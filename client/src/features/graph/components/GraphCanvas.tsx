@@ -48,73 +48,71 @@ const GraphCanvas = () => {
     // State for controlling the separation distance between visualizations
     const [separationDistance, setSeparationDistance] = useState(20);
 
-    // Removed the outer div wrapper
+    // Simplified container wrapper for proper sizing
     return (
         <Canvas
             ref={canvasRef}
-            className="r3f-canvas overflow-hidden" // Added overflow-hidden class here
+            className="r3f-canvas"
             style={{
                 width: '100%',
                 height: '100%',
-                minHeight: '0', // Ensure it can shrink
-                display: 'block' // Revert to display: block
-                // Removed flex properties from Canvas style
+                display: 'block'
             }}
-            gl={{
-                antialias,
-                alpha: true,
-                powerPreference: 'high-performance',
-                failIfMajorPerformanceCaveat: false
-            }}
-            camera={{
-                fov: 75,
-                near: 0.1,
-                far: 2000, // Remove settings access, camera settings likely managed elsewhere
-                position: [0, 10, 50]
-            }}
-            onCreated={({ gl }) => {
-                if (debugState.isEnabled()) {
-                    logger.debug('Canvas created with dimensions:', {
-                        width: gl.domElement.width,
-                        height: gl.domElement.height,
-                        containerWidth: gl.domElement.parentElement?.clientWidth,
-                        containerHeight: gl.domElement.parentElement?.clientHeight
-                    });
-                }
-            }}
-        >
-            <SceneSetup />
+                gl={{
+                    antialias,
+                    alpha: true,
+                    powerPreference: 'high-performance',
+                    failIfMajorPerformanceCaveat: false
+                }}
+                camera={{
+                    fov: 75,
+                    near: 0.1,
+                    far: 2000, // Remove settings access, camera settings likely managed elsewhere
+                    position: [0, 10, 50]
+                }}
+                onCreated={({ gl }) => {
+                    if (debugState.isEnabled()) {
+                        logger.debug('Canvas created with dimensions:', {
+                            width: gl.domElement.width,
+                            height: gl.domElement.height,
+                            containerWidth: gl.domElement.parentElement?.clientWidth,
+                            containerHeight: gl.domElement.parentElement?.clientHeight
+                        });
+                    }
+                }}
+            >
+                <SceneSetup />
 
-            {/* Logseq Graph Visualization - positioned on the left */}
-            <group position={[-separationDistance, 0, 0]}>
-                <EnhancedGraphManager />
-            </group>
+                {/* Logseq Graph Visualization - positioned on the left */}
+                <group position={[-separationDistance, 0, 0]}>
+                    <EnhancedGraphManager />
+                </group>
 
-            {/* VisionFlow Swarm Visualization - positioned on the right */}
-            <group position={[separationDistance, 0, 0]}>
-                <SwarmVisualizationEnhanced />
-            </group>
+                {/* VisionFlow Swarm Visualization - positioned on the right */}
+                <group position={[separationDistance, 0, 0]}>
+                    <SwarmVisualizationEnhanced />
+                </group>
 
-            {/* Dual Visualization Controls */}
-            <DualVisualizationControls
-                separationDistance={separationDistance}
-                setSeparationDistance={setSeparationDistance}
-            />
+                {/* Dual Visualization Controls */}
+                <DualVisualizationControls
+                    separationDistance={separationDistance}
+                    setSeparationDistance={setSeparationDistance}
+                />
 
-            {/* Camera Controls */}
-            <OrbitControls
-                enablePan={true}
-                enableZoom={true}
-                enableRotate={true}
-                zoomSpeed={0.8}
-                panSpeed={0.8}
-                rotateSpeed={0.8}
-            />
+                {/* Camera Controls */}
+                <OrbitControls
+                    enablePan={true}
+                    enableZoom={true}
+                    enableRotate={true}
+                    zoomSpeed={0.8}
+                    panSpeed={0.8}
+                    rotateSpeed={0.8}
+                />
 
-            {xrEnabled && <XRController />}
-            {xrEnabled && <XRVisualisationConnector />}
-            {showStats && <Stats />}
-            {settings?.visualisation?.bloom?.enabled && <PostProcessingEffects />}
+                {xrEnabled && <XRController />}
+                {xrEnabled && <XRVisualisationConnector />}
+                {showStats && <Stats />}
+                {settings?.visualisation?.bloom?.enabled && <PostProcessingEffects />}
         </Canvas>
     );
 };
