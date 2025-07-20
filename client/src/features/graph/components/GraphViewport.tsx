@@ -8,7 +8,6 @@ import CameraController from '../../visualisation/components/CameraController'; 
 import { useSettingsStore } from '../../../store/settingsStore';
 import { createLogger } from '../../../utils/logger';
 import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
-import { SwarmVisualizationSimpleTest } from '../../swarm/components/SwarmVisualizationSimpleTest';
 
 // Ensure Three.js types are properly loaded if not globally done
 // import '../../../types/react-three-fiber.d.ts';
@@ -156,8 +155,7 @@ const GraphViewport: React.FC = () => {
           {/* HologramVisualisation could be added here if it's part of the core graph view */}
           {/* <HologramVisualisation standalone={false} position={[0, 0, 0]} size={20} /> */}
           
-          {/* Add swarm visualizations on the right side */}
-          <SwarmVisualizationSimpleTest />
+          {/* Add VisionFlow visualization */}
           <SwarmVisualizationEnhanced />
         </Suspense>
 

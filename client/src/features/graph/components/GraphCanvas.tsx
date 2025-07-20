@@ -7,7 +7,6 @@ import { OrbitControls, Stats } from '@react-three/drei';
 import XRController from '../../xr/components/XRController';
 import XRVisualisationConnector from '../../xr/components/XRVisualisationConnector';
 import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
-import { SwarmVisualizationSimpleTest } from '../../swarm/components/SwarmVisualizationSimpleTest';
 // import { SwarmVisualizationIntegrated } from '../../swarm/components/SwarmVisualizationIntegrated';
 // import { SwarmVisualizationDebug } from '../../swarm/components/SwarmVisualizationDebug';
 
@@ -83,12 +82,6 @@ const GraphCanvas = () => {
         >
             <SceneSetup />
             <GraphManager />
-            {/* Test sphere to verify rendering */}
-            <mesh position={[0, 20, 0]}>
-                <sphereGeometry args={[3, 32, 32]} />
-                <meshStandardMaterial color="#FF0000" emissive="#FF0000" emissiveIntensity={0.5} />
-            </mesh>
-            <SwarmVisualizationSimpleTest />
             <SwarmVisualizationEnhanced />
             {xrEnabled && <XRController />}
             {xrEnabled && <XRVisualisationConnector />}

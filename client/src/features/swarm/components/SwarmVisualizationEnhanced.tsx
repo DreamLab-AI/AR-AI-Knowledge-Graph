@@ -13,7 +13,7 @@ import { swarmPhysicsWorker } from '../workers/swarmPhysicsWorker';
 const logger = createLogger('SwarmVisualizationEnhanced');
 
 // Enhanced gold and green color palette for swarm as per task.md
-const SWARM_COLORS = {
+const VISIONFLOW_COLORS = {
   // Primary agent types - Greens for roles
   coder: '#2ECC71',       // Emerald green
   tester: '#27AE60',      // Nephritis green
@@ -58,7 +58,7 @@ const SwarmNode: React.FC<SwarmNodeProps> = ({ agent, position, index }) => {
   const [hover, setHover] = useState(false);
 
   // Visual properties based on agent data
-  const color = new THREE.Color(SWARM_COLORS[agent.type] || '#CCCCCC');
+  const color = new THREE.Color(VISIONFLOW_COLORS[agent.type] || '#CCCCCC');
   const baseSize = 0.5;
   const size = baseSize + (agent.workload || agent.cpuUsage / 100) * 1.5;
   const healthColor = getHealthColor(agent.health);
@@ -114,6 +114,8 @@ const SwarmNode: React.FC<SwarmNodeProps> = ({ agent, position, index }) => {
           emissiveIntensity={0.3}
           metalness={0.8}
           roughness={0.2}
+          transparent
+          opacity={0.5}
         />
       </mesh>
 
@@ -134,7 +136,7 @@ const SwarmNode: React.FC<SwarmNodeProps> = ({ agent, position, index }) => {
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={0.2}
+          opacity={0.1}
           side={THREE.BackSide}
         />
       </mesh>
@@ -167,21 +169,32 @@ interface SwarmEdgeProps {
 
 const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetPos }) => {
   const particlesRef = useRef<THREE.Points>(null);
+  const lineRef = useRef<THREE.Mesh>(null);
+  const [isActive, setIsActive] = useState(false);
 
-  // Edge thickness based on data volume
-  const thickness = Math.min(0.1 + Math.log10(edge.dataVolume + 1) * 0.05, 0.5);
+  // Check if edge has recent activity
+  useEffect(() => {
+    const checkActivity = () => {
+      const timeSinceLastMessage = Date.now() - edge.lastMessageTime;
+      setIsActive(timeSinceLastMessage < 5000); // Active if communicated within 5 seconds
+    };
+    
+    checkActivity();
+    const interval = setInterval(checkActivity, 1000);
+    return () => clearInterval(interval);
+  }, [edge.lastMessageTime]);
 
-  // Animate particles along edge
+  // Animate particles along edge only when active
   useFrame((state) => {
-    if (!particlesRef.current) return;
+    if (!particlesRef.current || !isActive) return;
 
     const particlePositions = particlesRef.current.geometry.attributes.position;
-    const animationSpeed = edge.messageCount / 10;
+    const animationSpeed = Math.min(edge.messageCount / 5, 3);
     const time = state.clock.elapsedTime * animationSpeed;
 
-    // Animate 10 particles along the edge
-    for (let i = 0; i < 10; i++) {
-      const t = (time + i * 0.1) % 1;
+    // Animate 8 particles along the edge for pulse effect
+    for (let i = 0; i < 8; i++) {
+      const t = (time + i * 0.125) % 1;
       const x = sourcePos.x + (targetPos.x - sourcePos.x) * t;
       const y = sourcePos.y + (targetPos.y - sourcePos.y) * t;
       const z = sourcePos.z + (targetPos.z - sourcePos.z) * t;
@@ -190,36 +203,66 @@ const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetP
     particlePositions.needsUpdate = true;
   });
 
+  // Create a cylindrical edge
+  const edgeGeometry = useMemo(() => {
+    const direction = new THREE.Vector3().subVectors(targetPos, sourcePos);
+    const distance = direction.length();
+    const geometry = new THREE.CylinderGeometry(0.05, 0.05, distance, 8);
+    return geometry;
+  }, [sourcePos, targetPos]);
+
+  const edgePosition = useMemo(() => {
+    return new THREE.Vector3(
+      (sourcePos.x + targetPos.x) / 2,
+      (sourcePos.y + targetPos.y) / 2,
+      (sourcePos.z + targetPos.z) / 2
+    );
+  }, [sourcePos, targetPos]);
+
+  const edgeRotation = useMemo(() => {
+    const direction = new THREE.Vector3().subVectors(targetPos, sourcePos).normalize();
+    const axis = new THREE.Vector3(0, 1, 0);
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction);
+    return quaternion;
+  }, [sourcePos, targetPos]);
+
   return (
     <group>
-      {/* Edge line */}
-      <DreiLine
-        points={[sourcePos, targetPos]}
-        color="#F1C40F"
-        lineWidth={thickness * 10}
-        transparent
-        opacity={0.6}
-      />
-
-      {/* Animated particles showing data flow */}
-      <points ref={particlesRef}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={10}
-            array={new Float32Array(30)}
-            itemSize={3}
-          />
-        </bufferGeometry>
-        <pointsMaterial
-          size={0.3}
-          color="#FFD700"
+      {/* Persistent edge line */}
+      <mesh
+        ref={lineRef}
+        geometry={edgeGeometry}
+        position={edgePosition}
+        quaternion={edgeRotation}
+      >
+        <meshBasicMaterial
+          color="#F1C40F"
           transparent
-          opacity={0.9}
-          blending={THREE.AdditiveBlending}
-          sizeAttenuation={true}
+          opacity={0.2}
         />
-      </points>
+      </mesh>
+
+      {/* Animated particles showing active data flow */}
+      {isActive && (
+        <points ref={particlesRef}>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={8}
+              array={new Float32Array(24)}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <pointsMaterial
+            size={0.4}
+            color="#FFD700"
+            transparent
+            opacity={0.95}
+            blending={THREE.AdditiveBlending}
+            sizeAttenuation={true}
+          />
+        </points>
+      )}
     </group>
   );
 };
@@ -231,22 +274,23 @@ interface SwarmGraphData {
 }
 
 export const SwarmVisualizationEnhanced: React.FC = () => {
-  console.log('[SWARM] SwarmVisualizationEnhanced component mounting...');
+  console.log('[VISIONFLOW] VisionFlow Enhanced component mounting...');
 
   const [swarmData, setSwarmData] = useState<SwarmGraphData>({ nodes: [], edges: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<'mcp' | 'api' | 'mock'>('mock');
+  const [dataSource, setDataSource] = useState<'mcp' | 'api'>('mcp');
   const positionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
+  const edgeMapRef = useRef<Map<string, SwarmEdge>>(new Map());
 
   // Initialize physics and data connection
   useEffect(() => {
-    console.log('[SWARM] useEffect - Starting initialization...');
+    console.log('[VISIONFLOW] useEffect - Starting initialization...');
     let cleanup = false;
 
     const initialize = async () => {
       try {
-        console.log('[SWARM] Initializing swarm visualization...');
+        console.log('[VISIONFLOW] Initializing VisionFlow visualization...');
         setIsLoading(true);
 
         // Initialize physics worker
@@ -272,17 +316,15 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
             setDataSource(data._isMock ? 'mock' : 'api');
             processSwarmData(data);
           } catch (apiError) {
-            logger.error('API also failed, using mock data:', apiError);
-            setDataSource('mock');
-            generateMockData();
+            logger.error('API also failed:', apiError);
+            setError('Unable to connect to VisionFlow data source');
           }
         }
 
         setError(null);
       } catch (err) {
         logger.error('Initialization failed:', err);
-        setError('Failed to initialize swarm visualization');
-        generateMockData(); // Use mock data as fallback
+        setError('Failed to initialize VisionFlow visualization');
       } finally {
         setIsLoading(false);
       }
@@ -296,13 +338,12 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
           mcpWebSocketService.getCommunications()
         ]);
 
-        // Process communications into edges
-        const edgeMap = new Map<string, SwarmEdge>();
+        // Update edge map to maintain persistent edges between agent pairs
         communications.forEach(comm => {
           comm.receivers?.forEach(receiver => {
             const edgeKey = [comm.sender, receiver].sort().join('-');
-            if (!edgeMap.has(edgeKey)) {
-              edgeMap.set(edgeKey, {
+            if (!edgeMapRef.current.has(edgeKey)) {
+              edgeMapRef.current.set(edgeKey, {
                 id: edgeKey,
                 source: comm.sender,
                 target: receiver,
@@ -311,21 +352,30 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
                 lastMessageTime: Date.now()
               });
             }
-            const edge = edgeMap.get(edgeKey)!;
+            const edge = edgeMapRef.current.get(edgeKey)!;
             edge.dataVolume += comm.metadata?.size || 100;
             edge.messageCount += 1;
+            edge.lastMessageTime = Date.now();
           });
         });
 
+        // Clean up stale edges (no communication for 30 seconds)
+        const now = Date.now();
+        for (const [key, edge] of edgeMapRef.current.entries()) {
+          if (now - edge.lastMessageTime > 30000) {
+            edgeMapRef.current.delete(key);
+          }
+        }
+
         setSwarmData({
           nodes: agents,
-          edges: Array.from(edgeMap.values()),
+          edges: Array.from(edgeMapRef.current.values()),
           tokenUsage
         });
 
         // Update physics
         swarmPhysicsWorker.updateAgents(agents);
-        swarmPhysicsWorker.updateEdges(Array.from(edgeMap.values()));
+        swarmPhysicsWorker.updateEdges(Array.from(edgeMapRef.current.values()));
         if (tokenUsage) swarmPhysicsWorker.updateTokenUsage(tokenUsage);
       } catch (error) {
         logger.error('Error fetching MCP data:', error);
@@ -354,67 +404,27 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         }));
       }
 
-      setSwarmData({ nodes, edges: data.edges || [] });
+      // Update persistent edge map with backend edges
+      data.edges?.forEach((edge: any) => {
+        const edgeKey = [edge.source.toString(), edge.target.toString()].sort().join('-');
+        edgeMapRef.current.set(edgeKey, {
+          id: edge.id,
+          source: edge.source.toString(),
+          target: edge.target.toString(),
+          dataVolume: edge.weight * 1024,
+          messageCount: parseInt(edge.edge_type?.match(/\d+/) || '1'),
+          lastMessageTime: Date.now()
+        });
+      });
+
+      setSwarmData({ nodes, edges: Array.from(edgeMapRef.current.values()) });
 
       // Update physics
       swarmPhysicsWorker.updateAgents(nodes);
-      swarmPhysicsWorker.updateEdges(data.edges || []);
+      swarmPhysicsWorker.updateEdges(Array.from(edgeMapRef.current.values()));
     };
 
-    const generateMockData = () => {
-      console.log('[SWARM] Generating mock data...');
-      // Enhanced mock data with all agent types
-      const mockAgents: SwarmAgent[] = [
-        // Meta roles (Gold)
-        { id: 'coord-1', type: 'coordinator', status: 'busy', name: 'Master Coordinator',
-          cpuUsage: 65, memoryUsage: 45, health: 95, workload: 0.8, createdAt: new Date().toISOString(), age: 0 },
-        { id: 'analyst-1', type: 'analyst', status: 'busy', name: 'Data Analyst Prime',
-          cpuUsage: 78, memoryUsage: 62, health: 88, workload: 0.9, createdAt: new Date().toISOString(), age: 0 },
-        { id: 'arch-1', type: 'architect', status: 'idle', name: 'System Architect',
-          cpuUsage: 25, memoryUsage: 38, health: 92, workload: 0.3, createdAt: new Date().toISOString(), age: 0 },
-
-        // Worker roles (Green)
-        { id: 'coder-1', type: 'coder', status: 'busy', name: 'Code Builder Alpha',
-          cpuUsage: 85, memoryUsage: 72, health: 78, workload: 0.95, createdAt: new Date().toISOString(), age: 0 },
-        { id: 'coder-2', type: 'coder', status: 'busy', name: 'Code Builder Beta',
-          cpuUsage: 72, memoryUsage: 68, health: 82, workload: 0.85, createdAt: new Date().toISOString(), age: 0 },
-        { id: 'tester-1', type: 'tester', status: 'idle', name: 'Test Runner',
-          cpuUsage: 35, memoryUsage: 42, health: 90, workload: 0.4, createdAt: new Date().toISOString(), age: 0 },
-        { id: 'researcher-1', type: 'researcher', status: 'busy', name: 'Knowledge Seeker',
-          cpuUsage: 58, memoryUsage: 55, health: 93, workload: 0.7, createdAt: new Date().toISOString(), age: 0 },
-        { id: 'reviewer-1', type: 'reviewer', status: 'idle', name: 'Code Reviewer',
-          cpuUsage: 42, memoryUsage: 48, health: 87, workload: 0.5, createdAt: new Date().toISOString(), age: 0 }
-      ];
-
-      const mockEdges: SwarmEdge[] = [
-        { id: 'e1', source: 'coord-1', target: 'coder-1', dataVolume: 2048, messageCount: 25, lastMessageTime: Date.now() },
-        { id: 'e2', source: 'coord-1', target: 'coder-2', dataVolume: 1536, messageCount: 18, lastMessageTime: Date.now() },
-        { id: 'e3', source: 'coord-1', target: 'analyst-1', dataVolume: 3072, messageCount: 32, lastMessageTime: Date.now() },
-        { id: 'e4', source: 'coder-1', target: 'tester-1', dataVolume: 1024, messageCount: 15, lastMessageTime: Date.now() },
-        { id: 'e5', source: 'coder-2', target: 'tester-1', dataVolume: 768, messageCount: 12, lastMessageTime: Date.now() },
-        { id: 'e6', source: 'analyst-1', target: 'researcher-1', dataVolume: 2560, messageCount: 28, lastMessageTime: Date.now() },
-        { id: 'e7', source: 'arch-1', target: 'reviewer-1', dataVolume: 512, messageCount: 8, lastMessageTime: Date.now() }
-      ];
-
-      const mockTokenUsage = {
-        total: 15000,
-        byAgent: {
-          coordinator: 3500,
-          analyst: 4200,
-          coder: 5800,
-          tester: 800,
-          researcher: 2200,
-          reviewer: 500
-        }
-      };
-
-      setSwarmData({ nodes: mockAgents, edges: mockEdges, tokenUsage: mockTokenUsage });
-
-      // Initialize physics with mock data
-      swarmPhysicsWorker.updateAgents(mockAgents);
-      swarmPhysicsWorker.updateEdges(mockEdges);
-      swarmPhysicsWorker.updateTokenUsage(mockTokenUsage);
-    };
+    // Remove mock data generation - only use real data
 
     if (!cleanup) {
       initialize();
@@ -448,14 +458,9 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   });
 
   if (isLoading) {
-    console.log('[SWARM] Rendering loading state...');
+    console.log('[VISIONFLOW] Rendering loading state...');
     return (
       <group position={[0, 0, 0]}>
-        {/* Add a simple mesh to verify rendering */}
-        <mesh position={[0, 0, 0]}>
-          <boxGeometry args={[5, 5, 5]} />
-          <meshBasicMaterial color="#F1C40F" />
-        </mesh>
         <Html center>
           <div style={{
             background: 'rgba(0, 0, 0, 0.9)',
@@ -466,7 +471,7 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
             fontSize: '24px',
             fontFamily: 'monospace'
           }}>
-            🐝 Loading Swarm Visualization...
+            ⚡ Loading VisionFlow...
           </div>
         </Html>
       </group>
@@ -509,10 +514,10 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
           minWidth: '250px'
         }}>
           <h3 style={{ margin: '0 0 10px 0', color: '#F1C40F' }}>
-            🐝 Agent Swarm ({dataSource.toUpperCase()})
+            ⚡ VisionFlow ({dataSource.toUpperCase()})
           </h3>
           <div>Agents: {swarmData.nodes.length}</div>
-          <div>Communications: {swarmData.edges.length}</div>
+          <div>Active Links: {swarmData.edges.length}</div>
           <div>Total Tokens: {swarmData.tokenUsage?.total || 0}</div>
           <div style={{ marginTop: '10px', fontSize: '12px', opacity: 0.8 }}>
             Gold = Coordinators | Green = Workers
@@ -556,36 +561,25 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         return null;
       })}
 
-      {/* Ambient particles for "living hive" effect */}
+      {/* Ambient particles for VisionFlow atmosphere */}
       <points>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={300}
-            array={new Float32Array(900).map(() => (Math.random() - 0.5) * 80)}
+            count={200}
+            array={new Float32Array(600).map(() => (Math.random() - 0.5) * 60)}
             itemSize={3}
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.08}
+          size={0.05}
           color="#F1C40F"
           transparent
-          opacity={0.4}
+          opacity={0.3}
           blending={THREE.AdditiveBlending}
           sizeAttenuation={true}
         />
       </points>
-
-      {/* Ground reference plane */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -20, 0]}>
-        <planeGeometry args={[100, 100, 20, 20]} />
-        <meshBasicMaterial
-          color="#F1C40F"
-          wireframe
-          transparent
-          opacity={0.1}
-        />
-      </mesh>
     </group>
   );
 };

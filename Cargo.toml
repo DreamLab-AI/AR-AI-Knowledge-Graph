@@ -75,8 +75,6 @@ nalgebra = "0.32"
 # Added from the code block
 glam = "0.24"
 
-# UUID generation
-uuid = { version = "1.10", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
