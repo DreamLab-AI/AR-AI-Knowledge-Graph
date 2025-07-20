@@ -7,11 +7,11 @@ import { Input } from '@/features/design-system/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/features/design-system/components/Select';
 import { RadioGroup, RadioGroupItem } from '@/features/design-system/components/RadioGroup'; // Added RadioGroup imports
 import { Button } from '@/features/design-system/components/Button';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { HelpTooltip } from '../../help/components/HelpTooltip';
 import { helpRegistry } from '../../help/HelpRegistry';
 
-// Simple inline useDebounce hook
+// Simple inline useDebounce hook - only for text inputs that need it
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
 
@@ -37,45 +37,51 @@ export interface SettingControlProps {
 }
 
 export const SettingControlComponent = React.memo(({ path, settingDef, value, onChange }: SettingControlProps) => {
-  // State for debounced inputs
-  const [inputValue, setInputValue] = useState(String(value ?? ''));
-  const debouncedInputValue = useDebounce(inputValue, 300); // 300ms debounce
-  const [showPassword, setShowPassword] = useState(false); // For password visibility toggle
+  // Only use internal state for text inputs that need debouncing
+  const needsDebouncing = settingDef.type === 'textInput' || settingDef.type === 'numberInput';
 
-  // Update internal state when the external value changes
+  const [inputValue, setInputValue] = useState(needsDebouncing ? String(value ?? '') : '');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isPending, setIsPending] = useState(false); // Show loading state during debounce
+
+  const debouncedInputValue = useDebounce(inputValue, 150); // Reduced from 300ms to 150ms
+
+  // Update internal state when external value changes (only for debounced inputs)
   useEffect(() => {
-    // Only update if the debounced value isn't the source of the change
-    // This prevents loops but might need refinement depending on useDebounce implementation
-    if (String(value) !== inputValue) {
-       if (settingDef.type === 'rangeSlider' || settingDef.type === 'dualColorPicker') {
-         // For array types, handle string conversion carefully if needed, or maybe skip input state?
-         // For now, let's assume direct value prop usage for sliders/pickers is better for arrays.
-       } else {
-         setInputValue(String(value ?? ''));
-       }
+    if (needsDebouncing && String(value) !== inputValue) {
+      setInputValue(String(value ?? ''));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, settingDef.type]); // Rerun if value or type changes
+  }, [value, inputValue, needsDebouncing]);
 
-  // Effect to call onChange when debounced value changes
+  // Handle debounced changes for text inputs
   useEffect(() => {
-    if (settingDef.type === 'textInput' || settingDef.type === 'numberInput') {
-      // Avoid calling onChange with the initial value or if it hasn't changed
-      if (debouncedInputValue !== String(value ?? '')) {
-        if (settingDef.type === 'numberInput') {
-          const numValue = parseFloat(debouncedInputValue);
-          if (!isNaN(numValue)) {
-            onChange(numValue);
-          }
-        } else {
-          onChange(debouncedInputValue);
+    if (!needsDebouncing) return;
+
+    if (debouncedInputValue !== String(value ?? '')) {
+      setIsPending(true);
+
+      if (settingDef.type === 'numberInput') {
+        const numValue = parseFloat(debouncedInputValue);
+        if (!isNaN(numValue)) {
+          onChange(numValue);
         }
+      } else {
+        onChange(debouncedInputValue);
       }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedInputValue, settingDef.type, onChange]); // Depend on debounced value
 
-  // Handler for immediate input changes (updates local state)
+      // Clear pending state after a brief moment
+      setTimeout(() => setIsPending(false), 100);
+    }
+  }, [debouncedInputValue, settingDef.type, onChange, value, needsDebouncing]);
+
+  // Track when input changes to show pending state
+  useEffect(() => {
+    if (needsDebouncing && inputValue !== String(value ?? '')) {
+      setIsPending(true);
+    }
+  }, [inputValue, value, needsDebouncing]);
+
+  // Handler for immediate input changes (only for debounced inputs)
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };
@@ -89,7 +95,6 @@ export const SettingControlComponent = React.memo(({ path, settingDef, value, on
             id={path}
             checked={Boolean(value)}
             onCheckedChange={onChange}
-            label={settingDef.label}
           />
         );
 
@@ -108,7 +113,7 @@ export const SettingControlComponent = React.memo(({ path, settingDef, value, on
               step={settingDef.step ?? 0.01}
               onValueChange={([val]) => onChange(val)}
               className="flex-1"
-              label={settingDef.label}
+
               aria-valuemin={settingDef.min ?? 0}
               aria-valuemax={settingDef.max ?? 1}
               aria-valuenow={numericValue}

@@ -656,7 +656,7 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
       </Html>
 
       {/* Render nodes - use instanced mesh for large swarms */}
-      {swarmData.nodes.length > 50 && settings?.visualisation?.performance?.useInstancing !== false ? (
+      {swarmData.nodes.length > 50 ? (
         <instancedMesh
           ref={meshRef}
           args={[undefined, undefined, swarmData.nodes.length]}
@@ -710,8 +710,8 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         return null;
       })}
 
-      {/* Ambient particles for VisionFlow atmosphere - DISABLED to prevent white squares bug */}
-      {/* <points>
+      {/* Ambient particles for VisionFlow atmosphere - Fixed white squares bug */}
+      <points>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -727,8 +727,9 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
           opacity={0.3}
           blending={THREE.AdditiveBlending}
           sizeAttenuation={true}
+          depthWrite={false} // Fix for white squares bug - prevents depth conflicts
         />
-      </points> */}
+      </points>
     </group>
   );
 };

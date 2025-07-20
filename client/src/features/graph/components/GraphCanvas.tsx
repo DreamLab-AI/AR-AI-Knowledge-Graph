@@ -3,7 +3,6 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 
 // Components
-import GraphManager from './GraphManager';
 import EnhancedGraphManager from './EnhancedGraphManager';
 import { PostProcessingEffects } from './PostProcessingEffects';
 import XRController from '../../xr/components/XRController';
@@ -45,7 +44,7 @@ const GraphCanvas = () => {
     const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false; // Use performance debug flag
     const xrEnabled = settings?.xr?.enabled !== false;
     const antialias = settings?.visualisation?.rendering?.enableAntialiasing !== false; // Correct property name
-    
+
     // State for controlling the separation distance between visualizations
     const [separationDistance, setSeparationDistance] = useState(20);
 
@@ -85,29 +84,25 @@ const GraphCanvas = () => {
             }}
         >
             <SceneSetup />
-            
+
             {/* Logseq Graph Visualization - positioned on the left */}
             <group position={[-separationDistance, 0, 0]}>
-                {settings?.visualisation?.nodes?.enableHologram || settings?.visualisation?.edges?.enableFlowEffect ? (
-                    <EnhancedGraphManager />
-                ) : (
-                    <GraphManager />
-                )}
+                <EnhancedGraphManager />
             </group>
-            
+
             {/* VisionFlow Swarm Visualization - positioned on the right */}
             <group position={[separationDistance, 0, 0]}>
                 <SwarmVisualizationEnhanced />
             </group>
-            
+
             {/* Dual Visualization Controls */}
-            <DualVisualizationControls 
+            <DualVisualizationControls
                 separationDistance={separationDistance}
                 setSeparationDistance={setSeparationDistance}
             />
-            
+
             {/* Camera Controls */}
-            <OrbitControls 
+            <OrbitControls
                 enablePan={true}
                 enableZoom={true}
                 enableRotate={true}
@@ -115,7 +110,7 @@ const GraphCanvas = () => {
                 panSpeed={0.8}
                 rotateSpeed={0.8}
             />
-            
+
             {xrEnabled && <XRController />}
             {xrEnabled && <XRVisualisationConnector />}
             {showStats && <Stats />}

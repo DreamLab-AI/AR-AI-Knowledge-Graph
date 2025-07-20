@@ -14,7 +14,6 @@ import { registerSettingsHelp } from '../features/help/settingsHelp';
 import { OnboardingProvider } from '../features/onboarding/components/OnboardingProvider';
 import { registerOnboardingCommands } from '../features/onboarding/flows/defaultFlows';
 import { TooltipProvider } from '../features/design-system/components/Tooltip';
-import '../styles/tokens.css';
 const logger = createLogger('App')
 
 // Error boundary component to catch rendering errors
