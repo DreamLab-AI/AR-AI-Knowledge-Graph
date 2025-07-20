@@ -48,16 +48,18 @@ const GraphCanvas = () => {
     // State for controlling the separation distance between visualizations
     const [separationDistance, setSeparationDistance] = useState(20);
 
-    // Simplified container wrapper for proper sizing
+    // Wrapper to ensure proper canvas sizing
     return (
-        <Canvas
-            ref={canvasRef}
-            className="r3f-canvas"
-            style={{
-                width: '100%',
-                height: '100%',
-                display: 'block'
-            }}
+        <div style={{ width: '100%', height: '100%', position: 'relative', minHeight: 0 }}>
+            <Canvas
+                ref={canvasRef}
+                className="r3f-canvas"
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    touchAction: 'none' // Prevent touch scrolling
+                }}
                 gl={{
                     antialias,
                     alpha: true,
@@ -113,7 +115,8 @@ const GraphCanvas = () => {
                 {xrEnabled && <XRVisualisationConnector />}
                 {showStats && <Stats />}
                 {settings?.visualisation?.bloom?.enabled && <PostProcessingEffects />}
-        </Canvas>
+            </Canvas>
+        </div>
     );
 };
 

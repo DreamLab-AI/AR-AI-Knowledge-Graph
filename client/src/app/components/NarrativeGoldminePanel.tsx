@@ -1,9 +1,10 @@
-import React, { CSSProperties, useEffect, useRef } from 'react';
+import React, { CSSProperties, useEffect, useRef, useState } from 'react';
 import { IFRAME_COMMUNICATION_CONFIG } from '../../config/iframeCommunication';
 import { isAllowedOrigin, isNavigationMessage, NavigationMessage } from '../../utils/iframeCommunication';
 
 const NarrativeGoldminePanel: React.FC = () => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -62,17 +63,24 @@ const NarrativeGoldminePanel: React.FC = () => {
     width: '100%',
     height: '100%',
     overflow: 'hidden', // Iframe will handle its own scrolling
-    backgroundColor: '#000', // Optional: background while iframe loads
+    backgroundColor: '#1a1a1a', // Dark background while iframe loads
+    position: 'relative', // For loading overlay positioning
   };
 
   const iframeStyle: CSSProperties = {
     width: '100%',
     height: '100%',
     border: 'none', // Remove default iframe border
+    backgroundColor: '#1a1a1a', // Ensure no white flash while loading
   };
 
   return (
     <div style={panelStyle}>
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+          <div className="text-gray-400 text-sm">Loading Narrative Goldmine...</div>
+        </div>
+      )}
       <iframe
         ref={iframeRef}
         id="narrative-goldmine-iframe" // Added ID for backward compatibility
@@ -82,6 +90,7 @@ const NarrativeGoldminePanel: React.FC = () => {
         sandbox="allow-scripts allow-same-origin allow-popups allow-forms" // Standard sandbox attributes
         loading="lazy"
         referrerPolicy="no-referrer"
+        onLoad={() => setIsLoading(false)}
       ></iframe>
     </div>
   );

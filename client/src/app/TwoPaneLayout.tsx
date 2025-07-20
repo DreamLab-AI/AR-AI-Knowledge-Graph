@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import GraphCanvas from '../features/graph/components/GraphCanvas';
 import RightPaneControlPanel from './components/RightPaneControlPanel';
@@ -7,11 +7,19 @@ import NarrativeGoldminePanel from './components/NarrativeGoldminePanel';
 import { VoiceButton } from '../components/VoiceButton';
 import { VoiceIndicator } from '../components/VoiceIndicator';
 import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
+import { AudioInputService } from '../services/AudioInputService';
 
 const TwoPaneLayout: React.FC = () => {
   const [isRightPaneDocked, setIsRightPaneDocked] = useState(false);
   const [isLowerRightPaneDocked, setIsLowerRightPaneDocked] = useState(false);
   const [isBottomPaneDocked, setIsBottomPaneDocked] = useState(false);
+  const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
+
+  useEffect(() => {
+    const support = AudioInputService.getBrowserSupport();
+    const isSupported = support.getUserMedia && support.isHttps && support.audioContext && support.mediaRecorder;
+    setHasVoiceSupport(isSupported);
+  }, []);
 
   const toggleRightPaneDock = () => {
     setIsRightPaneDocked(!isRightPaneDocked);
@@ -32,13 +40,13 @@ const TwoPaneLayout: React.FC = () => {
         <Panel
           defaultSize={80}
           minSize={20}
-          className="relative h-full"
+          className="relative h-full flex"
           style={{
             transition: isRightPaneDocked ? 'none' : 'width 0.3s ease',
             width: isRightPaneDocked ? '100%' : undefined,
           }}
         >
-          <div className="w-full h-full">
+          <div className="w-full h-full flex" style={{ minHeight: 0 }}>
             <GraphCanvas />
           </div>
         </Panel>
@@ -118,20 +126,24 @@ const TwoPaneLayout: React.FC = () => {
         {isRightPaneDocked ? '▶' : '◀'}
       </button>
 
-      {/* Browser Support Warning - Top positioned */}
-      <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 max-w-2xl w-11/12 pointer-events-auto">
-        <BrowserSupportWarning />
-      </div>
+      {/* Browser Support Warning - Only show when there's no voice support */}
+      {!hasVoiceSupport && (
+        <div className="fixed bottom-20 left-4 z-40 max-w-sm pointer-events-auto">
+          <BrowserSupportWarning className="shadow-lg" />
+        </div>
+      )}
 
-      {/* Voice Interaction Components - Compact Floating Overlay */}
-      <div className="absolute bottom-4 left-4 z-50 flex flex-col gap-1 items-start pointer-events-auto">
-        <VoiceButton size="md" variant="primary" />
-        <VoiceIndicator
-          className="max-w-xs text-xs"
-          showTranscription={true}
-          showStatus={false}
-        />
-      </div>
+      {/* Voice Interaction Components - Only show when browser supports it */}
+      {hasVoiceSupport && (
+        <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-1 items-start pointer-events-auto">
+          <VoiceButton size="md" variant="primary" />
+          <VoiceIndicator
+            className="max-w-xs text-xs"
+            showTranscription={true}
+            showStatus={false}
+          />
+        </div>
+      )}
     </div>
   );
 };
