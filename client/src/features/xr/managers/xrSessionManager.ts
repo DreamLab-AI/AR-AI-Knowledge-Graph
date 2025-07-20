@@ -3,7 +3,7 @@ import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
 import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
 import { createLogger, createErrorMetadata } from '@/utils/logger';
 import { debugState } from '@/utils/debugState'; // Assuming debugState.ts exists in utils
-import { SceneManager } from '@/features/visualisation/managers/sceneManager'; // Correct path
+// SceneManager import removed - using React Three Fiber hooks instead
 import { GestureRecognitionResult } from '@/features/xr/systems/HandInteractionSystem'; // Correct path
 import { Settings } from '@/features/settings/config/settings'; // Correct path, assuming Settings is defined here
 
@@ -25,7 +25,6 @@ type HandTrackingHandler = (enabled: boolean) => void;
 
 export class XRSessionManager {
   private static instance: XRSessionManager;
-  private sceneManager: SceneManager;
   private renderer: THREE.WebGLRenderer | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
   private scene: THREE.Scene | null = null;
@@ -47,27 +46,21 @@ export class XRSessionManager {
   private handsVisibilityChangedHandlers: HandVisibilityHandler[] = [];
   private handTrackingStateHandlers: HandTrackingHandler[] = [];
   
-  private constructor(sceneManager: SceneManager, externalRenderer?: THREE.WebGLRenderer) {
-    this.sceneManager = sceneManager;    
-    // Allow using an external renderer (from React Three Fiber) or try to get one from SceneManager
-    this.renderer = externalRenderer || sceneManager.getRenderer();
+  private constructor(externalRenderer?: THREE.WebGLRenderer, scene?: THREE.Scene, camera?: THREE.PerspectiveCamera) {
+    // Use provided renderer from React Three Fiber
+    this.renderer = externalRenderer || null;
     
-    // Get camera and ensure it's a PerspectiveCamera
-    const camera = sceneManager.getCamera();
-    if (!camera || !(camera instanceof THREE.PerspectiveCamera)) {
-      logger.warn('PerspectiveCamera not available from SceneManager, creating default camera');
+    // Use provided camera or create default
+    if (camera && camera instanceof THREE.PerspectiveCamera) {
+      this.camera = camera;
+    } else {
+      logger.warn('PerspectiveCamera not provided, creating default camera');
       this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       this.camera.position.z = 5;
-    } else {
-      this.camera = camera as THREE.PerspectiveCamera;
     }
     
-    // Get scene
-    this.scene = sceneManager.getScene();
-    if (!this.scene) {
-      logger.warn('Scene not found in SceneManager, creating default scene');
-      this.scene = new THREE.Scene();
-    }
+    // Use provided scene or create default
+    this.scene = scene || new THREE.Scene();
     
     // Log warning instead of throwing error so application can continue
     if (!this.renderer) {
@@ -83,9 +76,9 @@ export class XRSessionManager {
     }
   }
   
-  public static getInstance(sceneManager: SceneManager, externalRenderer?: THREE.WebGLRenderer): XRSessionManager {
+  public static getInstance(externalRenderer?: THREE.WebGLRenderer, scene?: THREE.Scene, camera?: THREE.PerspectiveCamera): XRSessionManager {
     if (!XRSessionManager.instance) {
-      XRSessionManager.instance = new XRSessionManager(sceneManager, externalRenderer);
+      XRSessionManager.instance = new XRSessionManager(externalRenderer, scene, camera);
     } else if (externalRenderer && !XRSessionManager.instance.renderer) {
       // If instance exists but has no renderer, we can update it with the external renderer
       XRSessionManager.instance.renderer = externalRenderer;

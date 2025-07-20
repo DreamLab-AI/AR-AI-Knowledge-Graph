@@ -13,6 +13,7 @@ export class MCPWebSocketService {
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
   private requestCallbacks: Map<string, (data: any) => void> = new Map();
   private useMCPRelay = true; // Flag to control which endpoint to use
+  private dataType: 'visionflow' | 'logseq' = 'visionflow'; // Data type identifier
 
   constructor(private wsUrl?: string) {
     // Determine the WebSocket URL based on environment
@@ -20,16 +21,9 @@ export class MCPWebSocketService {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.host;
       
-      // Check if we should use the MCP relay endpoint
-      if (this.useMCPRelay) {
-        // Use the new MCP relay endpoint that connects to orchestrator
-        this.wsUrl = `${protocol}//${host}/ws/mcp`;
-        logger.info('MCP WebSocket configured to use relay endpoint:', this.wsUrl);
-      } else {
-        // Use the original /wss endpoint for backward compatibility
-        this.wsUrl = `${protocol}//${host}/wss`;
-        logger.info('MCP WebSocket configured to use legacy endpoint:', this.wsUrl);
-      }
+      // Use MCP relay endpoint
+      this.wsUrl = `${protocol}//${host}/ws/mcp`;
+      logger.info('MCP WebSocket configured for MCP relay endpoint:', this.wsUrl);
     } else {
       this.wsUrl = wsUrl;
     }
@@ -40,20 +34,16 @@ export class MCPWebSocketService {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const possibleUrls = [];
     
-    if (this.useMCPRelay) {
-      // Try MCP relay endpoints first
-      possibleUrls.push(
-        this.wsUrl!,  // Primary URL: backend /ws/mcp endpoint
-        `${protocol}//${window.location.host}/ws/mcp`,  // MCP relay endpoint
-        `ws://${window.location.hostname}/ws/mcp`,      // Without port (Nginx default)
-        `ws://localhost:3001/ws/mcp`,                    // Direct Nginx port (dev)
-        `ws://localhost:8080/ws/mcp`                     // Fallback port
-      );
-    }
-    
-    // Add legacy endpoints as fallback
+    // Try MCP relay endpoints first
     possibleUrls.push(
-      `${protocol}//${window.location.host}/wss`,  // Legacy WebSocket endpoint
+      `${protocol}//${window.location.host}/ws/mcp`,
+      `ws://${window.location.hostname}/ws/mcp`,
+      `ws://localhost:3001/ws/mcp`
+    );
+    
+    // Add fallback to main WebSocket endpoints if MCP not available
+    possibleUrls.push(
+      `${protocol}//${window.location.host}/wss`,  // Main WebSocket endpoint
       `ws://${window.location.hostname}/wss`,      // Without port (Nginx default)
       `ws://localhost:3001/wss`,                   // Direct Nginx port (dev)
       `ws://localhost:8080/wss`                    // Fallback port
@@ -93,12 +83,51 @@ export class MCPWebSocketService {
           resolve();
         };
 
-        this.ws.onmessage = (event) => {
+        this.ws.onmessage = async (event) => {
           try {
-            const message: MCPMessage = JSON.parse(event.data);
+            let data: string;
+            
+            // Handle both text and binary (Blob) data
+            if (event.data instanceof Blob) {
+              // Convert Blob to text
+              data = await event.data.text();
+            } else {
+              // Already text
+              data = event.data;
+            }
+            
+            // --- START OF THE FIX ---
+            const trimmedData = data.trim();
+            
+            // Check for empty, whitespace-only, or non-JSON messages
+            if (!trimmedData || trimmedData === '' || trimmedData === ' ') {
+              logger.debug('Received an empty or whitespace-only message, likely a keep-alive. Ignoring.');
+              return; // Ignore empty messages
+            }
+            
+            // Additional check for common keep-alive patterns
+            if (trimmedData === 'ping' || trimmedData === 'pong' || trimmedData === '1') {
+              logger.debug('Received a keep-alive message:', trimmedData);
+              return; // Ignore keep-alive messages
+            }
+            
+            // Check if it looks like JSON before parsing
+            if (!trimmedData.startsWith('{') && !trimmedData.startsWith('[')) {
+              logger.debug('Received non-JSON message, ignoring:', trimmedData);
+              return;
+            }
+            // --- END OF THE FIX ---
+            
+            // Now, parse the sanitized data
+            const message: MCPMessage = JSON.parse(trimmedData);
             this.handleMessage(message);
           } catch (error) {
             logger.error('Failed to parse MCP message:', error);
+            if (data) {
+              logger.error('Raw message data:', data);
+              logger.error('Data length:', data.length);
+              logger.error('Data char codes:', Array.from(data).map(c => c.charCodeAt(0)));
+            }
           }
         };
 
@@ -122,11 +151,17 @@ export class MCPWebSocketService {
     });
   }
 
+  // Set the data type this service handles
+  public setDataType(type: 'visionflow' | 'logseq'): void {
+    this.dataType = type;
+    logger.info(`MCPWebSocketService configured for ${type} data`);
+  }
+
   private handleMessage(message: MCPMessage) {
     switch (message.type) {
       case 'welcome':
         this.clientId = message.clientId || null;
-        logger.info('Received welcome message, clientId:', this.clientId);
+        logger.info(`Received welcome message for ${this.dataType}, clientId:`, this.clientId);
         this.emit('welcome', message.data);
         break;
 
@@ -146,8 +181,9 @@ export class MCPWebSocketService {
         break;
 
       case 'mcp-update':
-        logger.debug('Received MCP update');
-        this.emit('update', message.data);
+        logger.debug(`Received MCP update for ${this.dataType}`);
+        // Add data type to the event for proper routing
+        this.emit('update', { ...message.data, dataType: this.dataType });
         break;
 
       case 'mcp-response':
@@ -212,6 +248,10 @@ export class MCPWebSocketService {
 
   // Convenience methods for common tools
   async getAgents(): Promise<SwarmAgent[]> {
+    // Only return agents for VisionFlow data
+    if (this.dataType !== 'visionflow') {
+      return [];
+    }
     const response = await this.requestTool('agents/list');
     return response.agents || [];
   }
@@ -221,6 +261,10 @@ export class MCPWebSocketService {
   }
 
   async getCommunications(filter: any = { type: 'communication' }): Promise<SwarmCommunication[]> {
+    // Only return communications for VisionFlow data
+    if (this.dataType !== 'visionflow') {
+      return [];
+    }
     const response = await this.requestTool('memory/query', { filter });
     return response.memories || [];
   }

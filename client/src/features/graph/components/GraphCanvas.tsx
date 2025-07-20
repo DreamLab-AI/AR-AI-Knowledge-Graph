@@ -1,14 +1,15 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 
 // Components
- import GraphManager from './GraphManager';
+import GraphManager from './GraphManager';
+import EnhancedGraphManager from './EnhancedGraphManager';
+import { PostProcessingEffects } from './PostProcessingEffects';
 import XRController from '../../xr/components/XRController';
 import XRVisualisationConnector from '../../xr/components/XRVisualisationConnector';
 import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
-// import { SwarmVisualizationIntegrated } from '../../swarm/components/SwarmVisualizationIntegrated';
-// import { SwarmVisualizationDebug } from '../../swarm/components/SwarmVisualizationDebug';
+import { DualVisualizationControls } from './DualVisualizationControls';
 
 // Store and utils
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -44,6 +45,9 @@ const GraphCanvas = () => {
     const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false; // Use performance debug flag
     const xrEnabled = settings?.xr?.enabled !== false;
     const antialias = settings?.visualisation?.rendering?.enableAntialiasing !== false; // Correct property name
+    
+    // State for controlling the separation distance between visualizations
+    const [separationDistance, setSeparationDistance] = useState(20);
 
     // Removed the outer div wrapper
     return (
@@ -81,11 +85,41 @@ const GraphCanvas = () => {
             }}
         >
             <SceneSetup />
-            <GraphManager />
-            <SwarmVisualizationEnhanced />
+            
+            {/* Logseq Graph Visualization - positioned on the left */}
+            <group position={[-separationDistance, 0, 0]}>
+                {settings?.visualisation?.nodes?.enableHologram || settings?.visualisation?.edges?.enableFlowEffect ? (
+                    <EnhancedGraphManager />
+                ) : (
+                    <GraphManager />
+                )}
+            </group>
+            
+            {/* VisionFlow Swarm Visualization - positioned on the right */}
+            <group position={[separationDistance, 0, 0]}>
+                <SwarmVisualizationEnhanced />
+            </group>
+            
+            {/* Dual Visualization Controls */}
+            <DualVisualizationControls 
+                separationDistance={separationDistance}
+                setSeparationDistance={setSeparationDistance}
+            />
+            
+            {/* Camera Controls */}
+            <OrbitControls 
+                enablePan={true}
+                enableZoom={true}
+                enableRotate={true}
+                zoomSpeed={0.8}
+                panSpeed={0.8}
+                rotateSpeed={0.8}
+            />
+            
             {xrEnabled && <XRController />}
             {xrEnabled && <XRVisualisationConnector />}
             {showStats && <Stats />}
+            {settings?.visualisation?.bloom?.enabled && <PostProcessingEffects />}
         </Canvas>
     );
 };

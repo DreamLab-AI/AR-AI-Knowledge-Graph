@@ -2,32 +2,41 @@ import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Html, Text, Billboard, Line as DreiLine } from '@react-three/drei';
-import { SwarmAgent, SwarmEdge } from '../types/swarmTypes';
+import { SwarmAgent, SwarmEdge, SwarmState } from '../types/swarmTypes';
 import { createLogger } from '../../../utils/logger';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { apiService } from '../../../services/api';
 import { mcpWebSocketService } from '../services/MCPWebSocketService';
 import { useSwarmBinaryUpdates } from '../hooks/useSwarmBinaryUpdates';
 import { swarmPhysicsWorker } from '../workers/swarmPhysicsWorker';
+import { SwarmStatusIndicator } from './SwarmStatusIndicator';
+import { SwarmDebugInfo } from './SwarmVisualizationDebugInfo';
+import { debugState } from '../../../utils/debugState';
 
 const logger = createLogger('SwarmVisualizationEnhanced');
 
-// Enhanced gold and green color palette for swarm as per task.md
-const VISIONFLOW_COLORS = {
-  // Primary agent types - Greens for roles
-  coder: '#2ECC71',       // Emerald green
-  tester: '#27AE60',      // Nephritis green
-  researcher: '#1ABC9C',  // Turquoise
-  reviewer: '#16A085',    // Green sea
-  documenter: '#229954',  // Forest green
-  specialist: '#239B56',  // Emerald dark
+// Get VisionFlow colors from settings or use defaults
+const getVisionFlowColors = (settings: any) => {
+  const visionflowSettings = settings?.visualisation?.graphs?.visionflow;
+  const baseColor = visionflowSettings?.nodes?.baseColor || '#F1C40F';
 
-  // Meta roles - Golds for coordination
-  coordinator: '#F1C40F', // Sunflower gold
-  analyst: '#F39C12',     // Orange gold
-  architect: '#E67E22',   // Carrot gold
-  optimizer: '#D68910',   // Dark gold
-  monitor: '#D4AC0D',     // Bright gold
+  // Default gold and green color palette for swarm
+  return {
+    // Primary agent types - Greens for roles (can be overridden by settings)
+    coder: '#2ECC71',       // Emerald green
+    tester: '#27AE60',      // Nephritis green
+    researcher: '#1ABC9C',  // Turquoise
+    reviewer: '#16A085',    // Green sea
+    documenter: '#229954',  // Forest green
+    specialist: '#239B56',  // Emerald dark
+
+    // Meta roles - Golds for coordination (use base color from settings)
+    coordinator: baseColor, // From settings
+    analyst: '#F39C12',     // Orange gold
+    architect: '#E67E22',   // Carrot gold
+    optimizer: '#D68910',   // Dark gold
+    monitor: '#D4AC0D',     // Bright gold
+  };
 };
 
 // Health color gradient
@@ -56,9 +65,11 @@ const SwarmNode: React.FC<SwarmNodeProps> = ({ agent, position, index }) => {
   const glowRef = useRef<THREE.Mesh>(null);
   const borderRef = useRef<THREE.Mesh>(null);
   const [hover, setHover] = useState(false);
+  const settings = useSettingsStore(state => state.settings);
 
-  // Visual properties based on agent data
-  const color = new THREE.Color(VISIONFLOW_COLORS[agent.type] || '#CCCCCC');
+  // Visual properties based on agent data and settings
+  const visionflowColors = getVisionFlowColors(settings);
+  const color = new THREE.Color(visionflowColors[agent.type] || '#CCCCCC');
   const baseSize = 0.5;
   const size = baseSize + (agent.workload || agent.cpuUsage / 100) * 1.5;
   const healthColor = getHealthColor(agent.health);
@@ -171,6 +182,7 @@ const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetP
   const particlesRef = useRef<THREE.Points>(null);
   const lineRef = useRef<THREE.Mesh>(null);
   const [isActive, setIsActive] = useState(false);
+  const settings = useSettingsStore(state => state.settings);
 
   // Check if edge has recent activity
   useEffect(() => {
@@ -178,7 +190,7 @@ const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetP
       const timeSinceLastMessage = Date.now() - edge.lastMessageTime;
       setIsActive(timeSinceLastMessage < 5000); // Active if communicated within 5 seconds
     };
-    
+
     checkActivity();
     const interval = setInterval(checkActivity, 1000);
     return () => clearInterval(interval);
@@ -236,7 +248,7 @@ const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetP
         quaternion={edgeRotation}
       >
         <meshBasicMaterial
-          color="#F1C40F"
+          color={settings?.visualisation?.graphs?.visionflow?.edges?.color || "#F1C40F"}
           transparent
           opacity={0.2}
         />
@@ -271,6 +283,7 @@ interface SwarmGraphData {
   nodes: SwarmAgent[];
   edges: SwarmEdge[];
   tokenUsage?: { total: number; byAgent: { [key: string]: number } };
+  positions?: Float32Array;
 }
 
 export const SwarmVisualizationEnhanced: React.FC = () => {
@@ -279,9 +292,40 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   const [swarmData, setSwarmData] = useState<SwarmGraphData>({ nodes: [], edges: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dataSource, setDataSource] = useState<'mcp' | 'api'>('mcp');
+  const [dataSource, setDataSource] = useState<'mcp' | 'api' | 'mock'>('mock'); // Default to mock until MCP orchestrator is available
+  const [mcpConnected, setMcpConnected] = useState(false);
   const positionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
   const edgeMapRef = useRef<Map<string, SwarmEdge>>(new Map());
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const labelsRef = useRef<THREE.Group>(null);
+  const settings = useSettingsStore(state => state.settings);
+
+  // Position buffer from backend
+  const positionBufferRef = useRef<Float32Array | null>(null);
+
+  // Binary position updates from WebSocket
+  const { positions: binaryPositions } = useSwarmBinaryUpdates({
+    enabled: !isLoading && swarmData.nodes.length > 0,
+    onPositionUpdate: (positions) => {
+      // Update the positions ref when binary updates arrive
+      positionBufferRef.current = positions;
+
+      // Convert to Vector3 map
+      if (positions && swarmData.nodes.length > 0) {
+        swarmData.nodes.forEach((node, i) => {
+          const i3 = i * 3;
+          if (!positionsRef.current.has(node.id)) {
+            positionsRef.current.set(node.id, new THREE.Vector3());
+          }
+          positionsRef.current.get(node.id)!.set(
+            positions[i3],
+            positions[i3 + 1],
+            positions[i3 + 2]
+          );
+        });
+      }
+    }
+  });
 
   // Initialize physics and data connection
   useEffect(() => {
@@ -300,6 +344,7 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         try {
           await mcpWebSocketService.connect();
           setDataSource('mcp');
+          setMcpConnected(true);
           logger.info('Connected to MCP server');
 
           // Set up real-time updates
@@ -445,15 +490,80 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   }, []);
 
   // Update positions from physics simulation
-  useFrame(() => {
-    const positions = swarmPhysicsWorker.getPositions();
-    if (positions) {
-      positions.forEach((pos, id) => {
+  useFrame((state, delta) => {
+    // Try to get positions from physics worker first
+    const workerPositions = swarmPhysicsWorker.getPositions();
+    if (workerPositions && workerPositions.size > 0) {
+      workerPositions.forEach((pos, id) => {
         if (!positionsRef.current.has(id)) {
           positionsRef.current.set(id, new THREE.Vector3());
         }
         positionsRef.current.get(id)!.set(pos.x, pos.y, pos.z);
       });
+    } else if (swarmData.nodes.length > 0 && settings?.visualisation?.physics?.enabled !== false) {
+      // Fallback to simple physics simulation if worker not available
+      const dt = Math.min(delta, 0.016);
+      const physics = {
+        damping: 0.95,
+        nodeRepulsion: 15,
+        linkDistance: 20,
+        centerGravity: 0.01
+      };
+
+      // Simple physics for each node
+      positionsRef.current.forEach((pos, id) => {
+        const velocity = new THREE.Vector3();
+
+        // Repulsion from other nodes
+        positionsRef.current.forEach((otherPos, otherId) => {
+          if (id !== otherId) {
+            const diff = new THREE.Vector3().subVectors(pos, otherPos);
+            const dist = diff.length();
+
+            if (dist > 0 && dist < physics.nodeRepulsion) {
+              const force = physics.nodeRepulsion / (dist * dist);
+              diff.normalize().multiplyScalar(force * dt);
+              velocity.add(diff);
+            }
+          }
+        });
+
+        // Attraction for edges
+        swarmData.edges.forEach(edge => {
+          if (edge.source === id || edge.target === id) {
+            const otherId = edge.source === id ? edge.target : edge.source;
+            const otherPos = positionsRef.current.get(otherId);
+            if (otherPos) {
+              const diff = new THREE.Vector3().subVectors(otherPos, pos);
+              const dist = diff.length();
+              if (dist > 0) {
+                const force = 0.1 * (dist - physics.linkDistance);
+                diff.normalize().multiplyScalar(force * dt);
+                velocity.add(diff);
+              }
+            }
+          }
+        });
+
+        // Center gravity
+        velocity.add(pos.clone().multiplyScalar(-physics.centerGravity * dt));
+
+        // Apply damping and update position
+        velocity.multiplyScalar(physics.damping);
+        pos.add(velocity);
+
+        // Limit position
+        const maxDist = 30;
+        if (pos.length() > maxDist) {
+          pos.normalize().multiplyScalar(maxDist);
+        }
+      });
+    }
+
+    // Update instanced mesh if available
+    if (meshRef.current && swarmData.nodes.length > 0) {
+      meshRef.current.count = swarmData.nodes.length;
+      meshRef.current.instanceMatrix.needsUpdate = true;
     }
   });
 
@@ -501,6 +611,26 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   // Position swarm graph at origin to co-locate with knowledge graph
   return (
     <group position={[0, 0, 0]}>
+      {/* SwarmStatusIndicator component */}
+      <SwarmStatusIndicator
+        agentCount={swarmData.nodes.length}
+        edgeCount={swarmData.edges.length}
+        totalTokens={swarmData.tokenUsage?.total || 0}
+        connected={mcpConnected}
+      />
+
+      {/* Debug info component */}
+      {debugState.isEnabled() && (
+        <SwarmDebugInfo
+          isLoading={isLoading}
+          error={error}
+          nodeCount={swarmData.nodes.length}
+          edgeCount={swarmData.edges.length}
+          mcpConnected={mcpConnected}
+          dataSource={dataSource}
+        />
+      )}
+
       {/* Status panel */}
       <Html position={[0, 25, 0]} center>
         <div style={{
@@ -525,23 +655,42 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         </div>
       </Html>
 
-      {/* Render nodes */}
-      {swarmData.nodes.map((agent, index) => {
-        const position = positionsRef.current.get(agent.id) || new THREE.Vector3(
-          Math.cos(index / swarmData.nodes.length * Math.PI * 2) * 20,
-          Math.sin(index / swarmData.nodes.length * Math.PI * 2) * 20,
-          (Math.random() - 0.5) * 10
-        );
-
-        return (
-          <SwarmNode
-            key={agent.id}
-            agent={agent}
-            position={position}
-            index={index}
+      {/* Render nodes - use instanced mesh for large swarms */}
+      {swarmData.nodes.length > 50 && settings?.visualisation?.performance?.useInstancing !== false ? (
+        <instancedMesh
+          ref={meshRef}
+          args={[undefined, undefined, swarmData.nodes.length]}
+          frustumCulled={false}
+        >
+          <sphereGeometry args={[0.5, 16, 16]} />
+          <meshStandardMaterial
+            color={settings?.visualisation?.graphs?.visionflow?.nodes?.baseColor || "#F1C40F"}
+            emissive={settings?.visualisation?.graphs?.visionflow?.nodes?.baseColor || "#F1C40F"}
+            emissiveIntensity={0.3}
+            metalness={0.8}
+            roughness={0.2}
+            transparent
+            opacity={0.9}
           />
-        );
-      })}
+        </instancedMesh>
+      ) : (
+        swarmData.nodes.map((agent, index) => {
+          const position = positionsRef.current.get(agent.id) || new THREE.Vector3(
+            Math.cos(index / swarmData.nodes.length * Math.PI * 2) * 20,
+            Math.sin(index / swarmData.nodes.length * Math.PI * 2) * 20,
+            (Math.random() - 0.5) * 10
+          );
+
+          return (
+            <SwarmNode
+              key={agent.id}
+              agent={agent}
+              position={position}
+              index={index}
+            />
+          );
+        })
+      )}
 
       {/* Render edges */}
       {swarmData.edges.map(edge => {
@@ -561,8 +710,8 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         return null;
       })}
 
-      {/* Ambient particles for VisionFlow atmosphere */}
-      <points>
+      {/* Ambient particles for VisionFlow atmosphere - DISABLED to prevent white squares bug */}
+      {/* <points>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -573,13 +722,13 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         </bufferGeometry>
         <pointsMaterial
           size={0.05}
-          color="#F1C40F"
+          color={settings?.visualisation?.graphs?.visionflow?.nodes?.baseColor || "#F1C40F"}
           transparent
           opacity={0.3}
           blending={THREE.AdditiveBlending}
           sizeAttenuation={true}
         />
-      </points>
+      </points> */}
     </group>
   );
 };

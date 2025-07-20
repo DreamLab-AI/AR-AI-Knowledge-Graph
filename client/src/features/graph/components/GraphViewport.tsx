@@ -3,7 +3,8 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { graphDataManager } from '../managers/graphDataManager';
-import GraphManager from './GraphManager';
+import EnhancedGraphManager from './EnhancedGraphManager';
+import { VisualEnhancementToggle } from './VisualEnhancementToggle';
 import CameraController from '../../visualisation/components/CameraController'; // Adjusted path
 import { useSettingsStore } from '../../../store/settingsStore';
 import { createLogger } from '../../../utils/logger';
@@ -151,11 +152,13 @@ const GraphViewport: React.FC = () => {
         />
 
         <Suspense fallback={null}>
-          <GraphManager />
+          {/* Using EnhancedGraphManager for all graph rendering */}
+          <EnhancedGraphManager />
+          {/* Note: Enhanced features can be toggled via settings */}
           {/* HologramVisualisation could be added here if it's part of the core graph view */}
           {/* <HologramVisualisation standalone={false} position={[0, 0, 0]} size={20} /> */}
           
-          {/* Add VisionFlow visualization */}
+          {/* VisionFlow visualization re-enabled in same origin space */}
           <SwarmVisualizationEnhanced />
         </Suspense>
 

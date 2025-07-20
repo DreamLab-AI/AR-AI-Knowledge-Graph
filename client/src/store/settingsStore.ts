@@ -7,9 +7,66 @@ import { debugState } from '../utils/debugState'
 import { deepMerge } from '../utils/deepMerge';
 import { settingsService } from '../services/settingsService';
 import { produce } from 'immer';
-import { toast } from '../features/design-system/components/Toast'; // Import toast
+import { toast } from '../features/design-system/components/Toast';
+import { migrateToMultiGraphSettings } from '../features/settings/utils/settingsMigration';
 
 const logger = createLogger('SettingsStore')
+
+// Debounce utility
+let saveTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+// Shared debounced save function
+const debouncedSaveToServer = async (settings: Settings, initialized: boolean) => {
+  if (!initialized || settings.system?.persistSettings === false) {
+    return;
+  }
+
+  try {
+    const headers: Record<string, string> = {};
+    
+    // Add authentication headers if available
+    try {
+      const { nostrAuth } = await import('../services/nostrAuthService');
+      if (nostrAuth.isAuthenticated()) {
+        const user = nostrAuth.getCurrentUser();
+        const token = nostrAuth.getSessionToken();
+        if (user && token) {
+          headers['X-Nostr-Pubkey'] = user.pubkey;
+          headers['Authorization'] = `Bearer ${token}`;
+          if (debugState.isEnabled()) {
+            logger.info('Using Nostr authentication for settings sync');
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn('Error getting Nostr authentication:', createErrorMetadata(error));
+    }
+
+    const updatedSettings = await settingsService.saveSettings(settings, headers);
+    if (updatedSettings) {
+      if (debugState.isEnabled()) {
+        logger.info('Settings saved to server successfully');
+      }
+      toast({ title: "Settings Saved", description: "Your settings have been synced with the server." });
+    }
+  } catch (error) {
+    const errorMeta = createErrorMetadata(error);
+    logger.error('Failed to save settings to server:', errorMeta);
+    toast({ 
+      variant: "destructive", 
+      title: "Save Failed", 
+      description: `Could not save settings to server. ${errorMeta.message || 'Check console.'}` 
+    });
+  }
+};
+
+// Schedule debounced save
+const scheduleSave = (settings: Settings, initialized: boolean) => {
+  if (saveTimeoutId) {
+    clearTimeout(saveTimeoutId);
+  }
+  saveTimeoutId = setTimeout(() => debouncedSaveToServer(settings, initialized), 300);
+};
 
 interface SettingsState {
   settings: Settings
@@ -24,7 +81,7 @@ interface SettingsState {
   setAuthenticated: (authenticated: boolean) => void
   setUser: (user: { isPowerUser: boolean; pubkey: string } | null) => void
   get: <T>(path: SettingsPath) => T
-  set: <T>(path: SettingsPath, value: T) => void
+  set: <T>(path: SettingsPath, value: T) => void // Deprecated - use updateSettings instead
   subscribe: (path: SettingsPath, callback: () => void, immediate?: boolean) => () => void;
   unsubscribe: (path: SettingsPath, callback: () => void) => void;
   updateSettings: (updater: (draft: Settings) => void) => void;
@@ -64,12 +121,15 @@ export const useSettingsStore = create<SettingsState>()(
               // This ensures all nested objects are properly merged
               const mergedSettings = deepMerge(defaultSettings, currentSettings, serverSettings)
 
+              // Apply migration to multi-graph structure
+              const migratedSettings = migrateToMultiGraphSettings(mergedSettings)
+
               if (debugState.isEnabled()) {
-                logger.info('Deep merged settings:', { mergedSettings })
+                logger.info('Deep merged and migrated settings:', { migratedSettings })
               }
 
               set({
-                settings: mergedSettings,
+                settings: migratedSettings,
                 initialized: true
               })
 
@@ -84,24 +144,31 @@ export const useSettingsStore = create<SettingsState>()(
             // Continue with local settings if server fetch fails
           }
 
+          // Apply migration to current settings
+          const migratedSettings = migrateToMultiGraphSettings(currentSettings)
+          
           // Mark as initialized
-          set({ initialized: true })
+          set({ 
+            settings: migratedSettings,
+            initialized: true 
+          })
 
           if (debugState.isEnabled()) {
-            logger.info('Settings initialized from local storage')
+            logger.info('Settings initialized from local storage and migrated')
           }
 
-          return currentSettings
+          return migratedSettings
         } catch (error) {
           logger.error('Failed to initialize settings:', createErrorMetadata(error))
 
-          // Fall back to default settings
+          // Fall back to default settings (already in the correct format)
+          const migratedDefaults = migrateToMultiGraphSettings(defaultSettings)
           set({
-            settings: defaultSettings,
+            settings: migratedDefaults,
             initialized: true
           })
 
-          return defaultSettings
+          return migratedDefaults
         }
       },
 
@@ -147,147 +214,48 @@ export const useSettingsStore = create<SettingsState>()(
         return current as T
       },
 
+      // Deprecated method - kept for backward compatibility
+      // Internally uses updateSettings for consistency
       set: <T>(path: SettingsPath, value: T) => {
-        set(state => {
+        if (debugState.isEnabled()) {
+          logger.warn(`Deprecated: set('${path}', value) called. Use updateSettings() instead.`);
+        }
+        
+        const state = get();
+        
+        // Use updateSettings internally
+        state.updateSettings((draft) => {
           // If setting the entire object
           if (!path || path === '') {
-            return { settings: value as unknown as Settings }
+            Object.assign(draft, value);
+            return;
           }
-
-          // Create a deep copy of the settings object
-          const newSettings = JSON.parse(JSON.stringify(state.settings))
-
+          
           // Navigate to the correct location and update
-          const pathParts = path.split('.')
-          let current = newSettings
-
+          const pathParts = path.split('.');
+          let current: any = draft;
+          
           // Navigate to the parent of the setting we want to update
           for (let i = 0; i < pathParts.length - 1; i++) {
-            const part = pathParts[i]
+            const part = pathParts[i];
             if (current[part] === undefined || current[part] === null) {
-              // Create the path if it doesn't exist
-              current[part] = {}
+              current[part] = {};
             }
-            current = current[part]
+            current = current[part];
           }
-
+          
           // Update the value
-          const finalPart = pathParts[pathParts.length - 1]
-          current[finalPart] = value
-
-          // Return the updated settings
-          return { settings: newSettings }
-        })
-
-        // Check if this is a visualization setting that needs immediate viewport update
-        const needsImmediateUpdate = path.startsWith('visualisation.') ||
-                                    path.startsWith('xr.') ||
-                                    path === 'system.debug.enablePhysicsDebug' ||
-                                    path === 'system.debug.enableNodeDebug' ||
-                                    path === 'system.debug.enablePerformanceDebug'
-
-        if (needsImmediateUpdate) {
-          // Trigger immediate viewport update
-          get().notifyViewportUpdate(path)
-        }
-
-        // Notify subscribers
-        const notifySubscribers = async () => {
-          const state = get()
-
-          // Build a list of paths to notify
-          // e.g. for path 'visualisation.bloom.enabled':
-          // '', 'visualisation', 'visualisation.bloom', 'visualisation.bloom.enabled'
-          const pathsToNotify = ['']
-          const pathParts = path.split('.')
-          let currentPath = ''
-
-          for (const part of pathParts) {
-            currentPath = currentPath ? `${currentPath}.${part}` : part
-            pathsToNotify.push(currentPath)
-          }
-
-          // Notify subscribers for each path
-          for (const notifyPath of pathsToNotify) {
-            const callbacks = state.subscribers.get(notifyPath)
-            if (callbacks) {
-              // Convert Set to Array to avoid TypeScript iteration issues
-              Array.from(callbacks).forEach(callback => {
-                try {
-                  callback()
-                } catch (error) {
-                  logger.error(`Error in settings subscriber for path ${notifyPath}:`, createErrorMetadata(error))
-                }
-              })
-            }
-          }
-
-          // Save to server if appropriate
-          if (state.initialized && state.settings.system?.persistSettings !== false) {
-            try {
-              // Prepare authentication headers
-              const headers: Record<string, string> = {};
-
-              // Add Nostr authentication if available
-              try {
-                // Import nostrAuth dynamically to avoid circular dependencies
-                const { nostrAuth } = await import('../services/nostrAuthService')
-
-                if (nostrAuth.isAuthenticated()) {
-                  const user = nostrAuth.getCurrentUser()
-                  const token = nostrAuth.getSessionToken()
-
-                  if (user && token) {
-                    headers['X-Nostr-Pubkey'] = user.pubkey
-                    headers['Authorization'] = `Bearer ${token}`
-                    logger.info('Using Nostr authentication for settings sync')
-                  } else {
-                    logger.warn('Nostr auth is authenticated but missing user or token')
-                  }
-                } else {
-                  logger.info('Not authenticated with Nostr, proceeding without auth')
-                }
-              } catch (error) {
-                logger.warn('Error getting Nostr authentication:', createErrorMetadata(error))
-                // Proceed without auth header if there's an error
-              }
-
-              // Use the settings service to save settings
-              const updatedSettings = await settingsService.saveSettings(state.settings, headers);
-
-              if (updatedSettings) { // Check if response is not null (success)
-                if (debugState.isEnabled()) {
-                  logger.info('Settings saved to server successfully');
-                }
-                toast({ title: "Settings Saved", description: "Your settings have been synced with the server." });
-                // Optionally, merge serverResponse back into store if server can modify settings during save
-                // For now, assume client is authoritative for UI settings it sends.
-                // If server can modify settings, you might do:
-                // set(s => ({ ...s, settings: deepMerge(s.settings, updatedSettings) }));
-              } else {
-                // saveSettings would have returned null or thrown an error handled by catch
-                // throw new Error('Server responded with an error or no data.'); // This will be caught below
-                // The toast for failure will be handled in the catch block
-              }
-            } catch (error) {
-              const errorMeta = createErrorMetadata(error);
-              logger.error('Failed to save settings to server:', errorMeta);
-              toast({ variant: "destructive", title: "Save Failed", description: `Could not save settings to server. ${errorMeta.message || 'Check console.'}` });
-            }
-          }
-        }
-
-        // Debounce saving settings
-        if (typeof window !== 'undefined') {
-          if (window.settingsSaveTimeout) {
-            clearTimeout(window.settingsSaveTimeout)
-          }
-          window.settingsSaveTimeout = setTimeout(notifySubscribers, 300)
-        } else {
-          // If running server-side, notify immediately
-          notifySubscribers()
-        }
+          const finalPart = pathParts[pathParts.length - 1];
+          current[finalPart] = value;
+        });
       },
+
+      // Legacy set implementation (commented out for reference)
+      /*
+      set: <T>(path: SettingsPath, value: T) => {
+        // Implementation moved to use updateSettings
+      }
+      */
 
       subscribe: (path: SettingsPath, callback: () => void, immediate: boolean = true) => {
         set(state => {
@@ -328,75 +296,31 @@ export const useSettingsStore = create<SettingsState>()(
         })
       },
 
-      // Corrected updateSettings implementation using Immer
+      // Immer-based updateSettings - the preferred method for updating settings
       updateSettings: (updater) => {
-        // Correct usage: produce takes the current state and the updater function
         set((state) => produce(state, (draft) => {
-          // Apply the updater function to the draft state
-          updater(draft.settings); // Pass only the settings part of the draft to the updater
+          updater(draft.settings);
         }));
 
-        // Trigger save/notification logic (remains the same)
-        const notifySubscribers = async () => {
-          const state = get();
-          // Notify all subscribers for simplicity, or refine later
-          const allCallbacks = new Set<() => void>();
-          state.subscribers.forEach(callbacks => {
-            callbacks.forEach(cb => allCallbacks.add(cb));
-          });
+        // After state update, handle notifications and saving
+        const state = get();
+        
+        // Notify all subscribers
+        const allCallbacks = new Set<() => void>();
+        state.subscribers.forEach(callbacks => {
+          callbacks.forEach(cb => allCallbacks.add(cb));
+        });
 
-          Array.from(allCallbacks).forEach(callback => {
-            try {
-              callback();
-            } catch (error) {
-              logger.error(`Error in settings subscriber during updateSettings:`, createErrorMetadata(error));
-            }
-          });
-
-          // Save to server if appropriate (copied from set, consider refactoring)
-          if (state.initialized && state.settings.system?.persistSettings !== false) {
-            try {
-              const headers: Record<string, string> = {};
-              try {
-                const { nostrAuth } = await import('../services/nostrAuthService');
-                if (nostrAuth.isAuthenticated()) {
-                  const user = nostrAuth.getCurrentUser();
-                  const token = nostrAuth.getSessionToken();
-                  if (user && token) {
-                    headers['X-Nostr-Pubkey'] = user.pubkey;
-                    headers['Authorization'] = `Bearer ${token}`;
-                  }
-                }
-              } catch (error) {
-                logger.warn('Error getting Nostr authentication for updateSettings:', createErrorMetadata(error));
-              }
-
-              const updatedSettings = await settingsService.saveSettings(state.settings, headers);
-              if (updatedSettings) {
-                if (debugState.isEnabled()) {
-                  logger.info('Settings saved to server successfully via updateSettings');
-                }
-                toast({ title: "Settings Saved", description: "Your settings have been synced with the server." });
-              } else {
-                // Failure toast handled in catch
-              }
-            } catch (error) {
-              const errorMeta = createErrorMetadata(error);
-              logger.error('Failed to save settings to server via updateSettings:', errorMeta);
-              toast({ variant: "destructive", title: "Save Failed", description: `Could not save settings to server (updateSettings). ${errorMeta.message || 'Check console.'}` });
-            }
+        Array.from(allCallbacks).forEach(callback => {
+          try {
+            callback();
+          } catch (error) {
+            logger.error('Error in settings subscriber during updateSettings:', createErrorMetadata(error));
           }
-        };
+        });
 
-        // Debounce saving settings (copied from set)
-        if (typeof window !== 'undefined') {
-          if (window.settingsSaveTimeout) {
-            clearTimeout(window.settingsSaveTimeout);
-          }
-          window.settingsSaveTimeout = setTimeout(notifySubscribers, 300);
-        } else {
-          notifySubscribers();
-        }
+        // Schedule save to server
+        scheduleSave(state.settings, state.initialized);
       },
 
       // The subscribe and unsubscribe functions below were duplicated and are removed by this change.
@@ -409,14 +333,22 @@ export const useSettingsStore = create<SettingsState>()(
         authenticated: state.authenticated,
         user: state.user,
         isPowerUser: state.isPowerUser
-      })
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.settings) {
+          // Apply migration when rehydrating from storage
+          state.settings = migrateToMultiGraphSettings(state.settings);
+          if (debugState.isEnabled()) {
+            logger.info('Settings migrated during rehydration');
+          }
+        }
+      }
     }
   )
 )
 
-// Add to Window interface
-declare global {
-  interface Window {
-    settingsSaveTimeout: ReturnType<typeof setTimeout>;
-  }
-}
+// Export for testing and direct access
+export const settingsStoreUtils = {
+  debouncedSaveToServer,
+  scheduleSave
+};

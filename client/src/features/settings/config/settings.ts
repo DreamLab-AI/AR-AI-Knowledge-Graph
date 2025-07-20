@@ -215,16 +215,37 @@ export interface CameraSettings {
   position: { x: number; y: number; z: number };
   lookAt?: { x: number; y: number; z: number }; // lookAt is often dynamic
 }
-export interface VisualisationSettings {
+
+// Graph-specific settings namespace
+export interface GraphSettings {
   nodes: NodeSettings;
   edges: EdgeSettings;
+  labels: LabelSettings;
   physics: PhysicsSettings;
+}
+
+// Multi-graph namespace structure
+export interface GraphsSettings {
+  logseq: GraphSettings;
+  visionflow: GraphSettings;
+}
+
+export interface VisualisationSettings {
+  // Global visualisation settings (shared across graphs)
   rendering: RenderingSettings;
   animations: AnimationSettings;
-  labels: LabelSettings;
   bloom: BloomSettings;
   hologram: HologramSettings;
   camera?: CameraSettings;
+  
+  // Graph-specific settings
+  graphs: GraphsSettings;
+  
+  // Legacy compatibility - will be deprecated
+  nodes?: NodeSettings;
+  edges?: EdgeSettings;
+  physics?: PhysicsSettings;
+  labels?: LabelSettings;
 }
 
 // System settings

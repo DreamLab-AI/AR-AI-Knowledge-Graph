@@ -38,72 +38,92 @@ export interface UICategoryDefinition {
   subsections: Record<string, UISubsectionDefinition>;
 }
 
+// Helper function to create graph-specific settings for a given graph name
+const createGraphSettingsSubsections = (graphName: 'logseq' | 'visionflow') => ({
+  [`${graphName}Nodes`]: {
+    label: `${graphName === 'logseq' ? 'Logseq' : 'VisionFlow'} Nodes`,
+    settings: {
+      baseColor: { label: 'Base Color', type: 'colorPicker', path: `visualisation.graphs.${graphName}.nodes.baseColor`, description: 'Default color of graph nodes.' },
+      metalness: { label: 'Metalness', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.nodes.metalness`, description: 'How metallic nodes appear.' },
+      opacity: { label: 'Opacity', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.nodes.opacity`, description: 'Overall opacity of nodes.' },
+      roughness: { label: 'Roughness', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.nodes.roughness`, description: 'Surface roughness of nodes.' },
+      nodeSize: { label: 'Node Size', type: 'slider', min: 0.01, max: 2.0, step: 0.01, path: `visualisation.graphs.${graphName}.nodes.nodeSize`, description: 'Controls the overall size of the nodes.' },
+      quality: { label: 'Quality', type: 'radioGroup', options: [{value: 'low', label: 'Low'}, {value: 'medium', label: 'Medium'}, {value: 'high', label: 'High'}], path: `visualisation.graphs.${graphName}.nodes.quality`, description: 'Render quality of nodes.' },
+      enableInstancing: { label: 'Enable Instancing', type: 'toggle', path: `visualisation.graphs.${graphName}.nodes.enableInstancing`, description: 'Use instanced rendering for nodes (performance).' },
+      enableHologram: { label: 'Enable Hologram Effect', type: 'toggle', path: `visualisation.graphs.${graphName}.nodes.enableHologram`, description: 'Apply hologram effect to nodes.' },
+      enableMetadataShape: { label: 'Enable Metadata Shape', type: 'toggle', path: `visualisation.graphs.${graphName}.nodes.enableMetadataShape`, description: 'Use shapes based on metadata.' },
+      enableMetadataVisualisation: { label: 'Enable Metadata Visualisation', type: 'toggle', path: `visualisation.graphs.${graphName}.nodes.enableMetadataVisualisation`, description: 'Show metadata as part of node visualisation.' },
+    },
+  },
+  [`${graphName}Edges`]: {
+    label: `${graphName === 'logseq' ? 'Logseq' : 'VisionFlow'} Edges`,
+    settings: {
+      arrowSize: { label: 'Arrow Size', type: 'slider', min: 0.01, max: 0.5, step: 0.01, path: `visualisation.graphs.${graphName}.edges.arrowSize`, description: 'Size of the arrows on edges.' },
+      baseWidth: { label: 'Base Width', type: 'slider', min: 0.01, max: 2, step: 0.01, path: `visualisation.graphs.${graphName}.edges.baseWidth`, description: 'Base width of edges.' },
+      color: { label: 'Color', type: 'colorPicker', path: `visualisation.graphs.${graphName}.edges.color`, description: 'Default color of edges.' },
+      enableArrows: { label: 'Enable Arrows', type: 'toggle', path: `visualisation.graphs.${graphName}.edges.enableArrows`, description: 'Show arrows on directed edges.' },
+      opacity: { label: 'Opacity', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.edges.opacity`, description: 'Overall opacity of edges.' },
+      widthRange: { label: 'Width Range', type: 'rangeSlider', min: 0.1, max: 5, step: 0.1, path: `visualisation.graphs.${graphName}.edges.widthRange`, description: 'Minimum and maximum width for edges.' },
+      quality: { label: 'Quality', type: 'select', options: [{value: 'low', label: 'Low'}, {value: 'medium', label: 'Medium'}, {value: 'high', label: 'High'}], path: `visualisation.graphs.${graphName}.edges.quality`, description: 'Render quality of edges.' },
+      enableFlowEffect: { label: 'Enable Flow Effect', type: 'toggle', path: `visualisation.graphs.${graphName}.edges.enableFlowEffect`, description: 'Animate a flow effect along edges.', isAdvanced: true },
+      flowSpeed: { label: 'Flow Speed', type: 'slider', min: 0.1, max: 5, step: 0.1, path: `visualisation.graphs.${graphName}.edges.flowSpeed`, description: 'Speed of the flow effect.', isAdvanced: true },
+      flowIntensity: { label: 'Flow Intensity', type: 'slider', min: 0, max: 10, step: 0.1, path: `visualisation.graphs.${graphName}.edges.flowIntensity`, description: 'Intensity of the flow effect.' },
+      glowStrength: { label: 'Glow Strength', type: 'slider', min: 0, max: 5, step: 0.1, path: `visualisation.graphs.${graphName}.edges.glowStrength`, description: 'Strength of the edge glow effect.' },
+      distanceIntensity: { label: 'Distance Intensity', type: 'slider', min: 0, max: 10, step: 0.1, path: `visualisation.graphs.${graphName}.edges.distanceIntensity`, description: 'Intensity based on distance for some edge effects.' },
+      useGradient: { label: 'Use Gradient', type: 'toggle', path: `visualisation.graphs.${graphName}.edges.useGradient`, description: 'Use a gradient for edge colors.' },
+      gradientColors: { label: 'Gradient Colors', type: 'dualColorPicker', path: `visualisation.graphs.${graphName}.edges.gradientColors`, description: 'Start and end colors for edge gradient.' },
+    },
+  },
+  [`${graphName}Labels`]: {
+    label: `${graphName === 'logseq' ? 'Logseq' : 'VisionFlow'} Labels`,
+    settings: {
+      enableLabels: { label: 'Enable Labels', type: 'toggle', path: `visualisation.graphs.${graphName}.labels.enableLabels`, description: 'Show text labels for nodes.' },
+      desktopFontSize: { label: 'Desktop Font Size', type: 'slider', min: 0.01, max: 1.5, step: 0.05, path: `visualisation.graphs.${graphName}.labels.desktopFontSize`, description: 'Font size for labels in desktop mode.' },
+      textColor: { label: 'Text Color', type: 'colorPicker', path: `visualisation.graphs.${graphName}.labels.textColor`, description: 'Color of label text.' },
+      textOutlineColor: { label: 'Outline Color', type: 'colorPicker', path: `visualisation.graphs.${graphName}.labels.textOutlineColor`, description: 'Color of label text outline.' },
+      textOutlineWidth: { label: 'Outline Width', type: 'slider', min: 0, max: 0.01, step: 0.001, path: `visualisation.graphs.${graphName}.labels.textOutlineWidth`, description: 'Width of label text outline.' },
+      textResolution: { label: 'Text Resolution', type: 'numberInput', min: 8, max: 128, step: 1, path: `visualisation.graphs.${graphName}.labels.textResolution`, description: 'Resolution of text rendering texture.' },
+      textPadding: { label: 'Text Padding', type: 'slider', min: 0, max: 3.0, step: 0.1, path: `visualisation.graphs.${graphName}.labels.textPadding`, description: 'Padding around text labels.' },
+      billboardMode: { label: 'Billboard Mode', type: 'select', options: [{value: 'camera', label: 'Camera Facing'}, {value: 'vertical', label: 'Vertical Lock'}], path: `visualisation.graphs.${graphName}.labels.billboardMode`, description: 'How labels orient themselves.' },
+    },
+  },
+  [`${graphName}Physics`]: {
+    label: `${graphName === 'logseq' ? 'Logseq' : 'VisionFlow'} Physics`,
+    settings: {
+      enabled: { label: 'Enable Physics', type: 'toggle', path: `visualisation.graphs.${graphName}.physics.enabled`, description: 'Enable physics simulation for graph layout.' },
+      attractionStrength: { label: 'Attraction Strength', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.physics.attractionStrength`, description: 'Strength of attraction between connected nodes.' },
+      boundsSize: { label: 'Bounds Size', type: 'slider', min: 1, max: 50, step: 0.5, path: `visualisation.graphs.${graphName}.physics.boundsSize`, description: 'Size of the simulation bounding box.' },
+      collisionRadius: { label: 'Collision Radius', type: 'slider', min: 0.1, max: 5, step: 0.1, path: `visualisation.graphs.${graphName}.physics.collisionRadius`, description: 'Radius for node collision detection.' },
+      damping: { label: 'Damping', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.physics.damping`, description: 'Damping factor to slow down node movement.' },
+      enableBounds: { label: 'Enable Bounds', type: 'toggle', path: `visualisation.graphs.${graphName}.physics.enableBounds`, description: 'Confine nodes within the bounds size.' },
+      iterations: { label: 'Iterations', type: 'slider', min: 10, max: 500, step: 10, path: `visualisation.graphs.${graphName}.physics.iterations`, description: 'Number of physics iterations per step.' },
+      maxVelocity: { label: 'Max Velocity', type: 'slider', min: 0.001, max: 0.5, step: 0.001, path: `visualisation.graphs.${graphName}.physics.maxVelocity`, description: 'Maximum velocity of nodes.' },
+      repulsionStrength: { label: 'Repulsion Strength', type: 'slider', min: 0, max: 2, step: 0.01, path: `visualisation.graphs.${graphName}.physics.repulsionStrength`, description: 'Strength of repulsion between nodes.' },
+      springStrength: { label: 'Spring Strength', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.physics.springStrength`, description: 'Strength of springs (edges) pulling nodes together.' },
+      repulsionDistance: { label: 'Repulsion Distance', type: 'slider', min: 0.1, max: 10, step: 0.1, path: `visualisation.graphs.${graphName}.physics.repulsionDistance`, description: 'Distance at which repulsion force acts.' },
+      massScale: { label: 'Mass Scale', type: 'slider', min: 0.1, max: 10, step: 0.1, path: `visualisation.graphs.${graphName}.physics.massScale`, description: 'Scaling factor for node mass.' },
+      boundaryDamping: { label: 'Boundary Damping', type: 'slider', min: 0, max: 1, step: 0.01, path: `visualisation.graphs.${graphName}.physics.boundaryDamping`, description: 'Damping when nodes hit boundaries.' },
+      updateThreshold: {
+        label: 'Update Threshold',
+        type: 'slider',
+        min: 0,
+        max: 0.5,
+        step: 0.001,
+        path: `visualisation.graphs.${graphName}.physics.updateThreshold`,
+        description: 'Distance threshold below which server position updates are ignored to let nodes settle. A value of 0 applies all updates.'
+      },
+    },
+  },
+});
+
 export const settingsUIDefinition: Record<string, UICategoryDefinition> = {
   visualisation: {
     label: 'Visualisation',
     icon: 'Eye',
     subsections: {
-      nodes: {
-        label: 'Nodes',
-        settings: {
-          baseColor: { label: 'Base Color', type: 'colorPicker', path: 'visualisation.nodes.baseColor', description: 'Default color of graph nodes.' },
-          metalness: { label: 'Metalness', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.nodes.metalness', description: 'How metallic nodes appear.' },
-          opacity: { label: 'Opacity', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.nodes.opacity', description: 'Overall opacity of nodes.' },
-          roughness: { label: 'Roughness', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.nodes.roughness', description: 'Surface roughness of nodes.' },
-          nodeSize: { label: 'Node Size', type: 'slider', min: 0.01, max: 2.0, step: 0.01, path: 'visualisation.nodes.nodeSize', description: 'Controls the overall size of the nodes.' },
-          quality: { label: 'Quality', type: 'radioGroup', options: [{value: 'low', label: 'Low'}, {value: 'medium', label: 'Medium'}, {value: 'high', label: 'High'}], path: 'visualisation.nodes.quality', description: 'Render quality of nodes.' },
-          enableInstancing: { label: 'Enable Instancing', type: 'toggle', path: 'visualisation.nodes.enableInstancing', description: 'Use instanced rendering for nodes (performance).' },
-          enableHologram: { label: 'Enable Hologram Effect', type: 'toggle', path: 'visualisation.nodes.enableHologram', description: 'Apply hologram effect to nodes.' },
-          enableMetadataShape: { label: 'Enable Metadata Shape', type: 'toggle', path: 'visualisation.nodes.enableMetadataShape', description: 'Use shapes based on metadata.' },
-          enableMetadataVisualisation: { label: 'Enable Metadata Visualisation', type: 'toggle', path: 'visualisation.nodes.enableMetadataVisualisation', description: 'Show metadata as part of node visualisation.' },
-        },
-      },
-      edges: {
-        label: 'Edges',
-        settings: {
-          arrowSize: { label: 'Arrow Size', type: 'slider', min: 0.01, max: 0.5, step: 0.01, path: 'visualisation.edges.arrowSize', description: 'Size of the arrows on edges.' },
-          baseWidth: { label: 'Base Width', type: 'slider', min: 0.01, max: 2, step: 0.01, path: 'visualisation.edges.baseWidth', description: 'Base width of edges.' },
-          color: { label: 'Color', type: 'colorPicker', path: 'visualisation.edges.color', description: 'Default color of edges.' },
-          enableArrows: { label: 'Enable Arrows', type: 'toggle', path: 'visualisation.edges.enableArrows', description: 'Show arrows on directed edges.' },
-          opacity: { label: 'Opacity', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.edges.opacity', description: 'Overall opacity of edges.' },
-          widthRange: { label: 'Width Range', type: 'rangeSlider', min: 0.1, max: 5, step: 0.1, path: 'visualisation.edges.widthRange', description: 'Minimum and maximum width for edges.' },
-          quality: { label: 'Quality', type: 'select', options: [{value: 'low', label: 'Low'}, {value: 'medium', label: 'Medium'}, {value: 'high', label: 'High'}], path: 'visualisation.edges.quality', description: 'Render quality of edges.' },
-          enableFlowEffect: { label: 'Enable Flow Effect', type: 'toggle', path: 'visualisation.edges.enableFlowEffect', description: 'Animate a flow effect along edges.', isAdvanced: true },
-          flowSpeed: { label: 'Flow Speed', type: 'slider', min: 0.1, max: 5, step: 0.1, path: 'visualisation.edges.flowSpeed', description: 'Speed of the flow effect.', isAdvanced: true },
-          flowIntensity: { label: 'Flow Intensity', type: 'slider', min: 0, max: 10, step: 0.1, path: 'visualisation.edges.flowIntensity', description: 'Intensity of the flow effect.' },
-          glowStrength: { label: 'Glow Strength', type: 'slider', min: 0, max: 5, step: 0.1, path: 'visualisation.edges.glowStrength', description: 'Strength of the edge glow effect.' },
-          distanceIntensity: { label: 'Distance Intensity', type: 'slider', min: 0, max: 10, step: 0.1, path: 'visualisation.edges.distanceIntensity', description: 'Intensity based on distance for some edge effects.' },
-          useGradient: { label: 'Use Gradient', type: 'toggle', path: 'visualisation.edges.useGradient', description: 'Use a gradient for edge colors.' },
-          gradientColors: { label: 'Gradient Colors', type: 'dualColorPicker', path: 'visualisation.edges.gradientColors', description: 'Start and end colors for edge gradient.' },
-        },
-      },
-      physics: {
-        label: 'Physics',
-        settings: {
-          enabled: { label: 'Enable Physics', type: 'toggle', path: 'visualisation.physics.enabled', description: 'Enable physics simulation for graph layout.' },
-          attractionStrength: { label: 'Attraction Strength', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.physics.attractionStrength', description: 'Strength of attraction between connected nodes.' },
-          boundsSize: { label: 'Bounds Size', type: 'slider', min: 1, max: 50, step: 0.5, path: 'visualisation.physics.boundsSize', description: 'Size of the simulation bounding box.' },
-          collisionRadius: { label: 'Collision Radius', type: 'slider', min: 0.1, max: 5, step: 0.1, path: 'visualisation.physics.collisionRadius', description: 'Radius for node collision detection.' },
-          damping: { label: 'Damping', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.physics.damping', description: 'Damping factor to slow down node movement.' },
-          enableBounds: { label: 'Enable Bounds', type: 'toggle', path: 'visualisation.physics.enableBounds', description: 'Confine nodes within the bounds size.' },
-          iterations: { label: 'Iterations', type: 'slider', min: 10, max: 500, step: 10, path: 'visualisation.physics.iterations', description: 'Number of physics iterations per step.' },
-          maxVelocity: { label: 'Max Velocity', type: 'slider', min: 0.001, max: 0.5, step: 0.001, path: 'visualisation.physics.maxVelocity', description: 'Maximum velocity of nodes.' },
-          repulsionStrength: { label: 'Repulsion Strength', type: 'slider', min: 0, max: 2, step: 0.01, path: 'visualisation.physics.repulsionStrength', description: 'Strength of repulsion between nodes.' },
-          springStrength: { label: 'Spring Strength', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.physics.springStrength', description: 'Strength of springs (edges) pulling nodes together.' },
-          repulsionDistance: { label: 'Repulsion Distance', type: 'slider', min: 0.1, max: 10, step: 0.1, path: 'visualisation.physics.repulsionDistance', description: 'Distance at which repulsion force acts.' },
-          massScale: { label: 'Mass Scale', type: 'slider', min: 0.1, max: 10, step: 0.1, path: 'visualisation.physics.massScale', description: 'Scaling factor for node mass.' },
-          boundaryDamping: { label: 'Boundary Damping', type: 'slider', min: 0, max: 1, step: 0.01, path: 'visualisation.physics.boundaryDamping', description: 'Damping when nodes hit boundaries.' },
-          updateThreshold: {
-            label: 'Update Threshold',
-            type: 'slider',
-            min: 0,
-            max: 0.5,
-            step: 0.001,
-            path: 'visualisation.physics.updateThreshold',
-            description: 'Distance threshold below which server position updates are ignored to let nodes settle. A value of 0 applies all updates.'
-          },
-        },
-      },
+      // Graph-specific settings
+      ...createGraphSettingsSubsections('logseq'),
+      ...createGraphSettingsSubsections('visionflow'),
       rendering: {
         label: 'Rendering',
         settings: {
@@ -117,19 +137,6 @@ export const settingsUIDefinition: Record<string, UICategoryDefinition> = {
           shadowMapSize: { label: 'Shadow Map Size', type: 'select', options: [{value: '512', label: '512px'}, {value: '1024', label: '1024px'}, {value: '2048', label: '2048px'}, {value: '4096', label: '4096px'}], path: 'visualisation.rendering.shadowMapSize', description: 'Resolution of shadow maps.', isAdvanced: true },
           shadowBias: { label: 'Shadow Bias', type: 'slider', min: -0.01, max: 0.01, step: 0.0001, path: 'visualisation.rendering.shadowBias', description: 'Bias to prevent shadow acne.', isAdvanced: true },
           context: { label: 'Rendering Context', type: 'select', options: [{value: 'desktop', label: 'Desktop'}, {value: 'ar', label: 'AR'}], path: 'visualisation.rendering.context', description: 'Current rendering context.' },
-        },
-      },
-      labels: {
-        label: 'Labels',
-        settings: {
-          enableLabels: { label: 'Enable Labels', type: 'toggle', path: 'visualisation.labels.enableLabels', description: 'Show text labels for nodes.' },
-          desktopFontSize: { label: 'Desktop Font Size', type: 'slider', min: 0.01, max: 1.5, step: 0.05, path: 'visualisation.labels.desktopFontSize', description: 'Font size for labels in desktop mode.' },
-          textColor: { label: 'Text Color', type: 'colorPicker', path: 'visualisation.labels.textColor', description: 'Color of label text.' },
-          textOutlineColor: { label: 'Outline Color', type: 'colorPicker', path: 'visualisation.labels.textOutlineColor', description: 'Color of label text outline.' },
-          textOutlineWidth: { label: 'Outline Width', type: 'slider', min: 0, max: 0.01, step: 0.001, path: 'visualisation.labels.textOutlineWidth', description: 'Width of label text outline.' },
-          textResolution: { label: 'Text Resolution', type: 'numberInput', min: 8, max: 128, step: 1, path: 'visualisation.labels.textResolution', description: 'Resolution of text rendering texture.' },
-          textPadding: { label: 'Text Padding', type: 'slider', min: 0, max: 3.0, step: 0.1, path: 'visualisation.labels.textPadding', description: 'Padding around text labels.' },
-          billboardMode: { label: 'Billboard Mode', type: 'select', options: [{value: 'camera', label: 'Camera Facing'}, {value: 'vertical', label: 'Vertical Lock'}], path: 'visualisation.labels.billboardMode', description: 'How labels orient themselves.' },
         },
       },
       bloom: {

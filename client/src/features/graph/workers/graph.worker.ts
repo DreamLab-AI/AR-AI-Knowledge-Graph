@@ -85,6 +85,7 @@ class GraphWorker {
   private graphData: GraphData = { nodes: [], edges: [] };
   private nodeIdMap: Map<string, number> = new Map();
   private reverseNodeIdMap: Map<number, string> = new Map();
+  private graphType: 'logseq' | 'visionflow' = 'logseq'; // Graph type identifier
 
   // --- NEW STATE FOR ANIMATION ---
   private currentPositions: Float32Array | null = null;
@@ -99,6 +100,14 @@ class GraphWorker {
   };
   private positionBuffer: SharedArrayBuffer | null = null;
   private positionView: Float32Array | null = null;
+
+  /**
+   * Set the graph type
+   */
+  async setGraphType(type: 'logseq' | 'visionflow'): Promise<void> {
+    this.graphType = type;
+    console.log(`GraphWorker: Graph type set to ${type}`);
+  }
 
   /**
    * Initialize the worker with graph data
@@ -142,7 +151,7 @@ class GraphWorker {
       this.targetPositions![i3 + 2] = pos.z;
     });
 
-    console.log(`GraphWorker: Initialized with ${this.graphData.nodes.length} nodes`);
+    console.log(`GraphWorker: Initialized ${this.graphType} graph with ${this.graphData.nodes.length} nodes`);
   }
 
   /**
@@ -168,6 +177,11 @@ class GraphWorker {
    * Process binary position data with decompression
    */
   async processBinaryData(data: ArrayBuffer): Promise<Float32Array> { // The return value is no longer directly used for rendering but can be for listeners.
+    // Only process binary data for Logseq graphs
+    if (this.graphType !== 'logseq') {
+      console.log(`GraphWorker: Skipping binary data processing for ${this.graphType} graph`);
+      return new Float32Array(0);
+    }
     // ... (decompression logic remains the same)
     if (isZlibCompressed(data)) {
       data = await decompressZlib(data);
@@ -302,6 +316,9 @@ class GraphWorker {
       return new Float32Array(0);
     }
 
+    // Clamp deltaTime to prevent physics explosion when tab regains focus
+    const dt = Math.min(deltaTime, 0.016); // Cap at ~60fps (16ms) to avoid large jumps
+
     const { springStrength, damping, maxVelocity, updateThreshold } = this.physicsSettings;
 
     for (let i = 0; i < this.graphData.nodes.length; i++) {
@@ -327,20 +344,20 @@ class GraphWorker {
       let ay = dy * springStrength;
       let az = dz * springStrength;
 
-      // Update velocity with acceleration
-      this.velocities[i3] += ax * deltaTime;
-      this.velocities[i3 + 1] += ay * deltaTime;
-      this.velocities[i3 + 2] += az * deltaTime;
+      // Update velocity with acceleration (use clamped dt)
+      this.velocities[i3] += ax * dt;
+      this.velocities[i3 + 1] += ay * dt;
+      this.velocities[i3 + 2] += az * dt;
 
       // Apply damping
       this.velocities[i3] *= damping;
       this.velocities[i3 + 1] *= damping;
       this.velocities[i3 + 2] *= damping;
 
-      // Update position with velocity
-      this.currentPositions[i3] += this.velocities[i3] * deltaTime;
-      this.currentPositions[i3 + 1] += this.velocities[i3 + 1] * deltaTime;
-      this.currentPositions[i3 + 2] += this.velocities[i3 + 2] * deltaTime;
+      // Update position with velocity (use clamped dt)
+      this.currentPositions[i3] += this.velocities[i3] * dt;
+      this.currentPositions[i3 + 1] += this.velocities[i3 + 1] * dt;
+      this.currentPositions[i3 + 2] += this.velocities[i3 + 2] * dt;
     }
 
     // Return the smoothly animated positions for rendering

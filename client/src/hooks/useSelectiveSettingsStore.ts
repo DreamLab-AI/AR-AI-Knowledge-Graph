@@ -81,7 +81,7 @@ export function useSelectiveSettings<T extends Record<string, any>>(
  * Returns a setter function that batches updates
  */
 export function useSettingSetter() {
-  const set = useSettingsStore(state => state.set);
+  const set = useSettingsStore(state => state.set); // Deprecated - kept for backward compatibility
   const updateSettings = useSettingsStore(state => state.updateSettings);
   
   const batchedSet = useCallback((updates: Record<SettingsPath, any>) => {
@@ -104,8 +104,9 @@ export function useSettingSetter() {
   }, [updateSettings]);
   
   return {
-    set,
-    batchedSet
+    set, // Deprecated - use updateSettings or batchedSet instead
+    batchedSet,
+    updateSettings // Expose updateSettings directly for single updates
   };
 }
 

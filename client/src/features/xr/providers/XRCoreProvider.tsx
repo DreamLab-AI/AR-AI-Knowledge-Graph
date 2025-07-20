@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
 import { XRSessionManager } from '../managers/xrSessionManager';
-import { SceneManager } from '../../visualisation/managers/sceneManager';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { createLogger } from '../../../utils/logger';
+import { debugState } from '../../../utils/debugState';
 import * as THREE from 'three';
+import { XRSettings } from '../types/xr';
+import { XRControllerEvent } from '../managers/xrSessionManager';
 
 const logger = createLogger('XRCoreProvider');
 
-// Enhanced XR Context interface with complete session state
+// Enhanced XR Context interface with complete session state and interactions
 interface XRCoreContextProps {
   isXRCapable: boolean;
   isXRSupported: boolean;
@@ -19,6 +22,9 @@ interface XRCoreContextProps {
   handsVisible: boolean;
   handTrackingEnabled: boolean;
   sessionManager: XRSessionManager | null;
+  // Teleportation state
+  isTeleporting: boolean;
+  teleportPosition: THREE.Vector3 | null;
   // Session management methods
   startSession: (mode?: XRSessionMode) => Promise<void>;
   endSession: () => Promise<void>;
@@ -27,6 +33,8 @@ interface XRCoreContextProps {
   onSessionEnd: (callback: () => void) => () => void;
   onControllerConnect: (callback: (controller: THREE.XRTargetRaySpace) => void) => () => void;
   onControllerDisconnect: (callback: (controller: THREE.XRTargetRaySpace) => void) => () => void;
+  // XR settings
+  updateXRSettings: (settings: XRSettings) => void;
 }
 
 const XRCoreContext = createContext<XRCoreContextProps>({
@@ -40,25 +48,188 @@ const XRCoreContext = createContext<XRCoreContextProps>({
   handsVisible: false,
   handTrackingEnabled: false,
   sessionManager: null,
+  isTeleporting: false,
+  teleportPosition: null,
   startSession: async () => {},
   endSession: async () => {},
   onSessionStart: () => () => {},
   onSessionEnd: () => () => {},
   onControllerConnect: () => () => {},
   onControllerDisconnect: () => () => {},
+  updateXRSettings: () => {},
 });
 
 export const useXRCore = () => useContext(XRCoreContext);
 
 interface XRCoreProviderProps {
   children: ReactNode;
-  sceneManager?: SceneManager;
   renderer?: THREE.WebGLRenderer;
 }
 
+// Hook for XR interactions (teleportation, floor, etc.)
+export const useXRInteractions = () => {
+  const { scene, camera } = useThree();
+  const { isTeleporting, teleportPosition, sessionManager } = useXRCore();
+  const { settings } = useSettingsStore();
+  const xrSettings = settings?.xr;
+  
+  const floorPlaneRef = useRef<THREE.Mesh | null>(null);
+  const teleportMarkerRef = useRef<THREE.Mesh | null>(null);
+  const raycasterRef = useRef(new THREE.Raycaster());
+  const controllerIntersectionsRef = useRef<Map<THREE.XRTargetRaySpace, THREE.Intersection[]>>(new Map());
+  
+  // Create floor plane
+  useEffect(() => {
+    if (!xrSettings?.showFloor) {
+      if (floorPlaneRef.current) {
+        scene.remove(floorPlaneRef.current);
+        floorPlaneRef.current.geometry.dispose();
+        (floorPlaneRef.current.material as THREE.Material).dispose();
+        floorPlaneRef.current = null;
+      }
+      return;
+    }
+    
+    if (!floorPlaneRef.current) {
+      const geometry = new THREE.PlaneGeometry(20, 20);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x808080,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide
+      });
+      
+      floorPlaneRef.current = new THREE.Mesh(geometry, material);
+      floorPlaneRef.current.rotation.x = -Math.PI / 2;
+      floorPlaneRef.current.position.y = 0;
+      floorPlaneRef.current.receiveShadow = true;
+      floorPlaneRef.current.name = 'xr-floor';
+      
+      scene.add(floorPlaneRef.current);
+      
+      if (debugState.isEnabled()) {
+        logger.info('XR floor plane created');
+      }
+    }
+  }, [scene, xrSettings?.showFloor]);
+  
+  // Create teleport marker
+  useEffect(() => {
+    if (!xrSettings?.teleportEnabled) {
+      if (teleportMarkerRef.current) {
+        scene.remove(teleportMarkerRef.current);
+        teleportMarkerRef.current.geometry.dispose();
+        (teleportMarkerRef.current.material as THREE.Material).dispose();
+        teleportMarkerRef.current = null;
+      }
+      return;
+    }
+    
+    if (!teleportMarkerRef.current) {
+      const geometry = new THREE.RingGeometry(0.15, 0.2, 32);
+      const material = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        transparent: true,
+        opacity: 0.6,
+        side: THREE.DoubleSide
+      });
+      
+      teleportMarkerRef.current = new THREE.Mesh(geometry, material);
+      teleportMarkerRef.current.rotation.x = -Math.PI / 2;
+      teleportMarkerRef.current.visible = false;
+      teleportMarkerRef.current.name = 'teleport-marker';
+      
+      scene.add(teleportMarkerRef.current);
+      
+      if (debugState.isEnabled()) {
+        logger.info('Teleport marker created');
+      }
+    }
+  }, [scene, xrSettings?.teleportEnabled]);
+  
+  // Update controller interactions
+  useFrame(() => {
+    if (!sessionManager?.isSessionActive()) return;
+    
+    const controllers = sessionManager.getControllers();
+    
+    controllers.forEach(controller => {
+      // Initialize raycaster from controller
+      const tempMatrix = new THREE.Matrix4();
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+      
+      raycasterRef.current.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycasterRef.current.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+      
+      // Store intersections for this controller
+      const intersections: THREE.Intersection[] = [];
+      
+      // Check for floor intersection if teleport is enabled
+      if (floorPlaneRef.current && xrSettings?.teleportEnabled) {
+        const floorIntersects = raycasterRef.current.intersectObject(floorPlaneRef.current);
+        
+        if (floorIntersects.length > 0) {
+          intersections.push(...floorIntersects);
+          
+          // Update teleport marker position if currently teleporting
+          if (isTeleporting && teleportMarkerRef.current) {
+            teleportMarkerRef.current.position.copy(floorIntersects[0].point);
+            teleportMarkerRef.current.visible = true;
+          }
+        } else if (isTeleporting && teleportMarkerRef.current) {
+          // Hide marker if not pointing at floor
+          teleportMarkerRef.current.visible = false;
+        }
+      }
+      
+      // Store intersections for this controller
+      controllerIntersectionsRef.current.set(controller, intersections);
+    });
+  });
+  
+  // Handle teleportation completion
+  useEffect(() => {
+    if (!isTeleporting && teleportPosition && teleportMarkerRef.current?.visible) {
+      // Get camera position but keep y-height the same
+      const cameraPosition = new THREE.Vector3();
+      cameraPosition.setFromMatrixPosition(camera.matrixWorld);
+      
+      // Calculate teleport offset (where we want camera to end up)
+      const offsetX = teleportPosition.x - cameraPosition.x;
+      const offsetZ = teleportPosition.z - cameraPosition.z;
+      
+      // Find camera rig/offset parent - in WebXR the camera is often a child of a rig
+      let cameraRig = camera.parent;
+      if (cameraRig) {
+        // Apply offset to camera rig's position
+        cameraRig.position.x += offsetX;
+        cameraRig.position.z += offsetZ;
+      } else {
+        // Fallback to moving camera directly if no rig
+        camera.position.x += offsetX;
+        camera.position.z += offsetZ;
+      }
+      
+      // Hide teleport marker
+      if (teleportMarkerRef.current) {
+        teleportMarkerRef.current.visible = false;
+      }
+      
+      if (debugState.isDataDebugEnabled()) {
+        logger.debug('Teleported to', { x: teleportPosition.x, z: teleportPosition.z });
+      }
+    }
+  }, [isTeleporting, teleportPosition, camera]);
+  
+  return {
+    floorPlane: floorPlaneRef.current,
+    teleportMarker: teleportMarkerRef.current,
+    controllerIntersections: controllerIntersectionsRef.current,
+  };
+};
+
 const XRCoreProvider: React.FC<XRCoreProviderProps> = ({ 
   children, 
-  sceneManager: externalSceneManager, 
   renderer: externalRenderer 
 }) => {
   // Basic XR capability state
@@ -76,6 +247,10 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
   const [handsVisible, setHandsVisible] = useState(false);
   const [handTrackingEnabled, setHandTrackingEnabled] = useState(false);
   
+  // Teleportation state
+  const [isTeleporting, setIsTeleporting] = useState(false);
+  const [teleportPosition, setTeleportPosition] = useState<THREE.Vector3 | null>(null);
+  
   // Session manager and event handlers
   const sessionManagerRef = useRef<XRSessionManager | null>(null);
   const sessionStartCallbacksRef = useRef<Set<(session: XRSession) => void>>(new Set());
@@ -83,10 +258,17 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
   const controllerConnectCallbacksRef = useRef<Set<(controller: THREE.XRTargetRaySpace) => void>>(new Set());
   const controllerDisconnectCallbacksRef = useRef<Set<(controller: THREE.XRTargetRaySpace) => void>>(new Set());
   
+  // Controller event handlers
+  const controllerSelectStartUnsubscribeRef = useRef<(() => void) | null>(null);
+  const controllerSelectEndUnsubscribeRef = useRef<(() => void) | null>(null);
+  const controllerSqueezeStartUnsubscribeRef = useRef<(() => void) | null>(null);
+  const controllerSqueezeEndUnsubscribeRef = useRef<(() => void) | null>(null);
+  
   // Cleanup tracking
   const cleanupFunctionsRef = useRef<Set<() => void>>(new Set());
   
   const { settings } = useSettingsStore();
+  const xrSettings = settings?.xr;
 
   // Initialize XR capability detection (Quest 3 AR focused)
   useEffect(() => {
@@ -121,23 +303,79 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
     checkXRSupport();
   }, [settings?.system?.debug?.enabled]);
 
+  // Handle controller select start event (trigger press)
+  const handleControllerSelectStart = useCallback((event: XRControllerEvent) => {
+    const { controller } = event;
+    
+    // Start teleportation if enabled
+    if (xrSettings?.teleportEnabled) {
+      setIsTeleporting(true);
+      
+      // We'll let the useXRInteractions hook handle the actual teleport logic
+      if (debugState.isDataDebugEnabled()) {
+        logger.debug('Started teleportation');
+      }
+    }
+  }, [xrSettings?.teleportEnabled]);
+  
+  // Handle controller select end event (trigger release)
+  const handleControllerSelectEnd = useCallback((event: XRControllerEvent) => {
+    // Complete teleportation if in progress
+    if (isTeleporting) {
+      // The actual teleportation is handled by useXRInteractions hook
+      setIsTeleporting(false);
+      
+      if (debugState.isDataDebugEnabled()) {
+        logger.debug('Ended teleportation');
+      }
+    }
+  }, [isTeleporting]);
+  
+  // Handle controller squeeze start event (grip press)
+  const handleControllerSqueezeStart = useCallback((event: XRControllerEvent) => {
+    // Placeholder for future interactions
+    // Could be used for grabbing objects, scaling the environment, etc.
+    if (debugState.isDataDebugEnabled()) {
+      logger.debug('Controller squeeze start');
+    }
+  }, []);
+  
+  // Handle controller squeeze end event (grip release)
+  const handleControllerSqueezeEnd = useCallback((event: XRControllerEvent) => {
+    // Placeholder for future interactions
+    if (debugState.isDataDebugEnabled()) {
+      logger.debug('Controller squeeze end');
+    }
+  }, []);
+
   // Initialize session manager when XR is supported and dependencies are available
   useEffect(() => {
     if (!isXRSupported || sessionManagerRef.current) return;
 
     try {
-      // Use external scene manager or create a default one
-      let sceneManager = externalSceneManager;
-      if (!sceneManager) {
-        // Create a minimal scene manager for XR if none provided
-        logger.warn('No SceneManager provided, XR functionality may be limited');
-        return;
-      }
+      // Create default scene and camera if not provided
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.z = 5;
 
       // Initialize XR session manager
-      const sessionManager = XRSessionManager.getInstance(sceneManager, externalRenderer);
+      const sessionManager = XRSessionManager.getInstance(externalRenderer, scene, camera);
       sessionManager.initialize(settings);
       sessionManagerRef.current = sessionManager;
+
+      // Set up controller event handlers
+      controllerSelectStartUnsubscribeRef.current = sessionManager.onSelectStart(handleControllerSelectStart);
+      controllerSelectEndUnsubscribeRef.current = sessionManager.onSelectEnd(handleControllerSelectEnd);
+      controllerSqueezeStartUnsubscribeRef.current = sessionManager.onSqueezeStart(handleControllerSqueezeStart);
+      controllerSqueezeEndUnsubscribeRef.current = sessionManager.onSqueezeEnd(handleControllerSqueezeEnd);
+      
+      // Add to cleanup
+      cleanupFunctionsRef.current.add(() => {
+        controllerSelectStartUnsubscribeRef.current?.();
+        controllerSelectEndUnsubscribeRef.current?.();
+        controllerSqueezeStartUnsubscribeRef.current?.();
+        controllerSqueezeEndUnsubscribeRef.current?.();
+      });
 
       // Set up session event listeners
       const handleSessionStart = () => {
@@ -180,6 +418,8 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
         setControllerGrips([]);
         setHandsVisible(false);
         setHandTrackingEnabled(false);
+        setIsTeleporting(false);
+        setTeleportPosition(null);
         
         // Notify callbacks
         sessionEndCallbacksRef.current.forEach(callback => {
@@ -229,7 +469,7 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
     } catch (error) {
       logger.error('Failed to initialize XR session manager:', error);
     }
-  }, [isXRSupported, settings, externalSceneManager, externalRenderer]);
+  }, [isXRSupported, settings, externalRenderer, handleControllerSelectStart, handleControllerSelectEnd, handleControllerSqueezeStart, handleControllerSqueezeEnd]);
 
   // Complete cleanup function
   const performCompleteCleanup = useCallback(() => {
@@ -347,6 +587,13 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
       controllerDisconnectCallbacksRef.current.delete(callback);
     };
   }, []);
+  
+  // Update XR settings
+  const updateXRSettings = useCallback((newSettings: XRSettings) => {
+    if (sessionManagerRef.current) {
+      sessionManagerRef.current.updateSettings({ ...settings, xr: newSettings });
+    }
+  }, [settings]);
 
   const contextValue: XRCoreContextProps = {
     isXRCapable,
@@ -359,12 +606,15 @@ const XRCoreProvider: React.FC<XRCoreProviderProps> = ({
     handsVisible,
     handTrackingEnabled,
     sessionManager: sessionManagerRef.current,
+    isTeleporting,
+    teleportPosition,
     startSession,
     endSession,
     onSessionStart,
     onSessionEnd,
     onControllerConnect,
     onControllerDisconnect,
+    updateXRSettings,
   };
 
   return (

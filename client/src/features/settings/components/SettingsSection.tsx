@@ -23,6 +23,7 @@ export function SettingsSection({ id, title, subsectionSettings }: SettingsSecti
   const [isDetached, setIsDetached] = useState(false);
   const { advancedMode } = useControlPanelContext();
   const settingsStore = useSettingsStore.getState(); // Get store state once
+  const updateSettings = useSettingsStore(state => state.updateSettings); // Get updateSettings function
 
   // Removed advanced prop check at the top level
 
@@ -51,7 +52,23 @@ export function SettingsSection({ id, title, subsectionSettings }: SettingsSecti
         // Retrieve value and define onChange handler
         const value = settingsStore.get(settingDef.path);
         const handleChange = (newValue: any) => {
-          settingsStore.set(settingDef.path, newValue);
+          // Use updateSettings instead of deprecated set method
+          updateSettings((draft) => {
+            const pathParts = settingDef.path.split('.');
+            let current: any = draft;
+            
+            // Navigate to the parent of the setting
+            for (let i = 0; i < pathParts.length - 1; i++) {
+              const part = pathParts[i];
+              if (!current[part]) {
+                current[part] = {};
+              }
+              current = current[part];
+            }
+            
+            // Update the final value
+            current[pathParts[pathParts.length - 1]] = newValue;
+          });
         };
 
         return (

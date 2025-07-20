@@ -25,6 +25,7 @@ class GraphDataManager {
   public nodeIdMap: Map<string, number> = new Map();
   private reverseNodeIdMap: Map<number, string> = new Map();
   private workerInitialized: boolean = false;
+  private graphType: 'logseq' | 'visionflow' = 'logseq'; // Graph type identifier
 
   private constructor() {
     // Worker proxy initializes automatically, just wait for it to be ready
@@ -91,11 +92,24 @@ class GraphDataManager {
     }
   }
 
+  // Set the graph type (for preventing data mixing)
+  public setGraphType(type: 'logseq' | 'visionflow'): void {
+    this.graphType = type;
+    if (debugState.isEnabled()) {
+      logger.info(`Graph type set to: ${type}`);
+    }
+  }
+
+  // Get the current graph type
+  public getGraphType(): 'logseq' | 'visionflow' {
+    return this.graphType;
+  }
+
   // Fetch initial graph data from the API
   public async fetchInitialData(): Promise<GraphData> {
     try {
       if (debugState.isEnabled()) {
-        logger.info('Fetching initial graph data');
+        logger.info(`Fetching initial ${this.graphType} graph data`);
       }
 
       const response = await fetch('/api/graph/data');
@@ -160,7 +174,7 @@ class GraphDataManager {
   // Set graph data and notify listeners
   public async setGraphData(data: GraphData): Promise<void> {
     if (debugState.isEnabled()) {
-      logger.info(`Setting graph data: ${data.nodes.length} nodes, ${data.edges.length} edges`);
+      logger.info(`Setting ${this.graphType} graph data: ${data.nodes.length} nodes, ${data.edges.length} edges`);
     }
 
     // Ensure all nodes have valid positions before setting the data
@@ -323,6 +337,14 @@ class GraphDataManager {
   // Update node positions from binary data
   public async updateNodePositions(positionData: ArrayBuffer): Promise<void> {
     if (!positionData || positionData.byteLength === 0) {
+      return;
+    }
+
+    // Only process if this is for Logseq graph (VisionFlow uses different update mechanism)
+    if (this.graphType !== 'logseq') {
+      if (debugState.isDataDebugEnabled()) {
+        logger.debug(`Skipping binary update for ${this.graphType} graph`);
+      }
       return;
     }
 

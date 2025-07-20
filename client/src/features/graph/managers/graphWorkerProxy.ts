@@ -56,6 +56,7 @@ class GraphWorkerProxy {
   private positionUpdateListeners: PositionUpdateListener[] = [];
   private sharedBuffer: SharedArrayBuffer | null = null;
   private isInitialized: boolean = false;
+  private graphType: 'logseq' | 'visionflow' = 'logseq'; // Graph type identifier
 
   private constructor() {}
 
@@ -98,10 +99,36 @@ class GraphWorkerProxy {
       if (debugState.isEnabled()) {
         logger.info('Graph worker initialized successfully');
       }
+
+      // Set initial graph type
+      await this.setGraphType(this.graphType);
     } catch (error) {
       logger.error('Failed to initialize graph worker:', error);
       throw error;
     }
+  }
+
+  /**
+   * Set the graph type
+   */
+  public async setGraphType(type: 'logseq' | 'visionflow'): Promise<void> {
+    if (!this.workerApi) {
+      throw new Error('Worker not initialized');
+    }
+
+    this.graphType = type;
+    await this.workerApi.setGraphType(type);
+
+    if (debugState.isEnabled()) {
+      logger.info(`Graph type set to: ${type}`);
+    }
+  }
+
+  /**
+   * Get the current graph type
+   */
+  public getGraphType(): 'logseq' | 'visionflow' {
+    return this.graphType;
   }
 
   /**
@@ -116,7 +143,7 @@ class GraphWorkerProxy {
     this.notifyGraphDataListeners(data);
 
     if (debugState.isEnabled()) {
-      logger.info(`Set graph data: ${data.nodes.length} nodes, ${data.edges.length} edges`);
+      logger.info(`Set ${this.graphType} graph data: ${data.nodes.length} nodes, ${data.edges.length} edges`);
     }
   }
 
@@ -124,6 +151,13 @@ class GraphWorkerProxy {
    * Process binary data through the worker (with decompression)
    */
   public async processBinaryData(data: ArrayBuffer): Promise<void> {
+    // Only process binary data for Logseq graphs
+    if (this.graphType !== 'logseq') {
+      if (debugState.isDataDebugEnabled()) {
+        logger.debug(`Skipping binary data processing for ${this.graphType} graph`);
+      }
+      return;
+    }
     if (!this.workerApi) {
       throw new Error('Worker not initialized');
     }

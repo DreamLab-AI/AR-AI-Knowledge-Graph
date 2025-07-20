@@ -98,9 +98,9 @@ class WebSocketService {
   private determineWebSocketUrl(): string {
     // Always use a relative path. Nginx handles proxying in dev,
     // and the browser resolves it correctly in production.
-    const url = '/wss'; // Changed from /ws to /wss
+    const url = '/wss'; // Main backend WebSocket for Logseq
     if (debugState.isEnabled()) { // Log only if debug is enabled
-        logger.info(`Determined WebSocket URL (relative): ${url}`);
+        logger.info(`Determined Logseq WebSocket URL (relative): ${url}`);
     }
     return url;
   }
@@ -124,7 +124,7 @@ class WebSocketService {
     // Extract host and port
     const hostWithProtocol = backendUrl.replace(/^(https?:\/\/)?/, '');
     // Set the WebSocket URL
-    this.url = `${protocol}${hostWithProtocol}/wss`; // Changed from /ws to /wss
+    this.url = `${protocol}${hostWithProtocol}/wss`; // Main backend WebSocket
 
     if (debugState.isEnabled()) {
       logger.info(`Set custom WebSocket URL: ${this.url}`);
@@ -256,11 +256,17 @@ class WebSocketService {
         logger.debug(`Processing binary data: ${data.byteLength} bytes`);
       }
 
-      // Pass binary data to graphDataManager for processing in the worker
-      try {
-        await graphDataManager.updateNodePositions(data);
-      } catch (error) {
-        logger.error('Error processing binary data in graphDataManager:', createErrorMetadata(error));
+      // Only process binary data for Logseq graphs (check graph type)
+      if (graphDataManager.getGraphType() === 'logseq') {
+        try {
+          await graphDataManager.updateNodePositions(data);
+        } catch (error) {
+          logger.error('Error processing binary data in graphDataManager:', createErrorMetadata(error));
+        }
+      } else {
+        if (debugState.isDataDebugEnabled()) {
+          logger.debug('Skipping binary data processing - not a Logseq graph');
+        }
       }
 
       // Notify binary message handlers
@@ -419,5 +425,8 @@ class WebSocketService {
     }
   }
 }
+
+// Create and export singleton instance
+export const webSocketService = WebSocketService.getInstance();
 
 export default WebSocketService;

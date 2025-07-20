@@ -22,6 +22,7 @@ interface PhysicsEdge {
 class SwarmPhysicsSimulation {
   private nodes: Map<string, PhysicsNode> = new Map();
   private edges: Map<string, PhysicsEdge> = new Map();
+  private dataType: 'visionflow' | 'logseq' = 'visionflow'; // Data type identifier
   private config: SwarmVisualConfig['physics'] = {
     springStrength: 0.3,
     linkDistance: 20,
@@ -31,7 +32,16 @@ class SwarmPhysicsSimulation {
     maxVelocity: 0.5
   };
 
+  setDataType(type: 'visionflow' | 'logseq') {
+    this.dataType = type;
+  }
+
   updateAgents(agents: SwarmAgent[]) {
+    // Only process VisionFlow agents
+    if (this.dataType !== 'visionflow') {
+      return;
+    }
+
     // Update existing nodes or create new ones
     agents.forEach(agent => {
       if (!this.nodes.has(agent.id)) {
@@ -192,9 +202,15 @@ class SwarmPhysicsWorker {
   private simulation: SwarmPhysicsSimulation;
   private animationFrame: number | null = null;
   private tokenUsage: { byAgent: { [key: string]: number } } | undefined;
+  private dataType: 'visionflow' | 'logseq' = 'visionflow';
 
   constructor() {
     this.simulation = new SwarmPhysicsSimulation();
+  }
+
+  setDataType(type: 'visionflow' | 'logseq') {
+    this.dataType = type;
+    this.simulation.setDataType(type);
   }
 
   init() {
@@ -202,11 +218,17 @@ class SwarmPhysicsWorker {
   }
 
   updateAgents(agents: SwarmAgent[]) {
-    this.simulation.updateAgents(agents);
+    // Only update if this is VisionFlow data
+    if (this.dataType === 'visionflow') {
+      this.simulation.updateAgents(agents);
+    }
   }
 
   updateEdges(edges: SwarmEdge[]) {
-    this.simulation.updateEdges(edges);
+    // Only update if this is VisionFlow data
+    if (this.dataType === 'visionflow') {
+      this.simulation.updateEdges(edges);
+    }
   }
 
   updateTokenUsage(usage: { byAgent: { [key: string]: number } }) {

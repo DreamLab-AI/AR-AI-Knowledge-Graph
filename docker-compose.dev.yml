@@ -36,6 +36,9 @@ services:
       # Override the port from settings.yaml for development environment
       # Ensure Rust backend listens on 4000, which Vite proxies to.
       - SYSTEM_NETWORK_PORT=4000
+      # MCP Orchestrator configuration (optional - will use mock data if not available)
+      - ORCHESTRATOR_WS_URL=ws://mcp-orchestrator:9001/ws
+      - MCP_RELAY_FALLBACK_TO_MOCK=true
     deploy: # Indentation: 4 spaces
       resources:
         reservations:
