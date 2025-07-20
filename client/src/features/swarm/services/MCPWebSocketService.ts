@@ -12,42 +12,52 @@ export class MCPWebSocketService {
   private clientId: string | null = null;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
   private requestCallbacks: Map<string, (data: any) => void> = new Map();
+  private useMCPRelay = true; // Flag to control which endpoint to use
 
   constructor(private wsUrl?: string) {
     // Determine the WebSocket URL based on environment
     if (!wsUrl) {
-      // Try to connect to the MCP server as specified in task.md
-      // The MCP server runs in the claude-flow container on port 3000
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host;
       
-      // Try different possible hostnames for the claude-flow container
-      const possibleHosts = [
-        'claude-flow',           // Container name
-        'claude-flow.docker_ragflow', // With network name
-        'host.docker.internal',  // If running from host
-        'localhost'              // Fallback
-      ];
-      
-      // For now, try the most likely option first
-      // In production environment, this should be configured properly
-      this.wsUrl = 'ws://claude-flow:3000/ws';
-      
-      logger.info('MCP WebSocket URL configured as:', this.wsUrl);
+      // Check if we should use the MCP relay endpoint
+      if (this.useMCPRelay) {
+        // Use the new MCP relay endpoint that connects to orchestrator
+        this.wsUrl = `${protocol}//${host}/ws/mcp`;
+        logger.info('MCP WebSocket configured to use relay endpoint:', this.wsUrl);
+      } else {
+        // Use the original /wss endpoint for backward compatibility
+        this.wsUrl = `${protocol}//${host}/wss`;
+        logger.info('MCP WebSocket configured to use legacy endpoint:', this.wsUrl);
+      }
     } else {
       this.wsUrl = wsUrl;
     }
   }
 
   async connect(): Promise<void> {
-    // Try multiple possible MCP server URLs
-    const possibleUrls = [
-      this.wsUrl!,  // Primary URL
-      'ws://claude-flow:3000/ws',
-      'ws://claude-flow.docker_ragflow:3000/ws',
-      'ws://host.docker.internal:3000/ws',
-      'ws://localhost:3000/ws',
-      'ws://172.17.0.1:3000/ws',  // Default Docker bridge
-      `ws://${window.location.hostname}:3000/ws`  // Same host, MCP port
-    ];
+    // Connect to the backend's WebSocket endpoint through Nginx proxy
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const possibleUrls = [];
+    
+    if (this.useMCPRelay) {
+      // Try MCP relay endpoints first
+      possibleUrls.push(
+        this.wsUrl!,  // Primary URL: backend /ws/mcp endpoint
+        `${protocol}//${window.location.host}/ws/mcp`,  // MCP relay endpoint
+        `ws://${window.location.hostname}/ws/mcp`,      // Without port (Nginx default)
+        `ws://localhost:3001/ws/mcp`,                    // Direct Nginx port (dev)
+        `ws://localhost:8080/ws/mcp`                     // Fallback port
+      );
+    }
+    
+    // Add legacy endpoints as fallback
+    possibleUrls.push(
+      `${protocol}//${window.location.host}/wss`,  // Legacy WebSocket endpoint
+      `ws://${window.location.hostname}/wss`,      // Without port (Nginx default)
+      `ws://localhost:3001/wss`,                   // Direct Nginx port (dev)
+      `ws://localhost:8080/wss`                    // Fallback port
+    );
 
     for (const url of possibleUrls) {
       try {
@@ -120,6 +130,21 @@ export class MCPWebSocketService {
         this.emit('welcome', message.data);
         break;
 
+      case 'connection_established':
+        logger.info('MCP relay connection established');
+        this.emit('connected', message);
+        break;
+
+      case 'orchestrator_connected':
+        logger.info('Connected to MCP orchestrator');
+        this.emit('orchestrator_connected', message);
+        break;
+
+      case 'orchestrator_disconnected':
+        logger.warn('Disconnected from MCP orchestrator');
+        this.emit('orchestrator_disconnected', message);
+        break;
+
       case 'mcp-update':
         logger.debug('Received MCP update');
         this.emit('update', message.data);
@@ -135,6 +160,11 @@ export class MCPWebSocketService {
 
       case 'pong':
         logger.debug('Received pong');
+        break;
+
+      case 'error':
+        logger.error('MCP error:', message.message);
+        this.emit('error', message);
         break;
 
       default:

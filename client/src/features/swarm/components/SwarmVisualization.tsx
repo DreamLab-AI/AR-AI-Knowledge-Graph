@@ -77,7 +77,7 @@ const SwarmNode: React.FC<SwarmNodeProps> = ({ agent, index }) => {
       const pulseSpeed = 1 + agent.cpuUsage / 20; // Faster pulse for higher CPU
       const pulseScale = 1 + Math.sin(state.clock.elapsedTime * pulseSpeed) * 0.1;
       glowRef.current.scale.setScalar(pulseScale);
-      
+
       // Update position from physics engine
       if (agent.position) {
         meshRef.current.position.set(agent.position.x, agent.position.y, agent.position.z);
@@ -148,7 +148,7 @@ const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetP
 
   // Calculate edge thickness based on data volume
   const thickness = Math.min(0.1 + Math.log10(edge.dataVolume + 1) * 0.05, 0.5);
-  
+
   // Animation speed based on message frequency
   const animationSpeed = edge.messageCount / 10;
 
@@ -157,7 +157,7 @@ const SwarmEdgeComponent: React.FC<SwarmEdgeProps> = ({ edge, sourcePos, targetP
       // Animate particles along the edge
       const time = state.clock.elapsedTime * animationSpeed;
       const particlePositions = particlesRef.current.geometry.attributes.position;
-      
+
       for (let i = 0; i < particlePositions.count; i++) {
         const t = (time + i * 0.1) % 1;
         const x = sourcePos.x + (targetPos.x - sourcePos.x) * t;
@@ -259,10 +259,10 @@ export const SwarmVisualization: React.FC = () => {
         data.agents.forEach((agent: SwarmAgent) => {
           agents.set(agent.id, agent);
         });
-        
+
         // Update physics simulation
         swarmPhysicsWorker.updateAgents(Array.from(agents.values()));
-        
+
         setSwarmState(prev => ({
           ...prev,
           agents,
@@ -309,13 +309,13 @@ export const SwarmVisualization: React.FC = () => {
   const pollCommunications = async () => {
     try {
       const communications = await swarmDataProvider.getCommunications();
-      
+
       // Process communications to build edges
       const edgeMap = new Map<string, SwarmEdge>();
-      
+
       communications.forEach(comm => {
         const edgeKey = [comm.sender, ...comm.receivers].sort().join('-');
-        
+
         if (!edgeMap.has(edgeKey)) {
           edgeMap.set(edgeKey, {
             id: edgeKey,
@@ -326,7 +326,7 @@ export const SwarmVisualization: React.FC = () => {
             lastMessageTime: Date.now()
           });
         }
-        
+
         const edge = edgeMap.get(edgeKey)!;
         edge.dataVolume += comm.metadata.size;
         edge.messageCount += 1;
@@ -365,7 +365,7 @@ export const SwarmVisualization: React.FC = () => {
 
   // Position the swarm visualization to the side of the main graph
   return (
-    <group ref={groupRef} position={[50, 0, 0]}>
+    <group ref={groupRef} position={[0, 0, 0]}>
       {/* Status indicator */}
       <SwarmStatusIndicator
         agentCount={swarmState.agents.size}
@@ -414,7 +414,7 @@ export const SwarmVisualization: React.FC = () => {
       {Array.from(swarmState.edges.values()).map(edge => {
         const sourceAgent = swarmState.agents.get(edge.source);
         const targetAgent = swarmState.agents.get(edge.target);
-        
+
         if (sourceAgent?.position && targetAgent?.position) {
           const sourcePos = new THREE.Vector3(
             sourceAgent.position.x,
@@ -426,7 +426,7 @@ export const SwarmVisualization: React.FC = () => {
             targetAgent.position.y,
             targetAgent.position.z
           );
-          
+
           return (
             <SwarmEdgeComponent
               key={edge.id}

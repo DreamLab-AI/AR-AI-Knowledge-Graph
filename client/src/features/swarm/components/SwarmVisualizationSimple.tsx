@@ -44,7 +44,7 @@ interface NodeVisualsProps {
 const NodeVisuals: React.FC<NodeVisualsProps> = ({ agent, position }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  
+
   const color = new THREE.Color(VISUAL_CONFIG.colors[agent.type] || '#CCCCCC');
   const size = 0.5 + (agent.workload || agent.cpuUsage / 100) * 1.5;
   const healthColor = new THREE.Color().lerpColors(
@@ -58,7 +58,7 @@ const NodeVisuals: React.FC<NodeVisualsProps> = ({ agent, position }) => {
       const pulseSpeed = 1 + agent.cpuUsage / 20;
       const pulseScale = 1 + Math.sin(state.clock.elapsedTime * pulseSpeed) * 0.1;
       glowRef.current.scale.setScalar(pulseScale);
-      
+
       meshRef.current.position.copy(position);
       glowRef.current.position.copy(position);
     }
@@ -87,12 +87,12 @@ const NodeVisuals: React.FC<NodeVisualsProps> = ({ agent, position }) => {
           roughness={0.3}
         />
       </mesh>
-      
+
       <mesh position={position.toArray()}>
         <ringGeometry args={[size * 1.2, size * 1.4, 32]} />
         <meshBasicMaterial color={healthColor} transparent opacity={0.8} />
       </mesh>
-      
+
       <mesh ref={glowRef} position={position.toArray()}>
         <sphereGeometry args={[size * 1.5, 16, 16]} />
         <meshBasicMaterial
@@ -147,7 +147,7 @@ export const SwarmVisualizationSimple: React.FC = () => {
       const agents = new Map<string, SwarmAgent>();
       data.agents.forEach((agent: SwarmAgent) => {
         agents.set(agent.id, agent);
-        
+
         // Initialize positions if needed
         if (!positions.has(agent.id)) {
           positions.set(agent.id, new THREE.Vector3(
@@ -158,7 +158,7 @@ export const SwarmVisualizationSimple: React.FC = () => {
           velocities.set(agent.id, new THREE.Vector3(0, 0, 0));
         }
       });
-      
+
       setSwarmState(prev => ({
         ...prev,
         agents,
@@ -177,7 +177,7 @@ export const SwarmVisualizationSimple: React.FC = () => {
       const agentMap = new Map<string, SwarmAgent>();
       agents.forEach(agent => {
         agentMap.set(agent.id, agent);
-        
+
         if (!positions.has(agent.id)) {
           positions.set(agent.id, new THREE.Vector3(
             (Math.random() - 0.5) * 30,
@@ -203,10 +203,10 @@ export const SwarmVisualizationSimple: React.FC = () => {
     try {
       const communications = await swarmDataProvider.getCommunications();
       const edgeMap = new Map<string, SwarmEdge>();
-      
+
       communications.forEach(comm => {
         const edgeKey = [comm.sender, ...comm.receivers].sort().join('-');
-        
+
         if (!edgeMap.has(edgeKey)) {
           edgeMap.set(edgeKey, {
             id: edgeKey,
@@ -217,7 +217,7 @@ export const SwarmVisualizationSimple: React.FC = () => {
             lastMessageTime: Date.now()
           });
         }
-        
+
         const edge = edgeMap.get(edgeKey)!;
         edge.dataVolume += comm.metadata.size;
         edge.messageCount += 1;
@@ -237,23 +237,23 @@ export const SwarmVisualizationSimple: React.FC = () => {
   // Simple physics simulation
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.016);
-    
+
     // Update positions with simple physics
     positions.forEach((pos, id) => {
       const vel = velocities.get(id)!;
       const agent = swarmState.agents.get(id);
-      
+
       if (!agent) return;
-      
+
       // Apply damping
       vel.multiplyScalar(0.95);
-      
+
       // Repulsion from other nodes
       positions.forEach((otherPos, otherId) => {
         if (id !== otherId) {
           const diff = new THREE.Vector3().subVectors(pos, otherPos);
           const dist = diff.length();
-          
+
           if (dist > 0 && dist < 10) {
             const force = 3 / (dist * dist);
             diff.normalize().multiplyScalar(force * dt);
@@ -261,7 +261,7 @@ export const SwarmVisualizationSimple: React.FC = () => {
           }
         }
       });
-      
+
       // Attraction for edges
       swarmState.edges.forEach(edge => {
         if (edge.source === id || edge.target === id) {
@@ -279,27 +279,27 @@ export const SwarmVisualizationSimple: React.FC = () => {
           }
         }
       });
-      
+
       // Center gravity
       const centerForce = -0.01;
       vel.add(pos.clone().multiplyScalar(centerForce * dt));
-      
+
       // Update position
       pos.add(vel);
-      
+
       // Limit position
       const maxDist = 30;
       if (pos.length() > maxDist) {
         pos.normalize().multiplyScalar(maxDist);
       }
     });
-    
+
     // Force re-render
     setPositions(new Map(positions));
   });
 
   return (
-    <group position={[50, 0, 0]}>
+    <group position={[0, 0, 0]}>
       {/* Status display */}
       <Html position={[0, 20, 0]} center>
         <div style={{
@@ -329,11 +329,11 @@ export const SwarmVisualizationSimple: React.FC = () => {
       {Array.from(swarmState.edges.values()).map(edge => {
         const sourcePos = positions.get(edge.source);
         const targetPos = positions.get(edge.target);
-        
+
         if (sourcePos && targetPos) {
           const points = [sourcePos, targetPos];
           const geometry = new THREE.BufferGeometry().setFromPoints(points);
-          
+
           return (
             <line key={edge.id} geometry={geometry}>
               <lineBasicMaterial
