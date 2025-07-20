@@ -354,3 +354,15 @@ pub async fn get_swarm_positions() -> Vec<Node> {
     let swarm_graph = SWARM_GRAPH.read().await;
     swarm_graph.nodes.clone()
 }
+
+// Configure routes for swarm endpoints
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::resource("/data")
+            .route(web::get().to(get_swarm_data))
+    )
+    .service(
+        web::resource("/update")
+            .route(web::post().to(update_swarm_data))
+    );
+}

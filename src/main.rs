@@ -10,6 +10,7 @@ use webxr::{
         speech_socket_handler::speech_socket_handler,
         mcp_relay_handler::mcp_relay_handler,
         nostr_handler,
+        swarm_handler,
     },
     services::{
         file_service::FileService,
@@ -289,6 +290,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(api_handler::config) // This will now serve /api/user-settings etc.
                     .service(web::scope("/health").configure(health_handler::config)) // This will now serve /api/health
                     .service(web::scope("/pages").configure(pages_handler::config))
+                    .service(web::scope("/swarm").configure(swarm_handler::config)) // This will now serve /api/swarm/data and /api/swarm/update
             );
 
         app
