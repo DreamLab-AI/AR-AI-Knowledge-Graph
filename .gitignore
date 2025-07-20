@@ -10,6 +10,7 @@ debug_log.txt
 claude-flow
 .roomodes
 CLAUDE.md
+workspace
 
 # Dependencies
 node_modules

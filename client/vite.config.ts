@@ -25,6 +25,11 @@ export default defineConfig({
       clientPort: 3001, // Client connects to Nginx port
       path: '/ws' // Explicitly set the path Nginx proxies
     },
+    // Enable file watching with polling for Docker on Windows
+    watch: {
+      usePolling: true,
+      interval: 1000, // Poll every second
+    },
     // Proxy is now handled by Nginx, remove proxy config from Vite
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',

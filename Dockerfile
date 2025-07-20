@@ -1,164 +1,194 @@
-# Stage 1: Frontend Build
-FROM node:20-slim AS frontend-builder
+# Stage 0 – CUDA 12.9 + cuDNN (official NVIDIA image)
+FROM nvidia/cuda:12.9.0-cudnn-devel-ubuntu24.04 AS base
 
-WORKDIR /app/client
+################################################################################
+# Stage 1 – OS deps, Python 3.12 & 3.13 venvs, Rust, Node, ML stack, WasmEdge (Blender disabled)
+################################################################################
+ARG DEBIAN_FRONTEND=noninteractive
 
-# Copy package files
-COPY client/package.json client/package-lock.json ./
+# 1. Set Environment Variables for Blender (COMMENTED OUT - Blender disabled)
+# Set the Blender version and create a directory for it.
+# ARG BLENDER_DOWNLOAD_URL
+# ENV BLENDER_VERSION="4.5"
+# ENV BLENDER_PATH="/usr/local/blender"
 
-# Clean install dependencies
-RUN npm ci
+# Set the application workspace directory
+ENV APP_HOME="/app"
+WORKDIR $APP_HOME
 
-# Copy source files and config
-COPY client/src ./src
-COPY client/index.html ./index.html
-COPY client/vite.config.ts ./vite.config.ts
-COPY client/tsconfig.json ./tsconfig.json
+# 2. Install Dependencies
+# Add any dependencies needed to run Blender and its Python environment.
+# wget and other utilities are for downloading and extracting Blender.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg software-properties-common
+# Add Docker's official GPG key
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    chmod a+r /etc/apt/keyrings/docker.gpg
+# Set up the repository
+RUN echo \
+      "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+      tee /etc/apt/sources.list.d/docker.list > /dev/null
+# Add Deadsnakes PPA for newer Python versions
+RUN add-apt-repository -y ppa:deadsnakes/ppa
+# Add NodeSource repository for up-to-date NodeJS (v22+)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+# Install all packages including network utilities
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      wget libxi6 libxxf86vm1 libxfixes3 libxrender1 \
+      build-essential clang git pkg-config libssl-dev \
+      lsb-release shellcheck hyperfine openssh-client tmux sudo \
+      docker-ce docker-ce-cli containerd.io unzip 7zip texlive-full latexmk chktex \
+      # Network utilities for debugging
+      iputils-ping netcat-openbsd net-tools dnsutils traceroute tcpdump nmap \
+      iproute2 iptables curl wget telnet mtr-tiny \
+      # Additional Blender dependencies for headless operation (COMMENTED OUT)
+      # libgl1 libglu1-mesa libglib2.0-0 libsm6 libxext6 \
+      # libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 \
+      # X11 virtual framebuffer for headless rendering
+      xvfb \
+      # Python, Node, and GPU/Wasm dependencies
+      python3.12 python3.12-venv python3.12-dev \
+      python3.13 python3.13-venv python3.13-dev \
+      nodejs \
+      jq \
+      libvulkan1 vulkan-tools ocl-icd-libopencl1 && \
+    rm -rf /var/lib/apt/lists/* && \
+    # Linters
+    wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
+    chmod +x /usr/local/bin/hadolint
 
-# Create dist directory
-RUN mkdir -p ../data/public/dist
+# 3. Install Blender
+# Download and extract the specified Blender LTS version.
+# Use default URL if not provided
+# RUN BLENDER_URL=${BLENDER_DOWNLOAD_URL:-"https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz"} && \
+#     wget "${BLENDER_URL}" -O blender.tar.xz && \
+#     tar -xf blender.tar.xz && \
+#     mv blender-${BLENDER_VERSION}.0-linux-x64 ${BLENDER_PATH} && \
+#     rm blender.tar.xz
 
-# Build frontend
-ENV NODE_ENV=production
-RUN npm run build
+# 4. Create addon directory and copy files later (COMMENTED OUT - Blender disabled)
+# We'll copy the addon files after creating the proper directory structure
+# RUN mkdir -p ${BLENDER_PATH}/${BLENDER_VERSION}/scripts/addons/addon
 
-# Move the build output to the expected location
-RUN mv dist/* ../data/public/dist/
+# 5. Install the MCP Server Package Dependencies (COMMENTED OUT - Blender disabled)
+# Install dependencies for the addon using Blender's Python
+# RUN /usr/local/blender/4.5/python/bin/python3.11 -m ensurepip && \
+#     /usr/local/blender/4.5/python/bin/python3.11 -m pip install --upgrade pip && \
+#     /usr/local/blender/4.5/python/bin/python3.11 -m pip install Pillow
 
-# Stage 2: Rust Dependencies Cache
-FROM nvidia/cuda:12.8.1-devel-ubuntu22.04 AS rust-deps-builder
+# 6. Set PYTHONPATH for Blender integration
+ENV PYTHONPATH="${APP_HOME}"
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    libssl-dev \
-    pkg-config \
-    libegl1-mesa-dev \
-    libasound2-dev \
-    ca-certificates \
-    jq \
-    && rm -rf /var/lib/apt/lists/*
+# 7. Copy startup and addon files (MCP server files for remote Blender connection)
+# Note: addon.py is used as MCP server to connect to remote Blender, not as local addon
+COPY addon.py $APP_HOME/
+COPY keep_alive.py $APP_HOME/
+COPY entrypoint.sh /
+COPY entrypoint.sh /
+RUN chmod +x /entrypoint.sh
 
-# Install Rust with better error handling
-RUN curl --retry 5 --retry-delay 2 --retry-connrefused https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain 1.82.0
+# ---------- Create Python virtual environments & install global node packages ----------
+RUN python3.12 -m venv /opt/venv312 && \
+    /opt/venv312/bin/pip install --upgrade pip wheel setuptools && \
+    python3.13 -m venv /opt/venv313 && \
+    /opt/venv313/bin/pip install --upgrade pip wheel setuptools
+
+# ---------- Install global CLI tools with specific versions ----------
+RUN npm install -g \
+    claude-flow@alpha \
+    ruv-swarm@latest \
+    @anthropic-ai/claude-code@latest \
+    @google/gemini-cli@latest \
+    @openai/codex@latest
+
+# ---------- Install Python ML & AI libraries into the 3.12 venv ----------
+# Copy requirements file and install dependencies to leverage Docker layer caching.
+COPY requirements.txt .
+RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 -r requirements.txt
+
+# Install the Modular MAX runtime last. As a pre-release, it's best
+# installed on its own to avoid influencing the resolution of stable packages.
+RUN /opt/venv312/bin/pip install --no-cache-dir --retries 10 --timeout 60 --pre modular
+
+# ---------- Rust tool-chain (AVX‑512) ----------
 ENV PATH="/root/.cargo/bin:${PATH}"
+# Update certificates and install Rust with retry logic
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    update-ca-certificates && \
+    for i in 1 2 3; do \
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile default && break || \
+        echo "Rust installation attempt $i failed, retrying..." && sleep 5; \
+    done && \
+    echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> /etc/profile.d/rust.sh && \
+    . "$HOME/.cargo/env" && \
+    cargo install cargo-edit
+ENV RUSTFLAGS="-C target-cpu=skylake-avx512 -C target-feature=+avx2,+avx512f,+avx512bw,+avx512dq"
 
-# Configure cargo for better network resilience
-RUN mkdir -p ~/.cargo && \
-    echo '[source.crates-io]' >> ~/.cargo/config.toml && \
-    echo 'registry = "https://github.com/rust-lang/crates.io-index"' >> ~/.cargo/config.toml && \
-    echo 'replace-with = "ustc"' >> ~/.cargo/config.toml && \
-    echo '[source.ustc]' >> ~/.cargo/config.toml && \
-    echo 'registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"' >> ~/.cargo/config.toml && \
-    echo '[net]' >> ~/.cargo/config.toml && \
-    echo 'retry = 10' >> ~/.cargo/config.toml && \
-    echo 'timeout = 120' >> ~/.cargo/config.toml && \
-    echo 'git-fetch-with-cli = true' >> ~/.cargo/config.toml
+# ---------- Install uv (fast python package manager) and uvx ----------
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    echo 'export PATH="/root/.local/bin:$PATH"' >> /etc/profile.d/uv.sh
 
-WORKDIR /usr/src/app
+# ---------- GPU‑accelerated Wasm stack (WasmEdge) ----------
+RUN curl -sSf https://raw.githubusercontent.com/WasmEdge/WasmEdge/master/utils/install.sh | \
+    bash -s -- -p /usr/local --plugins wasi_nn-openvino && ldconfig
 
-# Copy Cargo files first for better layer caching
-COPY Cargo.toml Cargo.lock ./
+# ---------- OpenVINO from official APT repository ----------
+RUN wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | \
+    gpg --dearmor --output /etc/apt/trusted.gpg.d/intel.gpg && \
+    echo "deb https://apt.repos.intel.com/openvino ubuntu24 main" > /etc/apt/sources.list.d/intel-openvino.list && \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends openvino-2025.2.0
 
-# Install git and set GIT_HASH
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-# Create dummy src directory and build dependencies
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    GIT_HASH=$(git rev-parse HEAD || echo "development") \
-    CARGO_NET_GIT_FETCH_WITH_CLI=true \
-    CARGO_HTTP_TIMEOUT=120 \
-    CARGO_HTTP_CHECK_REVOKE=false \
-    cargo build --release --features gpu --jobs $(nproc) || \
-    (sleep 2 && GIT_HASH=$(git rev-parse HEAD || echo "development") CARGO_HTTP_MULTIPLEXING=false cargo build --release --jobs $(nproc)) || \
-    (sleep 5 && GIT_HASH=$(git rev-parse HEAD || echo "development") CARGO_HTTP_MULTIPLEXING=false cargo build --release --jobs 1)
-
-# Copy the real source code and build
-COPY src ./src
-
-RUN GIT_HASH=$(git rev-parse HEAD || echo "development") \
-    cargo build --release --features gpu --jobs $(nproc) || \
-    (sleep 2 && GIT_HASH=$(git rev-parse HEAD || echo "development") cargo build --release --jobs $(nproc)) || \
-    (sleep 5 && GIT_HASH=$(git rev-parse HEAD || echo "development") cargo build --release --jobs 1)
-
-# Stage 3: Final Runtime Image
-FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
-
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    PATH="/app/venv/bin:${PATH}" \
-    NVIDIA_DRIVER_CAPABILITIES=all \
-    RUST_LOG=warn \
-    RUST_BACKTRACE=0 \
-    PORT=4000 \
-    BIND_ADDRESS=0.0.0.0 \
-    NODE_ENV=production \
-    DOMAIN=localhost
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    libssl3 \
-    nginx \
-    libegl1-mesa \
-    libasound2 \
-    ca-certificates \
-    mesa-utils \
-    libgl1-mesa-dri \
-    libgl1-mesa-glx \
-    netcat-openbsd \
-    gettext-base \
-    net-tools \
-    iproute2 \
-    procps \
-    lsof \
-    jq \
-    wget \
-    && wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
-    && chmod +x /usr/bin/yq \
-    && wget https://github.com/vi/websocat/releases/latest/download/websocat.x86_64-unknown-linux-musl -O /usr/bin/websocat \
-    && chmod +x /usr/bin/websocat \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /usr/share/doc/* \
-    && rm -rf /usr/share/man/*
-
-# Create non-root user
-RUN groupadd -r webxr && useradd -r -g webxr webxr
+################################################################################
+# Stage 2 – Non‑root user, health‑check, env placeholders
+################################################################################
+ARG UID=1000
+ARG GID=1000
+# Remove the existing ubuntu user and replace it with the dev user
+# This ensures there's no UID conflict and the dev user is properly used
+RUN (id ubuntu &>/dev/null && userdel -r ubuntu) || true && \
+    groupadd -g ${GID} dev && \
+    useradd -m -s /bin/bash -u ${UID} -g ${GID} dev && \
+    # Add dev user to the docker and sudo groups
+    usermod -aG docker,sudo dev && \
+    # Allow passwordless sudo for the dev user
+    echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev && chmod 0440 /etc/sudoers.d/dev && \
+    # Fix ownership of npm global modules so dev user can write to them
+    chown -R dev:dev /usr/lib/node_modules && \
+    # Create python symlink for convenience
+    ln -s /usr/bin/python3.12 /usr/local/bin/python && \
+    # Create workspace directories with proper ownership
+    mkdir -p /workspace /workspace/ext /workspace/logs /workspace/.claude /workspace/.mcp /workspace/memory && \
+    chown -R dev:dev /workspace && \
+    # Make uv accessible to dev user
+    cp -r /root/.local /home/dev/ && \
+    chown -R dev:dev /home/dev/.local && \
+    echo 'export PATH="/home/dev/.local/bin:$PATH"' >> /home/dev/.bashrc
 
 
-# Create Nginx directories and set permissions for the webxr group
-RUN mkdir -p /var/log/nginx /var/run/nginx && \
-    chown -R root:webxr /var/log/nginx /var/run/nginx && \
-    chmod -R 775 /var/log/nginx /var/run/nginx
+USER dev
+WORKDIR /workspace
+COPY README.md .
+COPY CLAUDE-README.md .
 
-# Create necessary directories
-RUN mkdir -p /app/data/public/dist && \
-    mkdir -p /app/src/utils && \
-    chown -R webxr:webxr /app
+# Configure git for the dev user
+RUN git config --global user.email "swarm@dreamlab-ai.com" && \
+    git config --global user.name "Swarm Agent"
 
-# Switch to non-root user
-USER webxr
+# Activate 3.12 venv by default
+ENV PATH="/opt/venv312/bin:/home/dev/.local/bin:${PATH}"
 
-# Copy built artifacts
-COPY --from=rust-deps-builder /usr/src/app/target/release/webxr /app/
-COPY src/utils/compute_forces.ptx /app/src/utils/compute_forces.ptx
-COPY --from=frontend-builder /app/data/public/dist /app/data/public/dist
+# Runtime placeholders
+ENV WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
 
-# Copy start script
-COPY scripts/start.sh /app/start.sh
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+  CMD ["sh", "-c", "command -v claude >/dev/null && command -v claude-flow >/dev/null"] || exit 1
 
-# Set proper permissions
-USER root
-RUN chown -R webxr:webxr /app && \
-    chmod 755 /app/start.sh && \
-    chmod -R g+w /app && \
-    chmod 644 /app/src/utils/compute_forces.ptx
-# Settings file is mounted via docker-compose, no need to touch/chmod here
-
-USER webxr
-
-EXPOSE 4000
-
-CMD ["/app/start.sh"]
+# Start via entrypoint.sh which handles all services including Blender MCP
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["--interactive"]

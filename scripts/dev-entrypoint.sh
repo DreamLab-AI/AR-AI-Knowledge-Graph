@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits with a non-zero status.
 
+# Add Docker group if socket is mounted
+if [ -S /var/run/docker.sock ]; then
+    DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+    groupadd -g $DOCKER_GID docker 2>/dev/null || true
+    usermod -aG docker root 2>/dev/null || true
+fi
+
 # Configure log paths
 LOGS_DIR="/app/logs"
 RUST_LOG_FILE="${LOGS_DIR}/rust.log"
@@ -137,16 +144,33 @@ start_nginx() {
 # --- Main Execution ---
 log "Starting development environment services..."
 
-start_rust_server
-start_vite
-start_nginx
-
-# Wait for Nginx (foreground process) to exit
-wait $NGINX_PID
-
-# If Nginx exits, trigger cleanup
-log "Nginx process ended. Initiating cleanup..."
-cleanup
-
-log "Entrypoint script will now sleep indefinitely to keep container alive for debugging."
-sleep infinity
+# Check if we should use supervisord
+if [ -f /etc/supervisor/conf.d/services.conf ] || [ -f /app/supervisord.dev.conf ]; then
+    log "Starting services with supervisord..."
+    
+    # Create necessary directories
+    mkdir -p /app/logs /tmp
+    
+    # Use custom config if available
+    if [ -f /app/supervisord.dev.conf ]; then
+        exec supervisord -c /app/supervisord.dev.conf
+    else
+        exec supervisord -n
+    fi
+else
+    # Fallback to original startup method
+    log "Starting services individually..."
+    start_rust_server
+    start_vite
+    start_nginx
+    
+    # Wait for Nginx (foreground process) to exit
+    wait $NGINX_PID
+    
+    # If Nginx exits, trigger cleanup
+    log "Nginx process ended. Initiating cleanup..."
+    cleanup
+    
+    log "Entrypoint script will now sleep indefinitely to keep container alive for debugging."
+    sleep infinity
+fi

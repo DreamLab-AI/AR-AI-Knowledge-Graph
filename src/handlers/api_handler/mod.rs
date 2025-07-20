@@ -1,6 +1,7 @@
 pub mod files;
 pub mod graph;
 pub mod visualisation;
+pub mod swarm;
 
 // Re-export specific types and functions
 // Re-export specific types and functions
@@ -27,6 +28,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .configure(files::config)
             .configure(graph::config)
             .configure(visualisation::config)
+            .configure(swarm::config)
             .configure(crate::handlers::nostr_handler::config)
             .configure(crate::handlers::settings_handler::config)
             .configure(crate::handlers::ragflow_handler::config) // Add this line

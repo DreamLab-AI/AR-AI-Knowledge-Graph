@@ -1,71 +1,125 @@
-name: logseq-xr
-
 services:
-  webxr:
-    build: .
-    image: logseq-xr-image:latest
-    container_name: logseq-xr-webxr
-    read_only: false
-    networks:
-      ragflow:
-        aliases:
-          - webxr-client # Removed logseq-xr-webxr alias
+  powerdev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BLENDER_DOWNLOAD_URL=https://mirror.clarkson.edu/blender/release/Blender4.5/blender-4.5.0-linux-x64.tar.xz
+    image: powerdev:latest
+    container_name: powerdev
+
+    # GPU support (uncomment if you have NVIDIA GPU)
     deploy:
       resources:
-        limits:
-          cpus: '16.0'
-          memory: 64G
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']  # Explicitly use GPU 0
-              capabilities: [compute, utility]
-    expose:
-      - "4000"
-    ports:
-      - "4000:4000"  # Map container nginx port 4000 to host port 4000
-    environment:
-      - RUST_LOG=warn                 # Changed from info
-      - RUST_BACKTRACE=1
-      - BIND_ADDRESS=0.0.0.0
-      - PORT=3001  # Explicitly set Rust backend to use port 3001
-      - NGINX_PORT=4000  # Set nginx to use port 4000
-      - NVIDIA_GPU_UUID=GPU-553dc306-dab3-32e2-c69b-28175a6f4da6  # Direct UUID value for the specific GPU
-      - NVIDIA_VISIBLE_DEVICES=GPU-553dc306-dab3-32e2-c69b-28175a6f4da6  # Pass the GPU UUID directly
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-      - NODE_ENV=production
-      - GIT_HASH=${GIT_HASH:-development}  # Pass GIT_HASH from build environment
-      - DEBUG_MODE=${DEBUG_MODE:-false}  # Control whether to start webxr or not
-    env_file:
-      - .env
-    volumes:
-      - ./data/markdown:/app/data/markdown
-      - ./data/metadata:/app/data/metadata  # Added metadata volume mount
-      - ./data/user_settings:/app/user_settings  # Added user settings volume mount
-      - ./data/settings.yaml:/app/settings.yaml:rw # Simplified syntax, rw for read-write
-      - type: tmpfs
-        target: /tmp
-        tmpfs:
-          size: 4G
-    user: "${UID:-1000}:${GID:-1000}"  # Use host user's UID/GID or default to 1000
-    restart: unless-stopped
-    stop_grace_period: 30s
-    command: sh -c 'exec /app/start.sh'  # Always start WebXR with GPU enabled (via modified start.sh)
-    init: true
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "1g"
-        max-file: "5"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+              count: all
+              capabilities: [gpu]
 
-# Removed cloudflared service definition - now defined in docker-compose.production.yml
+    environment:
+      - DISPLAY=:99
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - PYTHONUNBUFFERED=1
+
+    ports:
+      - "9876:9876"    # Blender MCP server
+      - "3000:3000"    # Claude Flow UI
+      - "3001:3001"    # Additional services
+
+    volumes:
+      - ./workspace:/workspace
+      - ./blender-files:/blender-files
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${EXTERNAL_DIR:-./.agent-mount/ext}:/workspace/ext
+
+    # Run in interactive mode by default
+    command: ["--interactive"]
+
+    # Keep stdin open and allocate a pseudo-TTY
+    stdin_open: true
+    tty: true
+
+    # Security options
+    security_opt:
+      - seccomp:unconfined
+      - apparmor:unconfirmed
+    cap_add:
+      - SYS_PTRACE
+
+    # Resource limits
+    mem_limit: 8g
+    cpus: "4.0"
+
+    # Healthcheck
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # Restart policy
+    restart: unless-stopped
+
+    networks:
+      - powerdev-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "blender-host:192.168.0.216"  # For external Blender MCP server
+
+  # MCP Orchestrator service for swarm visualization
+  mcp-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    image: mcp-orchestrator:latest
+    container_name: mcp-orchestrator
+    environment:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+      - MCP_ORCHESTRATOR_PORT=9000
+      - WEBSOCKET_PORT=9001
+      - POLL_INTERVAL=5000
+      - MCP_SERVERS=blender:9876,claude-flow:3000
+      - CLAUDE_FLOW_HOST=powerdev
+      - CLAUDE_FLOW_PORT=3000
+    ports:
+      - "9000:9000"  # REST API
+      - "9001:9001"  # WebSocket
+    networks:
+      - powerdev-network
+    depends_on:
+      - powerdev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Claude Flow standalone service
+  claude-flow:
+    image: powerdev:latest
+    container_name: claude-flow-ui
+    command: ["claude-flow", "start", "--ui", "--port", "3000"]
+    ports:
+      - "3002:3000"
+    environment:
+      - NODE_ENV=production
+    networks:
+      - powerdev-network
+    profiles:
+      - standalone
+
 networks:
-  ragflow:
-    external: true
-    name: docker_ragflow  # RAGFlow's network name from docker network ls
+  powerdev-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  workspace:
+  blender-files:

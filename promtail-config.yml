@@ -1,0 +1,93 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # MCP Server Logs
+  - job_name: mcp-servers
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: mcp-servers
+          __path__: /var/log/mcp/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+)\s+(?P<level>\S+)\s+(?P<message>.*)'
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+      - json:
+          expressions:
+            request_id: request_id
+            method: method
+            tool: tool
+            error: error
+      - labels:
+          request_id:
+          method:
+          tool:
+
+  # Orchestrator Logs
+  - job_name: orchestrator
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: orchestrator
+          __path__: /var/log/mcp/orchestrator.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            clientId: clientId
+            tool: tool
+            error: error
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          clientId:
+          tool:
+
+  # MCP Request/Response Logs
+  - job_name: mcp-requests
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: mcp-requests
+          __path__: /var/log/mcp/mcp-requests.log
+    pipeline_stages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            tool: tool
+            request: request
+            response: response
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+      - labels:
+          level:
+          tool:
+      - metrics:
+          mcp_request_duration:
+            type: Histogram
+            description: "MCP request duration"
+            source: duration
+            config:
+              buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10]

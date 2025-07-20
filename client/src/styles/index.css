@@ -1,11 +1,12 @@
-/* Correct import order */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
+/* Import external and local CSS first */
 @import '@radix-ui/themes/styles.css';
 @import './tokens.css';
 @import './globals.css';
+
+/* Then Tailwind directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /*
   Removed hardcoded !important rules.

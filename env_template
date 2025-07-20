@@ -1,0 +1,28 @@
+# Core API Keys
+# ANTHROPIC_API_KEY=
+# ANTHROPIC_BASE_URL=
+# ANTHROPIC_MODEL="claude-sonnet-4"
+GITHUB_TOKEN=""
+# OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# GOOGLE_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Claude Flow Configuration (PRIMARY TOOL)
+CLAUDE_FLOW_PORT=3000
+CLAUDE_FLOW_HOST=0.0.0.0
+CLAUDE_FLOW_DATA_DIR=/home/dev/data/claude-flow
+CLAUDE_FLOW_LOG_LEVEL=info
+CLAUDE_FLOW_DEBUG=false
+
+# Directory Configuration
+EXTERNAL_DIR="/mnt/mldata/githubs/blended"
+WASMEDGE_PLUGIN_PATH="/usr/local/lib/wasmedge"
+
+# Resource Limits (optional overrides)
+DOCKER_CPUS=
+DOCKER_MEMORY=
+
+# blender download link
+BLENDER_DOWNLOAD_URL="https://cdn.builder.blender.org/download/daily/blender-5.0.0-alpha+main.1a247fbaa8bc-linux.x86_64-release.tar.xz"
+
+# Remote MCP Server IP
+REMOTE_MCP_HOST=

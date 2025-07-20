@@ -15,6 +15,9 @@ services:
       - ./nginx.dev.conf:/etc/nginx/nginx.conf:ro # Mount dev Nginx config (read-only)
       - ./logs/nginx:/var/log/nginx # Mount nginx logs to host
       - ./scripts/logs:/app/logs
+      - ./scripts/dev-exec-proxy.sh:/usr/local/bin/dev-exec:ro # Mount exec proxy
+      - ./supervisord.dev.conf:/app/supervisord.dev.conf:ro # Mount supervisor config
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Docker socket for controlled access
       - npm-cache:/root/.npm
       - cargo-cache:/root/.cargo/registry
       - cargo-git-cache:/root/.cargo/git

@@ -6,6 +6,10 @@ import { OrbitControls, Stats } from '@react-three/drei';
  import GraphManager from './GraphManager';
 import XRController from '../../xr/components/XRController';
 import XRVisualisationConnector from '../../xr/components/XRVisualisationConnector';
+import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
+import { SwarmVisualizationSimpleTest } from '../../swarm/components/SwarmVisualizationSimpleTest';
+// import { SwarmVisualizationIntegrated } from '../../swarm/components/SwarmVisualizationIntegrated';
+// import { SwarmVisualizationDebug } from '../../swarm/components/SwarmVisualizationDebug';
 
 // Store and utils
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -34,6 +38,8 @@ const SceneSetup = () => {
 
 // Main GraphCanvas component
 const GraphCanvas = () => {
+    console.log('[GRAPH CANVAS] Component rendering...');
+    console.log('[GRAPH CANVAS] About to render SwarmVisualizationEnhanced');
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const { settings } = useSettingsStore();
     const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false; // Use performance debug flag
@@ -77,6 +83,13 @@ const GraphCanvas = () => {
         >
             <SceneSetup />
             <GraphManager />
+            {/* Test sphere to verify rendering */}
+            <mesh position={[0, 20, 0]}>
+                <sphereGeometry args={[3, 32, 32]} />
+                <meshStandardMaterial color="#FF0000" emissive="#FF0000" emissiveIntensity={0.5} />
+            </mesh>
+            <SwarmVisualizationSimpleTest />
+            <SwarmVisualizationEnhanced />
             {xrEnabled && <XRController />}
             {xrEnabled && <XRVisualisationConnector />}
             {showStats && <Stats />}

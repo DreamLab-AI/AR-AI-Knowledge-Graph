@@ -1,10 +1,15 @@
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
+# Build argument for CUDA architecture
+ARG CUDA_ARCH=86
+
 ENV DEBIAN_FRONTEND=noninteractive \
     RUST_LOG=warn \
     PATH="/root/.cargo/bin:${PATH}" \
     NVIDIA_DRIVER_CAPABILITIES=all \
-    CUDA_HOME=/usr/local/cuda
+    CUDA_HOME=/usr/local/cuda \
+    LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}" \
+    CUDA_PATH=/usr/local/cuda
 
 # Install dependencies including compilation tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -20,6 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsof \
     gzip \
     expect \
+    docker.io \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 # Create Nginx log directory
@@ -64,8 +71,17 @@ COPY nginx.dev.conf /etc/nginx/nginx.conf
 # Update dependencies
 RUN cargo update
 
+# Verify CUDA installation and architecture support
+RUN nvcc --version && \
+    ls -la /usr/local/cuda/lib64/libcudart.so* || true && \
+    echo "Testing CUDA compilation..." && \
+    echo "__global__ void test() {}" > test.cu && \
+    nvcc -arch=sm_${CUDA_ARCH} -c test.cu -o test.o && \
+    echo "CUDA compilation test passed for sm_${CUDA_ARCH}" && \
+    rm -f test.cu test.o
+
 # Build Rust with GPU features
- RUN cargo build --features gpu && \
+RUN cargo build --features gpu && \
     cp target/debug/webxr /app/webxr
 
 # PTX compilation - now happens during container build

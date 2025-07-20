@@ -1,0 +1,67 @@
+# MCP Development Tools Container
+# Provides testing and debugging utilities for MCP servers
+FROM alpine:latest
+
+# Install system dependencies
+RUN apk add --no-cache \
+    bash \
+    curl \
+    jq \
+    netcat-openbsd \
+    nmap \
+    tcpdump \
+    python3 \
+    py3-pip \
+    nodejs \
+    npm \
+    git \
+    vim \
+    tmux \
+    htop \
+    iftop \
+    iotop \
+    strace \
+    ltrace \
+    busybox-extras \
+    bind-tools \
+    iputils
+
+# Install Python tools
+RUN pip3 install --no-cache-dir \
+    websocket-client \
+    requests \
+    httpx \
+    colorama \
+    tabulate \
+    click \
+    pytest \
+    pytest-asyncio
+
+# Install Node.js tools
+RUN npm install -g \
+    ws \
+    axios \
+    chalk \
+    yargs \
+    json-server \
+    wscat
+
+# Create working directory
+WORKDIR /app
+
+# Copy test scripts
+COPY mcp-tools/ /app/
+
+# Create test results directory
+RUN mkdir -p /app/results /app/tests
+
+# Add helpful aliases
+RUN echo '#!/bin/bash' > /etc/profile.d/mcp-aliases.sh && \
+    echo 'alias ws-test="wscat -c ws://mcp-orchestrator:9001"' >> /etc/profile.d/mcp-aliases.sh && \
+    echo 'alias api-test="curl -s http://mcp-orchestrator:9000/health | jq ."' >> /etc/profile.d/mcp-aliases.sh && \
+    echo 'alias mcp-health="curl -s http://powerdev-main:3000/api/mcp/health | jq ."' >> /etc/profile.d/mcp-aliases.sh && \
+    echo 'alias net-scan="nmap -sT -p 3000,8080,9000,9001,9876,55557 powerdev-net"' >> /etc/profile.d/mcp-aliases.sh && \
+    chmod +x /etc/profile.d/mcp-aliases.sh
+
+# Default command
+CMD ["/bin/bash"]

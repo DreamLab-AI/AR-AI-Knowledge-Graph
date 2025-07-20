@@ -1,0 +1,20 @@
+# MCP Orchestrator Dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Install dependencies
+RUN apk add --no-cache curl
+
+# Copy orchestrator files
+COPY orchestrator/package.json orchestrator/package-lock.json* ./
+RUN npm ci --only=production
+
+COPY orchestrator/server.js ./
+
+# Create logs directory
+RUN mkdir -p /app/logs
+
+EXPOSE 9000 9001
+
+CMD ["node", "server.js"]

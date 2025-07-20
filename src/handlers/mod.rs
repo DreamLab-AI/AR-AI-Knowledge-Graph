@@ -7,3 +7,4 @@ pub mod settings_handler;
 pub mod socket_flow_handler;
 pub mod speech_socket_handler;
 pub mod nostr_handler;
+pub mod swarm_handler;

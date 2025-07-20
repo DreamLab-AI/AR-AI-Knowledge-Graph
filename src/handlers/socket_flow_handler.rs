@@ -625,6 +625,55 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SocketFlowServer 
                                     });
                                 }
                             }
+                            Some("requestSwarmPositions") => {
+                                info!("Client requested swarm position updates");
+                                
+                                // Send swarm positions
+                                let _app_state = self.app_state.clone();
+                                
+                                ctx.spawn(actix::fut::wrap_future::<_, Self>(async move {
+                                    // Get swarm positions from the swarm handler
+                                    let swarm_nodes = crate::handlers::swarm_handler::get_swarm_positions().await;
+                                    
+                                    if swarm_nodes.is_empty() {
+                                        return vec![];
+                                    }
+                                    
+                                    // Convert to binary format
+                                    let mut nodes_data = Vec::new();
+                                    for node in swarm_nodes {
+                                        let node_data = BinaryNodeData {
+                                            position: node.data.position.clone(),
+                                            velocity: node.data.velocity.clone(),
+                                            mass: node.data.mass,
+                                            flags: node.data.flags | 0x80, // Set high bit to indicate swarm node
+                                            padding: node.data.padding,
+                                        };
+                                        nodes_data.push((node.id, node_data));
+                                    }
+                                    
+                                    nodes_data
+                                }).map(|nodes_data, _act, ctx| {
+                                    if !nodes_data.is_empty() {
+                                        // Encode and send swarm positions
+                                        let binary_data = binary_protocol::encode_node_data(&nodes_data);
+                                        
+                                        info!("Sending swarm positions: {} nodes, {} bytes", 
+                                            nodes_data.len(), binary_data.len());
+                                        
+                                        ctx.binary(binary_data);
+                                    }
+                                }));
+                                
+                                // Send confirmation
+                                let response = serde_json::json!({
+                                    "type": "swarmUpdatesStarted",
+                                    "timestamp": chrono::Utc::now().timestamp_millis()
+                                });
+                                if let Ok(msg_str) = serde_json::to_string(&response) {
+                                    ctx.text(msg_str);
+                                }
+                            }
                             _ => {
                                 warn!("[WebSocket] Unknown message type: {:?}", msg);
                             }
