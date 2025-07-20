@@ -50,7 +50,10 @@ const GraphCanvas = () => {
 
     // Wrapper to ensure proper canvas sizing
     return (
-        <div style={{ width: '100%', height: '100%', position: 'relative', minHeight: 0 }}>
+        // Use absolute positioning to fill the parent Panel. This is more robust
+        // than relying on a chain of `height: 100%` which can break in complex
+        // layouts involving flexbox and third-party components.
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
             <Canvas
                 ref={canvasRef}
                 className="r3f-canvas"

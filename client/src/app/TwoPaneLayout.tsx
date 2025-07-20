@@ -4,22 +4,22 @@ import GraphCanvas from '../features/graph/components/GraphCanvas';
 import RightPaneControlPanel from './components/RightPaneControlPanel';
 import ConversationPane from './components/ConversationPane';
 import NarrativeGoldminePanel from './components/NarrativeGoldminePanel';
-import { VoiceButton } from '../components/VoiceButton';
-import { VoiceIndicator } from '../components/VoiceIndicator';
-import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
-import { AudioInputService } from '../services/AudioInputService';
+// import { VoiceButton } from '../components/VoiceButton';
+// import { VoiceIndicator } from '../components/VoiceIndicator';
+// import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
+// import { AudioInputService } from '../services/AudioInputService';
 
 const TwoPaneLayout: React.FC = () => {
   const [isRightPaneDocked, setIsRightPaneDocked] = useState(false);
   const [isLowerRightPaneDocked, setIsLowerRightPaneDocked] = useState(false);
   const [isBottomPaneDocked, setIsBottomPaneDocked] = useState(false);
-  const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
+  // const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
 
-  useEffect(() => {
-    const support = AudioInputService.getBrowserSupport();
-    const isSupported = support.getUserMedia && support.isHttps && support.audioContext && support.mediaRecorder;
-    setHasVoiceSupport(isSupported);
-  }, []);
+  // useEffect(() => {
+  //   const support = AudioInputService.getBrowserSupport();
+  //   const isSupported = support.getUserMedia && support.isHttps && support.audioContext && support.mediaRecorder;
+  //   setHasVoiceSupport(isSupported);
+  // }, []);
 
   const toggleRightPaneDock = () => {
     setIsRightPaneDocked(!isRightPaneDocked);
@@ -34,19 +34,19 @@ const TwoPaneLayout: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden relative">
-      <PanelGroup direction="horizontal">
+    <div className="h-screen w-full overflow-hidden relative">
+      <PanelGroup direction="horizontal" className="h-full">
         {/* Left pane - Graph Canvas */}
         <Panel
           defaultSize={80}
           minSize={20}
-          className="relative h-full flex"
+          className="relative h-full flex flex-col"
           style={{
             transition: isRightPaneDocked ? 'none' : 'width 0.3s ease',
             width: isRightPaneDocked ? '100%' : undefined,
           }}
         >
-          <div className="w-full h-full flex" style={{ minHeight: 0 }}>
+          <div className="w-full flex-1" style={{ minHeight: 0 }}>
             <GraphCanvas />
           </div>
         </Panel>
@@ -120,21 +120,22 @@ const TwoPaneLayout: React.FC = () => {
       {/* Dock/Undock button */}
       <button
         onClick={toggleRightPaneDock}
-        className="fixed top-4 right-4 z-50 px-3 py-2 text-sm font-medium bg-background/90 border border-border rounded-md shadow-lg hover:bg-accent transition-colors"
+        className="fixed top-4 right-4 z-50 w-10 h-10 flex items-center justify-center text-sm font-medium bg-background/90 border border-border rounded-md shadow-lg hover:bg-accent transition-colors pointer-events-auto"
+        style={{ maxWidth: '40px', maxHeight: '40px' }}
         title={isRightPaneDocked ? 'Expand Right Pane' : 'Collapse Right Pane'}
       >
         {isRightPaneDocked ? '▶' : '◀'}
       </button>
 
       {/* Browser Support Warning - Only show when there's no voice support */}
-      {!hasVoiceSupport && (
+      {/* {!hasVoiceSupport && (
         <div className="fixed bottom-20 left-4 z-40 max-w-sm pointer-events-auto">
           <BrowserSupportWarning className="shadow-lg" />
         </div>
-      )}
+      )} */}
 
       {/* Voice Interaction Components - Only show when browser supports it */}
-      {hasVoiceSupport && (
+      {/* {hasVoiceSupport && (
         <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-1 items-start pointer-events-auto">
           <VoiceButton size="md" variant="primary" />
           <VoiceIndicator
@@ -143,7 +144,7 @@ const TwoPaneLayout: React.FC = () => {
             showStatus={false}
           />
         </div>
-      )}
+      )} */}
     </div>
   );
 };
