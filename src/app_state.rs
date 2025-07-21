@@ -14,6 +14,7 @@ use crate::services::perplexity_service::PerplexityService;
 use crate::services::speech_service::SpeechService;
 use crate::services::ragflow_service::RAGFlowService;
 use crate::services::nostr_service::NostrService;
+use crate::services::swarm_client::SwarmClient;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +33,7 @@ pub struct AppState {
     pub feature_access: web::Data<FeatureAccess>,
     pub ragflow_session_id: String,
     pub active_connections: Arc<AtomicUsize>,
+    pub swarm_client: Arc<SwarmClient>,
 }
 
 impl AppState {
@@ -69,6 +71,9 @@ impl AppState {
         info!("[AppState::new] Starting ProtectedSettingsActor");
         let protected_settings_addr = ProtectedSettingsActor::new(ProtectedSettings::default()).start();
         
+        info!("[AppState::new] Initializing SwarmClient");
+        let swarm_client = Arc::new(SwarmClient::new());
+        
         info!("[AppState::new] Actor system initialization complete");
         
         Ok(Self {
@@ -87,6 +92,7 @@ impl AppState {
             feature_access: web::Data::new(FeatureAccess::from_env()),
             ragflow_session_id,
             active_connections: Arc::new(AtomicUsize::new(0)),
+            swarm_client,
         })
     }
 

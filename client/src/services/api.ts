@@ -47,7 +47,8 @@ class ApiService {
   public async get<T>(endpoint: string, headers: Record<string, string> = {}): Promise<T> {
     try {
       const url = `${this.baseUrl}${endpoint}`;
-
+      
+      logger.info(`[API] Making GET request to ${url}`);
       if (debugState.isEnabled()) {
         logger.debug(`Making GET request to ${url}`);
       }
@@ -67,7 +68,7 @@ class ApiService {
           return this.getMockGraphData() as T;
         }
         // Check if this is the swarm data endpoint and provide mock data
-        if (endpoint === '/swarm/data') {
+        if (endpoint === '/api/swarm/data') {
           logger.warn('Backend not available, returning mock swarm data');
           return this.getMockSwarmData() as T;
         }
@@ -88,7 +89,7 @@ class ApiService {
         return this.getMockGraphData() as T;
       }
       // Check if this is the swarm data endpoint and provide mock data
-      if (endpoint === '/swarm/data') {
+      if (endpoint === '/api/swarm/data') {
         logger.warn('Backend not available, returning mock swarm data');
         return this.getMockSwarmData() as T;
       }

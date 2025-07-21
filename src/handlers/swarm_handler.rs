@@ -7,6 +7,7 @@ use crate::types::vec3::Vec3Data;
 use crate::models::edge::Edge;
 use crate::models::simulation_params::{SimulationParams, SimulationPhase, SimulationMode};
 use crate::actors::messages::GetSettings;
+use crate::services::swarm_client::SwarmClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use log::{info, debug, error, warn};
@@ -252,8 +253,55 @@ pub async fn update_swarm_data(
     })
 }
 
-// Get current swarm data
-pub async fn get_swarm_data(_state: web::Data<AppState>) -> impl Responder {
+// Get current swarm data from SwarmClient
+pub async fn get_swarm_data(state: web::Data<AppState>) -> impl Responder {
+    debug!("get_swarm_data endpoint called");
+    
+    // First try to get data from SwarmClient
+    if let Some(swarm_update) = state.swarm_client.get_latest_update().await {
+        info!("Returning live swarm data with {} agents", swarm_update.agents.len());
+        
+        // Log agent details for debugging
+        for agent in &swarm_update.agents {
+            debug!("Agent {}: {} ({}), status: {}, cpu: {}, health: {}, workload: {}", 
+                agent.id, agent.name, agent.agent_type, agent.status, 
+                agent.cpu_usage, agent.health, agent.workload);
+        }
+        
+        // Convert SwarmClient agents to our SwarmAgent format
+        let agents: Vec<SwarmAgent> = swarm_update.agents.iter().map(|agent| SwarmAgent {
+            id: agent.id.clone(),
+            agent_type: agent.agent_type.clone(),
+            status: agent.status.clone(),
+            name: agent.name.clone(),
+            cpu_usage: agent.cpu_usage,
+            health: agent.health,
+            workload: agent.workload,
+        }).collect();
+        
+        // Convert to nodes for graph visualization
+        let nodes = convert_agents_to_nodes(agents);
+        
+        // Create node ID mapping
+        let _node_map: HashMap<String, u32> = nodes.iter()
+            .map(|node| (node.metadata_id.clone(), node.id))
+            .collect();
+        
+        // For now, we'll return empty edges as the SwarmUpdate doesn't include them
+        // In a real implementation, you'd want to add edge data to SwarmUpdate
+        let edges = Vec::new();
+        
+        let graph_data = GraphData {
+            nodes,
+            edges,
+            metadata: HashMap::new(),
+            id_to_metadata: HashMap::new(),
+        };
+        
+        return HttpResponse::Ok().json(graph_data);
+    }
+    
+    // Fall back to static data if no live data available
     let swarm_graph = SWARM_GRAPH.read().await;
     
     info!("Returning swarm data with {} nodes and {} edges", 
@@ -350,7 +398,24 @@ pub async fn get_swarm_data(_state: web::Data<AppState>) -> impl Responder {
 }
 
 // Get swarm node positions (for WebSocket updates)
-pub async fn get_swarm_positions() -> Vec<Node> {
+pub async fn get_swarm_positions(swarm_client: &SwarmClient) -> Vec<Node> {
+    // Try to get live data from SwarmClient first
+    if let Some(swarm_update) = swarm_client.get_latest_update().await {
+        // Convert SwarmClient agents to nodes with positions
+        let agents: Vec<SwarmAgent> = swarm_update.agents.iter().map(|agent| SwarmAgent {
+            id: agent.id.clone(),
+            agent_type: agent.agent_type.clone(),
+            status: agent.status.clone(),
+            name: agent.name.clone(),
+            cpu_usage: agent.cpu_usage,
+            health: agent.health,
+            workload: agent.workload,
+        }).collect();
+        
+        return convert_agents_to_nodes(agents);
+    }
+    
+    // Fall back to static data
     let swarm_graph = SWARM_GRAPH.read().await;
     swarm_graph.nodes.clone()
 }

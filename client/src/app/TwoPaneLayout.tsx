@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import GraphCanvas from '../features/graph/components/GraphCanvas';
 import RightPaneControlPanel from './components/RightPaneControlPanel';
 import ConversationPane from './components/ConversationPane';
@@ -11,8 +12,14 @@ import NarrativeGoldminePanel from './components/NarrativeGoldminePanel';
 
 const TwoPaneLayout: React.FC = () => {
   const [isRightPaneDocked, setIsRightPaneDocked] = useState(false);
-  const [isLowerRightPaneDocked, setIsLowerRightPaneDocked] = useState(false);
-  const [isBottomPaneDocked, setIsBottomPaneDocked] = useState(false);
+  const rightPanelRef = useRef<any>(null);
+
+  // Ensure right panel is expanded on mount
+  useEffect(() => {
+    if (rightPanelRef.current && rightPanelRef.current.expand) {
+      rightPanelRef.current.expand();
+    }
+  }, []);
   // const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
 
   // useEffect(() => {
@@ -22,110 +29,97 @@ const TwoPaneLayout: React.FC = () => {
   // }, []);
 
   const toggleRightPaneDock = () => {
-    setIsRightPaneDocked(!isRightPaneDocked);
-  };
-
-  const toggleLowerRightPaneDock = () => {
-    setIsLowerRightPaneDocked(!isLowerRightPaneDocked);
-  };
-
-  const toggleBottomPaneDock = () => {
-    setIsBottomPaneDocked(!isBottomPaneDocked);
+    if (rightPanelRef.current) {
+      if (isRightPaneDocked) {
+        rightPanelRef.current.expand();
+      } else {
+        rightPanelRef.current.collapse();
+      }
+    }
   };
 
   return (
-    <div className="h-screen w-full overflow-hidden relative">
-      <PanelGroup direction="horizontal" className="h-full">
+    <div className="h-screen w-screen overflow-hidden bg-background text-foreground">
+      <PanelGroup direction="horizontal" style={{ height: '100%' }}>
         {/* Left pane - Graph Canvas */}
         <Panel
           defaultSize={80}
           minSize={20}
-          className="relative h-full flex flex-col"
-          style={{
-            transition: isRightPaneDocked ? 'none' : 'width 0.3s ease',
-            width: isRightPaneDocked ? '100%' : undefined,
-          }}
+          className="h-full"
         >
-          <div className="w-full flex-1" style={{ minHeight: 0 }}>
-            <GraphCanvas />
-          </div>
+          <GraphCanvas />
         </Panel>
 
-        {/* Vertical resizer */}
-        {!isRightPaneDocked && (
-          <PanelResizeHandle className="w-2 bg-border hover:bg-accent transition-colors cursor-ew-resize flex items-center justify-center">
-            <div className="w-px h-6 bg-muted-foreground opacity-50" />
-          </PanelResizeHandle>
-        )}
+        {/* Vertical resizer with integrated dock button */}
+        <PanelResizeHandle className="w-2 bg-gray-200 dark:bg-gray-800 hover:bg-accent transition-colors cursor-ew-resize relative group">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-px h-6 bg-muted-foreground opacity-75" />
+          </div>
+          {/* Integrated dock button in the resize handle */}
+          <button
+            onClick={toggleRightPaneDock}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-12 flex items-center justify-center bg-background border border-border rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent"
+            title={isRightPaneDocked ? 'Show Panel' : 'Hide Panel'}
+          >
+            {isRightPaneDocked ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        </PanelResizeHandle>
 
-        {/* Right pane container */}
-        {!isRightPaneDocked && (
-          <Panel defaultSize={20} minSize={15} className="flex flex-col">
-            <PanelGroup direction="vertical">
-              {/* Top panel - Control Panel */}
-              <Panel
-                defaultSize={isLowerRightPaneDocked ? 100 : 33.3}
-                minSize={15}
-                className="relative overflow-auto"
-              >
-                <RightPaneControlPanel
-                  toggleLowerRightPaneDock={toggleLowerRightPaneDock}
-                  isLowerRightPaneDocked={isLowerRightPaneDocked}
-                />
-              </Panel>
+        {/* Right pane - Single panel with all content */}
+        <Panel
+          ref={rightPanelRef}
+          defaultSize={20}
+          minSize={15}
+          collapsible
+          collapsedSize={0}
+          onCollapse={() => setIsRightPaneDocked(true)}
+          onExpand={() => setIsRightPaneDocked(false)}
+          className="bg-background"
+        >
+          <PanelGroup direction="vertical">
+            {/* Top panel - Control Panel */}
+            <Panel
+              defaultSize={33.3}
+              minSize={15}
+              className="relative overflow-auto"
+            >
+              <RightPaneControlPanel />
+            </Panel>
 
-              {/* Only show the rest if lower right pane isn't docked */}
-              {!isLowerRightPaneDocked && (
-                <>
-                  {/* Horizontal resizer */}
-                  <PanelResizeHandle className="h-2 bg-border hover:bg-accent transition-colors cursor-ns-resize flex items-center justify-center">
-                    <div className="h-px w-6 bg-muted-foreground opacity-50" />
-                  </PanelResizeHandle>
+            {/* Horizontal resizer */}
+            <PanelResizeHandle className="h-2 bg-gray-200 dark:bg-gray-800 hover:bg-accent transition-colors cursor-ns-resize flex items-center justify-center">
+              <div className="h-px w-6 bg-muted-foreground opacity-75" />
+            </PanelResizeHandle>
 
-                  {/* Middle panel - Conversation */}
-                  <Panel
-                    defaultSize={isBottomPaneDocked ? 66.7 : 33.3}
-                    minSize={15}
-                    className="relative overflow-hidden"
-                  >
-                    <ConversationPane />
-                    <button
-                      onClick={toggleBottomPaneDock}
-                      className="absolute bottom-2 right-2 z-10 px-2 py-1 text-sm bg-background/90 border border-border rounded hover:bg-accent transition-colors"
-                      title={isBottomPaneDocked ? 'Expand Lower Panel' : 'Collapse Lower Panel'}
-                    >
-                      {isBottomPaneDocked ? '⬆' : '⬇'}
-                    </button>
-                  </Panel>
+            {/* Middle panel - Conversation */}
+            <Panel
+              defaultSize={33.3}
+              minSize={15}
+              className="relative overflow-hidden"
+            >
+              <ConversationPane />
+            </Panel>
 
-                  {/* Bottom panel - Narrative Goldmine */}
-                  {!isBottomPaneDocked && (
-                    <>
-                      <PanelResizeHandle className="h-2 bg-border hover:bg-accent transition-colors cursor-ns-resize flex items-center justify-center">
-                        <div className="h-px w-6 bg-muted-foreground opacity-50" />
-                      </PanelResizeHandle>
+            {/* Horizontal resizer */}
+            <PanelResizeHandle className="h-2 bg-gray-200 dark:bg-gray-800 hover:bg-accent transition-colors cursor-ns-resize flex items-center justify-center">
+              <div className="h-px w-6 bg-muted-foreground opacity-75" />
+            </PanelResizeHandle>
 
-                      <Panel defaultSize={33.4} minSize={15} className="relative overflow-hidden">
-                        <NarrativeGoldminePanel />
-                      </Panel>
-                    </>
-                  )}
-                </>
-              )}
-            </PanelGroup>
-          </Panel>
-        )}
+            {/* Bottom panel - Narrative Goldmine */}
+            <Panel
+              defaultSize={33.4}
+              minSize={15}
+              className="relative overflow-hidden"
+            >
+              <NarrativeGoldminePanel />
+            </Panel>
+          </PanelGroup>
+        </Panel>
       </PanelGroup>
-
-      {/* Dock/Undock button */}
-      <button
-        onClick={toggleRightPaneDock}
-        className="fixed top-4 right-4 z-50 w-10 h-10 flex items-center justify-center text-sm font-medium bg-background/90 border border-border rounded-md shadow-lg hover:bg-accent transition-colors pointer-events-auto"
-        style={{ maxWidth: '40px', maxHeight: '40px' }}
-        title={isRightPaneDocked ? 'Expand Right Pane' : 'Collapse Right Pane'}
-      >
-        {isRightPaneDocked ? '▶' : '◀'}
-      </button>
 
       {/* Browser Support Warning - Only show when there's no voice support */}
       {/* {!hasVoiceSupport && (

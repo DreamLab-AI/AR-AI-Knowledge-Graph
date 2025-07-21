@@ -629,11 +629,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SocketFlowServer 
                                 info!("Client requested swarm position updates");
                                 
                                 // Send swarm positions
-                                let _app_state = self.app_state.clone();
+                                let app_state = self.app_state.clone();
                                 
                                 ctx.spawn(actix::fut::wrap_future::<_, Self>(async move {
                                     // Get swarm positions from the swarm handler
-                                    let swarm_nodes = crate::handlers::swarm_handler::get_swarm_positions().await;
+                                    let swarm_nodes = crate::handlers::swarm_handler::get_swarm_positions(&app_state.swarm_client).await;
                                     
                                     if swarm_nodes.is_empty() {
                                         return vec![];

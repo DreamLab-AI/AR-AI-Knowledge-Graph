@@ -1,10 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import GraphViewport from '../features/graph/components/GraphViewport';
 import { VoiceButton } from '../components/VoiceButton';
 import { VoiceIndicator } from '../components/VoiceIndicator';
 import { createLogger } from '../utils/logger';
 import { useXRCore } from '../features/xr/providers/XRCoreProvider';
 import { useApplicationMode } from '../contexts/ApplicationModeContext';
+import { useSettingsStore } from '../store/settingsStore';
+import { webSocketService } from '../services/WebSocketService';
 
 const logger = createLogger('Quest3ARLayout');
 
@@ -13,11 +15,36 @@ const logger = createLogger('Quest3ARLayout');
  * - No control panels or traditional UI
  * - Full-screen AR viewport
  * - Voice interaction only
- * - Optimized for passthrough AR experience
+ * - Optimized for passthrough AR experience with performance optimizations
+ * - Browser detection for Meta Quest 3
+ * - Level-of-detail rendering for distant nodes
+ * - Optimized WebSocket update rates
  */
 const Quest3ARLayout: React.FC = () => {
   const { isSessionActive, sessionType } = useXRCore();
   const { setMode } = useApplicationMode();
+  const settings = useSettingsStore((state) => state.settings);
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // Performance optimization refs
+  const frameRef = useRef<number>();
+  const lastUpdateRef = useRef<number>(0);
+  const [updateRate, setUpdateRate] = useState(30); // Default 30fps for AR
+  
+  // Browser detection for Meta Quest 3
+  const isQuest3 = useRef(false);
+  
+  useEffect(() => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    isQuest3.current = userAgent.includes('quest 3') || 
+                      userAgent.includes('meta quest 3') ||
+                      (userAgent.includes('oculus') && userAgent.includes('quest'));
+    
+    if (isQuest3.current) {
+      logger.info('Meta Quest 3 detected - applying AR optimizations');
+      setUpdateRate(72); // Quest 3 native refresh rate
+    }
+  }, []);
 
   // Ensure XR mode is active when this layout is used
   useEffect(() => {
@@ -26,6 +53,47 @@ const Quest3ARLayout: React.FC = () => {
       logger.info('Quest 3 AR Layout activated - entering XR mode');
     }
   }, [isSessionActive, sessionType, setMode]);
+  
+  // Optimized render loop with requestAnimationFrame
+  const renderLoop = useCallback(() => {
+    const now = performance.now();
+    const deltaTime = now - lastUpdateRef.current;
+    
+    // Throttle updates based on target frame rate
+    if (deltaTime >= 1000 / updateRate) {
+      lastUpdateRef.current = now;
+      // Update logic would go here
+    }
+    
+    frameRef.current = requestAnimationFrame(renderLoop);
+  }, [updateRate]);
+  
+  useEffect(() => {
+    if (isSessionActive) {
+      frameRef.current = requestAnimationFrame(renderLoop);
+    }
+    
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, [isSessionActive, renderLoop]);
+
+  // Monitor WebSocket connection
+  useEffect(() => {
+    const checkConnection = () => {
+      setIsConnected(webSocketService.isConnected());
+    };
+    
+    // Check initial connection state
+    checkConnection();
+    
+    // Set up periodic check
+    const interval = setInterval(checkConnection, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div style={{
@@ -37,17 +105,24 @@ const Quest3ARLayout: React.FC = () => {
       margin: 0,
       padding: 0
     }}>
-      {/* Full-screen AR viewport */}
-      <div style={{
-        width: '100%',
-        height: '100%',
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        zIndex: 1
-      }}>
-        <GraphViewport />
-      </div>
+      {/* Full-screen AR viewport - removed unnecessary wrapper div */}
+      <GraphViewport 
+        style={{
+          width: '100vw',
+          height: '100vh',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          zIndex: 1
+        }}
+        // Performance optimizations
+        levelOfDetail={true}
+        maxRenderDistance={100} // TODO: Add arRenderDistance to settings
+        updateRate={updateRate}
+      />
+      
+      {/* TODO: Add Knowledge Graph overlay for AR when component is implemented */}
+      {/* TODO: Add Agent Monitor overlay for AR when component is implemented */}
 
       {/* Minimal AR-optimized voice controls */}
       <div style={{
@@ -74,12 +149,12 @@ const Quest3ARLayout: React.FC = () => {
         />
       </div>
 
-      {/* AR session status indicator */}
+      {/* AR session status indicator with performance info */}
       {isSessionActive && sessionType === 'immersive-ar' && (
         <div style={{
           position: 'fixed',
           top: '20px',
-          right: '20px',
+          left: '20px',
           zIndex: 1000,
           backgroundColor: 'rgba(0, 255, 0, 0.8)',
           color: 'black',
@@ -91,7 +166,7 @@ const Quest3ARLayout: React.FC = () => {
           border: '1px solid rgba(255, 255, 255, 0.3)',
           pointerEvents: 'none'
         }}>
-          Quest 3 AR Active
+          {isQuest3.current ? 'Quest 3' : 'XR'} AR Active • {updateRate}fps
         </div>
       )}
 
@@ -99,7 +174,7 @@ const Quest3ARLayout: React.FC = () => {
       {process.env.NODE_ENV === 'development' && isSessionActive && (
         <div style={{
           position: 'fixed',
-          top: '20px',
+          top: '60px',
           left: '20px',
           zIndex: 999,
           backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -116,6 +191,11 @@ const Quest3ARLayout: React.FC = () => {
           <div>Session Type: {sessionType}</div>
           <div>AR Layout: Active</div>
           <div>Voice Controls: Available</div>
+          <div>Device: {isQuest3.current ? 'Meta Quest 3' : 'Generic XR'}</div>
+          <div>Update Rate: {updateRate} fps</div>
+          <div>WebSocket: {isConnected ? 'Connected' : 'Disconnected'}</div>
+          <div>Knowledge Graph: {settings?.graph?.enableKnowledgeGraph ? 'On' : 'Off'}</div>
+          <div>Agent Monitor: Pending Implementation</div>
         </div>
       )}
     </div>

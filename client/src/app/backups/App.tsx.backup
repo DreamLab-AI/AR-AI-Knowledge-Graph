@@ -6,7 +6,6 @@ import { useSettingsStore } from '../store/settingsStore';
 import { createLogger, createErrorMetadata } from '../utils/logger';
 import TwoPaneLayout from './TwoPaneLayout';
 import Quest3ARLayout from './Quest3ARLayout';
-import SimpleLayout from './SimpleLayout';
 import { useQuest3Integration } from '../hooks/useQuest3Integration';
 import { CommandPalette } from '../features/command-palette/components/CommandPalette';
 import { initializeCommandPalette } from '../features/command-palette/defaultCommands';
@@ -15,7 +14,6 @@ import { registerSettingsHelp } from '../features/help/settingsHelp';
 import { OnboardingProvider } from '../features/onboarding/components/OnboardingProvider';
 import { registerOnboardingCommands } from '../features/onboarding/flows/defaultFlows';
 import { TooltipProvider } from '../features/design-system/components/Tooltip';
-import { useSwarmWebSocketIntegration } from '../features/swarm/hooks/useSwarmWebSocketIntegration';
 const logger = createLogger('App')
 
 // Error boundary component to catch rendering errors
@@ -66,9 +64,6 @@ function App() {
   const { shouldUseQuest3Layout, isQuest3Detected, autoStartSuccessful } = useQuest3Integration({
     enableAutoStart: false
   });
-  
-  // Initialize swarm WebSocket integration
-  const swarmConnectionStatus = useSwarmWebSocketIntegration();
 
   useEffect(() => {
     // Initialize command palette, help system, and onboarding on first load
@@ -94,34 +89,47 @@ function App() {
     const debugEnabled = settings?.system?.debug?.enabled === true;
     if (debugEnabled) {
       logger.debug('Application initialized');
-      logger.debug('Swarm WebSocket connection status:', swarmConnectionStatus);
     }
-  }, [swarmConnectionStatus])
+  }, [])
 
   return (
-    <TooltipProvider delayDuration={300} skipDelayDuration={100}>
-      <HelpProvider>
-        <OnboardingProvider>
-          <ErrorBoundary>
-            <ApplicationModeProvider>
-              <XRCoreProvider>
-                {initialized ? (
-                  shouldUseQuest3Layout ? (
-                    <Quest3ARLayout />
-                  ) : (
-                    <SimpleLayout />
-                  )
-                ) : (
-                  <div>Loading application...</div>
-                )}
-                {!initialized && <AppInitializer onInitialized={handleInitialized} /> }
-                <CommandPalette />
-              </XRCoreProvider>
-            </ApplicationModeProvider>
-          </ErrorBoundary>
-        </OnboardingProvider>
-      </HelpProvider>
-    </TooltipProvider>
+    <div className="h-full">
+      <TooltipProvider delayDuration={300} skipDelayDuration={100}>
+        <div className="h-full">
+          <HelpProvider>
+            <div className="h-full">
+              <OnboardingProvider>
+                <div className="h-full">
+                  <ErrorBoundary>
+                    <div className="h-full">
+                      <ApplicationModeProvider>
+                        <div className="h-full">
+                          <XRCoreProvider>
+                            <div className="h-full">
+                              {initialized ? (
+                                shouldUseQuest3Layout ? (
+                                  <Quest3ARLayout />
+                                ) : (
+                                  <TwoPaneLayout />
+                                )
+                              ) : (
+                                <div>Loading application...</div>
+                              )}
+                              {!initialized && <AppInitializer onInitialized={handleInitialized} /> }
+                              <CommandPalette />
+                            </div>
+                          </XRCoreProvider>
+                        </div>
+                      </ApplicationModeProvider>
+                    </div>
+                  </ErrorBoundary>
+                </div>
+              </OnboardingProvider>
+            </div>
+          </HelpProvider>
+        </div>
+      </TooltipProvider>
+    </div>
   )
 }
 

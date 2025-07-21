@@ -45,12 +45,7 @@ interface SettingGroup {
   isPowerUser?: boolean;
 }
 
-interface SettingsPanelRedesignOptimizedProps {
-  toggleLowerRightPaneDock: () => void;
-  isLowerRightPaneDocked: boolean;
-}
-
-export function SettingsPanelRedesignOptimized({ toggleLowerRightPaneDock, isLowerRightPaneDocked }: SettingsPanelRedesignOptimizedProps) {
+export function SettingsPanelRedesignOptimized() {
   const { isPowerUser, initialized } = useSettingsStore();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Node Appearance']));
   const [savedNotification, setSavedNotification] = useState<string | null>(null);
@@ -579,7 +574,7 @@ export function SettingsPanelRedesignOptimized({ toggleLowerRightPaneDock, isLow
   return (
     // Dynamically set background and text color from settings
     <div className="w-full h-full flex flex-col min-h-0 bg-background text-foreground">
-      <div className="border-b border-border">
+      <div className="border-b border-gray-200 dark:border-gray-800">
         <div className="px-4 py-3 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold">Settings & Controls</h2>
@@ -589,15 +584,6 @@ export function SettingsPanelRedesignOptimized({ toggleLowerRightPaneDock, isLow
           </div>
           <div className="flex items-center gap-2">
             <UndoRedoControls showHistory />
-            <div className="w-px h-6 bg-border" />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleLowerRightPaneDock}
-              title={isLowerRightPaneDocked ? "Expand lower panels" : "Collapse lower panels"}
-            >
-              {isLowerRightPaneDocked ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-            </Button>
           </div>
         </div>
         <div className="px-4 pb-3">
@@ -644,7 +630,7 @@ export function SettingsPanelRedesignOptimized({ toggleLowerRightPaneDock, isLow
       </div>
 
       {/* Status bar */}
-      <div className="px-4 py-2 border-t border-border bg-muted/30 flex items-center justify-between text-xs">
+      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-800 bg-muted/30 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
           <Info className="h-3 w-3" />
           <span>Changes save automatically</span>

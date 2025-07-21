@@ -7,6 +7,7 @@ import { createLogger } from '../../../utils/logger';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { apiService } from '../../../services/api';
 import { mcpWebSocketService } from '../services/MCPWebSocketService';
+import { swarmWebSocketIntegration } from '../services/SwarmWebSocketIntegration';
 import { useSwarmBinaryUpdates } from '../hooks/useSwarmBinaryUpdates';
 import { swarmPhysicsWorker } from '../workers/swarmPhysicsWorker';
 import { SwarmStatusIndicator } from './SwarmStatusIndicator';
@@ -340,26 +341,63 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         // Initialize physics worker
         swarmPhysicsWorker.init();
 
-        // Try MCP connection first
+        // Use integrated WebSocket service for both connections
+        const connectionStatus = swarmWebSocketIntegration.getConnectionStatus();
+        logger.info('WebSocket connection status:', connectionStatus);
+
+        // Set up real-time updates through integrated service
+        swarmWebSocketIntegration.on('swarm-agents-update', (agents) => {
+          logger.debug('Received swarm agents update', agents);
+          processAgentsUpdate(agents);
+        });
+
+        swarmWebSocketIntegration.on('swarm-edges-update', (edges) => {
+          logger.debug('Received swarm edges update', edges);
+          processEdgesUpdate(edges);
+        });
+
+        swarmWebSocketIntegration.on('swarm-token-usage', (tokenUsage) => {
+          logger.debug('Received token usage update', tokenUsage);
+          setSwarmData(prev => ({ ...prev, tokenUsage }));
+        });
+
+        swarmWebSocketIntegration.on('mcp-connected', ({ connected }) => {
+          setMcpConnected(connected);
+          if (connected) {
+            setDataSource('mcp');
+            logger.info('MCP connection established through integration service');
+          }
+        });
+
+        // Request initial data through integration service
         try {
-          await mcpWebSocketService.connect();
-          setDataSource('mcp');
-          setMcpConnected(true);
-          logger.info('Connected to MCP server');
-
-          // Set up real-time updates
-          mcpWebSocketService.on('update', handleMCPUpdate);
-
-          // Fetch initial data
-          await fetchMCPData();
-        } catch (mcpError) {
-          logger.warn('MCP connection failed, falling back to API:', mcpError);
+          await swarmWebSocketIntegration.requestInitialData();
+          
+          // If MCP is connected, also fetch directly
+          if (connectionStatus.mcp) {
+            await fetchMCPData();
+          }
+        } catch (error) {
+          logger.warn('Failed to get initial data through integration:', error);
 
           // Try API fallback
           try {
+            logger.info('[VISIONFLOW] Fetching swarm data from API...');
             const data = await apiService.getSwarmData();
-            setDataSource(data._isMock ? 'mock' : 'api');
-            processSwarmData(data);
+            logger.info('[VISIONFLOW] API response:', data);
+            
+            if (data && data.nodes && data.nodes.length > 0) {
+              logger.info('[VISIONFLOW] Got real data from API with', data.nodes.length, 'nodes');
+              setDataSource('api');
+              processSwarmData(data);
+            } else if (data && data._isMock) {
+              logger.warn('[VISIONFLOW] API returned mock data');
+              setDataSource('mock');
+              processSwarmData(data);
+            } else {
+              logger.warn('[VISIONFLOW] API returned empty or invalid data:', data);
+              setError('No swarm data available from server');
+            }
           } catch (apiError) {
             logger.error('API also failed:', apiError);
             setError('Unable to connect to VisionFlow data source');
@@ -431,6 +469,39 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
       if (data.agents) fetchMCPData();
     };
 
+    const processAgentsUpdate = (agents: SwarmAgent[]) => {
+      // Update swarm data with new agents
+      setSwarmData(prev => ({ ...prev, nodes: agents }));
+      
+      // Update physics
+      swarmPhysicsWorker.updateAgents(agents);
+    };
+
+    const processEdgesUpdate = (edges: SwarmEdge[]) => {
+      // Update edge map
+      edges.forEach(edge => {
+        const edgeKey = [edge.source, edge.target].sort().join('-');
+        edgeMapRef.current.set(edgeKey, edge);
+      });
+      
+      // Clean up stale edges
+      const now = Date.now();
+      for (const [key, edge] of edgeMapRef.current.entries()) {
+        if (now - edge.lastMessageTime > 30000) {
+          edgeMapRef.current.delete(key);
+        }
+      }
+      
+      // Update swarm data
+      setSwarmData(prev => ({ 
+        ...prev, 
+        edges: Array.from(edgeMapRef.current.values()) 
+      }));
+      
+      // Update physics
+      swarmPhysicsWorker.updateEdges(Array.from(edgeMapRef.current.values()));
+    };
+
     const processSwarmData = (data: any) => {
       // Convert backend format to SwarmAgent format if needed
       let nodes = data.nodes || [];
@@ -481,10 +552,9 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
     return () => {
       cleanup = true;
       if (pollInterval) clearInterval(pollInterval);
-      if (dataSource === 'mcp') {
-        mcpWebSocketService.off('update', handleMCPUpdate);
-        mcpWebSocketService.disconnect();
-      }
+      
+      // Clean up integrated WebSocket listeners
+      // Note: We don't disconnect the integration service as it's shared
       swarmPhysicsWorker.cleanup();
     };
   }, []);

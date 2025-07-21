@@ -40,6 +40,7 @@ const GraphCanvas = () => {
     console.log('[GRAPH CANVAS] Component rendering...');
     console.log('[GRAPH CANVAS] About to render SwarmVisualizationEnhanced');
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const { settings } = useSettingsStore();
     const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false; // Use performance debug flag
     const xrEnabled = settings?.xr?.enabled !== false;
@@ -50,19 +51,9 @@ const GraphCanvas = () => {
 
     // Wrapper to ensure proper canvas sizing
     return (
-        // Use absolute positioning to fill the parent Panel. This is more robust
-        // than relying on a chain of `height: 100%` which can break in complex
-        // layouts involving flexbox and third-party components.
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+        <div style={{ width: '100%', height: '100%', backgroundColor: '#000033' }}>
             <Canvas
                 ref={canvasRef}
-                className="r3f-canvas"
-                style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'block',
-                    touchAction: 'none' // Prevent touch scrolling
-                }}
                 gl={{
                     antialias,
                     alpha: true,
@@ -72,16 +63,14 @@ const GraphCanvas = () => {
                 camera={{
                     fov: 75,
                     near: 0.1,
-                    far: 2000, // Remove settings access, camera settings likely managed elsewhere
+                    far: 2000,
                     position: [0, 10, 50]
                 }}
                 onCreated={({ gl }) => {
                     if (debugState.isEnabled()) {
                         logger.debug('Canvas created with dimensions:', {
                             width: gl.domElement.width,
-                            height: gl.domElement.height,
-                            containerWidth: gl.domElement.parentElement?.clientWidth,
-                            containerHeight: gl.domElement.parentElement?.clientHeight
+                            height: gl.domElement.height
                         });
                     }
                 }}

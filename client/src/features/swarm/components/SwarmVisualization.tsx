@@ -8,11 +8,12 @@ import { mcpWebSocketService } from '../services/MCPWebSocketService';
 import { MockSwarmDataProvider } from '../services/MockSwarmDataProvider';
 import { SwarmStatusIndicator } from './SwarmStatusIndicator';
 import { createLogger } from '../../../utils/logger';
+import { apiService } from '../../../services/api';
 
 const logger = createLogger('SwarmVisualization');
 
-// Use mock provider for now since MCP server isn't available
-const swarmDataProvider = new MockSwarmDataProvider();
+// Use mock provider as fallback
+const mockProvider = new MockSwarmDataProvider();
 
 // Gold and green color palette as specified
 const VISUAL_CONFIG: SwarmVisualConfig = {
@@ -223,29 +224,14 @@ export const SwarmVisualization: React.FC = () => {
     // Start physics worker
     swarmPhysicsWorker.init();
 
-    // Use mock provider for demonstration
-    swarmDataProvider.connect().then(() => {
-      logger.info('Connected to swarm data provider');
-      setConnected(true);
-      setConnectionError(null);
+    // Fetch initial data from backend
+    fetchSwarmDataFromBackend();
+    setConnected(true);
 
-      // Listen for updates
-      swarmDataProvider.on('update', handleMCPUpdate);
-      swarmDataProvider.on('welcome', handleMCPUpdate);
-
-      // Fetch initial data
-      fetchSwarmData();
-    }).catch(error => {
-      logger.error('Failed to connect to swarm provider:', error);
-      setConnectionError('Failed to connect to swarm data provider.');
-      setConnected(false);
-    });
-
-    // Poll for communications more frequently
-    const pollInterval = setInterval(pollCommunications, 2000);
+    // Poll for updates every 2 seconds
+    const pollInterval = setInterval(fetchSwarmDataFromBackend, 2000);
 
     return () => {
-      swarmDataProvider.disconnect();
       swarmPhysicsWorker.cleanup();
       clearInterval(pollInterval);
     };
@@ -282,68 +268,94 @@ export const SwarmVisualization: React.FC = () => {
     }
   };
 
-  const fetchSwarmData = async () => {
+  const fetchSwarmDataFromBackend = async () => {
     try {
-      const [agents, tokenUsage] = await Promise.all([
-        swarmDataProvider.getAgents(),
-        swarmDataProvider.getTokenUsage()
-      ]);
+      // Fetch swarm data from backend API
+      const response = await apiService.getSwarmData();
+      
+      if (response && response.nodes) {
+        logger.info('Received swarm data from backend:', response.nodes.length, 'nodes');
+        
+        // Convert backend nodes to SwarmAgent format
+        const agents: SwarmAgent[] = response.nodes.map((node: any) => ({
+          id: node.metadata_id || node.id.toString(),
+          name: node.label,
+          type: node.node_type || node.metadata?.type || 'unknown',
+          status: node.metadata?.status || 'active',
+          cpuUsage: parseFloat(node.metadata?.cpu_usage || '50'),
+          health: parseFloat(node.metadata?.health || '90'),
+          workload: parseFloat(node.metadata?.workload || node.weight || '0.5'),
+          position: node.data?.position ? {
+            x: node.data.position.x,
+            y: node.data.position.y,
+            z: node.data.position.z
+          } : undefined
+        }));
 
+        const agentMap = new Map<string, SwarmAgent>();
+        agents.forEach(agent => agentMap.set(agent.id, agent));
+
+        // Convert edges to SwarmEdge format
+        const edgeMap = new Map<string, SwarmEdge>();
+        if (response.edges) {
+          response.edges.forEach((edge: any) => {
+            const swarmEdge: SwarmEdge = {
+              id: edge.id,
+              source: edge.source.toString(),
+              target: edge.target.toString(),
+              dataVolume: edge.weight * 1024, // Convert to bytes
+              messageCount: parseInt(edge.edge_type?.match(/\d+/)?.[0] || '10'),
+              lastMessageTime: Date.now()
+            };
+            edgeMap.set(edge.id, swarmEdge);
+          });
+        }
+
+        setSwarmState(prev => ({
+          ...prev,
+          agents: agentMap,
+          edges: edgeMap,
+          lastUpdate: Date.now()
+        }));
+
+        // Update physics with agent data
+        swarmPhysicsWorker.updateAgents(agents);
+        swarmPhysicsWorker.updateEdges(Array.from(edgeMap.values()));
+      } else {
+        logger.warn('No swarm data received from backend');
+      }
+    } catch (error) {
+      logger.error('Error fetching swarm data from backend:', error);
+      setConnectionError('Failed to fetch swarm data from server');
+      
+      // Fall back to mock data if backend fails
+      logger.info('Falling back to mock data');
+      fetchMockData();
+    }
+  };
+
+  const fetchMockData = async () => {
+    try {
+      await mockProvider.connect();
+      const agents = await mockProvider.getAgents();
       const agentMap = new Map<string, SwarmAgent>();
       agents.forEach(agent => agentMap.set(agent.id, agent));
 
       setSwarmState(prev => ({
         ...prev,
         agents: agentMap,
-        tokenUsage,
         lastUpdate: Date.now()
       }));
 
-      // Initialize physics with agent data
       swarmPhysicsWorker.updateAgents(agents);
     } catch (error) {
-      logger.error('Error fetching swarm data:', error);
+      logger.error('Error with mock data:', error);
     }
   };
 
+  // Communications are now handled by edge data from backend
   const pollCommunications = async () => {
-    try {
-      const communications = await swarmDataProvider.getCommunications();
-
-      // Process communications to build edges
-      const edgeMap = new Map<string, SwarmEdge>();
-
-      communications.forEach(comm => {
-        const edgeKey = [comm.sender, ...comm.receivers].sort().join('-');
-
-        if (!edgeMap.has(edgeKey)) {
-          edgeMap.set(edgeKey, {
-            id: edgeKey,
-            source: comm.sender,
-            target: comm.receivers[0], // Simplify for now
-            dataVolume: 0,
-            messageCount: 0,
-            lastMessageTime: Date.now()
-          });
-        }
-
-        const edge = edgeMap.get(edgeKey)!;
-        edge.dataVolume += comm.metadata.size;
-        edge.messageCount += 1;
-        edge.lastMessageTime = Date.now();
-      });
-
-      // Update physics with edge data
-      swarmPhysicsWorker.updateEdges(Array.from(edgeMap.values()));
-
-      setSwarmState(prev => ({
-        ...prev,
-        edges: edgeMap,
-        communications: communications.slice(-100) // Keep last 100 for reference
-      }));
-    } catch (error) {
-      logger.error('Error polling communications:', error);
-    }
+    // This is now handled by fetchSwarmDataFromBackend which includes edges
   };
 
   // Update positions from physics simulation

@@ -23,7 +23,7 @@ const debouncedSaveToServer = async (settings: Settings, initialized: boolean) =
 
   try {
     const headers: Record<string, string> = {};
-    
+
     // Add authentication headers if available
     try {
       const { nostrAuth } = await import('../services/nostrAuthService');
@@ -52,10 +52,10 @@ const debouncedSaveToServer = async (settings: Settings, initialized: boolean) =
   } catch (error) {
     const errorMeta = createErrorMetadata(error);
     logger.error('Failed to save settings to server:', errorMeta);
-    toast({ 
-      variant: "destructive", 
-      title: "Save Failed", 
-      description: `Could not save settings to server. ${errorMeta.message || 'Check console.'}` 
+    toast({
+      variant: "destructive",
+      title: "Save Failed",
+      description: `Could not save settings to server. ${errorMeta.message || 'Check console.'}`
     });
   }
 };
@@ -146,11 +146,11 @@ export const useSettingsStore = create<SettingsState>()(
 
           // Apply migration to current settings
           const migratedSettings = migrateToMultiGraphSettings(currentSettings)
-          
+
           // Mark as initialized
-          set({ 
+          set({
             settings: migratedSettings,
-            initialized: true 
+            initialized: true
           })
 
           if (debugState.isEnabled()) {
@@ -220,9 +220,9 @@ export const useSettingsStore = create<SettingsState>()(
         if (debugState.isEnabled()) {
           logger.warn(`Deprecated: set('${path}', value) called. Use updateSettings() instead.`);
         }
-        
+
         const state = get();
-        
+
         // Use updateSettings internally
         state.updateSettings((draft) => {
           // If setting the entire object
@@ -230,11 +230,11 @@ export const useSettingsStore = create<SettingsState>()(
             Object.assign(draft, value);
             return;
           }
-          
+
           // Navigate to the correct location and update
           const pathParts = path.split('.');
           let current: any = draft;
-          
+
           // Navigate to the parent of the setting we want to update
           for (let i = 0; i < pathParts.length - 1; i++) {
             const part = pathParts[i];
@@ -243,7 +243,7 @@ export const useSettingsStore = create<SettingsState>()(
             }
             current = current[part];
           }
-          
+
           // Update the value
           const finalPart = pathParts[pathParts.length - 1];
           current[finalPart] = value;
@@ -304,7 +304,7 @@ export const useSettingsStore = create<SettingsState>()(
 
         // After state update, handle notifications and saving
         const state = get();
-        
+
         // Notify all subscribers
         const allCallbacks = new Set<() => void>();
         state.subscribers.forEach(callbacks => {

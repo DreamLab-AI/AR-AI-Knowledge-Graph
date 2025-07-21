@@ -146,6 +146,19 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize Nostr service
     nostr_handler::init_nostr_service(&mut app_state);
+    
+    // Initialize SwarmClient connection
+    info!("Connecting to swarm orchestrator...");
+    let swarm_url = std::env::var("SWARM_ORCHESTRATOR_URL")
+        .unwrap_or_else(|_| "ws://powerdev:3000/ws".to_string());
+    
+    let swarm_client = app_state.swarm_client.clone();
+    tokio::spawn(async move {
+        match swarm_client.connect(&swarm_url).await {
+            Ok(()) => info!("Successfully connected to swarm orchestrator at {}", swarm_url),
+            Err(e) => error!("Failed to connect to swarm orchestrator: {}", e),
+        }
+    });
 
     // First, try to load existing metadata without waiting for GitHub download
     info!("Loading existing metadata for quick initialization");
