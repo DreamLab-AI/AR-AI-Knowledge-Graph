@@ -139,16 +139,16 @@ export const SpacePilotSimpleIntegration: React.FC = () => {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
     const up = new THREE.Vector3(0, 0, 1); // Z is up/down in screen space
     
-    // Translation: X=strafe, Y=forward/back (away from model), Z=up/down
+    // Translation: X=strafe, Z=forward/back (inverted), Y=up/down (inverted)
     camera.position.add(right.multiplyScalar(smoothedTranslation.current.x * config.translationSpeed));
-    camera.position.add(forward.multiplyScalar(-smoothedTranslation.current.y * config.translationSpeed)); // Y away from model
-    camera.position.add(up.multiplyScalar(smoothedTranslation.current.z * config.translationSpeed)); // Z is up/down
+    camera.position.add(forward.multiplyScalar(smoothedTranslation.current.z * config.translationSpeed)); // Z inverted
+    camera.position.add(up.multiplyScalar(-smoothedTranslation.current.y * config.translationSpeed)); // Y inverted
     
-    // Rotation: Apply to camera directly (RZ and RY switched)
+    // Rotation: Apply to camera directly (RZ and RY switched, both inverted)
     const euler = new THREE.Euler(
       smoothedRotation.current.rx * config.rotationSpeed * (config.invertRX ? -1 : 1), // Pitch (inverted)
-      smoothedRotation.current.rz * config.rotationSpeedRY, // Roll (with reduced sensitivity like yaw)
-      smoothedRotation.current.ry * config.rotationSpeed,   // Yaw (now with normal sensitivity)
+      -smoothedRotation.current.rz * config.rotationSpeedRY, // Roll (inverted, with reduced sensitivity)
+      -smoothedRotation.current.ry * config.rotationSpeed,  // Yaw (inverted)
       'YXZ'
     );
     
