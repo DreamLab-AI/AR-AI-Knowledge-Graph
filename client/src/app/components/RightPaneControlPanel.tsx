@@ -5,6 +5,7 @@ import { SettingsPanelRedesignOptimized } from '../../features/settings/componen
 import ConversationPane from './ConversationPane';
 import NarrativeGoldminePanel from './NarrativeGoldminePanel';
 import { ProgrammaticMonitorControl } from '../../features/swarm/components/ProgrammaticMonitorControl';
+import { SpacePilotButtonPanel } from '../../features/visualisation/components/SpacePilotButtonPanel';
 import {
   Collapsible,
   CollapsibleContent,
@@ -48,12 +49,25 @@ const RightPaneControlPanel: React.FC = () => {
       {/* Programmatic Monitor Control - Collapsible */}
       <Collapsible defaultOpen={false} className="flex-shrink-0 border-t">
         <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50 transition-colors">
-          <h3 className="text-sm font-semibold">Swarm Monitor</h3>
+          <h3 className="text-sm font-semibold">VisionFlow Monitor</h3>
           <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=closed]:-rotate-90" />
         </CollapsibleTrigger>
         <CollapsibleContent className="overflow-hidden">
           <div className="p-2">
             <ProgrammaticMonitorControl />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* SpacePilot 6DOF Controller - Collapsible */}
+      <Collapsible defaultOpen={false} className="flex-shrink-0 border-t">
+        <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50 transition-colors">
+          <h3 className="text-sm font-semibold">SpacePilot Controller</h3>
+          <ChevronDown className="h-4 w-4 transition-transform duration-200 data-[state=closed]:-rotate-90" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="overflow-hidden">
+          <div className="p-2">
+            <SpacePilotButtonPanel compact={true} showLabels={true} />
           </div>
         </CollapsibleContent>
       </Collapsible>

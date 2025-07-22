@@ -10,9 +10,10 @@ import { mcpWebSocketService } from '../services/MCPWebSocketService';
 import { swarmWebSocketIntegration } from '../services/SwarmWebSocketIntegration';
 import { useSwarmBinaryUpdates } from '../hooks/useSwarmBinaryUpdates';
 import { swarmPhysicsWorker } from '../workers/swarmPhysicsWorker';
-import { SwarmStatusIndicator } from './SwarmStatusIndicator';
+// SwarmStatusIndicator merged into main VisionFlow panel
 import { SwarmDebugInfo } from './SwarmVisualizationDebugInfo';
 import { debugState } from '../../../utils/debugState';
+import { useSwarmData } from '../contexts/SwarmDataContext';
 
 const logger = createLogger('SwarmVisualizationEnhanced');
 
@@ -288,7 +289,7 @@ interface SwarmGraphData {
 }
 
 export const SwarmVisualizationEnhanced: React.FC = () => {
-  console.log('[VISIONFLOW] VisionFlow Enhanced component mounting...');
+  // console.log('[VISIONFLOW] VisionFlow Enhanced component mounting...');
 
   const [swarmData, setSwarmData] = useState<SwarmGraphData>({ nodes: [], edges: [] });
   const [isLoading, setIsLoading] = useState(true);
@@ -296,10 +297,12 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   const [dataSource, setDataSource] = useState<'mcp' | 'api' | 'mock'>('mock'); // Default to mock until MCP orchestrator is available
   const [mcpConnected, setMcpConnected] = useState(false);
   const positionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
+  
   const edgeMapRef = useRef<Map<string, SwarmEdge>>(new Map());
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const labelsRef = useRef<THREE.Group>(null);
   const settings = useSettingsStore(state => state.settings);
+  const { updateSwarmData } = useSwarmData();
 
   // Position buffer from backend
   const positionBufferRef = useRef<Float32Array | null>(null);
@@ -328,14 +331,15 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
     }
   });
 
+
   // Initialize physics and data connection
   useEffect(() => {
-    console.log('[VISIONFLOW] useEffect - Starting initialization...');
+    // console.log('[VISIONFLOW] useEffect - Starting initialization...');
     let cleanup = false;
 
     const initialize = async () => {
       try {
-        console.log('[VISIONFLOW] Initializing VisionFlow visualization...');
+        // console.log('[VISIONFLOW] Initializing VisionFlow visualization...');
         setIsLoading(true);
 
         // Initialize physics worker
@@ -560,6 +564,17 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   }, []);
 
   // Update positions from physics simulation
+  // Update context when swarm data changes
+  useEffect(() => {
+    updateSwarmData({
+      nodeCount: swarmData.nodes.length,
+      edgeCount: swarmData.edges.length,
+      tokenCount: swarmData.tokenUsage?.total || 0,
+      mcpConnected,
+      dataSource
+    });
+  }, [swarmData, mcpConnected, dataSource, updateSwarmData]);
+
   useFrame((state, delta) => {
     // Try to get positions from physics worker first
     const workerPositions = swarmPhysicsWorker.getPositions();
@@ -638,7 +653,7 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   });
 
   if (isLoading) {
-    console.log('[VISIONFLOW] Rendering loading state...');
+    // console.log('[VISIONFLOW] Rendering loading state...');
     return (
       <group position={[0, 0, 0]}>
         <Html center>
@@ -681,13 +696,7 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
   // Position swarm graph at origin to co-locate with knowledge graph
   return (
     <group position={[0, 0, 0]}>
-      {/* SwarmStatusIndicator component */}
-      <SwarmStatusIndicator
-        agentCount={swarmData.nodes.length}
-        edgeCount={swarmData.edges.length}
-        totalTokens={swarmData.tokenUsage?.total || 0}
-        connected={mcpConnected}
-      />
+      {/* Merged status indicator directly in VisionFlow */}
 
       {/* Debug info component */}
       {debugState.isEnabled() && (
@@ -701,29 +710,6 @@ export const SwarmVisualizationEnhanced: React.FC = () => {
         />
       )}
 
-      {/* Status panel */}
-      <Html position={[0, 25, 0]} center>
-        <div style={{
-          background: 'rgba(0, 0, 0, 0.8)',
-          padding: '15px',
-          borderRadius: '8px',
-          border: '2px solid #F1C40F',
-          color: '#fff',
-          fontFamily: 'monospace',
-          fontSize: '14px',
-          minWidth: '250px'
-        }}>
-          <h3 style={{ margin: '0 0 10px 0', color: '#F1C40F' }}>
-            ⚡ VisionFlow ({dataSource.toUpperCase()})
-          </h3>
-          <div>Agents: {swarmData.nodes.length}</div>
-          <div>Active Links: {swarmData.edges.length}</div>
-          <div>Total Tokens: {swarmData.tokenUsage?.total || 0}</div>
-          <div style={{ marginTop: '10px', fontSize: '12px', opacity: 0.8 }}>
-            Gold = Coordinators | Green = Workers
-          </div>
-        </div>
-      </Html>
 
       {/* Render nodes - use instanced mesh for large swarms */}
       {swarmData.nodes.length > 50 ? (

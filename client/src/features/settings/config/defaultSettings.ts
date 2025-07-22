@@ -149,6 +149,24 @@ export const defaultSettings: Settings = {
       position: { x: 0, y: 10, z: 50 },
       lookAt: { x: 0, y: 0, z: 0 },
     },
+    spacePilot: {
+      enabled: true,
+      mode: 'camera',
+      sensitivity: {
+        translation: 1.0,
+        rotation: 1.0,
+      },
+      smoothing: 0.8,
+      deadzone: 0.1,
+      buttonFunctions: {
+        1: 'resetView',
+        2: 'cycleMode',
+        3: 'fitToView',
+        4: 'topView',
+        5: 'rightView',
+        6: 'frontView',
+      },
+    },
     // sceneBackground: 0, // Removed, not in VisualisationSettings
     // icons: { // Removed, not in VisualisationSettings
     //   enabled: true,

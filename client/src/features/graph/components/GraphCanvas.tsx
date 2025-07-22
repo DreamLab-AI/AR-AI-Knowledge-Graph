@@ -8,7 +8,10 @@ import { PostProcessingEffects } from './PostProcessingEffects';
 import XRController from '../../xr/components/XRController';
 import XRVisualisationConnector from '../../xr/components/XRVisualisationConnector';
 import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
-import { DualVisualizationControls } from './DualVisualizationControls';
+// import { DualVisualizationControls } from './DualVisualizationControls'; // Removed - both graphs now at origin
+
+// SpacePilot Integration
+import { SpacePilotSimpleIntegration } from '../../visualisation/components/SpacePilotSimpleIntegration';
 
 // Store and utils
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -37,17 +40,17 @@ const SceneSetup = () => {
 
 // Main GraphCanvas component
 const GraphCanvas = () => {
-    console.log('[GRAPH CANVAS] Component rendering...');
-    console.log('[GRAPH CANVAS] About to render SwarmVisualizationEnhanced');
+    // console.log('[GRAPH CANVAS] Component rendering...');
+    // console.log('[GRAPH CANVAS] About to render SwarmVisualizationEnhanced');
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { settings } = useSettingsStore();
     const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false; // Use performance debug flag
     const xrEnabled = settings?.xr?.enabled !== false;
     const antialias = settings?.visualisation?.rendering?.enableAntialiasing !== false; // Correct property name
+    
 
-    // State for controlling the separation distance between visualizations
-    const [separationDistance, setSeparationDistance] = useState(20);
+    // Both visualizations now positioned at origin (0, 0, 0) for unified view
 
     // Wrapper to ensure proper canvas sizing
     return (
@@ -64,7 +67,7 @@ const GraphCanvas = () => {
                     fov: 75,
                     near: 0.1,
                     far: 2000,
-                    position: [0, 10, 50]
+                    position: [0, 20, 60] // Adjusted camera position for better view of unified graphs
                 }}
                 onCreated={({ gl }) => {
                     if (debugState.isEnabled()) {
@@ -77,23 +80,17 @@ const GraphCanvas = () => {
             >
                 <SceneSetup />
 
-                {/* Logseq Graph Visualization - positioned on the left */}
-                <group position={[-separationDistance, 0, 0]}>
+                {/* Logseq Graph Visualization - positioned at origin */}
+                <group position={[0, 0, 0]}>
                     <EnhancedGraphManager />
                 </group>
 
-                {/* VisionFlow Swarm Visualization - positioned on the right */}
-                <group position={[separationDistance, 0, 0]}>
+                {/* VisionFlow Swarm Visualization - also positioned at origin for unified view */}
+                <group position={[0, 0, 0]}>
                     <SwarmVisualizationEnhanced />
                 </group>
 
-                {/* Dual Visualization Controls */}
-                <DualVisualizationControls
-                    separationDistance={separationDistance}
-                    setSeparationDistance={setSeparationDistance}
-                />
-
-                {/* Camera Controls */}
+                {/* Camera Controls with SpacePilot Integration */}
                 <OrbitControls
                     enablePan={true}
                     enableZoom={true}

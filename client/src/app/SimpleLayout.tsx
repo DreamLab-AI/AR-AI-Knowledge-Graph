@@ -1,17 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import EnhancedGraphManager from '../features/graph/components/EnhancedGraphManager';
 import { SwarmVisualizationEnhanced } from '../features/swarm/components/SwarmVisualizationEnhanced';
-import { DualVisualizationControls } from '../features/graph/components/DualVisualizationControls';
+// import { DualVisualizationControls } from '../features/graph/components/DualVisualizationControls'; // Removed - both graphs now at origin
 import { PostProcessingEffects } from '../features/graph/components/PostProcessingEffects';
+import { SpacePilotSimpleIntegration } from '../features/visualisation/components/SpacePilotSimpleIntegration';
+import { IntegratedControlPanel } from '../features/visualisation/components/IntegratedControlPanel';
 import { useSettingsStore } from '../store/settingsStore';
+import { SwarmDataProvider, useSwarmData } from '../features/swarm/contexts/SwarmDataContext';
 
-const SimpleLayout: React.FC = () => {
-  const [separationDistance, setSeparationDistance] = useState(20);
+const SimpleLayoutContent: React.FC = () => {
+  // Both visualizations now positioned at origin (0, 0, 0) for unified view
   const { settings } = useSettingsStore();
+  const { swarmData } = useSwarmData();
   const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false;
   const enableBloom = settings?.visualisation?.bloom?.enabled ?? false;
+  const [orbitControlsEnabled, setOrbitControlsEnabled] = useState(true);
+  const orbitControlsRef = useRef<any>(null);
+
+  const handleOrbitControlsToggle = (enabled: boolean) => {
+    setOrbitControlsEnabled(enabled);
+    if (orbitControlsRef.current) {
+      orbitControlsRef.current.enabled = enabled;
+    }
+  };
 
   return (
     <div style={{ 
@@ -24,7 +37,7 @@ const SimpleLayout: React.FC = () => {
     }}>
       <Canvas
         camera={{ 
-          position: [0, 10, 50], 
+          position: [0, 20, 60], // Adjusted camera position for better view of unified graphs
           fov: 75,
           near: 0.1,
           far: 2000
@@ -41,24 +54,20 @@ const SimpleLayout: React.FC = () => {
         <ambientLight intensity={0.6} />
         <directionalLight intensity={0.8} position={[1, 1, 1]} />
 
-        {/* Logseq Graph Visualization - positioned on the left */}
-        <group position={[-separationDistance, 0, 0]}>
+        {/* Logseq Graph Visualization - positioned at origin */}
+        <group position={[0, 0, 0]}>
           <EnhancedGraphManager />
         </group>
 
-        {/* VisionFlow Swarm Visualization - positioned on the right */}
-        <group position={[separationDistance, 0, 0]}>
+        {/* VisionFlow Swarm Visualization - also positioned at origin for unified view */}
+        <group position={[0, 0, 0]}>
           <SwarmVisualizationEnhanced />
         </group>
 
-        {/* Dual Visualization Controls */}
-        <DualVisualizationControls
-          separationDistance={separationDistance}
-          setSeparationDistance={setSeparationDistance}
-        />
-
         {/* Camera Controls */}
         <OrbitControls 
+          ref={orbitControlsRef}
+          enabled={orbitControlsEnabled}
           enablePan={true} 
           enableZoom={true} 
           enableRotate={true}
@@ -66,6 +75,9 @@ const SimpleLayout: React.FC = () => {
           panSpeed={0.8}
           rotateSpeed={0.8}
         />
+        
+        {/* SpacePilot 6DOF Controller */}
+        <SpacePilotSimpleIntegration />
 
         {/* Performance stats */}
         {showStats && <Stats />}
@@ -74,24 +86,28 @@ const SimpleLayout: React.FC = () => {
         {enableBloom && <PostProcessingEffects />}
       </Canvas>
       
-      {/* Debug info */}
-      <div style={{
-        position: 'absolute',
-        top: 10,
-        left: 10,
-        color: 'white',
-        fontFamily: 'monospace',
-        fontSize: '12px',
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        padding: '10px',
-        borderRadius: '5px'
-      }}>
-        <div>Simple Layout - Dual Graph View</div>
-        <div>Separation: {separationDistance}</div>
-        <div>Stats: {showStats ? 'ON' : 'OFF'}</div>
-        <div>Bloom: {enableBloom ? 'ON' : 'OFF'}</div>
-      </div>
+      {/* Integrated Control Panel */}
+      <IntegratedControlPanel
+        showStats={showStats}
+        enableBloom={enableBloom}
+        onOrbitControlsToggle={handleOrbitControlsToggle}
+        swarmData={swarmData ? {
+          nodeCount: swarmData.nodeCount,
+          edgeCount: swarmData.edgeCount,
+          tokenCount: swarmData.tokenCount,
+          mcpConnected: swarmData.mcpConnected,
+          dataSource: swarmData.dataSource
+        } : undefined}
+      />
     </div>
+  );
+};
+
+const SimpleLayout: React.FC = () => {
+  return (
+    <SwarmDataProvider>
+      <SimpleLayoutContent />
+    </SwarmDataProvider>
   );
 };
 

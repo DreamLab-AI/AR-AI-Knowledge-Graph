@@ -156,6 +156,19 @@ export interface DebugSettings {
   enablePerformanceDebug?: boolean;
 }
 
+// SpacePilot settings
+export interface SpacePilotConfig {
+  enabled: boolean;
+  mode: 'camera' | 'object' | 'navigation';
+  sensitivity: {
+    translation: number;
+    rotation: number;
+  };
+  smoothing: number;
+  deadzone: number;
+  buttonFunctions?: Record<number, string>;
+}
+
 // XR settings
 export interface XRSettings {
   enabled: boolean;
@@ -236,6 +249,7 @@ export interface VisualisationSettings {
   animations: AnimationSettings;
   bloom: BloomSettings;
   hologram: HologramSettings;
+  spacePilot?: SpacePilotConfig;
   camera?: CameraSettings;
   
   // Graph-specific settings
