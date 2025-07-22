@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { cn } from '@/utils/cn';
+import { cn } from '@/utils/classNameUtils';
 import { Button } from '@/features/design-system/components/Button';
 import { Download, Check, Settings, Terminal, Anchor } from 'lucide-react';
 

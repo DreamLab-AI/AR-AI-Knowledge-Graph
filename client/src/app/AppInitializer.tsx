@@ -5,7 +5,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import WebSocketService from '../services/WebSocketService';
 import { graphWorkerProxy } from '../features/graph/managers/graphWorkerProxy';
 import { graphDataManager } from '../features/graph/managers/graphDataManager';
-import { initializeAuth } from '../features/auth/initAuth';
+import { initializeAuth } from '../features/auth/initializeAuthentication';
 
 // Load and initialize all services
 const loadServices = async (): Promise<void> => {

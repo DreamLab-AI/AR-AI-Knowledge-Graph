@@ -5,8 +5,8 @@
 
 import { parallelGraphCoordinator } from '../services/parallelGraphCoordinator';
 import { graphDataManager } from '../managers/graphDataManager';
-import { mcpWebSocketService } from '../../swarm/services/MCPWebSocketService';
-import { swarmPhysicsWorker } from '../../swarm/workers/swarmPhysicsWorker';
+import { mcpWebSocketService } from '../../bots/services/MCPWebSocketService';
+import { botsPhysicsWorker } from '../../bots/workers/botsPhysicsWorker';
 
 describe('Parallel Graph Functionality', () => {
   beforeEach(() => {
@@ -22,7 +22,7 @@ describe('Parallel Graph Functionality', () => {
   test('Graph types are correctly set', () => {
     // Verify graph data manager is set to Logseq
     expect(graphDataManager.getGraphType()).toBe('logseq');
-    
+
     // Note: We can't directly test private properties of MCPWebSocketService
     // but we can verify it behaves correctly for VisionFlow data
   });

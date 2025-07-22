@@ -1,10 +1,10 @@
 // client/src/app/components/RightPaneControlPanel.tsx
 import React from 'react';
 import { ChevronDown } from 'lucide-react';
-import { SettingsPanelRedesignOptimized } from '../../features/settings/components/panels/SettingsPanelRedesignOptimized';
+import { SettingsPanelRedesign } from '../../features/settings/components/panels/SettingsPanelRedesign';
 import ConversationPane from './ConversationPane';
 import NarrativeGoldminePanel from './NarrativeGoldminePanel';
-import { ProgrammaticMonitorControl } from '../../features/swarm/components/ProgrammaticMonitorControl';
+import { ProgrammaticMonitorControl } from '../../features/bots/components/ProgrammaticMonitorControl';
 import { SpacePilotButtonPanel } from '../../features/visualisation/components/SpacePilotButtonPanel';
 import {
   Collapsible,
@@ -17,7 +17,7 @@ const RightPaneControlPanel: React.FC = () => {
     <div className="h-full flex flex-col overflow-y-auto bg-background">
       {/* Settings Panel - Always visible at the top */}
       <div className="flex-shrink-0">
-        <SettingsPanelRedesignOptimized />
+        <SettingsPanelRedesign />
       </div>
 
       {/* Conversation Pane - Collapsible */}

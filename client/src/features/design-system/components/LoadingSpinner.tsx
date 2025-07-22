@@ -1,5 +1,5 @@
 import React from 'react'
-import { cn } from '../../../utils/cn'
+import { cn } from '../../../utils/classNameUtils'
 import { Loader2 } from 'lucide-react'
 
 interface LoadingSpinnerProps {

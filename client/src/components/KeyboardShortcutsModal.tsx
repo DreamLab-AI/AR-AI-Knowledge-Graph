@@ -3,7 +3,7 @@ import { X, Keyboard } from 'lucide-react';
 import { Button } from '@/features/design-system/components/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/features/design-system/components/Card';
 import { useKeyboardShortcutsList, formatShortcut } from '@/hooks/useKeyboardShortcuts';
-import { cn } from '@/utils/cn';
+import { cn } from '@/utils/classNameUtils';
 import { useFocusTrap, useAnnounce } from '@/utils/accessibility';
 
 interface KeyboardShortcutsModalProps {

@@ -5,10 +5,10 @@
 
 import { createLogger } from '../../../utils/logger';
 import { graphDataManager } from '../managers/graphDataManager';
-import { mcpWebSocketService } from '../../swarm/services/MCPWebSocketService';
-import { swarmPhysicsWorker } from '../../swarm/workers/swarmPhysicsWorker';
+import { mcpWebSocketService } from '../../bots/services/MCPWebSocketService';
+import { botsPhysicsWorker } from '../../bots/workers/botsPhysicsWorker';
 import type { GraphData } from '../managers/graphWorkerProxy';
-import type { SwarmAgent, SwarmEdge, TokenUsage } from '../../swarm/types/swarmTypes';
+import type { BotsAgent, BotsEdge, TokenUsage, BotsVisualConfig } from '../../bots/types/BotsTypes';
 
 const logger = createLogger('ParallelGraphCoordinator');
 
@@ -20,8 +20,8 @@ export interface ParallelGraphState {
   };
   visionflow: {
     enabled: boolean;
-    agents: SwarmAgent[];
-    edges: SwarmEdge[];
+    agents: BotsAgent[];
+    edges: BotsEdge[];
     tokenUsage: TokenUsage | null;
     lastUpdate: number;
   };
@@ -66,8 +66,8 @@ class ParallelGraphCoordinator {
     // Configure MCP WebSocket service for VisionFlow
     mcpWebSocketService.setDataType('visionflow');
 
-    // Configure swarm physics worker for VisionFlow
-    swarmPhysicsWorker.setDataType('visionflow');
+    // Configure bots physics worker for VisionFlow
+    botsPhysicsWorker.setDataType('visionflow');
 
     // Set up listeners for both data sources
     this.setupLogseqListeners();
@@ -159,15 +159,15 @@ class ParallelGraphCoordinator {
         const communications = await mcpWebSocketService.getCommunications();
 
         // Process communications into edges
-        const edgeMap = new Map<string, SwarmEdge>();
+        const edgeMap = new Map<string, BotsEdge>();
         communications.forEach(comm => {
           comm.receivers.forEach(receiver => {
             const edgeId = `${comm.sender}-${receiver}`;
             const reverseEdgeId = `${receiver}-${comm.sender}`;
-            
+
             // Check if edge already exists (in either direction)
             let edge = edgeMap.get(edgeId) || edgeMap.get(reverseEdgeId);
-            
+
             if (!edge) {
               edge = {
                 id: edgeId,
@@ -179,7 +179,7 @@ class ParallelGraphCoordinator {
               };
               edgeMap.set(edgeId, edge);
             }
-            
+
             // Update edge metrics
             edge.dataVolume += comm.metadata.size;
             edge.messageCount += 1;
@@ -191,9 +191,9 @@ class ParallelGraphCoordinator {
         });
 
         // Update physics simulation
-        swarmPhysicsWorker.updateAgents(agents);
-        swarmPhysicsWorker.updateEdges(Array.from(edgeMap.values()));
-        swarmPhysicsWorker.updateTokenUsage(tokenUsage);
+        botsPhysicsWorker.updateAgents(agents);
+        botsPhysicsWorker.updateEdges(Array.from(edgeMap.values()));
+        botsPhysicsWorker.updateTokenUsage(tokenUsage);
 
         // Update state
         this.state.visionflow.agents = agents;
@@ -284,7 +284,15 @@ class ParallelGraphCoordinator {
       return new Map();
     }
 
-    return swarmPhysicsWorker.getPositions();
+    return botsPhysicsWorker.getPositions();
+  }
+
+  /**
+   * Update physics configuration
+   */
+  public updatePhysicsConfig(config: Partial<BotsVisualConfig['physics']>): void {
+    botsPhysicsWorker.updateConfig(config);
+    logger.debug('Updated physics configuration in parallel graph coordinator:', config);
   }
 
   /**

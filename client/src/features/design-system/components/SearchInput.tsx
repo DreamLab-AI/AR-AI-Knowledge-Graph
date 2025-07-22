@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Search, X } from 'lucide-react'
-import { cn } from '../../../utils/cn'
+import { cn } from '../../../utils/classNameUtils'
 import { Input, InputProps } from './Input'
 
 export interface SearchInputProps extends Omit<InputProps, 'type' | 'onChange'> {

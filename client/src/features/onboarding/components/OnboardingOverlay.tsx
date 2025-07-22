@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, ChevronLeft, ChevronRight, SkipForward } from 'lucide-react';
 import { Button } from '../../design-system/components';
-import { cn } from '../../../utils/cn';
+import { cn } from '../../../utils/classNameUtils';
 import { OnboardingStep } from '../types';
 
 interface OnboardingOverlayProps {

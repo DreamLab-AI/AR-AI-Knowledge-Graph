@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import GraphViewport from '../features/graph/components/GraphViewport';
-import { VoiceButton } from '../components/VoiceButton';
-import { VoiceIndicator } from '../components/VoiceIndicator';
+import { AuthGatedVoiceButton } from '../components/AuthGatedVoiceButton';
+import { AuthGatedVoiceIndicator } from '../components/AuthGatedVoiceIndicator';
 import { createLogger } from '../utils/logger';
 import { useXRCore } from '../features/xr/providers/XRCoreProvider';
 import { useApplicationMode } from '../contexts/ApplicationModeContext';
@@ -137,12 +137,12 @@ const Quest3ARLayout: React.FC = () => {
         gap: '16px',
         pointerEvents: 'auto' // Ensure interaction works in AR
       }}>
-        <VoiceButton
+        <AuthGatedVoiceButton
           size="lg"
           variant="primary"
           className="bg-blue-500 bg-opacity-90 backdrop-blur-md border-2 border-white border-opacity-30 shadow-lg"
         />
-        <VoiceIndicator
+        <AuthGatedVoiceIndicator
           className="max-w-sm text-center bg-black bg-opacity-70 backdrop-blur-md rounded-xl p-3 border border-white border-opacity-20 text-white"
           showTranscription={true}
           showStatus={true}

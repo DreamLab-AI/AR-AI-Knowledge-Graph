@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cn } from '../../../utils/cn'
+import { cn } from '../../../utils/classNameUtils'
 import { animations } from '../animations'
 import { Loader2 } from 'lucide-react'
 

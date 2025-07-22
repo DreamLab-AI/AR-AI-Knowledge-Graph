@@ -28,7 +28,7 @@ const createDefaultGraphSettings = (colorTheme: 'blue' | 'green'): GraphSettings
       metalness: 0.63,
       opacity: 0.65,
       roughness: 0.73,
-      nodeSize: 0.1,
+      nodeSize: 0.5,
       quality: "medium",
       enableInstancing: false,
       enableHologram: true,
@@ -37,11 +37,11 @@ const createDefaultGraphSettings = (colorTheme: 'blue' | 'green'): GraphSettings
     },
     edges: {
       arrowSize: 0.02,
-      baseWidth: 0.1,
+      baseWidth: 0.5,
       color: theme.edgeColor,
       enableArrows: false,
       opacity: 0.25,
-      widthRange: [0.1, 1.0],
+      widthRange: [0.2, 1.0],
       quality: "medium",
       enableFlowEffect: true,
       flowSpeed: 1,
@@ -52,17 +52,17 @@ const createDefaultGraphSettings = (colorTheme: 'blue' | 'green'): GraphSettings
       gradientColors: ["#ffffff", "#000000"],
     },
     labels: {
-      desktopFontSize: 0.2,
+      desktopFontSize: 0.5,
       enableLabels: true,
       textColor: theme.labelColor,
       textOutlineColor: theme.labelOutlineColor,
-      textOutlineWidth: 0.01,
+      textOutlineWidth: 0.005,
       textResolution: 32,
       textPadding: 0.6,
       billboardMode: "camera",
     },
     physics: {
-      attractionStrength: 0.05,
+      attractionStrength: 0.3,
       boundsSize: 15.0,
       collisionRadius: 0.5,
       damping: 0.95,
@@ -70,12 +70,12 @@ const createDefaultGraphSettings = (colorTheme: 'blue' | 'green'): GraphSettings
       enabled: true,
       iterations: 100,
       maxVelocity: 0.02,
-      repulsionStrength: 0.1,
-      springStrength: 0.2,
+      repulsionStrength: 0.5,
+      springStrength: 0.3,
       repulsionDistance: 2.0,
       massScale: 1.0,
       boundaryDamping: 0.95,
-      updateThreshold: 0.05,
+      updateThreshold: 0.1,
     },
   };
 };
@@ -115,20 +115,20 @@ export const defaultSettings: Settings = {
       waveSpeed: 0.5,
     },
     bloom: { // This section is for visualisation.bloom specific settings
-      edgeBloomStrength: 0.4, // From JSON (camelCase, was 2.8)
+      edgeBloomStrength: 0.5, // From JSON (camelCase, was 2.8)
       enabled: true, // From JSON (camelCase)
-      environmentBloomStrength: 2.0, // From JSON (camelCase, was 3.8)
-      nodeBloomStrength: 3.0, // From JSON (camelCase, was 1.5)
+      environmentBloomStrength: 0.6, // From JSON (camelCase, was 3.8)
+      nodeBloomStrength: 0.7, // From JSON (camelCase, was 1.5)
       radius: 0.4,
-      strength: 1.77,
-      threshold: 0.06,
+      strength: 0.5,
+      threshold: 0.2,
     },
     hologram: {
-      ringCount: 1, // From JSON (camelCase, was 3)
+      ringCount: 3, // From JSON (camelCase, was 3)
       ringColor: "#c2a200", // From JSON (camelCase, was #ffffff)
-      ringOpacity: 0.001, // From JSON (camelCase, was 1)
-      sphereSizes: [4, 8], // From JSON (camelCase, was [40.5, 80])
-      ringRotationSpeed: 10.0, // From JSON (camelCase, was 12)
+      ringOpacity: 0.5, // From JSON (camelCase, was 1)
+      sphereSizes: [10, 20], // From JSON (camelCase, was [40.5, 80])
+      ringRotationSpeed: 5.0, // From JSON (camelCase, was 12)
       enableBuckminster: false,
       buckminsterSize: 10,
       buckminsterOpacity: 0.05,
@@ -136,9 +136,9 @@ export const defaultSettings: Settings = {
       geodesicSize: 10,
       geodesicOpacity: 0.05,
       enableTriangleSphere: false, // From JSON (camelCase, was true)
-      triangleSphereSize: 10, // From JSON (camelCase, was 60)
-      triangleSphereOpacity: 0.05, // From JSON (camelCase, was 0.3)
-      globalRotationSpeed: 3.0, // From JSON (camelCase, was 0.2)
+      triangleSphereSize: 15, // From JSON (camelCase, was 60)
+      triangleSphereOpacity: 0.3, // From JSON (camelCase, was 0.3)
+      globalRotationSpeed: 1.0, // From JSON (camelCase, was 0.2)
       // color: 65535, // Removed, does not exist in HologramSettings
       // opacity: 0.7, // Removed, not in HologramSettings
     },
@@ -281,7 +281,7 @@ export const defaultSettings: Settings = {
     // hapticFeedback: true, // Duplicate of enableHaptics
   },
   auth: {
-    enabled: true, // From JSON (camelCase, was false)
+    enabled: false, // Auth not enabled by default
     provider: "nostr", // From JSON (camelCase, was '')
     required: false,
   },

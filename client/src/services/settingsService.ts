@@ -1,5 +1,5 @@
 import { Settings } from '../features/settings/config/settings';
-import { apiService } from './api';
+import { apiService } from './apiService';
 import { createLogger, createErrorMetadata } from '../utils/logger';
 import { convertSnakeToCamelCase, convertCamelToSnakeCase } from '../utils/caseConversion';
 import { debugState } from '../utils/debugState';

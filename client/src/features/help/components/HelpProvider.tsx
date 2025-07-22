@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { HelpCircle, X } from 'lucide-react';
-import { cn } from '../../../utils/cn';
+import { cn } from '../../../utils/classNameUtils';
 import { Button } from '../../design-system/components/Button';
 import { HelpContent } from '../types';
 import { helpRegistry } from '../HelpRegistry';

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/features/design-system/components/Button';
 import { Input } from '@/features/design-system/components/Input';
 import { Send } from 'lucide-react';
-import { apiService } from '@/services/api';
+import { apiService } from '@/services/apiService';
 import { useSettingsStore } from '@/store/settingsStore'; // For auth check
 import { nostrAuth } from '@/services/nostrAuthService'; // For getting token
 import { createLogger, createErrorMetadata } from '@/utils/logger';
@@ -26,7 +26,8 @@ const ConversationPane: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  const authUser = useSettingsStore(state => state.user);
+  const authenticated = useSettingsStore(state => state.authenticated);
+  const authEnabled = useSettingsStore(state => state.settings?.auth?.enabled);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -35,10 +36,11 @@ const ConversationPane: React.FC = () => {
 
   useEffect(scrollToBottom, [messages]);
 
-  const isPowerUser = authUser?.isPowerUser === true;
+  // Check if auth is enabled and user is authenticated
+  const isAuthRequired = authEnabled && (!authenticated || !nostrAuth.isAuthenticated());
 
   const handleSendMessage = useCallback(async () => {
-    if (!currentInput.trim() || isLoading || !isPowerUser) return;
+    if (!currentInput.trim() || isLoading || isAuthRequired) return;
 
     const userMessage: Message = { id: Date.now().toString() + '_user', sender: 'user', text: currentInput };
     setMessages(prev => [...prev, userMessage]);
@@ -73,22 +75,14 @@ const ConversationPane: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentInput, isLoading, sessionId, isPowerUser]);
+  }, [currentInput, isLoading, sessionId, isAuthRequired]);
 
-  if (!isPowerUser && !authUser) { // Show loading or placeholder if authUser is not yet loaded
-    return (
-      <div className="flex flex-col items-center justify-center h-full p-4 bg-card text-card-foreground">
-        <p className="text-muted-foreground">Loading user information...</p>
-      </div>
-    );
-  }
-
-  if (!isPowerUser) {
+  if (isAuthRequired) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-4 bg-card text-card-foreground">
         <p className="text-lg font-semibold text-muted-foreground">RAGFlow Chat</p>
-        <p className="text-sm text-muted-foreground mt-2">This chat feature is available for Power Users only.</p>
-        <p className="text-xs text-muted-foreground mt-1">Please authenticate as a power user to enable RAGFlow chat.</p>
+        <p className="text-sm text-muted-foreground mt-2">This chat feature requires Nostr authentication.</p>
+        <p className="text-xs text-muted-foreground mt-1">Please authenticate with Nostr to enable chat features.</p>
       </div>
     );
   }
@@ -120,12 +114,12 @@ const ConversationPane: React.FC = () => {
           onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
           placeholder="Ask RAGFlow..."
           className="flex-grow bg-input border-border placeholder-muted-foreground"
-          disabled={isLoading || !isPowerUser}
+          disabled={isLoading || isAuthRequired}
           aria-label="Chat input"
         />
         <Button
             onClick={handleSendMessage}
-            disabled={isLoading || !currentInput.trim() || !isPowerUser}
+            disabled={isLoading || !currentInput.trim() || isAuthRequired}
             size="icon"
             variant="ghost"
             aria-label="Send message"

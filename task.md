@@ -1,2 +1,17 @@
-we have temporarily reduced the complexity of the client in ext/client/src such that it is just rendering the three js scene for the knowledge graph and dummy agent data provided by the server. We need to fully connect the WebHID 6DOF spacepilot through the experimental webhid interface in chrome/edge, which is enabled. I have confirmed that we can see data in the browser. The indicative code for the connection is in ext/webhid-space, and this should be adapted to provide full scene control orbiting the origin with 6DOF spacemouse control. We will need access to all of the buttons. You can see that there are three floating menus in the three js scene. One is to seperate the agent and knowledge graphs in 3d space. We don't need that feature, place both graphs at origin centre, and remove the panel controller. Another panel is for VisionFlow(MOCK) and another for Swarm Status. We only need VisionFlow as a swarm monitor. Its should have the features of both visionflow and swarm panels so merge them both into VisionFlow panel removing the word swarm and duplication. The Swarm status panel should be removed. We need a new panel in the same style to show the webhid button states as a dev check.
-The panel should display the current state of all buttons on the spacepilot, updating in real-time as buttons are pressed or released.
+The visualization component, BotsVisualizationEnhanced.tsx, further clarifies these types by grouping them into two logical categories: Primary Agent Roles (generally rendered in shades of green) and Meta/Coordinating Roles (rendered in shades of gold and yellow).
+Here is the complete list, categorized as the system implements it:
+Meta & Coordinating Roles (Gold/Yellow Palette)
+These agents are typically responsible for orchestration, analysis, and high-level strategy within the bots.
+coordinator: The central orchestrator or manager of a task or sub-bots.
+analyst: Responsible for analyzing data, performance, or results.
+architect: Designs the overall structure or approach for a task.
+optimizer: Focuses on improving the efficiency or output of other agents.
+monitor: Observes the state of the bots and reports on its health and progress.
+Primary Agent Roles (Green Palette)
+These agents are the primary "workers" that perform the core tasks assigned to the bots.
+coder: Writes or generates code.
+tester: Tests and validates the output of other agents, particularly coders.
+researcher: Gathers information and performs research tasks.
+reviewer: Reviews code or content for quality, correctness, and adherence to standards.
+documenter: Writes documentation for the work being done.
+specialist: A general-purpose agent with a specific, specialized skill set not covered by other types.

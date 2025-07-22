@@ -13,7 +13,7 @@ export { aiInsights, AIInsights } from '../services/aiInsights';
 export { advancedInteractionModes, AdvancedInteractionModes } from '../services/advancedInteractionModes';
 
 // Main Integration Component
-export { default as InnovativeGraphFeatures } from '../components/InnovativeGraphFeatures';
+export { default as GraphFeatures } from '../components/GraphFeatures';
 
 // Type Exports for Synchronization
 export type {
@@ -436,7 +436,7 @@ export default {
   advancedInteractionModes,
   
   // Components
-  InnovativeGraphFeatures,
+  GraphFeatures,
   
   // Management
   innovationManager,

@@ -10,7 +10,7 @@ use webxr::{
         speech_socket_handler::speech_socket_handler,
         mcp_relay_handler::mcp_relay_handler,
         nostr_handler,
-        swarm_handler,
+        bots_handler,
     },
     services::{
         file_service::FileService,
@@ -146,17 +146,17 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize Nostr service
     nostr_handler::init_nostr_service(&mut app_state);
-    
-    // Initialize SwarmClient connection
-    info!("Connecting to swarm orchestrator...");
-    let swarm_url = std::env::var("SWARM_ORCHESTRATOR_URL")
+
+    // Initialize BotsClient connection
+    info!("Connecting to bots orchestrator...");
+    let bots_url = std::env::var("BOTS_ORCHESTRATOR_URL")
         .unwrap_or_else(|_| "ws://powerdev:3000/ws".to_string());
-    
-    let swarm_client = app_state.swarm_client.clone();
+
+    let bots_client = app_state.bots_client.clone();
     tokio::spawn(async move {
-        match swarm_client.connect(&swarm_url).await {
-            Ok(()) => info!("Successfully connected to swarm orchestrator at {}", swarm_url),
-            Err(e) => error!("Failed to connect to swarm orchestrator: {}", e),
+        match bots_client.connect(&bots_url).await {
+            Ok(()) => info!("Successfully connected to bots orchestrator at {}", bots_url),
+            Err(e) => error!("Failed to connect to bots orchestrator: {}", e),
         }
     });
 
@@ -303,7 +303,7 @@ async fn main() -> std::io::Result<()> {
                     .configure(api_handler::config) // This will now serve /api/user-settings etc.
                     .service(web::scope("/health").configure(health_handler::config)) // This will now serve /api/health
                     .service(web::scope("/pages").configure(pages_handler::config))
-                    .service(web::scope("/swarm").configure(swarm_handler::config)) // This will now serve /api/swarm/data and /api/swarm/update
+                    .service(web::scope("/bots").configure(bots_handler::config)) // This will now serve /api/bots/data and /api/bots/update
             );
 
         app

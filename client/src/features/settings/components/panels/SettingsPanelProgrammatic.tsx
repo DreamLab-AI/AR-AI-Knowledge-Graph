@@ -19,7 +19,7 @@ import {
 import { useSettingsStore } from '@/store/settingsStore';
 import { SettingControlComponent } from '../SettingControlComponent';
 import { settingsUIDefinition, UICategoryDefinition, UISettingDefinition } from '../../config/settingsUIDefinition';
-import { cn } from '@/utils/cn';
+import { cn } from '@/utils/classNameUtils';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 import { LoadingSpinner, LoadingOverlay } from '@/features/design-system/components/LoadingSpinner';
@@ -29,7 +29,7 @@ import { useToast } from '@/features/design-system/components/Toast';
 import { UndoRedoControls } from '../UndoRedoControls';
 import NostrAuthSection from '../../../auth/components/NostrAuthSection';
 import { useSelectiveSetting, useSettingSetter } from '@/hooks/useSelectiveSettingsStore';
-import { VirtualizedSettingsGroupOptimized } from '../VirtualizedSettingsGroupOptimized';
+import { VirtualizedSettingsGroup } from '../VirtualizedSettingsGroup';
 import { performanceUtils } from '../../hooks/useSettingsPerformance';
 
 interface SettingItem {
@@ -396,7 +396,7 @@ export function SettingsPanelProgrammatic({
     if (group.isPowerUser && !isPowerUser) return null;
 
     return (
-      <VirtualizedSettingsGroupOptimized
+      <VirtualizedSettingsGroup
         key={group.title}
         title={group.title}
         description={group.description}

@@ -122,6 +122,3 @@ __pycache__/
 scripts/local/
 client/visualisation/effects/custom/
 .qodo
-
-# Claude Flow Swarm files
-.claude-flow-swarm/

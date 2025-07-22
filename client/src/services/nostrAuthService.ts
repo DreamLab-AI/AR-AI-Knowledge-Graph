@@ -1,4 +1,4 @@
-import { apiService } from './api';
+import { apiService } from './apiService';
 import { createLogger, createErrorMetadata } from '../utils/logger';
 import { Event, UnsignedEvent, nip19 } from 'nostr-tools';
 import { v4 as uuidv4 } from 'uuid'; // Import uuid

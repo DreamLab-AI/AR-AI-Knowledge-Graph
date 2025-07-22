@@ -4,7 +4,7 @@ visualisation:
     metalness: 0.63
     opacity: 0.65
     roughness: 0.73
-    node_size: 0.1
+    node_size: 0.5
     quality: 'medium'
     enable_instancing: false
     enable_hologram: false
@@ -20,12 +20,12 @@ visualisation:
     selected_color: '#00ff00'
   edges:
     arrow_size: 0.02
-    base_width: 0.1
+    base_width: 0.5
     color: '#56b6c2'
     enable_arrows: false
     opacity: 0.25
     width_range:
-      - 0.1
+      - 0.2
       - 1.0
     quality: 'medium'
     enable_flow_effect: true
@@ -43,7 +43,7 @@ visualisation:
     dash_size: 3
     gap_size: 1
   physics:
-    attraction_strength: 0.05
+    attraction_strength: 0.3
     bounds_size: 15.0
     collision_radius: 0.5
     damping: 0.95
@@ -51,8 +51,8 @@ visualisation:
     enabled: true
     iterations: 100
     max_velocity: 0.02
-    repulsion_strength: 0.1
-    spring_strength: 0.2
+    repulsion_strength: 0.5
+    spring_strength: 0.3
     repulsion_distance: 2.0
     mass_scale: 1.0
     boundary_damping: 0.95
@@ -73,9 +73,9 @@ visualisation:
     context: 'desktop'
     pixel_ratio: 1.5
     enable_bloom: true
-    bloom_strength: 1.5
+    bloom_strength: 0.5
     bloom_threshold: 0.4
-    bloom_radius: 0.85
+    bloom_radius: 0.4
   animations:
     enable_motion_blur: false
     enable_node_animations: false
@@ -86,31 +86,31 @@ visualisation:
     pulse_strength: 0.6
     wave_speed: 0.5
   labels:
-    desktop_font_size: 0.2
+    desktop_font_size: 0.5
     enable_labels: true # Note: JSON also has 'enabled: true', this one is more specific
     text_color: '#f8f8f2'
     text_outline_color: '#181c28'
-    text_outline_width: 0.01
+    text_outline_width: 0.005
     text_resolution: 32
     text_padding: 0.6
     billboard_mode: 'camera'
     enabled: true # General enabled flag for labels
   bloom: # This is for visualisation.bloom specific settings
-    edge_bloom_strength: 0.4
+    edge_bloom_strength: 0.5
     enabled: true # This is visualisation.bloom.enabled
-    environment_bloom_strength: 2.0
-    node_bloom_strength: 3.0
+    environment_bloom_strength: 0.6
+    node_bloom_strength: 0.7
     radius: 0.4
-    strength: 1.77
-    threshold: 0.06
+    strength: 0.5
+    threshold: 0.2
   hologram:
-    ring_count: 1
+    ring_count: 3
     ring_color: '#c2a200'
-    ring_opacity: 0.001
+    ring_opacity: 0.5
     sphere_sizes:
-      - 4
-      - 8
-    ring_rotation_speed: 10.0
+      - 10
+      - 20
+    ring_rotation_speed: 5.0
     enable_buckminster: false
     buckminster_size: 10
     buckminster_opacity: 0.05
@@ -118,9 +118,9 @@ visualisation:
     geodesic_size: 10
     geodesic_opacity: 0.05
     enable_triangle_sphere: false
-    triangle_sphere_size: 10
-    triangle_sphere_opacity: 0.05
-    global_rotation_speed: 3.0
+    triangle_sphere_size: 15
+    triangle_sphere_opacity: 0.3
+    global_rotation_speed: 1.0
     color: 65535
     opacity: 0.7
   camera:

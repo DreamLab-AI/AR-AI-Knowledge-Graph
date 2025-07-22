@@ -6,7 +6,7 @@ This document describes the implementation of parallel graph support for running
 
 The parallel graph system allows two independent graph visualizations to run at the same time:
 - **Logseq Graph**: Displays knowledge graph data from Logseq
-- **VisionFlow Graph**: Displays swarm agent visualization data
+- **VisionFlow Graph**: Displays bots agent visualization data
 
 ## Architecture
 
@@ -29,7 +29,7 @@ The parallel graph system allows two independent graph visualizations to run at 
 
 4. **Physics Workers**
    - `graph.worker.ts`: Runs Logseq physics simulation
-   - `swarmPhysicsWorker.ts`: Runs VisionFlow physics simulation
+   - `botsPhysicsWorker.ts`: Runs VisionFlow physics simulation
    - Both workers check graph type before processing
 
 ## Usage
@@ -96,7 +96,7 @@ const visionFlowPos = parallelGraphCoordinator.getVisionFlowPositions();
 ### VisionFlow Data Flow
 1. MCPWebSocketService receives MCP updates
 2. Filters data with `dataType === 'visionflow'`
-3. Updates agents and edges in `swarmPhysicsWorker`
+3. Updates agents and edges in `botsPhysicsWorker`
 4. Physics simulation runs independently
 5. Positions available via `parallelGraphCoordinator.getVisionFlowPositions()`
 

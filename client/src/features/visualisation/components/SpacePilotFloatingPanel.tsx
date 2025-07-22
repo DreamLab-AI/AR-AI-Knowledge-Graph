@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../design-system/components/Card';
 import { Button } from '../../design-system/components/Button';
 import { Tooltip } from '../../design-system/components/Tooltip';
-import { cn } from '../../../utils/cn';
+import { cn } from '../../../utils/classNameUtils';
 import { X, Gamepad2, Move } from 'lucide-react';
 
 import { SpaceDriver } from '../../../services/SpaceDriverService';

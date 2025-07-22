@@ -3,12 +3,12 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { graphDataManager } from '../managers/graphDataManager';
-import EnhancedGraphManager from './EnhancedGraphManager';
+import GraphManager from './GraphManager';
 import { VisualEnhancementToggle } from './VisualEnhancementToggle';
 import CameraController from '../../visualisation/components/CameraController'; // Adjusted path
 import { useSettingsStore } from '../../../store/settingsStore';
 import { createLogger } from '../../../utils/logger';
-import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
+import { BotsVisualization } from '../../bots/components/BotsVisualization';
 
 // Ensure Three.js types are properly loaded if not globally done
 // import '../../../types/react-three-fiber.d.ts';
@@ -152,14 +152,14 @@ const GraphViewport: React.FC = () => {
         />
 
         <Suspense fallback={null}>
-          {/* Using EnhancedGraphManager for all graph rendering */}
-          <EnhancedGraphManager />
+          {/* Using GraphManager for all graph rendering */}
+          <GraphManager />
           {/* Note: Enhanced features can be toggled via settings */}
           {/* HologramVisualisation could be added here if it's part of the core graph view */}
           {/* <HologramVisualisation standalone={false} position={[0, 0, 0]} size={20} /> */}
-          
+
           {/* VisionFlow visualization re-enabled in same origin space */}
-          <SwarmVisualizationEnhanced />
+          <BotsVisualization />
         </Suspense>
 
         {/* Removed showAxesHelper and showStats as they are not in DebugSettings type from settings.ts */}

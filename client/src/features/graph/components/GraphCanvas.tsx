@@ -3,11 +3,11 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { OrbitControls, Stats } from '@react-three/drei';
 
 // Components
-import EnhancedGraphManager from './EnhancedGraphManager';
+import GraphManager from './GraphManager';
 import { PostProcessingEffects } from './PostProcessingEffects';
 import XRController from '../../xr/components/XRController';
 import XRVisualisationConnector from '../../xr/components/XRVisualisationConnector';
-import { SwarmVisualizationEnhanced } from '../../swarm/components/SwarmVisualizationEnhanced';
+import { BotsVisualization } from '../../bots/components/BotsVisualization';
 // import { DualVisualizationControls } from './DualVisualizationControls'; // Removed - both graphs now at origin
 
 // SpacePilot Integration
@@ -41,14 +41,14 @@ const SceneSetup = () => {
 // Main GraphCanvas component
 const GraphCanvas = () => {
     // console.log('[GRAPH CANVAS] Component rendering...');
-    // console.log('[GRAPH CANVAS] About to render SwarmVisualizationEnhanced');
+    // console.log('[GRAPH CANVAS] About to render BotsVisualization');
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const { settings } = useSettingsStore();
     const showStats = settings?.system?.debug?.enablePerformanceDebug ?? false; // Use performance debug flag
     const xrEnabled = settings?.xr?.enabled !== false;
     const antialias = settings?.visualisation?.rendering?.enableAntialiasing !== false; // Correct property name
-    
+
 
     // Both visualizations now positioned at origin (0, 0, 0) for unified view
 
@@ -82,12 +82,12 @@ const GraphCanvas = () => {
 
                 {/* Logseq Graph Visualization - positioned at origin */}
                 <group position={[0, 0, 0]}>
-                    <EnhancedGraphManager />
+                    <GraphManager />
                 </group>
 
-                {/* VisionFlow Swarm Visualization - also positioned at origin for unified view */}
+                {/* VisionFlow Bots Visualization - also positioned at origin for unified view */}
                 <group position={[0, 0, 0]}>
-                    <SwarmVisualizationEnhanced />
+                    <BotsVisualization />
                 </group>
 
                 {/* Camera Controls with SpacePilot Integration */}

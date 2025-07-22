@@ -4,7 +4,7 @@ import { Button } from '@/features/design-system/components/Button';
 import { TooltipRoot, TooltipContent, TooltipTrigger } from '@/features/design-system/components/Tooltip';
 import { useSettingsHistory } from '../hooks/useSettingsHistory';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { cn } from '@/utils/cn';
+import { cn } from '@/utils/classNameUtils';
 
 interface UndoRedoControlsProps {
   className?: string;

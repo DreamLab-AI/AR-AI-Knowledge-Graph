@@ -5,14 +5,15 @@ import GraphCanvas from '../features/graph/components/GraphCanvas';
 import RightPaneControlPanel from './components/RightPaneControlPanel';
 import ConversationPane from './components/ConversationPane';
 import NarrativeGoldminePanel from './components/NarrativeGoldminePanel';
-// import { VoiceButton } from '../components/VoiceButton';
-// import { VoiceIndicator } from '../components/VoiceIndicator';
-// import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
-// import { AudioInputService } from '../services/AudioInputService';
+import { AuthGatedVoiceButton } from '../components/AuthGatedVoiceButton';
+import { AuthGatedVoiceIndicator } from '../components/AuthGatedVoiceIndicator';
+import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
+import { AudioInputService } from '../services/AudioInputService';
 
 const TwoPaneLayout: React.FC = () => {
   const [isRightPaneDocked, setIsRightPaneDocked] = useState(false);
   const rightPanelRef = useRef<any>(null);
+  const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
 
   // Ensure right panel is expanded on mount
   useEffect(() => {
@@ -20,13 +21,12 @@ const TwoPaneLayout: React.FC = () => {
       rightPanelRef.current.expand();
     }
   }, []);
-  // const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
 
-  // useEffect(() => {
-  //   const support = AudioInputService.getBrowserSupport();
-  //   const isSupported = support.getUserMedia && support.isHttps && support.audioContext && support.mediaRecorder;
-  //   setHasVoiceSupport(isSupported);
-  // }, []);
+  useEffect(() => {
+    const support = AudioInputService.getBrowserSupport();
+    const isSupported = support.getUserMedia && support.isHttps && support.audioContext && support.mediaRecorder;
+    setHasVoiceSupport(isSupported);
+  }, []);
 
   const toggleRightPaneDock = () => {
     if (rightPanelRef.current) {
@@ -122,23 +122,23 @@ const TwoPaneLayout: React.FC = () => {
       </PanelGroup>
 
       {/* Browser Support Warning - Only show when there's no voice support */}
-      {/* {!hasVoiceSupport && (
+      {!hasVoiceSupport && (
         <div className="fixed bottom-20 left-4 z-40 max-w-sm pointer-events-auto">
           <BrowserSupportWarning className="shadow-lg" />
         </div>
-      )} */}
+      )}
 
       {/* Voice Interaction Components - Only show when browser supports it */}
-      {/* {hasVoiceSupport && (
+      {hasVoiceSupport && (
         <div className="fixed bottom-4 left-4 z-50 flex flex-col gap-1 items-start pointer-events-auto">
-          <VoiceButton size="md" variant="primary" />
-          <VoiceIndicator
+          <AuthGatedVoiceButton size="md" variant="primary" />
+          <AuthGatedVoiceIndicator
             className="max-w-xs text-xs"
             showTranscription={true}
             showStatus={false}
           />
         </div>
-      )} */}
+      )}
     </div>
   );
 };

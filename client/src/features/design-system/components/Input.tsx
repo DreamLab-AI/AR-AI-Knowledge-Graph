@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '../../../utils/cn'
+import { cn } from '../../../utils/classNameUtils'
 import { animations } from '../animations'
 import { Eye, EyeOff, X } from 'lucide-react'
 

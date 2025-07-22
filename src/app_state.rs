@@ -14,7 +14,7 @@ use crate::services::perplexity_service::PerplexityService;
 use crate::services::speech_service::SpeechService;
 use crate::services::ragflow_service::RAGFlowService;
 use crate::services::nostr_service::NostrService;
-use crate::services::swarm_client::SwarmClient;
+use crate::services::bots_client::BotsClient;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -33,7 +33,7 @@ pub struct AppState {
     pub feature_access: web::Data<FeatureAccess>,
     pub ragflow_session_id: String,
     pub active_connections: Arc<AtomicUsize>,
-    pub swarm_client: Arc<SwarmClient>,
+    pub bots_client: Arc<BotsClient>,
 }
 
 impl AppState {
@@ -48,34 +48,34 @@ impl AppState {
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         info!("[AppState::new] Initializing actor system");
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Start actors
         info!("[AppState::new] Starting ClientManagerActor");
         let client_manager_addr = ClientManagerActor::new().start();
-        
+
         info!("[AppState::new] Starting SettingsActor");
         let settings_addr = SettingsActor::new(settings).start();
-        
+
         info!("[AppState::new] Starting MetadataActor");
         let metadata_addr = MetadataActor::new(MetadataStore::new()).start();
-        
+
         info!("[AppState::new] Starting GPUComputeActor");
         let gpu_compute_addr = Some(GPUComputeActor::new().start());
-        
+
         info!("[AppState::new] Starting GraphServiceActor");
         let graph_service_addr = GraphServiceActor::new(
             client_manager_addr.clone(),
             gpu_compute_addr.clone()
         ).start();
-        
+
         info!("[AppState::new] Starting ProtectedSettingsActor");
         let protected_settings_addr = ProtectedSettingsActor::new(ProtectedSettings::default()).start();
-        
-        info!("[AppState::new] Initializing SwarmClient");
-        let swarm_client = Arc::new(SwarmClient::new());
-        
+
+        info!("[AppState::new] Initializing BotsClient");
+        let bots_client = Arc::new(BotsClient::new());
+
         info!("[AppState::new] Actor system initialization complete");
-        
+
         Ok(Self {
             graph_service_addr,
             gpu_compute_addr,
@@ -92,7 +92,7 @@ impl AppState {
             feature_access: web::Data::new(FeatureAccess::from_env()),
             ragflow_session_id,
             active_connections: Arc::new(AtomicUsize::new(0)),
-            swarm_client,
+            bots_client,
         })
     }
 
@@ -156,7 +156,7 @@ impl AppState {
     pub fn get_available_features(&self, pubkey: &str) -> Vec<String> {
         self.feature_access.get_available_features(pubkey)
     }
-    
+
     pub fn get_client_manager_addr(&self) -> &Addr<ClientManagerActor> {
         &self.client_manager_addr
     }

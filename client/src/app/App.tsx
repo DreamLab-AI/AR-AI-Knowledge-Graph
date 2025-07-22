@@ -4,9 +4,8 @@ import { ApplicationModeProvider } from '../contexts/ApplicationModeContext';
 import XRCoreProvider from '../features/xr/providers/XRCoreProvider';
 import { useSettingsStore } from '../store/settingsStore';
 import { createLogger, createErrorMetadata } from '../utils/logger';
-import TwoPaneLayout from './TwoPaneLayout';
 import Quest3ARLayout from './Quest3ARLayout';
-import SimpleLayout from './SimpleLayout';
+import MainLayout from './MainLayout';
 import { useQuest3Integration } from '../hooks/useQuest3Integration';
 import { CommandPalette } from '../features/command-palette/components/CommandPalette';
 import { initializeCommandPalette } from '../features/command-palette/defaultCommands';
@@ -15,7 +14,7 @@ import { registerSettingsHelp } from '../features/help/settingsHelp';
 import { OnboardingProvider } from '../features/onboarding/components/OnboardingProvider';
 import { registerOnboardingCommands } from '../features/onboarding/flows/defaultFlows';
 import { TooltipProvider } from '../features/design-system/components/Tooltip';
-import { useSwarmWebSocketIntegration } from '../features/swarm/hooks/useSwarmWebSocketIntegration';
+import { useBotsWebSocketIntegration } from '../features/bots/hooks/useBotsWebSocketIntegration';
 const logger = createLogger('App')
 
 // Error boundary component to catch rendering errors
@@ -66,9 +65,9 @@ function App() {
   const { shouldUseQuest3Layout, isQuest3Detected, autoStartSuccessful } = useQuest3Integration({
     enableAutoStart: false
   });
-  
-  // Initialize swarm WebSocket integration
-  const swarmConnectionStatus = useSwarmWebSocketIntegration();
+
+  // Initialize bots WebSocket integration
+  const botsConnectionStatus = useBotsWebSocketIntegration();
 
   useEffect(() => {
     // Initialize command palette, help system, and onboarding on first load
@@ -94,9 +93,9 @@ function App() {
     const debugEnabled = settings?.system?.debug?.enabled === true;
     if (debugEnabled) {
       logger.debug('Application initialized');
-      logger.debug('Swarm WebSocket connection status:', swarmConnectionStatus);
+      logger.debug('Bots WebSocket connection status:', botsConnectionStatus);
     }
-  }, [swarmConnectionStatus])
+  }, [botsConnectionStatus])
 
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={100}>
@@ -109,7 +108,7 @@ function App() {
                   shouldUseQuest3Layout ? (
                     <Quest3ARLayout />
                   ) : (
-                    <SimpleLayout />
+                    <MainLayout />
                   )
                 ) : (
                   <div>Loading application...</div>
