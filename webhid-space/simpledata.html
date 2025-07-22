@@ -1,0 +1,25 @@
+<button id="scan">SCAN</button>
+<script>
+    function scan() {
+        navigator.hid.requestDevice({filters: [{ vendorId: 0x046d }]}).then(devices => {
+            if (!devices.length) return;
+
+            const device = devices[0];
+
+            device.open().then(() => {
+                console.log('Opened device: ' + device.productName);
+                device.addEventListener('inputreport', e => {
+                    // First attempt: Print all the data
+                    // console.log('Report ID', e.reportId);
+                    // console.log('Data', new Int8Array(e.data.buffer));
+
+                    // Second attempt: extract translation and rotation:
+                    if (e.reportId === 1) console.log('T', new Int16Array(e.data.buffer));
+                    if (e.reportId === 2) console.log('R', new Int16Array(e.data.buffer));
+                });
+            });
+        });
+    }
+
+    document.querySelector('#scan').addEventListener('click', scan);
+</script>
