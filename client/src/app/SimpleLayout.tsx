@@ -6,7 +6,7 @@ import { SwarmVisualizationEnhanced } from '../features/swarm/components/SwarmVi
 // import { DualVisualizationControls } from '../features/graph/components/DualVisualizationControls'; // Removed - both graphs now at origin
 import { PostProcessingEffects } from '../features/graph/components/PostProcessingEffects';
 import { SpacePilotSimpleIntegration } from '../features/visualisation/components/SpacePilotSimpleIntegration';
-import { IntegratedControlPanel } from '../features/visualisation/components/IntegratedControlPanel';
+import { IntegratedControlPanelEnhanced } from '../features/visualisation/components/IntegratedControlPanelEnhanced';
 import { useSettingsStore } from '../store/settingsStore';
 import { SwarmDataProvider, useSwarmData } from '../features/swarm/contexts/SwarmDataContext';
 
@@ -87,7 +87,7 @@ const SimpleLayoutContent: React.FC = () => {
       </Canvas>
       
       {/* Integrated Control Panel */}
-      <IntegratedControlPanel
+      <IntegratedControlPanelEnhanced
         showStats={showStats}
         enableBloom={enableBloom}
         onOrbitControlsToggle={handleOrbitControlsToggle}

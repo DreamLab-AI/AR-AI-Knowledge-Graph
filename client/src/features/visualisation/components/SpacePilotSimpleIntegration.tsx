@@ -139,10 +139,10 @@ export const SpacePilotSimpleIntegration: React.FC = () => {
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
     const up = new THREE.Vector3(0, 0, 1); // Z is up/down in screen space
     
-    // Translation: X=strafe, Z=forward/back (inverted), Y=up/down (inverted)
+    // Translation: X=strafe, Z=forward/back (inverted), Y=up/down (double inverted - user preference)
     camera.position.add(right.multiplyScalar(smoothedTranslation.current.x * config.translationSpeed));
     camera.position.add(forward.multiplyScalar(smoothedTranslation.current.z * config.translationSpeed)); // Z inverted
-    camera.position.add(up.multiplyScalar(-smoothedTranslation.current.y * config.translationSpeed)); // Y inverted
+    camera.position.add(up.multiplyScalar(smoothedTranslation.current.y * config.translationSpeed)); // Y double inverted per user request
     
     // Rotation: Apply to camera directly (RZ and RY switched, both inverted)
     const euler = new THREE.Euler(
