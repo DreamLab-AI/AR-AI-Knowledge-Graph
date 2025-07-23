@@ -26,6 +26,7 @@ pub struct GraphServiceActor {
     simulation_running: AtomicBool,
     shutdown_complete: Arc<AtomicBool>,
     next_node_id: AtomicU32,
+    bots_graph_data: GraphData, // Add a new field for the bots graph
 }
 
 impl GraphServiceActor {
@@ -41,6 +42,7 @@ impl GraphServiceActor {
             simulation_running: AtomicBool::new(false),
             shutdown_complete: Arc::new(AtomicBool::new(false)),
             next_node_id: AtomicU32::new(1),
+            bots_graph_data: GraphData::new(),
         }
     }
 
@@ -500,5 +502,61 @@ impl Handler<UpdateGraphData> for GraphServiceActor {
         
         info!("Graph data updated successfully");
         Ok(())
+    }
+}
+
+impl Handler<UpdateBotsGraph> for GraphServiceActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: UpdateBotsGraph, _ctx: &mut Context<Self>) -> Self::Result {
+        // This logic converts `AgentStatus` objects into `Node` and `Edge` objects
+        let mut nodes = vec![];
+        let mut edges = vec![]; // Edges can be derived from agent communication patterns
+        
+        // Use a high ID range (starting at 10000) to avoid conflicts with main graph
+        let bot_id_offset = 10000;
+        
+        for (i, agent) in msg.agents.iter().enumerate() {
+            let node_id = bot_id_offset + i as u32;
+            
+            // Create a node for each agent
+            let mut node = Node::new_with_id(agent.agent_id.clone(), Some(node_id));
+            
+            // Set node properties based on agent status
+            node.color = Some(match agent.profile.agent_type {
+                crate::services::claude_flow::AgentType::Coordinator => "#FF6B6B".to_string(),
+                crate::services::claude_flow::AgentType::Researcher => "#4ECDC4".to_string(),
+                crate::services::claude_flow::AgentType::Coder => "#45B7D1".to_string(),
+                crate::services::claude_flow::AgentType::Analyst => "#FFA07A".to_string(),
+                crate::services::claude_flow::AgentType::Architect => "#98D8C8".to_string(),
+                crate::services::claude_flow::AgentType::Tester => "#F7DC6F".to_string(),
+                _ => "#95A5A6".to_string(),
+            });
+            
+            node.label = agent.profile.name.clone();
+            // node.shape = "circle".to_string(); // Node struct doesn't have a shape field
+            node.size = Some(20.0 + (agent.active_tasks_count as f32 * 5.0)); // Size based on activity
+            
+            // Add metadata
+            node.metadata.insert("agent_type".to_string(), format!("{:?}", agent.profile.agent_type));
+            node.metadata.insert("status".to_string(), agent.status.clone());
+            node.metadata.insert("active_tasks".to_string(), agent.active_tasks_count.to_string());
+            node.metadata.insert("completed_tasks".to_string(), agent.completed_tasks_count.to_string());
+            
+            nodes.push(node);
+        }
+        
+        // Update the bots graph data
+        self.bots_graph_data.nodes = nodes;
+        self.bots_graph_data.edges = edges;
+        
+        // Create a message to broadcast the bots graph update to clients
+        // This would need to be implemented based on how the client expects bot data
+        // For now, we'll just log the update
+        info!("Updated bots graph with {} agents", msg.agents.len());
+        
+        // TODO: Implement broadcasting bots graph to clients
+        // This might involve creating a new message type or modifying the existing
+        // binary protocol to support dual graphs
     }
 }

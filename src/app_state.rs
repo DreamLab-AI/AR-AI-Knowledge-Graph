@@ -3,7 +3,7 @@ use actix::prelude::*;
 use actix_web::web;
 use log::info;
 
-use crate::actors::{GraphServiceActor, SettingsActor, MetadataActor, ClientManagerActor, GPUComputeActor, ProtectedSettingsActor};
+use crate::actors::{GraphServiceActor, SettingsActor, MetadataActor, ClientManagerActor, GPUComputeActor, ProtectedSettingsActor, ClaudeFlowActor};
 use crate::config::AppFullSettings; // Renamed for clarity, ClientFacingSettings removed
 use tokio::time::Duration;
 use crate::config::feature_access::FeatureAccess;
@@ -34,6 +34,7 @@ pub struct AppState {
     pub ragflow_session_id: String,
     pub active_connections: Arc<AtomicUsize>,
     pub bots_client: Arc<BotsClient>,
+    pub claude_flow_addr: Option<Addr<ClaudeFlowActor>>,
 }
 
 impl AppState {
@@ -74,6 +75,15 @@ impl AppState {
         info!("[AppState::new] Initializing BotsClient");
         let bots_client = Arc::new(BotsClient::new());
 
+        // Initialize ClaudeFlowActor if MCP is configured
+        let claude_flow_addr = if std::env::var("CLAUDE_FLOW_HOST").is_ok() {
+            info!("[AppState::new] Starting ClaudeFlowActor");
+            Some(ClaudeFlowActor::new(graph_service_addr.clone()).await.start())
+        } else {
+            info!("[AppState::new] ClaudeFlowActor not configured (CLAUDE_FLOW_HOST not set)");
+            None
+        };
+
         info!("[AppState::new] Actor system initialization complete");
 
         Ok(Self {
@@ -93,6 +103,7 @@ impl AppState {
             ragflow_session_id,
             active_connections: Arc::new(AtomicUsize::new(0)),
             bots_client,
+            claude_flow_addr,
         })
     }
 

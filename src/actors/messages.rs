@@ -161,6 +161,15 @@ pub struct SendToClientBinary(pub Vec<u8>);
 #[rtype(result = "()")]
 pub struct SendToClientText(pub String);
 
+// Claude Flow Actor Messages
+use crate::services::claude_flow::AgentStatus;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct UpdateBotsGraph {
+    pub agents: Vec<AgentStatus>,
+}
+
 // GPU Compute Actor Messages
 #[derive(Message)]
 #[rtype(result = "Result<(), String>")]
