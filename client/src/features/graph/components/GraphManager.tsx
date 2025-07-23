@@ -11,6 +11,7 @@ import { BinaryNodeData, createBinaryNodeData } from '../../../types/binaryProto
 import { HologramNodeMaterial } from '../shaders/HologramNodeMaterial'
 import { FlowingEdges } from './FlowingEdges'
 import { createEventHandlers } from './GraphManager_EventHandlers'
+import { MetadataNodesV3 } from './MetadataNodesV3'
 
 const logger = createLogger('GraphManager')
 
@@ -41,6 +42,24 @@ const getPositionForNode = (node: GraphNode, index: number, totalNodes: number):
 
   return [node.position.x, node.position.y, node.position.z]
 }
+
+// Get geometry for node type
+const getGeometryForNodeType = (type?: string): THREE.BufferGeometry => {
+  switch (type?.toLowerCase()) {
+    case 'folder':
+      return new THREE.OctahedronGeometry(0.6, 0); // Folder = octahedron
+    case 'file':
+      return new THREE.BoxGeometry(0.8, 0.8, 0.8); // File = cube
+    case 'concept':
+      return new THREE.IcosahedronGeometry(0.5, 0); // Concept = icosahedron
+    case 'todo':
+      return new THREE.ConeGeometry(0.5, 1, 4); // Todo = pyramid
+    case 'reference':
+      return new THREE.TorusGeometry(0.5, 0.2, 8, 16); // Reference = torus
+    default:
+      return new THREE.SphereGeometry(0.5, 32, 32); // Default = sphere
+  }
+};
 
 // Get node color based on type/metadata
 const getNodeColor = (node: GraphNode): THREE.Color => {
@@ -137,6 +156,11 @@ const GraphManager: React.FC = () => {
   })
 
   const { camera, size } = useThree()
+  
+  // Check if metadata shapes are enabled
+  const logseqSettings = settings?.visualisation?.graphs?.logseq
+  const nodeSettings = logseqSettings?.nodes || settings?.visualisation?.nodes
+  const enableMetadataShape = nodeSettings?.enableMetadataShape ?? false
 
   // Create custom hologram material
   useEffect(() => {
@@ -219,7 +243,7 @@ const GraphManager: React.FC = () => {
     }
 
     // Get smooth positions from physics worker
-    if (meshRef.current && graphData.nodes.length > 0) {
+    if ((meshRef.current || enableMetadataShape) && graphData.nodes.length > 0) {
       const positions = await graphWorkerProxy.tick(delta);
       nodePositionsRef.current = positions;
 
@@ -231,15 +255,18 @@ const GraphManager: React.FC = () => {
         const BASE_SPHERE_RADIUS = 0.5;
         const baseScale = nodeSize / BASE_SPHERE_RADIUS;
 
-        for (let i = 0; i < graphData.nodes.length; i++) {
-          const i3 = i * 3;
-          const node = graphData.nodes[i];
-          const nodeScale = getNodeScale(node, graphData.edges) * baseScale;
-          tempMatrix.makeScale(nodeScale, nodeScale, nodeScale);
-          tempMatrix.setPosition(positions[i3], positions[i3 + 1], positions[i3 + 2]);
-          meshRef.current.setMatrixAt(i, tempMatrix);
+        // Only update instance matrix if using standard mesh (not metadata shapes)
+        if (meshRef.current && !enableMetadataShape) {
+          for (let i = 0; i < graphData.nodes.length; i++) {
+            const i3 = i * 3;
+            const node = graphData.nodes[i];
+            const nodeScale = getNodeScale(node, graphData.edges) * baseScale;
+            tempMatrix.makeScale(nodeScale, nodeScale, nodeScale);
+            tempMatrix.setPosition(positions[i3], positions[i3 + 1], positions[i3 + 2]);
+            meshRef.current.setMatrixAt(i, tempMatrix);
+          }
+          meshRef.current.instanceMatrix.needsUpdate = true;
         }
-        meshRef.current.instanceMatrix.needsUpdate = true;
 
         // Update edge points based on new positions with endpoint offset
         const newEdgePoints: number[] = [];
@@ -435,7 +462,8 @@ const GraphManager: React.FC = () => {
       const physicsPos = labelPositions[index]
       const position = physicsPos || node.position || { x: 0, y: 0, z: 0 }
       const scale = getNodeScale(node, graphData.edges)
-      const labelOffsetY = scale * 1.5 + 0.5; // Stable offset calculation
+      const textPadding = labelSettings.textPadding ?? 0.6;
+      const labelOffsetY = scale * 1.5 + textPadding; // Use textPadding setting
 
       // Determine which piece of metadata to show
       let metadataToShow = null;
@@ -483,7 +511,7 @@ const GraphManager: React.FC = () => {
           </Text>
           {metadataToShow && (
             <Text
-              position={[0, -0.15, 0]}
+              position={[0, -(textPadding * 0.25), 0]}
               fontSize={fontSize * 0.6}
               color={new THREE.Color(labelSettings.textColor || '#ffffff').multiplyScalar(0.7).getStyle()}
               anchorX="center"
@@ -501,23 +529,37 @@ const GraphManager: React.FC = () => {
 
   return (
     <>
-      {/* Main node mesh with hologram shader */}
-      <instancedMesh
-        ref={meshRef}
-        args={[undefined, undefined, graphData.nodes.length]}
-        frustumCulled={false}
-        material={materialRef.current || undefined}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerMissed={() => {
-          if (dragDataRef.current.isDragging) {
-            handlePointerUp()
-          }
-        }}
-      >
-        <sphereGeometry args={[0.5, 32, 32]} />
-      </instancedMesh>
+      {/* Render nodes based on metadata shape setting */}
+      {enableMetadataShape ? (
+        <MetadataNodesV3
+          nodes={graphData.nodes}
+          nodePositions={nodePositionsRef.current}
+          onNodeClick={(nodeId, event) => {
+            const nodeIndex = graphData.nodes.findIndex(n => n.id === nodeId)
+            if (nodeIndex !== -1) {
+              handlePointerDown({ ...event, instanceId: nodeIndex } as any)
+            }
+          }}
+          settings={settings}
+        />
+      ) : (
+        <instancedMesh
+          ref={meshRef}
+          args={[undefined, undefined, graphData.nodes.length]}
+          frustumCulled={false}
+          material={materialRef.current || undefined}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerMissed={() => {
+            if (dragDataRef.current.isDragging) {
+              handlePointerUp()
+            }
+          }}
+        >
+          <sphereGeometry args={[0.5, 32, 32]} />
+        </instancedMesh>
+      )}
 
       {/* Enhanced flowing edges */}
       {edgePoints.length > 0 && (
