@@ -53,6 +53,7 @@ export const SpacePilotSimpleIntegration: React.FC = () => {
       // Disable OrbitControls when SpacePilot connects
       if (controls && 'enabled' in controls) {
         (controls as any).enabled = false;
+        console.log('[SpacePilot] Connected - OrbitControls disabled');
       }
     };
     
@@ -61,6 +62,7 @@ export const SpacePilotSimpleIntegration: React.FC = () => {
       // Re-enable OrbitControls when SpacePilot disconnects
       if (controls && 'enabled' in controls) {
         (controls as any).enabled = true;
+        console.log('[SpacePilot] Disconnected - OrbitControls enabled');
       }
     };
     

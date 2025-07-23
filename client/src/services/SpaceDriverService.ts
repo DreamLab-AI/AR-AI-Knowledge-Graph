@@ -71,22 +71,31 @@ class SpaceDriverService extends EventTarget {
     try {
       // Check if WebHID is available
       if (!navigator.hid) {
-        logger.error('WebHID API not available. This could be due to:');
-        logger.error('1. Not using HTTPS or localhost');
-        logger.error('2. Browser doesn\'t support WebHID (use Chrome or Edge)');
-        logger.error('3. WebHID is disabled in browser flags');
-        logger.error('4. Running in an insecure context');
+        logger.warn('WebHID API not available. This could be due to:');
+        logger.warn('1. Not using HTTPS or localhost');
+        logger.warn('2. Browser doesn\'t support WebHID (use Chrome or Edge)');
+        logger.warn('3. WebHID is disabled in browser flags');
+        logger.warn('4. Running in an insecure context');
         
         // Check if we're in a secure context
         if (window.isSecureContext === false) {
-          logger.error('Not in a secure context. WebHID requires HTTPS or localhost.');
-          logger.error('');
-          logger.error('TO FIX - Choose one option:');
-          logger.error('1. Access via http://localhost:3000 instead of IP');
-          logger.error('2. Use HTTPS (https://192.168.0.51:3000)');
-          logger.error('3. In Chrome: chrome://flags → "Insecure origins treated as secure" → Add http://192.168.0.51:3000');
-          logger.error('');
+          logger.warn('Not in a secure context. WebHID requires HTTPS or localhost.');
+          logger.warn('');
+          logger.warn('TO FIX - Choose one option:');
+          logger.warn('1. Access via http://localhost:3000 instead of IP');
+          logger.warn('2. Use HTTPS (https://192.168.0.51:3000)');
+          logger.warn('3. In Chrome: chrome://flags → "Insecure origins treated as secure" → Add http://192.168.0.51:3000');
+          logger.warn('');
         }
+        
+        // Dispatch a custom event to notify UI components
+        this.dispatchEvent(new CustomEvent('webhid-unavailable', {
+          detail: {
+            isSecureContext: window.isSecureContext,
+            hostname: window.location.hostname,
+            protocol: window.location.protocol
+          }
+        }));
         
         // Don't initialize demo mode - let user fix the issue
         return;

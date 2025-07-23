@@ -7,6 +7,7 @@ import { BotsVisualization } from '../features/bots/components/BotsVisualization
 import { PostProcessingEffects } from '../features/graph/components/PostProcessingEffects';
 import { SpacePilotSimpleIntegration } from '../features/visualisation/components/SpacePilotSimpleIntegration';
 import { IntegratedControlPanel } from '../features/visualisation/components/IntegratedControlPanel';
+import { useMouseControls } from '../hooks/useMouseControls';
 import { HologramVisualisation } from '../features/visualisation/components/HologramVisualisation';
 import { useSettingsStore } from '../store/settingsStore';
 import { BotsDataProvider, useBotsData } from '../features/bots/contexts/BotsDataContext';
@@ -14,6 +15,7 @@ import { useSelectiveSetting } from '@/hooks/useSelectiveSettingsStore';
 import { AuthGatedVoiceButton } from '../components/AuthGatedVoiceButton';
 import { AuthGatedVoiceIndicator } from '../components/AuthGatedVoiceIndicator';
 import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
+import { SpaceMouseStatus } from '../components/SpaceMouseStatus';
 import { AudioInputService } from '../services/AudioInputService';
 
 const MainLayoutContent: React.FC = () => {
@@ -35,6 +37,9 @@ const MainLayoutContent: React.FC = () => {
       orbitControlsRef.current.enabled = enabled;
     }
   };
+
+  // Ensure mouse controls work when SpaceMouse is unavailable
+  useMouseControls(orbitControlsRef);
 
   useEffect(() => {
     const support = AudioInputService.getBrowserSupport();
@@ -115,6 +120,9 @@ const MainLayoutContent: React.FC = () => {
           dataSource: botsData.dataSource
         } : undefined}
       />
+
+      {/* SpaceMouse Status Warning */}
+      <SpaceMouseStatus />
 
       {/* Browser Support Warning - Only show when there's no voice support */}
       {!hasVoiceSupport && (

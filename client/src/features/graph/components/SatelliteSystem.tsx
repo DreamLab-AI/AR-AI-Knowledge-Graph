@@ -39,16 +39,20 @@ export const SatelliteSystem: React.FC<SatelliteSystemProps> = ({ node, position
     return positions
   }, [satelliteCount, scale])
   
+  // Refs for satellite groups
+  const satelliteGroupRefs = useRef<THREE.Group[]>([])
+  
   // Animate satellites
   useFrame((state) => {
     if (groupRef.current && satelliteCount > 0) {
       groupRef.current.rotation.y = state.clock.elapsedTime * 0.2
       
-      // Add vertical oscillation
-      groupRef.current.children.forEach((child, i) => {
-        if (child instanceof THREE.Mesh) {
+      // Add vertical oscillation to satellite groups
+      satelliteGroupRefs.current.forEach((group, i) => {
+        if (group && satellitePositions[i]) {
           const offset = i * Math.PI * 2 / satelliteCount
-          child.position.y = satellitePositions[i][1] + Math.sin(state.clock.elapsedTime + offset) * 0.1
+          const baseY = satellitePositions[i][1]
+          group.position.y = baseY + Math.sin(state.clock.elapsedTime + offset) * 0.1
         }
       })
     }
@@ -59,7 +63,13 @@ export const SatelliteSystem: React.FC<SatelliteSystemProps> = ({ node, position
   return (
     <group ref={groupRef} position={position}>
       {satellitePositions.map((pos, i) => (
-        <group key={i} position={pos}>
+        <group 
+          key={i} 
+          position={pos}
+          ref={(el) => {
+            if (el) satelliteGroupRefs.current[i] = el
+          }}
+        >
           {/* Satellite sphere */}
           <mesh>
             <sphereGeometry args={[0.05 + i * 0.01, 8, 8]} />
