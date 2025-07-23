@@ -36,15 +36,15 @@ log() {
 # Cleanup function
 cleanup() {
     log "${YELLOW}Cleaning up development environment...${NC}"
-    
+
     # Stop Docker containers
     if docker ps -q -f name=$CONTAINER_NAME > /dev/null; then
         log "${YELLOW}Stopping Docker containers...${NC}"
         cd "$PROJECT_ROOT" && docker compose -f $DOCKER_COMPOSE_FILE stop # Changed 'down' to 'stop' to prevent container removal
     fi
-    
+
     # Host process cleanup removed as Node/Vite run inside the container
-    
+
     log "${GREEN}Cleanup complete${NC}"
 }
 
@@ -55,7 +55,11 @@ trap cleanup SIGINT SIGTERM EXIT
 # Start development servers
 start_dev() {
     log "${YELLOW}Starting development servers...${NC}"
-    
+
+    # Ensure logs directory exists on the host
+    log "${YELLOW}Ensuring host log directory exists...${NC}"
+    mkdir -p "$PROJECT_ROOT/logs"
+
     # Build and start containers with updated configuration
     log "${YELLOW}Starting Docker containers...${NC}"
     if [ "$NO_CACHE" = true ]; then

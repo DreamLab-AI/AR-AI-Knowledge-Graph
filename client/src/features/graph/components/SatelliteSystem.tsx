@@ -59,37 +59,63 @@ export const SatelliteSystem: React.FC<SatelliteSystemProps> = ({ node, position
   return (
     <group ref={groupRef} position={position}>
       {satellitePositions.map((pos, i) => (
-        <mesh key={i} position={pos}>
-          <sphereGeometry args={[0.05 + i * 0.01, 8, 8]} />
-          <meshBasicMaterial 
-            color="#00ffff" 
-            transparent 
-            opacity={0.8 - i * 0.05}
-            emissive="#00ffff"
-            emissiveIntensity={2}
-          />
-        </mesh>
+        <group key={i} position={pos}>
+          {/* Satellite sphere */}
+          <mesh>
+            <sphereGeometry args={[0.05 + i * 0.01, 8, 8]} />
+            <meshPhongMaterial 
+              color="#00ffff" 
+              transparent 
+              opacity={0.8 - i * 0.05}
+              emissive="#00ffff"
+              emissiveIntensity={2}
+            />
+          </mesh>
+          
+          {/* Glowing halo */}
+          <mesh>
+            <sphereGeometry args={[0.08 + i * 0.01, 8, 8]} />
+            <meshBasicMaterial 
+              color="#00ffff" 
+              transparent 
+              opacity={0.2}
+              side={THREE.BackSide}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        </group>
       ))}
       
-      {/* Connection lines */}
-      {satellitePositions.map((pos, i) => (
-        <line key={`line-${i}`}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              count={2}
-              array={new Float32Array([0, 0, 0, ...pos])}
-              itemSize={3}
+      {/* Connection beams with gradient */}
+      {satellitePositions.map((pos, i) => {
+        const points = [
+          new THREE.Vector3(0, 0, 0),
+          new THREE.Vector3(...pos)
+        ]
+        const geometry = new THREE.BufferGeometry().setFromPoints(points)
+        
+        return (
+          <line key={`line-${i}`} geometry={geometry}>
+            <lineBasicMaterial 
+              color="#00ffff" 
+              transparent 
+              opacity={0.4 - i * 0.02}
+              blending={THREE.AdditiveBlending}
             />
-          </bufferGeometry>
-          <lineBasicMaterial 
-            color="#00ffff" 
-            transparent 
-            opacity={0.3}
-            linewidth={1}
-          />
-        </line>
-      ))}
+          </line>
+        )
+      })}
+      
+      {/* Orbital ring */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.5 + scale * 0.5, 0.01, 8, 32]} />
+        <meshBasicMaterial 
+          color="#00ffff" 
+          transparent 
+          opacity={0.15}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
     </group>
   )
 }

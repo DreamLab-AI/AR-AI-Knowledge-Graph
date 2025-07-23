@@ -3,8 +3,10 @@ pub mod client;
 pub mod error;
 pub mod transport;
 pub mod types;
+pub mod mcp_tools;
 
 // Re-export the primary components for use within the backend
-pub use client::{ClaudeFlowClient, ClaudeFlowClientBuilder};
+pub use client::{ClaudeFlowClient, ClaudeFlowClientBuilder, TransportType};
 pub use error::{ConnectorError, Result};
 pub use types::*;
+pub use mcp_tools::{McpTool, ToolResponse};

@@ -1,5 +1,6 @@
 pub mod http;
 pub mod websocket;
+pub mod stdio;
 
 use async_trait::async_trait;
 use crate::services::claude_flow::error::Result;

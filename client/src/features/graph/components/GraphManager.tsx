@@ -11,7 +11,7 @@ import { BinaryNodeData, createBinaryNodeData } from '../../../types/binaryProto
 import { HologramNodeMaterial } from '../shaders/HologramNodeMaterial'
 import { FlowingEdges } from './FlowingEdges'
 import { createEventHandlers } from './GraphManager_EventHandlers'
-import { MetadataNodesV3 } from './MetadataNodesV3'
+import { MetadataNodesEnhanced } from './MetadataNodesEnhanced'
 
 const logger = createLogger('GraphManager')
 
@@ -531,7 +531,7 @@ const GraphManager: React.FC = () => {
     <>
       {/* Render nodes based on metadata shape setting */}
       {enableMetadataShape ? (
-        <MetadataNodesV3
+        <MetadataNodesEnhanced
           nodes={graphData.nodes}
           nodePositions={nodePositionsRef.current}
           onNodeClick={(nodeId, event) => {

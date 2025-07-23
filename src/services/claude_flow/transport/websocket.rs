@@ -8,7 +8,6 @@ use crate::services::claude_flow::error::{ConnectorError, Result};
 use crate::services::claude_flow::transport::Transport;
 use crate::services::claude_flow::types::{McpRequest, McpResponse, McpNotification};
 use dashmap::DashMap;
-use uuid::Uuid;
 
 type WsStream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 

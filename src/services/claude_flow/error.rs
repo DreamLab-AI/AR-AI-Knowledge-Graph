@@ -32,6 +32,9 @@ pub enum ConnectorError {
     #[error("MCP error: code={code}, message={message}")]
     McpError { code: i32, message: String },
     
+    #[error("Not connected")]
+    NotConnected,
+    
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

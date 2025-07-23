@@ -511,7 +511,7 @@ impl Handler<UpdateBotsGraph> for GraphServiceActor {
     fn handle(&mut self, msg: UpdateBotsGraph, _ctx: &mut Context<Self>) -> Self::Result {
         // This logic converts `AgentStatus` objects into `Node` and `Edge` objects
         let mut nodes = vec![];
-        let mut edges = vec![]; // Edges can be derived from agent communication patterns
+        let edges = vec![]; // Edges can be derived from agent communication patterns
         
         // Use a high ID range (starting at 10000) to avoid conflicts with main graph
         let bot_id_offset = 10000;

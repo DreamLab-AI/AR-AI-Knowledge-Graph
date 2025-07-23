@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use uuid::Uuid;
 
 // MCP Protocol Types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,18 +114,64 @@ pub enum AgentType {
     Specialist,
 }
 
+impl AgentType {
+    pub fn from_str(s: &str) -> Result<Self, &'static str> {
+        match s.to_lowercase().as_str() {
+            "coordinator" => Ok(AgentType::Coordinator),
+            "researcher" => Ok(AgentType::Researcher),
+            "coder" => Ok(AgentType::Coder),
+            "analyst" => Ok(AgentType::Analyst),
+            "architect" => Ok(AgentType::Architect),
+            "tester" => Ok(AgentType::Tester),
+            "reviewer" => Ok(AgentType::Reviewer),
+            "optimizer" => Ok(AgentType::Optimizer),
+            "documenter" => Ok(AgentType::Documenter),
+            "monitor" => Ok(AgentType::Monitor),
+            "specialist" => Ok(AgentType::Specialist),
+            _ => Err("Unknown agent type"),
+        }
+    }
+}
+
+impl std::fmt::Display for AgentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AgentType::Coordinator => write!(f, "coordinator"),
+            AgentType::Researcher => write!(f, "researcher"),
+            AgentType::Coder => write!(f, "coder"),
+            AgentType::Analyst => write!(f, "analyst"),
+            AgentType::Architect => write!(f, "architect"),
+            AgentType::Tester => write!(f, "tester"),
+            AgentType::Reviewer => write!(f, "reviewer"),
+            AgentType::Optimizer => write!(f, "optimizer"),
+            AgentType::Documenter => write!(f, "documenter"),
+            AgentType::Monitor => write!(f, "monitor"),
+            AgentType::Specialist => write!(f, "specialist"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RetryPolicy {
+    pub max_retries: u32,
+    pub initial_delay_ms: u64,
+    pub max_delay_ms: u64,
+    pub exponential_base: f32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentProfile {
-    pub id: String,
     pub name: String,
     #[serde(rename = "type")]
     pub agent_type: AgentType,
     pub capabilities: Vec<String>,
-    #[serde(rename = "systemPrompt")]
-    pub system_prompt: String,
+    #[serde(rename = "systemPrompt", skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
     #[serde(rename = "maxConcurrentTasks")]
     pub max_concurrent_tasks: u32,
     pub priority: u32,
+    #[serde(rename = "retryPolicy", default)]
+    pub retry_policy: RetryPolicy,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<HashMap<String, String>>,
     #[serde(rename = "workingDirectory", skip_serializing_if = "Option::is_none")]
@@ -146,6 +191,27 @@ pub struct AgentStatus {
     pub active_tasks_count: u32,
     #[serde(rename = "completedTasksCount")]
     pub completed_tasks_count: u32,
+    #[serde(rename = "failedTasksCount", default)]
+    pub failed_tasks_count: u32,
+    #[serde(rename = "totalExecutionTime", default)]
+    pub total_execution_time: u64,
+    #[serde(rename = "averageTaskDuration", default)]
+    pub average_task_duration: f64,
+    #[serde(rename = "successRate", default)]
+    pub success_rate: f64,
+    #[serde(rename = "currentTask", skip_serializing_if = "Option::is_none")]
+    pub current_task: Option<TaskReference>,
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskReference {
+    #[serde(rename = "taskId")]
+    pub task_id: String,
+    pub description: String,
+    #[serde(rename = "startedAt")]
+    pub started_at: DateTime<Utc>,
 }
 
 // Task Types

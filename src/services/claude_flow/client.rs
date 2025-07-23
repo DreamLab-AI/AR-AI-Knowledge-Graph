@@ -3,9 +3,12 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 use super::error::{ConnectorError, Result};
-use super::transport::{Transport, http::HttpTransport, websocket::WebSocketTransport};
+use super::transport::{Transport, http::HttpTransport, websocket::WebSocketTransport, stdio::StdioTransport};
 use super::types::*;
+use super::mcp_tools::{McpTool, ToolResponse};
 use std::collections::HashMap;
+use serde_json::{json, Value};
+use log::debug;
 
 #[derive(Clone)]
 pub struct ClaudeFlowClient {
@@ -75,48 +78,135 @@ impl ClaudeFlowClient {
         }
     }
     
-    // Agent Management
+    // Agent Management - Updated to use MCP tools
     pub async fn spawn_agent(&self, agent_params: SpawnAgentParams) -> Result<AgentStatus> {
         self.ensure_initialized()?;
         
-        let request = McpRequest {
-            jsonrpc: "2.0".to_string(),
-            id: Uuid::new_v4().to_string(),
-            method: "agents/spawn".to_string(),
-            params: Some(serde_json::to_value(agent_params)?),
+        // Clone values before moving them
+        let agent_name = agent_params.name.clone();
+        let agent_capabilities = agent_params.capabilities.clone();
+        
+        let tool = McpTool::AgentSpawn {
+            agent_type: agent_params.agent_type.to_string(),
+            name: Some(agent_name.clone()),
+            capabilities: agent_capabilities.clone(),
+            swarm_id: None,
         };
         
-        let mut transport = self.transport.lock().await;
-        let response = transport.send_request(request).await?;
+        let response = self.call_tool(tool).await?;
         
-        if let Some(result) = response.result {
-            Ok(serde_json::from_value(result)?)
+        if response.success {
+            // Create AgentStatus from response data
+            Ok(AgentStatus {
+                agent_id: response.data.get("agentId")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("unknown")
+                    .to_string(),
+                status: "active".to_string(),
+                session_id: self.session_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                profile: AgentProfile {
+                    name: agent_params.name,
+                    agent_type: agent_params.agent_type,
+                    capabilities: agent_params.capabilities.unwrap_or_default(),
+                    system_prompt: agent_params.system_prompt,
+                    max_concurrent_tasks: agent_params.max_concurrent_tasks.unwrap_or(3),
+                    priority: agent_params.priority.unwrap_or(5),
+                    retry_policy: Default::default(),
+                    environment: agent_params.environment,
+                    working_directory: agent_params.working_directory,
+                },
+                timestamp: chrono::Utc::now(),
+                active_tasks_count: 0,
+                completed_tasks_count: 0,
+                failed_tasks_count: 0,
+                total_execution_time: 0,
+                average_task_duration: 0.0,
+                success_rate: 100.0,
+                current_task: None,
+                metadata: Default::default(),
+            })
         } else {
-            Err(ConnectorError::InvalidResponse("No result in spawn agent response".to_string()))
+            Err(ConnectorError::Protocol("Failed to spawn agent".to_string()))
         }
     }
     
     pub async fn list_agents(&self, include_terminated: bool) -> Result<Vec<AgentStatus>> {
         self.ensure_initialized()?;
         
-        let params = serde_json::json!({
-            "includeTerminated": include_terminated
-        });
+        let tool = McpTool::AgentList { swarm_id: None };
+        let response = self.call_tool(tool).await?;
         
-        let request = McpRequest {
-            jsonrpc: "2.0".to_string(),
-            id: Uuid::new_v4().to_string(),
-            method: "agents/list".to_string(),
-            params: Some(params),
-        };
-        
-        let mut transport = self.transport.lock().await;
-        let response = transport.send_request(request).await?;
-        
-        if let Some(result) = response.result {
-            Ok(serde_json::from_value(result)?)
+        if let Some(agents_data) = response.data.get("agents") {
+            let mut agents: Vec<AgentStatus> = vec![];
+            
+            if let Some(agent_array) = agents_data.as_array() {
+                for agent_value in agent_array {
+                    // Try to parse as full AgentStatus first
+                    if let Ok(agent) = serde_json::from_value::<AgentStatus>(agent_value.clone()) {
+                        if !include_terminated || agent.status != "terminated" {
+                            agents.push(agent);
+                        }
+                    } else {
+                        // Fallback: create basic AgentStatus from partial data
+                        let agent_id = agent_value.get("id")
+                            .or_else(|| agent_value.get("agentId"))
+                            .and_then(|a| a.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        
+                        let agent_type = agent_value.get("type")
+                            .and_then(|t| t.as_str())
+                            .and_then(|t| AgentType::from_str(t).ok())
+                            .unwrap_or(AgentType::Specialist);
+                        
+                        let status = agent_value.get("status")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        
+                        if !include_terminated && status == "terminated" {
+                            continue;
+                        }
+                        
+                        agents.push(AgentStatus {
+                            agent_id,
+                            status,
+                            session_id: self.session_id.clone().unwrap_or_else(|| Uuid::new_v4().to_string()),
+                            profile: AgentProfile {
+                                name: agent_value.get("name")
+                                    .and_then(|n| n.as_str())
+                                    .unwrap_or(&agent_type.to_string())
+                                    .to_string(),
+                                agent_type,
+                                capabilities: agent_value.get("capabilities")
+                                    .and_then(|c| c.as_array())
+                                    .map(|arr| arr.iter()
+                                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                        .collect())
+                                    .unwrap_or_default(),
+                                system_prompt: None,
+                                max_concurrent_tasks: 3,
+                                priority: 5,
+                                retry_policy: Default::default(),
+                                environment: None,
+                                working_directory: None,
+                            },
+                            timestamp: chrono::Utc::now(),
+                            active_tasks_count: 0,
+                            completed_tasks_count: 0,
+                            failed_tasks_count: 0,
+                            total_execution_time: 0,
+                            average_task_duration: 0.0,
+                            success_rate: 100.0,
+                            current_task: None,
+                            metadata: Default::default(),
+                        });
+                    }
+                }
+            }
+            Ok(agents)
         } else {
-            Err(ConnectorError::InvalidResponse("No result in list agents response".to_string()))
+            Ok(vec![])
         }
     }
     
@@ -200,7 +290,66 @@ impl ClaudeFlowClient {
         Ok(())
     }
     
-    // Memory Management
+    // Memory Management - Enhanced with MCP tools
+    pub async fn store_in_memory(&self, key: &str, value: &str, namespace: Option<&str>) -> Result<()> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::MemoryUsage {
+            action: "store".to_string(),
+            key: Some(key.to_string()),
+            value: Some(value.to_string()),
+            namespace: namespace.map(|n| n.to_string()),
+            ttl: None,
+        };
+        
+        let response = self.call_tool(tool).await?;
+        
+        if response.success {
+            Ok(())
+        } else {
+            Err(ConnectorError::Protocol("Failed to store memory".to_string()))
+        }
+    }
+    
+    pub async fn retrieve_from_memory(&self, key: &str, namespace: Option<&str>) -> Result<Option<String>> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::MemoryUsage {
+            action: "retrieve".to_string(),
+            key: Some(key.to_string()),
+            value: None,
+            namespace: namespace.map(|n| n.to_string()),
+            ttl: None,
+        };
+        
+        let response = self.call_tool(tool).await?;
+        
+        if response.success {
+            Ok(response.data.get("value").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        } else {
+            Ok(None)
+        }
+    }
+    
+    pub async fn search_memory(&self, pattern: &str, namespace: Option<&str>, limit: Option<u32>) -> Result<Vec<Value>> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::MemorySearch {
+            pattern: pattern.to_string(),
+            namespace: namespace.map(|n| n.to_string()),
+            limit,
+        };
+        
+        let response = self.call_tool(tool).await?;
+        
+        if let Some(results) = response.data.get("results").and_then(|r| r.as_array()) {
+            Ok(results.clone())
+        } else {
+            Ok(vec![])
+        }
+    }
+    
+    // Legacy method for compatibility
     pub async fn store_memory(&self, memory_params: StoreMemoryParams) -> Result<MemoryEntry> {
         self.ensure_initialized()?;
         
@@ -241,25 +390,30 @@ impl ClaudeFlowClient {
         }
     }
     
-    // System Monitoring
+    // System Monitoring - Enhanced with MCP tools
     pub async fn get_system_health(&self) -> Result<SystemHealth> {
         self.ensure_initialized()?;
         
-        let request = McpRequest {
-            jsonrpc: "2.0".to_string(),
-            id: Uuid::new_v4().to_string(),
-            method: "system/health".to_string(),
-            params: None,
+        let tool = McpTool::HealthCheck { components: None };
+        let response = self.call_tool(tool).await?;
+        
+        Ok(SystemHealth {
+            status: if response.success { "healthy".to_string() } else { "unhealthy".to_string() },
+            components: HashMap::new(),
+            timestamp: chrono::Utc::now(),
+        })
+    }
+    
+    pub async fn get_performance_report(&self, timeframe: Option<&str>) -> Result<Value> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::PerformanceReport {
+            timeframe: timeframe.map(|t| t.to_string()),
+            format: Some("detailed".to_string()),
         };
         
-        let mut transport = self.transport.lock().await;
-        let response = transport.send_request(request).await?;
-        
-        if let Some(result) = response.result {
-            Ok(serde_json::from_value(result)?)
-        } else {
-            Err(ConnectorError::InvalidResponse("No result in system health response".to_string()))
-        }
+        let response = self.call_tool(tool).await?;
+        Ok(response.data)
     }
     
     pub async fn get_system_metrics(&self) -> Result<SystemMetrics> {
@@ -282,25 +436,91 @@ impl ClaudeFlowClient {
         }
     }
     
-    // Swarm Operations
+    // Swarm Operations - Enhanced with MCP tools
+    pub async fn init_swarm(&self, topology: &str, max_agents: Option<u32>) -> Result<String> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::SwarmInit {
+            topology: topology.to_string(),
+            max_agents,
+            strategy: Some("adaptive".to_string()),
+        };
+        
+        let response = self.call_tool(tool).await?;
+        
+        if let Some(swarm_id) = response.data.get("swarmId").and_then(|s| s.as_str()) {
+            Ok(swarm_id.to_string())
+        } else {
+            Err(ConnectorError::InvalidResponse("No swarmId in response".to_string()))
+        }
+    }
+    
     pub async fn get_swarm_status(&self) -> Result<SwarmStatus> {
         self.ensure_initialized()?;
+        
+        let tool = McpTool::SwarmStatus { swarm_id: None };
+        let response = self.call_tool(tool).await?;
+        
+        // Convert response data to SwarmStatus
+        Ok(SwarmStatus {
+            id: response.data.get("swarmId")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+                .to_string(),
+            topology: response.data.get("topology")
+                .and_then(|t| t.as_str())
+                .unwrap_or("hierarchical")
+                .to_string(),
+            strategy: response.data.get("strategy")
+                .and_then(|s| s.as_str())
+                .unwrap_or("adaptive")
+                .to_string(),
+            total_agents: response.data.get("agentCount")
+                .and_then(|a| a.as_u64())
+                .unwrap_or(0) as u32,
+            active_agents: response.data.get("activeAgents")
+                .and_then(|a| a.as_u64())
+                .unwrap_or(0) as u32,
+            total_tasks: response.data.get("taskCount")
+                .and_then(|t| t.as_u64())
+                .unwrap_or(0) as u32,
+            completed_tasks: response.data.get("completedTasks")
+                .and_then(|c| c.as_u64())
+                .unwrap_or(0) as u32,
+            uptime: response.data.get("uptime")
+                .and_then(|u| u.as_u64())
+                .unwrap_or(0),
+            status: response.data.get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("active")
+                .to_string(),
+        })
+    }
+    
+    // Enhanced MCP Tool Support
+    pub async fn call_tool(&self, tool: McpTool) -> Result<ToolResponse> {
+        self.ensure_initialized()?;
+        
+        let tool_name = tool.name();
+        let arguments = tool.to_arguments();
+        
+        debug!("Calling MCP tool: {} with args: {:?}", tool_name, arguments);
         
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
             id: Uuid::new_v4().to_string(),
-            method: "swarm/status".to_string(),
-            params: None,
+            method: "tools/call".to_string(),
+            params: Some(json!({
+                "name": tool_name,
+                "arguments": arguments
+            })),
         };
         
         let mut transport = self.transport.lock().await;
         let response = transport.send_request(request).await?;
         
-        if let Some(result) = response.result {
-            Ok(serde_json::from_value(result)?)
-        } else {
-            Err(ConnectorError::InvalidResponse("No result in swarm status response".to_string()))
-        }
+        ToolResponse::from_mcp_response(&response)
+            .map_err(|e| ConnectorError::InvalidResponse(format!("Failed to parse tool response: {}", e)))
     }
     
     // Tool Information
@@ -318,10 +538,82 @@ impl ClaudeFlowClient {
         let response = transport.send_request(request).await?;
         
         if let Some(result) = response.result {
-            Ok(serde_json::from_value(result)?)
+            if let Some(tools) = result.get("tools") {
+                Ok(serde_json::from_value(tools.clone())?)
+            } else {
+                Ok(vec![])
+            }
         } else {
             Err(ConnectorError::InvalidResponse("No result in list tools response".to_string()))
         }
+    }
+    
+    // Neural Network Operations
+    pub async fn train_neural_pattern(&self, pattern_type: &str, training_data: &str, epochs: Option<u32>) -> Result<Value> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::NeuralTrain {
+            pattern_type: pattern_type.to_string(),
+            training_data: training_data.to_string(),
+            epochs,
+        };
+        
+        let response = self.call_tool(tool).await?;
+        Ok(response.data)
+    }
+    
+    pub async fn neural_predict(&self, model_id: &str, input: &str) -> Result<Value> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::NeuralPredict {
+            model_id: model_id.to_string(),
+            input: input.to_string(),
+        };
+        
+        let response = self.call_tool(tool).await?;
+        Ok(response.data)
+    }
+    
+    // Task Orchestration
+    pub async fn orchestrate_task(&self, task: &str, strategy: Option<&str>, priority: Option<&str>) -> Result<String> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::TaskOrchestrate {
+            task: task.to_string(),
+            strategy: strategy.map(|s| s.to_string()),
+            priority: priority.map(|p| p.to_string()),
+            dependencies: None,
+        };
+        
+        let response = self.call_tool(tool).await?;
+        
+        if let Some(task_id) = response.data.get("taskId").and_then(|t| t.as_str()) {
+            Ok(task_id.to_string())
+        } else {
+            Err(ConnectorError::InvalidResponse("No taskId in response".to_string()))
+        }
+    }
+    
+    pub async fn get_task_status(&self, task_id: &str) -> Result<Value> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::TaskStatus {
+            task_id: task_id.to_string(),
+        };
+        
+        let response = self.call_tool(tool).await?;
+        Ok(response.data)
+    }
+    
+    pub async fn get_task_results(&self, task_id: &str) -> Result<Value> {
+        self.ensure_initialized()?;
+        
+        let tool = McpTool::TaskResults {
+            task_id: task_id.to_string(),
+        };
+        
+        let response = self.call_tool(tool).await?;
+        Ok(response.data)
     }
     
     // Execute arbitrary command
@@ -368,12 +660,20 @@ impl ClaudeFlowClient {
     }
 }
 
+// Transport selection for the builder
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TransportType {
+    Http,
+    WebSocket,
+    Stdio,
+}
+
 // Builder pattern for client configuration
 pub struct ClaudeFlowClientBuilder {
     host: String,
     port: u16,
     auth_token: Option<String>,
-    use_websocket: bool,
+    transport_type: TransportType,
 }
 
 impl Default for ClaudeFlowClientBuilder {
@@ -382,7 +682,7 @@ impl Default for ClaudeFlowClientBuilder {
             host: "localhost".to_string(),
             port: 8081,
             auth_token: None,
-            use_websocket: false,
+            transport_type: TransportType::Stdio, // Default to stdio as it's what Claude Flow provides
         }
     }
 }
@@ -408,20 +708,31 @@ impl ClaudeFlowClientBuilder {
     }
     
     pub fn use_websocket(mut self) -> Self {
-        self.use_websocket = true;
+        self.transport_type = TransportType::WebSocket;
         self
     }
     
     pub fn use_http(mut self) -> Self {
-        self.use_websocket = false;
+        self.transport_type = TransportType::Http;
+        self
+    }
+    
+    pub fn use_stdio(mut self) -> Self {
+        self.transport_type = TransportType::Stdio;
         self
     }
     
     pub async fn build(self) -> Result<ClaudeFlowClient> {
-        let transport: Box<dyn Transport> = if self.use_websocket {
-            Box::new(WebSocketTransport::new(&self.host, self.port, self.auth_token))
-        } else {
-            Box::new(HttpTransport::new(&self.host, self.port, self.auth_token)?)
+        let transport: Box<dyn Transport> = match self.transport_type {
+            TransportType::WebSocket => {
+                Box::new(WebSocketTransport::new(&self.host, self.port, self.auth_token))
+            }
+            TransportType::Http => {
+                Box::new(HttpTransport::new(&self.host, self.port, self.auth_token)?)
+            }
+            TransportType::Stdio => {
+                Box::new(StdioTransport::new())
+            }
         };
         
         Ok(ClaudeFlowClient::new(transport).await)
