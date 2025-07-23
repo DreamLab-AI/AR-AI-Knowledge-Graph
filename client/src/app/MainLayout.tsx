@@ -10,6 +10,7 @@ import { IntegratedControlPanel } from '../features/visualisation/components/Int
 import { HologramVisualisation } from '../features/visualisation/components/HologramVisualisation';
 import { useSettingsStore } from '../store/settingsStore';
 import { BotsDataProvider, useBotsData } from '../features/bots/contexts/BotsDataContext';
+import { useSelectiveSetting } from '@/hooks/useSelectiveSettingsStore';
 import { AuthGatedVoiceButton } from '../components/AuthGatedVoiceButton';
 import { AuthGatedVoiceIndicator } from '../components/AuthGatedVoiceIndicator';
 import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
@@ -24,6 +25,9 @@ const MainLayoutContent: React.FC = () => {
   const [orbitControlsEnabled, setOrbitControlsEnabled] = useState(true);
   const orbitControlsRef = useRef<any>(null);
   const [hasVoiceSupport, setHasVoiceSupport] = useState(true);
+
+  const ambientIntensity = useSelectiveSetting('visualisation.rendering.ambientLightIntensity') ?? 0.6;
+  const directionalIntensity = useSelectiveSetting('visualisation.rendering.directionalLightIntensity') ?? 0.8;
 
   const handleOrbitControlsToggle = (enabled: boolean) => {
     setOrbitControlsEnabled(enabled);
@@ -63,8 +67,8 @@ const MainLayoutContent: React.FC = () => {
       >
         {/* Scene lighting */}
         <color attach="background" args={[0, 0, 0.05]} />
-        <ambientLight intensity={0.6} />
-        <directionalLight intensity={0.8} position={[1, 1, 1]} />
+        <ambientLight intensity={ambientIntensity} />
+        <directionalLight intensity={directionalIntensity} position={[1, 1, 1]} />
 
         {/* Logseq Graph Visualization - positioned at origin */}
         <group position={[0, 0, 0]}>

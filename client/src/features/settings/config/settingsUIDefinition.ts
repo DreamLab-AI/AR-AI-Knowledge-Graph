@@ -266,8 +266,8 @@ export const settingsUIDefinition: Record<string, UICategoryDefinition> = {
           movementSpeed: { label: 'Movement Speed', type: 'slider', min: 0.01, max: 0.5, step: 0.01, path: 'xr.movementSpeed', description: 'Speed for continuous locomotion.' },
           deadZone: { label: 'Controller Dead Zone', type: 'slider', min: 0.01, max: 0.5, step: 0.01, path: 'xr.deadZone', description: 'Dead zone for controller analog sticks.' },
           interactionRadius: { label: 'Interaction Radius', type: 'slider', min: 0.05, max: 0.5, step: 0.01, path: 'xr.interactionRadius', description: 'Radius for direct hand interactions.' },
-          movementAxesHorizontal: { label: 'Movement Horizontal Axis', type: 'slider', min: 0, max: 5, step: 1, path: 'xr.movementAxesHorizontal', description: 'Axis used for horizontal movement in XR.', isAdvanced: true },
-          movementAxesVertical: { label: 'Movement Vertical Axis', type: 'slider', min: 0, max: 5, step: 1, path: 'xr.movementAxesVertical', description: 'Axis used for vertical movement in XR.', isAdvanced: true },
+          movementAxesHorizontal: { label: 'Movement Horizontal Axis', type: 'slider', min: 0, max: 5, step: 1, path: 'xr.movementAxes.horizontal', description: 'Axis used for horizontal movement in XR.', isAdvanced: true },
+          movementAxesVertical: { label: 'Movement Vertical Axis', type: 'slider', min: 0, max: 5, step: 1, path: 'xr.movementAxes.vertical', description: 'Axis used for vertical movement in XR.', isAdvanced: true },
         }
       },
       environmentUnderstanding: {

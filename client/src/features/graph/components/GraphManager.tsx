@@ -22,12 +22,12 @@ const getPositionForNode = (node: GraphNode, index: number, totalNodes: number):
     const theta = index * goldenAngle
     const y = 1 - (index / totalNodes) * 2
     const radius = Math.sqrt(1 - y * y)
-    
+
     const scaleFactor = 15 + Math.random() * 5 // Vary radius for organic feel
     const x = Math.cos(theta) * radius * scaleFactor
     const z = Math.sin(theta) * radius * scaleFactor
     const yScaled = y * scaleFactor
-    
+
     if (node.position) {
       node.position.x = x
       node.position.y = yScaled
@@ -35,10 +35,10 @@ const getPositionForNode = (node: GraphNode, index: number, totalNodes: number):
     } else {
       node.position = { x, y: yScaled, z }
     }
-    
+
     return [x, yScaled, z]
   }
-  
+
   return [node.position.x, node.position.y, node.position.z]
 }
 
@@ -53,7 +53,7 @@ const getNodeColor = (node: GraphNode): THREE.Color => {
     'import': '#F38181',     // Light coral
     'export': '#AA96DA',     // Lavender
   }
-  
+
   const nodeType = node.metadata?.type || 'default'
   const color = typeColors[nodeType] || '#00ffff'
   return new THREE.Color(color)
@@ -62,16 +62,16 @@ const getNodeColor = (node: GraphNode): THREE.Color => {
 // Get node scale based on importance/connections
 const getNodeScale = (node: GraphNode, edges: any[]): number => {
   const baseSize = node.metadata?.size || 1.0
-  const connectionCount = edges.filter(e => 
+  const connectionCount = edges.filter(e =>
     e.source === node.id || e.target === node.id
   ).length
-  
+
   // Scale based on connections (more connections = larger node)
   const connectionScale = 1 + Math.log(connectionCount + 1) * 0.3
-  
+
   // Also scale based on node type importance
   const typeScale = getTypeImportance(node.metadata?.type)
-  
+
   return baseSize * connectionScale * typeScale
 }
 
@@ -86,7 +86,7 @@ const getTypeImportance = (nodeType?: string): number => {
     'import': 0.7,      // Imports are small
     'export': 0.9,      // Exports are medium
   }
-  
+
   return importanceMap[nodeType || 'default'] || 1.0
 }
 
@@ -94,21 +94,21 @@ const GraphManager: React.FC = () => {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const materialRef = useRef<HologramNodeMaterial | null>(null)
   const particleSystemRef = useRef<THREE.Points>(null)
-  
+
   // Memoized objects for performance
   const tempMatrix = useMemo(() => new THREE.Matrix4(), [])
   const tempPosition = useMemo(() => new THREE.Vector3(), [])
   const tempScale = useMemo(() => new THREE.Vector3(), [])
   const tempQuaternion = useMemo(() => new THREE.Quaternion(), [])
   const tempColor = useMemo(() => new THREE.Color(), [])
-  
+
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
   const nodePositionsRef = useRef<Float32Array | null>(null)
   const [edgePoints, setEdgePoints] = useState<number[]>([])
   const [nodesAreAtOrigin, setNodesAreAtOrigin] = useState(false)
   const settings = useSettingsStore(state => state.settings)
   const [forceUpdate, setForceUpdate] = useState(0)
-  
+
   // Animation state
   const animationStateRef = useRef({
     time: 0,
@@ -116,13 +116,13 @@ const GraphManager: React.FC = () => {
     hoveredNode: null as string | null,
     pulsePhase: 0,
   })
-  
+
   // Drag state (same as original)
   const [dragState, setDragState] = useState<{
     nodeId: string | null;
     instanceId: number | null;
   }>({ nodeId: null, instanceId: null })
-  
+
   const dragDataRef = useRef({
     isDragging: false,
     pointerDown: false,
@@ -135,9 +135,9 @@ const GraphManager: React.FC = () => {
     lastUpdateTime: 0,
     pendingUpdate: null as BinaryNodeData | null,
   })
-  
+
   const { camera, size } = useThree()
-  
+
   // Create custom hologram material
   useEffect(() => {
     if (!materialRef.current) {
@@ -151,20 +151,20 @@ const GraphManager: React.FC = () => {
         hologramStrength: 0.8, // Strong hologram effect
         rimPower: 3.0, // Strong rim lighting
       })
-      
+
       // Enable instance color support
       materialRef.current.defines = { ...materialRef.current.defines, USE_INSTANCING_COLOR: '' }
       materialRef.current.needsUpdate = true
     }
   }, [])
-  
+
   // Update material settings for Logseq graph
   useEffect(() => {
     if (materialRef.current && settings?.visualisation) {
       // Use Logseq-specific settings, fallback to legacy nodes settings
       const logseqSettings = settings.visualisation.graphs?.logseq;
       const nodeSettings = logseqSettings?.nodes || settings.visualisation.nodes;
-      
+
       materialRef.current.updateColors(
         nodeSettings?.baseColor || '#00ffff',
         nodeSettings?.baseColor || '#00ffff'
@@ -178,51 +178,51 @@ const GraphManager: React.FC = () => {
       })
     }
   }, [settings?.visualisation])
-  
+
   // Initialize instance attributes
   useEffect(() => {
     if (meshRef.current && graphData.nodes.length > 0) {
       const mesh = meshRef.current
       mesh.count = graphData.nodes.length
-      
+
       // Set up instance colors
       const colors = new Float32Array(graphData.nodes.length * 3)
-      
+
       graphData.nodes.forEach((node, i) => {
         const color = getNodeColor(node)
         colors[i * 3] = color.r
         colors[i * 3 + 1] = color.g
         colors[i * 3 + 2] = color.b
       })
-      
+
       mesh.geometry.setAttribute('instanceColor', new THREE.InstancedBufferAttribute(colors, 3))
-      
+
       // Force material update
       if (materialRef.current) {
         materialRef.current.needsUpdate = true
       }
     }
   }, [graphData])
-  
+
   // Pass settings to worker whenever they change
   useEffect(() => {
     graphWorkerProxy.updateSettings(settings);
   }, [settings]);
-  
+
   // Animation loop with physics updates
   useFrame(async (state, delta) => {
     animationStateRef.current.time = state.clock.elapsedTime
-    
+
     // Update material time
     if (materialRef.current) {
       materialRef.current.updateTime(animationStateRef.current.time)
     }
-    
+
     // Get smooth positions from physics worker
     if (meshRef.current && graphData.nodes.length > 0) {
       const positions = await graphWorkerProxy.tick(delta);
       nodePositionsRef.current = positions;
-      
+
       if (positions) {
         // Update node positions from physics
         const logseqSettings = settings?.visualisation?.graphs?.logseq;
@@ -230,7 +230,7 @@ const GraphManager: React.FC = () => {
         const nodeSize = nodeSettings?.nodeSize || 0.5;
         const BASE_SPHERE_RADIUS = 0.5;
         const baseScale = nodeSize / BASE_SPHERE_RADIUS;
-        
+
         for (let i = 0; i < graphData.nodes.length; i++) {
           const i3 = i * 3;
           const node = graphData.nodes[i];
@@ -240,7 +240,7 @@ const GraphManager: React.FC = () => {
           meshRef.current.setMatrixAt(i, tempMatrix);
         }
         meshRef.current.instanceMatrix.needsUpdate = true;
-        
+
         // Update edge points based on new positions with endpoint offset
         const newEdgePoints: number[] = [];
         graphData.edges.forEach(edge => {
@@ -249,18 +249,18 @@ const GraphManager: React.FC = () => {
           if (sourceNodeIndex !== -1 && targetNodeIndex !== -1) {
             const i3s = sourceNodeIndex * 3;
             const i3t = targetNodeIndex * 3;
-            
+
             // Get node positions
             const sourcePos = new THREE.Vector3(positions[i3s], positions[i3s + 1], positions[i3s + 2]);
             const targetPos = new THREE.Vector3(positions[i3t], positions[i3t + 1], positions[i3t + 2]);
-            
+
             // Calculate edge direction
             const direction = new THREE.Vector3().subVectors(targetPos, sourcePos);
             const edgeLength = direction.length();
-            
+
             if (edgeLength > 0) {
               direction.normalize();
-              
+
               // Calculate node radii based on scale
               const sourceNode = graphData.nodes[sourceNodeIndex];
               const targetNode = graphData.nodes[targetNodeIndex];
@@ -268,11 +268,11 @@ const GraphManager: React.FC = () => {
               const nodeSettings = logseqSettings?.nodes || settings?.visualisation?.nodes;
               const sourceRadius = getNodeScale(sourceNode, graphData.edges) * (nodeSettings?.nodeSize || 0.5);
               const targetRadius = getNodeScale(targetNode, graphData.edges) * (nodeSettings?.nodeSize || 0.5);
-              
+
               // Offset endpoints to stop before node surfaces (plus small gap)
               const offsetSource = new THREE.Vector3().addVectors(sourcePos, direction.clone().multiplyScalar(sourceRadius + 0.1));
               const offsetTarget = new THREE.Vector3().subVectors(targetPos, direction.clone().multiplyScalar(targetRadius + 0.1));
-              
+
               // Only add edge if there's still visible length after offset
               if (offsetSource.distanceTo(offsetTarget) > 0.2) {
                 newEdgePoints.push(offsetSource.x, offsetSource.y, offsetSource.z);
@@ -282,7 +282,7 @@ const GraphManager: React.FC = () => {
           }
         });
         setEdgePoints(newEdgePoints);
-        
+
         // Update label positions in real-time
         const newLabelPositions = graphData.nodes.map((node, i) => {
           const i3 = i * 3;
@@ -295,32 +295,32 @@ const GraphManager: React.FC = () => {
         setLabelPositions(newLabelPositions);
       }
     }
-    
+
     // Animate particles - disabled
     // if (particleSystemRef.current) {
     //   particleSystemRef.current.rotation.y = animationStateRef.current.time * 0.05
     //   const positions = particleSystemRef.current.geometry.attributes.position.array as Float32Array
-    //   
+    //
     //   for (let i = 0; i < positions.length; i += 3) {
     //     positions[i + 1] += Math.sin(animationStateRef.current.time + i) * 0.01
     //   }
-    //   
+    //
     //   particleSystemRef.current.geometry.attributes.position.needsUpdate = true
     // }
-    
+
     // Pulse selected nodes
     if (meshRef.current && animationStateRef.current.selectedNode !== null) {
       const mesh = meshRef.current
       const nodes = graphData.nodes
-      
+
       nodes.forEach((node, i) => {
         if (node.id === animationStateRef.current.selectedNode) {
           mesh.getMatrixAt(i, tempMatrix)
           tempMatrix.decompose(tempPosition, tempQuaternion, tempScale)
-          
+
           const pulseFactor = 1 + Math.sin(animationStateRef.current.time * 3) * 0.1
           tempScale.multiplyScalar(pulseFactor)
-          
+
           tempMatrix.compose(tempPosition, tempQuaternion, tempScale)
           mesh.setMatrixAt(i, tempMatrix)
           mesh.instanceMatrix.needsUpdate = true
@@ -328,14 +328,14 @@ const GraphManager: React.FC = () => {
       })
     }
   })
-  
+
   // Graph data subscription (same as original)
   useEffect(() => {
     const handleGraphUpdate = (data: GraphData) => {
       if (debugState.isEnabled()) {
         logger.info('Graph data updated', { nodeCount: data.nodes.length, edgeCount: data.edges.length })
       }
-      
+
       // Ensure nodes have valid positions
       const dataWithPositions = {
         ...data,
@@ -350,20 +350,20 @@ const GraphManager: React.FC = () => {
           return node
         })
       }
-      
-      const allAtOrigin = dataWithPositions.nodes.every(node => 
+
+      const allAtOrigin = dataWithPositions.nodes.every(node =>
         !node.position || (node.position.x === 0 && node.position.y === 0 && node.position.z === 0)
       )
       setNodesAreAtOrigin(allAtOrigin)
-      
+
       setGraphData(dataWithPositions)
-      
+
       // Update edge points
       const newEdgePoints: number[] = []
       data.edges.forEach((edge) => {
         const sourceNode = data.nodes.find(n => n.id === edge.source)
         const targetNode = data.nodes.find(n => n.id === edge.target)
-        
+
         if (sourceNode?.position && targetNode?.position) {
           newEdgePoints.push(
             sourceNode.position.x, sourceNode.position.y, sourceNode.position.z,
@@ -371,24 +371,24 @@ const GraphManager: React.FC = () => {
           )
         }
       })
-      
+
       setEdgePoints(newEdgePoints)
     }
-    
+
     const unsubscribe = graphDataManager.onGraphDataChange(handleGraphUpdate)
-    
+
     // Get initial data and update worker
     graphDataManager.getGraphData().then((data) => {
       handleGraphUpdate(data)
       // Ensure worker has the data
       graphWorkerProxy.setGraphData(data)
     })
-    
+
     return () => {
       unsubscribe()
     }
   }, [])
-  
+
   // Event handlers
   const { handlePointerDown, handlePointerMove, handlePointerUp } = createEventHandlers(
     meshRef,
@@ -400,15 +400,15 @@ const GraphManager: React.FC = () => {
     settings,
     setGraphData
   )
-  
+
   // Create ambient particles (disabled for now to avoid white blocks)
   const particleGeometry = useMemo(() => {
     return null // Disable particles that were causing white blocks
   }, [])
-  
+
   // Node labels with dynamic positioning
   const [labelPositions, setLabelPositions] = useState<Array<{x: number, y: number, z: number}>>([])
-  
+
   // Update label positions from physics
   useEffect(() => {
     if (nodePositionsRef.current && graphData.nodes.length > 0) {
@@ -423,20 +423,20 @@ const GraphManager: React.FC = () => {
       setLabelPositions(newPositions)
     }
   }, [nodePositionsRef.current, graphData.nodes])
-  
+
   // Node labels (enhanced version) - using physics positions
   const NodeLabels = useMemo(() => {
     const logseqSettings = settings?.visualisation?.graphs?.logseq;
     const labelSettings = logseqSettings?.labels || settings?.visualisation?.labels;
     if (!labelSettings?.enableLabels || graphData.nodes.length === 0) return null
-    
+
     return graphData.nodes.map((node, index) => {
       // Use physics position if available, otherwise fallback to node position
       const physicsPos = labelPositions[index]
       const position = physicsPos || node.position || { x: 0, y: 0, z: 0 }
       const scale = getNodeScale(node, graphData.edges)
       const labelOffsetY = scale * 1.5 + 0.5 // Stable offset calculation
-      
+
       return (
         <Billboard
           key={`label-${node.id}`}
@@ -475,7 +475,7 @@ const GraphManager: React.FC = () => {
       )
     })
   }, [graphData.nodes, graphData.edges, labelPositions, settings?.visualisation?.labels])
-  
+
   return (
     <>
       {/* Main node mesh with hologram shader */}
@@ -495,7 +495,7 @@ const GraphManager: React.FC = () => {
       >
         <sphereGeometry args={[0.5, 32, 32]} />
       </instancedMesh>
-      
+
       {/* Enhanced flowing edges */}
       {edgePoints.length > 0 && (
         <FlowingEdges
@@ -504,7 +504,7 @@ const GraphManager: React.FC = () => {
           edgeData={graphData.edges}
         />
       )}
-      
+
       {/* Ambient particle system - disabled to prevent white blocks */}
       {particleGeometry && (
         <points ref={particleSystemRef} geometry={particleGeometry}>
@@ -514,12 +514,12 @@ const GraphManager: React.FC = () => {
             transparent
             opacity={0.3}
             vertexColors
-            blending={THREE.AdditiveBlending}
+            blending={THREE.NormalBlending}
             depthWrite={false}
           />
         </points>
       )}
-      
+
       {/* Enhanced node labels */}
       {NodeLabels}
     </>

@@ -272,7 +272,7 @@ const BotsEdgeComponent: React.FC<BotsEdgeProps> = ({ edge, sourcePos, targetPos
             color="#FFD700"
             transparent
             opacity={0.95}
-            blending={THREE.AdditiveBlending}
+            blending={THREE.NormalBlending}
             sizeAttenuation={true}
           />
         </points>
@@ -801,7 +801,7 @@ export const BotsVisualization: React.FC = () => {
           color={settings?.visualisation?.graphs?.visionflow?.nodes?.baseColor || "#F1C40F"}
           transparent
           opacity={0.3}
-          blending={THREE.AdditiveBlending}
+          blending={THREE.NormalBlending}
           sizeAttenuation={true}
           depthWrite={false} // Fix for white squares bug - prevents depth conflicts
         />

@@ -194,8 +194,10 @@ export interface XRSettings {
   interactionRadius?: number;
   movementSpeed?: number;
   deadZone?: number;
-  movementAxesHorizontal?: number;
-  movementAxesVertical?: number;
+  movementAxes?: {
+    horizontal: number;
+    vertical: number;
+  };
   enableLightEstimation?: boolean;
   enablePlaneDetection?: boolean;
   enableSceneUnderstanding?: boolean;

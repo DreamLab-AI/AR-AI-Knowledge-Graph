@@ -13,11 +13,6 @@ visualisation:
     size_range:
       - 0.01
       - 0.15
-    color: '#ff4500'
-    highlight_color: '#ffff00'
-    outline_width: 0.1
-    outline_color: '#ffffff'
-    selected_color: '#00ff00'
   edges:
     arrow_size: 0.02
     base_width: 0.5
@@ -37,11 +32,6 @@ visualisation:
     gradient_colors:
       - '#ffffff'
       - '#000000'
-    width: 1
-    highlight_color: '#ffff00'
-    show_labels: false
-    dash_size: 3
-    gap_size: 1
   physics:
     attraction_strength: 0.3
     bounds_size: 15.0
@@ -56,10 +46,6 @@ visualisation:
     repulsion_distance: 2.0
     mass_scale: 1.0
     boundary_damping: 0.95
-    gravity: 0
-    friction: 0.9
-    attraction: 0.5
-    spring_length: 30
   rendering:
     ambient_light_intensity: 0.8
     background_color: '#181c28'
@@ -70,8 +56,6 @@ visualisation:
     environment_intensity: 0.7
     shadow_map_size: '2048'
     shadow_bias: 0.0001
-    context: 'desktop'
-    pixel_ratio: 1.5
     enable_bloom: true
     bloom_strength: 0.5
     bloom_threshold: 0.4
@@ -86,18 +70,17 @@ visualisation:
     pulse_strength: 0.6
     wave_speed: 0.5
   labels:
+    enabled: true
     desktop_font_size: 0.5
-    enable_labels: true # Note: JSON also has 'enabled: true', this one is more specific
     text_color: '#f8f8f2'
     text_outline_color: '#181c28'
     text_outline_width: 0.005
     text_resolution: 32
     text_padding: 0.6
     billboard_mode: 'camera'
-    enabled: true # General enabled flag for labels
-  bloom: # This is for visualisation.bloom specific settings
+  bloom:
+    enabled: true
     edge_bloom_strength: 0.5
-    enabled: true # This is visualisation.bloom.enabled
     environment_bloom_strength: 0.6
     node_bloom_strength: 0.7
     radius: 0.4
@@ -156,11 +139,9 @@ system:
     enable_rate_limiting: false
     enable_tls: false
     max_request_size: 10485760
-    min_tls_version: ''
-    port: 3001 # Changed from 4000 to avoid conflict with Nginx
+    port: 3001
     rate_limit_requests: 10000
     rate_limit_window: 600
-    tunnel_id: dummy
     api_client_timeout: 30
     enable_metrics: false
     max_concurrent_requests: 1

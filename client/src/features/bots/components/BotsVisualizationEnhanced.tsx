@@ -31,9 +31,9 @@ const BotsNodeEnhanced: React.FC<BotsNodeProps> = ({ agent, position, index, con
 
   // Visual properties from configuration
   const color = new THREE.Color(config.colors.agents[agent.type] || '#CCCCCC');
-  const size = config.sizes.nodeBaseSize + (agent.workload || agent.cpuUsage / 100) * 
+  const size = config.sizes.nodeBaseSize + (agent.workload || agent.cpuUsage / 100) *
     (config.sizes.nodeMaxSize - config.sizes.nodeBaseSize);
-  
+
   // Health color from configuration
   const healthColor = useMemo(() => {
     if (agent.health > 80) return new THREE.Color(config.colors.health.excellent);
@@ -189,9 +189,9 @@ const BotsEdgeEnhanced: React.FC<BotsEdgeProps> = ({ edge, sourcePos, targetPos,
     const direction = new THREE.Vector3().subVectors(targetPos, sourcePos);
     const distance = direction.length();
     const geometry = new THREE.CylinderGeometry(
-      config.sizes.edgeWidth, 
-      config.sizes.edgeWidth, 
-      distance, 
+      config.sizes.edgeWidth,
+      config.sizes.edgeWidth,
+      distance,
       8
     );
     return geometry;
@@ -244,7 +244,7 @@ const BotsEdgeEnhanced: React.FC<BotsEdgeProps> = ({ edge, sourcePos, targetPos,
             color={config.colors.edges.particle}
             transparent
             opacity={0.95}
-            blending={THREE.AdditiveBlending}
+            blending={THREE.NormalBlending}
             sizeAttenuation={true}
           />
         </points>
@@ -260,12 +260,12 @@ export const BotsVisualizationEnhanced: React.FC = () => {
     edges: BotsEdge[];
     tokenUsage?: { total: number; byAgent: { [key: string]: number } };
   }>({ nodes: [], edges: [] });
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showControlPanel, setShowControlPanel] = useState(true);
   const [config, setConfig] = useState<VisualizationConfig>(configurationMapper.getConfig());
-  
+
   const positionsRef = useRef<Map<string, THREE.Vector3>>(new Map());
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const settings = useSettingsStore(state => state.settings);
@@ -274,18 +274,18 @@ export const BotsVisualizationEnhanced: React.FC = () => {
   // Initialize mock data and configuration
   useEffect(() => {
     logger.info('Initializing enhanced visualization with mock data...');
-    
+
     // Initialize mock data generator
     mockDataGenerator.initialize(12);
-    
+
     // Initialize physics worker
     botsPhysicsWorker.init();
-    
+
     // Subscribe to configuration changes
     const configId = 'enhanced-viz';
     configurationMapper.subscribe(configId, (newConfig) => {
       setConfig(newConfig);
-      
+
       // Update physics configuration
       botsPhysicsWorker.updateConfig(newConfig.physics);
     });
@@ -295,9 +295,9 @@ export const BotsVisualizationEnhanced: React.FC = () => {
       const nodes = mockDataGenerator.getAgents();
       const edges = mockDataGenerator.getEdges();
       const tokenUsage = mockDataGenerator.getTokenUsage();
-      
+
       setBotsData({ nodes, edges, tokenUsage });
-      
+
       // Update physics
       botsPhysicsWorker.updateAgents(nodes);
       botsPhysicsWorker.updateEdges(edges);
@@ -306,7 +306,7 @@ export const BotsVisualizationEnhanced: React.FC = () => {
 
     updateData();
     const interval = setInterval(updateData, 1000);
-    
+
     setIsLoading(false);
     setError(null);
 
@@ -343,7 +343,7 @@ export const BotsVisualizationEnhanced: React.FC = () => {
     } else if (botsData.nodes.length > 0) {
       // Fallback simple physics if worker not available
       const dt = Math.min(delta, 0.016);
-      
+
       // Initialize positions for new nodes
       botsData.nodes.forEach((node, index) => {
         if (!positionsRef.current.has(node.id)) {
@@ -463,7 +463,7 @@ export const BotsVisualizationEnhanced: React.FC = () => {
     <group position={[0, 0, 0]}>
       {/* Control Panel */}
       {showControlPanel && (
-        <BotsControlPanel 
+        <BotsControlPanel
           position={[30, 10, 0]}
           onConfigChange={handleConfigChange}
         />
@@ -574,7 +574,7 @@ export const BotsVisualizationEnhanced: React.FC = () => {
           color={config.colors.background.ambientParticles}
           transparent
           opacity={0.3}
-          blending={THREE.AdditiveBlending}
+          blending={THREE.NormalBlending}
           sizeAttenuation={true}
           depthWrite={false}
         />

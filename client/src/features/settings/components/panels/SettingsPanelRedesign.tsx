@@ -246,8 +246,8 @@ export function SettingsPanelRedesign() {
             { key: 'enableHandTracking', path: 'xr.handFeatures.enableHandTracking', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.enableHandTracking },
             { key: 'enableHaptics', path: 'xr.handFeatures.enableHaptics', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.enableHaptics },
             { key: 'interactionRadius', path: 'xr.handFeatures.interactionRadius', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.interactionRadius },
-            { key: 'movementAxesHorizontal', path: 'xr.handFeatures.movementAxesHorizontal', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.movementAxesHorizontal },
-            { key: 'movementAxesVertical', path: 'xr.handFeatures.movementAxesVertical', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.movementAxesVertical },
+            { key: 'movementAxesHorizontal', path: 'xr.movementAxes.horizontal', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.movementAxesHorizontal },
+            { key: 'movementAxesVertical', path: 'xr.movementAxes.vertical', definition: settingsUIDefinition.xr.subsections.handFeatures.settings.movementAxesVertical },
           ]),
           isPowerUser: true
         },

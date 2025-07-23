@@ -248,8 +248,10 @@ export const defaultSettings: Settings = {
     interactionRadius: 0.15,
     movementSpeed: 1.0, // From JSON (camelCase, was 0.08)
     deadZone: 0.12,
-    movementAxesHorizontal: 2, // From JSON (camelCase, was movementAxes: {horizontal: 2, vertical: 3})
-    movementAxesVertical: 3,   // From JSON (camelCase, was movementAxes: {horizontal: 2, vertical: 3})
+    movementAxes: {
+      horizontal: 2,
+      vertical: 3
+    }, // From JSON - nested object structure matching YAML
     enableLightEstimation: false,
     enablePlaneDetection: false,
     enableSceneUnderstanding: false,
