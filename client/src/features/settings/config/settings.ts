@@ -88,6 +88,8 @@ export interface LabelSettings {
   textResolution: number;
   textPadding: number;
   billboardMode: 'camera' | 'vertical';
+  showMetadata?: boolean; // Display metadata as secondary label
+  maxLabelWidth?: number; // Maximum width for label text
 }
 
 // Bloom settings

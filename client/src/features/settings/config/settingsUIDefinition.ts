@@ -78,7 +78,9 @@ const createGraphSettingsSubsections = (graphName: 'logseq' | 'visionflow') => (
     label: `${graphName === 'logseq' ? 'Logseq' : 'VisionFlow'} Labels`,
     settings: {
       enableLabels: { label: 'Enable Labels', type: 'toggle', path: `visualisation.graphs.${graphName}.labels.enableLabels`, description: 'Show text labels for nodes.' },
+      showMetadata: { label: 'Show Metadata', type: 'toggle', path: `visualisation.graphs.${graphName}.labels.showMetadata`, description: 'Display metadata (description, type, or file size) below node labels.' },
       desktopFontSize: { label: 'Desktop Font Size', type: 'slider', min: 0.01, max: 1.5, step: 0.05, path: `visualisation.graphs.${graphName}.labels.desktopFontSize`, description: 'Font size for labels in desktop mode.' },
+      maxLabelWidth: { label: 'Max Label Width', type: 'slider', min: 1, max: 10, step: 0.5, path: `visualisation.graphs.${graphName}.labels.maxLabelWidth`, description: 'Maximum width for label text before wrapping.' },
       textColor: { label: 'Text Color', type: 'colorPicker', path: `visualisation.graphs.${graphName}.labels.textColor`, description: 'Color of label text.' },
       textOutlineColor: { label: 'Outline Color', type: 'colorPicker', path: `visualisation.graphs.${graphName}.labels.textOutlineColor`, description: 'Color of label text outline.' },
       textOutlineWidth: { label: 'Outline Width', type: 'slider', min: 0, max: 0.01, step: 0.001, path: `visualisation.graphs.${graphName}.labels.textOutlineWidth`, description: 'Width of label text outline.' },

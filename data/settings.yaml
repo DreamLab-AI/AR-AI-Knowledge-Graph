@@ -78,6 +78,8 @@ visualisation:
     text_resolution: 32
     text_padding: 0.6
     billboard_mode: 'camera'
+    show_metadata: true
+    max_label_width: 5
   bloom:
     enabled: true
     edge_bloom_strength: 0.5

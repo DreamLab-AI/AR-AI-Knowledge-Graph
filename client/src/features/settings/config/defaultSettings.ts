@@ -60,6 +60,8 @@ const createDefaultGraphSettings = (colorTheme: 'blue' | 'green'): GraphSettings
       textResolution: 32,
       textPadding: 0.6,
       billboardMode: "camera",
+      showMetadata: true,
+      maxLabelWidth: 5,
     },
     physics: {
       attractionStrength: 0.3,

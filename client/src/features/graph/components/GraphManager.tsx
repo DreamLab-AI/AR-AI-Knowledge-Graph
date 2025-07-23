@@ -427,15 +427,38 @@ const GraphManager: React.FC = () => {
   // Node labels (enhanced version) - using physics positions
   const NodeLabels = useMemo(() => {
     const logseqSettings = settings?.visualisation?.graphs?.logseq;
-    const labelSettings = logseqSettings?.labels || settings?.visualisation?.labels;
-    if (!labelSettings?.enableLabels || graphData.nodes.length === 0) return null
+    const labelSettings = logseqSettings?.labels ?? settings?.visualisation?.labels;
+    if (!labelSettings?.enableLabels || graphData.nodes.length === 0) return null;
 
     return graphData.nodes.map((node, index) => {
       // Use physics position if available, otherwise fallback to node position
       const physicsPos = labelPositions[index]
       const position = physicsPos || node.position || { x: 0, y: 0, z: 0 }
       const scale = getNodeScale(node, graphData.edges)
-      const labelOffsetY = scale * 1.5 + 0.5 // Stable offset calculation
+      const labelOffsetY = scale * 1.5 + 0.5; // Stable offset calculation
+
+      // Determine which piece of metadata to show
+      let metadataToShow = null;
+      if (labelSettings.showMetadata && node.metadata) {
+        if (node.metadata.description) {
+          metadataToShow = node.metadata.description;
+        } else if (node.metadata.type) {
+          metadataToShow = node.metadata.type;
+        } else if (node.metadata.fileSize) {
+          const sizeInBytes = parseInt(node.metadata.fileSize);
+          if (sizeInBytes > 1024 * 1024) {
+            metadataToShow = `${(sizeInBytes / (1024 * 1024)).toFixed(1)} MB`;
+          } else if (sizeInBytes > 1024) {
+            metadataToShow = `${(sizeInBytes / 1024).toFixed(1)} KB`;
+          } else {
+            metadataToShow = `${sizeInBytes.toLocaleString()} bytes`;
+          }
+        }
+      }
+
+      // Get max width from settings
+      const maxWidth = labelSettings.maxLabelWidth ?? 5;
+      const fontSize = labelSettings.desktopFontSize ?? 0.5;
 
       return (
         <Billboard
@@ -447,34 +470,34 @@ const GraphManager: React.FC = () => {
           lockZ={false}
         >
           <Text
-            fontSize={labelSettings.desktopFontSize || 0.2}
+            fontSize={fontSize}
             color={labelSettings.textColor || '#ffffff'}
             anchorX="center"
             anchorY="bottom"
-            outlineWidth={labelSettings.textOutlineWidth || 0.02}
+            outlineWidth={labelSettings.textOutlineWidth || 0.005}
             outlineColor={labelSettings.textOutlineColor || '#000000'}
-            maxWidth={3}
+            maxWidth={maxWidth}
             textAlign="center"
           >
             {node.label || node.id}
           </Text>
-          {(node.metadata?.type || node.metadata?.description) && (
+          {metadataToShow && (
             <Text
               position={[0, -0.15, 0]}
-              fontSize={(labelSettings.desktopFontSize || 0.2) * 0.6}
-              color={new THREE.Color(labelSettings.textColor || '#ffffff').multiplyScalar(0.6).getStyle()}
+              fontSize={fontSize * 0.6}
+              color={new THREE.Color(labelSettings.textColor || '#ffffff').multiplyScalar(0.7).getStyle()}
               anchorX="center"
               anchorY="top"
-              maxWidth={2}
+              maxWidth={maxWidth * 0.8}
               textAlign="center"
             >
-              {node.metadata.description || node.metadata.type}
+              {metadataToShow}
             </Text>
           )}
         </Billboard>
       )
     })
-  }, [graphData.nodes, graphData.edges, labelPositions, settings?.visualisation?.labels])
+  }, [graphData.nodes, graphData.edges, labelPositions, settings?.visualisation?.graphs?.logseq?.labels, settings?.visualisation?.labels])
 
   return (
     <>
