@@ -420,10 +420,10 @@ export const IntegratedControlPanel: React.FC<IntegratedControlPanelProps> = ({
 
             // Hologram Settings
             { key: 'hologram', label: 'Hologram', type: 'toggle', path: 'visualisation.graphs.logseq.nodes.enableHologram' },
-            { key: 'ringCount', label: 'Ring Count', type: 'slider', min: 0, max: 10, path: 'visualisation.graphs.logseq.hologram.ringCount' },
-            { key: 'ringColor', label: 'Ring Color', type: 'color', path: 'visualisation.graphs.logseq.hologram.ringColor' },
-            { key: 'ringOpacity', label: 'Ring Opacity', type: 'slider', min: 0, max: 1, path: 'visualisation.graphs.logseq.hologram.ringOpacity' },
-            { key: 'ringRotationSpeed', label: 'Ring Speed', type: 'slider', min: 0, max: 50, path: 'visualisation.graphs.logseq.hologram.ringRotationSpeed' },
+            { key: 'ringCount', label: 'Ring Count', type: 'slider', min: 0, max: 10, path: 'visualisation.hologram.ringCount' },
+            { key: 'ringColor', label: 'Ring Color', type: 'color', path: 'visualisation.hologram.ringColor' },
+            { key: 'ringOpacity', label: 'Ring Opacity', type: 'slider', min: 0, max: 1, path: 'visualisation.hologram.ringOpacity' },
+            { key: 'ringRotationSpeed', label: 'Ring Speed', type: 'slider', min: 0, max: 50, path: 'visualisation.hologram.ringRotationSpeed' },
 
             // Flow & Animation
             { key: 'flowEffect', label: 'Edge Flow', type: 'toggle', path: 'visualisation.graphs.logseq.edges.enableFlowEffect' },

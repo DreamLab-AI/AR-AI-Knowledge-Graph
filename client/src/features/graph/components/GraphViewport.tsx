@@ -9,6 +9,7 @@ import CameraController from '../../visualisation/components/CameraController'; 
 import { useSettingsStore } from '../../../store/settingsStore';
 import { createLogger } from '../../../utils/logger';
 import { BotsVisualization } from '../../bots/components/BotsVisualization';
+import { HologramManager } from '../../visualisation/renderers/HologramManager';
 
 // Ensure Three.js types are properly loaded if not globally done
 // import '../../../types/react-three-fiber.d.ts';
@@ -28,6 +29,8 @@ const GraphViewport: React.FC = () => {
   const renderingSettings = settings.visualisation.rendering;
   const bloomSettingsStore = settings.visualisation.bloom;
   const debugSettings = settings.system.debug;
+  const nodeSettings = settings.visualisation.graphs?.logseq?.nodes || settings.visualisation.nodes;
+  const hologramEnabled = nodeSettings?.enableHologram || false;
 
   const fov = cameraSettings?.fov ?? 75;
   const near = cameraSettings?.near ?? 0.1;
@@ -154,9 +157,14 @@ const GraphViewport: React.FC = () => {
         <Suspense fallback={null}>
           {/* Using GraphManager for all graph rendering */}
           <GraphManager />
-          {/* Note: Enhanced features can be toggled via settings */}
-          {/* HologramVisualisation could be added here if it's part of the core graph view */}
-          {/* <HologramVisualisation standalone={false} position={[0, 0, 0]} size={20} /> */}
+          
+          {/* Render HologramManager when hologram is enabled */}
+          {hologramEnabled && (
+            <HologramManager 
+              position={graphCenter}
+              isXRMode={false}
+            />
+          )}
 
           {/* VisionFlow visualization re-enabled in same origin space */}
           <BotsVisualization />

@@ -138,11 +138,14 @@ export const HologramManager: React.FC<{
   const enableTriangleSphere = settings?.enableTriangleSphere !== false;
   const triangleSphereSize = settings?.triangleSphereSize || 60;
   const triangleSphereOpacity = settings?.triangleSphereOpacity || 0.3;
+  
+  // Ensure we have at least some spheres to render
+  const finalSphereSizes = sphereSizes.length > 0 ? sphereSizes : [40, 80];
 
   return (
     <group ref={groupRef} position={position as any}>
       {/* Render rings based on settings */}
-      {sphereSizes.map((size, index) => (
+      {finalSphereSizes.map((size, index) => (
         <HologramRing
           key={`ring-${index}`}
           size={size / 100} // Convert to meters
