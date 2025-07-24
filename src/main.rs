@@ -9,6 +9,7 @@ use webxr::{
         socket_flow_handler::{socket_flow_handler, PreReadSocketSettings}, // Import PreReadSocketSettings
         speech_socket_handler::speech_socket_handler,
         mcp_relay_handler::mcp_relay_handler,
+        mcp_stdio_handler::mcp_stdio_handler,
         nostr_handler,
         bots_handler,
     },
@@ -297,7 +298,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state_data.feature_access.clone())
             .route("/wss", web::get().to(socket_flow_handler)) // Changed from /ws to /wss
             .route("/ws/speech", web::get().to(speech_socket_handler))
-            .route("/ws/mcp", web::get().to(mcp_relay_handler)) // MCP relay endpoint
+            .route("/ws/mcp", web::get().to(mcp_stdio_handler)) // MCP direct stdio endpoint
+            .route("/ws/mcp-relay", web::get().to(mcp_relay_handler)) // Legacy MCP relay endpoint
             .service(
                 web::scope("/api") // Add /api prefix for these routes
                     .configure(api_handler::config) // This will now serve /api/user-settings etc.

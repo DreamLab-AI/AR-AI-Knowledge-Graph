@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 // MCP Protocol Types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,8 +115,10 @@ pub enum AgentType {
     Specialist,
 }
 
-impl AgentType {
-    pub fn from_str(s: &str) -> Result<Self, &'static str> {
+impl FromStr for AgentType {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "coordinator" => Ok(AgentType::Coordinator),
             "researcher" => Ok(AgentType::Researcher),

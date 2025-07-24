@@ -169,11 +169,11 @@ impl ClaudeFlowActor {
         // Configuration for the MCP connection should come from .env
         // Since Claude Flow is running in this container on port 8081,
         // we need to connect to it via HTTP/WebSocket
-        let host = std::env::var("CLAUDE_FLOW_HOST").unwrap_or_else(|_| "localhost".to_string());
+        let host = std::env::var("CLAUDE_FLOW_HOST").unwrap_or_else(|_| "powerdev".to_string());
         let port = std::env::var("CLAUDE_FLOW_PORT")
-            .unwrap_or_else(|_| "8081".to_string())
+            .unwrap_or_else(|_| "3000".to_string())
             .parse::<u16>()
-            .unwrap_or(8081);
+            .unwrap_or(3000);
 
         info!("ClaudeFlowActor: Connecting to Claude Flow at {}:{}", host, port);
 
@@ -181,7 +181,7 @@ impl ClaudeFlowActor {
         let mut client = ClaudeFlowClientBuilder::new()
             .host(&host)
             .port(port)
-            .use_http()  // Use HTTP transport to connect to the running service
+            .use_websocket()  // Use WebSocket transport for real-time communication
             .build()
             .await
             .expect("Failed to build ClaudeFlowClient");
@@ -221,7 +221,7 @@ impl ClaudeFlowActor {
         // If not connected, provide mock data for visualization
         if !self.is_connected {
             let graph_addr = self.graph_service_addr.clone();
-            
+
             // Create mock agents for visualization
             ctx.run_interval(Duration::from_secs(10), move |_act, _ctx| {
                 let mock_agents = Self::create_mock_agents();
@@ -230,13 +230,13 @@ impl ClaudeFlowActor {
             });
             return;
         }
-        
+
         // Poll for agent updates every 5 seconds
         ctx.run_interval(Duration::from_secs(5), |act, _ctx| {
             if !act.is_connected {
                 return;
             }
-            
+
             let client = act.client.clone();
             let graph_addr = act.graph_service_addr.clone();
 
@@ -260,15 +260,15 @@ impl ClaudeFlowActor {
         if !self.is_connected {
             return;
         }
-        
+
         // Check connection health every 30 seconds
         ctx.run_interval(Duration::from_secs(30), |act, _ctx| {
             if !act.is_connected {
                 return;
             }
-            
+
             let client = act.client.clone();
-            
+
             actix::spawn(async move {
                 match client.get_system_health().await {
                     Ok(health) => {
@@ -322,7 +322,7 @@ impl Handler<GetActiveAgents> for ClaudeFlowActor {
                 Ok(ClaudeFlowActor::create_mock_agents())
             });
         }
-        
+
         let client = self.client.clone();
         Box::pin(async move {
             client.list_agents(false)
@@ -351,12 +351,12 @@ impl Handler<SpawnClaudeAgent> for ClaudeFlowActor {
                 Ok(())
             });
         }
-        
+
         let client = self.client.clone();
-        
+
         Box::pin(async move {
             use crate::services::claude_flow::{client::SpawnAgentParams, AgentType};
-            
+
             let agent_type = match msg.agent_type.as_str() {
                 "coordinator" => AgentType::Coordinator,
                 "researcher" => AgentType::Researcher,
@@ -366,7 +366,7 @@ impl Handler<SpawnClaudeAgent> for ClaudeFlowActor {
                 "tester" => AgentType::Tester,
                 _ => AgentType::Specialist,
             };
-            
+
             let params = SpawnAgentParams {
                 agent_type,
                 name: msg.name,
@@ -377,7 +377,7 @@ impl Handler<SpawnClaudeAgent> for ClaudeFlowActor {
                 environment: None,
                 working_directory: None,
             };
-            
+
             client.spawn_agent(params)
                 .await
                 .map(|_| ())
@@ -397,7 +397,7 @@ impl Handler<TerminateClaudeAgent> for ClaudeFlowActor {
 
     fn handle(&mut self, msg: TerminateClaudeAgent, _ctx: &mut Context<Self>) -> Self::Result {
         let client = self.client.clone();
-        
+
         Box::pin(async move {
             client.terminate_agent(&msg.agent_id)
                 .await

@@ -2,20 +2,31 @@ const WebSocket = require('ws');
 const { spawn } = require('child_process');
 const http = require('http');
 
+// Get port from environment or use default
+const PORT = process.env.MCP_PORT || 3000;
+const HOST = process.env.MCP_HOST || '0.0.0.0';
+
 // Create HTTP server
 const server = http.createServer();
 
 // Create WebSocket server
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
-console.log('Starting MCP WebSocket relay on port 8081...');
+console.log(`Starting MCP WebSocket relay on port ${PORT}...`);
 
 wss.on('connection', (ws) => {
   console.log('New WebSocket connection established');
 
-  // Spawn Claude Flow MCP process
-  const mcpProcess = spawn('npx', ['claude-flow@alpha', 'mcp', 'start'], {
-    stdio: ['pipe', 'pipe', 'pipe']
+  // Spawn Claude Flow MCP process with stdio mode
+  const mcpProcess = spawn('npx', ['claude-flow@alpha', 'mcp', 'start', '--stdio'], {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: '/workspace/ext/claude-flow',
+    env: {
+      ...process.env,
+      CLAUDE_FLOW_AUTO_ORCHESTRATOR: 'true',
+      CLAUDE_FLOW_NEURAL_ENABLED: 'true',
+      CLAUDE_FLOW_WASM_ENABLED: 'true'
+    }
   });
 
   let buffer = '';
@@ -71,17 +82,10 @@ wss.on('connection', (ws) => {
     ws.close();
   });
 
-  // Send initial health check response
-  ws.send(JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'health',
-    params: {
-      status: 'healthy',
-      version: '2.0.0-alpha.59'
-    }
-  }));
+  // Don't send any initial message - wait for client to initialize
+  console.log('WebSocket client connected, waiting for initialization...');
 });
 
-server.listen(8081, () => {
-  console.log('MCP WebSocket relay listening on http://localhost:8081/ws');
+server.listen(PORT, HOST, () => {
+  console.log(`MCP WebSocket relay listening on http://${HOST}:${PORT}/ws`);
 });

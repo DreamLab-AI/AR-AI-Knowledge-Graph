@@ -1,51 +1,50 @@
 #!/bin/bash
-# Claude-Flow MCP Service Startup Script for PowerDev Container
 
-echo "=== Claude-Flow MCP Service Startup Script ==="
-echo "Container: PowerDev ($(hostname))"
-echo "Network: Docker network at $(ip addr show eth0 | grep inet | awk '{print $2}')"
-echo ""
+# Start Claude Flow MCP services inside the powerdev container
+# This makes the MCP service available at ws://powerdev:3000/ws for other containers
 
-# Configuration
-CLAUDE_FLOW_DIR="/workspace/ext/claude-flow"
-MCP_PORT=3000
-MCP_HOST="0.0.0.0"  # Listen on all interfaces for container access
+set -e
 
-# Check if MCP is already running
-if pgrep -f "mcp-server.js" > /dev/null; then
-    echo "⚠️  MCP server is already running!"
-    echo "Process: $(pgrep -f "mcp-server.js" -a)"
-    echo ""
-    echo "To restart, first stop the existing process:"
-    echo "pkill -f mcp-server.js"
-    exit 0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MCP_PORT=${MCP_PORT:-3000}
+MCP_HOST=${MCP_HOST:-0.0.0.0}  # Listen on all interfaces for Docker networking
+
+echo "Starting Claude Flow MCP services in powerdev container..."
+echo "Container hostname: $(hostname)"
+echo "Container IP: $(hostname -i)"
+echo "Service will be available at ws://powerdev:${MCP_PORT}/ws"
+
+# Change to the directory containing the MCP relay
+cd "${SCRIPT_DIR}/src"
+
+# Check if the relay script exists
+if [ ! -f "mcp-ws-relay.js" ]; then
+    echo "Error: mcp-ws-relay.js not found in ${SCRIPT_DIR}/src"
+    echo "Please ensure the WebSocket relay script exists"
+    exit 1
 fi
 
-# Navigate to claude-flow directory
-cd "$CLAUDE_FLOW_DIR" || exit 1
+# Check if Node.js is available
+if ! command -v node &> /dev/null; then
+    echo "Error: Node.js is not installed"
+    exit 1
+fi
 
-# Set environment variables
-export CLAUDE_FLOW_AUTO_ORCHESTRATOR=true
-export CLAUDE_FLOW_NEURAL_ENABLED=true
-export CLAUDE_FLOW_WASM_ENABLED=true
-export MCP_MODE=server
-export MCP_PORT=$MCP_PORT
+# Kill any existing MCP processes on the port
+echo "Checking for existing processes on port ${MCP_PORT}..."
+if lsof -Pi :${MCP_PORT} -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo "Killing existing process on port ${MCP_PORT}..."
+    lsof -Pi :${MCP_PORT} -sTCP:LISTEN -t | xargs kill -9 2>/dev/null || true
+    sleep 1
+fi
 
-echo "Starting Claude-Flow MCP Service..."
-echo "Configuration:"
-echo "  - Directory: $CLAUDE_FLOW_DIR"
-echo "  - Port: $MCP_PORT"
-echo "  - Host: $MCP_HOST"
-echo "  - Transport: HTTP/WebSocket"
-echo "  - Features: Auto-orchestrator, Neural, WASM"
-echo ""
+# Start the MCP WebSocket relay
+echo "Starting MCP WebSocket relay..."
+echo "Listening on ${MCP_HOST}:${MCP_PORT}"
 
-# Start MCP server in HTTP mode for WebSocket access
-echo "Command: npx claude-flow mcp start --transport http --port $MCP_PORT --host $MCP_HOST --auto-orchestrator"
-echo ""
+# Export environment variables for the relay
+export MCP_PORT=${MCP_PORT}
+export MCP_HOST=${MCP_HOST}
 
-# Start the service
-npx claude-flow mcp start --transport http --port $MCP_PORT --host $MCP_HOST --auto-orchestrator
-
-# Note: The above command will run in foreground. 
-# For background execution, add & at the end or use --daemon flag
+# Start the relay in the foreground
+exec node mcp-ws-relay.js
