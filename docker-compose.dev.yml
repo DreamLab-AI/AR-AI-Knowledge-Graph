@@ -39,6 +39,8 @@ services:
       # MCP Orchestrator configuration (optional - will use mock data if not available)
       - ORCHESTRATOR_WS_URL=ws://mcp-orchestrator:9001/ws
       - MCP_RELAY_FALLBACK_TO_MOCK=true
+      # Set BOTS_ORCHESTRATOR_URL to non-existent to trigger mock data
+      - BOTS_ORCHESTRATOR_URL=ws://bots-orchestrator:9999/ws
     deploy: # Indentation: 4 spaces
       resources:
         reservations:

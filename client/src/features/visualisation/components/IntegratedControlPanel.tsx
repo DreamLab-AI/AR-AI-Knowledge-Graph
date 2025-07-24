@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SpaceDriver } from '../../../services/SpaceDriverService';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { SwarmInitializationPrompt } from '../../bots/components/SwarmInitializationPrompt';
 
 interface IntegratedControlPanelProps {
   showStats: boolean;
@@ -67,6 +68,7 @@ export const IntegratedControlPanel: React.FC<IntegratedControlPanelProps> = ({
   // Nostr auth state
   const [nostrConnected, setNostrConnected] = useState(false);
   const [nostrPublicKey, setNostrPublicKey] = useState<string>('');
+  const [showSwarmPrompt, setShowSwarmPrompt] = useState(false);
 
   // Settings store access
   const settings = useSettingsStore(state => state.settings);
@@ -605,14 +607,40 @@ export const IntegratedControlPanel: React.FC<IntegratedControlPanelProps> = ({
           <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#F1C40F' }}>
             ⚡ VisionFlow ({botsData.dataSource.toUpperCase()})
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '3px 15px', fontSize: '11px' }}>
-            <span style={{ opacity: 0.7 }}>Agents:</span>
-            <span style={{ color: '#F1C40F' }}>{botsData.nodeCount}</span>
-            <span style={{ opacity: 0.7 }}>Links:</span>
-            <span style={{ color: '#F1C40F' }}>{botsData.edgeCount}</span>
-            <span style={{ opacity: 0.7 }}>Tokens:</span>
-            <span style={{ color: '#F39C12' }}>{botsData.tokenCount.toLocaleString()}</span>
-          </div>
+          {botsData.nodeCount === 0 ? (
+            <div style={{ textAlign: 'center', padding: '10px 0' }}>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginBottom: '10px' }}>
+                No active swarm
+              </div>
+              <button
+                onClick={() => setShowSwarmPrompt(true)}
+                style={{
+                  background: '#F1C40F',
+                  color: 'black',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '8px 16px',
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#F39C12'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#F1C40F'}
+              >
+                Initialize Swarm
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '3px 15px', fontSize: '11px' }}>
+              <span style={{ opacity: 0.7 }}>Agents:</span>
+              <span style={{ color: '#F1C40F' }}>{botsData.nodeCount}</span>
+              <span style={{ opacity: 0.7 }}>Links:</span>
+              <span style={{ color: '#F1C40F' }}>{botsData.edgeCount}</span>
+              <span style={{ opacity: 0.7 }}>Tokens:</span>
+              <span style={{ color: '#F39C12' }}>{botsData.tokenCount.toLocaleString()}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -978,6 +1006,17 @@ export const IntegratedControlPanel: React.FC<IntegratedControlPanelProps> = ({
           </div>
         )}
       </div>
+
+      {/* Swarm Initialization Prompt */}
+      {showSwarmPrompt && (
+        <SwarmInitializationPrompt
+          onClose={() => setShowSwarmPrompt(false)}
+          onInitialized={() => {
+            setShowSwarmPrompt(false);
+            // The bots data will be refreshed automatically through the existing update mechanism
+          }}
+        />
+      )}
     </div>
   );
 };

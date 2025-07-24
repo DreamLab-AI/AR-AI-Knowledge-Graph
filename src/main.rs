@@ -9,7 +9,6 @@ use webxr::{
         socket_flow_handler::{socket_flow_handler, PreReadSocketSettings}, // Import PreReadSocketSettings
         speech_socket_handler::speech_socket_handler,
         mcp_relay_handler::mcp_relay_handler,
-        mcp_stdio_handler::mcp_stdio_handler,
         nostr_handler,
         bots_handler,
     },
@@ -149,17 +148,19 @@ async fn main() -> std::io::Result<()> {
     nostr_handler::init_nostr_service(&mut app_state);
 
     // Initialize BotsClient connection
-    info!("Connecting to bots orchestrator...");
-    let bots_url = std::env::var("BOTS_ORCHESTRATOR_URL")
-        .unwrap_or_else(|_| "ws://powerdev:3000/ws".to_string());
+    // DISABLED: BotsClient was trying to connect to powerdev MCP with wrong protocol
+    // info!("Connecting to bots orchestrator...");
+    // let bots_url = std::env::var("BOTS_ORCHESTRATOR_URL")
+    //     .unwrap_or_else(|_| "ws://powerdev:3000/ws".to_string());
 
-    let bots_client = app_state.bots_client.clone();
-    tokio::spawn(async move {
-        match bots_client.connect(&bots_url).await {
-            Ok(()) => info!("Successfully connected to bots orchestrator at {}", bots_url),
-            Err(e) => error!("Failed to connect to bots orchestrator: {}", e),
-        }
-    });
+    // let bots_client = app_state.bots_client.clone();
+    // tokio::spawn(async move {
+    //     match bots_client.connect(&bots_url).await {
+    //         Ok(()) => info!("Successfully connected to bots orchestrator at {}", bots_url),
+    //         Err(e) => error!("Failed to connect to bots orchestrator: {}", e),
+    //     }
+    // });
+    info!("BotsClient connection disabled - will use mock data");
 
     // First, try to load existing metadata without waiting for GitHub download
     info!("Loading existing metadata for quick initialization");
@@ -298,7 +299,6 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state_data.feature_access.clone())
             .route("/wss", web::get().to(socket_flow_handler)) // Changed from /ws to /wss
             .route("/ws/speech", web::get().to(speech_socket_handler))
-            .route("/ws/mcp", web::get().to(mcp_stdio_handler)) // MCP direct stdio endpoint
             .route("/ws/mcp-relay", web::get().to(mcp_relay_handler)) // Legacy MCP relay endpoint
             .service(
                 web::scope("/api") // Add /api prefix for these routes

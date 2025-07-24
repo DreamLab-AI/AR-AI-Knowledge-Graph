@@ -170,6 +170,17 @@ pub struct UpdateBotsGraph {
     pub agents: Vec<AgentStatus>,
 }
 
+#[derive(Message)]
+#[rtype(result = "Result<(), String>")]
+pub struct InitializeSwarm {
+    pub topology: String,
+    pub max_agents: u32,
+    pub strategy: String,
+    pub enable_neural: bool,
+    pub agent_types: Vec<String>,
+    pub custom_prompt: Option<String>,
+}
+
 // GPU Compute Actor Messages
 #[derive(Message)]
 #[rtype(result = "Result<(), String>")]

@@ -405,3 +405,117 @@ impl Handler<TerminateClaudeAgent> for ClaudeFlowActor {
         })
     }
 }
+
+use crate::actors::messages::InitializeSwarm;
+
+impl Handler<InitializeSwarm> for ClaudeFlowActor {
+    type Result = ResponseFuture<Result<(), String>>;
+
+    fn handle(&mut self, msg: InitializeSwarm, ctx: &mut Context<Self>) -> Self::Result {
+        info!("ClaudeFlowActor: Initializing swarm with topology: {}, max_agents: {}", 
+              msg.topology, msg.max_agents);
+
+        let mut client = self.client.clone();
+        let graph_addr = self.graph_service_addr.clone();
+        let actor_addr = ctx.address();
+        
+        Box::pin(async move {
+            // First ensure we're connected
+            if let Err(e) = client.connect().await {
+                error!("Failed to connect to Claude Flow: {}", e);
+                return Err(format!("Failed to connect to Claude Flow: {}", e));
+            }
+
+            // Initialize the MCP session
+            if let Err(e) = client.initialize().await {
+                error!("Failed to initialize Claude Flow session: {}", e);
+                return Err(format!("Failed to initialize Claude Flow session: {}", e));
+            }
+
+            // Initialize swarm with the requested configuration
+            match client.init_swarm(&msg.topology, Some(msg.max_agents)).await {
+                Ok(swarm_info) => {
+                    info!("Swarm initialized successfully: {}", swarm_info);
+                    
+                    // If neural enhancement is enabled, train neural patterns
+                    if msg.enable_neural {
+                        info!("Training neural patterns for enhanced coordination");
+                        // Train neural patterns for better coordination
+                        if let Err(e) = client.train_neural_pattern("coordination", "swarm optimization", Some(50)).await {
+                            warn!("Failed to train neural patterns: {}", e);
+                        }
+                    }
+                    
+                    // Now spawn the requested agent types
+                    let mut spawn_errors = Vec::new();
+                    
+                    for agent_type in &msg.agent_types {
+                        use crate::services::claude_flow::{client::SpawnAgentParams, AgentType};
+                        
+                        let agent_type_enum = match agent_type.as_str() {
+                            "coordinator" => AgentType::Coordinator,
+                            "researcher" => AgentType::Researcher,
+                            "coder" => AgentType::Coder,
+                            "analyst" => AgentType::Analyst,
+                            "architect" => AgentType::Architect,
+                            "tester" => AgentType::Tester,
+                            "optimizer" => AgentType::Optimizer,
+                            "reviewer" => AgentType::Reviewer,
+                            "documenter" => AgentType::Documenter,
+                            _ => AgentType::Specialist,
+                        };
+                        
+                        let agent_name = format!("{} Agent", 
+                            agent_type.chars().next().unwrap().to_uppercase().to_string() + &agent_type[1..]);
+                        
+                        let params = SpawnAgentParams {
+                            agent_type: agent_type_enum,
+                            name: agent_name,
+                            capabilities: Some(vec![]),
+                            system_prompt: msg.custom_prompt.clone(),
+                            max_concurrent_tasks: Some(3),
+                            priority: Some(5),
+                            environment: None,
+                            working_directory: None,
+                        };
+                        
+                        if let Err(e) = client.spawn_agent(params).await {
+                            spawn_errors.push(format!("Failed to spawn {} agent: {}", agent_type, e));
+                        }
+                    }
+                    
+                    if !spawn_errors.is_empty() {
+                        warn!("Some agents failed to spawn: {:?}", spawn_errors);
+                    }
+                    
+                    // Mark the actor as connected and restart polling
+                    actor_addr.do_send(MarkConnected { connected: true });
+                    
+                    Ok(())
+                }
+                Err(e) => {
+                    error!("Failed to initialize swarm: {}", e);
+                    Err(format!("Failed to initialize swarm: {}", e))
+                }
+            }
+        })
+    }
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+struct MarkConnected {
+    connected: bool,
+}
+
+impl Handler<MarkConnected> for ClaudeFlowActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: MarkConnected, ctx: &mut Context<Self>) {
+        self.is_connected = msg.connected;
+        if msg.connected {
+            info!("ClaudeFlowActor marked as connected, restarting polling");
+            self.poll_for_updates(ctx);
+        }
+    }
+}

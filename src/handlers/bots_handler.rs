@@ -6,7 +6,7 @@ use crate::models::node::Node;
 use crate::types::vec3::Vec3Data;
 use crate::models::edge::Edge;
 use crate::models::simulation_params::{SimulationParams, SimulationPhase, SimulationMode};
-use crate::actors::messages::GetSettings;
+use crate::actors::messages::{GetSettings, InitializeSwarm};
 use crate::services::bots_client::BotsClient;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -51,6 +51,17 @@ pub struct BotsResponse {
     pub message: String,
     pub nodes: Option<Vec<Node>>,
     pub edges: Option<Vec<Edge>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InitializeSwarmRequest {
+    pub topology: String,
+    pub max_agents: u32,
+    pub strategy: String,
+    pub enable_neural: bool,
+    pub agent_types: Vec<String>,
+    pub custom_prompt: Option<String>,
 }
 
 // Static bots graph data storage
@@ -420,6 +431,55 @@ pub async fn get_bots_positions(bots_client: &BotsClient) -> Vec<Node> {
     bots_graph.nodes.clone()
 }
 
+// Initialize swarm endpoint
+pub async fn initialize_swarm(
+    state: web::Data<AppState>,
+    request: web::Json<InitializeSwarmRequest>,
+) -> impl Responder {
+    info!("Received swarm initialization request: {:?}", request);
+
+    // Get the Claude Flow actor
+    if let Some(claude_flow_addr) = &state.claude_flow_addr {
+        // Send initialization message to ClaudeFlowActor
+        match claude_flow_addr.send(InitializeSwarm {
+            topology: request.topology.clone(),
+            max_agents: request.max_agents,
+            strategy: request.strategy.clone(),
+            enable_neural: request.enable_neural,
+            agent_types: request.agent_types.clone(),
+            custom_prompt: request.custom_prompt.clone(),
+        }).await {
+            Ok(Ok(_)) => {
+                info!("Swarm initialization request sent successfully");
+                HttpResponse::Ok().json(serde_json::json!({
+                    "success": true,
+                    "message": "Swarm initialization started"
+                }))
+            }
+            Ok(Err(e)) => {
+                error!("Failed to initialize swarm: {}", e);
+                HttpResponse::InternalServerError().json(serde_json::json!({
+                    "success": false,
+                    "error": e.to_string()
+                }))
+            }
+            Err(e) => {
+                error!("Failed to send initialization message: {}", e);
+                HttpResponse::InternalServerError().json(serde_json::json!({
+                    "success": false,
+                    "error": "Failed to communicate with Claude Flow service"
+                }))
+            }
+        }
+    } else {
+        error!("Claude Flow actor not available");
+        HttpResponse::ServiceUnavailable().json(serde_json::json!({
+            "success": false,
+            "error": "Claude Flow service not available"
+        }))
+    }
+}
+
 // Configure routes for bots endpoints
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -429,5 +489,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     .service(
         web::resource("/update")
             .route(web::post().to(update_bots_data))
+    )
+    .service(
+        web::resource("/initialize-swarm")
+            .route(web::post().to(initialize_swarm))
     );
 }
