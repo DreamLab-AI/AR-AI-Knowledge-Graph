@@ -11,7 +11,8 @@ import { BinaryNodeData, createBinaryNodeData } from '../../../types/binaryProto
 import { HologramNodeMaterial } from '../shaders/HologramNodeMaterial'
 import { FlowingEdges } from './FlowingEdges'
 import { createEventHandlers } from './GraphManager_EventHandlers'
-import { MetadataNodesEnhanced } from './MetadataNodesEnhanced'
+import { MetadataShapes } from './MetadataShapes'
+import { EdgeSettings } from '../../settings/config/settings'
 
 const logger = createLogger('GraphManager')
 
@@ -156,7 +157,7 @@ const GraphManager: React.FC = () => {
   })
 
   const { camera, size } = useThree()
-  
+
   // Check if metadata shapes are enabled
   const logseqSettings = settings?.visualisation?.graphs?.logseq
   const nodeSettings = logseqSettings?.nodes || settings?.visualisation?.nodes
@@ -452,10 +453,27 @@ const GraphManager: React.FC = () => {
   }, [nodePositionsRef.current, graphData.nodes])
 
   // Node labels (enhanced version) - using physics positions
+  const defaultEdgeSettings: EdgeSettings = {
+    arrowSize: 0.5,
+    baseWidth: 1,
+    color: '#ffffff',
+    enableArrows: true,
+    opacity: 0.8,
+    widthRange: [1, 5],
+    quality: 'medium',
+    enableFlowEffect: false,
+    flowSpeed: 1,
+    flowIntensity: 1,
+    glowStrength: 1,
+    distanceIntensity: 0.5,
+    useGradient: false,
+    gradientColors: ['#ff0000', '#0000ff'],
+  };
+
   const NodeLabels = useMemo(() => {
-    const logseqSettings = settings?.visualisation?.graphs?.logseq;
-    const labelSettings = logseqSettings?.labels ?? settings?.visualisation?.labels;
-    if (!labelSettings?.enableLabels || graphData.nodes.length === 0) return null;
+      const logseqSettings = settings?.visualisation?.graphs?.logseq;
+      const labelSettings = logseqSettings?.labels ?? settings?.visualisation?.labels;
+      if (!labelSettings?.enableLabels || graphData.nodes.length === 0) return null;
 
     return graphData.nodes.map((node, index) => {
       // Use physics position if available, otherwise fallback to node position
@@ -531,18 +549,18 @@ const GraphManager: React.FC = () => {
     <>
       {/* Render nodes based on metadata shape setting */}
       {enableMetadataShape ? (
-        <MetadataNodesEnhanced
-          nodes={graphData.nodes}
-          nodePositions={nodePositionsRef.current}
-          onNodeClick={(nodeId, event) => {
-            const nodeIndex = graphData.nodes.findIndex(n => n.id === nodeId)
-            if (nodeIndex !== -1) {
-              handlePointerDown({ ...event, instanceId: nodeIndex } as any)
-            }
-          }}
-          settings={settings}
-        />
-      ) : (
+  <MetadataShapes
+    nodes={graphData.nodes}
+    nodePositions={nodePositionsRef.current}
+    onNodeClick={(nodeId, event) => {
+      const nodeIndex = graphData.nodes.findIndex(n => n.id === nodeId);
+      if (nodeIndex !== -1) {
+        handlePointerDown({ ...event, instanceId: nodeIndex } as any);
+      }
+    }}
+    settings={settings}
+  />
+) : (
         <instancedMesh
           ref={meshRef}
           args={[undefined, undefined, graphData.nodes.length]}
@@ -565,7 +583,7 @@ const GraphManager: React.FC = () => {
       {edgePoints.length > 0 && (
         <FlowingEdges
           points={edgePoints}
-          settings={settings?.visualisation?.graphs?.logseq?.edges || settings?.visualisation?.edges || {}}
+          settings={settings?.visualisation?.graphs?.logseq?.edges || settings?.visualisation?.edges || defaultEdgeSettings}
           edgeData={graphData.edges}
         />
       )}
