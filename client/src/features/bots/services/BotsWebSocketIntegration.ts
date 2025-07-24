@@ -1,17 +1,15 @@
 import { createLogger } from '../../../utils/logger';
-import { mcpWebSocketService } from './MCPWebSocketService';
 import { webSocketService } from '../../../services/WebSocketService';
 import type { BotsAgent, BotsEdge, BotsCommunication } from '../types/BotsTypes';
 
 const logger = createLogger('BotsWebSocketIntegration');
 
 /**
- * Integration service that connects both Logseq graph and VisionFlow bots
- * to their respective WebSocket services for real-time updates
+ * Integration service that handles WebSocket connections for graph data
+ * Note: MCP connections are handled by the backend only - frontend uses REST API
  */
 export class BotsWebSocketIntegration {
   private static instance: BotsWebSocketIntegration;
-  private mcpConnected = false;
   private logseqConnected = false;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
@@ -27,52 +25,10 @@ export class BotsWebSocketIntegration {
   }
 
   private async initializeConnections() {
-    logger.info('Initializing dual WebSocket connections for graph and bots');
+    logger.info('Initializing WebSocket connection for graph data');
 
-    // Initialize MCP WebSocket for VisionFlow bots data
-    this.initializeMCPConnection();
-
-    // Initialize main WebSocket for Logseq graph data
+    // Initialize main WebSocket for Logseq graph data and position updates
     this.initializeLogseqConnection();
-  }
-
-  private async initializeMCPConnection() {
-    try {
-      // Set MCP service to handle VisionFlow data
-      mcpWebSocketService.setDataType('visionflow');
-
-      // Listen for MCP connection events
-      mcpWebSocketService.on('connected', () => {
-        logger.info('MCP WebSocket connected for VisionFlow bots');
-        this.mcpConnected = true;
-        this.emit('mcp-connected', { connected: true });
-      });
-
-      mcpWebSocketService.on('orchestrator_connected', () => {
-        logger.info('Connected to MCP orchestrator');
-        this.emit('orchestrator-connected', { connected: true });
-      });
-
-      mcpWebSocketService.on('update', (data) => {
-        // Only process VisionFlow data
-        if (data.dataType === 'visionflow') {
-          logger.debug('Received VisionFlow bots update', data);
-          this.processBotsUpdate(data);
-        }
-      });
-
-      mcpWebSocketService.on('error', (error) => {
-        logger.error('MCP WebSocket error:', error);
-        this.emit('mcp-error', error);
-      });
-
-      // Connect to MCP relay
-      await mcpWebSocketService.connect();
-
-    } catch (error) {
-      logger.error('Failed to initialize MCP connection:', error);
-      this.mcpConnected = false;
-    }
   }
 
   private initializeLogseqConnection() {
@@ -126,65 +82,37 @@ export class BotsWebSocketIntegration {
    * Request initial data for both visualizations
    */
   async requestInitialData() {
-    logger.info('Requesting initial data for both visualizations');
+    logger.info('Requesting initial data for graph visualization');
 
     // Request Logseq graph data
     if (this.logseqConnected) {
       webSocketService.sendMessage('requestInitialData');
     }
 
-    // Request VisionFlow bots data
-    if (this.mcpConnected) {
-      try {
-        const [agents, tokenUsage] = await Promise.all([
-          mcpWebSocketService.getAgents(),
-          mcpWebSocketService.getTokenUsage()
-        ]);
-
-        this.processBotsUpdate({ agents, tokenUsage });
-      } catch (error) {
-        logger.error('Failed to fetch initial bots data:', error);
-      }
-    }
+    // Bots data should be fetched via REST API from the backend
+    // The frontend no longer connects directly to MCP
   }
 
   /**
-   * Send bots position update (from programmatic monitor)
+   * Send bots position update (deprecated - use REST API instead)
    */
   async sendBotsUpdate(data: {
     nodes: BotsAgent[],
     edges: BotsEdge[]
   }) {
-    if (!this.mcpConnected) {
-      logger.warn('Cannot send bots update: MCP not connected');
-      return;
-    }
-
-    try {
-      // Send update through MCP WebSocket
-      await mcpWebSocketService.requestTool('bots/update', {
-        nodes: data.nodes,
-        edges: data.edges,
-        timestamp: Date.now()
-      });
-
-      logger.debug('Sent bots update with', {
-        nodeCount: data.nodes.length,
-        edgeCount: data.edges.length
-      });
-    } catch (error) {
-      logger.error('Failed to send bots update:', error);
-    }
+    logger.warn('sendBotsUpdate is deprecated. Use REST API POST /api/bots/update instead');
+    // Updates should be sent via REST API to the backend
+    // The backend handles all communication with Claude Flow MCP
   }
 
   /**
-   * Check connection status for both services
+   * Check connection status
    */
   getConnectionStatus() {
     return {
-      mcp: this.mcpConnected,
+      mcp: false, // MCP connections are handled by backend only
       logseq: this.logseqConnected,
-      overall: this.mcpConnected && this.logseqConnected
+      overall: this.logseqConnected
     };
   }
 
@@ -217,9 +145,7 @@ export class BotsWebSocketIntegration {
    */
   disconnect() {
     logger.info('Disconnecting WebSocket services');
-    mcpWebSocketService.disconnect();
     webSocketService.close();
-    this.mcpConnected = false;
     this.logseqConnected = false;
   }
 }

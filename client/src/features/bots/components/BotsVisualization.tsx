@@ -6,7 +6,6 @@ import { BotsAgent, BotsEdge, BotsState } from '../types/botsTypes';
 import { createLogger } from '../../../utils/logger';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { apiService } from '../../../services/apiService';
-import { mcpWebSocketService } from '../services/MCPWebSocketService';
 import { botsWebSocketIntegration } from '../services/BotsWebSocketIntegration';
 import { useBotsBinaryUpdates } from '../hooks/useBotsBinaryUpdates';
 import { botsPhysicsWorker } from '../workers/BotsPhysicsWorker';
@@ -377,10 +376,7 @@ export const BotsVisualization: React.FC = () => {
         try {
           await botsWebSocketIntegration.requestInitialData();
 
-          // If MCP is connected, also fetch directly
-          if (connectionStatus.mcp) {
-            await fetchMCPData();
-          }
+          // MCP connections are handled by the backend only
         } catch (error) {
           logger.warn('Failed to get initial data through integration:', error);
 
@@ -417,61 +413,11 @@ export const BotsVisualization: React.FC = () => {
       }
     };
 
-    const fetchMCPData = async () => {
-      try {
-        const [agents, tokenUsage, communications] = await Promise.all([
-          mcpWebSocketService.getAgents(),
-          mcpWebSocketService.getTokenUsage(),
-          mcpWebSocketService.getCommunications()
-        ]);
-
-        // Update edge map to maintain persistent edges between agent pairs
-        communications.forEach(comm => {
-          comm.receivers?.forEach(receiver => {
-            const edgeKey = [comm.sender, receiver].sort().join('-');
-            if (!edgeMapRef.current.has(edgeKey)) {
-              edgeMapRef.current.set(edgeKey, {
-                id: edgeKey,
-                source: comm.sender,
-                target: receiver,
-                dataVolume: 0,
-                messageCount: 0,
-                lastMessageTime: Date.now()
-              });
-            }
-            const edge = edgeMapRef.current.get(edgeKey)!;
-            edge.dataVolume += comm.metadata?.size || 100;
-            edge.messageCount += 1;
-            edge.lastMessageTime = Date.now();
-          });
-        });
-
-        // Clean up stale edges (no communication for 30 seconds)
-        const now = Date.now();
-        for (const [key, edge] of edgeMapRef.current.entries()) {
-          if (now - edge.lastMessageTime > 30000) {
-            edgeMapRef.current.delete(key);
-          }
-        }
-
-        setBotsData({
-          nodes: agents,
-          edges: Array.from(edgeMapRef.current.values()),
-          tokenUsage
-        });
-
-        // Update physics
-        botsPhysicsWorker.updateAgents(agents);
-        botsPhysicsWorker.updateEdges(Array.from(edgeMapRef.current.values()));
-        if (tokenUsage) botsPhysicsWorker.updateTokenUsage(tokenUsage);
-      } catch (error) {
-        logger.error('Error fetching MCP data:', error);
-      }
-    };
-
-    const handleMCPUpdate = (data: any) => {
-      if (data.agents) fetchMCPData();
-    };
+    // REMOVED: fetchMCPData and handleMCPUpdate functions
+    // Frontend should not connect to MCP directly
+    // Use REST API endpoints instead:
+    // - GET /api/bots/data for fetching bots data
+    // - POST /api/bots/initialize-swarm for spawning hive minds
 
     const processAgentsUpdate = (agents: BotsAgent[]) => {
       // Update bots data with new agents
@@ -550,12 +496,11 @@ export const BotsVisualization: React.FC = () => {
       initialize();
     }
 
-    // Poll for updates if using MCP
-    const pollInterval = dataSource === 'mcp' ? setInterval(fetchMCPData, 3000) : null;
+    // Polling is handled by the backend ClaudeFlowActor
+    // Frontend uses REST API and WebSocket for real-time position updates
 
     return () => {
       cleanup = true;
-      if (pollInterval) clearInterval(pollInterval);
 
       // Clean up integrated WebSocket listeners
       // Note: We don't disconnect the integration service as it's shared

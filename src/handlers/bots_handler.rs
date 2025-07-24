@@ -436,6 +436,7 @@ pub async fn initialize_swarm(
     state: web::Data<AppState>,
     request: web::Json<InitializeSwarmRequest>,
 ) -> impl Responder {
+    info!("=== INITIALIZE SWARM ENDPOINT CALLED ===");
     info!("Received swarm initialization request: {:?}", request);
 
     // Get the Claude Flow actor
@@ -482,6 +483,11 @@ pub async fn initialize_swarm(
 
 // Configure routes for bots endpoints
 pub fn config(cfg: &mut web::ServiceConfig) {
+    info!("Configuring bots routes:");
+    info!("  - /bots/data (GET)");
+    info!("  - /bots/update (POST)");
+    info!("  - /bots/initialize-swarm (POST)");
+    
     cfg.service(
         web::resource("/data")
             .route(web::get().to(get_bots_data))

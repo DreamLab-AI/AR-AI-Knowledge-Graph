@@ -262,6 +262,128 @@ Matches `RagflowChatRequest` from `src/models/ragflow_chat.rs`.
 Matches `RagflowChatResponse` from `src/models/ragflow_chat.rs`.
 
 
+## Bots API
+
+### Initialize Swarm (Hive Mind)
+```http
+POST /api/bots/initialize-swarm
+```
+
+Spawns a Claude Flow hive mind with specified configuration and task.
+
+**Request Body:**
+```json
+{
+  "topology": "mesh" | "hierarchical" | "ring" | "star",
+  "maxAgents": 3-20,
+  "strategy": "adaptive",
+  "enableNeural": true,
+  "agentTypes": [
+    "coordinator",
+    "researcher", 
+    "coder",
+    "analyst",
+    "tester",
+    "architect",
+    "optimizer",
+    "reviewer",
+    "documenter"
+  ],
+  "customPrompt": "Build a REST API with authentication" // Required task description
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Swarm initialization started"
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "error": "Failed to initialize swarm: <error message>"
+}
+```
+
+### Get Bots Data
+```http
+GET /api/bots/data
+```
+
+Returns current swarm agent data as a graph structure.
+
+**Response:**
+```json
+{
+  "nodes": [
+    {
+      "id": 1000,
+      "label": "Coordinator Alpha",
+      "metadata_id": "agent-1",
+      "data": {
+        "position": {"x": 0, "y": 0, "z": 0},
+        "velocity": {"x": 0, "y": 0, "z": 0},
+        "mass": 5,
+        "flags": 1
+      },
+      "metadata": {
+        "type": "coordinator",
+        "status": "active",
+        "health": "95.0",
+        "cpu_usage": "45.0",
+        "workload": "0.7"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": 1000,
+      "target": 1001,
+      "weight": 1.0,
+      "edge_type": "15 msgs"
+    }
+  ]
+}
+```
+
+### Update Bots Data
+```http
+POST /api/bots/update
+```
+
+Updates the swarm visualization with new agent data.
+
+**Request Body:**
+```json
+{
+  "nodes": [
+    {
+      "id": "agent-1",
+      "type": "coordinator",
+      "status": "active",
+      "name": "Coordinator Alpha",
+      "cpu_usage": 45.0,
+      "health": 95.0,
+      "workload": 0.7
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "agent-1",
+      "target": "agent-2",
+      "data_volume": 1024.0,
+      "message_count": 15
+    }
+  ]
+}
+```
+
 ## System Status
 
 ### Health Check

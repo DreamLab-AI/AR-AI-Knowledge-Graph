@@ -66,6 +66,8 @@ export const SwarmInitializationPrompt: React.FC<SwarmInitializationPromptProps>
       logger.info('Spawning hive mind with config:', config);
 
       // Call API to initialize swarm
+      const fullUrl = `${apiService.getBaseUrl()}/bots/initialize-swarm`;
+      logger.info('Calling API endpoint:', fullUrl);
       const response = await apiService.post('/bots/initialize-swarm', config);
 
       if (response.success) {
