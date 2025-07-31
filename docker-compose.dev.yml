@@ -27,7 +27,7 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=GPU-553dc306-dab3-32e2-c69b-28175a6f4da6
       - NVIDIA_GPU_UUID=GPU-553dc306-dab3-32e2-c69b-28175a6f4da6
-      - RUST_LOG=warn,webxr=warn,actix_web=warn
+      - RUST_LOG=warn,webxr::services::claude_flow=trace,webxr=warn,actix_web=warn
       - NODE_ENV=development
       - VITE_DEV_SERVER_PORT=5173 # Internal Vite port, accessed via Nginx
       - VITE_API_PORT=4000
@@ -36,6 +36,9 @@ services:
       # Override the port from settings.yaml for development environment
       # Ensure Rust backend listens on 4000, which Vite proxies to.
       - SYSTEM_NETWORK_PORT=4000
+      # Claude Flow MCP WebSocket configuration
+      - CLAUDE_FLOW_HOST=powerdev
+      - CLAUDE_FLOW_PORT=3002
       # MCP Orchestrator configuration (optional - will use mock data if not available)
       - ORCHESTRATOR_WS_URL=ws://mcp-orchestrator:9001/ws
       - MCP_RELAY_FALLBACK_TO_MOCK=true

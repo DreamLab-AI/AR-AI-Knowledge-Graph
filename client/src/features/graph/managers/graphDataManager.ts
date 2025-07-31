@@ -125,20 +125,54 @@ class GraphDataManager {
           throw new Error('Invalid graph data format: data is not an object');
         }
         
-        // Ensure nodes and edges exist, even if empty
+        // Extract nodes, edges, and metadata from response
+        const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+        const edges = Array.isArray(data.edges) ? data.edges : [];
+        const metadata = data.metadata || {};
+        
+        // Merge metadata into nodes based on metadata_id (filename)
+        const enrichedNodes = nodes.map(node => {
+          // Look up metadata by the node's metadata_id (which is the filename)
+          const nodeMetadata = metadata[node.metadata_id || node.metadataId];
+          if (nodeMetadata) {
+            // Merge the rich metadata from server into the node
+            return {
+              ...node,
+              metadata: {
+                ...node.metadata,
+                ...nodeMetadata
+              }
+            };
+          }
+          return node;
+        });
+        
         const validatedData = {
-          nodes: Array.isArray(data.nodes) ? data.nodes : [],
-          edges: Array.isArray(data.edges) ? data.edges : []
+          nodes: enrichedNodes,
+          edges: edges
         };
         
         if (debugState.isEnabled()) {
           logger.info(`Received initial graph data: ${validatedData.nodes.length} nodes, ${validatedData.edges.length} edges`);
+          logger.debug('Metadata entries received:', Object.keys(metadata).length);
           if (validatedData.nodes.length > 0) {
             logger.debug('Sample node data:', {
               id: validatedData.nodes[0].id,
               label: validatedData.nodes[0].label,
               position: validatedData.nodes[0].position,
-              metadata: validatedData.nodes[0].metadata
+              metadata: validatedData.nodes[0].metadata,
+              metadataId: validatedData.nodes[0].metadata_id || validatedData.nodes[0].metadataId
+            });
+            // Log a few nodes to check metadata enrichment
+            const sampleNodes = validatedData.nodes.slice(0, 3);
+            sampleNodes.forEach((node, idx) => {
+              logger.debug(`Node ${idx} metadata:`, {
+                id: node.id,
+                metadataId: node.metadata_id || node.metadataId,
+                hasMetadata: !!node.metadata,
+                lastModified: node.metadata?.lastModified,
+                fileSize: node.metadata?.fileSize
+              });
             });
           }
           if (validatedData.edges.length > 0) {

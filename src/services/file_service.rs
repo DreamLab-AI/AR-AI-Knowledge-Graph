@@ -107,6 +107,10 @@ impl FileService {
             hyperlink_count: Self::count_hyperlinks(&content),
             sha1: Self::calculate_sha1(&content),
             last_modified: Utc::now(),
+            last_content_change: Some(Utc::now()), // Uploaded files have content change same as upload time
+            last_commit: Some(Utc::now()),
+            change_count: Some(1), // First upload counts as 1 change
+            file_blob_sha: None, // No GitHub blob SHA for uploaded files
             perplexity_link: String::new(),
             last_perplexity_process: None,
             topic_counts,
@@ -166,6 +170,10 @@ impl FileService {
             hyperlink_count: Self::count_hyperlinks(&content),
             sha1: Self::calculate_sha1(&content),
             last_modified: Utc::now(),
+            last_content_change: Some(Utc::now()),
+            last_commit: Some(Utc::now()),
+            change_count: None,
+            file_blob_sha: None,
             perplexity_link: String::new(),
             last_perplexity_process: None,
             topic_counts,
@@ -350,6 +358,10 @@ impl FileService {
                             hyperlink_count: Self::count_hyperlinks(&content),
                             sha1: Self::calculate_sha1(&content),
                             last_modified: file_meta.last_modified.unwrap_or_else(|| Utc::now()),
+                            last_content_change: file_meta.last_content_change,
+                            last_commit: file_meta.last_modified,
+                            change_count: None, // Could be populated with API calls to get commit count
+                            file_blob_sha: file_meta.file_blob_sha.clone(),
                             perplexity_link: String::new(),
                             last_perplexity_process: None,
                             topic_counts: HashMap::new(), // Will be updated later
@@ -542,6 +554,10 @@ impl FileService {
                                         hyperlink_count: Self::count_hyperlinks(&content),
                                         sha1: Self::calculate_sha1(&content),
                                         last_modified: file_meta.last_modified.unwrap_or_else(|| Utc::now()),
+                                        last_content_change: file_meta.last_content_change,
+                                        last_commit: file_meta.last_modified,
+                                        change_count: None, // Could be populated with API calls to get commit count
+                                        file_blob_sha: file_meta.file_blob_sha.clone(),
                                         perplexity_link: String::new(),
                                         last_perplexity_process: None,
                                         topic_counts: HashMap::new(), // Will be updated later

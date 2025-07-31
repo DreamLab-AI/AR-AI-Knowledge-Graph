@@ -34,7 +34,7 @@ The bots visualization has been successfully integrated into VisionFlow to displ
 
 #### 1. BotsVisualizationIntegrated Component
 - Main visualization component using React Three Fiber
-- Connects to MCP server with fallback to backend API
+- Retrieves agent data from backend API
 - Renders agents as spheres with size based on workload
 - Shows communication edges between agents
 
@@ -42,11 +42,6 @@ The bots visualization has been successfully integrated into VisionFlow to displ
 - Handles binary WebSocket position updates
 - Filters nodes by bots flag (0x80)
 - Updates positions in real-time
-
-#### 3. MCP WebSocket Service
-- Attempts connection to multiple possible MCP server URLs
-- Implements JSON-RPC 2.0 protocol for MCP tools
-- Falls back to backend API if MCP unavailable
 
 #### 4. SwarmInitializationPrompt Component
 - Interactive modal dialog for spawning hive minds
@@ -60,7 +55,7 @@ The bots visualization has been successfully integrated into VisionFlow to displ
 ## Data Flow
 
 ### Visualization Updates
-1. **MCP Server** → Sends agent data via WebSocket
+1. **Claude Flow MCP Server** → Sends agent data to backend
 2. **Backend** → Receives data, processes through GPU physics
 3. **Binary WebSocket** → Streams position updates to frontend
 4. **Frontend** → Renders 3D visualization with real-time updates
@@ -153,7 +148,7 @@ curl -X POST http://localhost:4000/api/bots/initialize-swarm \
 ### No Bots Visible
 - Check WebSocket connection in browser console
 - Verify backend services are running: `supervisorctl status`
-- Check for CORS errors with MCP server
+- Ensure Claude Flow container is running and accessible
 
 ### Position Updates Not Working
 - Verify binary WebSocket messages in Network tab

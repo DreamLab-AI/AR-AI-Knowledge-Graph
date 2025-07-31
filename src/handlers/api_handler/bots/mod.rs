@@ -9,6 +9,7 @@ pub use crate::handlers::bots_handler::{
     update_bots_data,
     get_bots_data,
     get_bots_positions,
+    initialize_swarm,
 };
 
 // Configure bots API routes
@@ -18,5 +19,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/data", web::get().to(bots_get))
             .route("/data", web::post().to(bots_update))
             .route("/update", web::post().to(bots_update))
+            .route("/initialize-swarm", web::post().to(initialize_swarm))
     );
 }

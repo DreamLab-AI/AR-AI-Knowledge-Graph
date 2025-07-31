@@ -22,6 +22,14 @@ pub struct Metadata {
     #[serde(default = "Utc::now")]
     pub last_modified: DateTime<Utc>,
     #[serde(default)]
+    pub last_content_change: Option<DateTime<Utc>>,  // When content actually changed
+    #[serde(default)]
+    pub last_commit: Option<DateTime<Utc>>,  // When file appeared in any commit
+    #[serde(default)]
+    pub change_count: Option<u32>,  // Number of actual content changes
+    #[serde(default)]
+    pub file_blob_sha: Option<String>,  // GitHub file blob SHA
+    #[serde(default)]
     pub perplexity_link: String,
     #[serde(default)]
     pub last_perplexity_process: Option<DateTime<Utc>>,

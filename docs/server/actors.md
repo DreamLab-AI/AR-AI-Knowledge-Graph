@@ -6,7 +6,7 @@ LogseqSpringThing uses the Actix actor system to manage concurrent state and pro
 
 ## Architecture
 
-The actor system consists of six primary actors that work together to manage the application state:
+The actor system consists of seven primary actors that work together to manage the application state:
 
 ```mermaid
 graph TB
@@ -16,6 +16,8 @@ graph TB
     GS --> MA[MetadataActor]
     SA[SettingsActor] --> GS
     PSA[ProtectedSettingsActor] --> SA
+    CFA[ClaudeFlowActor] --> GS
+    CFA --> |UpdateBotsGraph| GS
     
     style CM fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style GS fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
@@ -23,6 +25,7 @@ graph TB
     style MA fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style SA fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style PSA fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
+    style CFA fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
 ```
 
 ## Actor Descriptions
@@ -144,6 +147,32 @@ Manages protected settings like API keys.
 - `MergeSettings` - Merge new settings into protected settings
 - `SaveSettings` - Persist protected settings to file
 - `GetUser` - Retrieve a specific user's protected data
+
+### ClaudeFlowActor
+
+**Location**: `src/actors/claude_flow_actor.rs`
+
+Manages integration with Claude Flow MCP (Model Context Protocol) service for AI agent coordination.
+
+**Responsibilities**:
+- Connects to Claude Flow MCP service via WebSocket
+- Polls for active AI agent status updates
+- Manages swarm initialization and agent spawning
+- Provides mock data when Claude Flow is unavailable
+- Handles graceful degradation and reconnection
+
+**Key Messages**:
+- `GetActiveAgents` - Retrieve list of active Claude Flow agents
+- `SpawnClaudeAgent` - Create a new AI agent with specified type and capabilities
+- `TerminateClaudeAgent` - Terminate a specific agent by ID
+- `InitializeSwarm` - Initialize a swarm with topology and spawn agents
+- `MarkConnected` - Internal message to update connection status
+
+**Features**:
+- Automatic polling every 5 seconds for agent updates
+- Health check monitoring every 30 seconds
+- Mock agent generation for visualization when disconnected
+- Support for various agent types: coordinator, researcher, coder, analyst, architect, tester, optimizer, reviewer, documenter
 
 ## Message Flow Examples
 

@@ -148,6 +148,10 @@ impl PerplexityService {
             hyperlink_count: 0,
             sha1: String::new(),
             last_modified: Utc::now(),
+            last_content_change: Some(Utc::now()), // Perplexity processed content is new
+            last_commit: None, // Not from GitHub
+            change_count: Some(1), // First generation
+            file_blob_sha: None, // Not from GitHub
             perplexity_link: perplexity_response.link,
             last_perplexity_process: Some(Utc::now()),
             topic_counts: HashMap::new(),

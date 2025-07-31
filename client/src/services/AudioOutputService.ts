@@ -4,6 +4,7 @@
  */
 
 import { AudioContextManager } from './AudioContextManager';
+import { gatedConsole } from '../utils/console';
 
 export interface AudioQueueItem {
   id: string;
@@ -74,7 +75,7 @@ export class AudioOutputService {
       try {
         await this.playAudioBuffer(item);
       } catch (error) {
-        console.error('Error playing audio:', error);
+        gatedConsole.voice.error('Error playing audio:', error);
         this.emit('error', { item, error });
       }
     }
@@ -114,7 +115,7 @@ export class AudioOutputService {
         this.currentSource.start(0);
       });
     } catch (error) {
-      console.error('Failed to decode audio:', error);
+      gatedConsole.voice.error('Failed to decode audio:', error);
       throw error;
     }
   }

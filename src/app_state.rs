@@ -1,7 +1,7 @@
 use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 use actix::prelude::*;
 use actix_web::web;
-use log::info;
+use log::{info, warn, error};
 
 use crate::actors::{GraphServiceActor, SettingsActor, MetadataActor, ClientManagerActor, GPUComputeActor, ProtectedSettingsActor, ClaudeFlowActor};
 use crate::config::AppFullSettings; // Renamed for clarity, ClientFacingSettings removed
@@ -78,7 +78,27 @@ impl AppState {
         // Initialize ClaudeFlowActor if MCP is configured
         let claude_flow_addr = if std::env::var("CLAUDE_FLOW_HOST").is_ok() {
             info!("[AppState::new] Starting ClaudeFlowActor");
-            Some(ClaudeFlowActor::new(graph_service_addr.clone()).await.start())
+            
+            // Ensure MCP relay is running first
+            use crate::services::mcp_relay_manager::ensure_mcp_ready;
+            match ensure_mcp_ready().await {
+                Ok(_) => {
+                    info!("[AppState::new] MCP relay is ready");
+                }
+                Err(e) => {
+                    warn!("[AppState::new] Could not ensure MCP relay is running: {}", e);
+                    warn!("[AppState::new] Proceeding anyway - ClaudeFlowActor may fail to connect");
+                }
+            }
+            
+            match ClaudeFlowActor::new(graph_service_addr.clone()).await {
+                Ok(actor) => Some(actor.start()),
+                Err(e) => {
+                    error!("[AppState::new] Failed to create ClaudeFlowActor: {}", e);
+                    warn!("[AppState::new] Continuing without Claude Flow integration");
+                    None
+                }
+            }
         } else {
             info!("[AppState::new] ClaudeFlowActor not configured (CLAUDE_FLOW_HOST not set)");
             None

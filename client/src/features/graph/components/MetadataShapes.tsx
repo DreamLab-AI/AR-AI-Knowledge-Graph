@@ -18,6 +18,19 @@ const getVisualsForNode = (node: GraphNode) => {
 
   const { metadata } = node;
   if (!metadata) return visuals;
+  
+  // Debug: Log first few nodes to see what metadata we have
+  if (Math.random() < 0.05) { // Log 5% of nodes to see variation
+    console.log('MetadataShapes: Node metadata sample:', {
+      id: node.id,
+      label: node.label,
+      metadata: metadata,
+      hasLastModified: !!metadata.lastModified,
+      lastModified: metadata.lastModified,
+      fileSize: metadata.fileSize,
+      hyperlinkCount: metadata.hyperlinkCount
+    });
+  }
 
   // METAPHOR 1: Geometry from Connectivity (hyperlinkCount)
   const hyperlinkCount = parseInt(metadata.hyperlinkCount || '0', 10);
@@ -37,7 +50,7 @@ const getVisualsForNode = (node: GraphNode) => {
   const connectionScale = 1 + hyperlinkCount * 0.05;
   visuals.scale = THREE.MathUtils.clamp(sizeScale * connectionScale, 0.5, 3.0);
 
-  // METAPHOR 3: Color from Recency (lastModified)
+  // METAPHOR 3: Color from Recency (lastModified) or Type
   const lastModified = metadata.lastModified ? new Date(metadata.lastModified).getTime() : 0;
   if (lastModified > 0) {
     const ageInDays = (Date.now() - lastModified) / (1000 * 60 * 60 * 24);
@@ -46,6 +59,27 @@ const getVisualsForNode = (node: GraphNode) => {
     const hue = 0.5 + heat * 0.1; // Shift from cyan (0.5) to yellow (0.6)
     const saturation = 0.6 + heat * 0.4; // More saturated when hot
     const lightness = 0.4 + heat * 0.3; // Brighter when hot
+    visuals.color.setHSL(hue, saturation, lightness);
+  } else if (metadata.type) {
+    // Fallback to type-based colors if no lastModified
+    const typeColors: Record<string, string> = {
+      'folder': '#FFD700',     // Gold
+      'file': '#00CED1',       // Dark turquoise
+      'function': '#FF6B6B',   // Coral
+      'class': '#4ECDC4',      // Turquoise
+      'variable': '#95E1D3',   // Mint
+      'import': '#F38181',     // Light coral
+      'export': '#AA96DA',     // Lavender
+      'default': '#00ffff'     // Default cyan
+    };
+    const color = typeColors[metadata.type] || typeColors['default'];
+    visuals.color.set(color);
+  } else {
+    // Use connectivity-based color as another fallback
+    const colorIntensity = Math.min(hyperlinkCount / 10, 1);
+    const hue = 0.5 - colorIntensity * 0.3; // From cyan to purple based on connections
+    const saturation = 0.6 + colorIntensity * 0.4;
+    const lightness = 0.5;
     visuals.color.setHSL(hue, saturation, lightness);
   }
 

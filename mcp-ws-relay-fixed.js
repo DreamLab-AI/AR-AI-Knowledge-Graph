@@ -2,14 +2,10 @@ const WebSocket = require('ws');
 const { spawn } = require('child_process');
 const http = require('http');
 
-// Get port from environment or use default
 const PORT = process.env.MCP_PORT || 3000;
 const HOST = process.env.MCP_HOST || '0.0.0.0';
 
-// Create HTTP server
 const server = http.createServer();
-
-// Create WebSocket server
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 console.log(`Starting MCP WebSocket relay on port ${PORT}...`);
@@ -31,22 +27,29 @@ wss.on('connection', (ws) => {
 
   let buffer = '';
 
-  // Handle MCP stdout
+  // Handle MCP stdout - FIXED: Better JSON parsing
   mcpProcess.stdout.on('data', (data) => {
     buffer += data.toString();
     const lines = buffer.split('\n');
     buffer = lines.pop() || '';
 
     lines.forEach(line => {
-      if (line.trim()) {
-        try {
-          // Parse JSON-RPC messages
-          const message = JSON.parse(line);
-          console.log('MCP -> WS:', message);
-          ws.send(JSON.stringify(message));
-        } catch (e) {
-          // Not JSON, might be initialization message
-          console.log('MCP stdout:', line);
+      line = line.trim();
+      if (line) {
+        // Only forward actual JSON-RPC messages, skip logs
+        if (line.startsWith('{') && line.includes('"jsonrpc"')) {
+          try {
+            const message = JSON.parse(line);
+            console.log('MCP -> WS:', message);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(message));
+            }
+          } catch (e) {
+            console.error('Failed to parse JSON-RPC message:', line, e);
+          }
+        } else {
+          // Log non-JSON messages for debugging
+          console.log('MCP log:', line);
         }
       }
     });
@@ -57,7 +60,7 @@ wss.on('connection', (ws) => {
     console.error('MCP stderr:', data.toString());
   });
 
-  // Handle WebSocket messages
+  // Handle WebSocket messages - send to MCP stdin
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message.toString());
@@ -67,25 +70,47 @@ wss.on('connection', (ws) => {
       mcpProcess.stdin.write(JSON.stringify(data) + '\n');
     } catch (e) {
       console.error('Failed to parse WebSocket message:', e);
+      ws.send(JSON.stringify({
+        jsonrpc: "2.0",
+        error: { code: -32700, message: "Parse error" },
+        id: null
+      }));
     }
   });
 
   // Handle WebSocket close
   ws.on('close', () => {
-    console.log('WebSocket connection closed');
+    console.log('WebSocket connection closed, terminating MCP process');
     mcpProcess.kill();
   });
 
   // Handle MCP process exit
   mcpProcess.on('exit', (code) => {
     console.log(`MCP process exited with code ${code}`);
-    ws.close();
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
   });
 
-  // Don't send any initial message - wait for client to initialize
-  console.log('WebSocket client connected, waiting for initialization...');
+  // Handle process errors
+  mcpProcess.on('error', (err) => {
+    console.error('MCP process error:', err);
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
+  });
+
+  console.log('WebSocket client connected, MCP process spawned');
 });
 
 server.listen(PORT, HOST, () => {
   console.log(`MCP WebSocket relay listening on http://${HOST}:${PORT}/ws`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\nShutting down MCP WebSocket relay...');
+  wss.close(() => {
+    process.exit(0);
+  });
 });

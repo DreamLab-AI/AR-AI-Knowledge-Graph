@@ -25,7 +25,7 @@ logger.debug('Processing data:', { data: someObject });
 logger.error('Failed to fetch graph data:', error);
 ```
 
-### `binaryUtils.ts` ([`client/src/utils/binaryUtils.ts`](../../client/src/utils/binaryUtils.ts))
+### `binaryProtocol.ts` ([`client/src/utils/binaryProtocol.ts`](../../client/src/utils/binaryProtocol.ts))
 
 Contains helper functions for working with binary data, particularly useful for encoding and decoding messages transmitted over WebSockets using the custom binary protocol.
 
@@ -111,22 +111,22 @@ function MyComponent() {
 }
 ```
 
-### `useWindowSize.ts` ([`client/src/hooks/useWindowSize.ts`](../../client/src/hooks/useWindowSize.ts))
+### `useContainerSize.ts` ([`client/src/hooks/useContainerSize.ts`](../../client/src/hooks/useContainerSize.ts))
 
-A custom React hook that provides the current dimensions (width and height) of the browser window. It updates reactively when the window is resized by listening to the `resize` event, enabling responsive design and layout adjustments based on the viewport size.
+A custom React hook that measures and provides the current dimensions (width and height) of a referenced DOM element. It typically uses `ResizeObserver` to react to changes in the element's size, making it useful for responsive layouts or sizing elements like the R3F canvas.
 
 **Usage Example:**
 ```typescript
-import { useWindowSize } from './useWindowSize';
+import React, { useRef } from 'react';
+import { useContainerSize } from './useContainerSize';
 
-function ResponsiveHeader() {
-  const { width, height } = useWindowSize();
-  const isMobile = width < 768;
+function MyComponent() {
+  const ref = useRef(null);
+  const { width, height } = useContainerSize(ref);
 
   return (
-    <header>
-      {isMobile ? 'Mobile Header' : 'Desktop Header'}
-      <p>Window size: {width}x{height}</p>
-    </header>
+    <div ref={ref} style={{ width: '100%', height: '500px' }}>
+      Container size: {width}x{height}
+    </div>
   );
 }

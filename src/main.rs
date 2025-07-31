@@ -11,6 +11,8 @@ use webxr::{
         mcp_relay_handler::mcp_relay_handler,
         nostr_handler,
         bots_handler,
+        mcp_health_handler,
+        bots_visualization_handler,
     },
     services::{
         file_service::FileService,
@@ -306,6 +308,8 @@ async fn main() -> std::io::Result<()> {
                     .service(web::scope("/health").configure(health_handler::config)) // This will now serve /api/health
                     .service(web::scope("/pages").configure(pages_handler::config))
                     .service(web::scope("/bots").configure(bots_handler::config)) // This will now serve /api/bots/data and /api/bots/update
+                    .service(web::scope("/mcp").configure(mcp_health_handler::configure_routes)) // MCP health and control endpoints
+                    .configure(bots_visualization_handler::configure_routes) // Agent visualization endpoints
             );
 
         app

@@ -6,6 +6,7 @@ import { BotsAgent, BotsEdge, BotsState } from '../types/BotsTypes';
 import { createLogger } from '../../../utils/logger';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { botsPhysicsWorker } from '../workers/BotsPhysicsWorker';
+import { graphWorkerProxy } from '../../graph/managers/graphWorkerProxy';
 import { BotsDebugInfo } from './BotsVisualizationDebugInfo';
 import { BotsControlPanel } from './BotsControlPanel';
 import { debugState } from '../../../utils/debugState';
@@ -271,23 +272,38 @@ export const BotsVisualizationEnhanced: React.FC = () => {
   const settings = useSettingsStore(state => state.settings);
   const { updateBotsData } = useBotsData();
 
-  // Initialize mock data and configuration
+  // Initialize with unified GPU physics system
   useEffect(() => {
-    logger.info('Initializing enhanced visualization with mock data...');
+    logger.info('Initializing enhanced visualization with unified GPU physics...');
 
     // Initialize mock data generator
     mockDataGenerator.initialize(12);
 
-    // Initialize physics worker
+    // Initialize physics worker with shared ground truth
     botsPhysicsWorker.init();
+    botsPhysicsWorker.setDataType('visionflow');
+
+    // Configure unified physics parameters for agent swarm
+    const unifiedPhysicsConfig = {
+      springStrength: 0.3,
+      linkDistance: 25,
+      damping: 0.92,
+      nodeRepulsion: 20,
+      gravityStrength: 0.08,
+      maxVelocity: 0.8
+    };
+    
+    botsPhysicsWorker.updateConfig(unifiedPhysicsConfig);
 
     // Subscribe to configuration changes
     const configId = 'enhanced-viz';
     configurationMapper.subscribe(configId, (newConfig) => {
       setConfig(newConfig);
-
-      // Update physics configuration
-      botsPhysicsWorker.updateConfig(newConfig.physics);
+      // Merge with unified physics config
+      botsPhysicsWorker.updateConfig({
+        ...unifiedPhysicsConfig,
+        ...newConfig.physics
+      });
     });
 
     // Set up data update interval
@@ -329,16 +345,25 @@ export const BotsVisualizationEnhanced: React.FC = () => {
     });
   }, [botsData, updateBotsData]);
 
-  // Physics simulation
-  useFrame((state, delta) => {
-    // Get positions from physics worker
+  // Unified physics simulation using the same GPU solver as knowledge graph
+  useFrame(async (state, delta) => {
+    // Use the unified GPU physics worker for both graphs
+    const unifiedPositions = await graphWorkerProxy.getUnifiedPositions();
+    
+    // Get bot-specific positions from physics worker
     const workerPositions = botsPhysicsWorker.getPositions();
+    
     if (workerPositions && workerPositions.size > 0) {
       workerPositions.forEach((pos, id) => {
         if (!positionsRef.current.has(id)) {
           positionsRef.current.set(id, new THREE.Vector3());
         }
-        positionsRef.current.get(id)!.set(pos.x, pos.y, pos.z);
+        // Apply unified coordinate system offset to integrate with knowledge graph
+        positionsRef.current.get(id)!.set(
+          pos.x + (unifiedPositions?.offset?.x || 0),
+          pos.y + (unifiedPositions?.offset?.y || 0),
+          pos.z + (unifiedPositions?.offset?.z || 0)
+        );
       });
     } else if (botsData.nodes.length > 0) {
       // Fallback simple physics if worker not available

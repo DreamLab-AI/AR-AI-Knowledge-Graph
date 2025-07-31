@@ -16,6 +16,8 @@ pub mod settings_handler;
 pub mod socket_flow_handler;
 pub mod speech_socket_handler;
 pub mod nostr_handler;
+pub mod bots_handler;
+pub mod mcp_relay_handler;
 ```
 
 ## Core Handlers
@@ -142,6 +144,32 @@ Manages WebSocket connections specifically for speech-related functionalities (S
     -   Text-to-speech (TTS) generation
     -   Integration with Kokoro voice service
 -   Interacts with `SpeechService` to process audio streams and broadcast responses
+
+### Bots Handler ([`src/handlers/bots_handler.rs`](../../src/handlers/bots_handler.rs))
+Manages AI agent (bots) visualization and swarm coordination.
+-   **Base Path:** `/api/bots`
+-   **Endpoints:**
+    -   `GET /api/bots/data` - Get current bots graph data
+    -   `POST /api/bots/update` - Update bots data with agent positions
+    -   `POST /api/bots/initialize-swarm` - Initialize Claude Flow swarm
+-   **Features:**
+    -   Converts Claude Flow agent data to graph nodes
+    -   Manages agent relationships as graph edges
+    -   GPU-accelerated physics for agent layout
+    -   Integration with ClaudeFlowActor for live agent updates
+    -   Mock data generation for testing/visualization
+
+### MCP Relay Handler ([`src/handlers/mcp_relay_handler.rs`](../../src/handlers/mcp_relay_handler.rs))
+Provides WebSocket relay for Model Context Protocol (MCP) communication.
+-   **Path:** `/mcp-relay` (WebSocket endpoint)
+-   **Function:** `mcp_relay_handler(req: HttpRequest, stream: web::Payload)`
+-   **Features:**
+    -   Bidirectional WebSocket proxy between clients and MCP orchestrator
+    -   Automatic connection to orchestrator WebSocket (configurable via `ORCHESTRATOR_WS_URL`)
+    -   Message forwarding in both directions (text and binary)
+    -   Automatic reconnection with retry logic
+    -   Heartbeat/ping-pong for connection health
+-   **Actor:** `MCPRelayActor` manages the relay lifecycle and message routing
 
 
 

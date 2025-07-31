@@ -100,9 +100,14 @@ pub struct GitHubFileMetadata {
     /// When this metadata was last checked
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub last_checked: Option<DateTime<Utc>>,
-    /// When the file was last modified on GitHub
+    /// When the file was last modified on GitHub (any commit)
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub last_modified: Option<DateTime<Utc>>,
+    /// When the file content was last actually changed
+    #[serde(with = "chrono::serde::ts_seconds_option")]
+    pub last_content_change: Option<DateTime<Utc>>,
+    /// File blob SHA from GitHub
+    pub file_blob_sha: Option<String>,
 }
 
 /// Response from content-related API calls

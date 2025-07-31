@@ -5,9 +5,9 @@ The REST API provides endpoints for graph data management, content operations, a
 
 ## Base URL
 ```
-http://localhost:4000/api
+http://localhost:3001/api
 ```
-Default is http://localhost:4000/api when running locally via Docker with Nginx. The actual backend runs on port 3001 (or as configured in settings.yaml/env) and is proxied by Nginx. For production, it's typically https://www.visionflow.info/api (or your configured domain).
+Default is http://localhost:3001/api when running locally via Docker with Nginx. The actual backend runs on port 3001 (or as configured in settings.yaml/env) and is proxied by Nginx. For production, it's typically https://www.visionflow.info/api (or your configured domain).
 
 ## Authentication
 
@@ -206,9 +206,13 @@ Requires authentication.
 GET /api/visualisation/settings/{category}
 ```
 
-The handler `get_visualisation_settings` (mapped to `/api/visualisation/get_settings/{category}` in `src/handlers/api_handler/visualisation/mod.rs`) actually returns the entire `AppFullSettings` struct, not just a category. The path parameter `{category}` is not used by this specific handler.
-The handler `get_category_settings` (mapped to `/api/visualisation/settings/{category}`) does return a specific category.
-The documentation path `/api/visualisation/settings/{category}` matches `get_category_settings`. This endpoint returns a specific category as a JSON object.
+Returns settings for a specific visualization category.
+
+**Path Parameters:**
+- `category`: The settings category to retrieve (e.g., "nodes", "edges", "physics", "rendering", "animation", "labels", "bloom", "hologram", "camera")
+
+**Response:**
+Returns the specific category settings as a JSON object.
 
 ### Update API Keys
 ```http
@@ -319,35 +323,37 @@ Returns current swarm agent data as a graph structure.
 **Response:**
 ```json
 {
-  "nodes": [
-    {
-      "id": 1000,
-      "label": "Coordinator Alpha",
-      "metadata_id": "agent-1",
-      "data": {
-        "position": {"x": 0, "y": 0, "z": 0},
-        "velocity": {"x": 0, "y": 0, "z": 0},
-        "mass": 5,
-        "flags": 1
-      },
-      "metadata": {
-        "type": "coordinator",
-        "status": "active",
-        "health": "95.0",
-        "cpu_usage": "45.0",
-        "workload": "0.7"
+  "data": {
+    "nodes": [
+      {
+        "id": 1000,
+        "label": "Coordinator Alpha",
+        "metadata_id": "agent-1",
+        "data": {
+          "position": {"x": 0, "y": 0, "z": 0},
+          "velocity": {"x": 0, "y": 0, "z": 0},
+          "mass": 5,
+          "flags": 1
+        },
+        "metadata": {
+          "type": "coordinator",
+          "status": "active",
+          "health": "95.0",
+          "cpu_usage": "45.0",
+          "workload": "0.7"
+        }
       }
-    }
-  ],
-  "edges": [
-    {
-      "id": "edge-1",
-      "source": 1000,
-      "target": 1001,
-      "weight": 1.0,
-      "edge_type": "15 msgs"
-    }
-  ]
+    ],
+    "edges": [
+      {
+        "id": "edge-1",
+        "source": 1000,
+        "target": 1001,
+        "weight": 1.0,
+        "edge_type": "15 msgs"
+      }
+    ]
+  }
 }
 ```
 
@@ -430,6 +436,23 @@ The structured format `{"error": {"code": ..., "message": ..., "details": ...}}`
 - `422 Unprocessable Entity`: The request was well-formed but could not be processed (e.g., semantic errors in Nostr event).
 - `500 Internal Server Error`: A generic error occurred on the server.
 - `503 Service Unavailable`: The server is temporarily unable to handle the request (e.g., during maintenance or if a dependent service is down).
+
+## MCP WebSocket Relay
+
+The server includes an MCP (Model Control Protocol) WebSocket relay that bridges MCP connections through the LogseqXR server.
+
+### MCP WebSocket Endpoint
+```
+ws://localhost:3000/mcp-ws-relay
+```
+
+This endpoint provides a WebSocket relay for MCP connections, allowing Claude Flow and other MCP tools to communicate through the LogseqXR server infrastructure. The relay operates on port 3000 and handles bidirectional message passing between MCP clients and servers.
+
+**Key Features:**
+- Bidirectional message relay
+- Automatic connection management
+- Message routing between MCP clients and servers
+- Integration with LogseqXR authentication (when configured)
 
 ## Related Documentation
 - [WebSocket API](./websocket.md)

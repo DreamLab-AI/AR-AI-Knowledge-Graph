@@ -12,7 +12,8 @@ graph TB
         AppInitializer[App Initializer]
 
         subgraph UILayer [User Interface Layer]
-            TwoPaneLayout[TwoPaneLayout.tsx]
+            MainLayout[MainLayout.tsx]
+            Quest3ARLayout[Quest3ARLayout.tsx]
             GraphViewportUI[GraphViewport.tsx]
             RightPaneControlPanel[RightPaneControlPanel.tsx]
             SettingsPanelRedesignOptimized[SettingsPanelRedesignOptimized.tsx]
@@ -34,7 +35,8 @@ graph TB
         WebSocketClient["WebSocketClient"]
         XRModule["XR Module"]
 
-        AppInitializer --> TwoPaneLayout
+        AppInitializer --> MainLayout
+        AppInitializer --> Quest3ARLayout
         AppInitializer --> SettingsStore
         AppInitializer --> GraphDataManager
         AppInitializer --> NostrAuthService
@@ -43,10 +45,11 @@ graph TB
         AppInitializer --> WebSocketClient
         AppInitializer --> XRModule
 
-        TwoPaneLayout --> GraphViewportUI
-        TwoPaneLayout --> RightPaneControlPanel
-        TwoPaneLayout --> ConversationPane
-        TwoPaneLayout --> NarrativeGoldminePanel
+        MainLayout --> GraphViewportUI
+        MainLayout --> RightPaneControlPanel
+        MainLayout --> ConversationPane
+        MainLayout --> NarrativeGoldminePanel
+        Quest3ARLayout --> GraphViewportUI
         RightPaneControlPanel --> SettingsPanelRedesignOptimized
 
         SettingsPanelRedesignOptimized --> SettingsStore
@@ -82,7 +85,8 @@ graph TB
     style StateManagement fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style APILayer fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style AppInitializer fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
-    style TwoPaneLayout fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
+    style MainLayout fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
+    style Quest3ARLayout fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style GraphViewportUI fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style RightPaneControlPanel fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
     style SettingsPanelRedesignOptimized fill:#3A3F47,stroke:#61DAFB,color:#FFFFFF
@@ -106,7 +110,8 @@ graph TB
 
 ### User Interface Layer
 The UI layer is built with React and TypeScript.
-- [`TwoPaneLayout.tsx`](../../client/src/app/TwoPaneLayout.tsx) serves as the primary layout, dividing the screen into a main visualisation area and a control panel area.
+- [`MainLayout.tsx`](../../client/src/app/MainLayout.tsx) serves as the primary layout for desktop and standard views, dividing the screen into a main visualisation area and a control panel area.
+- [`Quest3ARLayout.tsx`](../../client/src/features/xr/layouts/Quest3ARLayout.tsx) provides specialized layout for Quest 3 AR experiences.
 - [`RightPaneControlPanel.tsx`](../../client/src/app/components/RightPaneControlPanel.tsx) hosts the authentication UI and the main settings panel: [`SettingsPanelRedesignOptimized.tsx`](../../client/src/features/settings/components/panels/SettingsPanelRedesignOptimized.tsx). The `ConversationPane` and `NarrativeGoldminePanel` are rendered alongside it within the main `TwoPaneLayout`.
 - [`GraphViewport.tsx`](../../client/src/features/graph/components/GraphViewport.tsx) is responsible for the main 3D graph visualisation area.
 

@@ -159,7 +159,7 @@ graph TD
     -   [`RAGFlowService`](../../src/services/ragflow_service.rs): Interacts with the RAGFlow API.
     -   [`PerplexityService`](../../src/services/perplexity_service.rs): Interacts with the Perplexity AI API.
 -   **Shared State & Utilities**:
-    -   [`AppState`](../../src/app_state.rs): Holds shared application state like settings and references to some services.
+    -   [`AppState`](../../src/app_state.rs): Manages application state through actor addresses and provides access to services via the actor system.
     -   [`ProtectedSettings`](../../src/models/protected_settings.rs): Manages sensitive configurations like API keys and user data, stored separately.
     -   [`MetadataStore`](../../src/models/metadata.rs): In-memory store for file/node metadata, managed by `FileService` and read by `GraphService`.
     -   [`ClientManager`](../../src/handlers/socket_flow_handler.rs): (Often part of `socket_flow_handler` or a static utility) Manages active WebSocket clients for broadcasting.

@@ -4,6 +4,7 @@
  */
 
 import { AudioContextManager } from './AudioContextManager';
+import { gatedConsole } from '../utils/console';
 
 export interface AudioConstraints {
   echoCancellation?: boolean;
@@ -101,7 +102,7 @@ export class AudioInputService {
       this.setState('ready');
       return true;
     } catch (error) {
-      console.error('Failed to access microphone:', error);
+      gatedConsole.voice.error('Failed to access microphone:', error);
       this.setState('error');
       this.emit('error', error);
       return false;
@@ -129,7 +130,7 @@ export class AudioInputService {
     try {
       await this.setupAudioWorklet();
     } catch (error) {
-      console.warn('Audio worklet setup failed, continuing without processing:', error);
+      gatedConsole.voice.warn('Audio worklet setup failed, continuing without processing:', error);
     }
   }
 
@@ -190,7 +191,7 @@ export class AudioInputService {
     };
 
     this.mediaRecorder.onerror = (error) => {
-      console.error('MediaRecorder error:', error);
+      gatedConsole.voice.error('MediaRecorder error:', error);
       this.emit('error', error);
       this.stopRecording();
     };

@@ -13,8 +13,6 @@ graph TB
     GC --> CUDA[CUDA Device]
     GC --> PTX[PTX Kernel]
     
-    GC --> |Fallback| CPU[CPU Computation]
-    
     style GA fill:#f9f,stroke:#333,stroke-width:2px
     style GPU fill:#bbf,stroke:#333,stroke-width:2px
     style GC fill:#bfb,stroke:#333,stroke-width:2px
@@ -92,13 +90,18 @@ GPU_MAX_NODES=1000000
 
 ```rust
 pub struct SimulationParams {
-    pub repulsion_strength: f32,      // Default: 100.0
-    pub attraction_strength: f32,     // Default: 0.01
-    pub centering_strength: f32,      // Default: 0.01
-    pub damping: f32,                 // Default: 0.9
-    pub time_step: f32,               // Default: 0.016
-    pub min_distance: f32,            // Default: 0.01
-    pub max_distance: f32,            // Default: 1000.0
+    pub iterations: u32,              // Number of simulation iterations
+    pub time_step: f32,               // Time step for physics (Default: 0.2)
+    pub spring_strength: f32,         // Spring force strength (Default: 0.5)
+    pub repulsion: f32,               // Repulsion force strength (Default: 100.0)
+    pub max_repulsion_distance: f32,  // Maximum repulsion range (Default: 500.0)
+    pub mass_scale: f32,              // Mass scaling factor (Default: 1.0)
+    pub damping: f32,                 // Velocity damping (Default: 0.5)
+    pub boundary_damping: f32,        // Boundary damping (Default: 0.9)
+    pub viewport_bounds: f32,         // Simulation boundary size (Default: 1000.0)
+    pub enable_bounds: bool,          // Enable boundary constraints (Default: true)
+    pub phase: SimulationPhase,       // Current simulation phase
+    pub mode: SimulationMode,         // Computation mode (Remote/GPU/Local)
 }
 ```
 
@@ -192,29 +195,33 @@ let launch_config = LaunchConfig {
 3. **Warp Efficiency**: Block size multiple of 32
 4. **Minimal Transfers**: Only position updates sent to CPU
 
-## CPU Fallback
+## Error Handling and Graceful Degradation
 
-When GPU is unavailable, the system falls back to CPU computation:
+The system handles GPU errors gracefully with retry mechanisms and clear error reporting:
 
 ```rust
-pub fn compute_forces_cpu(&mut self) {
-    // Simplified O(n²) force calculation
-    for i in 0..self.num_nodes {
-        for j in 0..self.num_nodes {
-            if i != j {
-                // Calculate forces between nodes
-            }
+// Retry mechanism for GPU initialization
+const MAX_GPU_INIT_RETRIES: u32 = 3;
+const RETRY_DELAY_MS: u64 = 500;
+
+for attempt in 0..MAX_GPU_INIT_RETRIES {
+    match CudaDevice::new(0) {
+        Ok(device) => return Ok(device),
+        Err(e) if attempt < MAX_GPU_INIT_RETRIES - 1 => {
+            sleep(Duration::from_millis(RETRY_DELAY_MS * (attempt + 1))).await;
         }
+        Err(e) => return Err(e),
     }
 }
 ```
 
-### Fallback Triggers
+### Error Scenarios
 
 - CUDA device initialization failure
 - Insufficient GPU memory
 - Kernel compilation errors
 - Runtime GPU errors
+- Connection loss to GPU device
 
 ## Error Handling
 
@@ -223,10 +230,10 @@ pub fn compute_forces_cpu(&mut self) {
 ```rust
 pub struct GPUStatus {
     pub is_initialized: bool,
-    pub cpu_fallback_active: bool,
     pub failure_count: u32,
     pub iteration_count: u32,
     pub num_nodes: u32,
+    pub device_properties: Option<DeviceProperties>,
 }
 ```
 
@@ -241,7 +248,7 @@ pub struct GPUStatus {
 2. **Out of Memory**
    ```
    Error: CUDA out of memory
-   Action: Reduce node count or use CPU
+   Action: Reduce node count or restart with smaller dataset
    ```
 
 3. **Kernel Compilation**
@@ -332,11 +339,15 @@ async fn test_gpu_compute() {
 # Enable detailed GPU logging
 RUST_LOG=logseq_spring_thing::utils::gpu_compute=trace
 
-# Force CPU fallback for testing
-CUDA_ENABLED=false
-
 # GPU memory debugging
 CUDA_LAUNCH_BLOCKING=1
+
+# GPU device selection
+CUDA_DEVICE_ID=0
+
+# Performance tuning
+GPU_BLOCK_SIZE=256
+GPU_MAX_NODES=1000000
 ```
 
 ## Best Practices

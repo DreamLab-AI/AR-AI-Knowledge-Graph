@@ -48,8 +48,8 @@ pub struct BinaryNodeData {
     pub velocity: Vec3Data,
     pub mass: u8,       // Used in server-side physics
     pub flags: u8,      // Used in server-side physics (e.g., is_fixed)
-    pub padding: [u8; 2], // For alignment to 28 bytes (if NodeId is external) or 30 bytes (if NodeId is internal u16)
-                          // The client-side `BinaryNodeData` type in `client/src/types/binaryProtocol.ts` and the server-side `WireNodeDataItem` in `src/utils/binary_protocol.rs` correctly reflect the **28-byte** wire format (`u32` ID, position, velocity).
+    pub padding: [u8; 2], // For alignment
+                          // Note: The wire format uses a 28-byte structure with u32 node ID
 }
 
 // The primary `Node` model is defined in `src/models/node.rs`. It uses a `u32` for its `id` and contains a `metadata_id: String` field to link back to the original file/metadata entry.
@@ -235,8 +235,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub type NodeMap = HashMap<String, Node>;
 pub type MetadataMap = HashMap<String, Metadata>;
 pub type SafeAppState = Arc<AppState>;
-pub type SafeSettings = Arc<RwLock<Settings>>;
-pub type SafeMetadataManager = Arc<RwLock<MetadataManager>>;
+// Note: Settings and metadata are now managed by actors, not Arc<RwLock<T>>
+// pub type SafeSettings = Addr<SettingsActor>;
+// pub type SafeMetadataManager = Addr<MetadataActor>;
 ```
 
 ## Constants

@@ -1,0 +1,20 @@
+services:
+  logseq_spring_thing_webxr:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: logseq_spring_thing_webxr
+    environment:
+      - CLAUDE_FLOW_HOST=powerdev
+      - CLAUDE_FLOW_PORT=3002
+      - RUST_LOG=info
+    depends_on:
+      powerdev:
+        condition: service_healthy
+    networks:
+      - docker_ragflow
+    restart: unless-stopped
+
+networks:
+  docker_ragflow:
+    external: true

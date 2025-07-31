@@ -236,7 +236,7 @@ The audio processor module (`src/utils/audio_processor.rs`) handles processing o
 ### AudioProcessor Structure
 ```rust
 pub struct AudioProcessor {
-    settings: Arc<RwLock<Settings>>,
+    settings_addr: Addr<SettingsActor>, // Access settings via actor messages
 }
 ```
 

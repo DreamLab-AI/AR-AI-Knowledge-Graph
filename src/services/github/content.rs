@@ -1,7 +1,7 @@
 use super::api::GitHubClient;
 use super::types::{GitHubFileMetadata, GitHubError, RateLimitInfo};
 use chrono::{DateTime, Utc};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use std::error::Error;
 use std::sync::Arc;
 use reqwest::header::HeaderMap;
@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use std::time::Duration;
 use std::pin::Pin;
 use std::future::Future;
+use urlencoding;
 
 const BATCH_SIZE: usize = 5;
 const BATCH_DELAY: Duration = Duration::from_millis(500);
@@ -296,8 +297,18 @@ impl ContentAPI {
         }
     }
 
-    /// Get the last modified time for a file
+    /// Get the last modified time for a file (when it appeared in any commit)
     pub async fn get_file_last_modified(&self, file_path: &str) -> Result<DateTime<Utc>, Box<dyn Error + Send + Sync>> {
+        self.get_file_last_modified_internal(file_path, false).await
+    }
+    
+    /// Get the last time a file's content was actually modified
+    pub async fn get_file_content_last_modified(&self, file_path: &str) -> Result<DateTime<Utc>, Box<dyn Error + Send + Sync>> {
+        self.get_file_last_modified_internal(file_path, true).await
+    }
+    
+    /// Internal method to get file modification time with option to check actual changes
+    async fn get_file_last_modified_internal(&self, file_path: &str, check_actual_changes: bool) -> Result<DateTime<Utc>, Box<dyn Error + Send + Sync>> {
         // Check rate limits before making request
         self.check_rate_limit().await?;
 
@@ -317,7 +328,10 @@ impl ContentAPI {
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.client.token()))
             .header("Accept", "application/vnd.github+json")
-            .query(&[("path", encoded_path.as_str()), ("per_page", "1")])
+            .query(&[
+                ("path", encoded_path.as_str()), 
+                ("per_page", if check_actual_changes { "10" } else { "1" })
+            ])
             .send()
             .await?;
 
@@ -353,23 +367,127 @@ impl ContentAPI {
             return Err(Box::new(GitHubError::NotFound(format!("No commit history found for {}", file_path))));
         }
         
-        if let Some(last_commit) = commits.first() {
-            debug!("Found commit data: {}", serde_json::to_string_pretty(last_commit)?);
-            if let Some(commit) = last_commit["commit"]["committer"]["date"].as_str() {
-                if let Ok(date) = DateTime::parse_from_rfc3339(commit) {
-                    return Ok(date.with_timezone(&Utc));
-                } else {
-                    error!("Failed to parse commit date: {}", commit);
-                    return Err("Failed to parse commit date from GitHub response".into());
-                }
+        // If not checking actual changes, return the first commit's date
+        if !check_actual_changes {
+            if let Some(last_commit) = commits.first() {
+                debug!("Found commit data: {}", serde_json::to_string_pretty(last_commit)?);
+                return self.extract_commit_date(last_commit);
             } else {
-                error!("No committer date found in commit data");
-                return Err("No committer date found in GitHub response".into());
+                error!("No commits found for file: {} (encoded path: {})", file_path, encoded_path);
+                return Err(format!("No commit history found for file: {} (API path: {})", file_path, encoded_path).into());
             }
-        } else {
-            error!("No commits found for file: {} (encoded path: {})", file_path, encoded_path);
-            return Err(format!("No commit history found for file: {} (API path: {})", file_path, encoded_path).into());
         }
+        
+        // Check each commit to see if the file was actually modified
+        for commit in &commits {
+            let sha = commit["sha"]
+                .as_str()
+                .ok_or("Missing commit SHA")?;
+            
+            match self.was_file_modified_in_commit(sha, file_path).await {
+                Ok(true) => {
+                    debug!("File {} was actually modified in commit: {}", file_path, sha);
+                    return self.extract_commit_date(commit);
+                }
+                Ok(false) => {
+                    debug!("File {} was not modified in commit: {} (likely a merge commit)", file_path, sha);
+                }
+                Err(e) => {
+                    debug!("Error checking commit {}: {} - assuming file was modified", sha, e);
+                    // On error, assume the file was modified to be conservative
+                    return self.extract_commit_date(commit);
+                }
+            }
+        }
+        
+        // If no actual modifications found in recent commits, return an error
+        error!("No actual content changes found in recent commits for file: {}", file_path);
+        Err(format!("No actual content changes found for file: {} in recent history", file_path).into())
+    }
+
+    /// Extract commit date from commit JSON
+    fn extract_commit_date(&self, commit: &serde_json::Value) -> Result<DateTime<Utc>, Box<dyn Error + Send + Sync>> {
+        // Try committer date first, then author date
+        let date_str = commit["commit"]["committer"]["date"]
+            .as_str()
+            .or_else(|| commit["commit"]["author"]["date"].as_str())
+            .ok_or("No commit date found")?;
+
+        DateTime::parse_from_rfc3339(date_str)
+            .map(|dt| dt.with_timezone(&Utc))
+            .map_err(|e| format!("Failed to parse date {}: {}", date_str, e).into())
+    }
+    
+    /// Check if a specific file was actually modified in a commit
+    async fn was_file_modified_in_commit(
+        &self,
+        commit_sha: &str,
+        file_path: &str,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+        // Check rate limits before making request
+        self.check_rate_limit().await?;
+        
+        let commit_url = format!(
+            "https://api.github.com/repos/{}/{}/commits/{}",
+            self.client.owner(),
+            self.client.repo(),
+            commit_sha
+        );
+
+        debug!("Checking commit {} for file changes to {}", commit_sha, file_path);
+
+        let response = self.client.client()
+            .get(&commit_url)
+            .header("Authorization", format!("Bearer {}", self.client.token()))
+            .header("Accept", "application/vnd.github+json")
+            .send()
+            .await?;
+
+        // Update rate limits from response headers
+        self.update_rate_limits(response.headers()).await;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            debug!("Failed to get commit details: {}", error_text);
+            // Return error instead of assuming file was modified
+            return Err(format!("Failed to get commit details: {}", error_text).into());
+        }
+
+        let commit_data: serde_json::Value = response.json().await?;
+        
+        // Check if this commit has file changes
+        if let Some(files) = commit_data["files"].as_array() {
+            // Get the full path that would be in the commit
+            let full_path = self.client.get_full_path(file_path).await;
+            let decoded_full_path = urlencoding::decode(&full_path)?.into_owned();
+            
+            for file in files {
+                if let Some(filename) = file["filename"].as_str() {
+                    // Check if this is our file (need to match the path format)
+                    if filename == decoded_full_path || filename == file_path || 
+                       filename.ends_with(&format!("/{}", file_path)) {
+                        // Check if there were actual changes
+                        let additions = file["additions"].as_u64().unwrap_or(0);
+                        let deletions = file["deletions"].as_u64().unwrap_or(0);
+                        let changes = file["changes"].as_u64().unwrap_or(0);
+                        
+                        debug!(
+                            "File {} in commit {}: +{} -{} (total: {} changes)",
+                            filename, commit_sha, additions, deletions, changes
+                        );
+                        
+                        // File was actually modified if there were any changes
+                        return Ok(changes > 0);
+                    }
+                }
+            }
+            debug!("File {} was not found in commit {} changed files list", file_path, commit_sha);
+        } else {
+            debug!("No files array in commit data for {}", commit_sha);
+        }
+
+        // File was not in the changed files list
+        Ok(false)
     }
 
     /// List all markdown files in a directory
@@ -490,15 +608,29 @@ impl ContentAPI {
                     debug!("Fetching last modified time for: {}", full_path);
                 }
 
-                let last_modified = match self.get_file_last_modified(&full_path).await {
+                // Get both content change time and any commit time
+                let last_content_change = match self.get_file_content_last_modified(&full_path).await {
                     Ok(time) => {
                         if debug_enabled {
-                            debug!("Got last modified time for {}: {}", name, time);
+                            debug!("Got content last modified time for {}: {}", name, time);
                         }
                         Some(time)
                     },
                     Err(e) => {
-                        error!("Failed to get last modified time for {}: {}", name, e);
+                        warn!("Failed to get content modification time for {}: {}", name, e);
+                        None
+                    }
+                };
+                
+                let last_modified = match self.get_file_last_modified(&full_path).await {
+                    Ok(time) => {
+                        if debug_enabled {
+                            debug!("Got last commit time for {}: {}", name, time);
+                        }
+                        Some(time)
+                    },
+                    Err(e) => {
+                        error!("Failed to get any last modified time for {}: {}", name, e);
                         if debug_enabled {
                             debug!("Using current time as fallback for {}", name);
                         }
@@ -516,11 +648,13 @@ impl ContentAPI {
                 
                 markdown_files.push(GitHubFileMetadata {
                     name,
-                    sha,
+                    sha: sha.clone(),
                     download_url,
                     etag: None,
                     last_checked: Some(Utc::now()),
                     last_modified,
+                    last_content_change: last_content_change.or(last_modified), // Use last_modified as fallback
+                    file_blob_sha: Some(sha),
                 });
                 }
             }

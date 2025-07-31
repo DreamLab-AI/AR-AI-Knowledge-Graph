@@ -165,56 +165,65 @@ impl ClaudeFlowActor {
         ]
     }
 
-    pub async fn new(graph_service_addr: Addr<GraphServiceActor>) -> Self {
+    pub async fn new(graph_service_addr: Addr<GraphServiceActor>) -> Result<Self, String> {
         // Configuration for the MCP connection should come from .env
         // Since Claude Flow is running in this container on port 8081,
         // we need to connect to it via HTTP/WebSocket
         let host = std::env::var("CLAUDE_FLOW_HOST").unwrap_or_else(|_| "powerdev".to_string());
         let port = std::env::var("CLAUDE_FLOW_PORT")
-            .unwrap_or_else(|_| "3000".to_string())
+            .unwrap_or_else(|_| "3002".to_string())
             .parse::<u16>()
-            .unwrap_or(3000);
+            .unwrap_or(3002);
 
-        info!("ClaudeFlowActor: Connecting to Claude Flow at {}:{}", host, port);
+        info!("ClaudeFlowActor: Attempting to connect to Claude Flow at {}:{}", host, port);
 
-        // Use HTTP transport to connect to Claude Flow running in this container
-        let mut client = ClaudeFlowClientBuilder::new()
+        // Use WebSocket transport to connect to Claude Flow
+        let client_result = ClaudeFlowClientBuilder::new()
             .host(&host)
             .port(port)
-            .use_websocket()  // Use WebSocket transport for real-time communication
+            .use_websocket()
             .build()
-            .await
-            .expect("Failed to build ClaudeFlowClient");
+            .await;
 
-        // Try to connect, but handle failures gracefully
-        let is_connected = match client.connect().await {
-            Ok(_) => {
-                info!("ClaudeFlowActor: Successfully connected to Claude Flow MCP");
-                match client.initialize().await {
+        let (client, is_connected) = match client_result {
+            Ok(mut c) => {
+                // Try to connect, but handle failures gracefully
+                let connected = match c.connect().await {
                     Ok(_) => {
-                        info!("ClaudeFlowActor: Successfully initialized Claude Flow session");
-                        true
+                        info!("ClaudeFlowActor: Successfully connected to Claude Flow MCP");
+                        match c.initialize().await {
+                            Ok(_) => {
+                                info!("ClaudeFlowActor: Successfully initialized Claude Flow session");
+                                true
+                            }
+                            Err(e) => {
+                                error!("ClaudeFlowActor: Failed to initialize Claude Flow session: {}. Running in degraded mode.", e);
+                                // Continue without Claude Flow - the actor can still function
+                                false
+                            }
+                        }
                     }
                     Err(e) => {
-                        error!("ClaudeFlowActor: Failed to initialize Claude Flow session: {}. Running in degraded mode.", e);
-                        // Continue without Claude Flow - the actor can still function
+                        error!("ClaudeFlowActor: Failed to connect to Claude Flow: {}. Running in degraded mode.", e);
+                        warn!("ClaudeFlowActor: Claude Flow features will be unavailable. This might be due to:");
+                        warn!("  - Claude Flow MCP server not running on port {}", port);
+                        warn!("  - Network connectivity issues");
+                        warn!("  - Authentication/protocol mismatch");
+                        info!("ClaudeFlowActor: Using mock agents for visualization instead.");
+                        // Continue without Claude Flow - provide mock data
                         false
                     }
-                }
+                };
+                (c, connected)
             }
             Err(e) => {
-                error!("ClaudeFlowActor: Failed to connect to Claude Flow: {}. Running in degraded mode.", e);
-                warn!("ClaudeFlowActor: Claude Flow features will be unavailable. This might be due to:");
-                warn!("  - Claude Flow MCP server not running on port {}", port);
-                warn!("  - Network connectivity issues");
-                warn!("  - Authentication/protocol mismatch");
-                info!("ClaudeFlowActor: Using mock agents for visualization instead.");
-                // Continue without Claude Flow - provide mock data
-                false
+                error!("ClaudeFlowActor: Failed to build Claude Flow client: {}.", e);
+                warn!("ClaudeFlowActor: This is likely a configuration or network issue");
+                return Err(format!("Failed to build Claude Flow client: {}", e));
             }
         };
 
-        Self { client, graph_service_addr, is_connected }
+        Ok(Self { client, graph_service_addr, is_connected })
     }
 
     fn poll_for_updates(&self, ctx: &mut Context<Self>) {
@@ -412,13 +421,13 @@ impl Handler<InitializeSwarm> for ClaudeFlowActor {
     type Result = ResponseFuture<Result<(), String>>;
 
     fn handle(&mut self, msg: InitializeSwarm, ctx: &mut Context<Self>) -> Self::Result {
-        info!("ClaudeFlowActor: Initializing swarm with topology: {}, max_agents: {}", 
+        info!("ClaudeFlowActor: Initializing swarm with topology: {}, max_agents: {}",
               msg.topology, msg.max_agents);
 
         let mut client = self.client.clone();
-        let graph_addr = self.graph_service_addr.clone();
+        let _graph_addr = self.graph_service_addr.clone();
         let actor_addr = ctx.address();
-        
+
         Box::pin(async move {
             // First ensure we're connected
             if let Err(e) = client.connect().await {
@@ -436,7 +445,7 @@ impl Handler<InitializeSwarm> for ClaudeFlowActor {
             match client.init_swarm(&msg.topology, Some(msg.max_agents)).await {
                 Ok(swarm_info) => {
                     info!("Swarm initialized successfully: {}", swarm_info);
-                    
+
                     // If neural enhancement is enabled, train neural patterns
                     if msg.enable_neural {
                         info!("Training neural patterns for enhanced coordination");
@@ -445,13 +454,13 @@ impl Handler<InitializeSwarm> for ClaudeFlowActor {
                             warn!("Failed to train neural patterns: {}", e);
                         }
                     }
-                    
+
                     // Now spawn the requested agent types
                     let mut spawn_errors = Vec::new();
-                    
+
                     for agent_type in &msg.agent_types {
                         use crate::services::claude_flow::{client::SpawnAgentParams, AgentType};
-                        
+
                         let agent_type_enum = match agent_type.as_str() {
                             "coordinator" => AgentType::Coordinator,
                             "researcher" => AgentType::Researcher,
@@ -464,10 +473,10 @@ impl Handler<InitializeSwarm> for ClaudeFlowActor {
                             "documenter" => AgentType::Documenter,
                             _ => AgentType::Specialist,
                         };
-                        
-                        let agent_name = format!("{} Agent", 
+
+                        let agent_name = format!("{} Agent",
                             agent_type.chars().next().unwrap().to_uppercase().to_string() + &agent_type[1..]);
-                        
+
                         let params = SpawnAgentParams {
                             agent_type: agent_type_enum,
                             name: agent_name,
@@ -478,19 +487,19 @@ impl Handler<InitializeSwarm> for ClaudeFlowActor {
                             environment: None,
                             working_directory: None,
                         };
-                        
+
                         if let Err(e) = client.spawn_agent(params).await {
                             spawn_errors.push(format!("Failed to spawn {} agent: {}", agent_type, e));
                         }
                     }
-                    
+
                     if !spawn_errors.is_empty() {
                         warn!("Some agents failed to spawn: {:?}", spawn_errors);
                     }
-                    
+
                     // Mark the actor as connected and restart polling
                     actor_addr.do_send(MarkConnected { connected: true });
-                    
+
                     Ok(())
                 }
                 Err(e) => {

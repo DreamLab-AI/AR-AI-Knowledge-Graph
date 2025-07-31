@@ -6,6 +6,7 @@
 import { AudioOutputService } from './AudioOutputService';
 import { AudioInputService, AudioChunk } from './AudioInputService';
 import { useSettingsStore } from '../store/settingsStore';
+import { gatedConsole } from '../utils/console';
 
 export interface VoiceMessage {
   type: 'tts' | 'stt' | 'audio_chunk' | 'transcription' | 'error' | 'connected';
@@ -81,7 +82,7 @@ export class VoiceWebSocketService {
         this.socket = new WebSocket(url);
 
         this.socket.onopen = () => {
-          console.log('Voice WebSocket connected');
+          gatedConsole.voice.log('Voice WebSocket connected');
           this.reconnectAttempts = 0;
           this.emit('connected');
           resolve();
@@ -92,7 +93,7 @@ export class VoiceWebSocketService {
         };
 
         this.socket.onclose = (event) => {
-          console.log('Voice WebSocket disconnected');
+          gatedConsole.voice.log('Voice WebSocket disconnected');
           this.emit('disconnected', event);
           if (event.code !== 1000) { // Only reconnect if not normal closure
             this.attemptReconnect(url);
@@ -100,7 +101,7 @@ export class VoiceWebSocketService {
         };
 
         this.socket.onerror = (error) => {
-          console.error('Voice WebSocket error:', error);
+          gatedConsole.voice.error('Voice WebSocket error:', error);
           this.emit('error', error);
           reject(error);
         };
@@ -126,7 +127,7 @@ export class VoiceWebSocketService {
 
       switch (message.type) {
         case 'connected':
-          console.log('Connected to voice service:', message.data);
+          gatedConsole.voice.log('Connected to voice service:', message.data);
           this.emit('voiceConnected', message.data);
           break;
 
@@ -135,7 +136,7 @@ export class VoiceWebSocketService {
           break;
 
         case 'error':
-          console.error('Voice service error:', message.data);
+          gatedConsole.voice.error('Voice service error:', message.data);
           this.emit('voiceError', message.data);
           break;
 
@@ -143,7 +144,7 @@ export class VoiceWebSocketService {
           this.emit('message', message);
       }
     } catch (error) {
-      console.error('Failed to parse voice message:', error);
+      gatedConsole.voice.error('Failed to parse voice message:', error);
     }
   }
 
@@ -159,7 +160,7 @@ export class VoiceWebSocketService {
       await this.audioOutput.queueAudio(buffer);
       this.emit('audioReceived', buffer);
     } catch (error) {
-      console.error('Failed to handle audio data:', error);
+      gatedConsole.voice.error('Failed to handle audio data:', error);
       this.emit('audioError', error);
     }
   }
@@ -200,7 +201,7 @@ export class VoiceWebSocketService {
     }
 
     if (this.isStreamingAudio) {
-      console.warn('Audio streaming already active');
+      gatedConsole.voice.warn('Audio streaming already active');
       return;
     }
 
@@ -289,7 +290,7 @@ export class VoiceWebSocketService {
     });
 
     this.audioInput.on('error', (error: any) => {
-      console.error('Audio input error:', error);
+      gatedConsole.voice.error('Audio input error:', error);
       this.emit('audioInputError', error);
     });
   }
@@ -326,8 +327,8 @@ export class VoiceWebSocketService {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       setTimeout(() => {
-        console.log(`Attempting to reconnect voice WebSocket (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-        this.connect(url).catch(console.error);
+        gatedConsole.voice.log(`Attempting to reconnect voice WebSocket (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        this.connect(url).catch((error) => gatedConsole.voice.error('Reconnect failed:', error));
       }, this.reconnectDelay);
     }
   }

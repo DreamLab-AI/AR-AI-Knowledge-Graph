@@ -74,64 +74,62 @@ These interfaces define the structure of the application settings, managed by `S
 The root interface for all application settings, located in `client/src/features/settings/config/settings.ts`.
 
 ```typescript
-// The primary Settings interface is defined in:
-// client/src/features/settings/config/settings.ts
-//
-// export interface Settings {
-//   visualisation: VisualisationSettings;
-//   system: SystemSettings;
-//   xr: XRSettings;
-//   auth: AuthSettings;
-//   ragflow?: RAGFlowSettings;
-//   perplexity?: PerplexitySettings;
-//   openai?: OpenAISettings;
-//   kokoro?: KokoroSettings;
-//   // whisper is NOT in the current settings.ts
-// }
-
-// Example of a few key sub-categories and fields.
-// For the full, accurate structure, ALWAYS refer to settings.ts.
+// The primary Settings interface with multi-graph support
 export interface Settings {
-  visualisation: {
-    nodes: {
-      nodeSize: number; // Single number, not a range
-      baseColor: string;
-      // ... many other node properties
-    };
-    edges: {
-      baseWidth: number;
-      color: string;
-      // ... many other edge properties
-    };
-    // ... other categories like labels, physics, rendering, hologram, camera (optional)
-  };
-  system: {
-    websocket: { // ClientWebSocketSettings
-      updateRate: number; // Example field
-      // ... other websocket settings
-    };
-    debug: { // DebugSettings
-      enabled: boolean;
-      // ... other debug settings
-    };
-    persistSettings: boolean;
-    customBackendUrl?: string;
-  };
-  xr: { // XRSettings
-    enabled: boolean;
-    clientSideEnableXR?: boolean; // Important client-side toggle
-    enableHandTracking: boolean; // Note: not xr.handTracking
-    // ... many other XR settings
-  };
-  auth: { // AuthSettings
-    // ... auth related settings
-  };
-  ragflow?: { /* RAGFlowSettings */ }; // Optional
-  perplexity?: { /* PerplexitySettings */ }; // Optional
-  openai?: { /* OpenAISettings */ }; // Optional
-  kokoro?: { /* KokoroSettings */ }; // Optional
-  // Note: 'whisper' settings are present in the server's AppFullSettings but not directly exposed in this client-side Settings interface.
+  visualisation: VisualisationSettings;
+  system: SystemSettings;
+  xr: XRSettings;
+  auth: AuthSettings;
+  ragflow?: RAGFlowSettings;
+  perplexity?: PerplexitySettings;
+  openai?: OpenAISettings;
+  kokoro?: KokoroSettings;
 }
+
+// Expanded VisualisationSettings with multi-graph structure
+export interface VisualisationSettings {
+  // NEW: Graph-specific settings namespace
+  graphs: GraphsSettings;
+  
+  // Global visualization settings (shared across graphs)
+  rendering: RenderingSettings;
+  animations: AnimationSettings;
+  bloom: BloomSettings;
+  hologram: HologramSettings;
+  camera?: CameraSettings;
+  
+  // DEPRECATED: Legacy flat structure (for backward compatibility)
+  nodes?: NodeSettings;
+  edges?: EdgeSettings;
+  physics?: PhysicsSettings;
+  labels?: LabelSettings;
+}
+
+// Multi-graph namespace structure
+export interface GraphsSettings {
+  logseq: GraphSettings;      // Settings for Logseq graph visualization
+  visionflow: GraphSettings;   // Settings for VisionFlow graph visualization
+}
+
+// Graph-specific settings container
+export interface GraphSettings {
+  nodes: NodeSettings;         // Node appearance configuration
+  edges: EdgeSettings;         // Edge/link appearance configuration
+  labels: LabelSettings;       // Label display configuration
+  physics: PhysicsSettings;    // Physics simulation parameters
+}
+
+// Example of accessing settings in the new structure:
+// settings.visualisation.graphs.logseq.nodes.baseColor
+// settings.visualisation.graphs.visionflow.edges.color
+```
+
+**Key Changes:**
+1. **Multi-Graph Support**: Settings now support multiple graph visualizations simultaneously
+2. **Nested Structure**: Graph-specific settings are nested under `visualisation.graphs`
+3. **Legacy Compatibility**: Old flat structure remains for backward compatibility but is deprecated
+4. **Theme Separation**: Each graph can have its own visual theme (e.g., blue for Logseq, green for VisionFlow)
+
 **Important:** The above is a simplified representation. The definitive source for the `Settings` interface and all its nested types is [`client/src/features/settings/config/settings.ts`](../../client/src/features/settings/config/settings.ts). Please refer to this file for the complete and accurate structure.
 
 ## RAGFlow Specific Types

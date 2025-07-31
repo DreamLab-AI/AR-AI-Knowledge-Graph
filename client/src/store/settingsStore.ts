@@ -9,11 +9,51 @@ import { settingsService } from '../services/settingsService';
 import { produce } from 'immer';
 import { toast } from '../features/design-system/components/Toast';
 import { migrateToMultiGraphSettings } from '../features/settings/utils/settingsMigration';
+import { isViewportSetting } from '../features/settings/config/viewportSettings';
 
 const logger = createLogger('SettingsStore')
 
 // Debounce utility
 let saveTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+// Helper function to find changed paths between two objects
+function findChangedPaths(oldObj: any, newObj: any, path: string = ''): string[] {
+  const changedPaths: string[] = [];
+  
+  // Handle null/undefined cases
+  if (oldObj === newObj) return changedPaths;
+  if (oldObj == null || newObj == null) {
+    if (path) changedPaths.push(path);
+    return changedPaths;
+  }
+  
+  // Handle primitive values
+  if (typeof oldObj !== 'object' || typeof newObj !== 'object') {
+    if (oldObj !== newObj && path) {
+      changedPaths.push(path);
+    }
+    return changedPaths;
+  }
+  
+  // Handle objects and arrays
+  const allKeys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+  
+  for (const key of allKeys) {
+    const currentPath = path ? `${path}.${key}` : key;
+    const oldValue = oldObj[key];
+    const newValue = newObj[key];
+    
+    if (typeof oldValue === 'object' && typeof newValue === 'object' && oldValue !== null && newValue !== null) {
+      // Recursively check nested objects
+      changedPaths.push(...findChangedPaths(oldValue, newValue, currentPath));
+    } else if (oldValue !== newValue) {
+      // Value changed
+      changedPaths.push(currentPath);
+    }
+  }
+  
+  return changedPaths;
+}
 
 // Shared debounced save function
 const debouncedSaveToServer = async (settings: Settings, initialized: boolean) => {
@@ -223,7 +263,7 @@ export const useSettingsStore = create<SettingsState>()(
 
         const state = get();
 
-        // Use updateSettings internally
+        // Use updateSettings internally which will handle viewport updates
         state.updateSettings((draft) => {
           // If setting the entire object
           if (!path || path === '') {
@@ -298,12 +338,37 @@ export const useSettingsStore = create<SettingsState>()(
 
       // Immer-based updateSettings - the preferred method for updating settings
       updateSettings: (updater) => {
+        // Get the old settings for comparison
+        const oldSettings = get().settings;
+        
+        // Apply the update
         set((state) => produce(state, (draft) => {
           updater(draft.settings);
         }));
 
         // After state update, handle notifications and saving
         const state = get();
+        
+        // Find which paths changed
+        const changedPaths = findChangedPaths(oldSettings, state.settings);
+        
+        if (debugState.isEnabled() && changedPaths.length > 0) {
+          logger.info('Settings updated', { changedPaths });
+        }
+
+        // Check if any viewport settings were updated
+        const viewportUpdated = changedPaths.some(path => isViewportSetting(path));
+        
+        if (viewportUpdated) {
+          // Trigger immediate viewport update
+          state.notifyViewportUpdate('viewport.update');
+          
+          if (debugState.isEnabled()) {
+            logger.info('Viewport settings updated, triggering immediate update', { 
+              viewportPaths: changedPaths.filter(path => isViewportSetting(path))
+            });
+          }
+        }
 
         // Notify all subscribers
         const allCallbacks = new Set<() => void>();

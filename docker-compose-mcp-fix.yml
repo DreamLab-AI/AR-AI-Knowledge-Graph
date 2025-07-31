@@ -1,0 +1,41 @@
+# Docker Compose configuration to fix MCP startup
+
+services:
+  powerdev:
+    # Add this to your existing powerdev service configuration
+    # This ensures the MCP WebSocket relay starts automatically
+    command: >
+      sh -c "
+        # Start the MCP WebSocket relay in the background
+        cd /workspace/ext/src && 
+        nohup node mcp-ws-relay.js > /var/log/mcp-ws-relay.log 2>&1 &
+        
+        # Keep the container running with the original command
+        exec python /app/keep_alive.py
+      "
+    environment:
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=3000
+      - CLAUDE_FLOW_AUTO_ORCHESTRATOR=true
+      - CLAUDE_FLOW_NEURAL_ENABLED=true
+      - CLAUDE_FLOW_WASM_ENABLED=true
+    # Ensure port 3000 is exposed for WebSocket connections
+    ports:
+      - "3000:3000"  # Map to host if needed for debugging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/ws", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  logseq_spring_thing_webxr:
+    # Add these environment variables to your Rust container
+    environment:
+      - CLAUDE_FLOW_HOST=powerdev
+      - CLAUDE_FLOW_PORT=3000
+    depends_on:
+      powerdev:
+        condition: service_healthy  # Wait for powerdev to be healthy
+    # Add a restart policy to handle initial connection failures
+    restart: unless-stopped

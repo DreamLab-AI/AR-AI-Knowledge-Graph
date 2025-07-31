@@ -30,14 +30,14 @@ The `FileService` is responsible for interactions with the local file system and
 ```rust
 // In src/services/file_service.rs
 pub struct FileService {
-    // settings: Arc<RwLock<AppFullSettings>>, // To access paths, etc.
+    // settings_addr: Addr<SettingsActor>, // To access paths via actor messages
     // github_service: Option<Arc<GitHubService>>, // If GitHub is a source
-    // metadata_store: Arc<RwLock<MetadataStore>>, // To update metadata
+    // metadata_addr: Addr<MetadataActor>, // To update metadata via actor messages
     // node_id_counter: AtomicU32, // For generating unique node IDs if needed
 }
 
 impl FileService {
-    // pub fn new(settings: Arc<RwLock<AppFullSettings>>, metadata_store: Arc<RwLock<MetadataStore>>, github_service: Option<Arc<GitHubService>>) -> Self;
+    // pub fn new(settings_addr: Addr<SettingsActor>, metadata_addr: Addr<MetadataActor>, github_service: Option<Arc<GitHubService>>) -> Self;
     
     // Manages local file operations (reading, writing, listing).
     // pub async fn process_local_files(&self) -> Result<Vec<ProcessedFile>, FileServiceError>;
@@ -71,18 +71,19 @@ The `GraphService` is central to managing the graph's structure, layout, and rea
 
 ```rust
 // In src/services/graph_service.rs
+// Note: GraphService is now implemented as GraphServiceActor
 pub struct GraphService {
-    // graph_data: Arc<RwLock<GraphData>>, // Holds the current nodes and edges
-    // node_map: Arc<RwLock<HashMap<String, crate::utils::socket_flow_messages::Node>>>, // For quick node lookup by ID
-    // gpu_compute: Option<Arc<RwLock<GPUCompute>>>, // Optional GPU acceleration
-    // settings: Arc<RwLock<AppFullSettings>>, // To access simulation parameters
-    // client_manager: Arc<ClientManager>, // To broadcast updates (passed during construction or accessed statically)
+    // graph_data: GraphData, // Holds the current nodes and edges (internal to actor)
+    // node_map: HashMap<String, crate::utils::socket_flow_messages::Node>, // For quick node lookup by ID
+    // gpu_compute_addr: Option<Addr<GPUComputeActor>>, // GPU acceleration via actor messages
+    // settings_addr: Addr<SettingsActor>, // To access simulation parameters via messages
+    // client_manager_addr: Addr<ClientManagerActor>, // To broadcast updates via messages
     // shutdown_signal: Arc<AtomicBool>, // For graceful shutdown
     // ... other fields for caching, simulation state, etc.
 }
 
 impl GraphService {
-    // pub async fn new(settings: Arc<RwLock<AppFullSettings>>, gpu_compute: Option<Arc<RwLock<GPUCompute>>>, client_manager: Arc<ClientManager>) -> Self;
+    // pub async fn new(settings_addr: Addr<SettingsActor>, gpu_compute_addr: Option<Addr<GPUComputeActor>>, client_manager_addr: Addr<ClientManagerActor>) -> Self;
     
     // Builds the graph from the MetadataStore.
     // pub async fn build_graph_from_metadata(&self, metadata_store: &MetadataStore) -> Result<(), GraphServiceError>;
@@ -151,13 +152,13 @@ Orchestrates Speech-to-Text (STT) and Text-to-Speech (TTS) functionalities. It i
 ```rust
 // In src/services/speech_service.rs
 pub struct SpeechService {
-    // settings: Arc<RwLock<AppFullSettings>>, // To access OpenAIConfig, KokoroConfig etc.
+    // settings_addr: Addr<SettingsActor>, // To access OpenAIConfig, KokoroConfig via messages
     // http_client: reqwest::Client,
     // audio_broadcast_tx: tokio::sync::broadcast::Sender<Vec<u8>>, // For broadcasting TTS audio to speech_socket_handler
     // command_tx: tokio::sync::mpsc::Sender<SpeechCommand>, // For internal command processing
 }
 impl SpeechService {
-    // pub fn new(settings: Arc<RwLock<AppFullSettings>>, client: reqwest::Client, audio_tx: tokio::sync::broadcast::Sender<Vec<u8>>) -> Self;
+    // pub fn new(settings_addr: Addr<SettingsActor>, client: reqwest::Client, audio_tx: tokio::sync::broadcast::Sender<Vec<u8>>) -> Self;
     // pub fn start_processing_loop(&self); // Handles commands from command_tx
     // pub async fn process_stt_request(&self, audio_data: Vec<u8>) -> Result<String, SpeechError>;
     // pub async fn process_tts_request(&self, text: String, options: TTSSpeechOptions) -> Result<(), SpeechError>; // Sends audio via audio_broadcast_tx
@@ -170,7 +171,7 @@ impl SpeechService {
 
 ## Error Handling & State Management
 - Each service typically defines its own error types (e.g., `GraphServiceError`, `FileServiceError`).
-- Shared state (like `AppFullSettings`, `MetadataStore`) is managed within `AppState` using `Arc<RwLock<T>>` for thread-safe access. Services receive references to this state or relevant parts of it.
+- Shared state (like `AppFullSettings`, `MetadataStore`) is managed within `AppState` using the **Actix actor system**. Services communicate with actors via message passing using actor addresses (`Addr<...Actor>`). This eliminates lock contention and provides better concurrency than `Arc<RwLock<T>>`.
 
 ## Performance Optimization
 - **Caching**: `GraphService` uses caching for node positions.

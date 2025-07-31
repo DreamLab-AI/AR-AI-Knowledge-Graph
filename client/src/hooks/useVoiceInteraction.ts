@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { VoiceWebSocketService, TranscriptionResult } from '../services/VoiceWebSocketService';
 import { useSettingsStore } from '../store/settingsStore';
+import { gatedConsole } from '../utils/console';
 
 export interface UseVoiceInteractionOptions {
   autoConnect?: boolean;
@@ -76,7 +77,7 @@ export function useVoiceInteraction(options: UseVoiceInteractionOptions = {}): U
     const handleAudioEnded = () => setIsSpeaking(false);
 
     const handleError = (error: any) => {
-      console.error('Voice interaction error:', error);
+      gatedConsole.voice.error('Voice interaction error:', error);
       onErrorRef.current?.(error);
     };
 
@@ -105,7 +106,7 @@ export function useVoiceInteraction(options: UseVoiceInteractionOptions = {}): U
   useEffect(() => {
     if (autoConnect && !autoConnectAttemptedRef.current && voiceServiceRef.current && (settings.system?.customBackendUrl || window.location.origin)) {
       autoConnectAttemptedRef.current = true;
-      connect().catch(console.error);
+      connect().catch((error) => gatedConsole.voice.error('Auto-connect failed:', error));
     }
   }, [autoConnect, settings.system?.customBackendUrl]);
 
@@ -116,7 +117,7 @@ export function useVoiceInteraction(options: UseVoiceInteractionOptions = {}): U
       const baseUrl = settings.system?.customBackendUrl || window.location.origin;
       await voiceServiceRef.current.connectToSpeech(baseUrl);
     } catch (error) {
-      console.error('Failed to connect to voice service:', error);
+      gatedConsole.voice.error('Failed to connect to voice service:', error);
       onError?.(error);
     }
   }, [isConnected, settings.system?.customBackendUrl]);
@@ -128,7 +129,7 @@ export function useVoiceInteraction(options: UseVoiceInteractionOptions = {}): U
       await voiceServiceRef.current.disconnect();
       autoConnectAttemptedRef.current = false; // Reset auto-connect flag
     } catch (error) {
-      console.error('Failed to disconnect from voice service:', error);
+      gatedConsole.voice.error('Failed to disconnect from voice service:', error);
       onError?.(error);
     }
   }, []);
@@ -140,7 +141,7 @@ export function useVoiceInteraction(options: UseVoiceInteractionOptions = {}): U
       await voiceServiceRef.current.startAudioStreaming({ language });
       setIsListening(true);
     } catch (error) {
-      console.error('Failed to start listening:', error);
+      gatedConsole.voice.error('Failed to start listening:', error);
       onError?.(error);
     }
   }, [isConnected, isListening, language]);
@@ -165,7 +166,7 @@ export function useVoiceInteraction(options: UseVoiceInteractionOptions = {}): U
         stream: settings.kokoro?.stream ?? true
       });
     } catch (error) {
-      console.error('Failed to speak:', error);
+      gatedConsole.voice.error('Failed to speak:', error);
       onError?.(error);
       throw error;
     }

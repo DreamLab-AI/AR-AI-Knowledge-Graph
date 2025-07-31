@@ -8,7 +8,7 @@ The LogseqSpringThing client includes a comprehensive UI component library built
 
 ### Core UI Components
 
-#### Button ([`client/src/ui/Button.tsx`](../../client/src/ui/Button.tsx))
+#### Button ([`client/src/features/design-system/components/Button.tsx`](../../client/src/features/design-system/components/Button.tsx))
 A versatile button component with multiple variants and sizes.
 - **Variants**: default, destructive, outline, secondary, ghost, link
 - **Sizes**: default, sm, lg, icon
@@ -20,7 +20,7 @@ A versatile button component with multiple variants and sizes.
 </Button>
 ```
 
-#### Input ([`client/src/ui/Input.tsx`](../../client/src/ui/Input.tsx))
+#### Input ([`client/src/features/design-system/components/Input.tsx`](../../client/src/features/design-system/components/Input.tsx))
 Standard input field component with consistent styling.
 - **Features**: Error states, disabled states, placeholder support
 - **Integrates with form validation libraries
@@ -34,7 +34,7 @@ Standard input field component with consistent styling.
 />
 ```
 
-#### Label ([`client/src/ui/Label.tsx`](../../client/src/ui/Label.tsx))
+#### Label ([`client/src/features/design-system/components/Label.tsx`](../../client/src/features/design-system/components/Label.tsx))
 Form label component for accessibility and consistent styling.
 - **Features**: Required field indicators, error states
 - **Automatically associates with form controls
@@ -43,7 +43,7 @@ Form label component for accessibility and consistent styling.
 <Label htmlFor="input-id">Field Label</Label>
 ```
 
-#### Select ([`client/src/ui/Select.tsx`](../../client/src/ui/Select.tsx))
+#### Select ([`client/src/features/design-system/components/Select.tsx`](../../client/src/features/design-system/components/Select.tsx))
 Dropdown selection component with customizable options.
 - **Features**: Single/multiple selection, searchable options
 - **Keyboard navigation support
@@ -59,7 +59,7 @@ Dropdown selection component with customizable options.
 </Select>
 ```
 
-#### Switch ([`client/src/ui/Switch.tsx`](../../client/src/ui/Switch.tsx))
+#### Switch ([`client/src/features/design-system/components/Switch.tsx`](../../client/src/features/design-system/components/Switch.tsx))
 Toggle switch component for boolean settings.
 - **Features**: Animated transitions, disabled states
 - **Accessible with keyboard navigation
@@ -71,7 +71,7 @@ Toggle switch component for boolean settings.
 />
 ```
 
-#### RadioGroup ([`client/src/ui/RadioGroup.tsx`](../../client/src/ui/RadioGroup.tsx))
+#### RadioGroup ([`client/src/features/design-system/components/RadioGroup.tsx`](../../client/src/features/design-system/components/RadioGroup.tsx))
 Radio button group for single selection from multiple options.
 - **Features**: Grouped radio buttons with consistent styling
 - **Keyboard navigation between options
@@ -83,7 +83,7 @@ Radio button group for single selection from multiple options.
 </RadioGroup>
 ```
 
-#### Slider ([`client/src/ui/Slider.tsx`](../../client/src/ui/Slider.tsx))
+#### Slider ([`client/src/features/design-system/components/Slider.tsx`](../../client/src/features/design-system/components/Slider.tsx))
 Range slider component for numeric value selection.
 - **Features**: Min/max bounds, step increments
 - **Visual feedback during interaction
@@ -100,7 +100,7 @@ Range slider component for numeric value selection.
 
 ### Layout Components
 
-#### Card ([`client/src/ui/Card.tsx`](../../client/src/ui/Card.tsx))
+#### Card ([`client/src/features/design-system/components/Card.tsx`](../../client/src/features/design-system/components/Card.tsx))
 Container component for grouping related content.
 - **Sub-components**: CardHeader, CardTitle, CardDescription, CardContent, CardFooter
 - **Features**: Consistent padding and shadows
@@ -117,7 +117,7 @@ Container component for grouping related content.
 </Card>
 ```
 
-#### Tabs ([`client/src/ui/Tabs.tsx`](../../client/src/ui/Tabs.tsx))
+#### Tabs ([`client/src/features/design-system/components/Tabs.tsx`](../../client/src/features/design-system/components/Tabs.tsx))
 Tabbed interface component for organizing content.
 - **Sub-components**: TabsList, TabsTrigger, TabsContent
 - **Features**: Keyboard navigation, animated transitions
@@ -133,7 +133,7 @@ Tabbed interface component for organizing content.
 </Tabs>
 ```
 
-#### Collapsible ([`client/src/ui/Collapsible.tsx`](../../client/src/ui/Collapsible.tsx))
+#### Collapsible ([`client/src/features/design-system/components/Collapsible.tsx`](../../client/src/features/design-system/components/Collapsible.tsx))
 Expandable/collapsible content container.
 - **Features**: Smooth animations, controlled/uncontrolled modes
 - **Accessibility support with ARIA attributes
@@ -149,7 +149,7 @@ Expandable/collapsible content container.
 
 ### Feedback Components
 
-#### Toast ([`client/src/ui/Toast.tsx`](../../client/src/ui/Toast.tsx))
+#### Toast ([`client/src/features/design-system/components/Toast.tsx`](../../client/src/features/design-system/components/Toast.tsx))
 Notification system for user feedback.
 - **Hook**: `useToast` for programmatic toast creation
 - **Features**: Multiple toast types (success, error, warning, info)
@@ -165,7 +165,7 @@ toast({
 });
 ```
 
-#### Tooltip ([`client/src/ui/Tooltip.tsx`](../../client/src/ui/Tooltip.tsx))
+#### Tooltip ([`client/src/features/design-system/components/Tooltip.tsx`](../../client/src/features/design-system/components/Tooltip.tsx))
 Contextual information on hover/focus.
 - **Features**: Customizable placement, delay options
 - **Keyboard accessible
@@ -178,21 +178,6 @@ Contextual information on hover/focus.
   </TooltipContent>
 </Tooltip>
 ```
-
-### Theme Components
-
-#### ThemeProvider ([`client/src/ui/ThemeProvider.tsx`](../../client/src/ui/ThemeProvider.tsx))
-Context provider for application theming.
-- **Features**: Light/dark mode support
-- **System preference detection
-- **Persistent theme selection
-- **Usage**: Wrap your app root with ThemeProvider
-
-#### ThemeSelector ([`client/src/ui/ThemeSelector.tsx`](../../client/src/ui/ThemeSelector.tsx))
-UI component for theme selection.
-- **Features**: Dropdown with theme options
-- **Preview of theme colors
-- **Instant theme switching
 
 ### Specialized Components
 
@@ -207,22 +192,6 @@ Renders markdown content with custom styling.
 - **Usage**:
 ```tsx
 <MarkdownRenderer content={markdownString} />
-```
-
-#### FormGroup ([`client/src/ui/formGroup/FormGroup.tsx`](../../client/src/ui/formGroup/FormGroup.tsx))
-Wrapper component for form field grouping.
-- **Features**: 
-  - Consistent spacing between form elements
-  - Error message display
-  - Help text support
-- **Usage**:
-```tsx
-<FormGroup>
-  <Label>Field Name</Label>
-  <Input {...inputProps} />
-  <FormDescription>Help text here</FormDescription>
-  <FormMessage />
-</FormGroup>
 ```
 
 ## Application-Specific Components
@@ -298,7 +267,7 @@ All components support responsive design through:
 
 ### Importing Components
 ```tsx
-import { Button, Card, Input } from '@/ui';
+import { Button, Card, Input } from '@/features/design-system/components';
 ```
 
 ### Styling Components

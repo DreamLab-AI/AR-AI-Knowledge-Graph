@@ -539,7 +539,18 @@ impl GraphService {
                 node.metadata.insert("nodeSize".to_string(), metadata.node_size.to_string());
                 node.metadata.insert("hyperlinkCount".to_string(), metadata.hyperlink_count.to_string());
                 node.metadata.insert("sha1".to_string(), metadata.sha1.clone());
-                node.metadata.insert("lastModified".to_string(), metadata.last_modified.to_string());
+                // Use last_content_change if available, otherwise fall back to last_modified
+                let last_modified_to_use = metadata.last_content_change
+                    .unwrap_or(metadata.last_modified);
+                node.metadata.insert("lastModified".to_string(), last_modified_to_use.to_string());
+                
+                // Also include both dates for debugging
+                if let Some(content_change) = metadata.last_content_change {
+                    node.metadata.insert("lastContentChange".to_string(), content_change.to_string());
+                }
+                if let Some(last_commit) = metadata.last_commit {
+                    node.metadata.insert("lastCommit".to_string(), last_commit.to_string());
+                }
                 
                 if !metadata.perplexity_link.is_empty() {
                     node.metadata.insert("perplexityLink".to_string(), metadata.perplexity_link.clone());
@@ -1212,6 +1223,10 @@ pub async fn initialize_gpu(&mut self, graph_data: &GraphData) -> Result<(), Err
             sha1: "abc123".to_string(),
             node_id: "1".to_string(), // This will be parsed to u32 during node creation
             last_modified: Utc::now(),
+            last_content_change: Some(Utc::now()),
+            last_commit: Some(Utc::now()),
+            change_count: Some(1),
+            file_blob_sha: Some("test_blob_sha".to_string()),
             perplexity_link: "https://example.com".to_string(),
             last_perplexity_process: Some(Utc::now()),
             topic_counts: HashMap::new(),

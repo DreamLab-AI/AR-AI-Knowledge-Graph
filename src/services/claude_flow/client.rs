@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::str::FromStr;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -43,11 +42,7 @@ impl ClaudeFlowClient {
 
     pub async fn initialize(&mut self) -> Result<InitializeResult> {
         let params = InitializeParams {
-            protocol_version: ProtocolVersion {
-                major: 2024,
-                minor: 11,
-                patch: 5,
-            },
+            protocol_version: "2024-11-05".to_string(),  // MCP string format
             client_info: ClientInfo {
                 name: "Claude Flow Rust Connector".to_string(),
                 version: "0.1.0".to_string(),
@@ -153,7 +148,9 @@ impl ClaudeFlowClient {
 
         let params = json!({
             "name": "agent_list",
-            "arguments": {}
+            "arguments": {
+                "filter": if include_terminated { "all" } else { "active" }
+            }
         });
 
         let request = McpRequest {
@@ -167,20 +164,19 @@ impl ClaudeFlowClient {
         let response = transport.send_request(request).await?;
 
         if let Some(result) = response.result {
-            // Parse the tool call result
-            let content = result.get("content")
-                .and_then(|c| c.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|item| item.get("text"))
-                .and_then(|text| text.as_str())
-                .ok_or_else(|| ConnectorError::InvalidResponse("Invalid tool response format".to_string()))?;
-            
-            let tool_result: Value = serde_json::from_str(content)?;
-            
-            if let Some(agents_data) = tool_result.get("agents") {
-                let mut agents: Vec<AgentStatus> = vec![];
+            // Parse the tool call result - MCP returns content as an array
+            if let Some(content_array) = result.get("content").and_then(|c| c.as_array()) {
+                if let Some(first_item) = content_array.first() {
+                    if let Some(text) = first_item.get("text").and_then(|t| t.as_str()) {
+                        // Parse the JSON string from the text field
+                        let tool_result: Value = serde_json::from_str(text)
+                            .map_err(|e| ConnectorError::InvalidResponse(format!("Failed to parse agent list: {}", e)))?;
+                        
+                        // Handle the response structure from agent_list tool
+                        if let Some(agents_data) = tool_result.get("agents") {
+                            let mut agents: Vec<AgentStatus> = vec![];
 
-                if let Some(agent_array) = agents_data.as_array() {
+                            if let Some(agent_array) = agents_data.as_array() {
                     for agent_value in agent_array {
                         // Try to parse as full AgentStatus first
                         if let Ok(agent) = serde_json::from_value::<AgentStatus>(agent_value.clone()) {
@@ -245,16 +241,31 @@ impl ClaudeFlowClient {
                         }
                     }
                 }
-                Ok(agents)
+                            Ok(agents)
+                        } else {
+                            // No agents field in response, return empty list
+                            Ok(vec![])
+                        }
+                    } else {
+                        // No text field in response
+                        Ok(vec![])
+                    }
+                } else {
+                    // Empty content array
+                    Ok(vec![])
+                }
             } else {
-                Ok(vec![])
+                // No content field or not an array
+                Err(ConnectorError::InvalidResponse("Invalid MCP tool response format: missing content array".to_string()))
             }
+        } else if let Some(error) = response.error {
+            Err(ConnectorError::Protocol(format!("MCP error: {} (code: {})", error.message, error.code)))
         } else {
             Err(ConnectorError::InvalidResponse("No result in list agents response".to_string()))
         }
     }
 
-    pub async fn terminate_agent(&self, agent_id: &str) -> Result<()> {
+    pub async fn terminate_agent(&self, _agent_id: &str) -> Result<()> {
         self.ensure_initialized()?;
 
         // Note: MCP doesn't have an agent_terminate tool, this would need to be implemented
@@ -291,22 +302,20 @@ impl ClaudeFlowClient {
         let response = transport.send_request(request).await?;
 
         if let Some(result) = response.result {
-            // Parse the tool call result
-            let content = result.get("content")
-                .and_then(|c| c.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|item| item.get("text"))
-                .and_then(|text| text.as_str())
-                .ok_or_else(|| ConnectorError::InvalidResponse("Invalid tool response format".to_string()))?;
-            
-            let tool_result: Value = serde_json::from_str(content)?;
-            
-            // Create a Task from the response
-            Ok(Task {
-                id: tool_result.get("taskId")
-                    .and_then(|id| id.as_str())
-                    .unwrap_or("unknown")
-                    .to_string(),
+            // Parse the tool call result - MCP returns content as an array
+            if let Some(content_array) = result.get("content").and_then(|c| c.as_array()) {
+                if let Some(first_item) = content_array.first() {
+                    if let Some(text) = first_item.get("text").and_then(|t| t.as_str()) {
+                        // Parse the JSON string from the text field
+                        let tool_result: Value = serde_json::from_str(text)
+                            .map_err(|e| ConnectorError::InvalidResponse(format!("Failed to parse task response: {}", e)))?;
+                        
+                        // Create a Task from the response
+                        Ok(Task {
+                            id: tool_result.get("taskId")
+                                .and_then(|id| id.as_str())
+                                .map(|s| s.to_string())
+                                .unwrap_or_else(|| Uuid::new_v4().to_string()),
                 task_type: task_params.task_type,
                 description: task_params.description,
                 status: TaskStatus::Pending,
@@ -320,6 +329,17 @@ impl ClaudeFlowClient {
                 output: None,
                 error: None,
             })
+                    } else {
+                        Err(ConnectorError::InvalidResponse("No text field in task response".to_string()))
+                    }
+                } else {
+                    Err(ConnectorError::InvalidResponse("Empty content array in task response".to_string()))
+                }
+            } else {
+                Err(ConnectorError::InvalidResponse("Invalid MCP tool response format: missing content array".to_string()))
+            }
+        } else if let Some(error) = response.error {
+            Err(ConnectorError::Protocol(format!("MCP error: {} (code: {})", error.message, error.code)))
         } else {
             Err(ConnectorError::InvalidResponse("No result in create task response".to_string()))
         }

@@ -9,3 +9,5 @@ pub mod speech_socket_handler;
 pub mod nostr_handler;
 pub mod bots_handler;
 pub mod mcp_relay_handler;
+pub mod bots_visualization_handler;
+pub mod mcp_health_handler;

@@ -25,6 +25,22 @@ const GraphViewport: React.FC = () => {
 
   // Settings for camera and visuals
   const settings = useSettingsStore(state => state.settings);
+  const [viewportRefresh, setViewportRefresh] = useState(0);
+  
+  // Subscribe to viewport updates for real-time changes
+  useEffect(() => {
+    const unsubscribe = useSettingsStore.getState().subscribe(
+      'viewport.update',
+      () => {
+        logger.debug('Viewport update triggered');
+        setViewportRefresh(prev => prev + 1); // Force re-render
+      },
+      false
+    );
+    
+    return unsubscribe;
+  }, []);
+  
   const cameraSettings = settings.visualisation.camera;
   const renderingSettings = settings.visualisation.rendering;
   const bloomSettingsStore = settings.visualisation.bloom;

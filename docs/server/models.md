@@ -13,7 +13,7 @@ Defines parameters for the physics-based graph layout simulation.
 pub struct SimulationParams {
     pub iterations: u32,
     pub spring_strength: f32,
-    pub repulsion_strength: f32,
+    pub repulsion: f32,  // Note: field name is 'repulsion', not 'repulsion_strength'
     pub damping: f32,
     pub time_step: f32,
     pub max_repulsion_distance: f32,
@@ -21,13 +21,27 @@ pub struct SimulationParams {
     pub boundary_damping: f32,
     pub enable_bounds: bool,
     pub viewport_bounds: f32,
-    pub collision_radius: f32,
-    pub max_velocity: f32,
     pub phase: SimulationPhase,
     pub mode: SimulationMode,
 }
+
+// Simulation phases for different computation strategies
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum SimulationPhase {
+    Initial,    // Heavy computation for initial layout
+    Dynamic,    // Lighter computation for dynamic updates
+    Finalize,   // Final positioning and cleanup
+}
+
+// Simulation modes for computation backend
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum SimulationMode {
+    Remote,  // GPU-accelerated remote computation (default)
+    GPU,     // Local GPU computation (deprecated)
+    Local,   // CPU-based computation (disabled)
+}
 ```
-Note: Some physics parameters like `gravity_strength` and `center_attraction_strength` are part of `PhysicsSettings` within the main `AppFullSettings` and are used to influence the `SimulationParams` at runtime, but are not direct fields of this struct. The `viewport_bounds`, `collision_radius`, `max_velocity`, `enable_bounds` fields are directly part of `SimulationParams` in `src/models/simulation_params.rs` and are influenced by `PhysicsSettings`.
+Note: The actual field name in the struct is `repulsion`, not `repulsion_strength`. The `collision_radius` and `max_velocity` fields shown in the original documentation do not exist in the actual implementation.
 
 ### Usage
 -   Configuring the physics engine for graph layout.
@@ -57,12 +71,48 @@ The server defines two main structures for managing UI-related settings:
     #[derive(Debug, Clone, Serialize, Deserialize, Default)]
     #[serde(rename_all = "camelCase")]
     pub struct UISettings {
-        pub visualisation: VisualisationSettings, // Sourced from AppFullSettings.visualisation
+        pub visualisation: VisualisationSettings, // Multi-graph support
         pub system: UISystemSettings,             // Contains client-relevant parts of AppFullSettings.system
         pub xr: XRSettings,                       // Sourced from AppFullSettings.xr
         // Note: AuthSettings from AppFullSettings are used server-side; client gets tokens/features.
         // AI service configurations (like API keys) are NOT part of UISettings.
         // Client interacts with AI services via API endpoints; server uses ProtectedSettings for keys.
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+    #[serde(rename_all = "camelCase")]
+    pub struct VisualisationSettings {
+        // NEW: Multi-graph support with graph-specific settings
+        pub graphs: GraphsSettings,
+        
+        // Global visualization settings (shared across graphs)
+        pub rendering: RenderingSettings,
+        pub animations: AnimationSettings,
+        pub bloom: BloomSettings,
+        pub hologram: HologramSettings,
+        pub camera: Option<CameraSettings>,
+        
+        // DEPRECATED: Legacy flat structure (for backward compatibility)
+        pub nodes: Option<NodeSettings>,
+        pub edges: Option<EdgeSettings>,
+        pub physics: Option<PhysicsSettings>,
+        pub labels: Option<LabelSettings>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+    #[serde(rename_all = "camelCase")]
+    pub struct GraphsSettings {
+        pub logseq: GraphSettings,      // Blue/purple theme for Logseq graphs
+        pub visionflow: GraphSettings,   // Green theme for VisionFlow graphs
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+    #[serde(rename_all = "camelCase")]
+    pub struct GraphSettings {
+        pub nodes: NodeSettings,
+        pub edges: EdgeSettings,
+        pub labels: LabelSettings,
+        pub physics: PhysicsSettings,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -75,10 +125,22 @@ The server defines two main structures for managing UI-related settings:
         // but their server-side counterparts might influence these.
     }
     ```
-    -   **Clarification**: `LayoutConfig` and `ThemeConfig` are not distinct top-level structures within `UISettings`.
-        -   Theme-related aspects (colors, styles) are primarily part of `VisualisationSettings` (e.g., `visualisation.rendering.backgroundColor`, `visualisation.nodes.baseColor`).
-        -   Layout aspects are generally managed client-side or are an emergent property of the physics simulation and camera settings.
-    -   **AI Settings**: AI service configurations (API keys, model choices, endpoints) are **not** part of `UISettings` sent to the client. The client interacts with AI services via dedicated API endpoints. The server manages AI API keys and configurations within `AppFullSettings` (for general AI behavior) and `ProtectedSettings` (for sensitive keys, often user-specific).
+    
+### Multi-Graph Architecture
+
+The server now supports multiple graph visualizations with independent settings:
+
+1. **Graph Namespaces**: Each graph type (`logseq`, `visionflow`) has its own namespace with complete visual settings
+2. **Settings Migration**: The server handles automatic migration from the legacy flat structure to the multi-graph structure
+3. **Backward Compatibility**: Legacy settings paths are preserved but marked as deprecated
+4. **Theme Separation**: Each graph can maintain its own visual theme and physics parameters
+
+**Migration Path Examples:**
+- Legacy: `visualisation.nodes.baseColor` 
+- New: `visualisation.graphs.logseq.nodes.baseColor`
+- New: `visualisation.graphs.visionflow.nodes.baseColor`
+
+The server automatically migrates user settings when they are loaded, ensuring a smooth transition to the multi-graph architecture.
 
 ### Persistence
 -   **User-Specific Settings (`UserSettings`)**: Saved to individual YAML files (e.g., `/app/user_settings/<pubkey>.yaml`).
@@ -94,24 +156,22 @@ This structure holds sensitive server-side configurations that are not directly 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ProtectedSettings {
-    // These fields mirror parts of AppFullSettings.system but are managed separately for security/persistence.
-    pub network: ProtectedNetworkConfig, // Contains bind_address, port etc.
-    pub security: ServerSecurityConfig,    // Contains allowed_origins, session_timeout etc. (often reuses SecuritySettings from config/mod.rs)
-    pub websocket_server: ProtectedWebSocketServerConfig, // Contains server-specific WebSocket settings
-
-    // User management and API keys
+    pub network: NetworkSettings,      // Contains bind_address, port, domain, TLS settings, rate limiting
+    pub security: SecuritySettings,    // Contains allowed_origins, session_timeout, CSRF, audit logging
+    pub websocket_server: WebSocketServerSettings, // Contains max_connections, max_message_size, url
     pub users: std::collections::HashMap<String, NostrUser>, // Keyed by Nostr pubkey (hex)
-    pub default_api_keys: ApiKeys, // Default API keys for services if no user-specific key
+    pub default_api_keys: ApiKeys,     // Default API keys for services if no user-specific key
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct NostrUser {
-    pub pubkey: String, // Hex public key
-    pub npub: Option<String>,
+    pub pubkey: String,              // Hex public key
+    pub npub: String,                // Nostr npub format (not optional)
     pub is_power_user: bool,
-    pub api_keys: Option<ApiKeys>, // User-specific API keys
-    pub user_settings_path: Option<String>, // Path to their persisted UserSettings YAML
+    pub api_keys: ApiKeys,           // User-specific API keys (not optional)
+    pub last_seen: i64,              // Unix timestamp of last activity
+    pub session_token: Option<String>, // Session token for authentication
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -123,8 +183,43 @@ pub struct ApiKeys {
     // Potentially other AI service keys
 }
 
-// ProtectedNetworkConfig, ServerSecurityConfig (may reuse config::SecuritySettings),
-// and ProtectedWebSocketServerConfig are also defined in this module or imported.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkSettings {
+    pub bind_address: String,
+    pub domain: String,
+    pub port: u16,
+    pub enable_http2: bool,
+    pub enable_tls: bool,
+    pub min_tls_version: String,
+    pub max_request_size: usize,
+    pub enable_rate_limiting: bool,
+    pub rate_limit_requests: u32,
+    pub rate_limit_window: u32,
+    pub tunnel_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecuritySettings {
+    pub allowed_origins: Vec<String>,
+    pub audit_log_path: String,
+    pub cookie_httponly: bool,
+    pub cookie_samesite: String,
+    pub cookie_secure: bool,
+    pub csrf_token_timeout: u32,
+    pub enable_audit_logging: bool,
+    pub enable_request_validation: bool,
+    pub session_timeout: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebSocketServerSettings {
+    pub max_connections: usize,
+    pub max_message_size: usize,
+    pub url: String,
+}
 ```
 
 ### Features
@@ -182,11 +277,11 @@ pub struct Metadata {
 ## Implementation Details
 
 ### Thread Safety
-Shared mutable data structures like `MetadataStore` and settings objects are wrapped in `Arc<RwLock<T>>` within `AppState` to ensure thread-safe access.
+Shared mutable data structures like `MetadataStore` and settings objects are managed by **Actix actors** within `AppState`. Instead of using `Arc<RwLock<T>>`, the application uses actor addresses (`Addr<...Actor>`) for thread-safe access through message passing.
 ```rust
 // Example from app_state.rs
-// pub metadata: Arc<RwLock<MetadataStore>>,
-// pub settings: Arc<RwLock<AppFullSettings>>,
+// pub metadata_addr: Addr<MetadataActor>,
+// pub settings_addr: Addr<SettingsActor>,
 ```
 
 ### Serialization

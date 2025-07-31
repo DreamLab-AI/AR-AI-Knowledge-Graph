@@ -7,3 +7,6 @@ pub mod ragflow_service;
 pub mod speech_service;
 pub mod bots_client;
 pub mod claude_flow;
+pub mod agent_visualization_processor;
+pub mod agent_visualization_protocol;
+pub mod mcp_relay_manager;

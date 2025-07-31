@@ -169,6 +169,10 @@ const unsubscribeSpecificSetting = useSettingsStore.subscribe(
 
 ## Settings Structure
 
+### Multi-Graph Architecture
+
+The application now supports multiple graph visualizations simultaneously, with each graph having its own independent visual settings. This allows for different visual themes and configurations for different data sources.
+
 ```typescript
 // Simplified conceptual representation.
 // For the complete and accurate structure, see:
@@ -176,21 +180,24 @@ const unsubscribeSpecificSetting = useSettingsStore.subscribe(
 
 interface Settings {
   visualisation: {
-    nodes: {
-      nodeSize: number; // Note: This is a single number, not a range.
-      baseColor: string;
-      // ... other node properties
+    // Graph-specific settings (NEW structure)
+    graphs: {
+      logseq: GraphSettings;      // Blue/purple theme for Logseq data
+      visionflow: GraphSettings;   // Green theme for VisionFlow data
     };
-    edges: {
-      baseWidth: number;
-      // ... other edge properties
-    };
-    physics: {
-      enabled: boolean;
-      // Note: gravityStrength and centerAttractionStrength are not in the config.
-      // ... other physics properties
-    };
-    // ... other visualisation categories
+    
+    // Global visualization settings (shared across all graphs)
+    rendering: RenderingSettings;
+    animations: AnimationSettings;
+    bloom: BloomSettings;
+    hologram: HologramSettings;
+    camera?: CameraSettings;
+    
+    // Legacy compatibility (deprecated)
+    nodes?: NodeSettings;
+    edges?: EdgeSettings;
+    physics?: PhysicsSettings;
+    labels?: LabelSettings;
   };
   system: {
     websocket: ClientWebSocketSettings;
@@ -199,13 +206,48 @@ interface Settings {
   };
   xr: XRSettings;
   auth: AuthSettings;
-  // Optional AI Service Settings (whisper is not a setting)
+  // Optional AI Service Settings
   ragflow?: RAGFlowSettings;
   perplexity?: PerplexitySettings;
   openai?: OpenAISettings;
   kokoro?: KokoroSettings;
 }
+
+// Graph-specific settings structure
+interface GraphSettings {
+  nodes: NodeSettings;     // Node appearance and behavior
+  edges: EdgeSettings;     // Edge/link appearance
+  labels: LabelSettings;   // Text label configuration
+  physics: PhysicsSettings; // Physics simulation parameters
+}
 ```
+
+### Settings Migration
+
+The application includes automatic migration from the legacy flat structure to the new multi-graph structure:
+
+**Legacy Structure (before migration):**
+```typescript
+settings.visualisation.nodes.baseColor
+settings.visualisation.edges.color
+settings.visualisation.physics.enabled
+settings.visualisation.labels.fontSize
+```
+
+**New Multi-Graph Structure (after migration):**
+```typescript
+settings.visualisation.graphs.logseq.nodes.baseColor
+settings.visualisation.graphs.visionflow.nodes.baseColor
+settings.visualisation.graphs.logseq.edges.color
+settings.visualisation.graphs.visionflow.edges.color
+```
+
+The migration utility (`settingsMigration.ts`) handles:
+- Automatic detection of legacy settings
+- Migration of existing settings to the `logseq` graph
+- Initialization of `visionflow` graph with default green theme
+- Cleanup of deprecated fields
+- Backward compatibility during transition
 
 ### Settings Validation
 As mentioned earlier, settings validation primarily relies on TypeScript's static type checking and UI component constraints. There is no explicit Zod validation layer directly within the `settingsStore`'s update methods.

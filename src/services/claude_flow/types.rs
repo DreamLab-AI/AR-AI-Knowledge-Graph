@@ -43,7 +43,7 @@ pub struct McpNotification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
-    pub protocol_version: ProtocolVersion,
+    pub protocol_version: String,  // MCP uses string format "2024-11-05"
     pub client_info: ClientInfo,
     pub capabilities: ClientCapabilities,
 }
@@ -75,16 +75,37 @@ pub struct ToolCapabilities {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitializeResult {
-    pub protocol_version: ProtocolVersion,
+    pub protocol_version: String,  // MCP uses string format "2024-11-05"
     pub capabilities: ServerCapabilities,
     pub server_info: ServerInfo,
-    pub instructions: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerCapabilities {
-    pub logging: LoggingCapabilities,
-    pub tools: ToolCapabilities,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub logging: Option<LoggingCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<ToolCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<ResourceCapabilities>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompts: Option<PromptCapabilities>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCapabilities {
+    pub list_changed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subscribe: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptCapabilities {
+    pub list_changed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

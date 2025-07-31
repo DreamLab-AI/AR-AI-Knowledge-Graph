@@ -1,5 +1,10 @@
 # System Architecture Overview
 
+**Latest Updates:**
+- ✨ **Parallel Graphs Architecture** - Run Logseq and VisionFlow graphs simultaneously
+- 🤖 **Claude Flow MCP Integration** - AI agent visualization with backend relay
+- 🔄 **Migration Guide Available** - See [migration-guide.md](./migration-guide.md)
+
 ## Introduction
 
 LogseqSpringThing is a distributed 3D knowledge graph visualization system built with a decoupled architecture. It combines a high-performance Rust backend with a React/TypeScript frontend to deliver real-time, interactive graph visualizations with XR capabilities.
@@ -224,8 +229,17 @@ System works at multiple capability levels:
 ## Next Steps
 
 For detailed component documentation, see:
+
+### Core Architecture
 - [Component Architecture](./component-architecture.md)
 - [Data Flow Diagrams](./data-flow.md)
 - [Actor System Design](./actor-system.md)
 - [WebSocket Protocol](./websocket-protocol.md)
 - [XR Architecture](./xr-architecture.md)
+
+### New Features (2024)
+- **[Parallel Graphs Architecture](./parallel-graphs.md)** - Multiple simultaneous graph visualizations
+- **[MCP WebSocket Relay](./mcp-websocket-relay.md)** - Claude Flow agent data integration
+- **[ClaudeFlowActor](./claude-flow-actor.md)** - Backend MCP connection management
+- **[Bots Visualization](./bots-visualization.md)** - 3D AI agent visualization system
+- **[Migration Guide](./migration-guide.md)** - Upgrading from old architecture
