@@ -632,14 +632,36 @@ export const IntegratedControlPanel: React.FC<IntegratedControlPanelProps> = ({
               </button>
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '3px 15px', fontSize: '11px' }}>
-              <span style={{ opacity: 0.7 }}>Agents:</span>
-              <span style={{ color: '#F1C40F' }}>{botsData.nodeCount}</span>
-              <span style={{ opacity: 0.7 }}>Links:</span>
-              <span style={{ color: '#F1C40F' }}>{botsData.edgeCount}</span>
-              <span style={{ opacity: 0.7 }}>Tokens:</span>
-              <span style={{ color: '#F39C12' }}>{botsData.tokenCount.toLocaleString()}</span>
-            </div>
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto auto', gap: '3px 15px', fontSize: '11px' }}>
+                <span style={{ opacity: 0.7 }}>Agents:</span>
+                <span style={{ color: '#F1C40F' }}>{botsData.nodeCount}</span>
+                <span style={{ opacity: 0.7 }}>Links:</span>
+                <span style={{ color: '#F1C40F' }}>{botsData.edgeCount}</span>
+                <span style={{ opacity: 0.7 }}>Tokens:</span>
+                <span style={{ color: '#F39C12' }}>{botsData.tokenCount.toLocaleString()}</span>
+              </div>
+              <div style={{ marginTop: '10px', textAlign: 'center' }}>
+                <button
+                  onClick={() => setShowSwarmPrompt(true)}
+                  style={{
+                    background: '#27AE60',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '6px 12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#229954'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = '#27AE60'}
+                >
+                  New Swarm Task
+                </button>
+              </div>
+            </>
           )}
         </div>
       )}

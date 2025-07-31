@@ -16,6 +16,73 @@ import { useBotsData } from '../contexts/BotsDataContext';
 
 const logger = createLogger('BotsVisualization');
 
+// Generate mock processing logs for visualization
+const generateMockProcessingLogs = (agentType: string, status: string): string[] => {
+  const logs: string[] = [];
+  
+  const activityTemplates = {
+    coordinator: [
+      'Analyzing swarm topology and agent distribution patterns...',
+      'Coordinating task allocation across 7 active agents...',
+      'Optimizing communication channels for minimal latency...',
+      'Monitoring agent health metrics and workload balance...',
+      'Synchronizing distributed memory across swarm nodes...'
+    ],
+    researcher: [
+      'Scanning knowledge base for relevant documentation...',
+      'Analyzing code patterns in /src/components/*.tsx files...',
+      'Extracting semantic relationships from API endpoints...',
+      'Cross-referencing implementation with best practices...',
+      'Compiling research findings into actionable insights...'
+    ],
+    coder: [
+      'Implementing authentication middleware with JWT tokens...',
+      'Refactoring database connection pool for performance...',
+      'Writing unit tests for UserService.createUser() method...',
+      'Optimizing React component render cycles in Dashboard...',
+      'Debugging WebSocket connection timeout issues...'
+    ],
+    analyst: [
+      'Profiling application performance bottlenecks...',
+      'Analyzing database query execution plans...',
+      'Evaluating code complexity metrics across modules...',
+      'Identifying potential security vulnerabilities...',
+      'Generating performance optimization recommendations...'
+    ],
+    architect: [
+      'Designing microservice communication patterns...',
+      'Evaluating architectural trade-offs for scalability...',
+      'Creating domain model for user management system...',
+      'Planning database schema migrations strategy...',
+      'Documenting API contract specifications...'
+    ],
+    tester: [
+      'Executing integration test suite for API endpoints...',
+      'Running load tests with 1000 concurrent users...',
+      'Validating edge cases in payment processing flow...',
+      'Checking accessibility compliance for UI components...',
+      'Generating code coverage reports for modules...'
+    ],
+    default: [
+      'Processing task queue items sequentially...',
+      'Analyzing incoming data streams for patterns...',
+      'Executing scheduled maintenance operations...',
+      'Monitoring system resources and performance...',
+      'Updating internal state and synchronizing...'
+    ]
+  };
+  
+  const templates = activityTemplates[agentType] || activityTemplates.default;
+  
+  // Generate 3 random logs
+  for (let i = 0; i < 3; i++) {
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    logs.push(template);
+  }
+  
+  return logs;
+};
+
 // Get VisionFlow colors from settings or use defaults
 const getVisionFlowColors = (settings: any) => {
   const visionflowSettings = settings?.visualisation?.graphs?.visionflow;
@@ -60,6 +127,88 @@ interface BotsNodeProps {
   position: THREE.Vector3;
   index: number;
 }
+
+// Component for the floating activity display
+const ActivityMonitor: React.FC<{ logs: string[], position: THREE.Vector3 }> = ({ logs, position }) => {
+  const [displayLogs, setDisplayLogs] = useState<{ text: string, key: number }[]>([]);
+  const [logKey, setLogKey] = useState(0);
+  
+  useEffect(() => {
+    // Keep only the last 3 logs with unique keys for animation
+    const newLogs = logs.slice(-3).map((log, index) => ({
+      text: log,
+      key: logKey + index
+    }));
+    setDisplayLogs(newLogs);
+    setLogKey(prev => prev + logs.length);
+  }, [logs]);
+  
+  return (
+    <Html
+      position={[position.x, position.y + 2.5, position.z]}
+      center
+      style={{
+        width: '160px',
+        height: '45px',
+        pointerEvents: 'none'
+      }}
+    >
+      <div style={{
+        width: '100%',
+        height: '100%',
+        background: 'rgba(0, 0, 0, 0.85)',
+        border: '1px solid rgba(241, 196, 15, 0.4)',
+        borderRadius: '4px',
+        padding: '2px 4px',
+        fontSize: '9px',
+        fontFamily: 'monospace',
+        color: '#F1C40F',
+        overflow: 'hidden',
+        position: 'relative',
+        boxShadow: '0 0 10px rgba(241, 196, 15, 0.2)'
+      }}>
+        {displayLogs.map((log, i) => (
+          <div
+            key={log.key}
+            style={{
+              position: 'absolute',
+              top: `${i * 14}px`,
+              left: '4px',
+              right: '4px',
+              height: '14px',
+              lineHeight: '14px',
+              opacity: 1 - (i * 0.25),
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'clip',
+              animation: 'scrollUp 1.5s ease-out',
+              textShadow: '0 0 3px rgba(241, 196, 15, 0.5)'
+            }}
+          >
+            <div style={{ 
+              transform: 'scaleX(1.2)',
+              transformOrigin: 'left'
+            }}>
+              {log.text}
+            </div>
+          </div>
+        ))}
+        <style>{`
+          @keyframes scrollUp {
+            from {
+              transform: translateY(14px);
+              opacity: 0;
+            }
+            to {
+              transform: translateY(0);
+              opacity: 1;
+            }
+          }
+        `}</style>
+      </div>
+    </Html>
+  );
+};
 
 const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index }) => {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -178,6 +327,14 @@ const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index }) => {
           )}
         </Text>
       </Billboard>
+      
+      {/* Activity monitor showing processing logs */}
+      {agent.processingLogs && agent.processingLogs.length > 0 && (
+        <ActivityMonitor 
+          logs={agent.processingLogs} 
+          position={position}
+        />
+      )}
     </group>
   );
 };
@@ -443,6 +600,11 @@ export const BotsVisualization: React.FC = () => {
           positionsRef.current.set(agent.id, newPosition);
           logger.debug(`Initialized position for new agent ${agent.id}:`, newPosition);
         }
+        
+        // Add processing logs if not present
+        if (!agent.processingLogs) {
+          agent.processingLogs = generateMockProcessingLogs(agent.type || 'specialist', agent.status || 'active');
+        }
       });
 
       // Update bots data with new agents
@@ -491,7 +653,9 @@ export const BotsVisualization: React.FC = () => {
           health: parseFloat(node.metadata?.health || '90'),
           workload: parseFloat(node.metadata?.workload || '0.5'),
           createdAt: new Date().toISOString(),
-          age: 0
+          age: 0,
+          // Add mock processing logs for visualization
+          processingLogs: generateMockProcessingLogs(node.type || 'specialist', node.metadata?.status || 'active')
         }));
       }
 
@@ -554,6 +718,18 @@ export const BotsVisualization: React.FC = () => {
       dataSource
     });
   }, [botsData, mcpConnected, dataSource, updateBotsData]);
+
+  // Debug logging for visualization state - moved here to avoid hooks order issue
+  useEffect(() => {
+    logger.info('[VISIONFLOW] Visualization render state:', {
+      nodeCount: botsData.nodes.length,
+      edgeCount: botsData.edges.length,
+      positionCount: positionsRef.current.size,
+      dataSource,
+      firstNodeId: botsData.nodes[0]?.id,
+      firstNodePosition: positionsRef.current.get(botsData.nodes[0]?.id)
+    });
+  }, [botsData.nodes.length, botsData.edges.length, dataSource]);
 
   // Poll for updates periodically
   useEffect(() => {
@@ -726,6 +902,7 @@ export const BotsVisualization: React.FC = () => {
     });
   }
 
+
   // Position bots graph at origin to co-locate with knowledge graph
   return (
     <group position={[0, 0, 0]}>
@@ -741,22 +918,6 @@ export const BotsVisualization: React.FC = () => {
           mcpConnected={mcpConnected}
           dataSource={dataSource}
         />
-      )}
-
-
-      {/* Test visualization - Simple red cubes to verify rendering works */}
-      {botsData.nodes.length > 0 && (
-        <mesh position={[0, 5, 0]}>
-          <boxGeometry args={[2, 2, 2]} />
-          <meshBasicMaterial color="red" />
-        </mesh>
-      )}
-      
-      {botsData.nodes.length > 0 && (
-        <mesh position={[10, 0, 0]}>
-          <sphereGeometry args={[1, 16, 16]} />
-          <meshBasicMaterial color="lime" />
-        </mesh>
       )}
 
       {/* Render nodes - use instanced mesh for large botss */}

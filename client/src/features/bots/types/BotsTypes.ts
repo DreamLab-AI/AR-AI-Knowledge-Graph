@@ -40,6 +40,9 @@ export interface BotsAgent {
   swarmId?: string;
   agentMode?: 'centralized' | 'distributed' | 'strategic';
   parentQueenId?: string; // for hierarchical topologies
+  
+  // Processing activity logs for visualization
+  processingLogs?: string[]; // Recent processing activity messages
 }
 
 export interface BotsCommunication {

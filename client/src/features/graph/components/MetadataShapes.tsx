@@ -20,7 +20,8 @@ const getVisualsForNode = (node: GraphNode) => {
   if (!metadata) return visuals;
   
   // Debug: Log first few nodes to see what metadata we have
-  if (Math.random() < 0.05) { // Log 5% of nodes to see variation
+  // Only log when debug is enabled via debugState
+  if (typeof window !== 'undefined' && window.debugState?.isEnabled?.() && Math.random() < 0.05) { // Log 5% of nodes to see variation
     console.log('MetadataShapes: Node metadata sample:', {
       id: node.id,
       label: node.label,
