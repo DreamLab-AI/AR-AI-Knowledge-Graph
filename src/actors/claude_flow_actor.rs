@@ -166,22 +166,11 @@ impl ClaudeFlowActor {
     }
 
     pub async fn new(graph_service_addr: Addr<GraphServiceActor>) -> Result<Self, String> {
-        // Configuration for the MCP connection should come from .env
-        // Since Claude Flow is running in this container on port 8081,
-        // we need to connect to it via HTTP/WebSocket
-        let host = std::env::var("CLAUDE_FLOW_HOST").unwrap_or_else(|_| "powerdev".to_string());
-        let port = std::env::var("CLAUDE_FLOW_PORT")
-            .unwrap_or_else(|_| "3002".to_string())
-            .parse::<u16>()
-            .unwrap_or(3002);
+        info!("ClaudeFlowActor: Initializing Claude Flow via stdio (direct process spawn)");
 
-        info!("ClaudeFlowActor: Attempting to connect to Claude Flow at {}:{}", host, port);
-
-        // Use WebSocket transport to connect to Claude Flow
+        // Use stdio transport to directly spawn claude-flow process
         let client_result = ClaudeFlowClientBuilder::new()
-            .host(&host)
-            .port(port)
-            .use_websocket()
+            .use_stdio()
             .build()
             .await;
 
@@ -206,9 +195,9 @@ impl ClaudeFlowActor {
                     Err(e) => {
                         error!("ClaudeFlowActor: Failed to connect to Claude Flow: {}. Running in degraded mode.", e);
                         warn!("ClaudeFlowActor: Claude Flow features will be unavailable. This might be due to:");
-                        warn!("  - Claude Flow MCP server not running on port {}", port);
-                        warn!("  - Network connectivity issues");
-                        warn!("  - Authentication/protocol mismatch");
+                        warn!("  - Claude Flow npm package not installed or available");
+                        warn!("  - Process spawn permissions issues");
+                        warn!("  - MCP initialization failure");
                         info!("ClaudeFlowActor: Using mock agents for visualization instead.");
                         // Continue without Claude Flow - provide mock data
                         false
@@ -218,7 +207,7 @@ impl ClaudeFlowActor {
             }
             Err(e) => {
                 error!("ClaudeFlowActor: Failed to build Claude Flow client: {}.", e);
-                warn!("ClaudeFlowActor: This is likely a configuration or network issue");
+                warn!("ClaudeFlowActor: This is likely due to missing claude-flow npm package");
                 return Err(format!("Failed to build Claude Flow client: {}", e));
             }
         };

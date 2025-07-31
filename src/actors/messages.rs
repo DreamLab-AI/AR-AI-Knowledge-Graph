@@ -163,12 +163,17 @@ pub struct SendToClientText(pub String);
 
 // Claude Flow Actor Messages
 use crate::services::claude_flow::AgentStatus;
+use crate::models::graph::GraphData;
 
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct UpdateBotsGraph {
     pub agents: Vec<AgentStatus>,
 }
+
+#[derive(Message)]
+#[rtype(result = "Result<GraphData, String>")]
+pub struct GetBotsGraphData;
 
 #[derive(Message)]
 #[rtype(result = "Result<(), String>")]

@@ -89,8 +89,19 @@ export class BotsWebSocketIntegration {
       webSocketService.sendMessage('requestInitialData');
     }
 
-    // Bots data should be fetched via REST API from the backend
-    // The frontend no longer connects directly to MCP
+    // Fetch bots data via REST API from the backend
+    try {
+      const { apiService } = await import('../../../services/apiService');
+      const botsData = await apiService.get('/api/bots/data');
+      logger.info('Fetched bots data:', botsData);
+      
+      // Emit the data for components to use
+      if (botsData && botsData.nodes) {
+        this.emit('bots-data', botsData);
+      }
+    } catch (error) {
+      logger.error('Failed to fetch bots data:', error);
+    }
   }
 
   /**

@@ -560,3 +560,11 @@ impl Handler<UpdateBotsGraph> for GraphServiceActor {
         // binary protocol to support dual graphs
     }
 }
+
+impl Handler<GetBotsGraphData> for GraphServiceActor {
+    type Result = Result<GraphData, String>;
+
+    fn handle(&mut self, _msg: GetBotsGraphData, _ctx: &mut Context<Self>) -> Self::Result {
+        Ok(self.bots_graph_data.clone())
+    }
+}

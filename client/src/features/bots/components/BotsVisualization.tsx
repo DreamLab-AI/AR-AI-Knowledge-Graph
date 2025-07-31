@@ -498,9 +498,19 @@ export const BotsVisualization: React.FC = () => {
 
     // Polling is handled by the backend ClaudeFlowActor
     // Frontend uses REST API and WebSocket for real-time position updates
+    
+    // Listen for bots data updates from the WebSocket integration
+    const unsubscribe = botsWebSocketIntegration.on('bots-data', (data) => {
+      logger.info('[VISIONFLOW] Received bots data from WebSocket integration:', data);
+      if (data && data.nodes && data.nodes.length > 0) {
+        setDataSource('live');
+        processBotsData(data);
+      }
+    });
 
     return () => {
       cleanup = true;
+      unsubscribe();
 
       // Clean up integrated WebSocket listeners
       // Note: We don't disconnect the integration service as it's shared
@@ -519,6 +529,25 @@ export const BotsVisualization: React.FC = () => {
       dataSource
     });
   }, [botsData, mcpConnected, dataSource, updateBotsData]);
+
+  // Poll for updates periodically
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      if (dataSource === 'live' || dataSource === 'api') {
+        try {
+          const data = await apiService.get('/api/bots/data');
+          if (data && data.nodes && data.nodes.length > 0 && !data._isMock) {
+            logger.debug('[VISIONFLOW] Polling update: got', data.nodes.length, 'nodes');
+            processBotsData(data);
+          }
+        } catch (error) {
+          logger.error('[VISIONFLOW] Polling error:', error);
+        }
+      }
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [dataSource]);
 
   // Update physics configuration when settings change
   useEffect(() => {
@@ -696,11 +725,22 @@ export const BotsVisualization: React.FC = () => {
         </instancedMesh>
       ) : (
         botsData.nodes.map((agent, index) => {
-          const position = positionsRef.current.get(agent.id) || new THREE.Vector3(
-            Math.cos(index / botsData.nodes.length * Math.PI * 2) * 20,
-            Math.sin(index / botsData.nodes.length * Math.PI * 2) * 20,
-            (Math.random() - 0.5) * 10
-          );
+          // Ensure position exists in map before retrieving
+          if (!positionsRef.current.has(agent.id)) {
+            // Initialize with a more distributed circular layout
+            const radius = 25;
+            const angle = (index / botsData.nodes.length) * Math.PI * 2;
+            const height = (Math.random() - 0.5) * 15;
+            const newPosition = new THREE.Vector3(
+              Math.cos(angle) * radius,
+              height,
+              Math.sin(angle) * radius
+            );
+            positionsRef.current.set(agent.id, newPosition);
+            logger.debug(`Initialized position for agent ${agent.id}:`, newPosition);
+          }
+          
+          const position = positionsRef.current.get(agent.id)!;
 
           return (
             <BotsNode

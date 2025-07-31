@@ -1,12 +1,14 @@
 use async_trait::async_trait;
-use tokio::process::Child;
+use tokio::process::{Command, Child/*, ChildStdin, ChildStdout*/};
 use tokio::sync::{mpsc, Mutex};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use std::sync::Arc;
-use log::warn;
+use log::{info, error/*, warn*/};
 use crate::services::claude_flow::error::{ConnectorError, Result};
 use crate::services::claude_flow::transport::Transport;
 use crate::services::claude_flow::types::{McpRequest, McpResponse, McpNotification};
 use dashmap::DashMap;
+use serde_json::Value;
 
 pub struct StdioTransport {
     process: Option<Arc<Mutex<Child>>>,
@@ -35,11 +37,75 @@ impl StdioTransport {
 #[async_trait]
 impl Transport for StdioTransport {
     async fn connect(&mut self) -> Result<()> {
-        // This transport is now a no-op.
-        // The connection is handled by the WebSocket transport.
-        warn!("StdioTransport::connect() called, but this transport is disabled. The system should be using the WebSocket transport to connect to 'powerdev'.");
-        *self.connected.lock().await = false;
-        Err(ConnectorError::Connection("StdioTransport is disabled.".to_string()))
+        info!("Starting claude-flow MCP process via stdio");
+        
+        // Spawn claude-flow MCP process
+        let mut child = Command::new("npx")
+            .args(&["claude-flow@alpha", "mcp", "start", "--stdio"])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::inherit())
+            .spawn()
+            .map_err(|e| ConnectorError::Connection(format!("Failed to spawn claude-flow: {}", e)))?;
+        
+        let stdin = child.stdin.take()
+            .ok_or_else(|| ConnectorError::Connection("Failed to get stdin".to_string()))?;
+        let stdout = child.stdout.take()
+            .ok_or_else(|| ConnectorError::Connection("Failed to get stdout".to_string()))?;
+        
+        // Set up channels for stdin writer
+        let (stdin_tx, mut stdin_rx) = mpsc::channel::<String>(100);
+        self.stdin_tx = Some(stdin_tx);
+        
+        // Spawn task to write to stdin
+        let stdin = Arc::new(Mutex::new(stdin));
+        let stdin_writer = stdin.clone();
+        tokio::spawn(async move {
+            while let Some(line) = stdin_rx.recv().await {
+                let mut stdin = stdin_writer.lock().await;
+                if let Err(e) = stdin.write_all(line.as_bytes()).await {
+                    error!("Failed to write to stdin: {}", e);
+                    break;
+                }
+                if let Err(e) = stdin.flush().await {
+                    error!("Failed to flush stdin: {}", e);
+                    break;
+                }
+            }
+        });
+        
+        // Spawn task to read from stdout
+        let pending_requests = self.pending_requests.clone();
+        let notification_tx = self.notification_tx.clone();
+        tokio::spawn(async move {
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            
+            while let Some(line) = lines.next_line().await.ok().flatten() {
+                if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    // Check if it's a response, notification, or server event
+                    if let Some(id) = value.get("id").and_then(|v| v.as_str()) {
+                        // This is a response
+                        if let Ok(response) = serde_json::from_value::<McpResponse>(value.clone()) {
+                            if let Some((_, tx)) = pending_requests.remove(id) {
+                                let _ = tx.send(response).await;
+                            }
+                        }
+                    } else if value.get("method").is_some() {
+                        // This is a notification or server event
+                        if let Ok(notification) = serde_json::from_value::<McpNotification>(value.clone()) {
+                            let _ = notification_tx.send(notification).await;
+                        }
+                    }
+                }
+            }
+        });
+        
+        self.process = Some(Arc::new(Mutex::new(child)));
+        *self.connected.lock().await = true;
+        
+        info!("Claude-flow MCP process started successfully");
+        Ok(())
     }
 
     async fn disconnect(&mut self) -> Result<()> {

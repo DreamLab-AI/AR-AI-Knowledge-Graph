@@ -37,7 +37,7 @@ services:
       # Ensure Rust backend listens on 4000, which Vite proxies to.
       - SYSTEM_NETWORK_PORT=4000
       # Claude Flow MCP WebSocket configuration
-      - CLAUDE_FLOW_HOST=powerdev
+      - CLAUDE_FLOW_HOST=multi-agent-container
       - CLAUDE_FLOW_PORT=3002
       # MCP Orchestrator configuration (optional - will use mock data if not available)
       - ORCHESTRATOR_WS_URL=ws://mcp-orchestrator:9001/ws

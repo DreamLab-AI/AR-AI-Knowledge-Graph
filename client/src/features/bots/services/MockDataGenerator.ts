@@ -19,6 +19,63 @@ export class MockDataGenerator {
     return MockDataGenerator.instance;
   }
 
+  // UPDATED: Helper method to generate realistic current tasks based on agent type
+  private generateCurrentTask(agentType: string): string {
+    const taskTemplates: Record<string, string[]> = {
+      queen: [
+        'Coordinating full-stack development swarm',
+        'Strategic planning for microservices architecture',
+        'Resource allocation for AI training pipeline',
+        'Quality control review across all teams'
+      ],
+      coordinator: [
+        'Managing React component development',
+        'Coordinating API integration tasks',
+        'Synchronizing team workflows',
+        'Orchestrating deployment pipeline'
+      ],
+      researcher: [
+        'Analyzing latest AI safety research',
+        'Investigating performance optimization techniques',
+        'Researching blockchain scalability solutions',
+        'Studying neural network architectures'
+      ],
+      coder: [
+        'Implementing JWT authentication service',
+        'Developing REST API endpoints',
+        'Refactoring legacy database queries',
+        'Building real-time WebSocket handlers'
+      ],
+      requirements_analyst: [
+        'Analyzing user authentication requirements',
+        'Defining acceptance criteria for payments',
+        'Gathering stakeholder requirements',
+        'Creating user story specifications'
+      ],
+      implementation_coder: [
+        'Implementing JWT authentication service',
+        'Building microservice APIs',
+        'Developing frontend components',
+        'Integrating third-party services'
+      ],
+      design_architect: [
+        'Designing microservices architecture',
+        'Planning system integration patterns',
+        'Architecting distributed database schema',
+        'Defining API gateway configuration'
+      ]
+    };
+
+    const templates = taskTemplates[agentType] || [
+      'Processing assigned tasks',
+      'Analyzing system requirements',
+      'Optimizing performance metrics',
+      'Coordinating with team members'
+    ];
+
+    return templates[Math.floor(Math.random() * templates.length)];
+  }
+
   /**
    * Initialize mock data with specified number of agents
    */
@@ -29,19 +86,61 @@ export class MockDataGenerator {
   }
 
   /**
-   * Create mock agents with diverse types and states
+   * UPDATED: Create mock agents with enhanced hive-mind types and hierarchical structure
    */
   private createAgents(count: number): void {
+    // UPDATED: Include all hive-mind agent types including Maestro specs-driven types
     const agentTypes: BotsAgent['type'][] = [
-      'coordinator', 'coder', 'tester', 'analyst', 'researcher',
-      'architect', 'reviewer', 'optimizer', 'documenter', 'monitor', 'specialist'
+      'queen', 'coordinator', 'researcher', 'coder', 'analyst', 'architect', 'tester', 
+      'reviewer', 'optimizer', 'documenter', 'monitor', 'specialist',
+      'requirements_analyst', 'design_architect', 'task_planner', 
+      'implementation_coder', 'quality_reviewer', 'steering_documenter'
     ];
 
-    const statuses: BotsAgent['status'][] = ['idle', 'busy', 'busy', 'idle']; // More busy agents
+    const statuses: BotsAgent['status'][] = ['idle', 'busy', 'active', 'active', 'busy']; // More active agents
+    
+    // UPDATED: Capability mappings for each agent type
+    const capabilityMap: Record<string, string[]> = {
+      queen: ['strategic_planning', 'resource_allocation', 'coordination', 'quality_control'],
+      coordinator: ['task_management', 'team_coordination', 'workflow_optimization'],
+      researcher: ['information_gathering', 'pattern_recognition', 'knowledge_synthesis'],
+      coder: ['code_generation', 'refactoring', 'debugging'],
+      analyst: ['data_analysis', 'performance_metrics', 'bottleneck_detection'],
+      architect: ['system_design', 'architecture_patterns', 'integration_planning'],
+      tester: ['test_generation', 'quality_assurance', 'edge_case_detection'],
+      reviewer: ['code_review', 'standards_enforcement', 'best_practices'],
+      optimizer: ['performance_optimization', 'resource_optimization', 'algorithm_improvement'],
+      documenter: ['documentation_generation', 'api_docs', 'user_guides'],
+      monitor: ['system_monitoring', 'health_checks', 'alerting'],
+      specialist: ['domain_expertise', 'custom_capabilities', 'problem_solving'],
+      requirements_analyst: ['requirements_analysis', 'user_story_creation', 'acceptance_criteria'],
+      design_architect: ['specs_driven_design', 'workflow_orchestration', 'architecture'],
+      task_planner: ['task_management', 'resource_allocation', 'scheduling'],
+      implementation_coder: ['code_generation', 'api_development', 'integration'],
+      quality_reviewer: ['quality_assurance', 'compliance', 'validation'],
+      steering_documenter: ['governance', 'documentation_generation', 'standards']
+    };
 
+    // UPDATED: Create Queen agent first (always agent-0)
+    let queenId: string | undefined;
+    
     for (let i = 0; i < count; i++) {
-      const agentType = agentTypes[i % agentTypes.length];
+      let agentType: BotsAgent['type'];
+      let parentQueenId: string | undefined;
+      
+      // First agent is always Queen
+      if (i === 0) {
+        agentType = 'queen';
+        queenId = `agent-${i}`;
+      } else {
+        // Other agents get random types (excluding queen)
+        const nonQueenTypes = agentTypes.filter(t => t !== 'queen');
+        agentType = nonQueenTypes[i % nonQueenTypes.length];
+        parentQueenId = queenId;
+      }
+      
       const status = statuses[Math.floor(Math.random() * statuses.length)];
+      const capabilities = capabilityMap[agentType] || ['general_capabilities'];
       
       const agent: BotsAgent = {
         id: `agent-${i}`,
@@ -52,6 +151,20 @@ export class MockDataGenerator {
         memoryUsage: 20 + Math.random() * 60,
         workload: status === 'busy' ? 0.5 + Math.random() * 0.5 : Math.random() * 0.3,
         createdAt: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+        
+        // UPDATED: Enhanced hive-mind properties
+        capabilities: capabilities,
+        currentTask: status === 'active' || status === 'busy' ? this.generateCurrentTask(agentType) : undefined,
+        tasksActive: status === 'active' || status === 'busy' ? Math.floor(Math.random() * 5) + 1 : 0,
+        tasksCompleted: Math.floor(Math.random() * 100) + 10,
+        successRate: 0.75 + Math.random() * 0.25, // 75-100% success rate
+        tokens: Math.floor(Math.random() * 50000) + 1000,
+        tokenRate: Math.random() * 20 + 2, // 2-22 tokens per minute
+        activity: status === 'active' ? 0.7 + Math.random() * 0.3 : Math.random() * 0.6,
+        swarmId: 'hive-mind-mock-001',
+        agentMode: agentType === 'queen' ? 'centralized' : 
+                  ['hierarchical', 'distributed', 'strategic'][Math.floor(Math.random() * 3)],
+        parentQueenId: parentQueenId,
         age: Math.random() * 3600000,
         name: `${agentType.charAt(0).toUpperCase() + agentType.slice(1)}-${i}`,
         position: {
