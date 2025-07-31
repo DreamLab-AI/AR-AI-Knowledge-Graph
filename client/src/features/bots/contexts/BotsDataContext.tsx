@@ -16,7 +16,13 @@ interface BotsDataContextType {
 const BotsDataContext = createContext<BotsDataContextType | undefined>(undefined);
 
 export const BotsDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [botsData, setBotsData] = useState<BotsData | null>(null);
+  const [botsData, setBotsData] = useState<BotsData | null>({
+    nodeCount: 0,
+    edgeCount: 0,
+    tokenCount: 0,
+    mcpConnected: false,
+    dataSource: 'mock'
+  });
 
   const updateBotsData = (data: BotsData) => {
     setBotsData(data);

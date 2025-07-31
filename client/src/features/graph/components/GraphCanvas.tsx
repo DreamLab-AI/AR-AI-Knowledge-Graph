@@ -67,7 +67,7 @@ const GraphCanvas = () => {
                     fov: 75,
                     near: 0.1,
                     far: 2000,
-                    position: [0, 20, 60] // Adjusted camera position for better view of unified graphs
+                    position: [40, 30, 40] // Better angle to see both visualization systems
                 }}
                 onCreated={({ gl }) => {
                     if (debugState.isEnabled()) {

@@ -68,6 +68,14 @@ const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index }) => {
   const [hover, setHover] = useState(false);
   const settings = useSettingsStore(state => state.settings);
 
+  // Debug logging for node position
+  if (debugState.isEnabled() && index < 3) { // Only log first 3 nodes to prevent spam
+    logger.debug(`BotsNode ${agent.id} render:`, {
+      position: { x: position.x, y: position.y, z: position.z },
+      agent: { type: agent.type, status: agent.status, health: agent.health }
+    });
+  }
+
   // Visual properties based on agent data and settings
   const visionflowColors = getVisionFlowColors(settings);
   const color = new THREE.Color(visionflowColors[agent.type] || '#CCCCCC');
@@ -89,10 +97,10 @@ const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index }) => {
         0.2 + agent.cpuUsage / 200 + (hover ? 0.2 : 0);
     }
 
-    // Update position
-    meshRef.current.position.copy(position);
-    if (glowRef.current) glowRef.current.position.copy(position);
-    if (borderRef.current) borderRef.current.position.copy(position);
+    // Position is already set via position prop, no need to update here
+    // meshRef.current.position.copy(position);
+    // if (glowRef.current) glowRef.current.position.copy(position);
+    // if (borderRef.current) borderRef.current.position.copy(position);
   });
 
   // Shape based on status (as per task.md)
@@ -117,6 +125,7 @@ const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index }) => {
       <mesh
         ref={meshRef}
         geometry={geometry}
+        position={position}
         onPointerOver={() => setHover(true)}
         onPointerOut={() => setHover(false)}
       >
@@ -127,7 +136,7 @@ const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index }) => {
           metalness={0.8}
           roughness={0.2}
           transparent
-          opacity={0.5}
+          opacity={0.8} // Increased opacity for better visibility
         />
       </mesh>
 
@@ -420,6 +429,22 @@ export const BotsVisualization: React.FC = () => {
     // - POST /api/bots/initialize-swarm for spawning hive minds
 
     const processAgentsUpdate = (agents: BotsAgent[]) => {
+      // Initialize positions for new agents before updating physics
+      agents.forEach((agent, index) => {
+        if (!positionsRef.current.has(agent.id)) {
+          const radius = 25;
+          const angle = (index / agents.length) * Math.PI * 2;
+          const height = (Math.random() - 0.5) * 15;
+          const newPosition = new THREE.Vector3(
+            Math.cos(angle) * radius,
+            height,
+            Math.sin(angle) * radius
+          );
+          positionsRef.current.set(agent.id, newPosition);
+          logger.debug(`Initialized position for new agent ${agent.id}:`, newPosition);
+        }
+      });
+
       // Update bots data with new agents
       setBotsData(prev => ({ ...prev, nodes: agents }));
 
@@ -535,7 +560,7 @@ export const BotsVisualization: React.FC = () => {
     const pollInterval = setInterval(async () => {
       if (dataSource === 'live' || dataSource === 'api') {
         try {
-          const data = await apiService.get('/api/bots/data');
+          const data = await apiService.get('/bots/data');
           if (data && data.nodes && data.nodes.length > 0 && !data._isMock) {
             logger.debug('[VISIONFLOW] Polling update: got', data.nodes.length, 'nodes');
             processBotsData(data);
@@ -687,6 +712,20 @@ export const BotsVisualization: React.FC = () => {
     );
   }
 
+  // Debug logging for render state
+  if (debugState.isEnabled()) {
+    logger.debug('BotsVisualization render state:', {
+      isLoading,
+      error,
+      nodeCount: botsData.nodes.length,
+      edgeCount: botsData.edges.length,
+      positionsMapSize: positionsRef.current.size,
+      samplePositions: Array.from(positionsRef.current.entries()).slice(0, 3),
+      dataSource,
+      mcpConnected
+    });
+  }
+
   // Position bots graph at origin to co-locate with knowledge graph
   return (
     <group position={[0, 0, 0]}>
@@ -704,6 +743,21 @@ export const BotsVisualization: React.FC = () => {
         />
       )}
 
+
+      {/* Test visualization - Simple red cubes to verify rendering works */}
+      {botsData.nodes.length > 0 && (
+        <mesh position={[0, 5, 0]}>
+          <boxGeometry args={[2, 2, 2]} />
+          <meshBasicMaterial color="red" />
+        </mesh>
+      )}
+      
+      {botsData.nodes.length > 0 && (
+        <mesh position={[10, 0, 0]}>
+          <sphereGeometry args={[1, 16, 16]} />
+          <meshBasicMaterial color="lime" />
+        </mesh>
+      )}
 
       {/* Render nodes - use instanced mesh for large botss */}
       {botsData.nodes.length > 50 ? (

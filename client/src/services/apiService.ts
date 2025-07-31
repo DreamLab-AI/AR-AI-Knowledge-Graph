@@ -68,7 +68,7 @@ class ApiService {
           return this.getMockGraphData() as T;
         }
         // Check if this is the bots data endpoint and provide mock data
-        if (endpoint === '/api/bots/data') {
+        if (endpoint === '/bots/data') {
           logger.warn('Backend not available, returning mock bots data');
           return this.getMockBotsData() as T;
         }
@@ -89,7 +89,7 @@ class ApiService {
         return this.getMockGraphData() as T;
       }
       // Check if this is the bots data endpoint and provide mock data
-      if (endpoint === '/api/bots/data') {
+      if (endpoint === '/bots/data') {
         logger.warn('Backend not available, returning mock bots data');
         return this.getMockBotsData() as T;
       }
