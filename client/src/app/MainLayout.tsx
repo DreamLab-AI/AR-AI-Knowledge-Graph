@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import GraphCanvasWrapper from '../features/graph/components/GraphCanvasWrapper';
 import { IntegratedControlPanel } from '../features/visualisation/components/IntegratedControlPanel';
+import {
+  Spine,
+  SpineProvider,
+  DESCRIPTORS,
+} from '../features/control-surface';
 import { useSettingsStore } from '../store/settingsStore';
 import { useBotsData } from '../features/bots/contexts/BotsDataContext';
 import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
@@ -73,14 +78,44 @@ const MainLayoutContent: React.FC = () => {
       </section>
 
       <nav id="control-panel" aria-label="Visualization controls">
-        <IntegratedControlPanel
-          showStats={showStats}
-          enableBloom={enableBloom}
-          onOrbitControlsToggle={() => {}}
-          botsData={botsData ?? undefined}
-          graphData={graphData}
-          otherGraphData={otherGraphData}
-        />
+        {/*
+          PRD-007 / ADR-061 — Spine surface co-existing with legacy panel.
+          Toggle via URL ?surface=spine|legacy (default: legacy until tier-1
+          telemetry confirms parity, per PRD-007 §13 Phase 4).
+        */}
+        {(typeof window !== 'undefined' &&
+          new URLSearchParams(window.location.search).get('surface') === 'spine') ? (
+          <SpineProvider
+            auth={{
+              pubkey: settings?.auth?.nostr?.publicKey ?? undefined,
+              isPowerUser: !!settings?.auth?.nostr?.isPowerUser,
+              isOperator: !!settings?.auth?.nostr?.isOperator,
+            }}
+          >
+            <div
+              className="cs-spine-overlay"
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                bottom: 16,
+                width: 'min(560px, 92vw)',
+                zIndex: 10,
+              }}
+            >
+              <Spine descriptors={DESCRIPTORS} />
+            </div>
+          </SpineProvider>
+        ) : (
+          <IntegratedControlPanel
+            showStats={showStats}
+            enableBloom={enableBloom}
+            onOrbitControlsToggle={() => {}}
+            botsData={botsData ?? undefined}
+            graphData={graphData}
+            otherGraphData={otherGraphData}
+          />
+        )}
       </nav>
 
       {/* Node detail slide-in panel — driven by visionflow:node-selected events */}

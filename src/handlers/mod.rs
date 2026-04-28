@@ -88,6 +88,13 @@ pub mod agent_events_ws_handler;
 // ADR-059 §3 Phase 3 — user-interaction REST → broadcaster
 pub mod user_interaction_handler;
 
+// PRD-007 / ADR-061 — Per-descriptor NL query (mounted under /api/spine-nl/*
+// to avoid collision with legacy /api/nl-query/* in natural_language_query_handler).
+pub mod nl_query_handler;
+pub use nl_query_handler::configure_routes as configure_spine_nl_routes;
+pub mod operator_status_handler;
+pub use operator_status_handler::configure_routes as configure_operator_status_routes;
+
 pub use quic_transport_handler::{
     QuicTransportServer, QuicServerConfig,
     PostcardNodeUpdate, PostcardBatchUpdate, PostcardDeltaUpdate,

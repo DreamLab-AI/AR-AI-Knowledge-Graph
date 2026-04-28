@@ -926,6 +926,12 @@ async fn main() -> std::io::Result<()> {
                             .configure(webxr::handlers::user_interaction_handler::configure_routes)
                     )
 
+                    // PRD-007 / ADR-061 — per-descriptor NL query for the Spine
+                    .configure(webxr::handlers::configure_spine_nl_routes)
+
+                    // PRD-007 / ADR-061 — tier-4 operator status (read-only)
+                    .configure(webxr::handlers::configure_operator_status_routes)
+
                     // Layout mode system (ADR-031)
                     .configure(webxr::handlers::configure_layout_routes)
 
