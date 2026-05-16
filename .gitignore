@@ -242,3 +242,6 @@ extraction/
 data/oxigraph/
 data/sqlite/
 *.sqlite3
+
+# Investigation-only — external source clone, never commit
+.khive-source/
