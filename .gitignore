@@ -257,3 +257,4 @@ agentdb.rvf
 agentdb.rvf.lock
 scripts/whelk-rs/
 voice-stack/unmute/
+.khive-source/
