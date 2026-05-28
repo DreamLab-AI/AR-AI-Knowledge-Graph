@@ -19,6 +19,7 @@ pub mod gpu_semantic_analyzer;
 pub mod inference_engine;
 pub mod ontology_repository;
 pub mod owl_types;
+pub mod settings_repository;
 
 // Convenience re-exports
 pub use gpu_physics_adapter::{
@@ -38,4 +39,7 @@ pub use ontology_repository::{
 pub use owl_types::{
     AxiomType, InferenceResults, OwlAxiom, OwlClass, OwlCrossReference, OwlProperty,
     OwlRelationship, PropertyType,
+};
+pub use settings_repository::{
+    SettingValue, SettingsRepository, SettingsRepositoryError,
 };

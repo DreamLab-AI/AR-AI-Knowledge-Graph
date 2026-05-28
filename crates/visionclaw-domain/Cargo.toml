@@ -34,6 +34,10 @@ specta = { version = "2.0.0-rc.22", features = ["derive", "export"] }
 validator = { version = "0.18", features = ["derive"] }
 thiserror = "2.0"
 
+# Settings validation (config/validation.rs)
+lazy_static = "1.4"
+regex = { version = "1.10", default-features = false, features = ["std"] }
+
 # Async primitives (speech.rs uses tokio::sync::mpsc; claude_flow uses time/net/io)
 tokio = { version = "1", default-features = false, features = ["sync", "time", "net", "io-util", "rt"] }
 

@@ -1,11 +1,5 @@
-use super::app_settings::AppFullSettings;
-use super::physics::PhysicsSettings;
-use super::services::AuthSettings;
-use super::system::SystemSettings;
-use super::visualisation::{
-    GraphSettings, GraphsSettings, VisualisationSettings,
-};
-use super::xr::XRSettings;
+use super::{AppFullSettings, PhysicsSettings, AuthSettings, SystemSettings};
+use super::{GraphSettings, GraphsSettings, VisualisationSettings, XRSettings};
 use super::path_access::{parse_path, PathAccessible};
 
 // PathAccessible implementation for AppFullSettings

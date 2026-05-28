@@ -14,6 +14,7 @@
 //! - `events/`    — domain events (extracted incrementally — see ADR-090 Phase 1b)
 //! - `ports/`     — port trait interfaces (extracted incrementally — see ADR-090 Phase 1b)
 
+pub mod config;
 pub mod errors;
 pub mod events;
 pub mod models;
