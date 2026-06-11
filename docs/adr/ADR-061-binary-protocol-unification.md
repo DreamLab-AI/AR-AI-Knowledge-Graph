@@ -22,6 +22,11 @@ anomaly_score, sssp_distance, sssp_parent) move to a separate
 type/visibility flag bits move to the JSON init payload at
 `/api/graph/data` and are no longer transmitted per frame.
 
+> **Amended:** the shipped frame is the 52-byte `WireNodeDataItemV3`
+> (centrality/analytics tail added in 07ebd2e9); the "28 bytes/node, fixed"
+> figure above describes the pre-centrality V3 design. See
+> `crates/visionclaw-protocol/src/lib.rs:13`.
+
 ## Context
 
 ADR-037 ("literal-only, full snapshot of every node's absolute position +

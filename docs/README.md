@@ -17,8 +17,10 @@ updated-date: 2026-05-05
 ```bash
 git clone https://github.com/DreamLab-AI/VisionClaw.git
 cd VisionClaw && cp .env.example .env
-docker-compose --profile dev up -d
+./scripts/launch.sh up dev
 ```
+
+`./scripts/launch.sh up dev` is the canonical launcher; the explicit fallback is `docker compose -f docker-compose.unified.yml --profile dev up -d` (`docker-compose.unified.yml` is the only compose file shipped).
 
 Open [http://localhost:3001](http://localhost:3001) for the 3D graph interface and [http://localhost:4000/api](http://localhost:4000/api) for the REST API. The graph store is the embedded Oxigraph triple store (ADR-11) — there is no separate database browser UI.
 
@@ -40,15 +42,11 @@ See [Sovereign Mesh ADRs](#sovereign-mesh-pod-integration-adr-028-ext-to-adr-052
 
 ---
 
-## Agent Control Surface Protocol Integration (2026-05-12)
+## Agent Control Surface Protocol Integration (planned)
 
-**Governance bridge between VisionClaw BrokerActor and Forum Kit relay mesh**. Two new server-signed Nostr event kinds:
+VisionClaw does **not** emit governance panels today. The live Nostr egress is the bead-provenance bridge (`src/services/nostr_bridge.rs`), which republishes kind 30001 bead-provenance records as kind 9 events. There is no `ServerNostrActor` and no 31400/31402 panel emission in the current build.
 
-- **Kind 31400 — PanelDefinition**: `PublishGovernancePanel` registers/updates control panels (ActionInbox, Dashboard, ConfigForm, StatusBoard, ChatBridge) with schema, fields, actions, layout hints. NIP-33 replaceable by `d` tag.
-- **Kind 31402 — ActionRequest**: `PublishActionRequest` submits cases for human review with priority, category, structured fields, and agent reasoning.
-- **Dual-path enterprise RBAC**: `RequireRole` middleware now supports NIP-98 Schnorr auth (`nip98-auth` feature gate) alongside the existing `X-Enterprise-Role` header path. `Nip98RoleResolver` trait maps verified pubkeys to enterprise roles.
-
-Source: `src/actors/server_nostr_actor.rs`, `src/middleware/enterprise_auth.rs` | Kinds added to `server_identity.rs` `SUPPORTED_KINDS` and `metrics.rs` `NostrKind` enum.
+The Agent Control Surface Protocol — server-signed panel and action-request events bridging an agent broker to a Forum Kit relay mesh — is a **planned integration**. Its contract is defined in [architecture/agent-control-surface-panels.md](architecture/agent-control-surface-panels.md), the authoritative statement that VisionClaw does not publish panels. When implemented, panel emission (kind 31400 PanelDefinition, kind 31402 ActionRequest) would be carried by a future `ServerNostrActor`; the document specifies the kinds, fields, and RBAC model that emitter must satisfy.
 
 ---
 
@@ -220,7 +218,7 @@ Full reference index: [reference/INDEX.md](reference/INDEX.md)
 | Reference | Contents |
 |-----------|----------|
 | [REST API](reference/rest-api.md) | All HTTP endpoints — graph, settings, ontology, auth, pathfinding, Solid |
-| [WebSocket Binary Protocol](reference/websocket-binary.md) | Unified binary protocol (24B/node), connection lifecycle, client implementation |
+| [WebSocket Binary Protocol](reference/websocket-binary.md) | Unified binary protocol (52 bytes/node, WireNodeDataItemV3), connection lifecycle, client implementation |
 | [Graph Schema](reference/neo4j-schema-unified.md) | Graph node/edge types, ontology nodes, Solid Pod records, indexes (Oxigraph/RDF, ADR-11) |
 | [Agents Catalog](reference/agents-catalog.md) | Complete catalog of specialist agent skills by domain |
 | [Error Codes](reference/error-codes.md) | AP-E, DB-E, GR-E, GP-E, WS-E error code hierarchy with solutions |

@@ -21,7 +21,7 @@ C4Container
     Container(browser, "Web Browser", "Chrome/Firefox/Quest Browser", "Hosts VisionClaw client app")
 
     Container_Boundary(app, "React Application") {
-        Component(graph, "GraphManager", "React/Three.js", "Main 3D graph renderer — nodes, edges, labels")
+        Component(graph, "GraphManager", "React/Three.js", "Composition shell — delegates to extracted hooks; renders nodes, edges, labels")
         Component(ws, "WebSocketService", "TypeScript", "Binary protocol consumer with exponential-backoff reconnection")
         Component(worker, "Physics Worker", "Web Worker", "Receives position updates via SharedArrayBuffer")
         Component(wasm, "WASM Scene Effects", "Rust → WASM", "Particle and environment effect rendering")
@@ -91,7 +91,9 @@ graph TD
 
 ## Rendering Pipeline
 
-The rendering loop runs inside `GraphManager` at 60 fps, driven by the R3F `useFrame` hook. Each frame reads node positions from the SharedArrayBuffer, updates InstancedMesh matrices, recomputes edge geometries, and passes everything to Three.js for a single draw call per node type.
+`GraphManager` is now a composition shell: its data, edge-buffer, event, filtering, and colour concerns are delegated to extracted hooks under `client/src/features/graph/hooks/` — `useGraphDataSubscription`, `useEdgeBufferComputation`, `useGraphEventHandlers`, `useGraphFiltering`, and `useGraphNodeColors`. The component wires these hooks together and owns the render tree rather than implementing each concern inline.
+
+The rendering loop runs inside `GraphManager` at 60 fps, driven by the R3F `useFrame` hook (edge-buffer recomputation lives in `useEdgeBufferComputation`). Each frame reads node positions from the SharedArrayBuffer, updates InstancedMesh matrices, recomputes edge geometries, and passes everything to Three.js for a single draw call per node type.
 
 ```mermaid
 sequenceDiagram

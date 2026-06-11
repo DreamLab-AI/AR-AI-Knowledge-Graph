@@ -6,7 +6,7 @@
 
 [![Build](https://img.shields.io/github/actions/workflow/status/DreamLab-AI/VisionClaw/ci.yml?branch=main&style=flat-square&logo=github)](https://github.com/DreamLab-AI/VisionClaw/actions)
 [![Version](https://img.shields.io/github/v/release/DreamLab-AI/VisionClaw?style=flat-square&logo=semantic-release)](https://github.com/DreamLab-AI/VisionClaw/releases)
-[![License](https://img.shields.io/badge/License-MPL%202.0-blue?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-2021-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-13.1-76B900?style=flat-square&logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
 [![Docs](https://img.shields.io/badge/Docs-Diataxis-4A90D9?style=flat-square)](docs/README.md)
@@ -67,8 +67,10 @@ VisionClaw is the knowledge engineering substrate of the **[VisionFlow](https://
 ```bash
 git clone https://github.com/DreamLab-AI/VisionClaw.git
 cd VisionClaw && cp .env.example .env
-docker-compose --profile dev up -d
+./scripts/launch.sh up dev
 ```
+
+`./scripts/launch.sh up dev` is the canonical launcher. The explicit fallback is `docker compose -f docker-compose.unified.yml --profile dev up -d` (`docker-compose.unified.yml` is the only compose file shipped).
 
 | Service | URL | Description |
 |:--------|:----|:------------|
@@ -77,24 +79,9 @@ docker-compose --profile dev up -d
 | Solid Pod | http://localhost:8484 | Embedded Solid pod server (solid-pod-rs) |
 
 <details>
-<summary><strong>Enable voice routing (LiveKit + whisper + TTS)</strong></summary>
+<summary><strong>Voice routing and multi-user XR overlays</strong></summary>
 
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.voice.yml --profile dev up -d
-```
-
-Adds LiveKit SFU (port 7880), turbo-whisper STT (CUDA), and Kokoro TTS. Requires GPU for real-time transcription.
-
-</details>
-
-<details>
-<summary><strong>Enable multi-user XR (Vircadia World Server)</strong></summary>
-
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.vircadia.yml --profile dev up -d
-```
-
-Adds Vircadia World Server with avatar sync, HRTF spatial audio, and collaborative graph editing.
+The voice (LiveKit + whisper + TTS) and Vircadia World Server overlays are not currently shipped as separate compose files. `docker-compose.unified.yml` is the only compose file in the repository; there are no `docker-compose.voice.yml` or `docker-compose.vircadia.yml` overlays to stack on top of it. Any voice/XR services are configured within the unified compose definition or via the host launcher, not by overlaying additional compose files.
 
 </details>
 
@@ -246,7 +233,7 @@ flowchart LR
 
 ### Agent Control Surface Protocol
 
-Agents publish structured Nostr events; the relay routes them; the forum renders decision surfaces; humans respond with cryptographically signed events. The governance audit trail is immutable by construction.
+VisionClaw does **not** currently emit governance panels. What ships today is the bead-provenance bridge (`src/services/nostr_bridge.rs`), which republishes kind 30001 bead records as kind 9 Nostr events. The Agent Control Surface Protocol — agents publishing structured panel events that a relay routes, a forum renders as decision surfaces, and humans answer with cryptographically signed responses — is a **planned integration**, not a shipped emitter. The authoritative contract for the panel kinds below lives in [docs/architecture/agent-control-surface-panels.md](docs/architecture/agent-control-surface-panels.md), which states plainly that VisionClaw does not publish panels; emission (kinds 31400/31402 via a future `ServerNostrActor`) is future work.
 
 | Kind | Name | Flow |
 |---|---|---|
@@ -256,6 +243,8 @@ Agents publish structured Nostr events; the relay routes them; the forum renders
 | 31403 | ActionResponse | Human → approve/reject (NIP-98 signed) |
 | 31404 | PanelUpdate | Agent → incremental state diff |
 | 31405 | PanelRetired | Agent → retires a control panel |
+
+*(Planned contract — no VisionClaw emitter exists today.)*
 
 ### Embodied Agent Loop
 
@@ -456,7 +445,7 @@ flowchart TB
 
     subgraph Server["Rust Backend (Actix-web · Hexagonal · CQRS)"]
         Handlers["HTTP/WS Handlers\n(9 ports · 12 adapters)"]
-        Actors["23 Actix Actors\n(supervised concurrency)"]
+        Actors["21 Actix Actors\n(supervised concurrency)"]
         Services["OWL Ontology Pipeline\n(Whelk-rs EL++)"]
         MCP["MCP Tool Server\n(:9500 TCP)"]
     end
@@ -540,7 +529,7 @@ flowchart LR
 </details>
 
 <details>
-<summary><strong>23-Actor supervision tree</strong></summary>
+<summary><strong>21-Actor supervision tree</strong></summary>
 
 The backend uses Actix actors for supervised concurrency. GPU actors form a hierarchy: `GraphServiceSupervisor` → `PhysicsOrchestratorActor` → `ForceComputeActor`. All actors restart automatically on failure.
 
@@ -574,7 +563,6 @@ The backend uses Actix actors for supervised concurrency. GPU actors form a hier
 | `GitHubSyncActor` | Incremental GitHub sync (SHA1 delta) |
 | `OntologyPipelineActor` | Assembler → converter → Whelk pipeline |
 | `GraphServiceSupervisor` | Top-level GPU supervision and restart |
-| `ServerNostrActor` | Signs and publishes governance events (31400/31402) |
 | `AgentMonitorActor` | Agent lifecycle monitoring |
 
 </details>
@@ -730,13 +718,13 @@ See the [Contributing Guide](docs/CONTRIBUTING.md). Check [Known Issues](docs/KN
 
 ## License
 
-[Mozilla Public License 2.0](LICENSE) — Use commercially, modify freely, share changes to MPL files.
+[GNU Affero General Public License v3.0-only](LICENSE) — see [LICENSE](LICENSE) for the full text. Network use is distribution: if you run a modified version as a network service, you must offer its complete source to its users.
 
 ---
 
 <div align="center">
 
-**VisionClaw is the knowledge engineering substrate of [VisionClaw](https://github.com/DreamLab-AI/VisionClaw), built by [DreamLab AI](https://www.dreamlab-ai.com).**
+**VisionClaw is the knowledge engineering substrate of [VisionFlow](https://github.com/DreamLab-AI/VisionFlow), built by [DreamLab AI](https://www.dreamlab-ai.com).**
 
 [VisionClaw Platform](https://github.com/DreamLab-AI/VisionClaw) · [Documentation](docs/README.md) · [Known Issues](docs/KNOWN_ISSUES.md) · [Discussions](https://github.com/DreamLab-AI/VisionClaw/discussions)
 

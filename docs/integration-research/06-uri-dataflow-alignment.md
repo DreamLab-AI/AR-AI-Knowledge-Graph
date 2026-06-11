@@ -35,9 +35,13 @@ forum (community-forum-rs) / agentbox / VisionClaw triple.
 
 ### 1.1 VisionClaw kinds (6, plus `did:nostr` identity URI)
 
-Defined in `src/uri/kinds.rs:13-31` (`Kind` enum) and
-`src/uri/kinds.rs:36-63` (`ParsedUri` enum). Re-exported via
-`src/uri/mod.rs:34-41`.
+Defined in `src/uri/mod.rs` (`Kind` enum and `ParsedUri` enum).
+
+> **Citation note:** the URI module ships as a single file, `src/uri/mod.rs`.
+> Earlier drafts of this document referenced sub-modules (`kinds.rs`,
+> `mint.rs`, `parse.rs`); those `mint_*`, `parse_*`, and `Kind`/`ParsedUri`
+> symbols all live in `src/uri/mod.rs`. The grammar and symbol names below are
+> correct — only the file paths consolidate to `src/uri/mod.rs`.
 
 | Kind | URN form | R-class | Mint fn |
 |------|----------|---------|---------|

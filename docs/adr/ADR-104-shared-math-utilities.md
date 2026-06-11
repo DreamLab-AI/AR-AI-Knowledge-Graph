@@ -1,4 +1,7 @@
-# ADR-090 — Shared Math Utilities Extraction
+# ADR-104 — Shared Math Utilities Extraction
+
+> Renumbered from ADR-090 to resolve a number collision with
+> ADR-090 (Hexagonal Crate Modularisation), which retains the 090 slot.
 
 | Field | Value |
 |-------|-------|

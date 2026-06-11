@@ -9,7 +9,7 @@
 
 **Understand-Anything (UA)** is a Claude Code plugin that statically analyzes codebases (and Karpathy-pattern LLM wikis) to produce interactive knowledge graphs. It uses LLM-augmented analysis, language-specific parsers, and a React/ReactFlow 2D dashboard.
 
-**VisionClaw (VC)** is a GPU-accelerated 3D knowledge graph platform that ingests Logseq markdown wikis, stores graph data in Neo4j, runs force-directed physics on CUDA, and renders via Three.js/WebXR in the browser with real-time binary position streaming.
+**VisionClaw (VC)** is a GPU-accelerated 3D knowledge graph platform that ingests Logseq markdown wikis, stores graph data in embedded Oxigraph + SQLite (SPARQL triple store; ADR-11), runs force-directed physics on CUDA, and renders via Three.js/WebXR in the browser with real-time binary position streaming.
 
 They solve **adjacent problems at different layers of the stack**: UA excels at *graph construction from source analysis*, VC excels at *GPU-powered real-time graph visualization and Solid-rs pod federation*. The combination would be greater than the sum of parts.
 

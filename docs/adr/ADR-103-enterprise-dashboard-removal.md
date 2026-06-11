@@ -1,4 +1,7 @@
-# ADR-090: Enterprise Dashboard Removal — Migration to Nostr Forum
+# ADR-103: Enterprise Dashboard Removal — Migration to Nostr Forum
+
+> Renumbered from ADR-090 to resolve a number collision with
+> ADR-090 (Hexagonal Crate Modularisation), which retains the 090 slot.
 
 **Status:** Accepted  
 **Date:** 2026-05-15  
