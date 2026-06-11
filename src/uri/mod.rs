@@ -39,6 +39,10 @@ use std::fmt;
 
 /// URN namespace prefix for all converged VisionClaw identifiers.
 pub const NS: &str = "urn:visionclaw";
+/// Legacy URN namespace prefix (pre-convergence `urn:ngm:*`). New identifiers are
+/// never minted under this prefix, but persisted IDs that predate the cutover must
+/// keep resolving — see [`parse_dual`] and ADR-105 (urn convergence + ngm cutover).
+pub const LEGACY_NGM_NS: &str = "urn:ngm";
 /// DID method used for sovereign identity (shared with the VisionClaw substrate).
 pub const DID_NOSTR_PREFIX: &str = "did:nostr:";
 /// Content-address prefix (`sha256-12-<12 hex>`).
@@ -285,6 +289,11 @@ pub enum ParsedUri {
     Room { address: String },
     /// `avatar:<hex-pubkey>` (identity-bound).
     Avatar { pubkey: String },
+    /// A legacy `urn:ngm:<sub>` identifier that predates the convergence cutover.
+    /// Carried opaquely (the segment after `urn:ngm:`) so the dual-read resolve
+    /// path can recognise and round-trip it without re-minting it under the
+    /// converged grammar. New mints never produce this variant. See ADR-105.
+    LegacyNgm { sub: String },
 }
 
 impl ParsedUri {
@@ -292,7 +301,8 @@ impl ParsedUri {
     /// (identity has no `Kind`).
     pub fn kind(&self) -> Option<Kind> {
         Some(match self {
-            ParsedUri::DidNostr { .. } => return None,
+            // Identity and legacy-ngm carry no converged `Kind`.
+            ParsedUri::DidNostr { .. } | ParsedUri::LegacyNgm { .. } => return None,
             ParsedUri::Concept { .. } => Kind::Concept,
             ParsedUri::Kg { .. } => Kind::Kg,
             ParsedUri::Bead { .. } => Kind::Bead,
@@ -327,7 +337,14 @@ impl ParsedUri {
             ParsedUri::Group { team } => format!("{NS}:{}:{team}#members", Kind::Group),
             ParsedUri::Room { address } => format!("{NS}:{}:{address}", Kind::Room),
             ParsedUri::Avatar { pubkey } => format!("{NS}:{}:{pubkey}", Kind::Avatar),
+            ParsedUri::LegacyNgm { sub } => format!("{LEGACY_NGM_NS}:{sub}"),
         }
+    }
+
+    /// True iff this is a legacy `urn:ngm:*` identifier carried for backward
+    /// resolution rather than a converged `urn:visionclaw` / `did:nostr` one.
+    pub fn is_legacy(&self) -> bool {
+        matches!(self, ParsedUri::LegacyNgm { .. })
     }
 }
 
@@ -426,6 +443,37 @@ pub fn parse(input: &str) -> Result<ParsedUri, UriError> {
                 pubkey: tail.to_string(),
             })
         }
+    }
+}
+
+/// Dual-read parse for the resolve path (ADR-105). Accepts BOTH the converged
+/// grammar (`did:nostr:*` / `urn:visionclaw:*`, via [`parse`]) AND legacy
+/// `urn:ngm:*` identifiers persisted before the convergence cutover, which are
+/// returned as [`ParsedUri::LegacyNgm`].
+///
+/// This is the function every *resolve/lookup* surface should call so that
+/// already-stored `urn:ngm:node:*` / `urn:ngm:edge:*` / `urn:ngm:domain:*` IDs
+/// keep resolving. Minting and strict validation continue to use [`parse`],
+/// which deliberately rejects `urn:ngm:*` (new durable IDs are converged-only).
+///
+/// `urn:ngm:graph:*` named graphs are recognised here like any other legacy
+/// sub-namespace; per ADR-100 they remain the persistence named-graph IRIs and
+/// are not rewritten.
+pub fn parse_dual(input: &str) -> Result<ParsedUri, UriError> {
+    match parse(input) {
+        Ok(p) => Ok(p),
+        Err(UriError::NotVisionclaw(_)) => {
+            if let Some(sub) = input.strip_prefix(&format!("{LEGACY_NGM_NS}:")) {
+                if sub.is_empty() {
+                    return Err(UriError::Malformed(input.to_string()));
+                }
+                return Ok(ParsedUri::LegacyNgm {
+                    sub: sub.to_string(),
+                });
+            }
+            Err(UriError::NotVisionclaw(input.to_string()))
+        }
+        Err(e) => Err(e),
     }
 }
 
@@ -648,6 +696,43 @@ mod tests {
         assert!(matches!(parse("urn:agentbox:thing:x:y"), Err(UriError::NotVisionclaw(_))));
         assert!(matches!(
             parse("urn:visionclaw:bogus:whatever"),
+            Err(UriError::UnknownKind(_))
+        ));
+    }
+
+    #[test]
+    fn parse_dual_accepts_converged_and_legacy_ngm() {
+        // Converged forms round-trip identically through the dual reader.
+        let vc = kg(PK_A, b"x").unwrap();
+        assert_eq!(parse_dual(&vc).unwrap(), parse(&vc).unwrap());
+        let did = did_nostr(PK_A).unwrap();
+        assert_eq!(parse_dual(&did).unwrap(), parse(&did).unwrap());
+
+        // Legacy persisted IDs resolve as LegacyNgm and round-trip their string.
+        for legacy in [
+            "urn:ngm:node:42",
+            "urn:ngm:edge:1:2:1-2",
+            "urn:ngm:domain:knowledge",
+            "urn:ngm:graph:knowledge",
+        ] {
+            let p = parse_dual(legacy).unwrap();
+            assert!(p.is_legacy());
+            assert_eq!(p.kind(), None);
+            assert_eq!(p.owner_pubkey(), None);
+            assert_eq!(p.to_uri(), legacy);
+        }
+
+        // Strict parse still rejects legacy (mint path is converged-only).
+        assert!(matches!(parse("urn:ngm:node:42"), Err(UriError::NotVisionclaw(_))));
+        // Neither reader accepts an empty legacy sub or a foreign namespace.
+        assert!(parse_dual("urn:ngm:").is_err());
+        assert!(matches!(
+            parse_dual("urn:agentbox:thing:x:y"),
+            Err(UriError::NotVisionclaw(_))
+        ));
+        // A malformed converged id still surfaces its specific error, not a downgrade.
+        assert!(matches!(
+            parse_dual("urn:visionclaw:bogus:whatever"),
             Err(UriError::UnknownKind(_))
         ));
     }

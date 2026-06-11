@@ -2,11 +2,24 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-09) |
+| Status | Accepted (2026-06-11; proposed 2026-05-09) |
 | Drives | PRD-015 §3 (isolated code registry), PRD-014 OBS-03 (dead code removal) |
 | Companion ADRs | ADR-077 P8 (code quality gates) |
 | Companion PRDs | PRD-014, PRD-015 |
 | Affected repos | `VisionClaw` |
+
+## 2026-06-11 reclassification
+
+Moved Proposed → **Accepted**. The 2026-06-11 ADR-gap audit re-confirmed this ADR's
+premise directly against the tree: no command/query *bus* was ever wired into a
+production dispatch path. The sole command path is **direct hexser dispatch** —
+`DirectiveHandler` / `QueryHandler` implementations invoked directly (and actor
+mailboxes for live state), never routed through an in-process CQRS bus. The
+`src/cqrs/` scaffold remained a dead, no-op experiment with zero consumers and zero
+coverage. Ratifying the deletion removes the contradiction between the dead scaffold
+and the actual direct-dispatch architecture. The companion correction is the README,
+whose "114 CQRS handlers" headline implied a bus that never existed; it now describes
+direct hexser `DirectiveHandler`/`QueryHandler` dispatch.
 
 ## Context
 

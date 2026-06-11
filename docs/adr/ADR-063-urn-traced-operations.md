@@ -13,9 +13,11 @@ subsystems were generating opaque UUIDv4 identifiers instead of minted URNs,
 breaking traceability across the knowledge graph, observability stack, and
 federation boundary.
 
-The VisionClaw Rust substrate has `src/uri/` (mint.rs, parse.rs, kinds.rs)
-with `mint_concept`, `mint_execution`, `mint_bead`, `mint_did_nostr`,
-`mint_owned_kg`, and `mint_group_members` — but several actors still use
+The VisionClaw Rust substrate has the converged minter at `src/uri/mod.rs`
+(a single module — the `mint.rs/parse.rs/kinds.rs` split cited in earlier drafts
+never landed; corrected per ADR-105) with `concept`, `execution`, `bead`,
+`did_nostr`, `kg`, `group_members`, `room`, `avatar`, plus `parse` / `parse_dual`
+and the BC20 `cross_from_agentbox` ingest — but several actors still use
 `Uuid::new_v4()` directly.
 
 ## Decision

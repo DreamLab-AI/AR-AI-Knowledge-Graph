@@ -1,4 +1,10 @@
-# ADR-086 — SOPS + age for Ecosystem Secrets Management
+# ADR-109 — SOPS + age for Ecosystem Secrets Management
+
+> **Renumber note (2026-06-11):** previously filed as `ADR-086-sops-secrets-management`,
+> which collided with `ADR-086-git-over-http-ingest-unification`. Renumbered to ADR-109
+> to enforce the one-number-one-decision uniqueness convention (see ADR-105 §Numbering
+> and the ADR index in `README.md`). `ADR-086` now refers solely to
+> git-over-http-ingest-unification.
 
 | Field | Value |
 |-------|-------|

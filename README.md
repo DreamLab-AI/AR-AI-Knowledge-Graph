@@ -150,7 +150,7 @@ flowchart TB
 - `subClassOf` → attraction, `disjointWith` → repulsion in GPU physics
 - Every ontology mutation creates a GitHub PR — human veto before commit
 - Content-addressed immutable provenance beads (Nostr)
-- 10 DDD bounded contexts with CQRS — 114 command/query handlers
+- DDD bounded contexts with direct hexser dispatch — 56 `DirectiveHandler`/`QueryHandler` implementations across 5 application contexts (no CQRS bus; see ADR-089)
 
 </td>
 <td width="50%">
@@ -484,7 +484,7 @@ flowchart TB
 ```
 
 <details>
-<summary><strong>Hexagonal architecture (9 ports · 12 adapters · 114 CQRS handlers)</strong></summary>
+<summary><strong>Hexagonal architecture (9 ports · 12 adapters · 56 direct hexser DirectiveHandler/QueryHandler impls — no CQRS bus, see ADR-089)</strong></summary>
 
 VisionClaw follows strict hexagonal architecture. Business logic in `src/services/` depends only on port traits in `src/ports/`. Concrete implementations live in `src/adapters/`, swapped at startup via dependency injection.
 
@@ -612,7 +612,7 @@ Each context has its own aggregate roots, domain events, and anti-corruption lay
 
 | Layer | Technology | Detail |
 |:------|:-----------|:-------|
-| **Backend** | Rust 2021 · Actix-web | 427 files, 175K LOC · hexagonal CQRS · 9 ports · 12 adapters · 114 handlers |
+| **Backend** | Rust 2021 · Actix-web | 427 files, 175K LOC · hexagonal · direct hexser dispatch (no CQRS bus, ADR-089) · 9 ports · 12 adapters · 56 DirectiveHandler/QueryHandler impls |
 | **Frontend (desktop)** | React 19 · Three.js 0.182 · R3F | 370 files, 96K LOC · TypeScript 5.9 · InstancedMesh · SAB zero-copy |
 | **Frontend (XR)** | Babylon.js | Immersive/VR mode — Quest 3 foveated rendering, hand tracking |
 | **WASM** | Rust → wasm-pack | `scene-effects` crate: zero-copy `Float32Array` view over `WebAssembly.Memory` |

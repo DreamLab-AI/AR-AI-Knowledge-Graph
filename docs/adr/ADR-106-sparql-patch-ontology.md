@@ -1,4 +1,9 @@
-# ADR-028: SPARQL PATCH for Ontology Mutations
+# ADR-106: SPARQL PATCH for Ontology Mutations
+
+> **Renumber note (2026-06-11):** previously filed as `ADR-028-sparql-patch-ontology`,
+> which collided with `ADR-028-ext-optional-auth`. Renumbered to ADR-106 to enforce
+> the one-number-one-decision uniqueness convention (see ADR-105 §Numbering and the
+> ADR index in `README.md`). `ADR-028` now refers solely to optional-auth.
 
 ## Status
 Accepted

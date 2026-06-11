@@ -1,4 +1,10 @@
-# ADR-031: Layout Mode System for Knowledge Graph Discovery
+# ADR-108: Layout Mode System for Knowledge Graph Discovery
+
+> **Renumber note (2026-06-11):** previously filed as `ADR-031-layout-mode-system`,
+> which collided with `ADR-031-gpu-analytics-correctness-and-wiring`. Renumbered to
+> ADR-108 to enforce the one-number-one-decision uniqueness convention (see ADR-105
+> §Numbering and the ADR index in `README.md`). `ADR-031` now refers solely to
+> gpu-analytics-correctness-and-wiring.
 
 ## Status
 Accepted

@@ -186,7 +186,7 @@ Conceptual deep-dives that build understanding of how and why VisionClaw works.
 | Document | What it explains |
 |----------|-----------------|
 | [System Overview](explanation/system-overview.md) | End-to-end architectural blueprint — all layers and their interactions |
-| [Backend CQRS Pattern](explanation/backend-cqrs-pattern.md) | Hexagonal architecture with 9 ports, 12 adapters, 114 command/query handlers |
+| [Backend CQRS Pattern](explanation/backend-cqrs-pattern.md) | Hexagonal architecture with 9 ports, 12 adapters, 56 direct hexser DirectiveHandler/QueryHandler impls (no CQRS bus — see ADR-089) |
 | [Actor Hierarchy](explanation/actor-hierarchy.md) | 21-actor Actix supervision tree — roles, message protocols, failure strategies |
 | [Client Architecture](explanation/client-architecture.md) | React + Three.js component hierarchy, WebGL rendering pipeline, WASM integration |
 | [DDD Bounded Contexts](explanation/ddd-bounded-contexts.md) | Domain-Driven Design context map and aggregate boundaries |
@@ -240,6 +240,17 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 
 > ADR-015 through ADR-026 are not in this repository — those numbers were assigned to decisions that predated the current ADR process and were not backfilled.
 
+> **Numbering convention (one-number-one-decision):** every ADR number maps to exactly
+> one decision. Duplicate-numbered files are renumbered to the next free number rather
+> than disambiguated by suffix. The 2026-06-11 sweep renumbered the colliding second
+> file of four pairs: `ADR-028-sparql-patch-ontology`→**ADR-106**,
+> `ADR-030-ext-github-creds-in-pod`→**ADR-107**, `ADR-031-layout-mode-system`→**ADR-108**,
+> `ADR-086-sops-secrets-management`→**ADR-109**. The primary of each pair keeps its number
+> (ADR-028 optional-auth, ADR-030 agent-memory-pods, ADR-031 gpu-analytics, ADR-086
+> git-over-http-ingest). See ADR-105 §Numbering. The previous historical `-ext` suffix
+> (e.g. ADR-028-ext) is retained where it still denotes a distinct accepted decision and
+> did not itself collide.
+
 ### Core Platform (ADR-011 to ADR-014)
 
 | ADR | Title |
@@ -254,7 +265,7 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 | ADR | Title |
 |-----|-------|
 | [ADR-027](adr/ADR-027-pod-backed-graph-views.md) | Pod-Backed Graph Views |
-| [ADR-028](adr/ADR-028-sparql-patch-ontology.md) | SPARQL PATCH for Ontology Mutations |
+| [ADR-106](adr/ADR-106-sparql-patch-ontology.md) | SPARQL PATCH for Ontology Mutations (renumbered from ADR-028; see ADR-105 §Numbering) |
 | [ADR-029](adr/ADR-029-type-index-discovery.md) | Type Index Discovery |
 | [ADR-030](adr/ADR-030-agent-memory-pods.md) | Agent Memory Pods |
 
@@ -263,7 +274,7 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 | ADR | Title | Description |
 |-----|-------|-------------|
 | [ADR-028-ext](adr/ADR-028-ext-optional-auth.md) | NIP-98 Optional Enterprise Auth | AccessLevel::Optional + caller-aware filter + legacy session deprecation path |
-| [ADR-030-ext](adr/ADR-030-ext-github-creds-in-pod.md) | Pod-Stored GitHub Credentials | Per-user GitHub creds in Pod ./private/config/github + power-user bootstrap CLI |
+| [ADR-107](adr/ADR-107-github-creds-in-pod.md) | Pod-Stored GitHub Credentials | Per-user GitHub creds in Pod ./private/config/github + power-user bootstrap CLI (renumbered from ADR-030-ext; see ADR-105 §Numbering) |
 | [ADR-050](adr/ADR-050-pod-backed-kgnode-schema.md) | Pod-Backed KGNode Schema | KGNode visibility/owner_pubkey/opaque_id/pod_url fields + PRIVATE_OPAQUE_FLAG + HMAC opaque IDs |
 | [ADR-051](adr/ADR-051-visibility-transitions.md) | Publish/Unpublish Saga | Visibility state machine: MOVE between /public and /private containers, 410 Gone, cache invalidation |
 | [ADR-052](adr/ADR-052-pod-default-wac-public-container.md) | Pod Default WAC + Container Layout | Default-private root ACL + /private, /public, /shared, /profile + double-gated writes |
@@ -272,7 +283,7 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 
 | ADR | Status | Title |
 |-----|--------|-------|
-| [ADR-031](adr/ADR-031-layout-mode-system.md) | Accepted | Layout Mode System |
+| [ADR-108](adr/ADR-108-layout-mode-system.md) | Accepted | Layout Mode System (renumbered from ADR-031; see ADR-105 §Numbering) |
 | ADR-032 (deleted) | **Superseded** | ~~RATK Integration for WebXR~~ → ADR-071 |
 | ADR-033 (deleted) | **Superseded** | ~~Vircadia SDK Decoupling~~ → ADR-071 |
 | [ADR-034](adr/ADR-034-needle-bead-provenance.md) | Accepted | NEEDLE Bead Provenance System |

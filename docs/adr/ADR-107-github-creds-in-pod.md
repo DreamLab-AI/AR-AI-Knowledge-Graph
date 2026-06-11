@@ -1,4 +1,9 @@
-# ADR-030-ext: GitHub Credentials in Pod — Sovereign Per-User Auth
+# ADR-107: GitHub Credentials in Pod — Sovereign Per-User Auth
+
+> **Renumber note (2026-06-11):** previously filed as `ADR-030-ext-github-creds-in-pod`,
+> which collided with `ADR-030-agent-memory-pods`. Renumbered to ADR-107 to enforce the
+> one-number-one-decision uniqueness convention (see ADR-105 §Numbering and the ADR
+> index in `README.md`). `ADR-030` now refers solely to agent-memory-pods.
 
 ## Status
 
