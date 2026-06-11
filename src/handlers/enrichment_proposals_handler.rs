@@ -21,7 +21,7 @@
 //! When the durable store lands, step 3 becomes "apply to the proposal/KG
 //! aggregate"; the wire contract and provenance minting are already correct.
 
-use actix_web::{web, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::{debug, info, warn};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -116,6 +116,33 @@ pub fn decision_count() -> usize {
     DECISION_LOG.lock().map(|g| g.len()).unwrap_or(0)
 }
 
+/// Shared service credential for unattended service-to-service callers. Mirrors
+/// the established sibling pattern in `image_gen_handler::agent_key` so the
+/// agentbox broker-bridge authenticates against the same `VISIONCLAW_AGENT_KEY`
+/// it already uses for the image-gen agent-submit route.
+fn agent_key() -> String {
+    std::env::var("VISIONCLAW_AGENT_KEY").unwrap_or_else(|_| "changeme-agent-key".to_string())
+}
+
+/// Constant-time-ish equality on the presented `X-Agent-Key`. Returns `Ok(())`
+/// when the request bears the valid service credential, else an `Unauthorized`
+/// response the caller can short-circuit on.
+fn require_agent_key(req: &HttpRequest) -> Result<(), HttpResponse> {
+    let provided = req
+        .headers()
+        .get("x-agent-key")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if provided != agent_key() {
+        warn!("[enrichment-decide] rejected: invalid or missing X-Agent-Key");
+        return Err(HttpResponse::Unauthorized().json(serde_json::json!({
+            "success": false,
+            "error": "Invalid or missing X-Agent-Key header",
+        })));
+    }
+    Ok(())
+}
+
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -176,10 +203,19 @@ pub(crate) fn record_decision(
 
 /// `POST /api/enrichment-proposals/{id}/decide`.
 pub async fn decide(
+    req: HttpRequest,
     path: web::Path<String>,
     body: web::Json<BrokerDecisionRequest>,
     client_coordinator: web::Data<actix::Addr<ClientCoordinatorActor>>,
 ) -> HttpResponse {
+    // Gate first: this mutating governance route is a service-to-service call
+    // from the agentbox broker-bridge, not the human UI (no client/src caller).
+    // Require the established service credential before any decision is recorded,
+    // broadcast, or attributed — closes the unauthenticated write-back loop.
+    if let Err(resp) = require_agent_key(&req) {
+        return resp;
+    }
+
     let case_id = path.into_inner();
 
     let record = match record_decision(&case_id, &body) {
