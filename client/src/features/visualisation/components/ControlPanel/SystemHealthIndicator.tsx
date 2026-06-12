@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Activity, Wifi, Database, Server, Check, AlertCircle, Loader, Filter, Link, Unlink, Network, Boxes, Bot, GitBranch, Sigma, Zap } from 'lucide-react';
-import { webSocketService } from '../../../../store/websocketStore';
+import { webSocketService, useWebSocketStore } from '../../../../store/websocketStore';
 import { useSettingsStore } from '../../../../store/settingsStore';
 import { useConstraintStats } from '../../../ontology/hooks/useConstraintStats';
 import { useInferredEdgesStore } from '../../../ontology/store/useInferredEdgesStore';
@@ -121,10 +121,24 @@ export const SystemHealthIndicator: React.FC<SystemHealthIndicatorProps> = ({
     }
   }, []);
 
+  // Honest liveness: statistics.lastActivity is bumped on every real WS
+  // message (rx and tx) since the Front-4 fix — a wedged or half-open feed
+  // stops bumping it, so the indicator can no longer show "All systems
+  // synchronized" over a dead connection. 90s grace covers converged-physics
+  // quiet periods (heartbeat pings refresh activity every 30s regardless).
+  const lastActivity = useWebSocketStore(s => s.statistics.lastActivity);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 15000);
+    return () => window.clearInterval(t);
+  }, []);
+  const feedFresh = now - lastActivity < 90000;
+
   const isFullyConnected =
     status.websocket === 'connected' &&
     status.metadata === 'loaded' &&
-    status.nodes > 0;
+    status.nodes > 0 &&
+    feedFresh;
 
   const getStatusColor = (connected: boolean | string): string => {
     if (connected === true || connected === 'connected' || connected === 'loaded') {

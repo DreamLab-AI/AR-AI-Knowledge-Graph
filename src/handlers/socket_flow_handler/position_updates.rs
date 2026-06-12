@@ -438,6 +438,21 @@ pub(crate) fn handle_subscribe_position_updates(
     // hot-path: trace only (re-fires every interval via run_later re-subscription loop)
     trace!("Client requested position update subscription");
 
+    // Per-session rate limit: ignore subscribes arriving within 2s of the last
+    // accepted one. A client stuck in a reconnect/subscribe loop (observed at
+    // ~400ms cadence) otherwise restarts the broadcast loop and re-snapshots
+    // continuously, degrading the pipeline for every connected client. The
+    // duplicate-loop generation collapse below handles correctness; this guard
+    // handles the resource churn. Legitimate clients subscribe once per
+    // connection (plus ~30s watchdog probes), far below this limit.
+    if let Some(last) = act.last_position_subscribe {
+        if last.elapsed() < std::time::Duration::from_secs(2) {
+            trace!("subscribe_position_updates rate-limited (per-session, <2s since last)");
+            return;
+        }
+    }
+    act.last_position_subscribe = Some(std::time::Instant::now());
+
     // Collapse duplicate subscriptions to a single broadcast loop. A client that
     // subscribes more than once (AppInitializer fires on both connection-status-change
     // and connection_established) would otherwise spawn one independent run_later

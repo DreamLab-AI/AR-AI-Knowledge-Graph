@@ -24,6 +24,7 @@ export const SpacePilotSimpleIntegration: React.FC<SpacePilotSimpleIntegrationPr
   const _euler = useRef(new THREE.Euler());
   const _quat = useRef(new THREE.Quaternion());
   const _targetVec = useRef(new THREE.Vector3());
+  const _savedQuat = useRef(new THREE.Quaternion());
 
   const config = {
     translationSpeed: 5.0,
@@ -57,9 +58,17 @@ export const SpacePilotSimpleIntegration: React.FC<SpacePilotSimpleIntegrationPr
     const dist = Math.max(camera.position.length(), 20);
     _targetVec.current.copy(camera.position).add(fwd.multiplyScalar(dist));
 
-    // Update OrbitControls to accept the new camera state
+    // Update OrbitControls to accept the new camera state.
+    // OrbitControls.update() re-orients the camera via lookAt with world-up,
+    // which zeroes any 6DOF roll — the "camera snaps to level" on puck
+    // release (the OS SpaceMouse driver also emits wheel events, so this
+    // fires without the user touching the mouse). Preserve the camera
+    // orientation across the internal-state refresh; world-up is re-imposed
+    // only when the user genuinely orbit-drags.
     orbitControls.target.copy(_targetVec.current);
+    _savedQuat.current.copy(camera.quaternion);
     orbitControls.update();
+    camera.quaternion.copy(_savedQuat.current);
   }, [camera, orbitControlsRef]);
 
   // On mouse/wheel interaction after SpacePilot diverged, sync orbit to

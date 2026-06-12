@@ -108,6 +108,14 @@ pub struct SocketFlowServer {
     /// newer subscribe supersedes it, leaving exactly one active loop.
     pub(crate) position_sub_generation: u64,
 
+    /// Rate limit for `subscribe_position_updates`. A buggy client in a
+    /// reconnect loop (observed 2026-06-12: a zombie tab resubscribing every
+    /// ~400ms for hours) constantly restarts the broadcast loop and
+    /// re-snapshots, degrading the position pipeline for EVERY connected
+    /// client. Per-session state: one client's storm never throttles another
+    /// client's subscription.
+    pub(crate) last_position_subscribe: Option<Instant>,
+
     /// ADR-031 item 4: Pending server-to-client directives embedded in pong frames.
     /// Drained on each `send_pong` call via the `WebSocketHeartbeat` trait override.
     pub(crate) pending_directives: Vec<HeartbeatDirective>,
@@ -170,6 +178,7 @@ impl SocketFlowServer {
             drag_timeout_ms: 500,
             subscribed_node_types: HashSet::new(),
             position_sub_generation: 0,
+            last_position_subscribe: None,
             pending_directives: Vec::new(),
         }
     }

@@ -17,8 +17,9 @@ import { debugState } from '../../utils/clientDebugState';
 import type { WebSocketMessage } from '../../types/websocketTypes';
 import type { NodeType } from '../../types/binaryProtocol';
 import { processBinaryData, validateBinaryData } from './binaryProtocol';
-import { handleHeartbeatResponse } from './connectionManager';
+import { handleHeartbeatResponse, noteInboundBinary } from './connectionManager';
 import { handleTextMessage } from './textMessageHandler';
+import type { WebSocketStatistics } from '../../types/websocketTypes';
 
 const logger = createLogger('WebSocketStore');
 
@@ -100,11 +101,28 @@ export function createMessageHandler(
   dispatcher: BinaryFrameDispatcher,
   processMessageQueueFn: () => void,
 ): (event: MessageEvent) => void {
+  // Honest statistics: every inbound message bumps the counters that the
+  // status indicators read. Previously statistics stayed zeroed forever, so
+  // "All systems synchronized" displayed even with a dead feed (Front 4).
+  const bumpRx = (bytes: number) => {
+    const stats = (get() as unknown as { statistics?: WebSocketStatistics }).statistics;
+    if (!stats) return;
+    set({
+      statistics: {
+        ...stats,
+        messagesReceived: stats.messagesReceived + 1,
+        bytesReceived: stats.bytesReceived + bytes,
+        lastActivity: Date.now(),
+      },
+    });
+  };
+
   return (event: MessageEvent) => {
     if (get().socket !== socket) return;
 
     if (event.data === 'pong') {
       handleHeartbeatResponse();
+      bumpRx(4);
       return;
     }
 
@@ -112,6 +130,8 @@ export function createMessageHandler(
       if (debugState.isDataDebugEnabled()) {
         logger.debug('Received binary blob data');
       }
+      noteInboundBinary();
+      bumpRx(event.data.size);
 
       event.data.arrayBuffer().then(buffer => {
         if (validateBinaryData(buffer)) {
@@ -129,6 +149,8 @@ export function createMessageHandler(
       if (debugState.isDataDebugEnabled()) {
         logger.debug(`Received binary ArrayBuffer data: ${event.data.byteLength} bytes`);
       }
+      noteInboundBinary();
+      bumpRx(event.data.byteLength);
       if (validateBinaryData(event.data)) {
         dispatcher.handle(event.data);
       } else {
@@ -142,6 +164,7 @@ export function createMessageHandler(
         logger.warn('Received empty or invalid message data');
         return;
       }
+      bumpRx(event.data.length);
 
       const message = JSON.parse(event.data) as WebSocketMessage;
 

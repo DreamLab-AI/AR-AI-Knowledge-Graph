@@ -53,6 +53,14 @@ class GraphWorker {
   private binaryUpdateCount: number = 0;
   private lastBinaryUpdate: number = 0;
 
+  // Self-driven interpolation loop. Server frames arrive at broadcast cadence
+  // (~5Hz); the renderer runs at 60fps reading the SAB. Without a worker-side
+  // tween tick, positions step once per server frame — visible stutter despite
+  // fast rendering. (The old main-thread tick() caller was removed along with
+  // client physics, so interpolation must self-drive here.)
+  private tweenTimer: ReturnType<typeof setInterval> | null = null;
+  private lastTweenTs: number = 0;
+
   // Retained for API compatibility — server (Rust/CUDA) now owns all force-directed layout.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private forcePhysics: ForcePhysicsSettings = {
@@ -297,18 +305,61 @@ class GraphWorker {
       unknownCount, this.unknownNodeIds.size, this.lastUnknownNodeAlert,
     );
 
-    // Server is authoritative: reflect target positions into currentPositions and
-    // publish to the SAB the renderer reads (getPositionsSync). The D7 refactor
-    // (c99a18bc2) wired the renderer to read the SAB directly but left the tween
-    // loop (tick → syncToSharedBuffer) with no callers, so without this the SAB
-    // stays frozen at the initial layout and every server frame dies in
-    // targetPositions — the graph never reflects server physics.
-    if (this.currentPositions && this.currentPositions.length === this.targetPositions!.length) {
-      this.currentPositions.set(this.targetPositions!);
+    // Server is authoritative: incoming frames land in targetPositions only, and
+    // the self-driven tween loop interpolates currentPositions toward them at
+    // ~60Hz, publishing to the SAB each tick. The previous hard snap here (D7
+    // hotfix for the orphaned tick() caller) made positions step at server
+    // broadcast cadence (~5Hz) — the long-standing stutter despite fast
+    // rendering. Snap remains only for tweening-disabled mode.
+    if (!this.tweenSettings.enabled) {
+      if (this.currentPositions && this.currentPositions.length === this.targetPositions!.length) {
+        this.currentPositions.set(this.targetPositions!);
+      }
+      this.syncToSharedBuffer();
+    } else {
+      this.ensureTweenLoop();
     }
-    this.syncToSharedBuffer();
 
     return positionArray;
+  }
+
+  /**
+   * Start (idempotently) the worker-internal interpolation loop. Runs at ~60Hz,
+   * advancing currentPositions toward targetPositions via tickTween and
+   * publishing to the SAB. Stops itself after the layout has fully converged
+   * AND no fresh server frame has arrived for 2s, so an idle graph costs
+   * nothing; the next incoming frame restarts it. Per-client: this loop is
+   * purely local interpolation — multi-client safe by construction.
+   */
+  private ensureTweenLoop(): void {
+    if (this.tweenTimer !== null) return;
+    this.lastTweenTs = performance.now();
+    let idleTicks = 0;
+    this.tweenTimer = setInterval(() => {
+      const now = performance.now();
+      const dt = Math.min((now - this.lastTweenTs) / 1000, 0.033);
+      this.lastTweenTs = now;
+      if (!this.currentPositions || !this.targetPositions || !this.velocities) return;
+      const result = tickTween({
+        curPos: this.currentPositions,
+        tgtPos: this.targetPositions,
+        vel: this.velocities,
+        nodeCount: this.graphData.nodes.length,
+        pinnedNodeIds: this.pinnedNodeIds,
+        nodeIdMap: this.nodeIdMap,
+        nodeIds: this.nodeIdCache,
+        tweenSettings: this.tweenSettings,
+        deltaTime: dt,
+      });
+      this.syncToSharedBuffer();
+      // lastBinaryUpdate is epoch ms (Date.now), distinct from performance.now.
+      if (result.hadMovement || Date.now() - this.lastBinaryUpdate < 2000) {
+        idleTicks = 0;
+      } else if (++idleTicks > 120) {
+        clearInterval(this.tweenTimer!);
+        this.tweenTimer = null;
+      }
+    }, 16);
   }
 
   /**

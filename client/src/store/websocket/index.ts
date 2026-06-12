@@ -312,6 +312,14 @@ export const useWebSocketStore = create<WebSocketState>()(
 
         try {
           state.socket.send(messageStr);
+          set({
+            statistics: {
+              ...state.statistics,
+              messagesSent: state.statistics.messagesSent + 1,
+              bytesSent: state.statistics.bytesSent + messageStr.length,
+              lastActivity: Date.now(),
+            },
+          });
 
           if (debugState.isDataDebugEnabled()) {
             logger.debug(`Sent message: ${type}`);
@@ -332,6 +340,14 @@ export const useWebSocketStore = create<WebSocketState>()(
 
         try {
           state.socket.send(data);
+          set({
+            statistics: {
+              ...state.statistics,
+              messagesSent: state.statistics.messagesSent + 1,
+              bytesSent: state.statistics.bytesSent + data.byteLength,
+              lastActivity: Date.now(),
+            },
+          });
 
           if (debugState.isDataDebugEnabled()) {
             logger.debug(`Sent binary data: ${data.byteLength} bytes`);

@@ -1572,10 +1572,13 @@ impl Handler<ComputeForces> for ForceComputeActor {
                     // (Previously 0.7x which decayed in ~10 steps — too fast for
                     // 2000+ node graphs to find community structure.)
                     if actor.reheat_factor > 0.0 {
-                        // Slower decay (0.985) gives ~46-step half-life vs 14-step at 0.95.
-                        // Dense knowledge graphs need sustained energy injection to escape
-                        // tight spring-equilibrium pockets (Slice A audit, 2026-05-26).
-                        actor.reheat_factor *= 0.985;
+                        // Decay 0.997 gives a ~230-step half-life: a reheat of 1.0 sustains
+                        // ~21s at 60fps before hitting the 0.02 floor — matched to the 30s
+                        // stability_warmup_remaining window. The previous 0.985 (~46-step
+                        // half-life) burned out in ~4s, so the orchestrator's settle
+                        // detector paused physics before a new equilibrium could form and
+                        // every slider change looked dead at deep convergence.
+                        actor.reheat_factor *= 0.997;
                         if actor.reheat_factor < 0.02 {
                             actor.reheat_factor = 0.0;
                         }
@@ -2142,10 +2145,14 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             msg.params.center_gravity_k, msg.params.cluster_strength, msg.params.alignment_strength
         );
 
-        // Capture prior repel_k BEFORE update_simulation_parameters overwrites self.simulation_params.
-        // Used below to scale reheat energy proportional to the magnitude of the user's change.
+        // Capture prior force coefficients BEFORE update_simulation_parameters overwrites
+        // self.simulation_params. Used below to scale reheat energy proportional to the
+        // magnitude of the user's change — spring changes must reheat too, or the spring
+        // sliders appear dead at deep equilibrium (one 4s nudge, no visible relayout).
         let prior_repel_k = self.simulation_params.repel_k.max(1.0);
         let new_repel_k = msg.params.repel_k.max(1.0);
+        let prior_spring_k = self.simulation_params.spring_k.max(0.01);
+        let new_spring_k = msg.params.spring_k.max(0.01);
 
         // Detect per-population spring changes so we re-upload the spring_scale buffer
         // (it is otherwise only set on graph load). These drive the independent
@@ -2204,10 +2211,14 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
         // repulsion/spring changes (Slice A audit, 2026-05-26).
         self.stability_warmup_remaining = 1800;
 
-        // Scale reheat by the log-ratio of repel_k change. A 10x repel_k bump produces
-        // reheat ≈ 1 + ln(10)*2 = 5.6 → clamped to 5.0; a 1.5x bump produces ≈ 1.8.
-        // Capped at 5.0 to stay bounded by max_velocity.
-        let ratio = new_repel_k / prior_repel_k;
+        // Scale reheat by the log-ratio of the LARGEST force-coefficient change in
+        // either direction (repel_k or spring_k). A 10x bump produces reheat
+        // ≈ 1 + ln(10)*2 = 5.6 → clamped to 5.0; a 1.5x change produces ≈ 1.8.
+        // Direction-agnostic: weakening springs 40→6 must relayout just as much as
+        // strengthening them. Capped at 5.0 to stay bounded by max_velocity.
+        let repel_ratio = (new_repel_k / prior_repel_k).max(prior_repel_k / new_repel_k);
+        let spring_ratio = (new_spring_k / prior_spring_k).max(prior_spring_k / new_spring_k);
+        let ratio = repel_ratio.max(spring_ratio);
         let reheat = if ratio > 1.0 { (1.0 + ratio.ln() * 2.0).clamp(1.0, 5.0) } else { 1.0 };
         self.reheat_factor = reheat;
 
