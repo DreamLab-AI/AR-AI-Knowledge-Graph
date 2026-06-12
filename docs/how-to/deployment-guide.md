@@ -72,7 +72,7 @@ sudo systemctl restart docker
 | 7880 | LiveKit | HTTP/WS | WebRTC signaling (voice overlay) |
 | 7881 | LiveKit RTC | TCP | WebRTC TCP fallback |
 | 7882 | LiveKit RTC | UDP | WebRTC media transport |
-| 8100 | Turbo Whisper | HTTP/WS | Speech-to-text API (voice overlay) |
+| 8000 | Turbo Whisper | HTTP/WS | Speech-to-text API (voice overlay) |
 | 8880 | Kokoro TTS | HTTP | Text-to-speech API (voice overlay) |
 | 9500 | MCP TCP Server | TCP | Multi-agent MCP protocol |
 | 9380 | RAGFlow | HTTP | Knowledge retrieval service |
@@ -141,7 +141,7 @@ VisionClaw uses several compose files for different deployment scenarios.
 ```mermaid
 graph TB
     subgraph "Entry Points"
-        Nginx["Nginx :3001\n(dev) / :4000 (prod)"]
+        Nginx["Nginx :3001\n(entry point, dev and prod;\nAPI also mapped on :4000 in dev)"]
         CF["Cloudflare Tunnel\n(optional)"]
     end
 
@@ -151,7 +151,7 @@ graph TB
 
     subgraph "Voice Pipeline (overlay)"
         livekit["livekit\n:7880"]
-        whisper["turbo-whisper\n:8100"]
+        whisper["turbo-whisper\n:8000"]
         kokoro["kokoro-tts\n:8880"]
     end
 
@@ -469,7 +469,7 @@ Adds three GPU-aware services:
 | Service | Image | Port | Role |
 |---------|-------|------|------|
 | `livekit` | `livekit/livekit-server:v1.7` | 7880 (HTTP/WS), 7881 (TCP), 7882 (UDP) | WebRTC SFU for spatial audio |
-| `turbo-whisper` | `fedirz/faster-whisper-server:latest-cuda` | 8100 | Streaming speech-to-text |
+| `turbo-whisper` | `fedirz/faster-whisper-server:latest-cuda` | 8000 | Streaming speech-to-text |
 | `kokoro-tts` | `ghcr.io/remsky/kokoro-fastapi-cpu:latest` | 8880 | Text-to-speech |
 
 LiveKit configuration lives in `config/livekit.yaml` (mounted read-only at `/etc/livekit.yaml`). It sets Opus codec defaults, 50-participant room limits, and WebRTC media ports 50000–50200/udp.
@@ -556,10 +556,10 @@ graph LR
     end
 
     subgraph "visionclaw_network network"
-        Nginx_int["Internal Nginx\n:3001 (dev) / :4000 (prod)"]
+        Nginx_int["Internal Nginx\n:3001 (entry point, dev and prod)"]
         VF["visionclaw\nActix-web :4000\n(embeds Oxigraph store)"]
         LK["LiveKit\n:7880"]
-        WH["Whisper\n:8100"]
+        WH["Whisper\n:8000"]
         KO["Kokoro TTS\n:8880"]
     end
 

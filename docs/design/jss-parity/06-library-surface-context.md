@@ -1,5 +1,7 @@
 # Bounded Context: Library Surface
 
+> **Status:** implemented — verified 2026-06-12 in the solid-pod-rs repo (separate `solid-pod-rs` library and `solid-pod-rs-server` crates).
+
 > **Sprint 4 / F7**. Realises ADR-054 "library vs server separation"
 > referenced throughout GAP-ANALYSIS.md (§C.7a, §F.4, §E.9, §E.3, §E.7).
 > PARITY-CHECKLIST.md rows 139, 140.

@@ -10,6 +10,8 @@ owner: VisionClaw core
 
 # Insight Migration Loop — Master Design
 
+> **Partially realised by ADR-110 (2026-06-12):** the broker-escalation seam now ships as the ACSP producer + ElevationActor; the wider context map remains aspirational.
+
 ## 1. Executive summary
 
 The Insight Migration Loop turns writing a Logseq note into the first step of building a governed, machine-reasoned vocabulary. When a `public:: true` note accumulates evidence — ontology wikilinks, an agent proposal, a maturity marker — VisionClaw surfaces it in the broker's inbox as a candidate class. The broker takes two minutes, approves, the system opens a GitHub PR, and on merge the note becomes a live OWL class Whelk can reason over, with the 3D physics view redrawing around it. A governed ontology grows as a by-product of note-taking. VisionClaw is uniquely positioned because it already runs the four ingredients nobody else combines: Logseq tacit input, a CUDA physics graph, Nostr-signed provenance, the Judgment Broker Workbench. The migration event itself is the novelty ([01-prior-art.md](./01-prior-art.md) §Genuine-Novelty Ledger).

@@ -9,6 +9,8 @@ precedes: docs/audits/2026-04-18-logseq-ontology-audit/00-master.md
 
 # Unified Knowledge Pipeline
 
+> **Status:** partially implemented as of 2026-06-12 — Whelk reasoning (`src/application/inference_service.rs`) and frontier-concept elevation (`src/actors/elevation_actor.rs`, ADR-110) are live; the domain registry (`config/domains.yaml`) and the §4 discovery dashboards are not.
+
 ## Prime Directive
 
 **Every atom of information authored has exactly one canonical representation in the graph, participates in the physics, and is addressable by a deterministic IRI.** No silent losses. No grounded/ungrounded tiers. No domain hard-coding. No dead-code axiom types.

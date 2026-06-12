@@ -4,6 +4,15 @@
 
 ## 1. Bounded Context Map
 
+> **Status (2026-06-12):** decision-time design, partially superseded by what
+> shipped. The live wire is the **52-byte** `WireNodeDataItemV3` record (1-byte
+> version header `0x03`/`0x05`) with the analytics tail (sssp/cluster/anomaly/
+> community/centrality) **inline in the position frame** — see
+> `docs/binary-protocol.md` and the amendment note in ADR-061. The separate
+> `analytics_update` message and the 28 B/node steady-state frame shown below
+> were not implemented (no `analytics_update` emitter exists in `src/` or
+> `client/src`).
+
 ```mermaid
 graph TB
     subgraph "Core Domain: Position Stream"

@@ -1,5 +1,7 @@
 # Agentbox Cartography Audit — 2026-06-09
 
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 **Auditor:** Cartography agent (Diagram-Driven Diagnosis)
 **Scope:** `/home/devuser/workspace/project/agentbox` (sub-git of VisionClaw host)
 **Protocol:** Read-only analysis against CLAUDE.md architectural claims

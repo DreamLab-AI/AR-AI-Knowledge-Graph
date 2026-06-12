@@ -170,13 +170,12 @@ flowchart LR
         A1[UI slider] -->|updatePhysics| B1[physicsSlice\nvalidate + immer]
         B1 -->|updateSettings| B2[coreSlice\nchangedPaths]
         B2 -->|queueChanges| C1[autoSaveManager\n500 ms debounce]
-        B1 -->|notifyPhysicsUpdate\nPARALLEL| C2[settingsApi.updatePhysics\nDIRECT — no debounce]
+        B1 -.->|notifyPhysicsUpdate\nNO-OP since 2026-06-03\nno network side-effect| C2[settingsApi.updatePhysics\nformerly DIRECT — retired]
     end
 
     subgraph WIRE
         C1 -->|updateSettingsByPaths\nbatch routing| D1[PUT /api/settings/physics]
-        C2 -->|GET current + PUT merged| D1
-        A2[/settings/path PUT] -->|update_setting_by_path\nroutes.rs:99| D2[settings_addr UpdateSettings\nthen propagate_physics_to_gpu]
+        A2[/settings/path PUT] -->|update_setting_by_path\nroutes.rs:92| D2[settings_addr UpdateSettings\nthen propagate_physics_to_gpu]
         A3[POST /settings\nwrite_handlers.rs] -->|update_settings| D2
     end
 
@@ -197,13 +196,11 @@ flowchart LR
 
 ## Anomalies Found (with file:line)
 
-### ANOMALY-1: Dual simultaneous write paths from a single slider event
+### ANOMALY-1: Dual simultaneous write paths from a single slider event — RESOLVED 2026-06-03
 
-`physicsSlice.ts:116` calls `state.updateSettings(draft => ...)` — which routes through `autoSaveManager.queueChanges()` (500 ms debounced batch).
+~~`physicsSlice.ts:130` — `notifyPhysicsUpdate()` also calls `settingsApi.updatePhysics()` **directly and immediately**, bypassing the debounce entirely.~~
 
-`physicsSlice.ts:130` — `notifyPhysicsUpdate()` also calls `settingsApi.updatePhysics()` **directly and immediately**, bypassing the debounce entirely.
-
-Result: every slider drag fires **two concurrent write pipelines** to `PUT /api/settings/physics`.  The `updatePhysics` path itself does a GET-then-PUT (`endpoints.ts:85–91`), so a single drag gesture generates at least two GET + two PUT round trips, potentially out of order.
+**Resolved 2026-06-03 (T2 fix).** `notifyPhysicsUpdate()` (`physicsSlice.ts:129`) is now a persistence NO-OP — it performs no network side-effect. Persistence is owned solely by the debounced `autoSaveManager` path (`queueChanges()` → `updateSettingsByPaths` → `settingsApi.updatePhysics`), so each slider commit reaches the backend exactly once.
 
 ### ANOMALY-2: Three independent default sources that do not fully agree
 

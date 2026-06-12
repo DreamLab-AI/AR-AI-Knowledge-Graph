@@ -69,14 +69,19 @@ xychart-beta
 | CUDA | 12.0 |
 | Node.js | 20.x |
 | TypeScript | 5.8 |
-| React | 18.2 |
-| Babylon.js | 7.x |
+| React | 19.2 |
+| Three.js (React Three Fiber) | 0.183 / R3F 9.5 |
 
 ---
 
 ## 1. WebSocket Protocol Performance
 
 ### Binary vs JSON Protocol
+
+> **Note (2026-06-12):** these numbers were measured against the V2-era
+> 36 B/node wire. The current wire is **V3: 52 B/node** (version byte `0x03`,
+> see [docs/binary-protocol.md](../binary-protocol.md)); absolute sizes scale
+> accordingly but the binary-vs-JSON ratios remain representative.
 
 **Test:** Stream 100K node updates @ 60 FPS for 60 seconds
 
@@ -175,7 +180,7 @@ xychart-beta
 
 ## 5. Frontend Rendering Performance
 
-### 3D Visualization (Babylon.js)
+### 3D Visualization (Three.js / React Three Fiber)
 
 **Test:** Render 100K spheres with lighting and shadows
 
@@ -321,7 +326,7 @@ graph LR
     B --> C{Route}
     C -->|Physics| D[CUDA Force Compute Actor]
     C -->|Queries| E[Oxigraph embedded graph store]
-    C -->|Rendering| F[Babylon.js Client]
+    C -->|Rendering| F[React Three Fiber Client]
     D --> G[GPU Timing: nvml / CUDA Events]
     E --> H[SPARQL Query Timer]
     F --> I[Chrome DevTools / Frame Profiler]

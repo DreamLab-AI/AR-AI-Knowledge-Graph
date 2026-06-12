@@ -1,6 +1,6 @@
 ---
 title: VisionClaw XR Architecture (Godot 4 + godot-rust + OpenXR)
-description: VisionClaw's XR architecture. A native Quest 3 APK built on Godot 4.3 + godot-rust (gdext) + OpenXR talks the existing 28 B/node binary protocol and a new presence WebSocket. Replaces the prior browser-based WebXR design.
+description: VisionClaw's XR architecture. A native Quest 3 APK built on Godot 4.3 + godot-rust (gdext) + OpenXR talks the existing V3 52 B/node binary protocol and a new presence WebSocket. Replaces the prior browser-based WebXR design.
 category: explanation
 tags: [xr, vr, godot, godot-rust, gdext, openxr, quest3, presence, livekit, binary-protocol]
 updated-date: 2026-05-02
@@ -22,9 +22,10 @@ related:
 > APK** built from a **Godot 4.3** project, with performance-critical paths
 > implemented in **Rust via godot-rust (gdext)** and runtime XR access through
 > **OpenXR**. Multi-user presence rides a new **`/ws/presence`** WebSocket
-> served by a Rust `PresenceActor`; the existing 28 B/node binary position
-> stream (per [ADR-061](../adr/ADR-061-binary-protocol-unification.md)) is
-> consumed unchanged. Voice continues to ride **LiveKit** (Android AAR on the
+> served by a Rust `PresenceActor`; the existing V3 **52 B/node** binary
+> position stream (version byte `0x03`, per
+> [docs/binary-protocol.md](../binary-protocol.md)) is consumed unchanged.
+> Voice continues to ride **LiveKit** (Android AAR on the
 > headset; HRTF spatialised in the Godot audio bus).
 >
 > **Predecessor.** The prior browser-hosted WebXR client is removed wholesale
@@ -56,8 +57,8 @@ the headline device, for five structural reasons documented in PRD-008 §1:
    "browser-universal" justification was never real.
 
 The native APK lifts the ceiling: full OpenXR extension surface, no JS GC,
-Rust-substrate alignment, and the same 28 B/node binary protocol the desktop
-client speaks. See
+Rust-substrate alignment, and the same V3 52 B/node binary protocol the
+desktop client speaks. See
 [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md) for the full decision
 analysis (six options considered).
 
@@ -197,17 +198,19 @@ sequenceDiagram
     XR-->>GDExt: XrInstance handle
     GDExt->>GDExt: capability probe (immutable for process lifetime)
 
-    GDExt->>Server: GET /api/auth/challenge → nonce
-    GDExt->>GDExt: schnorr_sign(nonce || ts, did_priv)
-    GDExt->>Server: WSS /wss + Authorization: Nostr <NIP-98>
-    Server-->>GDExt: subscription_confirmed
+    GDExt->>Server: WSS /wss (graph stream)
+    GDExt->>Server: {"type":"subscribe_position_updates","data":{interval, binary:true}}
+    GDExt->>Server: {"type":"authenticate", event: <NIP-98 kind-27235>} (unlocks server-authoritative drag)
 
-    GDExt->>Server: WSS /ws/presence + Authorization
-    Server-->>GDExt: room_joined{members, spawn_anchor, livekit_token}
+    GDExt->>Server: WSS /ws/presence
+    Server-->>GDExt: {"type":"challenge", nonce, ts}
+    GDExt->>GDExt: schnorr_sign(SHA256(nonce || ts_le), did_priv)
+    GDExt->>Server: {"type":"auth", did, signature, room_id, metadata}
+    Server-->>GDExt: {"type":"joined", room_id, avatar_id, members[]}
 
     APK->>APK: load GraphScene.tscn
-    Server-->>GDExt: 0x42 frame N=5000
-    GDExt->>GDExt: parse → MultiMeshInstance3D buffers
+    Server-->>GDExt: V3 frame (version byte 0x03, 52 B/node)
+    GDExt->>GDExt: parse → MultiMesh buffers
     APK->>XR: xrBeginSession() → first compositor frame
 ```
 
@@ -234,11 +237,11 @@ sequenceDiagram
     loop every 11.1 ms
         Godot->>GDExt: _process(dt)
         GDExt->>GDExt: drain pending position frames (mpsc)
-        alt frame N % 2 == 0
-            GDExt->>LOD: recompute_lod_buckets(camera_pose)
-            LOD-->>GDExt: bucket_assignments
+        alt scheduler tick (every 2nd frame)
+            GDExt->>LOD: classify_avatars(camera_pose) + visible_subset(centrality, cap)
+            LOD-->>GDExt: LOD levels + top-N-by-centrality node subset
         end
-        GDExt->>Multi: set_instance_transform_2d(buffer)
+        GDExt->>Multi: set_instance_transform(i, xf) per visible instance
         GDExt->>GDExt: emit local pose (90 Hz, throttled)
         GDExt-->>Godot: frame complete
         Godot->>Godot: render compositor layers
@@ -255,18 +258,24 @@ stays near zero for AFK users.
 
 ## 7. Binary protocol — reuse and extension
 
-[ADR-061](../adr/ADR-061-binary-protocol-unification.md) fixes the per-frame
-node size at **28 bytes** and forbids version negotiation. The Godot client
-consumes the same position stream byte-for-byte. The avatar pose frame is
-added **as a sibling opcode** dispatched on the existing WS endpoint by
-preamble byte — not a version bump.
+> **UPDATED 2026-06-12.** The design-era 28 B / `0x42` / `0x50` figures below
+> were superseded by the shipped implementation (ADR-102): the graph stream
+> is **V3, version byte `0x03`, 52 B/node** (canonical spec
+> [docs/binary-protocol.md](../binary-protocol.md)), and the avatar pose
+> opcode is **`0x43`** on `/ws/presence`
+> (`crates/visionclaw-xr-presence/src/wire.rs`).
 
-### 7.1 Opcode dispatch
+The Godot client consumes the same V3 position stream byte-for-byte as the
+desktop client (`xr-client/rust/src/binary_protocol.rs`). The avatar pose
+frame is a **separate opcode on `/ws/presence`** — not a version bump of the
+graph stream.
 
-| Preamble | Opcode | Sender | Description | Spec |
+### 7.1 Frame dispatch
+
+| First byte | Meaning | Endpoint / sender | Description | Spec |
 |---|---|---|---|---|
-| `0x42` | position_frame | server → all subscribed clients | 28 B/node position + velocity | [`docs/binary-protocol.md`](../binary-protocol.md) |
-| `0x50` | avatar_pose_frame | bidirectional, presence-room scoped | Head + hand transforms at 90 Hz | [PRD-008 §5.2](../PRD-008-xr-godot-replacement.md) |
+| `0x03` | V3 position frame | `/wss`, server → all subscribed clients | 52 B/node: id+flags, pos, vel, sssp_distance, sssp_parent, cluster_id, anomaly, community_id, centrality | [`docs/binary-protocol.md`](../binary-protocol.md) |
+| `0x43` | avatar_pose_frame | `/ws/presence`, bidirectional, room scoped | Head + optional hand transforms (mask-encoded) | `crates/visionclaw-xr-presence/src/wire.rs` |
 
 Future opcodes (e.g. spatial annotations) do not break existing clients —
 the dispatch table treats unknown opcodes as a logged drop, not a
@@ -274,21 +283,24 @@ connection close.
 
 ### 7.2 Avatar pose frame layout
 
-Per `AvatarPose` (76 bytes fixed):
+As implemented in `crates/visionclaw-xr-presence/src/wire.rs` (variable
+length, little-endian):
 
 ```
-[u32 user_id_LE]                                         room-local id, server-bound
-[f32 head_x][f32 head_y][f32 head_z]                     12 B head position
-[f32 head_qx][f32 head_qy][f32 head_qz][f32 head_qw]     16 B head orientation (quat)
-[f32 lhand_x][f32 lhand_y][f32 lhand_z]                  12 B left hand position
-[f32 lhand_qx][f32 lhand_qy][f32 lhand_qz][f32 lhand_qw] 16 B left hand orientation
-[f32 rhand_x][f32 rhand_y][f32 rhand_z]                  12 B right hand position
-[f32 rhand_qx][f32 rhand_qy][f32 rhand_qz][f32 rhand_qw] 16 B right hand orientation
-                                                           = 76 B per avatar
+[u8  opcode = 0x43]
+[u16 frame_len_LE]            // bytes that follow this field
+[u8;16 room_id_hash]
+[u8  avatar_id_len]
+[u8;N avatar_id_utf8]
+[u64 timestamp_us_LE]
+[u8  transform_mask]          // bit0=head bit1=left_hand bit2=right_hand
+[{28 B} transforms...]        // present slots in head, left, right order
 ```
 
-Steady-state per-avatar wire cost: 76 B × 90 Hz ≈ 6.8 KB/s. A 4-user room
-broadcasts ~27 KB/s of pose to each participant.
+Hands are optional (mask-encoded), so a head-only frame is far smaller than
+a full head+hands frame. Inbound multi-avatar broadcast ("sibling") frames
+use a related layout with a `[u64 broadcast_seq][u32 room_id][u16 user_count]`
+header (`xr-client/rust/src/presence.rs::decode_sibling_frame`).
 
 ---
 
@@ -302,20 +314,20 @@ a server restart.
 
 `src/handlers/presence_handler.rs` mounts at `/ws/presence`:
 
-1. **Auth on upgrade.** Inspect `Authorization: Nostr <NIP-98 token>`.
-   Verify Schnorr signature against claimed `did:nostr:<hex-pubkey>`.
-   On failure → HTTP 401, no upgrade. The pubkey is bound to the socket;
-   mid-session impersonation is impossible.
-2. **Init handshake.** First post-upgrade message is JSON
-   `presence_init { room_id, display_name }`. Server replies with
-   `presence_room_state`, establishing the `user_id ↔ did:nostr` mapping.
-3. **Pose ingest.** Inbound `0x50` frames are decoded via the
-   `binary-protocol` crate, validated by `pose_validator`, then forwarded
+1. **Challenge on upgrade.** Server sends JSON
+   `{"type":"challenge", nonce, ts}` immediately after the upgrade.
+2. **Auth handshake.** Client replies with
+   `{"type":"auth", did, signature, room_id, metadata}` where `signature`
+   is `schnorr(SHA256(nonce || ts_le))` over the claimed
+   `did:nostr:<hex-pubkey>`. On success the server replies
+   `{"type":"joined", room_id, avatar_id, members[]}`, binding the
+   `local_id ↔ did:nostr` mapping; mid-session impersonation is impossible.
+3. **Pose ingest.** Inbound `0x43` frames are decoded via the shared
+   `visionclaw-xr-presence` wire crate, validated, then forwarded
    to `PresenceActor`.
-4. **Broadcast.** `PresenceActor` coalesces in-flight poses per room at
-   90 Hz, encodes one `0x50` frame containing all current members'
-   latest pose (with a stale-flag bit for any member whose last pose is
-   older than 200 ms), and sends to each subscribed socket **except** the
+4. **Broadcast.** `PresenceActor` coalesces in-flight poses per room,
+   encodes one `0x43` sibling frame containing all current members'
+   latest pose, and sends to each subscribed socket **except** the
    sender.
 5. **Visibility filter.** Re-broadcast respects [ADR-050](../adr/ADR-050-sovereign-graph-visibility.md)
    sovereign visibility — invisible avatars are dropped from the frame

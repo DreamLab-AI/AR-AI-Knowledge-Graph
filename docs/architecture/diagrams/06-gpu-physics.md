@@ -119,7 +119,7 @@ flowchart TD
 
     Lock --> |"kernel panics (OOM, CUDA error)"| Poison["Mutex POISONED\nstd::sync::PoisonError"]
 
-    Poison --> |"ForceComputeActor: lock()\n-> recovers via poisoned.into_inner()\nforce_compute_actor.rs:1520-1525"| FCARec["Physics continues\n(may use corrupt GPU state)"]
+    Poison --> |"ForceComputeActor: lock()\n-> recovers via poisoned.into_inner()\nforce_compute_actor.rs:1528"| FCARec["Physics continues\n(may use corrupt GPU state)"]
     Poison --> |"ClusteringActor: lock()\n-> recovers via poisoned.into_inner()\nclustering_actor.rs:167-169"| CARec["Analytics continues\n(may use corrupt GPU state)"]
 
     Poison --> |"Any actor that does NOT recover\nand propagates the panic across\nthe spawn_blocking thread boundary"| ProcessPanic["Process-wide panic\nAll GPU actors stop"]
@@ -259,13 +259,13 @@ per-step runtime decision, not a compile-time specialisation.
 
 - `memory.rs:697` — inside `initialize_graph()`, initial graph load
 - `memory.rs:713` — inside `update_positions_only()`, position-only update
-- `force_compute_actor.rs:1221` — divergence recovery (`recover_from_divergence`),
+- `force_compute_actor.rs:1222` — divergence recovery (`recover_from_divergence`),
   restores last-known-good positions to GPU
-- `force_compute_actor.rs:2943` — `ResetPositions` handler, uploads random sphere
+- `force_compute_actor.rs:3012` — `ResetPositions` handler, uploads random sphere
 
 All four go through the same `upload_positions` function (`memory.rs:51`), which
 does a safe size-checked `copy_from` to `pos_in_x/y/z`. No path bypasses the
-safety check, but recovery path (1221) and reset path (2943) both lock the
+safety check, but recovery path (1222) and reset path (3012) both lock the
 `unified_compute` Mutex directly on the actor thread (not inside `spawn_blocking`),
 which blocks the Tokio executor — the same anti-pattern the inline comment
 at `shared.rs:104-118` warns against.

@@ -1,5 +1,7 @@
 # Bounded Context: Security Primitives
 
+> **Status:** implemented — verified 2026-06-12 in the solid-pod-rs repo (`crates/solid-pod-rs/src/security/ssrf.rs`, `src/security/dotfile.rs`).
+
 > **Sprint 4 / F1 + F2**. Closes GAP-ANALYSIS.md §H rank 1, PARITY-CHECKLIST.md
 > rows 114 (SSRF guard) and 115 (dotfile allowlist). Upstream references:
 > `JavaScriptSolidServer/src/utils/ssrf.js:15-157` and

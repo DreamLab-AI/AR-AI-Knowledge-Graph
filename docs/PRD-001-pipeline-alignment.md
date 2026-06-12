@@ -174,6 +174,12 @@ VisionClaw's data pipeline from Neo4j through Rust server to TypeScript client h
 
 ### Encoding Function Call Graph (Server)
 
+> **Update 2026-06-12:** the `encode_node_data_with_analytics` →
+> `encode_node_data_with_all` branch (G→H below) was removed (task #70 D8b);
+> the remaining wrappers still delegate to
+> `encode_node_data_extended_with_sssp` as shown, and
+> `encode_node_data_with_live_analytics` still passes empty type arrays.
+
 ```mermaid
 graph TD
     A["encode_node_data()"] --> B["encode_node_data_with_types(nodes, &[], &[])<br/><i>no type flags</i>"]

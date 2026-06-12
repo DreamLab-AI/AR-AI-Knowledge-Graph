@@ -32,13 +32,13 @@ graph TD
         H_PHYSICS[physics_handler.rs<br/>427 lines]
         H_ONTOLOGY[ontology_handler.rs<br/>794 lines]
         H_BOTS[bots_handler.rs<br/>566 lines]
-        H_DISCOVERY[discovery_handler.rs<br/>1093 lines]
         H_MCP_RELAY[mcp_relay_handler.rs<br/>608 lines]
         H_RAGFLOW[ragflow_handler.rs<br/>815 lines]
         H_SPEECH[speech_socket_handler.rs<br/>593 lines]
-        H_SOLID[solid_pod_handler.rs<br/>500 lines]
+        H_SOLID[solid_proxy_handler.rs]
         H_NOSTR[nostr_handler.rs<br/>364 lines]
         H_QUIC[quic_transport_handler.rs<br/>759 lines]
+        H_PRESENCE[presence_handler.rs]
     end
 
     subgraph Actors["Actor System"]
@@ -49,11 +49,11 @@ graph TD
         A_SEMANTIC[SemanticProcessorActor<br/>1829 lines]
         A_ONTOLOGY[OntologyActor<br/>1155 lines]
         A_SETTINGS[OptimizedSettingsActor<br/>1428 lines]
-        A_BROKER[BrokerActor<br/>567 lines]
-        A_NOSTR[ServerNostrActor<br/>1041 lines]
         A_MCP_VIZ[MultiMcpVisualizationActor<br/>1206 lines]
         A_WORKSPACE[WorkspaceActor<br/>626 lines]
         A_PRESENCE[PresenceActor<br/>721 lines]
+        A_ELEVATION[ElevationActor<br/>env-gated ELEVATION_ACTOR_ENABLED=1]
+        A_VOICE[VoiceInterfaceActor]
         A_SUPERVISOR[SupervisorActor<br/>584 lines]
         A_LIFECYCLE[ActorLifecycleManager<br/>346 lines]
     end
@@ -76,15 +76,10 @@ graph TD
         S_AGENT_VIZ[AgentVisualizationProtocol<br/>1454 lines]
         S_SPEECH[SpeechService<br/>1414 lines]
         S_OWL_VAL[OwlValidator<br/>1245 lines]
-        S_KGE[KgeTrainer<br/>840 lines]
-        S_BEAD_STORE[BeadStore<br/>1217 lines]
         S_SEMANTIC_TYPE[SemanticTypeRegistry<br/>1145 lines]
-        S_INGEST_SAGA[IngestSaga<br/>986 lines]
         S_FILE_SVC[FileService<br/>1282 lines]
         S_NOSTR[NostrService<br/>742 lines]
-        S_EMBED[EmbeddingService<br/>728 lines]
-        S_NHOP[NhopMaterializer<br/>724 lines]
-        S_SHARE_ORCH[ShareOrchestrator<br/>715 lines]
+        S_ACSP[ACSP events + client<br/>services/acsp/]
         S_PATHFINDING[Pathfinding<br/>896 lines]
     end
 
@@ -538,9 +533,9 @@ V5 frames add an 8-byte broadcast-sequence prefix before the V3 body.
 | @48 | 4 B | f32 | centrality (PageRank, normalised) |
 
 The live encoder is `src/utils/binary_protocol.rs::encode_node_data_extended_with_sssp()`.
-The shadow crate `crates/visionclaw-protocol/src/binary_protocol.rs` encodes
-only 48 B (no centrality field) and has zero external callers — it is dead but
-not yet deleted (T6, under investigation, see `docs/architecture/KNOWN_ISSUES.md`).
+The former shadow module `crates/visionclaw-protocol/src/binary_protocol.rs`
+(48 B, no centrality field, zero external callers) **has been deleted**
+(task #101 T6); the rationale is recorded in `crates/visionclaw-protocol/src/lib.rs`.
 
 The stale description in §2 of this document cited "24 bytes/node" — that was
 the pre-ADR-031 V1 record size. The current protocol is 52 B.
@@ -555,8 +550,9 @@ the pre-ADR-031 V1 record size. The current protocol is 52 B.
 
 `ClusteringActor` is the sole writer of `cluster_id` and `community_id` in the
 shared `Arc<RwLock<HashMap<u32,NodeAnalytics>>>` store. All trigger paths —
-`POST /clustering/start`, `POST /analytics/clustering/run` (both GPU and
-CPU-fallback branches), and auto-trigger (when enabled) — ultimately route
+`POST /analytics/clustering/run` (both GPU and CPU-fallback branches, the sole
+remaining clustering route family after `clustering_handler.rs` was removed)
+and auto-trigger (when enabled) — ultimately route
 through `WriteClusterAnalytics → GPUManagerActor → AnalyticsSupervisor →
 ClusteringActor`.
 
@@ -580,6 +576,6 @@ in stats/wire are identical. Regression test:
 (`graph_service_supervisor.rs`) defaults to OFF for all four channels
 (`COMMUNITY`, `PAGERANK`, `ANOMALY`, `COMPONENTS`) unless
 `VISIONCLAW_AUTO_<ALGO>_ENABLED` is explicitly set. Hulls populate and render
-after an explicit `POST /analytics/clustering/run` or `POST /clustering/start`.
+after an explicit `POST /analytics/clustering/run`.
 They do not auto-render at boot. See `docs/architecture/KNOWN_ISSUES.md` for
 the T5 timing note.

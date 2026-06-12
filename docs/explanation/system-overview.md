@@ -55,8 +55,8 @@ graph LR
     D --> E[Inferred Axioms<br/>is-inferred=1]
     E --> C
     C --> F[Constraint Builder<br/>8 types]
-    F --> G[CUDA Physics<br/>39 kernels]
-    G --> H[Binary WebSocket<br/>36 bytes/node]
+    F --> G[CUDA Physics<br/>crates/visionclaw-gpu kernels]
+    G --> H[Binary WebSocket V3<br/>52 bytes/node]
     H --> I[3D Client]
 
     style D fill:#e1f5ff
@@ -137,84 +137,13 @@ store for both knowledge-graph and ontology data ([ADR-11](../migration-sprint/1
 
 **Unified Database Structure**:
 
-```mermaid
-erDiagram
-    graph_nodes ||--o{ graph_edges : "connects"
-    graph_nodes {
-        integer id PK
-        text metadata_id UK
-        text label
-        real x
-        real y
-        real z
-        text metadata
-    }
-
-    graph_edges {
-        text id PK
-        integer source FK
-        integer target FK
-        real weight
-        text metadata
-    }
-
-    owl_classes ||--o{ owl_class_hierarchy : "parent"
-    owl_classes ||--o{ owl_class_hierarchy : "child"
-    owl_classes ||--o{ owl_axioms : "references"
-
-    owl_classes {
-        text iri PK
-        text label
-        text description
-        text properties
-    }
-
-    owl_class_hierarchy {
-        text class_iri FK
-        text parent_iri FK
-    }
-
-    owl_properties {
-        text iri PK
-        text label
-        text property_type
-        text domain
-        text range
-    }
-
-    owl_axioms {
-        integer id PK
-        text axiom_type
-        text subject
-        text predicate
-        text object
-        integer is_inferred
-    }
-
-    graph_statistics {
-        text key PK
-        text value
-        datetime updated_at
-    }
-
-    file_metadata {
-        integer id PK
-        text file_path UK
-        text file_hash
-        datetime last_modified
-        text sync_status
-    }
-```
-
-**Table Overview**:
-1. **graph-nodes** - Knowledge graph vertices (local markdown)
-2. **graph-edges** - Knowledge graph relationships
-3. **owl-classes** - OWL ontology class definitions (GitHub markdown)
-4. **owl-class-hierarchy** - SubClassOf relationships
-5. **owl-properties** - OWL property definitions
-6. **owl-axioms** - Complete axiom storage with inference tracking
-7. **graph-statistics** - Runtime metrics and metadata
-8. **file-metadata** - Source file tracking for incremental sync
+> **SUPERSEDED 2026-06-12.** A relational ER diagram of the deprecated SQLite
+> `unified.db` schema (`graph_nodes`, `owl_classes`, `owl_axioms`, …)
+> previously appeared here. That schema was removed with the migration to the
+> embedded Oxigraph RDF store (ADR-11): the same logical entities now live as
+> RDF named graphs queried via SPARQL. See
+> [Unified Graph Schema](../reference/neo4j-schema-unified.md) for the
+> current logical model and node/edge/ontology entity reference.
 
 ### 2. Hexagonal Architecture with hexser
 

@@ -16,12 +16,27 @@ The topology is intentionally layered: a reverse proxy sits at the perimeter, st
 
 ## Service Map
 
+> **UPDATED 2026-06-12.** Ground truth is `docker-compose.unified.yml`, which
+> defines exactly three services: `visionclaw` (dev profile, ports
+> `3001:3001` and `4000:4000`), `visionclaw-production` (prod profile, port
+> `3001:3001`), and `cloudflared` (prod, optional). **nginx, the Rust
+> backend, and the Vite dev server all run inside the single `visionclaw`
+> container** under supervisord — they are not separate compose services.
+> There are no `postgres`, `redis`, `qdrant`, `opensearch`, or `jss`
+> services in the current compose: the backend has no relational-database
+> client at all (graph store is embedded Oxigraph, settings are SQLite, and
+> Solid pod routes are served by the backend itself at `/api/solid/*`).
+> Voice services (`livekit:7880`, `turbo-whisper:8000`, `kokoro-tts:8880`)
+> and `ruvector-postgres` are **external** containers on the shared
+> `visionclaw_network`. Rows below describing other services are retained
+> for historical context only.
+
 The table below lists every service defined across the compose files. The `profile` column shows which Docker Compose profile activates the service — `dev` means it runs only during development, `prod` means production-only, and `all` means it runs under any profile invocation.
 
 | Service | Port(s) | Role | Profile | depends_on |
 |---------|---------|------|---------|------------|
 | `nginx` | 3001 (HTTP) | Reverse proxy — routes `/api/*` to Actix-web, `/` to Vite; terminates TLS in prod | dev | visionclaw |
-| `visionclaw` | 4000 (HTTP), 9090 (WS), 9500 (MCP TCP) | Rust Actix-web backend (`visionclaw-server` binary, `visionclaw_container`) — graph API, physics orchestration, WebSocket binary stream, MCP server. Embeds the Oxigraph RDF triple store in-process (ADR-11), so there is no separate graph-database container | dev, prod | postgres (healthy) |
+| `visionclaw` | 4000 (HTTP + WS: `/wss`, `/ws/speech`, `/ws/mcp-relay`) | Rust Actix-web backend (`visionclaw-server` binary, `visionclaw_container`) — graph API, physics orchestration, WebSocket binary stream. Embeds the Oxigraph RDF triple store in-process (ADR-11) and SQLite settings; connects out to the agent container's MCP TCP server (:9500). No relational-database dependency | dev, prod | — |
 | `vite` | 5173 (HTTP), 24678 (WS HMR) | Vite dev server — Three.js/React frontend with Hot Module Replacement | dev | visionclaw |
 | `jss` | 3030 (HTTP), 9090 (Solid WS) | JavaScript Solid Server — Linked Data Platform for per-user RDF pods | all | visionclaw |
 | `solid-pod` | 9090 (HTTP) | Solid pod storage endpoint (separate from JSS in some deployments) | prod | jss |
@@ -46,70 +61,44 @@ The following diagram shows all services as nodes. Solid arrows represent active
 ```mermaid
 graph TB
     Browser(["Browser Client"])
-    CF["cloudflared\n(optional dev tunnel)"]
+    CF["cloudflared\n(prod profile, optional tunnel)"]
 
-    subgraph Perimeter ["Perimeter"]
-        Nginx["nginx\n:3001"]
+    subgraph VCC ["visionclaw container (single container, supervisord)"]
+        Nginx["nginx\n:3001 (entry point)"]
+        VC["visionclaw-server (Actix)\nHTTP + WS :4000\n/wss · /ws/speech · /ws/mcp-relay\nembeds Oxigraph store + SQLite settings\nserves /api/solid/* itself"]
+        Vite["vite dev server\n:5173 (dev profile only)"]
+        Nginx -->|"/api/*, /wss, /solid/*, /pods/*"| VC
+        Nginx -->|"/ (dev assets, HMR)"| Vite
     end
 
-    subgraph Compute ["Compute Tier"]
-        VC["visionclaw\nHTTP :4000\nWS :9090\nMCP :9500\n(embeds Oxigraph store)"]
-        Vite["vite dev server\n:5173 / HMR :24678"]
-    end
-
-    subgraph DataStores ["Data Stores"]
-        PG["postgres\n:5432"]
-        Redis["redis\n:6379"]
-        QD["qdrant\n:6333 REST\n:6334 gRPC"]
-        OS["opensearch\n:9600"]
-    end
-
-    subgraph SolidLayer ["Solid / Linked Data"]
-        JSS["jss\n:3030"]
-    end
-
-    subgraph VoiceOverlay ["Voice Overlay (optional)"]
-        LK["livekit\n:7880 / :7881 / :7882"]
-        Whisper["turbo-whisper\n:8100"]
+    subgraph VoiceOverlay ["Voice Overlay (external containers, optional)"]
+        LK["livekit\n:7880"]
+        Whisper["turbo-whisper\n:8000"]
         Kokoro["kokoro-tts\n:8880"]
     end
 
     subgraph ExternalNetwork ["External (visionclaw_network network)"]
-        RUV["ruvector-postgres\n:5432"]
+        MA["agentic workstation /\nmulti-agent-container\nMCP TCP :9500 · management API :9090"]
+        RUV["ruvector-postgres\n:5432\n(agent memory — used by MCP agents,\nnot by the Rust backend directly)"]
     end
 
     Browser -->|"HTTPS / WS"| CF
     CF -->|":3001"| Nginx
     Browser -->|"HTTP :3001"| Nginx
 
-    Nginx -->|":4000"| VC
-    Nginx -->|":5173"| Vite
-
-    VC -->|":5432"| PG
-    VC -->|":6379"| Redis
-    VC -->|":6333"| QD
-    VC -->|":9600"| OS
-    VC -->|"Solid API :3030"| JSS
     VC -.->|":7880"| LK
-    VC -.->|":8100"| Whisper
+    VC -.->|":8000"| Whisper
     VC -.->|":8880"| Kokoro
-    VC -->|"$RUVECTOR_PG_CONNINFO"| RUV
+    VC -->|"MCP TCP :9500\nmanagement API :9090"| MA
+    MA -->|"$RUVECTOR_PG_CONNINFO"| RUV
 
-    Whisper -.->|"audio stream"| LK
-
-    classDef perimeter fill:#e3f2fd,stroke:#1565c0
     classDef compute fill:#e8f5e9,stroke:#2e7d32
-    classDef store fill:#fff3e0,stroke:#e65100
-    classDef solid fill:#f3e5f5,stroke:#6a1b9a
     classDef voice fill:#e0f7fa,stroke:#006064
     classDef external fill:#fce4ec,stroke:#880e4f
 
-    class Nginx perimeter
-    class VC,Vite compute
-    class PG,Redis,QD,OS store
-    class JSS solid
+    class Nginx,VC,Vite compute
     class LK,Whisper,Kokoro voice
-    class RUV external
+    class RUV,MA external
 ```
 
 In development, Nginx proxies both the Vite dev server (for the frontend) and the Actix-web API, presenting a unified origin at `:3001`. This avoids CORS issues during development without requiring any special client configuration. In production, Vite is replaced by pre-built static assets served directly by Nginx, so the Vite container is not present.
@@ -118,46 +107,37 @@ In development, Nginx proxies both the Vite dev server (for the frontend) and th
 
 ## Service Dependency Chain
 
-Container startup order matters because the Rust backend opens its embedded Oxigraph dataset and populates it from local files at startup, then applies its PostgreSQL schema migrations. Starting the backend before its relational dependency results in crash-restart loops. The diagram below shows which services block which.
+Startup ordering happens **inside** the single `visionclaw` container (supervisord), not between compose services: the Rust backend opens its embedded Oxigraph dataset and populates it from local files at startup; nginx and the Vite dev server come up alongside it and proxy to `:4000` once the backend binds. The only compose-level dependency is `cloudflared → visionclaw` (`condition: service_started, required: false`).
 
 ```mermaid
 graph LR
-    PG["postgres\n(healthcheck: pg_isready)"]
-    Redis["redis\n(healthcheck: redis-cli ping)"]
-    QD["qdrant"]
-    OS["opensearch"]
+    subgraph VCC ["visionclaw container (supervisord)"]
+        RB["visionclaw-server (Rust)\n:4000\nopens embedded Oxigraph dataset\n+ SQLite settings at boot"]
+        Nginx["nginx :3001\n(upstream 127.0.0.1:4000)"]
+        Vite["vite :5173\n(dev profile only)"]
+        RB -->|"must bind :4000"| Nginx
+        RB --> Vite
+    end
 
-    VC["visionclaw\n(depends_on: postgres healthy;\nembeds Oxigraph store)"]
-    JSS["jss\n(depends_on: visionclaw)"]
-    Vite["vite\n(depends_on: visionclaw)"]
-    Nginx["nginx\n(depends_on: visionclaw)"]
-    LK["livekit"]
-    Whisper["turbo-whisper\n(depends_on: livekit)"]
-    Kokoro["kokoro-tts"]
+    CF["cloudflared\n(depends_on: visionclaw,\nservice_started, required: false)"]
+    VCC --> CF
 
-    PG -->|"must be healthy"| VC
-    Redis -->|"must be healthy"| VC
-    QD --> VC
-    OS --> VC
-
-    VC -->|"must be running"| JSS
-    VC -->|"must be running"| Vite
-    VC -->|"must be running"| Nginx
-
+    LK["livekit (external)"]
+    Whisper["turbo-whisper (external)"]
     LK -->|"must be running"| Whisper
 
     classDef blocker fill:#ffccbc,stroke:#bf360c
     classDef blocked fill:#dcedc8,stroke:#33691e
-    class PG,Redis,QD,OS blocker
-    class VC,JSS,Vite,Nginx,Whisper,Kokoro blocked
+    class RB,LK blocker
+    class Nginx,Vite,CF,Whisper blocked
 ```
 
 The critical path at startup is:
 
-1. `postgres`, `redis`, `qdrant`, `opensearch` — all start in parallel, no inter-dependencies. (There is no graph-database container; the graph store is embedded in the backend — ADR-11.)
-2. `visionclaw` starts only after `postgres` passes its health check (condition: `service_healthy`). At boot it opens its embedded Oxigraph dataset and populates it from local files before serving graph data.
-3. `nginx`, `vite`, and `jss` start once `visionclaw` is running.
-4. `livekit` starts independently; `turbo-whisper` waits for it.
+1. The `visionclaw` container starts; inside it the Rust backend opens its embedded Oxigraph dataset and populates it from local files before serving graph data. (There is no graph-database container — ADR-11. There is no relational database dependency; the backend has no PostgreSQL client.)
+2. nginx (`:3001`) and, in the dev profile, the Vite dev server (`:5173`) proxy to the backend on `:4000`.
+3. `cloudflared` (prod, optional) starts after the `visionclaw` container.
+4. External voice containers (`livekit`, `turbo-whisper`, `kokoro-tts`) start independently of the compose stack; `turbo-whisper` needs `livekit`.
 
 If the embedded Oxigraph store fails to populate at startup, the backend enters a **DEGRADED** state (it does not silently serve empty graph data) — see `app_state.set_degraded(...)` in `src/main.rs` and the `/readyz` readiness probe.
 
@@ -170,48 +150,41 @@ The sequence diagram below traces a complete browser request for the main knowle
 ```mermaid
 sequenceDiagram
     actor Browser
-    participant Nginx as nginx :3001
-    participant VC as visionclaw :4000
+    participant Nginx as nginx :3001 (in-container)
+    participant VC as visionclaw-server :4000
     participant OXI as Oxigraph (embedded, in-process)
-    participant PG as postgres :5432
-    participant RUV as ruvector-postgres
-    participant Redis as redis :6379
+    participant SQL as SQLite settings.sqlite3 (in-process)
 
     Browser->>Nginx: GET /api/graph/data (HTTP)
-    Nginx->>VC: proxy_pass http://visionclaw:4000/graph/data
+    Nginx->>VC: proxy_pass http://127.0.0.1:4000/api/graph/data
 
-    VC->>Redis: GET session:{token} (auth check)
-    Redis-->>VC: session payload (JWT claims)
+    VC->>VC: auth check in-process (Nostr session token / NIP-98, optional)
 
     VC->>OXI: SPARQL SELECT over named graphs (in-process call)
     OXI-->>VC: node + edge solutions
 
-    VC->>PG: SELECT * FROM graph_metadata WHERE graph_id=$1
-    PG-->>VC: graph metadata row
-
     VC-->>Nginx: 200 JSON {nodes:[...], edges:[...]}
     Nginx-->>Browser: 200 JSON (Content-Encoding: gzip)
 
-    Browser->>Nginx: Upgrade: websocket (WS /api/ws/positions)
-    Nginx->>VC: proxy WebSocket to :9090
+    Browser->>Nginx: Upgrade: websocket (WS /wss)
+    Nginx->>VC: proxy WebSocket to :4000
 
-    loop Physics broadcast (~60fps)
-        VC-->>Browser: binary frame (node positions, u32 IDs + f32 x/y/z)
+    loop Physics broadcast
+        VC-->>Browser: V3 binary frame (version byte 0x03, 52 bytes/node)
     end
 
-    Browser->>Nginx: POST /api/graph/settings (physics params change)
-    Nginx->>VC: proxy_pass POST /graph/settings
-    VC->>RUV: INSERT INTO memory_entries (embedding pipeline)
-    RUV-->>VC: OK (entry stored with MiniLM vector)
-    VC-->>Browser: 204 No Content
+    Browser->>Nginx: PUT /api/settings/physics (physics params change)
+    Nginx->>VC: proxy_pass PUT /api/settings/physics
+    VC->>SQL: set_setting("physics") (SQLite wins for physics)
+    VC-->>Browser: 200 OK
 ```
 
 Key observations from this flow:
 
-- **Auth is checked against Redis**, not the database, on every request. This keeps the hot path sub-millisecond even under high request volume.
+- **Auth is checked in-process** — the backend issues UUID session bearer tokens after NIP-98 verification (`nostr_service.rs`) and holds session state itself. There is no Redis hop on the hot path (a `redis` integration exists only behind an optional cargo feature).
 - **Graph data comes from the embedded Oxigraph triple store** (ADR-11), queried in-process via SPARQL over named graphs — there is no network round-trip to a separate graph-database container. Live node positions are held in RAM by the physics actors and only snapshotted back to Oxigraph periodically; the hot loop never reads positions back from Oxigraph (cold start does, so layout resumes rather than restarting).
-- **Physics position data flows over a dedicated WebSocket connection**, not HTTP polling. The binary frame format encodes each node as a `u32` ID followed by three `f32` values (x, y, z), keeping frames small even for graphs with thousands of nodes.
-- **Agent memory writes go to RuVector**, the external PostgreSQL instance. These writes run through the MiniLM-L6-v2 embedding pipeline so the stored entries are visible to HNSW semantic search. Plain SQL inserts that bypass this pipeline produce entries invisible to vector search.
+- **Physics position data flows over the `/wss` WebSocket**, not HTTP polling. The current wire format is **V3** (`docs/binary-protocol.md`): a version byte `0x03` followed by 52-byte node records (id+flags, position, velocity, SSSP distance/parent, cluster id, anomaly score, community id, centrality).
+- **Settings persist to SQLite** (`SqliteSettingsRepository`); SQLite wins for physics parameters. Agent memory writes to RuVector happen from the MCP agent tooling (which owns the MiniLM-L6-v2 embedding pipeline), not from the Rust backend.
 
 ---
 

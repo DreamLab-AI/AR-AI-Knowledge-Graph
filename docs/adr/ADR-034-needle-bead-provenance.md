@@ -111,6 +111,8 @@ records it in the store. No outcome path uses wildcard matching.
 
 Beads transition through explicit states:
 
+> The `Neo4jPersisted` state below is superseded by ADR-11 (Persistence Strategy Migration: Neo4j → Oxigraph + SQLite, `docs/migration-sprint/11-persistence-migration/ADR-11.md`) — kept as the decision-time design.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Created: debrief requested

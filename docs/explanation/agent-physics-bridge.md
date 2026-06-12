@@ -130,7 +130,7 @@ Each agent node renders a floating label via `@react-three/drei Text` (or `Html`
 
 ### Registration path
 
-When a Claude-Flow agent spawns, it announces itself to the Rust backend via the `/api/bots/register` endpoint. The `bots_handler.rs` handler creates a graph node with `node_type = agent`, sets bit 31 in the assigned u32 ID, adds it to `GraphStateActor.agent_nodes`, and enqueues an `AddNode` message to `GraphStateActor`. `GraphStateActor` in turn publishes a `GraphUpdateEvent` so `SemanticProcessorActor` generates an initial 256-dim embedding for the agent (using the agent name and description as content).
+When a Claude-Flow agent spawns, it announces itself to the Rust backend via the `POST /api/bots/spawn-agent-hybrid` endpoint (route table in `src/handlers/api_handler/bots/mod.rs` — there is no `/api/bots/register` route). The `bots_handler.rs` handler creates a graph node with `node_type = agent`, sets bit 31 in the assigned u32 ID, adds it to `GraphStateActor.agent_nodes`, and enqueues an `AddNode` message to `GraphStateActor`. `GraphStateActor` in turn publishes a `GraphUpdateEvent` so `SemanticProcessorActor` generates an initial 256-dim embedding for the agent (using the agent name and description as content).
 
 The registration response returns the assigned `bot_id`; the agent stores this for subsequent telemetry pushes.
 
@@ -151,7 +151,7 @@ The periodic full broadcast (every 300 iterations) ensures clients that connect 
 
 ### Deregistration path
 
-When an agent terminates, it (or a cleanup process) calls `DELETE /api/bots/:id`. The `bots_handler.rs` handler sends `RemoveNode { id }` to `GraphStateActor`, which removes the node from the cache and the `agent_nodes` set, and broadcasts the topology change to all clients.
+When an agent terminates, it (or a cleanup process) calls `DELETE /api/bots/remove-task/{id}`. The `bots_handler.rs` handler sends `RemoveNode { id }` to `GraphStateActor`, which removes the node from the cache and the `agent_nodes` set, and broadcasts the topology change to all clients.
 
 ---
 
@@ -160,7 +160,7 @@ When an agent terminates, it (or a cleanup process) calls `DELETE /api/bots/:id`
 ```mermaid
 sequenceDiagram
     participant CF as Claude-Flow (Node.js)
-    participant REST as REST API :3030
+    participant REST as REST API :4000 (nginx :3001)
     participant BH as bots_handler.rs
     participant GSA as GraphStateActor
     participant FCA as ForceComputeActor
@@ -169,7 +169,7 @@ sequenceDiagram
     participant ANL as AgentNodesLayer (browser)
 
     Note over CF,ANL: Agent spawn
-    CF->>REST: POST /api/bots/register { name, type, pubkey }
+    CF->>REST: POST /api/bots/spawn-agent-hybrid { name, type, pubkey }
     REST->>BH: route request
     BH->>GSA: AddNode { node_type: agent, bit31_set: true }
     GSA-->>BH: u32 node_id (>= 0x80000000)
@@ -196,7 +196,7 @@ sequenceDiagram
     Note over ANL: Next poll picks up status change → green + breathing animation
 
     Note over CF,ANL: Agent terminates
-    CF->>REST: DELETE /api/bots/bot-001
+    CF->>REST: DELETE /api/bots/remove-task/bot-001
     REST->>BH: route request
     BH->>GSA: RemoveNode { id: node_id }
     GSA->>CC: BroadcastGraphStructure (topology change)
@@ -212,9 +212,9 @@ sequenceDiagram
 graph TD
     CF["Claude-Flow<br/>(Node.js, port 3002 MCP bridge)"]
 
-    CF -->|POST /api/bots/register| BH["bots_handler.rs"]
+    CF -->|POST /api/bots/spawn-agent-hybrid| BH["bots_handler.rs"]
     CF -->|POST /api/bots/update| BH
-    CF -->|DELETE /api/bots/:id| BH
+    CF -->|DELETE /api/bots/remove-task/:id| BH
 
     BH -->|AddNode / RemoveNode / UpdateMetadata| GSA["GraphStateActor<br/>(agent_nodes HashSet)"]
 
@@ -224,9 +224,9 @@ graph TD
 
     FCA -->|UpdateNodePositions| PO["PhysicsOrchestratorActor"]
     PO -->|BroadcastPositions binary| CC["ClientCoordinatorActor"]
-    CC -->|34-byte binary frames fan-out| WSS["WebSocketSession × N"]
+    CC -->|V3 binary frames fan-out<br/>52 bytes/node| WSS["WebSocketSession × N"]
 
-    WSS -->|V2 binary WebSocket| ANL["AgentNodesLayer.tsx"]
+    WSS -->|V3 binary WebSocket| ANL["AgentNodesLayer.tsx"]
     ANL -->|GET /api/bots/agents every 5s| BH
 
     ANL -->|Position from SAB<br/>Status from poll| Render["Three.js render<br/>status colour + animation"]

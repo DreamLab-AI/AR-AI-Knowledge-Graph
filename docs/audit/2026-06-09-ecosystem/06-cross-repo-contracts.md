@@ -1,5 +1,7 @@
 # 06 — Cross-Repo Contracts Cartography
 
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 **Audit**: 2026-06-09 DreamLab Ecosystem (Diagram-Driven Diagnosis / build-with-quality)
 **Scope**: READ-ONLY. The contracts that bind VisionClaw, agentbox, solid-pod-rs, nostr-rust-forum, dreamlab-ai-website.
 **Cartographer concern**: identity mesh, URN grammar convergence, version skew, beads, content addressing.

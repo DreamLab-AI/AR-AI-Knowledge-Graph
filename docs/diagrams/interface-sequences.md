@@ -78,8 +78,9 @@ sequenceDiagram
     H->>H: validate_physics_settings(&new_physics)
     H->>SA: UpdateSettings { settings: full_settings }
     SA->>SA: update_settings(): write RwLock,<br/>clear path_cache, call settings.save()
-    Note over SA: save() persists to YAML file<br/>(ADR-11: SQLite is settings_repo for<br/>per-user filters; global settings → YAML)
+    Note over SA: save() persists to YAML file
     SA-->>H: Ok(())
+    H->>H: settings_repo.set_setting("physics", Json)<br/>(SQLite-first: SQLite wins over actor<br/>on the next GET — see 01-settings-flow.md)
     H->>GPU: UpdateSimulationParams { params }<br/>(direct GPUComputeActor addr, fallback GPUManagerActor)
     GPU-->>H: Ok(()) [fire-and-forget if no addr cached]
     H-->>A: HttpResponse::Ok + JSON { physics settings echo }
@@ -354,10 +355,12 @@ reads.
 The `src/protocol/v3_frame.rs` module documents itself as "the single source of encode/decode
 logic" for the broadcast path (28-byte NodeRow). The actual position subscription loop
 (`position_updates.rs:555`) calls `binary_protocol::encode_node_data_extended_with_sssp` which
-produces **52-byte** frames. The client's `validateBinaryData` checks `version byte == 3 or 5`
-(`store/websocket/binaryProtocol.ts:198`), but the 52-byte frames have no version byte in the
-first field — the first 4 bytes are the `u32 node_id`. The client autodetects V2 vs V3 via
-`data.length % 52 == 0` heuristic. The `BinaryWebSocketProtocol` class in
+produces **52-byte** records prefixed by a 1-byte protocol-version header (`buffer.push(3)`,
+`src/utils/binary_protocol.rs`; V5 frames wrap the same body with `[version=5][8-byte seq]`).
+The client's `validateBinaryData` checks `version byte == 3 or 5`
+(`store/websocket/binaryProtocol.ts:198`) and the decoder reads the version byte first
+(`types/binaryProtocol.ts:165`); the `length % nodeSize` heuristic is only a fallback for
+unknown version bytes. The `BinaryWebSocketProtocol` class in
 `services/BinaryWebSocketProtocol.ts` uses a different 6-byte V4 header format
 (`MESSAGE_HEADER_SIZE=6`, `PROTOCOL_VERSION=V4=4`) which is never emitted by the server's
 position subscription path. The V3 frame format in `v3_frame.rs` (28 bytes) is never decoded on
@@ -392,7 +395,8 @@ no client caller routes through it.
 
 The `BinaryWebSocketProtocol.createMessage()` stamps a V4 header (1-byte type, 1-byte version=4,
 4-byte payloadLength). The server `binary_protocol.rs` encoder does not produce this header.
-Server position frames begin with a raw `u32 node_id` at offset 0. The V4 client header parser
+Server position frames begin with a 1-byte protocol version (3 or 5), then 52-byte node
+records starting with `u32 node_id`. The V4 client header parser
 (`parseHeader`) and the server's legacy encoder are talking different formats on the same socket.
 The client's `processBinaryData` path in `store/websocket/binaryProtocol.ts` short-circuits to
 `parseBinaryNodeData` / `parseBinaryFrameData` (which understands the raw 52-byte legacy format),
@@ -501,6 +505,9 @@ A build without `solid-pod-embed` will surface 503 errors at runtime with no cli
 `src/utils/binary_protocol.rs` — `encode_node_data_extended_with_sssp()`
 
 ```
+Frame header: 1 byte protocol version (3 = V3; 5 = V5, followed by an 8-byte
+broadcast-sequence u64 before the node records).
+
 Per-node (52 bytes):
   Offset  Size  Field
     0      4    node_id u32 (bits 31-26 = type flags: AGENT=0x80000000, KNOWLEDGE=0x40000000,

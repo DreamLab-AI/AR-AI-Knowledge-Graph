@@ -158,6 +158,13 @@ A comprehensive architecture audit of the DreamLab 5-substrate ecosystem reveals
 
 ## 5. Cross-Substrate Overlap Analysis
 
+> **Update 2026-06-12:** this map records the pre-remediation state. Several
+> VisionClaw-side overlap files have since been deleted
+> (`services/bead_store.rs`, `services/pod_client.rs`,
+> `services/wac_mutator.rs` no longer exist in `src/`), and the three
+> duplicated `rate_limit.rs` stubs in nostr-rust-forum were extracted to the
+> shared `nostr-bbs-rate-limit` crate.
+
 ```mermaid
 graph LR
     subgraph VisionClaw

@@ -141,12 +141,12 @@ cuobjdump -ptx ./libphysics.so | grep ".target"
 
 ### Binary Frame Size Monitoring
 
-VisionClaw uses a 34-byte per-node wire format for client position updates. Each binary WebSocket frame carries `N` node updates, where `N` depends on the delta filter output:
+VisionClaw uses the V3 52-byte per-node wire format for client position updates (version byte `0x03`, see [docs/binary-protocol.md](../../binary-protocol.md)). Each binary WebSocket frame carries `N` node updates, where `N` depends on the delta filter output:
 
 | Wire format | Bytes per node | When used |
 |-------------|---------------|-----------|
-| Client position update (V2) | 34 bytes | Normal delta broadcast |
-| GPU internal `BinaryNodeDataGPU` (V3) | 48 bytes | Internal GPU actor messages only; not sent to clients |
+| Client position update (V3) | 52 bytes | All position broadcasts (id+flags, pos, vel, sssp, cluster, anomaly, community, centrality) |
+| V5 framing | 9-byte seq header + 52-byte V3 records | Sequence-numbered broadcasts |
 
 To observe actual frame sizes from the server side, enable WebSocket frame logging:
 
@@ -154,7 +154,7 @@ To observe actual frame sizes from the server side, enable WebSocket frame loggi
 VISIONCLAW_WS_TRACE=1 ./visionclaw 2>&1 | grep '\[WS\]' | awk '{print $4, $5}'
 ```
 
-In the browser, open Chrome DevTools → Network → filter by `WS` → select the VisionClaw connection → Messages tab. Each binary frame should be `34 × N` bytes for a batch of `N` nodes. If frames are consistently zero bytes or absent, see the next section.
+In the browser, open Chrome DevTools → Network → filter by `WS` → select the VisionClaw connection → Messages tab. Each binary frame should be `1 + 52 × N` bytes for a batch of `N` nodes (or `9 + 52 × N` under V5 framing). If frames are consistently zero bytes or absent, see the next section.
 
 ### Detecting the Delta Compressor Filter Bug
 
@@ -416,7 +416,7 @@ sequenceDiagram
 
     Note over CCA: TIMING PROBE E<br/>Viewport filter: cull off-screen nodes
 
-    CCA->>WS: Binary WebSocket frame<br/>(34 bytes × N active nodes)
+    CCA->>WS: Binary WebSocket frame<br/>(V3: 52 bytes × N active nodes)
 
     Note over WS,SAB: TIMING PROBE F<br/>Client: performance.now() on message event
 

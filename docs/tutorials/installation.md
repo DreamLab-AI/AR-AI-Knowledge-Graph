@@ -171,7 +171,7 @@ docker-compose up -d
 docker-compose logs -f
 
 # 4. Open VisionClaw in your browser
-open http://localhost:3030
+open http://localhost:3001
 ```
 
 ### Method 2: Custom Configuration
@@ -215,7 +215,7 @@ DEBUG-MODE=false                 # Debug logging
 
 # Security
 JWT-SECRET=your-random-secret
-CORS-ORIGINS=http://localhost:3030
+CORS-ORIGINS=http://localhost:3001
 
 # Database
 POSTGRES-USER=visionclaw
@@ -259,7 +259,7 @@ docker-compose ps
 docker-compose logs --tail=50
 
 # Test API endpoint
-curl http://localhost:3030/api/health
+curl http://localhost:4000/api/health
 
 # Expected response:
 # {"status":"healthy","version":"0.1.0","timestamp":"2024-01-01T12:00:00Z"}
@@ -269,9 +269,9 @@ curl http://localhost:3030/api/health
 graph TB
     Browser[Browser\n:3001] --> Nginx[Nginx\nReverse Proxy]
     Nginx --> Vite[Vite Dev Server\n:5173]
-    Nginx --> Rust[VisionClaw API\n:8080]
+    Nginx --> Rust[VisionClaw API\n:4000]
     Rust --> Oxigraph[(Oxigraph\nembedded, in-process)]
-    Rust --> JSS[Solid JSS\n:3030]
+    Rust --> Solid[Solid Pod routes\n/api/solid/* — embedded]
     Rust --> GPU[CUDA GPU\nPhysics Engine]
     Rust --> RuVector[(RuVector\n:5432)]
 
@@ -496,7 +496,7 @@ sudo docker-compose up
 ```bash
 # Error: port is already allocated
 # Check what's using the port
-sudo lsof -i :3030
+sudo lsof -i :3001
 
 # Kill the process or change port in .env
 HOST-PORT=3002
@@ -558,7 +558,7 @@ sudo ufw allow 3001
 sudo ufw allow 4001
 
 # Test WebSocket endpoint
-wscat -c ws://localhost:3030/ws
+wscat -c ws://localhost:4000/wss
 ```
 
 ### Performance Issues
@@ -606,7 +606,7 @@ VISIONCLAW-HOST=127.0.0.1
 After installation, verify these components:
 
 ### Basic Functionality
-- [ ] VisionClaw web interface loads at `http://localhost:3030`
+- [ ] VisionClaw web interface loads at `http://localhost:3001`
 - [ ] API health check returns successful response
 - [ ] WebSocket connection establishes successfully
 - [ ] Sample graph data loads and displays

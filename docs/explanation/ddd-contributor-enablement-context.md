@@ -642,6 +642,8 @@ happen:
 The Mermaid flow:
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ```mermaid
 sequenceDiagram
     participant C as Contributor
@@ -823,6 +825,8 @@ Neo4j projection updates; Team dojo sees the artifact
 ### Scenario B: Pod-native automation writes to inbox; contributor reviews and shares to Mesh
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ```mermaid
 sequenceDiagram
     participant AS as AutomationScheduler

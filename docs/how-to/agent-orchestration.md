@@ -23,7 +23,7 @@ VisionClaw integrates a multi-agent AI system that extends the core knowledge gr
 ```mermaid
 graph TB
     subgraph "VisionClaw Core"
-        API[VisionClaw API :9090]
+        API[VisionClaw API :4000]
         WS[WebSocket Server :3001]
         Oxigraph[(Oxigraph embedded RDF store)]
         Whelk[Whelk EL++ Reasoner]
@@ -49,7 +49,7 @@ graph TB
 
     subgraph "Orchestration"
         ClaudeFlow[Claude Flow v3]
-        Skills[83 Skills]
+        Skills[88 Skills]
         GOAP[GOAP Planner]
     end
 
@@ -82,16 +82,16 @@ graph TB
 docker compose --profile dev up -d
 
 # Verify agent manager is responding
-curl http://localhost:9090/api/bots/agents
+curl http://localhost:4000/api/bots/agents
 
 # Check the MCP TCP server
 curl http://localhost:9500/health
 
 # Verify VisionClaw API health
-curl http://localhost:9090/api/health
+curl http://localhost:4000/api/health
 
 # Spawn a researcher agent via REST
-curl -X POST http://localhost:9090/api/bots/spawn-agent-hybrid \
+curl -X POST http://localhost:4000/api/bots/spawn-agent-hybrid \
   -H "Content-Type: application/json" \
   -d '{"agent-type":"researcher","swarm-id":"main-swarm","method":"mcp-fallback","priority":"medium","strategy":"adaptive"}'
 ```
@@ -105,7 +105,7 @@ VisionClaw uses three cooperating containers on a shared Docker network (`vision
 ```mermaid
 graph LR
     subgraph "visionclaw_network network"
-        VF["VisionClaw Container\n:9090 API\n:3001 Client\n16GB RAM / 4 CPUs / NVIDIA GPU"]
+        VF["VisionClaw Container\n:4000 API\n:3001 Client\n16GB RAM / 4 CPUs / NVIDIA GPU"]
         AW["Agentic Workstation\n:9500 MCP TCP\n:3002 MCP WS\n16GB RAM / 4 CPUs"]
         GUI["GUI Tools Container\n:5901 VNC\n:9876-9878 MCP\n8GB RAM / 2 CPUs"]
     end
@@ -181,7 +181,7 @@ flowchart TB
         MCP[MCP Tool Call]
     end
 
-    subgraph API["VisionClaw REST API :9090"]
+    subgraph API["VisionClaw REST API :4000"]
         Handler[ontology_agent_handler]
     end
 
@@ -716,10 +716,10 @@ docker restart agentic-workstation
 
 ```bash
 # Check VisionClaw API
-curl http://localhost:9090/api/health
+curl http://localhost:4000/api/health
 
 # Check ontology service status
-curl http://localhost:9090/api/ontology-agent/status
+curl http://localhost:4000/api/ontology-agent/status
 
 # Review VisionClaw logs for Whelk errors
 docker logs visionclaw_container | grep -i whelk

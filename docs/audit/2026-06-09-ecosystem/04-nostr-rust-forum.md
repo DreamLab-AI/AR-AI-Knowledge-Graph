@@ -1,4 +1,7 @@
 # Audit Report 04 — nostr-rust-forum
+
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 **Date:** 2026-06-09  
 **Auditor:** Code Analyzer Agent (Diagram-Driven Diagnosis)  
 **Repo:** `/home/devuser/workspace/nostr-rust-forum`  

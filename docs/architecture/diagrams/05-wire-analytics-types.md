@@ -131,25 +131,22 @@ sequenceDiagram
 
 ## C. Encoder / decoder inventory
 
-> **Investigated 2026-06-03 — no change.** The two binary wire-protocol
-> implementations were audited for deadness. Result: the live 52 B broadcast
+> **Resolved (task #101 T6 — shadow module deleted).** The live 52 B broadcast
 > encoder is `src/utils/binary_protocol.rs::encode_node_data_extended_with_sssp`
 > (reached via `encode_node_data_with_live_analytics` from the `/wss` path —
 > `position_updates.rs`, `fastwebsockets_handler.rs`, `actor_messages.rs`,
-> `client_coordinator_actor.rs`). The crate copy in
-> `crates/visionclaw-protocol/src/binary_protocol.rs` is the 48 B shadow
-> (`WIRE_V3_ITEM_SIZE = 48`, no centrality@48 slot) with **zero callers outside
-> its own crate/tests**. It was **not deleted**: the `visionclaw-protocol` crate
-> is a live dependency of the server — `src/utils/socket_flow_messages.rs`
-> re-exports `visionclaw_protocol::socket_flow_messages`, and the crate's
-> `BinaryV3Frame`/`NodeRow` 28 B frame is the `BroadcastActor` hot path
-> (`src/actors/broadcast_actor.rs`). `lib.rs` re-exports the whole
-> `binary_protocol` module, so the shadow encoders cannot be excised without
-> editing the crate's public surface. Deleting the crate or the live module
-> would break the wire types — neither implementation is provably removable.
-> A future cleanup may prune just the unused crate-internal `encode_*` fns once
-> the crate's public API is narrowed; that is out of scope for a dead-code
-> deletion.
+> `client_coordinator_actor.rs`). The former crate copy at
+> `crates/visionclaw-protocol/src/binary_protocol.rs` — a stale 48 B shadow
+> (`WIRE_V3_ITEM_SIZE = 48`, no centrality@48 slot) with zero callers outside
+> its own crate/tests — **has since been removed** (see the rationale note in
+> `crates/visionclaw-protocol/src/lib.rs`), leaving a single source of truth.
+> The `visionclaw-protocol` crate itself remains a live dependency:
+> `src/utils/socket_flow_messages.rs` re-exports
+> `visionclaw_protocol::socket_flow_messages`, and the crate's
+> `BinaryV3Frame`/`NodeRow` 28 B frame (`protocol/v3_frame.rs`) is the
+> `BroadcastActor` hot path (`src/actors/broadcast_actor.rs`). The 52 B encoder
+> stays in the webxr crate because it depends on the webxr-local
+> `BinaryNodeDataClient` type.
 
 | File | Function / path | Role | Status |
 |------|----------------|------|--------|
@@ -157,11 +154,8 @@ sequenceDiagram
 | `src/utils/binary_protocol.rs` | `encode_node_data_with_live_analytics()` | Thin wrapper → `encode_node_data_extended_with_sssp` | Active |
 | `src/utils/binary_protocol.rs` | `encode_node_data_with_types()`, `encode_node_data_extended()`, `encode_node_data()`, `encode_node_data_with_flags()` | Wrappers with `None` analytics — all delegate to live writer | Active |
 | `src/utils/binary_protocol.rs` | `encode_node_data_with_analytics`, `encode_node_data_with_all` | **REMOVED** (task #70 D8b) — confirmed absent from `src/` | Deleted |
-| `crates/visionclaw-protocol/src/binary_protocol.rs` | `encode_node_data_with_analytics()` | Shadow — encodes only 48 B (no centrality) | Unreachable (0 external callers); crate retained — see §C note 2026-06-03 |
-| `crates/visionclaw-protocol/src/binary_protocol.rs` | `encode_node_data_with_all()` | Shadow — encodes only 48 B (no centrality) | Unreachable (0 external callers); crate retained — see §C note 2026-06-03 |
-| `crates/visionclaw-protocol/src/binary_protocol.rs` | `encode_node_data_extended_with_sssp()` | Protocol-crate copy — encodes 48 B (no centrality) | Reachable only via crate-internal delegation; not invoked from `src/` |
+| `crates/visionclaw-protocol/src/binary_protocol.rs` | entire 48 B shadow module (`encode_node_data_with_analytics`, `encode_node_data_with_all`, `encode_node_data_extended_with_sssp`, `decode_node_data_v3`) | Stale 48 B copy (no centrality@48) | **DELETED** (task #101 T6) — rationale recorded in `crates/visionclaw-protocol/src/lib.rs` |
 | `crates/visionclaw-protocol/src/protocol/v3_frame.rs` | `BinaryV3Frame::encode_slice()` | 28 B frame (`V3_NODE_BYTES=28`) — `BroadcastActor` hot path | **LIVE** (separate broadcast channel; not the 52 B analytics path) |
 | `src/utils/binary_protocol.rs:decode_node_data_v3()` | server-side decoder | Reads 52 B; centrality parsed but discarded (prefixed `_`) | Active |
-| `crates/visionclaw-protocol/src/binary_protocol.rs:decode_node_data_v3()` | protocol-crate decoder | Reads 48 B chunks (`WIRE_V3_ITEM_SIZE=48`) — no centrality slot | Active within crate |
 | `client/src/types/binaryProtocol.ts:parseBinaryNodeData()` | client decoder | Reads 52 B; all nine fields including centrality@48 | Active |
 | `client/src/app/AppInitializer.tsx` | debug size probe | Uses magic number `nodeSize = 26` for logging only | Debug-only stale value |

@@ -8,6 +8,8 @@ updated-date: 2026-04-20
 
 # Skill Dojo and Evaluation — Design Spec
 
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ## 1. Purpose
 
 A contributor's workspace is measured by how quickly a single breakthrough

@@ -81,8 +81,8 @@ flowchart TD
         OB --> OC
         OB --> SUB
         OB --> REL
-        WL --> GN
-        WL --> EDGE
+        MD -->|"public:: true page"| GN
+        WL -->|"edges only — wikilink stubs\nno longer mint KG nodes"| EDGE
         NS --> EDGE
         OA --> SUB
     end

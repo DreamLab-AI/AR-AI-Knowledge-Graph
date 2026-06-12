@@ -31,7 +31,7 @@ graph TB
     end
 
     subgraph "External: BC-BP Binary Protocol"
-        WIRE28[V3 52 B per node record<br/>pos+vel +24B analytics tail<br/>XR decodes first 28 B]
+        WIRE28[V3 52 B per node record<br/>0x03 version byte + pos@4 vel@16<br/>+ analytics tail 28..52 — XR decodes full record<br/>xr-client/rust/src/binary_protocol.rs]
         ANS[analytics_update JSON]
     end
 
@@ -55,17 +55,17 @@ graph TB
         FCA[ForceComputeActor]
     end
 
-    subgraph "ACL boundary ports/adapters (xr-client/rust/src/ports/mod.rs — 151 lines, implemented)"
-        GDP[GraphDataPort trait<br/>+ binary_stream_adapter]
-        PP[PresencePort trait<br/>+ ws_presence_adapter]
-        VP[VoicePort trait<br/>+ livekit_adapter]
-        IDP[IdentityPort trait<br/>+ nostr_did_adapter]
-        FAKES[FakeGraphData / FakePresence / FakeVoice / FakeIdentity<br/>test doubles for all ports]
+    subgraph "ACL boundary ports/adapters (xr-client/rust/src/ports/mod.rs — implemented, ADR-102 shape)"
+        GDP[WsTransport trait<br/>+ tungstenite adapter src/transport.rs<br/>graph position + presence frames]
+        PP[WsTransport trait<br/>presence subprotocol on same port]
+        VP[Voice path<br/>webrtc_audio.rs — LiveKit adapter]
+        IDP[Signer trait<br/>+ Nostr BIP-340 adapter src/signer.rs]
+        FAKES[FakeWsTransport / FakeSigner<br/>test doubles for the headless suite]
     end
 
     subgraph "ACL boundary ports/adapters (server-side, crates/visionclaw-xr-presence/src/ports/mod.rs)"
         SIDP[IdentityVerifier trait]
-        SROOMP[RoomMembershipStore trait]
+        SROOMP[Broadcaster trait]
     end
 
     XRR -->|consumes| GDP
@@ -147,7 +147,7 @@ The pose stream mirroring BC-BP's binary contract — and the explicit refusal t
 
 Every external relationship in §1.2 has a named port (Rust trait) and a named adapter (Rust struct implementing it). The Godot scene tree calls into Rust through gdext; Rust calls **only ports**, never adapters directly. Adapters are wired in the application bootstrap. Tests substitute fake adapters per port. This is the pattern the previous design lacked — and the reason the previous Vircadia leak across `quest3AutoDetector` was unrecoverable.
 
-**Implementation status (2026-05-04):** The hexagonal port architecture is implemented in `xr-client/rust/src/ports/mod.rs` (151 lines). Four port traits (`GraphDataPort`, `PresencePort`, `VoicePort`, `IdentityPort`) are defined with corresponding fake implementations (`FakeGraphData`, `FakePresence`, `FakeVoice`, `FakeIdentity`) used throughout the test suite. Server-side ACL traits live in `crates/visionclaw-xr-presence/src/ports/mod.rs` (`IdentityVerifier`, `RoomMembershipStore`). All integration, property, and adversarial tests use fake transports exclusively.
+**Implementation status (updated 2026-06-12, ADR-102):** The hexagonal port architecture is implemented in `xr-client/rust/src/ports/mod.rs`. The four conceptual ports of the original design collapsed onto two implemented traits: `WsTransport` (graph position + presence transport; tungstenite adapter in `src/transport.rs`, shared tokio runtime in `src/runtime.rs`) and `Signer` (Nostr BIP-340 NIP-98 signing; adapter in `src/signer.rs`). Fakes (`FakeWsTransport`, `FakeSigner`) remain the test substrate for the headless suite. Server-side ACL traits live in `crates/visionclaw-xr-presence/src/ports/mod.rs` (`IdentityVerifier`, `Broadcaster`). All integration, property, and adversarial tests use fake transports exclusively.
 
 ## 3. Aggregates
 

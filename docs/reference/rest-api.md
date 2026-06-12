@@ -13,15 +13,23 @@ adr-references: [ADR-028-ext, ADR-050, ADR-051, ADR-052, ADR-072]
 
 ## Overview
 
-**Base URL**: `http://localhost:8080` (development) / your deployment host (production)
+**Base URL**: `http://localhost:4000` (development, direct) or `http://localhost:3001` (via nginx) / your deployment host (production)
 
 All REST API paths are prefixed with `/api/` unless otherwise noted. Solid Pod endpoints use `/solid/`.
 
 **API version**: 1.1.0
 **Content-Type**: `application/json` for all requests and responses, unless otherwise noted.
-**OpenAPI UI**: Available at `http://localhost:8080/swagger-ui/`
+**OpenAPI UI**: Available at `http://localhost:4000/swagger-ui/`
 
 ### Endpoint Taxonomy
+
+> **Status note (2026-06-12):** the `Enterprise` group (`/api/broker/*`,
+> `/api/workflows/*`, `/api/connectors/*`, `/api/policy/evaluate`,
+> `/api/mesh-metrics`) and `/api/discovery/*` are **design-stage — not
+> registered in the backend router** (`src/main.rs` /
+> `src/handlers/api_handler/mod.rs`). Broker governance currently flows over
+> Nostr ACSP events (kinds 31400-31405, `src/services/acsp/`, ADR-110), with
+> the REST write-back limited to `POST /api/enrichment-proposals/{id}/decide`.
 
 ```mermaid
 graph LR

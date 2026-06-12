@@ -1,5 +1,7 @@
 # Bounded Context: Notifications Compat
 
+> **Status:** implemented — verified 2026-06-12 in the solid-pod-rs repo (`crates/solid-pod-rs/src/notifications/legacy.rs`, `src/handlers/legacy_notifications.rs`).
+
 > **Sprint 4 / F3**. Closes GAP-ANALYSIS.md §E.8, PARITY-CHECKLIST.md row 91.
 > Upstream reference: `JavaScriptSolidServer/src/notifications/websocket.js:1-102,110-147`.
 

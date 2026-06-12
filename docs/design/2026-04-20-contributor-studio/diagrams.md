@@ -8,6 +8,8 @@ updated-date: 2026-04-21
 
 # Contributor Studio — Canonical Diagrams Index
 
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ## Purpose
 
 All diagrams supporting the 2026-04-20 Contributor AI Support Stratum sprint,

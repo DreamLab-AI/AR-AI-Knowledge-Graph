@@ -26,6 +26,14 @@ dependencies:
 **Target:** Blender 5.x, Linux (Ubuntu 24+), Claude Code Integration
 **Status:** Architecture Design Phase
 
+> **Status (2026-06-12):** aspirational design — the WebSocket-RPC bridge
+> described below (`ws://127.0.0.1:8765`, `BLENDER_RPC_TOKEN`, CMD_Q/RESP_Q
+> addon) is **not the deployed integration**. The live Blender path is the
+> agentbox `blender` skill speaking raw TCP JSON to the Blender MCP server on
+> the GUI tools container at port **9876** (`agentbox/skills/blender/tools/mcp-blender-client.js`,
+> `BLENDER_HOST`/`BLENDER_PORT` env vars). The diagrams in this document
+> describe the unified-addon design, not current behaviour.
+
 ---
 
 ## Executive Summary

@@ -15,6 +15,15 @@ updated-date: 2026-04-09
 > names below (`neo4j-to-solid` / `solid-to-neo4j`) are historical; the live equivalents
 > export from / import to the embedded Oxigraph store. RDF export to Solid is now a
 > direct serialization (Oxigraph is already RDF-native).
+>
+> **UPDATED 2026-06-12**: The Solid surface shipped **embedded**, not as a JSS
+> Node.js sidecar: the Rust backend serves `/api/solid/*` and `/pods/*` itself
+> via the `solid-pod-rs` crate (`configure_solid_routes` in `src/main.rs`;
+> nginx proxies `/solid/` and `/pods/` to the backend). The current compose
+> defines **no `jss` container**. Diagrams below showing a separate
+> "JSS Sidecar (:3030)" are design-era intent — read "JSS" as the embedded
+> solid-pod-rs LDP layer. References to "Binary V2" predate the V3 52 B/node
+> wire (`docs/binary-protocol.md`).
 
 **Version:** 1.0
 **Date:** 2025-12-29

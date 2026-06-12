@@ -13,7 +13,8 @@ Read-only audit. No source edited. Ranking = user-facing impact × blast radius.
 | **T2** | ✅ RESOLVED 2026-06-03 | One persistence owner (debounced `autoSaveManager`); `notifyPhysicsUpdate` no longer fires an immediate PUT. One GPU dispatch path (orchestrator `state.graph_service_addr` → PhysicsOrchestratorActor); direct-GPU send removed from `physics.rs` + dead `enhanced.rs` fn delegates. Drag sends one canonical JSON frame; legacy binary block removed. | `01-settings-flow.md`, `04-updates-backoff.md` |
 | **T4** | ✅ RESOLVED 2026-06-03 | Single source of truth `src/actors/gpu/physics_bounds.rs` `(MIN,MAX)` consts; `optimized_settings_actor` path-patterns and `validate_physics_settings` both read it. Canonical defaults (repelK 120, maxVelocity 100, springK 12, maxForce 150) now sit inside the unified ceilings; max_velocity ceiling held equal to the GPU backstop (1000). | `qe-T2-T4-writepaths-ceilings.md` |
 | **T5** | ✅ RESOLVED 2026-06-03 | Single modularity (`modularity_csr`, `community.rs`); shadow `calculate_modularity` deleted, stats reuse the canonical Q. Single `node_analytics` writer: `ClusteringActor` via new `WriteClusterAnalytics` message (GPUManager → AnalyticsSupervisor → ClusteringActor), sent after `perform_clustering` for both GPU and CPU branches, so hulls populate. | `07-analysis-clustering.md` |
-| T6 / T7 / T8 | ⏸ DEFERRED | Per git-archaeology triage below — reconcile/delete-forward, not urgent. | — |
+| **T6** | ✅ RESOLVED (task #101 T6) | Shadow 48 B `crates/visionclaw-protocol/src/binary_protocol.rs` module deleted; rationale recorded in the crate's `lib.rs`. Single 52 B encoder remains in `src/utils/binary_protocol.rs`. | `05-wire-analytics-types.md` |
+| T7 / T8 | ⏸ DEFERRED | Per git-archaeology triage below — reconcile/delete-forward, not urgent. | — |
 
 ---
 
@@ -110,7 +111,7 @@ User-visible: **convex hulls never draw in a default deployment.**
 - **T4.2** `max_velocity` default 100, actor cap 50, route validator 1000 (`optimized_settings_actor.rs:237` vs `settings_routes.rs:132`).
 - **T4.3 (the teeth)**: connects to GPU. `max_velocity > 1000` → GPU clamp (`c_params.max_velocity`) looser than Rust backstop `MAX_VELOCITY_MAGNITUDE=1000` → divergence guard flags **every** frame OOB even for a healthy layout (diagram 06). Three uncoordinated velocity-clamp systems.
 
-### RANK 6 — T6: Duplicate binary protocol crate *(MEDIUM — latent wire corruption)*
+### RANK 6 — T6: Duplicate binary protocol crate *(MEDIUM — latent wire corruption)* — ✅ RESOLVED (shadow module deleted, task #101 T6)
 
 - **T6.1 CRITICAL-if-linked**: live `src/utils/binary_protocol.rs` = **52B** (centrality@48); shadow `crates/visionclaw-protocol/src/binary_protocol.rs` = **48B** (no centrality). Shadow decoder reads 48B chunks (`WIRE_V3_ITEM_SIZE=48`, `:631`) against a 52B stream. **Mitigant (verified): the shadow analytics encoders have zero callers** (only self-exported in `lib.rs:49-50`); `src/` uses its own local module. Dead, not active corruption — but a live footgun for any future import.
 - Live server↔client agree at 52B (golden test passes). `cluster_id/community_id` dup-write already removed.

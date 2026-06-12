@@ -68,6 +68,10 @@ surface.
 
 The system has three layers, and each owns a different kind of problem.
 
+> **Status:** aspirational design — BC18 (Contributor Enablement) and BC19
+> (Skill Lifecycle) are not implemented as of 2026-06-12; the substrate
+> contexts (graph, physics, ontology, websocket, identity) are live.
+
 ```mermaid
 graph TD
     subgraph Mesh["MANAGEMENT MESH"]

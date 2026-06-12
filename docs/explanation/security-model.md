@@ -284,7 +284,7 @@ The WebSocket upgrade request is validated before the connection is accepted:
 
 The binary position update protocol (single unified format — see [docs/binary-protocol.md](../binary-protocol.md) and [ADR-061](../adr/ADR-061-binary-protocol-unification.md)) carries only numeric node IDs and f32 position/velocity components. No user-identifying information, pubkeys, or session tokens appear in binary frames. An eavesdropper on the binary channel learns only that nodes moved — no identity linkage is possible from the binary stream alone.
 
-The fixed preamble byte (0x42) is validated on every frame as a sanity check; mismatches are rejected, not truncated. Payload length must match `9 + 24 × node_count`. The preamble is not a version dispatch — there is one binary protocol, and any future evolution gets a new endpoint.
+The version byte (`0x03` for V3) is validated on every frame; frames with an unknown version are rejected, not truncated. Payload length must match `1 + 52 × node_count` (or `9 + 52 × node_count` under V5 sequence framing). See [docs/binary-protocol.md](../binary-protocol.md) for the canonical layout.
 
 ### Content Security Policy
 
@@ -454,8 +454,7 @@ Use this table to verify a deployment before exposing it to production traffic.
 | Check | Verified |
 |-------|---------|
 | All required environment variables set (no defaults remaining) | [ ] |
-| `VIRCADIA_JWT_SECRET` changed from `change_this_in_production` | [ ] |
-| `POSTGRES_PASSWORD` changed from `visionclaw_secure` | [ ] |
+| `VIRCADIA_JWT_SECRET` removed from compose/env files (dead relic — Vircadia removed) | [ ] |
 | `SESSION_SECRET` set to a random 32+ byte value | [ ] |
 | `WS_AUTH_TOKEN` set to a random value | [ ] |
 | `.env` file absent from version control (check `.gitignore`) | [ ] |

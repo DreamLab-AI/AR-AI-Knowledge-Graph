@@ -1,7 +1,7 @@
 # nostr-rust-forum Architecture Map
 
 > Generated: 2026-05-09 | Substrate: `/home/devuser/workspace/nostr-rust-forum/`
-> Files: 125 (.rs) | Lines: 66,794 | Crates: 10
+> Files: 125 (.rs) | Lines: 66,794 | Crates: 12 (verified 2026-06-12; `nostr-bbs-rate-limit` extracted as a shared crate)
 
 ---
 
@@ -41,6 +41,10 @@ graph TD
         CANARY[nostr-bbs-upstream-canary<br/>~135 lines<br/>1 module]
     end
 
+    subgraph Shared["Shared Rate Limiting"]
+        RATE[nostr-bbs-rate-limit<br/>lib.rs + replay.rs]
+    end
+
     AUTH_W --> CORE
     RELAY_W --> CORE
     POD_W --> CORE
@@ -49,6 +53,9 @@ graph TD
     FORUM_CLIENT --> CORE
     SETUP --> CONFIG
     MESH --> CORE
+    AUTH_W --> RATE
+    PREVIEW_W --> RATE
+    SEARCH_W --> RATE
 ```
 
 ## 2. Auth Flow Diagram
@@ -224,15 +231,12 @@ flowchart TD
 
 ## 5. PARALLEL Implementations
 
-### P1: Rate Limiting (3 identical stubs)
+### P1: Rate Limiting — RESOLVED (extracted to shared crate)
 
-| Location | Lines |
-|----------|-------|
-| `nostr-bbs-auth-worker/src/rate_limit.rs` | 46 |
-| `nostr-bbs-preview-worker/src/rate_limit.rs` | 46 |
-| `nostr-bbs-search-worker/src/rate_limit.rs` | 46 |
-
-All three are identical token-bucket stubs. Should be extracted to a shared crate.
+The three formerly identical `rate_limit.rs` stubs in auth/preview/search
+workers have been deleted; all three workers now depend on the shared
+`crates/nostr-bbs-rate-limit` workspace crate (verified 2026-06-12 via each
+worker's `Cargo.toml`).
 
 ### P2: Auth/NIP-98 Verification (3 locations)
 

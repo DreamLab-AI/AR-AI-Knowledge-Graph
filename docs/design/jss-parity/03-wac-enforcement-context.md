@@ -1,5 +1,7 @@
 # Bounded Context: WAC Enforcement (extension)
 
+> **Status:** implemented — verified 2026-06-12 in the solid-pod-rs repo (`crates/solid-pod-rs/src/wac/origin.rs`).
+
 > **Sprint 4 / F4**. Closes GAP-ANALYSIS.md §H rank 3, §F.2,
 > PARITY-CHECKLIST.md row 51. Upstream reference: WAC §4.3
 > (`https://solidproject.org/TR/wac#origin`). Note that **JSS also does

@@ -1,5 +1,7 @@
 # Nostr-Solid Browser Extension Design
 
+> **Status:** aspirational design — not implemented as of 2026-06-12 (no extension code exists in this repo).
+
 ## Executive Summary
 
 A browser extension that enables seamless authentication to Solid servers using Nostr keys, eliminating the OAuth dance entirely. Users with existing Nostr identities can access protected Solid resources by signing HTTP requests with their Nostr keys.

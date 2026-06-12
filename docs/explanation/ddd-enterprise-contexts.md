@@ -632,6 +632,8 @@ Broker decides: Approve
 ```
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ```mermaid
 sequenceDiagram
     participant Agent
@@ -712,6 +714,8 @@ BC15 KPI ──── MetricComputed(MeshVelocity: 12 days)
 ```
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ```mermaid
 sequenceDiagram
     participant Ext as External System

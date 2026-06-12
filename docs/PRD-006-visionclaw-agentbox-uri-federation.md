@@ -65,6 +65,11 @@ The grammars are compatible in principle and the content-addressing convention a
 
 ## 4. Architecture Overview
 
+> **Update 2026-06-12:** the "Neo4j adapters" box below reflects the substrate
+> at authoring time; persistence has since moved to Oxigraph + SQLite (ADR-11).
+> The BC20 components marked NEW (AgentEventStream Projector, FederationSession
+> service, stdio bridge reader, ACL modules) remain unimplemented in `src/`.
+
 ```mermaid
 graph TD
     subgraph Client["Client (browser)"]

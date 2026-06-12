@@ -18,6 +18,8 @@ Each user authenticates via Nostr (npub), and their agent memories should be:
 
 ## Architecture Overview
 
+> **Status:** aspirational design — not implemented as of 2026-06-12 (NIP-26 delegation verification is deferred to Phase 5 of the agent-events schema; `AgentPodClient` exists only as test pseudocode in `client/src/__tests__/agent-pod/`).
+
 ```mermaid
 graph TD
     subgraph Container["Docker Container"]
@@ -53,6 +55,8 @@ graph TD
 *Component diagram showing the per-user Solid Pod directory structure, resources, and ACL layout within JSS.*
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
+> **Status:** aspirational design — not implemented as of 2026-06-12 (NIP-26 delegation verification is deferred to Phase 5 of the agent-events schema; `AgentPodClient` exists only as test pseudocode in `client/src/__tests__/agent-pod/`).
+
 ```mermaid
 graph TD
     subgraph Docker["Docker Container"]
@@ -105,6 +109,8 @@ User delegates signing authority to a session-scoped agent key.
 *Sequence diagram showing the NIP-26 delegation flow — from user key delegation through agent-signed NIP-98 requests to JSS access granted as the delegating user.*
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
+> **Status:** aspirational design — not implemented as of 2026-06-12 (NIP-26 delegation verification is deferred to Phase 5 of the agent-events schema; `AgentPodClient` exists only as test pseudocode in `client/src/__tests__/agent-pod/`).
+
 ```mermaid
 sequenceDiagram
     actor User

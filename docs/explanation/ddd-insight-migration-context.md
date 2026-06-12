@@ -320,6 +320,8 @@ should not collapse into their ontology class under physics force.
 
 ## 9. Happy-Path Sequence Diagram
 
+> **Status:** aspirational design — not implemented as of 2026-06-12.
+
 ```mermaid
 sequenceDiagram
     participant KG as BC3 Knowledge Graph

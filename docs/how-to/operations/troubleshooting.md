@@ -652,12 +652,12 @@ valgrind --leak-check=full ./target/debug/visionclaw
 **Solution**:
 ```bash
 # Find process using port
-sudo lsof -i :3030
+sudo lsof -i :3001
 sudo netstat -tulpn | grep 3001
 sudo ss -tulpn | grep 3001
 
 # Kill process (if safe)
-sudo kill -9 $(sudo lsof -t -i:3030)
+sudo kill -9 $(sudo lsof -t -i:3001)
 
 # Or change port in .env
 echo "VITE-API-PORT=3002" >> .env
@@ -770,12 +770,12 @@ docker exec gui-tools-container tcpdump -i any port 9876
 ```mermaid
 flowchart TD
     A[Connection refused\nor WebSocket error] --> B{Which endpoint\nfails?}
-    B --> C[Main API :4000\nor :3030] --> D{Container running?\ndocker ps}
+    B --> C[Main API :4000\nor nginx :3001] --> D{Container running?\ndocker ps}
     D --> N1[No] --> E[docker-compose up -d visionclaw]
     D --> Y1[Yes] --> F{Port mapped?\ndocker port}
     F --> N2[No] --> G[Fix ports in\ndocker-compose.yml]
     F --> Y2[Yes] --> H{Firewall blocking?\nufw status}
-    H --> Y3[Yes] --> I[sudo ufw allow\n3030/tcp 4000/tcp]
+    H --> Y3[Yes] --> I[sudo ufw allow\n3001/tcp 4000/tcp]
     H --> N3[No] --> J[Check nginx config\nnginx -t inside container]
     B --> K[Agent API :3000] --> L{MCP server listening?\nnetstat grep 9500}
     L --> N4[No] --> M[supervisorctl restart\nmcp-tcp-server]
@@ -809,7 +809,7 @@ sudo ufw allow 5901/tcp  # VNC
 docker ps --format "table {{.Names}}\t{{.Ports}}"
 
 # Test locally first
-curl http://localhost:3030/
+curl http://localhost:3001/
 curl http://localhost:5901
 
 # Check if service is listening on correct interface
@@ -823,13 +823,13 @@ sudo iptables -L -n | grep 3001
 ```bash
 # Test from different locations
 # Local machine
-curl http://localhost:3030
+curl http://localhost:3001
 
 # From container
-docker exec visionclaw-container curl http://localhost:3030
+docker exec visionclaw-container curl http://localhost:3001
 
 # From another machine on network
-curl http://<host-ip>:3030
+curl http://<host-ip>:3001
 
 # Check nginx configuration
 docker exec visionclaw-container cat /etc/nginx/nginx.conf
@@ -994,82 +994,18 @@ docker-compose build visionclaw 2>&1 | grep -i "ptx\|cuda\|nvcc"
 
 ## XR/VR Issues
 
-### WebXR Not Working
+### WebXR / Quest Browser — SUPERSEDED
 
-**Problem**: Can't enter immersive mode in VR headset
+> **SUPERSEDED 2026-06-12.** The browser-hosted WebXR client (HTTPS +
+> `navigator.xr`, `?immersive=true` / `?force=quest3` URL parameters) was
+> **removed** per ADR-071/ADR-102. The XR client is now a **native Godot 4
+> APK** (`visionclaw-xr.apk`) side-loaded onto the Quest 3 — there is no
+> browser entry point and no WebXR/HTTPS requirement for XR. For XR setup
+> and troubleshooting see [XR Setup (Quest 3)](../xr-setup-quest3.md) and
+> [XR Architecture](../../explanation/xr-architecture.md).
 
-**Solution**:
-```bash
-# Verify HTTPS is enabled (required for WebXR)
-# Check vite.config.ts or nginx configuration
+### VNC Issues (GUI tools container)
 
-# For development with self-signed certificate
-openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes
-
-# Update .env
-echo "VITE-HTTPS=true" >> .env
-echo "VITE-SSL-KEY=./key.pem" >> .env
-echo "VITE-SSL-CERT=./cert.pem" >> .env
-
-# Restart services
-docker-compose restart visionclaw
-
-# Test WebXR API availability in browser console
-navigator.xr.isSessionSupported('immersive-vr').then(supported => {
-  console.log('WebXR VR supported:', supported);
-});
-```
-
-**Diagnostic**:
-```bash
-# Check if HTTPS is enabled
-curl -I https://localhost:3030
-
-# Verify certificate
-openssl s-client -connect localhost:3030 -showcerts
-
-# Check browser console for WebXR errors
-# Press F12, look for WebXR or immersive-related messages
-```
-
-**Prevention**:
-- Always use HTTPS in production
-- Test WebXR compatibility before deployment
-- Provide fallback UI for non-XR devices
-
----
-
-**Problem**: Quest 3 headset not connecting
-
-**Solution**:
-```bash
-# Enable developer mode on Quest 3
-# Settings → System → Developer → Developer Mode
-
-# Ensure Quest is on same network as development machine
-
-# Test network connectivity
-ping <quest-ip-address>
-
-# Use correct URL with immersive parameter
-https://<your-ip>:3030?immersive=true
-https://<your-ip>:3030?force=quest3
-
-# Accept security warning for self-signed certificate
-# Quest Browser → Advanced → Proceed anyway
-```
-
-**Diagnostic Checklist**:
-- [ ] Developer mode enabled on Quest
-- [ ] Quest and PC on same network
-- [ ] HTTPS enabled on server
-- [ ] Certificate accepted in Quest browser
-- [ ] WebXR API available (check browser console)
-- [ ] Controllers paired and tracking
-
-**Prevention**: Document setup process and test regularly
-
----
 
 **Problem**: VNC not accessible on port 5901
 
@@ -1358,7 +1294,7 @@ graph LR
 
     subgraph Network["docker-ragflow network"]
         subgraph Core["Core Services"]
-            WX[visionclaw container\nRust backend :4000\nVite dev :3030]
+            WX[visionclaw container\nRust backend :4000\nnginx :3001 · Vite dev :5173]
             PG[postgres\n:5432]
             RD[redis\ntask queue]
             RF[ragflow-server\n:9380]

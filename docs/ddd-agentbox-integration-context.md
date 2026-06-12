@@ -25,6 +25,10 @@ Without this context, every VisionClaw actor that wants to spawn an agent or rec
 
 ## 3. Strategic placement
 
+> **Status:** aspirational design — not implemented as of 2026-06-12 (no
+> `AgentExecutionRequestHandler`, `AdapterEndpointRegistry`, or
+> `FederationSession` types exist in `src/`).
+
 ```mermaid
 graph TD
     subgraph VC["VisionClaw Rust substrate"]

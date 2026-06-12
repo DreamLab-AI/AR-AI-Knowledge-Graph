@@ -133,7 +133,7 @@ flowchart LR
 
     subgraph Network
         REST[REST API<br/>/api/settings<br/>/api/graph/*]
-        WS[WebSocket<br/>/ws/graph]
+        WS[WebSocket<br/>/wss]
     end
 
     UI -->|user action| STORE
@@ -455,8 +455,8 @@ for logging only; it does not affect decoding.
 `ClusterHulls.tsx` renders hull geometry when the `nodeAnalyticsStore` returns
 at least one non-zero `cluster_id` or `community_id` entry. All three fallback
 paths (`communityFallback`, `spatialFallback`) default to OFF. Hulls render
-after an explicit clustering trigger (`POST /analytics/clustering/run` or
-`POST /clustering/start`) — they do not auto-render at boot.
+after an explicit clustering trigger (`POST /analytics/clustering/run`) —
+they do not auto-render at boot.
 
 The `InteractionManager.ts` and `useNodeInteraction.ts` files exist in the
 codebase but are dead (zero imports). The live interaction path is

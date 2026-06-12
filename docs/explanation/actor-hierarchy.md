@@ -35,16 +35,16 @@ Actors serve as the **Presentation Layer** of the hexagonal architecture. They r
 graph TD
     Arbiter["Actix Arbiter<br/>(Tokio runtime)"]
 
-    Arbiter --> AppSupervisor["AppSupervisor<br/>OneForOne strategy"]
+    Arbiter --> AppRoot["app_state.rs bootstrap<br/>(actors started directly with .start();<br/>generic SupervisorActor available for parenting,<br/>src/actors/supervisor.rs)"]
 
-    AppSupervisor --> GSS["GraphServiceSupervisor<br/>OneForOne strategy"]
-    AppSupervisor --> PhysicsOrch["PhysicsOrchestratorActor"]
-    AppSupervisor --> ClientCoord["ClientCoordinatorActor"]
-    AppSupervisor --> GitHubSync["GitHubSyncActor"]
-    AppSupervisor --> SemanticProc["SemanticProcessorActor"]
-    AppSupervisor --> OptSettings["OptimizedSettingsActor"]
-    AppSupervisor --> Workspace["WorkspaceActor"]
-    AppSupervisor --> Ontology["OntologyActor"]
+    AppRoot --> GSS["GraphServiceSupervisor<br/>OneForOne strategy"]
+    AppRoot --> PhysicsOrch["PhysicsOrchestratorActor"]
+    AppRoot --> ClientCoord["ClientCoordinatorActor"]
+    AppRoot --> GitHubSync["GitHubSyncActor"]
+    AppRoot --> SemanticProc["SemanticProcessorActor"]
+    AppRoot --> OptSettings["OptimizedSettingsActor"]
+    AppRoot --> Workspace["WorkspaceActor"]
+    AppRoot --> Ontology["OntologyActor"]
 
     GSS --> GraphState["GraphStateActor"]
     GSS --> GraphUpdate["GraphUpdateActor"]

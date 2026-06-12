@@ -1,5 +1,7 @@
 # Bounded Context: OIDC Hardening
 
+> **Status:** implemented — verified 2026-06-12 in the solid-pod-rs repo (`crates/solid-pod-rs/src/oidc/replay.rs`).
+
 > **Sprint 4 / F5**. Closes GAP-ANALYSIS.md §H rank 4, §C.3a,
 > PARITY-CHECKLIST.md row 64. Upstream reference:
 > `JavaScriptSolidServer/src/auth/solid-oidc.js` (jti replay cache

@@ -6,6 +6,12 @@
 
 ## 1. Bounded Context Map
 
+> **Status:** aspirational design — not implemented as of 2026-06-12. Where it
+> names substrate, the substrate has since moved: persistence is Oxigraph +
+> SQLite (ADR-11), not Neo4j, and the live position wire is the 52-byte V3
+> record with inline analytics (see `docs/binary-protocol.md`), not a
+> 28 B frame + `analytics_update` JSON split.
+
 ```mermaid
 graph TB
     subgraph "Core Domain: Graph Cognition (BC-GC, this doc)"

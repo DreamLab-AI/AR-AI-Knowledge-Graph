@@ -81,6 +81,14 @@ The bead provenance system is the audit backbone of VisionClaw â€” every briefâ†
 
 ## 5. Architecture
 
+> **Update 2026-06-12:** the Neo4j boxes below describe the architecture as
+> implemented at the time. The Neo4j write path (`Neo4jBeadStore`,
+> `:Bead`/`:NostrEvent` persistence, the `Neo4jPersisted` state) was
+> **removed with ADR-11**; `bead_lifecycle.rs` / the `BeadStore` trait are no
+> longer in `src/`. What remains live is `nostr_bead_publisher.rs` (kind 30001
+> NIP-33 relay publishing) and `nostr_bridge.rs`; Oxigraph provenance
+> persistence is queued as Phase 2 (see the publisher's module header).
+
 ### 5.1 System Overview
 
 ```mermaid

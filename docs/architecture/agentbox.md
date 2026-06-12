@@ -26,6 +26,7 @@ graph TD
         R_LINKED[routes/linked-objects.js<br/>232 lines]
         R_URI[routes/uri-resolver.js<br/>175 lines]
         R_STATUS[routes/status.js<br/>65 lines]
+        R_NEW["newer routes (2026-06):<br/>kg-elevation.js · voice-intent.js · pod-git.js<br/>payments.js · llm-marketplace.js · admin-users.js"]
     end
 
     subgraph Adapters["Pluggable Adapters (ADR-005)"]
@@ -173,27 +174,31 @@ flowchart TD
 
 ## 3. URI Namespace (18 kinds)
 
+> Verified 2026-06-12 against `management-api/lib/uris.js` `KINDS` (grammar:
+> `urn:agentbox:<kind>:<scope>:<local>`; bead is content-addressed to match the
+> converged `urn:visionclaw:bead:<pubkey>:<sha256-12>` grammar for the BC20 bridge).
+
 ```mermaid
 graph LR
     URN["urn:agentbox:"]
-    URN --> agent
-    URN --> workspace
-    URN --> task
-    URN --> bead
-    URN --> skill
     URN --> pod
-    URN --> relay
-    URN --> event
-    URN --> hook
-    URN --> metric
-    URN --> adapter
-    URN --> session
-    URN --> memory
+    URN --> envelope
     URN --> credential
-    URN --> git_object[git-object]
-    URN --> comfy_workflow[comfy-workflow]
-    URN --> linked_object[linked-object]
-    URN --> route
+    URN --> mandate
+    URN --> receipt
+    URN --> activity
+    URN --> event
+    URN --> mcp
+    URN --> memory
+    URN --> skill
+    URN --> adr
+    URN --> prd
+    URN --> ddd
+    URN --> thing
+    URN --> dataset
+    URN --> bead
+    URN --> agent
+    URN --> meta
 ```
 
 ## 4. File Checklist

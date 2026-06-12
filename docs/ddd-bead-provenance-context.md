@@ -4,6 +4,14 @@
 
 ## 1. Bounded Context Map
 
+> **Status (2026-06-12):** partially implemented. `NostrBeadPublisher`
+> (`src/services/nostr_bead_publisher.rs`, kind 30001 NIP-33) and the Nostr
+> bridge are live. The Neo4j persistence shown below (`N4J` / the
+> `Neo4jPersisted` state) was **removed** with ADR-11 — graph persistence is
+> Oxigraph + SQLite, and the bead provenance write path is queued for an
+> Oxigraph Phase 2 (`todo!` noted in the publisher header). No `BeadStore`
+> trait exists in `src/` yet.
+
 ```mermaid
 graph TB
     subgraph "Core Domain: Bead Provenance"

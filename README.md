@@ -127,7 +127,7 @@ flowchart TB
     subgraph Layer1["LAYER 1 — DISCOVERY ENGINE"]
         Ingest["Knowledge Ingestion\nLogseq · GitHub · RSS"]
         Graph["Oxigraph + SQLite\n+ RuVector pgvector Memory"]
-        Viz["3D Visualisation\nR3F · Babylon.js · WebXR"]
+        Viz["3D Visualisation\nR3F · native Godot XR"]
         Voice["Voice Routing\n4-Plane Architecture"]
     end
 
@@ -471,12 +471,13 @@ Dependency order (inner → outer): `contracts → domain → {gpu, ontology, pr
 
 ```mermaid
 flowchart TB
-    subgraph Client["Browser Client (React 19 + Three.js / Babylon.js)"]
+    subgraph Client["Browser Client (React 19 + Three.js)"]
         R3F["React Three Fiber\n(desktop graph)"]
-        BabylonXR["Babylon.js\n(immersive XR)"]
-        BinProto["Binary Protocol V2/V3"]
+        BinProto["Binary Protocol V3/V5"]
         Voice["Voice Orchestrator"]
     end
+
+    XRClient["Native XR Client\n(Godot 4 + godot-rust, ADR-071/102)"]
 
     subgraph Server["Rust Backend (Actix-web · Hexagonal · CQRS)"]
         Handlers["HTTP/WS Handlers\n(9 ports · 12 adapters)"]
@@ -502,7 +503,8 @@ flowchart TB
         Forum["Forum\n(governance UI)"]
     end
 
-    Client <-->|"Binary V2/V3 + REST"| Server
+    Client <-->|"Binary V3/V5 + REST"| Server
+    XRClient <-->|"Binary V3/V5 WS + NIP-98 auth"| Server
     Server <--> Oxigraph
     Server <--> RuVector
     Server <--> Solid
@@ -525,25 +527,25 @@ VisionClaw follows strict hexagonal architecture. Business logic in `src/service
 
 ```mermaid
 flowchart LR
-    subgraph Ports["src/ports/ (Traits)"]
+    subgraph Ports["src/ports/ + crates/visionclaw-domain/src/ports/ (Traits)"]
         GP[GraphRepository]
+        KGR[KnowledgeGraphRepository]
+        PS[PhysicsSimulator]
+        SA[SemanticAnalyzer]
+        SR[SettingsRepository]
         OR[OntologyRepository]
         IE[InferenceEngine]
         GPA[GpuPhysicsAdapter]
         GSA[GpuSemanticAnalyzer]
-        SR[SettingsRepository]
-        SP[SolidPodRepository]
-        NR[NostrRelay]
-        VR[VectorRepository]
     end
 
-    subgraph Adapters["src/adapters/ (Implementations)"]
+    subgraph Adapters["src/adapters/ + crates/visionclaw-adapters/ (Implementations)"]
         OxiGraph[OxigraphGraphRepository]
         OxiOntology[OxigraphOntologyRepository]
         Whelk[WhelkInferenceEngine]
         CudaPhysics[PhysicsOrchestratorAdapter]
-        SolidPod[EmbeddedSolidPodAdapter]
-        RuVectorAdapter[RuVectorAdapter]
+        AGR[ActorGraphRepository]
+        SqliteSettings[SqliteSettingsRepository]
     end
 
     subgraph Services["src/services/ (Business Logic)"]

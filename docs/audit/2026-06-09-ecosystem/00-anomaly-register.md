@@ -1,5 +1,7 @@
 # Ecosystem Anomaly Register — 2026-06-09 Mega-Sprint
 
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 Queen synthesis of six cartography reports (build-with-quality Diagram-Driven Diagnosis,
 ruflo mesh `swarm_1781038461338_ho3achb`). Source reports: `01`–`06` in this directory.
 Prior-audit memory folded in: `security-audit-sovereign-mesh-2026-06`,

@@ -1,5 +1,7 @@
 # Bounded Context: Config Platform
 
+> **Status:** implemented — verified 2026-06-12 in the solid-pod-rs repo (`crates/solid-pod-rs/src/config/{schema,sources}.rs`, `JSS_*` env sources).
+
 > **Sprint 4 / F6**. Closes GAP-ANALYSIS.md §H rank 7, §E.6,
 > PARITY-CHECKLIST.md rows 120–124. Upstream reference:
 > `JavaScriptSolidServer/src/config.js:17-239`.

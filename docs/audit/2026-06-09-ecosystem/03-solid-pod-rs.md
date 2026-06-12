@@ -1,5 +1,7 @@
 # Audit Slice 03: solid-pod-rs — 2026-06-09
 
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 Cartography agent, Diagram-Driven Diagnosis sprint. READ-ONLY analysis of
 `/home/devuser/workspace/solid-pod-rs`.  
 Workspace version: **0.4.0-alpha.15** (workspace root `Cargo.toml`; the version

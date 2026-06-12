@@ -22,14 +22,14 @@ This guide shows how to accomplish real tasks with the VisionClaw REST API. For 
 
 | Environment | REST API | WebSocket |
 |-------------|----------|-----------|
-| Development | `http://localhost:8080` | `ws://localhost:8080/wss` |
+| Development |  `http://localhost:4000` (direct) or `http://localhost:3001` (nginx) | `ws://localhost:4000/wss` |
 | Production | `https://<your-host>` | `wss://<your-host>/wss` |
 
-All REST paths are prefixed with `/api/`. The OpenAPI UI is available at `http://localhost:8080/swagger-ui/`.
+All REST paths are prefixed with `/api/`. The OpenAPI UI is available at `http://localhost:4000/swagger-ui/`.
 
 ```mermaid
 graph TD
-    API[VisionClaw API\nlocalhost:8080] --> Graph[/api/graph/*\nNodes · Edges · Data]
+    API[VisionClaw API\nlocalhost:4000] --> Graph[/api/graph/*\nNodes · Edges · Data]
     API --> Settings[/api/settings/*\nUser Preferences]
     API --> Ontology[/api/ontology/*\nOWL Query · Update]
     API --> Admin[/api/admin/*\nSync · Force-sync]
@@ -39,7 +39,7 @@ graph TD
     API --> Health[/health\nService Status]
 ```
 
-*Figure: VisionClaw API endpoint groups — all paths are served from port 8080*
+*Figure: VisionClaw API endpoint groups — all paths are served from port 4000 (or via nginx on :3001)*
 
 ---
 
@@ -51,7 +51,7 @@ VisionClaw uses [NIP-98](https://github.com/nostr-protocol/nips/blob/master/98.m
 sequenceDiagram
     participant App as Client App
     participant Nostr as nostr-tools
-    participant API as VisionClaw API :8080
+    participant API as VisionClaw API :4000
     participant Store as Oxigraph (embedded)
 
     App->>Nostr: signEvent(kind:27235, url, method, payload_hash)
@@ -124,7 +124,7 @@ function createAuthEvent(
 ### 2.3 Reusable authenticated fetch wrapper
 
 ```typescript
-const BASE_URL = 'http://localhost:8080/api'
+const BASE_URL = 'http://localhost:4000/api'
 
 // After first NIP-98 auth the server returns a session token.
 // Store it and reuse via Bearer to avoid signing every request.
@@ -338,7 +338,7 @@ graph LR
         REST[REST\nGET /api/graph/data] --> Render[Initial\n3D Render]
     end
     subgraph "Live Updates"
-        WS[WebSocket\nws://host/ws] --> Binary[Binary V2\n36 bytes/node]
+        WS[WebSocket\nws://host/wss] --> Binary[Binary V3\n52 bytes/node]
         Binary --> SAB[SharedArrayBuffer\nPosition Updates]
         SAB --> RAF[requestAnimationFrame\nSmooth Animation]
     end
@@ -358,7 +358,7 @@ renderGraph(nodes, edges)
 // Step 2 — stream live positions via WebSocket
 const token = localStorage.getItem('nostr_session_token')
 const ws = new WebSocket(
-  `ws://localhost:8080/wss${token ? `?token=${token}` : ''}`
+  `ws://localhost:4000/wss${token ? `?token=${token}` : ''}`
 )
 
 ws.onopen = () => {
@@ -564,7 +564,7 @@ npm install -g nostr-tools
 
 # Set your private key (hex)
 SK="your_private_key_hex_here"
-TARGET_URL="http://localhost:8080/api/graph/data"
+TARGET_URL="http://localhost:4000/api/graph/data"
 METHOD="GET"
 
 AUTH=$(node -e "
@@ -591,7 +591,7 @@ For POST requests add a body hash to the `payload` tag and pass `-d` to curl:
 
 ```bash
 BODY='{"changes":[{"key":"physics.damping","value":0.9}]}'
-TARGET_URL="http://localhost:8080/api/settings/bulk"
+TARGET_URL="http://localhost:4000/api/settings/bulk"
 METHOD="POST"
 
 AUTH=$(node -e "

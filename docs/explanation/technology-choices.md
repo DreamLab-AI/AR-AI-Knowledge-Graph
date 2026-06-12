@@ -67,7 +67,7 @@ graph TB
     end
 
     subgraph "Transport Layer"
-        WS["Binary WebSocket V2\n36 bytes/node · 80% smaller"]
+        WS["Binary WebSocket V3\n52 bytes/node · ~80% smaller than JSON"]
         REST["REST API\nActix-Web"]
     end
 
@@ -407,7 +407,7 @@ below ([ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md),
 [PRD-008](../PRD-008-xr-godot-replacement.md)).
 
 The desktop R3F path remains the entry point for users without an XR
-headset; it consumes the same 28 B/node binary protocol the APK consumes.
+headset; it consumes the same V3 52 B/node binary protocol the APK consumes.
 
 ### Alternatives Considered
 
@@ -868,25 +868,29 @@ Use **custom 36-byte binary WebSocket protocol** instead of JSON over WebSocket.
 }
 ```
 
-**Binary format (36 bytes per node):**
+**Binary format (V3 — 52 bytes per node, `src/utils/binary_protocol.rs`):**
 ```rust
-struct BinaryNodeData {
-    id: u32,        // 4 bytes
-    x: f32,         // 4 bytes
-    y: f32,         // 4 bytes
-    z: f32,         // 4 bytes
-    vx: f32,        // 4 bytes
-    vy: f32,        // 4 bytes
-    vz: f32,        // 4 bytes
-    group_id: u32,  // 4 bytes
-    flags: u32,     // 4 bytes
+struct WireNodeDataItemV3 {
+    id: u32,             // 4 bytes — node id + type flags (bits 26-31)
+    x: f32,              // 4 bytes
+    y: f32,              // 4 bytes
+    z: f32,              // 4 bytes
+    vx: f32,             // 4 bytes
+    vy: f32,             // 4 bytes
+    vz: f32,             // 4 bytes
+    sssp_distance: f32,  // 4 bytes
+    sssp_parent: i32,    // 4 bytes
+    cluster_id: u32,     // 4 bytes
+    anomaly_score: f32,  // 4 bytes
+    community_id: u32,   // 4 bytes
+    centrality: f32,     // 4 bytes
 }
 ```
 
-**Impact for 10k node update:**
-- JSON: 1.8MB
-- Binary: 360KB
-- **Reduction: 80%**
+**Impact for 10k node update** (JSON for the same 13 fields is ~360 bytes/node):
+- JSON: ~3.6MB
+- Binary: 520KB
+- **Reduction: ~85%**
 
 #### 2. Zero-Copy Parsing
 

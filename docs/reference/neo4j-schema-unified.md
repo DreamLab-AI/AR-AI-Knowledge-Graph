@@ -627,9 +627,9 @@ block-beta
   columns 32
   block:b31["31\nAgent\n0x80000000"]:1
   block:b30["30\nKnowledge\n0x40000000"]:1
+  block:b29["29\n(reserved)"]:1
   block:b28["28-26\nOntology\nsubtype\n0x1C000000"]:3
-  block:b25["25\n(reserved)"]:1
-  block:b0["0–25 Sequential node ID (max ~67 million)"]:26
+  block:b0["0–25 Sequential node ID (NODE_ID_MASK 0x03FF_FFFF, max ~67 million)"]:26
 ```
 
 **Flag masks:**

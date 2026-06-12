@@ -1,5 +1,7 @@
 # VisionClaw Core Audit — 2026-06-09
 
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 **Scope:** `src/` (Rust backend), `crates/` (workspace crates), `xr-client/rust/` (Godot XR client), `client/` (TypeScript, structural only). Read-only analysis built from actual code, not documentation.
 
 ---

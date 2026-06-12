@@ -12,13 +12,12 @@ flowchart TD
     subgraph TRIGGERS["Trigger sources"]
         direction TB
         AUTO["Auto-trigger loop\n(graph_service_supervisor.rs)\nADR-031 D5\nOPT-IN — disabled by default\nunless VISIONCLAW_AUTO_&lt;ALGO&gt;_ENABLED is set\n(CUDA primary-context poison risk)"]
-        HTTP_CLUSTER["POST /clustering/start\nclustering_handler.rs"]
         HTTP_ANALYTICS["POST /analytics/clustering/run\nanalytics/mod.rs → clustering_handlers.rs"]
         HTTP_COMMUNITY["POST /analytics/community/detect\nanalytics/mod.rs → community.rs\n(label_propagation only — Louvain NOT exposed here)"]
         HTTP_ANOMALY["POST /analytics/anomaly/detect\nanalytics/mod.rs → anomaly.rs\nLOF or Z-score"]
         HTTP_PAGERANK["POST /analytics/pagerank/compute\npagerank_handlers.rs"]
         HTTP_SSSP["POST /analytics/sssp/compute\nsssp_handlers.rs\nPOST /analytics/pathfinding/sssp\npathfinding.rs"]
-        HTTP_DBSCAN_STANDALONE["POST /clustering/dbscan\nclustering_handler.rs\nPOST /analytics/clustering/dbscan\nclustering_handlers.rs"]
+        HTTP_DBSCAN_STANDALONE["POST /analytics/clustering/dbscan\nclustering_handlers.rs"]
     end
 
     %% ── Actor mesh ───────────────────────────────────────────────────────────
@@ -72,8 +71,7 @@ flowchart TD
     AUTO -->|"ANOMALY channel\nRunAnomalyDetection{LOF}"| GPUMgr
     AUTO -->|"COMPONENTS channel\nConnectedComponents"| GPUMgr
 
-    HTTP_CLUSTER -->|"PerformGPUClustering\n(louvain/kmeans/dbscan)"| GPUMgr
-    HTTP_ANALYTICS -->|"PerformGPUClustering"| GPUMgr
+    HTTP_ANALYTICS -->|"PerformGPUClustering\n(louvain/kmeans/dbscan)"| GPUMgr
     HTTP_COMMUNITY -->|"RunCommunityDetection\n{LabelPropagation only}"| GPUMgr
     HTTP_ANOMALY -->|"RunAnomalyDetection{LOF|ZScore}"| GPUMgr
     HTTP_PAGERANK -->|"RunPageRank"| GPUMgr
@@ -350,20 +348,19 @@ flowchart TD
 - `ClusteringActor::calculate_modularity()` (formerly the edge-count shadow heuristic at clustering_actor.rs) has been **DELETED**. `CommunityDetectionResult.stats.modularity` now reuses the `modularity_csr` value the detection path already returns (`let actual_modularity = modularity;`), so the gate and the reported Q are identical.
 - The regression test `tests/qe_t5_shadow_modularity.rs` pins the canonical Q on BARBELL_K3 (5/14 ≈ 0.3571) and asserts the system no longer reports the old shadow value (≈ 0.25).
 
-**PARALLEL-2 — Three HTTP clustering entry points routing to the same actor**
+**PARALLEL-2 — Multiple HTTP clustering entry points routing to the same actor** *(updated 2026-06-12: the standalone `src/handlers/clustering_handler.rs` with `POST /clustering/start` has been removed — `/analytics/clustering/*` is now the only clustering route family)*
 
-- `POST /clustering/start` — `src/handlers/clustering_handler.rs:127` → `PerformGPUClustering` → ClusteringActor.
-- `POST /analytics/clustering/run` — `src/handlers/api_handler/analytics/clustering_handlers.rs:21` → `perform_clustering()` in the same file. The GPU branch routes `PerformGPUClustering` through GPUManagerActor → ClusteringActor; the CPU branch falls back to label-propagation. **RESOLVED 2026-06-03**: regardless of branch, the spawn task now routes the finished `Vec<Cluster>` back through the single writer via `WriteClusterAnalytics` (GPUManagerActor → AnalyticsSupervisor → ClusteringActor), so `node_analytics.cluster_id` is written and hulls render on explicit user trigger.
+- `POST /analytics/clustering/run` — `src/handlers/api_handler/analytics/clustering_handlers.rs` → `perform_clustering()` in the same file. The GPU branch routes `PerformGPUClustering` through GPUManagerActor → ClusteringActor; the CPU branch falls back to label-propagation. **RESOLVED 2026-06-03**: regardless of branch, the spawn task now routes the finished `Vec<Cluster>` back through the single writer via `WriteClusterAnalytics` (GPUManagerActor → AnalyticsSupervisor → ClusteringActor), so `node_analytics.cluster_id` is written and hulls render on explicit user trigger.
 - `POST /analytics/community/detect` — `src/handlers/api_handler/analytics/mod.rs:183` → `community::run_gpu_community_detection()` → `RunCommunityDetection{LabelPropagation}` via the GPU actor chain. Only exposes `label_propagation`; Louvain is not reachable from this route (see `community.rs:68–76`).
 
 **PARALLEL-3 — cluster_id vs community_id dual-write history / current state**
 
 - ADR-031 D3 documents a prior violation where handlers wrote both. Current code: ClusteringActor is sole writer of `cluster_id` (K-means/DBSCAN path) and `community_id` (LPA/Louvain path). The writes are now separated by field — community detection never touches `cluster_id` and vice versa (`src/actors/gpu/clustering_actor.rs:240–253` for cluster, `:379–393` for community). The duplicate-write bug is removed but the historical comments remain in-tree as evidence.
 
-**PARALLEL-4 — Two DBSCAN entry points**
+**PARALLEL-4 — Two DBSCAN entry points — RESOLVED (route consolidated)**
 
-- `POST /clustering/dbscan` — `src/handlers/clustering_handler.rs:738` → `RunDBSCAN` → ClusteringActor.
-- `POST /analytics/clustering/dbscan` — `src/handlers/api_handler/analytics/clustering_handlers.rs:202` → same `RunDBSCAN` message → same ClusteringActor path. Duplicate route, identical execution path.
+- ~~`POST /clustering/dbscan` — `src/handlers/clustering_handler.rs:738`~~ — removed along with `clustering_handler.rs`.
+- `POST /analytics/clustering/dbscan` — `src/handlers/api_handler/analytics/clustering_handlers.rs:214` → `RunDBSCAN` → ClusteringActor. Now the sole DBSCAN route.
 
 **PARALLEL-5 — Two anomaly subsystems sharing the name "anomaly"**
 

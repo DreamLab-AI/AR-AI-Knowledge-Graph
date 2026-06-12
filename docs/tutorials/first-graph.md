@@ -35,7 +35,7 @@ Ports that must be free:
 | Port | Service |
 |------|---------|
 | 3001 | Nginx proxy (main entry point) |
-| 3030 | Rust backend API |
+| 4000 | Rust backend API |
 
 > The graph store is an **embedded Oxigraph** triple store running in-process inside
 > the Rust backend (ADR-11). There is no separate database container, browser UI, or
@@ -60,7 +60,7 @@ docker compose --profile dev up -d
 Wait ~30 seconds for the Rust backend (which opens the embedded Oxigraph store) to initialise, then verify:
 
 ```bash
-curl http://localhost:3030/api/health
+curl http://localhost:4000/api/health
 # Expected: {"status":"ok"}
 ```
 
@@ -78,7 +78,7 @@ docker compose logs -f visionclaw-container
 sequenceDiagram
     participant U as You
     participant N as Nginx :3001
-    participant R as Rust Backend :3030
+    participant R as Rust Backend :4000
     participant G as Oxigraph (embedded, in-process)
     participant V as Vite Frontend :5173
 
@@ -172,7 +172,7 @@ Example relationships to add:
 Verify the data reached the graph store via the REST API:
 
 ```bash
-curl http://localhost:3030/api/graph/data | jq '.nodes | length'
+curl http://localhost:4000/api/graph/data | jq '.nodes | length'
 # Expected: a non-zero node count once the sync completes
 ```
 

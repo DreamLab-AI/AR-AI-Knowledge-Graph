@@ -1,4 +1,7 @@
 # Audit Slice 05 — dreamlab-ai-website
+
+> **Audit snapshot (2026-06-09).** Findings reflect that date; several items have since been resolved — verify against current code before acting.
+
 **Date:** 2026-06-09
 **Method:** Diagram-Driven Diagnosis (build-with-quality protocol), read-only static analysis
 **Repo:** `/home/devuser/workspace/dreamlab-ai-website`

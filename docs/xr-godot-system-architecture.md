@@ -30,14 +30,16 @@ Godot APK is recorded in [ADR-071](adr/ADR-071-xr-godot-replacement.md). The rat
 is twofold: (1) WebXR on Quest is constrained by the Meta browser's compositor budget
 and lacks reliable access to OpenXR extensions like `XR_FB_spatial_audio`,
 `XR_FB_passthrough`, and reprojection hints; (2) the Vircadia world server's
-PostgreSQL-backed entity model duplicates state already canonical in Neo4j and the
-GPU physics actor mesh, producing two sources of truth for node position. A native
-APK that consumes the existing 24-byte binary protocol unchanged collapses both
-problems: rendering uses platform-native OpenXR with full extension access, and
-presence is a thin overlay that does not replicate graph state.
+PostgreSQL-backed entity model duplicates state already canonical in the graph
+store (Oxigraph + SQLite, ADR-11) and the GPU physics actor mesh, producing two
+sources of truth for node position. A native APK that consumes the existing
+binary protocol unchanged (52-byte V3 node records behind a 1-byte version
+header — see `docs/binary-protocol.md`) collapses both problems: rendering uses
+platform-native OpenXR with full extension access, and presence is a thin
+overlay that does not replicate graph state.
 
 The Rust substrate (Actix-web, GraphServiceSupervisor, BroadcastOptimizer, CUDA
-physics, Neo4j) is **unchanged**. The only server-side additions are one new actor
+physics, Oxigraph + SQLite) is **unchanged**. The only server-side additions are one new actor
 (`presence_actor.rs`) and one new handler (`presence_handler.rs`), wired into the
 existing supervisor tree and exposed on the existing `webxr` container's WebSocket
 port. The new Quest 3 client is a separate APK build artefact; it does not affect
@@ -77,14 +79,14 @@ graph TB
         WSGraph["/wss<br/>graph position stream<br/>(unchanged)"]
         WSPresence["/ws/presence<br/><b>NEW</b>"]
         PresHandler["presence_handler.rs<br/><b>NEW</b>"]
-        PresActor["presence_actor.rs<br/><b>NEW</b><br/>raft consensus"]
+        PresActor["presence_actor.rs<br/><b>NEW</b><br/>(single-process registry — raft<br/>was design-time, not implemented)"]
         Supervisor["GraphServiceSupervisor<br/>(unchanged)"]
         ClientCoord["ClientCoordinatorActor<br/>(unchanged)"]
         Physics["PhysicsOrchestratorActor<br/>(unchanged)"]
         ForceCompute["ForceComputeActor<br/>+ CUDA kernels<br/>(unchanged)"]
         Broadcast["BroadcastOptimizer<br/>(unchanged)"]
         GraphState["GraphStateActor<br/>(unchanged)"]
-        Neo4jClient["neo4rs client<br/>(unchanged)"]
+        GraphRepo["Oxigraph + SQLite repos<br/>(ADR-11, unchanged)"]
 
         WSGraph --> ClientCoord
         WSPresence --> PresHandler --> PresActor
@@ -96,11 +98,11 @@ graph TB
         Physics --> ForceCompute
         ClientCoord --> WSGraph
         ClientCoord --> WSPresence
-        GraphState --> Neo4jClient
+        GraphState --> GraphRepo
     end
 
     subgraph DataStores ["Data stores (unchanged)"]
-        Neo4j[("neo4j :7687")]
+        Oxi[("Oxigraph + SQLite<br/>(embedded)")]
         PG[("postgres :5432")]
         Redis[("redis :6379")]
     end
@@ -124,7 +126,7 @@ graph TB
 
     PresActor -.uses.-> Crate
     GDExt -.uses.-> Crate
-    Neo4jClient --> Neo4j
+    GraphRepo --> Oxi
 
     classDef new fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
     classDef unchanged fill:#eceff1,stroke:#546e7a
@@ -132,8 +134,8 @@ graph TB
     classDef external fill:#fce4ec,stroke:#880e4f
 
     class APK,GDExt,WSPresence,PresHandler,PresActor,Crate new
-    class WSGraph,Supervisor,ClientCoord,Physics,ForceCompute,Broadcast,GraphState,Neo4jClient,R3F,Nginx unchanged
-    class Neo4j,PG,Redis store
+    class WSGraph,Supervisor,ClientCoord,Physics,ForceCompute,Broadcast,GraphState,GraphRepo,R3F,Nginx unchanged
+    class Oxi,PG,Redis store
     class LiveKit external
 ```
 
@@ -171,7 +173,7 @@ typed signals and getter methods.
 graph TB
     subgraph GDExtCrate ["xr-client/rust/ (gdext)"]
         Boot["boot.rs<br/>OpenXR init, capability probe"]
-        BinaryProto["binary_protocol.rs<br/>parse 28B/node, ack handling"]
+        BinaryProto["binary_protocol.rs<br/>parse 52B/node V3 (0x03 header)"]
         Presence["presence.rs<br/>room state machine, pose tx"]
         Interaction["interaction.rs<br/>ray cast, gesture, haptics"]
         LOD["lod.rs<br/>distance buckets, frustum cull"]
@@ -234,6 +236,11 @@ The APK boot is intentionally chatty during the first 200 ms because we want
 fail-fast behaviour: a missing OpenXR capability or a rejected DID handshake
 should produce a visible error overlay before the user puts the headset on,
 not silent black-screen on first frame.
+
+> **Implemented auth (ADR-102, 2026-06-12):** the shipped handshake uses a
+> NIP-98-style WebSocket `authenticate` flow (Nostr BIP-340 signing via the
+> `Signer` port, `xr-client/rust/src/signer.rs`), not the
+> `GET /api/auth/challenge` + Auth-header sequence sketched below.
 
 ```mermaid
 sequenceDiagram
@@ -444,19 +451,32 @@ avatar pose frame is identified by a different preamble byte.
 
 ### 7.1 Wire opcode dispatch
 
-```
-First byte of every WS binary message:
-  0x42 → graph position frame  (existing, unchanged — see docs/binary-protocol.md)
-  0x43 → avatar pose frame     (NEW — this section)
-  0x44 → presence control      (NEW — JoinRoom ACK, MutePropagation, AvatarLeft, …)
-```
+> **Implemented as (2026-06-12):** graph position frames begin with a 1-byte
+> protocol version (`0x03` V3, `0x05` V5 seq-wrapped), not `0x42` — see
+> `docs/binary-protocol.md`. The avatar pose opcode `0x43` IS implemented
+> (`crates/visionclaw-xr-presence/src/wire.rs::OPCODE_AVATAR_POSE`) and is
+> dispatched on the dedicated `/ws/presence` endpoint
+> (`src/handlers/presence_handler.rs`), not multiplexed onto `/wss`. The
+> `0x44` presence-control opcode was never implemented — room events travel
+> as JSON text messages on `/ws/presence`. The block below is the
+> decision-time design, retained for context.
 
-The dispatch table in `src/utils/binary_protocol.rs::decode_ws_message()` reads
-the first byte and routes; the existing 0x42 path is bit-identical. There is
-no version field on either frame type because, per ADR-061, version negotiation
-is forbidden — protocol evolution requires a new endpoint.
+```
+First byte of every WS binary message (design-time proposal):
+  0x42 → graph position frame  (actual: 0x03/0x05 version byte)
+  0x43 → avatar pose frame     (implemented — /ws/presence)
+  0x44 → presence control      (not implemented — JSON text events instead)
+```
 
 ### 7.2 Avatar pose frame layout
+
+> **Implemented as (2026-06-12):** the shipped 0x43 layout differs from this
+> design. Client→server pose:
+> `[u8 opcode=0x43][u16 frame_len][u8;16 room_id_hash][u8 avatar_id_len][avatar_id][u64 timestamp_us][u8 transform_mask][28 B per present transform]`
+> (`crates/visionclaw-xr-presence/src/wire.rs::encode`). Server→client sibling
+> broadcast: `[u8 0x43][u64 broadcast_seq][u32 room_id][u16 user_count][...]`
+> (`xr-client/rust/src/presence.rs`). The packed-52-byte design below was the
+> decision-time proposal.
 
 ```
 [u8  preamble = 0x43]
