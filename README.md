@@ -295,6 +295,8 @@ The transport is one authenticated WebSocket, `/wss/agent-events` (subprotocol `
 
 Contract: **VisionClaw [ADR-059](docs/adr/ADR-059-bidirectional-agent-channel-server.md)** (server) paired with **agentbox ADR-014** (ingress), with cross-substrate seams in **agentbox ADR-026** and the driving spec **agentbox PRD-014**.
 
+The agentbox consumer economy pipeline (PRD-015 Phase 1, 2026-06-12) adds a governed buy-side: agents can pay 402-gated resources from peer nodes via `payFetch()`, with fail-closed policy gates, receipt URNs on every attempt, and a `/.well-known/x402.json` discovery manifest — all Lightning-first (no EVM rail).
+
 <details>
 <summary><strong>7 MCP Ontology Tools (native)</strong></summary>
 
@@ -734,7 +736,7 @@ VisionClaw/
 │   ├── src/features/             #   13 feature modules (graph, settings, etc.)
 │   ├── src/services/             #   Voice, WebSocket, Nostr auth, Solid
 │   └── crates/scene-effects/     #   Rust WASM crate — zero-copy scene FX
-├── agentbox/                     # Submodule: agent runtime (ontology bridge, 88 skills, browser setup wizard)
+├── agentbox/                     # Submodule: agent runtime (ontology bridge, 88 skills, browser setup wizard, governed payment consumer PRD-015 Phase 1)
 ├── docs/                         # Diataxis documentation (106 files, 46 with Mermaid)
 │   ├── explanation/              #   Architecture (incl. VisionClaw platform doc)
 │   ├── adr/                      #   91 Architecture Decision Records
