@@ -1,3 +1,6 @@
+// ADR-110 — ACSP producer: agentic actors project control panels into the
+// forum governance page and receive human decisions (kinds 31400-31405).
+pub mod acsp;
 pub mod agent_visualization_processor;
 pub mod agent_visualization_protocol;
 pub mod bots_client;

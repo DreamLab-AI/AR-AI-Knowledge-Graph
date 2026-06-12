@@ -1045,6 +1045,22 @@ impl AppState {
         let mgmt_client = ManagementApiClient::new(mgmt_api_host, mgmt_api_port, mgmt_api_key);
         let task_orchestrator_addr = TaskOrchestratorActor::new(mgmt_client).start();
 
+        // ADR-110: flagship ACSP agentic actor — knowledge elevation through
+        // forum governance cases. Env-gated (ELEVATION_ACTOR_ENABLED=1 +
+        // FORUM_RELAY_URL + panel secret); None means the gate is closed.
+        match crate::actors::elevation_actor::ElevationActor::new(
+            graph_adapter.clone()
+                as Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
+        ) {
+            Some(actor) => {
+                let _ = actor.start();
+                info!("[AppState] ElevationActor started (ACSP knowledge-elevation panel live)");
+            }
+            None => info!(
+                "[AppState] ElevationActor disabled (set ELEVATION_ACTOR_ENABLED=1 + FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY to enable)"
+            ),
+        }
+
         
         
         info!("[AppState] GPU manager will self-initialize when needed");

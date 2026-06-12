@@ -11,27 +11,37 @@ dos/don'ts, troubleshooting) is maintained in agentbox:
 (mirrored locally under `docs/agentbox-docs/`). This page covers only the
 VisionClaw-specific picture.
 
-## Current state: VisionClaw does NOT publish panels
+## Current state: VisionClaw IS a panel producer (ADR-110, 2026-06-12)
 
-`src/services/nostr_bridge.rs` is a **bead-provenance bridge**, not a panel
-producer. It:
+`src/services/acsp/` is the VisionClaw ACSP producer:
 
-- subscribes to the source relay (`NOSTR_RELAY_URL`, default
-  `ws://localhost:7000`) for **kind 30001** bead provenance events,
-- re-signs them with the bridge keypair (`VISIONCLAW_NOSTR_PRIVKEY`) and
-  republishes them to the DreamLab forum relay (`FORUM_RELAY_URL`) as
-  **kind 9** NIP-29 group messages, preserving the original event id in a
-  `source_event` tag.
+- `events.rs` — serde-exact wire types + unsigned-event builders, with
+  round-trip tests locking the consumer contract (kebab-case panel enums,
+  snake_case content keys, `["d", id]` first tag, broker-projection fields as
+  tags).
+- `client.rs` — `nostr_sdk::Client`-backed signing/publishing to
+  `FORUM_RELAY_URL` plus the long-lived kind-31403 decision subscription that
+  routes human responses back to the owning actor by case-id namespace.
+- First agentic actor: `src/actors/elevation_actor.rs` — the "Knowledge
+  Elevation" panel (`d = vc-elevation`, cases `vc-elev-*`,
+  `knowledge_enrichment` category). Frontier ontology concepts become broker
+  cases; an `approve` decision commits a draft Class page to the corpus as a
+  PR via `GitHubPRService`. Env gate: `ELEVATION_ACTOR_ENABLED=1` +
+  `FORUM_RELAY_URL` + `ACSP_PANEL_NOSTR_PRIVKEY` (falls back to
+  `VISIONCLAW_NOSTR_PRIVKEY`).
+- **Operational prerequisite:** register the panel pubkey (logged at startup)
+  in the relay's `agent_registry` or every publish is rejected with
+  `blocked: pubkey not in agent registry`.
 
-No ACSP kind (31400-31405) is produced anywhere in this repo today. If you
-need a VisionClaw presence on the governance page, you are building a new
-integration — the rest of this page tells you what it must do.
+Separately, `src/services/nostr_bridge.rs` remains the **bead-provenance
+bridge** (kind 30001 → kind 9 NIP-29 group messages) — an audit trail, not a
+decision mechanism.
 
-## The pipeline you are joining
+## The pipeline
 
 | Hop | Component | Behaviour |
 |-----|-----------|-----------|
-| Producer | (yours — new) | Builds + signs 31400-31405 events |
+| Producer | `src/services/acsp/` (+ your actor) | Builds + signs 31400-31405 events |
 | Relay | nostr-rust-forum `nostr-bbs-relay-worker` | Accepts the agent kinds **only from pubkeys in its `agent_registry` D1 table** (`active = 1`); rejects others with `OK false "blocked: pubkey not in agent registry"`. Kind 31403 (human responses) is admin-only — never publish it. 31402 events are projected into the `broker_cases` governance inbox |
 | Consumer | nostr-rust-forum `nostr-bbs-forum-client` (`panel_registry` + `GovernancePage`) | Strict-serde parses content and renders panels/action rows at `/governance` |
 | Website | dreamlab-ai-website | Serves the forum SPA at `/community/`, so panels appear at `/community/governance` |

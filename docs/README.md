@@ -251,6 +251,13 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 > (e.g. ADR-028-ext) is retained where it still denotes a distinct accepted decision and
 > did not itself collide.
 
+### Latest Decisions (2026-06)
+
+| ADR | Status | Title |
+|-----|--------|-------|
+| [ADR-110](adr/ADR-110-agentic-actors-acsp-control-surfaces.md) | Accepted | Agentic Actors Project Control Surfaces into the Forum (ACSP producer + knowledge-elevation flagship; resolves PRD-014 §8) |
+| [ADR-102](adr/ADR-102-xr-client-backend-transport-completion.md) | Accepted | XR Client ↔ Backend Transport Completion (live V3 wire; amends ADR-071) |
+
 ### Core Platform (ADR-011 to ADR-014)
 
 | ADR | Title |
