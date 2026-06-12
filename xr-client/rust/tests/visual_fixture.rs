@@ -102,7 +102,13 @@ fn avatar_transform_fixture_round_trip() {
         timestamp_us: 1_700_000_000_000_000,
         head: Transform {
             position: [0.5, 1.7, -0.3],
-            rotation: [0.0, 0.7071068, 0.0, 0.7071068], // 90° yaw
+            // 90° yaw: [0, sin(45°), 0, cos(45°)].
+            rotation: [
+                0.0,
+                std::f32::consts::FRAC_1_SQRT_2,
+                0.0,
+                std::f32::consts::FRAC_1_SQRT_2,
+            ],
         },
         left_hand: Some(Transform {
             position: [-0.4, 1.2, -0.5],
@@ -123,7 +129,7 @@ fn avatar_transform_fixture_round_trip() {
     // The fixture is the round-trip: any drift in the wire codec changes
     // these per-joint floats and breaks the assertion.
     assert_eq!(decoded.frame.head.position, [0.5, 1.7, -0.3]);
-    assert_eq!(decoded.frame.head.rotation[1], 0.7071068);
+    assert_eq!(decoded.frame.head.rotation[1], std::f32::consts::FRAC_1_SQRT_2);
     assert_eq!(
         decoded.frame.left_hand.expect("left").position,
         [-0.4, 1.2, -0.5]

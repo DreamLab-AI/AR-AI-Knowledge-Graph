@@ -1,10 +1,11 @@
-[gd_scene load_steps=10 format=3 uid="uid://b3xrgraph01vc"]
+[gd_scene load_steps=12 format=3 uid="uid://b3xrgraph01vc"]
 
 [ext_resource type="Script" path="res://scripts/graph_scene.gd" id="1_graph"]
 [ext_resource type="PackedScene" uid="uid://b3xravatar01vc" path="res://scenes/Avatar.tscn" id="2_avatar"]
 [ext_resource type="Material" path="res://materials/gem.tres" id="3_gem"]
 [ext_resource type="Material" path="res://materials/crystal_orb.tres" id="4_orb"]
 [ext_resource type="Material" path="res://materials/agent_capsule.tres" id="5_caps"]
+[ext_resource type="PackedScene" path="res://scenes/HUD.tscn" id="6_hud"]
 
 [sub_resource type="SphereMesh" id="SphereMesh_node"]
 radius = 0.5
@@ -14,6 +15,7 @@ rings = 8
 
 [sub_resource type="MultiMesh" id="MultiMesh_nodes"]
 transform_format = 1
+use_colors = true
 mesh = SubResource("SphereMesh_node")
 instance_count = 0
 
@@ -27,6 +29,11 @@ rings = 1
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_edge"]
 albedo_color = Color(0.5, 0.7, 1, 0.6)
 transparency = 1
+
+[sub_resource type="MultiMesh" id="MultiMesh_edges"]
+transform_format = 1
+mesh = SubResource("CylinderMesh_edge")
+instance_count = 0
 
 [node name="GraphScene" type="Node3D"]
 script = ExtResource("1_graph")
@@ -53,12 +60,15 @@ material_override = ExtResource("4_orb")
 [node name="AgentMulti" type="MultiMeshInstance3D" parent="."]
 material_override = ExtResource("5_caps")
 
-[node name="EdgesMesh" type="MeshInstance3D" parent="."]
-mesh = SubResource("CylinderMesh_edge")
+[node name="EdgesMulti" type="MultiMeshInstance3D" parent="."]
 material_override = SubResource("StandardMaterial3D_edge")
+multimesh = SubResource("MultiMesh_edges")
 
 [node name="AvatarSpawner" type="Node3D" parent="."]
 metadata/avatar_template = ExtResource("2_avatar")
+
+[node name="HUD" parent="XROrigin3D/XRCamera3D" instance=ExtResource("6_hud")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, -0.8)
 
 [node name="AmbientLight" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866, -0.5, 0, 0.5, 0.866, 0, 0, 0, 1, 0, 5, 0)

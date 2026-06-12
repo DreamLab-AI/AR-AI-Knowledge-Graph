@@ -1,9 +1,11 @@
 # DDD: XR Godot Bounded Context (BC22)
 
 > **Supersedes:** [`ddd-xr-bounded-context.md`](ddd-xr-bounded-context.md) (Three.js / Vircadia / Babylon analysis)
-> **Related:** PRD-008 (Godot 4 + godot-rust XR client) · ADR-071 (XR runtime replacement) · [`ddd-binary-protocol-context.md`](ddd-binary-protocol-context.md) · [`ddd-graph-cognition-context.md`](ddd-graph-cognition-context.md) · [`ddd-agentbox-integration-context.md`](ddd-agentbox-integration-context.md) · [`binary-protocol.md`](binary-protocol.md)
+> **Related:** PRD-008 (Godot 4 + godot-rust XR client) · ADR-071 (XR runtime replacement) · ADR-102 (transport completion) · PRD-019 (transport completion) · [`ddd-binary-protocol-context.md`](ddd-binary-protocol-context.md) · [`ddd-graph-cognition-context.md`](ddd-graph-cognition-context.md) · [`ddd-agentbox-integration-context.md`](ddd-agentbox-integration-context.md) · [`binary-protocol.md`](binary-protocol.md)
 > **Adjacent / external contexts referenced:** BC-GC (Graph Cognition), BC-BP (Binary Protocol), BC20 (Agentbox Integration), BC-Identity (Nostr DID), BC-Voice (LiveKit)
-> **Status:** Implemented — `xr-client/` (Godot project + gdext crate) and `crates/visionclaw-xr-presence/` (server presence crate) are feature-complete minus LiveKit Android AAR JNI bridge. Demolition of `client/src/immersive/*`, `client/src/services/vircadia/*`, `client/src/contexts/Vircadia*` remains planned (Phase 3).
+> **Status:** Implemented + **transport wired** (2026-06-08, ADR-102 / PRD-019) — `xr-client/` (Godot project + gdext crate) and `crates/visionclaw-xr-presence/` (server presence crate) are feature-complete and now connected to the live backend over `/wss` (graph, binary V3) and `/ws/presence` (handshake + pose). 130 headless tests green. Remaining: LiveKit Android AAR JNI bridge, on-device validation, the `local_id ↔ avatar` mapping gap (ADR-102 §5), and demolition of `client/src/immersive/*`, `client/src/services/vircadia/*`, `client/src/contexts/Vircadia*` (Phase 3).
+>
+> **Wire correction (ADR-102 §2):** references below to a "28 B/node frame" describe the **server-internal `BinaryNodeData` struct**, not the wire. The **live graph wire is Protocol V3**: a `0x03` version byte followed by N×**52-byte** records (position+velocity in the first 28 bytes, a 24-byte analytics tail after). The XR client decodes the first 28 bytes per record and skips the tail. ADR-061/`binary-protocol.md` are stale on this point.
 
 ## 0. Why this document supersedes the previous XR DDD
 
@@ -29,7 +31,7 @@ graph TB
     end
 
     subgraph "External: BC-BP Binary Protocol"
-        WIRE28[28 B per node frame<br/>position+velocity]
+        WIRE28[V3 52 B per node record<br/>pos+vel +24B analytics tail<br/>XR decodes first 28 B]
         ANS[analytics_update JSON]
     end
 
@@ -107,7 +109,7 @@ graph TB
 
 | Upstream | Downstream | Pattern | Boundary file |
 |---|---|---|---|
-| BC-BP (Binary Protocol) | BC22 (XR Godot, client side) | Customer / Supplier (BC22 conforms to ADR-061's 28 B/node) | `xr-client/rust/src/ports/graph_data_port.rs` + `adapters/binary_stream_adapter.rs` |
+| BC-BP (Binary Protocol) | BC22 (XR Godot, client side) | Customer / Supplier (BC22 conforms to the live **Protocol V3** wire: `0x03` + 52 B/record; ADR-102 §2) | `xr-client/rust/src/binary_protocol.rs` (decoder) |
 | BC-GC (Graph Cognition) | BC22 | Customer / Supplier (XR consumes TypedGraph + PersonaView; emits `selectNode`, `togglePersona`, `grabNode` interactions back) | `xr-client/rust/src/ports/graph_data_port.rs` (init descriptor + interaction emit) |
 | BC-Identity (Nostr DID) | BC22 server-side | Anti-Corruption Layer (NIP-98 verification translated into `RoomMembership::Authenticated`) | `crates/visionclaw-xr-presence/src/ports/identity_port.rs` |
 | BC-Voice (LiveKit) | BC22 (Spatial Audio Routing) | Open-Host Service via vendor SDK (LiveKit owns wire; BC22 wraps the SDK) | `xr-client/rust/src/ports/voice_port.rs` + `adapters/livekit_adapter.rs` |
@@ -115,7 +117,7 @@ graph TB
 | BC22 | BC20 (Agentbox Integration) | None directly. Avatar identity DIDs may map to agentbox actors via existing BC20 ACL; that mapping lives in BC20, not here. | — |
 | BC22 | CUDA Physics | None (BC22 reads positions through BC-BP; never speaks to physics directly) | — |
 
-**Invariant:** No file under `xr-client/` may import a Godot class, gdscript, or LiveKit type from inside `crates/visionclaw-xr-presence/`. Cross-direction: no file under `crates/visionclaw-xr-presence/` may import `godot::*` or any gdext crate. The two halves talk only over the WebSocket presence port + the existing 28 B/node binary stream + the existing JSON HTTP init endpoint.
+**Invariant:** No file under `xr-client/` may import a Godot class, gdscript, or LiveKit type from inside `crates/visionclaw-xr-presence/`. Cross-direction: no file under `crates/visionclaw-xr-presence/` may import `godot::*` or any gdext crate. The two halves talk only over the WebSocket presence port + the existing V3 52 B/record binary stream (ADR-102 §2) + the existing JSON HTTP init endpoint.
 
 ## 2. Strategic Patterns
 

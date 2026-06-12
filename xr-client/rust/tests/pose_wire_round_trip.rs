@@ -28,7 +28,13 @@ fn round_trip_preserves_timestamp_and_pose() {
         timestamp_us: 1_700_000_000_000,
         head: Transform {
             position: [1.5, 2.5, 3.5],
-            rotation: [0.0, 0.7071, 0.0, 0.7071],
+            // 90° yaw: [0, sin(45°), 0, cos(45°)].
+            rotation: [
+                0.0,
+                std::f32::consts::FRAC_1_SQRT_2,
+                0.0,
+                std::f32::consts::FRAC_1_SQRT_2,
+            ],
         },
         left_hand: Some(Transform {
             position: [-0.3, 1.2, -0.4],

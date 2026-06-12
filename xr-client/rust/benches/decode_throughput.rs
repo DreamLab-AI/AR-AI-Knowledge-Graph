@@ -1,15 +1,15 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use visionclaw_xr_gdext::binary_protocol::{
-    decode_position_frame, NODE_RECORD_BYTES, OPCODE_POSITION_FRAME,
-};
+use visionclaw_xr_gdext::binary_protocol::{decode_position_frame, NODE_RECORD_BYTES, PROTOCOL_V3};
 use visionclaw_xr_presence::types::{PoseFrame, Transform};
 use visionclaw_xr_presence::{decode, encode, AvatarId, Did, RoomId};
 
 const FULL_GRAPH_NODE_COUNT: usize = 1000;
 
+/// Build a V3 graph position frame: version byte + N×52-byte node records
+/// (id, pos[3], vel[3], then sssp_dist/sssp_parent/cluster_id/anomaly/community/centrality).
 fn build_position_frame(node_count: usize) -> Vec<u8> {
     let mut out = Vec::with_capacity(1 + node_count * NODE_RECORD_BYTES);
-    out.push(OPCODE_POSITION_FRAME);
+    out.push(PROTOCOL_V3);
     for i in 0..node_count {
         let id = (i as u32) + 1;
         out.extend_from_slice(&id.to_le_bytes());
@@ -22,6 +22,13 @@ fn build_position_frame(node_count: usize) -> Vec<u8> {
         for v in vel {
             out.extend_from_slice(&v.to_le_bytes());
         }
+        // Analytics tail (24 bytes): sssp_dist, sssp_parent, cluster_id, anomaly, community, centrality.
+        out.extend_from_slice(&f32::INFINITY.to_le_bytes());
+        out.extend_from_slice(&(-1i32).to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&0f32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&0f32.to_le_bytes());
     }
     out
 }

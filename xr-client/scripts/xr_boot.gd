@@ -43,7 +43,10 @@ func _transition_to_graph_scene() -> void:
 	if graph_scene == null:
 		_show_error("GraphScene.tscn missing.")
 		return
-	get_tree().change_scene_to_packed(graph_scene)
+	# Defer the swap: _ready() runs while the OpenXR vendor addon is still adding
+	# XR nodes to the tree, so a synchronous change_scene_to_packed() trips
+	# "Parent node is busy adding/removing children". Deferring runs it at idle.
+	get_tree().change_scene_to_packed.call_deferred(graph_scene)
 
 
 func _show_error(text: String) -> void:

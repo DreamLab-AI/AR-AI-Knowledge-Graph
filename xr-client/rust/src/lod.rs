@@ -79,7 +79,7 @@ impl LodPolicyState {
 
     pub fn tick(&mut self) -> bool {
         self.frame_counter = self.frame_counter.wrapping_add(1);
-        self.frame_counter % RECOMPUTE_INTERVAL_FRAMES == 0
+        self.frame_counter.is_multiple_of(RECOMPUTE_INTERVAL_FRAMES)
     }
 
     pub fn classify_avatars(&mut self, camera: [f32; 3], avatars: &[[f32; 3]]) -> &[LodLevel] {
@@ -96,6 +96,28 @@ impl Default for LodPolicyState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Pick the indices of the `cap` most important nodes by centrality. Used to
+/// bound the Quest MultiMesh instance count on large graphs: when the node
+/// count exceeds the cap, only the structurally significant nodes render.
+/// Returns ALL indices (identity order) when `count <= cap`. Selection is
+/// O(n log n); ties keep the lower index for determinism.
+pub fn select_top_by_centrality(centrality: &[f32], cap: usize) -> Vec<u32> {
+    if centrality.len() <= cap {
+        return (0..centrality.len() as u32).collect();
+    }
+    let mut idx: Vec<u32> = (0..centrality.len() as u32).collect();
+    idx.sort_by(|&a, &b| {
+        let ca = centrality[a as usize];
+        let cb = centrality[b as usize];
+        cb.partial_cmp(&ca)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.cmp(&b))
+    });
+    idx.truncate(cap);
+    idx.sort_unstable(); // restore stable scene order for the renderer
+    idx
 }
 
 #[cfg(not(test))]
@@ -125,6 +147,21 @@ impl LodPolicy {
     #[func]
     fn classify_distance(&self, distance_m: f32) -> i32 {
         classify(distance_m).as_i32()
+    }
+
+    /// Indices of the `cap` highest-centrality nodes (all indices when the
+    /// node count is within the cap). Drives the Quest node-instance budget.
+    #[func]
+    fn visible_subset(&self, centrality: PackedFloat32Array, cap: i64) -> PackedInt32Array {
+        let cap = cap.max(0) as usize;
+        let picked = select_top_by_centrality(centrality.as_slice(), cap);
+        PackedInt32Array::from(
+            picked
+                .into_iter()
+                .map(|i| i as i32)
+                .collect::<Vec<i32>>()
+                .as_slice(),
+        )
     }
 }
 
@@ -213,28 +250,21 @@ mod tests {
     }
 
     #[test]
-    fn tick_wraps_u32_max() {
+    fn tick_fires_on_interval_cadence() {
         let mut s = LodPolicyState::new();
-        // Advance counter to u32::MAX - 1 so next tick overflows.
-        // tick uses wrapping_add, so frame_counter goes:
-        //   MAX-1 -> MAX (tick returns true since MAX % 2 == 0 for even MAX)
-        //   MAX -> 0 (wrapping)
-        // We verify no panic occurs.
-        for _ in 0..(u32::MAX - 1) % RECOMPUTE_INTERVAL_FRAMES {
-            s.tick();
+        let ticks = 10_000u32;
+        let mut fired = 0u32;
+        for i in 1..=ticks {
+            let recompute = s.tick();
+            assert_eq!(
+                recompute,
+                i.is_multiple_of(RECOMPUTE_INTERVAL_FRAMES),
+                "tick {i} cadence mismatch"
+            );
+            fired += recompute as u32;
         }
-        // Now just run a few more ticks around the boundary to prove no panic.
-        // We drive the counter directly by running tick in a loop.
-        // Since we can't set the counter directly, just verify tick survives
-        // many calls without panicking. The wrapping_add ensures no overflow panic.
-        let mut state = LodPolicyState::new();
-        // Simulate approaching wrap by ticking many times.
-        // The real proof is that wrapping_add is used; here we just confirm
-        // a large number of ticks doesn't panic.
-        for _ in 0..10_000 {
-            state.tick();
-        }
-        // If we got here without panic, wrapping_add works.
+        // Exactly one recompute per interval, and wrapping_add never panics.
+        assert_eq!(fired, ticks / RECOMPUTE_INTERVAL_FRAMES);
     }
 
     #[test]
@@ -242,5 +272,38 @@ mod tests {
         let mut s = LodPolicyState::new();
         let levels = s.classify_avatars([0.0, 0.0, 0.0], &[]).to_vec();
         assert!(levels.is_empty());
+    }
+
+    #[test]
+    fn top_by_centrality_identity_when_under_cap() {
+        assert_eq!(
+            select_top_by_centrality(&[0.1, 0.9, 0.5], 3),
+            vec![0, 1, 2]
+        );
+        assert_eq!(select_top_by_centrality(&[], 10), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn top_by_centrality_picks_most_important() {
+        // cap 2 of 4: highest are index 1 (0.9) and 3 (0.7); output in index order.
+        assert_eq!(
+            select_top_by_centrality(&[0.1, 0.9, 0.3, 0.7], 2),
+            vec![1, 3]
+        );
+    }
+
+    #[test]
+    fn top_by_centrality_ties_keep_lower_index() {
+        assert_eq!(
+            select_top_by_centrality(&[0.5, 0.5, 0.5, 0.5], 2),
+            vec![0, 1]
+        );
+    }
+
+    #[test]
+    fn top_by_centrality_handles_nan_without_panic() {
+        let picked = select_top_by_centrality(&[f32::NAN, 0.9, 0.1], 2);
+        assert_eq!(picked.len(), 2);
+        assert!(picked.contains(&1), "real maximum must always survive NaNs");
     }
 }

@@ -6,8 +6,10 @@
 //! session ingests a pose frame, and removes shutdown-pending rooms via
 //! [`LeaveRoom`].
 //!
-//! Domain events ([`AvatarJoinedRoom`], [`AvatarLeftRoom`]) follow the carriers
-//! defined in `docs/ddd-xr-godot-context.md` §4.1: JSON over `/ws/presence`.
+//! Room events ([`RoomEventEnvelope`]) follow the carriers defined in
+//! `docs/ddd-xr-godot-context.md` §4.1: JSON over `/ws/presence`. Every
+//! `avatar_joined` carries the avatar's transport `local_id` so the client can
+//! attribute opaque-`local_id` sibling pose frames to a named avatar.
 
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -38,21 +40,6 @@ pub struct BroadcastFrame {
     pub broadcast_sequence: u64,
 }
 
-#[derive(Message, Debug, Clone)]
-#[rtype(result = "()")]
-pub struct AvatarJoinedRoom {
-    pub avatar_id: AvatarId,
-    pub did: Did,
-    pub display_name: String,
-}
-
-#[derive(Message, Debug, Clone)]
-#[rtype(result = "()")]
-pub struct AvatarLeftRoom {
-    pub avatar_id: AvatarId,
-    pub did: Did,
-}
-
 #[derive(Message, Debug)]
 #[rtype(result = "Result<JoinAck, JoinRejection>")]
 pub struct JoinRoom {
@@ -62,10 +49,20 @@ pub struct JoinRoom {
     pub event_recipient: Recipient<RoomEventEnvelope>,
 }
 
+/// One existing room member as seen at join time, pairing the domain metadata
+/// with the transport `local_id` the broadcast frames will tag this avatar's
+/// poses with. `local_id` is an infrastructure concern (per-session pose
+/// addressing), so it lives here rather than polluting [`AvatarMetadata`].
+#[derive(Debug, Clone)]
+pub struct MemberSnapshot {
+    pub metadata: AvatarMetadata,
+    pub local_id: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct JoinAck {
     pub avatar_id: AvatarId,
-    pub members: Vec<AvatarMetadata>,
+    pub members: Vec<MemberSnapshot>,
 }
 
 #[derive(Debug, Clone, thiserror::Error, Serialize)]
@@ -124,6 +121,9 @@ pub enum RoomEventEnvelope {
         avatar_id: String,
         did: String,
         display_name: String,
+        /// Transport id this avatar's poses are tagged with in 0x43 sibling
+        /// frames. Lets the client map an opaque per-pose `local_id` to a URN.
+        local_id: u32,
     },
     AvatarLeft {
         avatar_id: String,
@@ -410,10 +410,15 @@ impl PresenceActor {
         );
         self.stats.member_count = self.subscribers.len();
 
+        // Assign the joiner's transport id eagerly so peers learn it now (not
+        // lazily on first pose), and so the joiner's own poses are attributable
+        // the moment it starts broadcasting.
+        let joiner_local_id = self.local_id_for(&avatar_id);
         let join_event = RoomEventEnvelope::AvatarJoined {
             avatar_id: avatar_id.to_string(),
             did: did.to_string(),
             display_name,
+            local_id: joiner_local_id,
         };
         for (peer_id, peer) in self.subscribers.iter() {
             if peer_id != &avatar_id {
@@ -421,8 +426,21 @@ impl PresenceActor {
             }
         }
 
-        let members: Vec<AvatarMetadata> =
-            self.room.members().map(|m| m.metadata.clone()).collect();
+        // Snapshot existing members with their local_ids so the joining client
+        // can attribute their sibling poses too. Collect ids first to release
+        // the immutable `room` borrow before `local_id_for` takes `&mut self`.
+        let member_ids: Vec<(AvatarId, AvatarMetadata)> = self
+            .room
+            .members()
+            .map(|m| (m.avatar_id.clone(), m.metadata.clone()))
+            .collect();
+        let members: Vec<MemberSnapshot> = member_ids
+            .into_iter()
+            .map(|(aid, metadata)| {
+                let local_id = self.local_id_for(&aid);
+                MemberSnapshot { metadata, local_id }
+            })
+            .collect();
         info!(
             room = %self.room_id,
             avatar = %avatar_id,

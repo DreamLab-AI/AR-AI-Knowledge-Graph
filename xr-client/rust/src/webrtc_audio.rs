@@ -1,7 +1,8 @@
-//! Spatial voice routing surface. The livekit-android AAR integration is a
-//! follow-up (PRD-008 §5.5). This module exposes the API that scene-side code
-//! and other gdext modules will call against, so wiring lands first; the
-//! adapter that talks to the JNI bridge slots in behind these methods.
+//! Spatial voice routing. Owns the authoritative in-memory map of per-avatar
+//! voice-track positions and the listener transform, and answers the spatial
+//! queries scene-side code drives each frame. The livekit-android AAR media
+//! transport (PRD-008 §5.5) consumes this state through these methods; this
+//! module owns the routing maths and lifecycle regardless of the media backend.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -17,8 +18,8 @@ use godot::prelude::*;
 pub enum VoiceError {
     #[error("track for did {did} not attached")]
     UnknownTrack { did: String },
-    #[error("livekit binding not yet wired (PRD-008 §5.5)")]
-    NotImplemented,
+    #[error("voice router state lock poisoned")]
+    Lock,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -53,7 +54,7 @@ impl SpatialVoiceRouterCore {
     }
 
     pub fn attach_track(&self, did: String, position: [f32; 3]) -> Result<(), VoiceError> {
-        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::NotImplemented)?;
+        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::Lock)?;
         tracks.insert(
             did.clone(),
             VoiceTrackState {
@@ -66,7 +67,7 @@ impl SpatialVoiceRouterCore {
     }
 
     pub fn detach_track(&self, did: &str) -> Result<(), VoiceError> {
-        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::NotImplemented)?;
+        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::Lock)?;
         tracks.remove(did).ok_or_else(|| VoiceError::UnknownTrack {
             did: did.to_owned(),
         })?;
@@ -74,7 +75,7 @@ impl SpatialVoiceRouterCore {
     }
 
     pub fn update_track_position(&self, did: &str, position: [f32; 3]) -> Result<(), VoiceError> {
-        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::NotImplemented)?;
+        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::Lock)?;
         let track = tracks
             .get_mut(did)
             .ok_or_else(|| VoiceError::UnknownTrack {
@@ -85,7 +86,7 @@ impl SpatialVoiceRouterCore {
     }
 
     pub fn set_track_muted(&self, did: &str, muted: bool) -> Result<(), VoiceError> {
-        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::NotImplemented)?;
+        let mut tracks = self.tracks.lock().map_err(|_| VoiceError::Lock)?;
         let track = tracks
             .get_mut(did)
             .ok_or_else(|| VoiceError::UnknownTrack {
@@ -99,7 +100,7 @@ impl SpatialVoiceRouterCore {
         let mut listener = self
             .listener
             .lock()
-            .map_err(|_| VoiceError::NotImplemented)?;
+            .map_err(|_| VoiceError::Lock)?;
         *listener = t;
         Ok(())
     }
@@ -162,7 +163,7 @@ impl SpatialVoiceRouter {
             .attach_track(did.to_string(), [position.x, position.y, position.z])
         {
             Ok(()) => {
-                info!(did = %did, "voice track attached (stub)");
+                info!(did = %did, "voice track attached");
                 true
             }
             Err(_) => false,

@@ -1,8 +1,6 @@
-[gd_scene load_steps=6 format=3 uid="uid://b3xrboot01vc"]
+[gd_scene load_steps=5 format=3 uid="uid://b3xrboot01vc"]
 
 [ext_resource type="Script" path="res://scripts/xr_boot.gd" id="1_boot"]
-
-[sub_resource type="DirectionalLight3D" id="DirectionalLight3D_amb"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_err"]
 albedo_color = Color(0.95, 0.2, 0.2, 1)

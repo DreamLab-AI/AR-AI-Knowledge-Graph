@@ -1,8 +1,14 @@
+//! Integration tests for the `/ws/presence` server-initiated handshake through
+//! the public `PresenceClient` API and the fake transport/signer ports.
+//!
+//! Flow (authoritative `src/handlers/presence_handler.rs`):
+//!   server -> challenge -> client -> auth -> server -> joined.
+
 use std::sync::Arc;
 
 use visionclaw_xr_gdext::ports::fakes::{FakeSigner, FakeWsTransport};
-use visionclaw_xr_gdext::ports::WsMessage;
-use visionclaw_xr_gdext::presence::{PresenceClient, PresenceRoomState, RemoteMember};
+use visionclaw_xr_gdext::ports::{Signer, WsMessage};
+use visionclaw_xr_gdext::presence::{PresenceClient, PresenceError};
 use visionclaw_xr_presence::wire::{decode, OPCODE_AVATAR_POSE};
 use visionclaw_xr_presence::{PoseFrame, RoomId, Transform};
 
@@ -10,31 +16,61 @@ fn room() -> RoomId {
     RoomId::parse("urn:visionclaw:room:sha256-12-aaaaaaaaaaaa").unwrap()
 }
 
+fn challenge_json() -> String {
+    serde_json::json!({
+        "type": "challenge",
+        "nonce": "00".repeat(32),
+        "ts": 1_700_000_000_000_000u64
+    })
+    .to_string()
+}
+
+fn joined_json(avatar_hex: &str, members: serde_json::Value) -> String {
+    serde_json::json!({
+        "type": "joined",
+        "room_id": room().as_str(),
+        "avatar_id": format!("urn:visionclaw:avatar:{avatar_hex}"),
+        "members": members
+    })
+    .to_string()
+}
+
 #[tokio::test]
 async fn handshake_and_pose_round_trip_through_fake_transport() {
     let (transport, inbox) = FakeWsTransport::new();
     let transport = Arc::new(transport);
     let signer = Arc::new(FakeSigner::new());
-    let mut client = PresenceClient::new(transport.clone(), signer.clone(), room());
+    let avatar_hex = signer.pubkey_hex();
+    let mut client = PresenceClient::new(transport.clone(), signer, room());
 
-    let server_state = PresenceRoomState {
-        room_id: room().as_str().to_owned(),
-        members: vec![RemoteMember {
-            did: format!("did:nostr:{}", "c".repeat(64)),
-            display_name: "carol".into(),
-            avatar_id: format!("urn:visionclaw:avatar:{}", "c".repeat(64)),
-            model_uri: None,
-        }],
-    };
+    let members = serde_json::json!([{
+        "did": format!("did:nostr:{}", "c".repeat(64)),
+        "display_name": "carol",
+        "model_uri": null
+    }]);
     inbox
-        .send(WsMessage::Text(
-            serde_json::to_string(&server_state).unwrap(),
-        ))
+        .send(WsMessage::Text(challenge_json()))
+        .await
+        .unwrap();
+    inbox
+        .send(WsMessage::Text(joined_json(&avatar_hex, members)))
         .await
         .unwrap();
 
-    let state = client.handshake("alice".into()).await.unwrap();
+    let state = client.handshake("alice".into(), None).await.unwrap();
     assert_eq!(state.members.len(), 1);
+    assert_eq!(state.members[0].display_name, "carol");
+
+    // The auth reply carried the room and display name. Scope the guard so it
+    // is released before the next await (no lock held across `.await`).
+    {
+        let sent_text = transport.sent_text.lock().unwrap();
+        assert_eq!(sent_text.len(), 1);
+        let auth: serde_json::Value = serde_json::from_str(&sent_text[0]).unwrap();
+        assert_eq!(auth["type"], "auth");
+        assert_eq!(auth["room_id"], room().as_str());
+        assert_eq!(auth["metadata"]["display_name"], "alice");
+    }
 
     let frame = PoseFrame {
         timestamp_us: 99_000,
@@ -64,11 +100,8 @@ async fn server_close_during_init_yields_rejected() {
 
     inbox.send(WsMessage::Close).await.unwrap();
 
-    let err = client.handshake("alice".into()).await.unwrap_err();
-    assert!(matches!(
-        err,
-        visionclaw_xr_gdext::presence::PresenceError::Rejected(_)
-    ));
+    let err = client.handshake("alice".into(), None).await.unwrap_err();
+    assert!(matches!(err, PresenceError::Rejected(_)));
 }
 
 #[tokio::test]
@@ -82,10 +115,7 @@ async fn send_pose_before_handshake_is_rejected() {
         right_hand: None,
     };
     let err = client.send_pose(&frame).await.unwrap_err();
-    assert!(matches!(
-        err,
-        visionclaw_xr_gdext::presence::PresenceError::Protocol(_)
-    ));
+    assert!(matches!(err, PresenceError::Protocol(_)));
 }
 
 #[tokio::test]
@@ -93,20 +123,19 @@ async fn handshake_with_empty_members_succeeds() {
     let (transport, inbox) = FakeWsTransport::new();
     let transport = Arc::new(transport);
     let signer = Arc::new(FakeSigner::new());
+    let avatar_hex = signer.pubkey_hex();
     let mut client = PresenceClient::new(transport.clone(), signer, room());
 
-    let server_state = PresenceRoomState {
-        room_id: room().as_str().to_owned(),
-        members: vec![],
-    };
     inbox
-        .send(WsMessage::Text(
-            serde_json::to_string(&server_state).unwrap(),
-        ))
+        .send(WsMessage::Text(challenge_json()))
+        .await
+        .unwrap();
+    inbox
+        .send(WsMessage::Text(joined_json(&avatar_hex, serde_json::json!([]))))
         .await
         .unwrap();
 
-    let state = client.handshake("alice".into()).await.unwrap();
+    let state = client.handshake("alice".into(), None).await.unwrap();
     assert!(state.members.is_empty());
     assert!(client.avatar_id().is_some());
 }

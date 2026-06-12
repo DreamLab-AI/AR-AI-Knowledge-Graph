@@ -1,64 +1,81 @@
 ---
 title: The Binary Protocol
-description: Single-source spec for the GPU position stream wire format
+description: Single-source spec for the GPU position stream wire format (Protocol V3)
 category: reference
 tags: [websocket, binary, protocol, real-time]
-updated-date: 2026-04-30
+updated-date: 2026-06-12
 ---
 
-# The Binary Protocol
+# The Binary Protocol (V3)
 
-Single per-physics-tick wire format used by the GPU position stream. There
-is one binary protocol; there are no versions.
+Single per-physics-tick wire format used by the GPU position stream on
+`/wss`. The live wire has been **Protocol V3** since the ADR-031 analytics
+extension: a leading version byte followed by fixed 52-byte node records
+with the analytics inline.
 
-> Authoritative spec: [ADR-061](adr/ADR-061-binary-protocol-unification.md).
-> Domain model: [ddd-binary-protocol-context.md](ddd-binary-protocol-context.md).
-> Decision instance: [PRD-007](PRD-007-binary-protocol-unification.md).
+> Authoritative encoder: `src/utils/binary_protocol.rs` (V3 always).
+> Wire decision record: [ADR-102 §2](adr/ADR-102-xr-client-backend-transport-completion.md)
+> (which also amends ADR-071's stale 28-byte claim).
+> Historical: [ADR-061](adr/ADR-061-binary-protocol-unification.md) /
+> [PRD-007](PRD-007-binary-protocol-unification.md) describe the pre-ADR-031
+> 28-byte layout — that layout survives only as the server-internal
+> `BinaryNodeData` struct, **not** the wire.
 
 ## Frame layout
 
 ```
-[u8  preamble = 0x42]            <- fixed sanity byte, NOT a version dispatch
-[u64 broadcast_sequence_LE]
-[N × Node]
+[u8 version = 0x03]
+[N × 52-byte node record]
 ```
 
-## Node layout (28 bytes, fixed)
+Receivers MUST dispatch on the version byte and reject unknown versions;
+record framing is length-checked (`payload % 52 == 0`).
+
+## Node record (52 bytes, little-endian)
 
 ```
-[u32 id_LE]
-[f32 x_LE][f32 y_LE][f32 z_LE]
-[f32 vx_LE][f32 vy_LE][f32 vz_LE]
+@0   u32   node id        (bits 0–25 = id, bits 26–31 = type flags)
+@4   f32×3 position
+@16  f32×3 velocity
+@28  f32   sssp_distance  ─┐
+@32  i32   sssp_parent     │
+@36  u32   cluster_id      │  24-byte analytics tail (ADR-031)
+@40  f32   anomaly         │
+@44  u32   community_id    │
+@48  f32   centrality     ─┘
 ```
+
+Type flags: agent `0x8000_0000` (bit 31) · knowledge `0x4000_0000` (bit 30) ·
+ontology mask `0x1C00_0000` (class bit 26, individual bit 27, property bit 28).
+Node id range `0..2^26-1`; `NODE_ID_MASK = 0x03FF_FFFF`.
 
 ## Cadence
 
-- **Position stream**: every physics tick (≤60 Hz). Carries pos+vel only.
-- **Analytics stream**: separate `analytics_update` JSON message at recompute
-  cadence (~0.1–1 Hz). Carries `cluster_id`, `community_id`, `anomaly_score`,
-  `sssp_distance`, `sssp_parent`.
+- **Position stream**: per broadcast interval (clients subscribe with
+  `subscribe_position_updates`, typical interval 60–200 ms). Each record
+  carries pos+vel **and** the analytics tail; there is no separate
+  per-frame analytics message.
+- Analytics values change at recompute cadence (~0.1–1 Hz); consumers should
+  treat the tail as slowly-varying (the XR client quantises it into a
+  visual key and reacts only to changes).
 
-## Backpressure
+## Consumers
 
-Server emits a monotonic `broadcast_sequence`; client acks via
-`ClientBroadcastAck` to replenish a token bucket on the
-`ForceComputeActor`. See [ADR-031](adr/ADR-031-broadcast-backpressure.md).
+- **Desktop client**: `client/src/store/websocket/binaryProtocol.ts`
+  (52-byte stride, analytics into `analyticsBuffer`).
+- **XR client**: `xr-client/rust/src/binary_protocol.rs`
+  (`PROTOCOL_V3`, `NODE_RECORD_BYTES = 52`; community/centrality/anomaly drive
+  colour, size and importance-capped LOD).
 
 ## Privacy
 
 Visibility is enforced at the broadcast boundary
 (`ClientCoordinator::broadcast_with_filter`); positions for nodes the
-caller cannot see are dropped from the frame. The wire id is the raw
-u32 — no flag bits. See ADR-050 §H2 (post-ADR-061 prose).
+caller cannot see are dropped from the frame.
 
 ## Forbidden patterns (regression guards)
 
-- Adding columns to per-frame binary without an ADR superseding ADR-061.
-- Encoding session-static state in id flag bits.
-- Emitting `analytics_update` from a per-frame loop.
-- Versioning the binary protocol — any future evolution gets a new endpoint.
-
-## Implementation
-
-- **Server**: `src/utils/binary_protocol.rs::encode_position_frame`
-- **Client**: `client/src/store/websocket/binaryProtocol.ts::parsePositionFrame`
+- Adding or reordering record fields without an ADR superseding ADR-031/ADR-102.
+- Encoding session-static state in id flag bits beyond the defined type flags.
+- Shipping a decoder written to the historical 28-byte layout — it desyncs on
+  the first live frame (this is exactly the bug ADR-102 records).

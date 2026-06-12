@@ -147,7 +147,12 @@ impl AgentMonitorActor {
             graph_service_addr,
             management_api_client,
             is_connected: false,
-            polling_interval: Duration::from_secs(3),
+            // Idle telemetry cadence. Each tick hits BOTH agentbox /v1/tasks and
+            // /v1/status, so 3s flooded the management-api log. Task-status changes
+            // still re-poll immediately via the TaskStatusChanged push from
+            // TaskOrchestratorActor, so on-demand responsiveness is unaffected;
+            // this only governs the idle telemetry refresh.
+            polling_interval: Duration::from_secs(15),
             last_poll: time::now(),
             agent_cache: HashMap::new(),
             consecutive_poll_failures: 0,

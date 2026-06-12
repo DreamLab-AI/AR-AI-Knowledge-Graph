@@ -243,3 +243,5 @@ data/sqlite/
 *.sqlite3
 
 agentbox/.env.solid-pods
+# Godot editor cache (xr-client)
+xr-client/.godot/

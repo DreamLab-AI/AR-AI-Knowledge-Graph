@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::actors::presence_actor::{
-    AvatarJoinedRoom, AvatarLeftRoom, BroadcastFrame, IngestOutcome, IngestPose, JoinRejection,
-    JoinRoom, LeaveRoom, PresenceActor, RoomEventEnvelope,
+    BroadcastFrame, IngestOutcome, IngestPose, JoinRejection, JoinRoom, LeaveRoom, PresenceActor,
+    RoomEventEnvelope,
 };
 use visionclaw_xr_presence::{
     ports::{IdentityVerifier, SignedChallenge},
@@ -65,6 +65,8 @@ struct MemberDescriptor {
     did: String,
     display_name: String,
     model_uri: Option<String>,
+    /// Transport id this member's poses are tagged with in 0x43 sibling frames.
+    local_id: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -211,7 +213,14 @@ impl PresenceSession {
             let mut entry = registry
                 .entry(room.as_str().to_owned())
                 .or_insert_with(|| PresenceActor::new(room.clone()).start());
-            entry.value_mut().clone()
+            // A PresenceActor self-stops once its room empties, but its Addr
+            // lingers here. Reusing that dead Addr makes every rejoin fail with
+            // "Mailbox has closed", silently poisoning the room. Replace any
+            // disconnected entry with a fresh actor before the joiner gets it.
+            if !entry.connected() {
+                *entry = PresenceActor::new(room.clone()).start();
+            }
+            entry.clone()
         };
 
         let avatar_metadata = AvatarMetadata {
@@ -239,9 +248,10 @@ impl PresenceSession {
                             .members
                             .iter()
                             .map(|m| MemberDescriptor {
-                                did: m.did.to_string(),
-                                display_name: m.display_name.clone(),
-                                model_uri: m.model_uri.clone(),
+                                did: m.metadata.did.to_string(),
+                                display_name: m.metadata.display_name.clone(),
+                                model_uri: m.metadata.model_uri.clone(),
+                                local_id: m.local_id,
                             })
                             .collect();
                         let msg = ServerHandshake::Joined {
@@ -413,33 +423,6 @@ impl Handler<RoomEventEnvelope> for PresenceSession {
 
     fn handle(&mut self, msg: RoomEventEnvelope, ctx: &mut Self::Context) {
         if let Ok(json) = serde_json::to_string(&msg) {
-            ctx.text(json);
-        }
-    }
-}
-
-impl Handler<AvatarJoinedRoom> for PresenceSession {
-    type Result = ();
-    fn handle(&mut self, msg: AvatarJoinedRoom, ctx: &mut Self::Context) {
-        let env = RoomEventEnvelope::AvatarJoined {
-            avatar_id: msg.avatar_id.to_string(),
-            did: msg.did.to_string(),
-            display_name: msg.display_name,
-        };
-        if let Ok(json) = serde_json::to_string(&env) {
-            ctx.text(json);
-        }
-    }
-}
-
-impl Handler<AvatarLeftRoom> for PresenceSession {
-    type Result = ();
-    fn handle(&mut self, msg: AvatarLeftRoom, ctx: &mut Self::Context) {
-        let env = RoomEventEnvelope::AvatarLeft {
-            avatar_id: msg.avatar_id.to_string(),
-            did: msg.did.to_string(),
-        };
-        if let Ok(json) = serde_json::to_string(&env) {
             ctx.text(json);
         }
     }
