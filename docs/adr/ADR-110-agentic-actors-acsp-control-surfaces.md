@@ -90,6 +90,32 @@ infrastructure; actors compose it rather than re-implementing transport.
 queued candidates: sync governance (force-resync action), physics health,
 agent telemetry.
 
+### D3b — Voice is a first-class guide (local Whisper in, local Kokoro out)
+
+Conversation inside the immersive interface guides elevation **primarily**,
+and drives interface configuration. Both directions stay sovereign: STT is
+the local Whisper provider, confirmations speak back through local Kokoro
+TTS. Two consumers tap `SpeechService::subscribe_to_transcriptions`:
+
+- **Elevation demand** (`src/actors/elevation_voice.rs`): transcription lines
+  are matched against a normalised n-gram index of the graph's elevatable
+  labels (frontier stubs + working pages, rebuilt per cycle). Mentions feed a
+  decaying demand ledger (30-minute half-life) that becomes the *primary*
+  candidate ranking — degree only breaks ties or carries the queue when
+  nobody is talking. Voice-driven cases carry provenance (mention counts,
+  utterance excerpts, speakers when the voice path attributes them) and open
+  at `high` priority. Explicit commands — "elevate X", "formalise X", "make X
+  a class" — jump the queue entirely and are confirmed aloud. Per-user/room
+  attribution slots in when the XR voice path (LiveKit) lands; the ledger
+  already models speakers.
+- **Interface configuration** (`src/actors/voice_interface_actor.rs`): spoken
+  view/graph requests ("hide the ontology nodes", "increase spring strength")
+  route to the **same settings assistant** the Control Center command box
+  drives (`settings_assistant_task` → agentbox LLM → settings REST), with a
+  conservative verb+noun intent gate so ordinary conversation is never
+  hijacked. One assistant, two mouths: typed in the UX control centre or
+  spoken in the immersive session.
+
 ### D4 — Elevation, the flagship case
 
 `ElevationActor` (env-gated: `ELEVATION_ACTOR_ENABLED=1`):

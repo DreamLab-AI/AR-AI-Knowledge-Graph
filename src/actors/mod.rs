@@ -3,6 +3,9 @@
 pub mod agent_beam_actor;
 // ADR-110 — flagship ACSP agentic actor (knowledge elevation via forum cases)
 pub mod elevation_actor;
+pub mod elevation_voice;
+// ADR-110 — voice → settings-assistant bridge (Control Center configuration agent)
+pub mod voice_interface_actor;
 pub mod agent_monitor_actor;
 pub mod client_coordinator_actor;
 pub mod client_filter;

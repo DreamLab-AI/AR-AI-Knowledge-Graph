@@ -478,6 +478,39 @@ pub async fn spawn_agent_hybrid(
 /// introducing a new path to the agents. The agent receives the live settings +
 /// descriptions context and applies changes back through the existing
 /// /api/settings/* REST API.
+/// Build the settings-assistant LLM task prompt. Shared by the Control
+/// Center command box (HTTP, with the client's live settings catalogue) and
+/// the voice path (`VoiceInterfaceActor`, no catalogue — the agent is told to
+/// fetch current values itself).
+pub fn settings_assistant_task(command: &str, context: &str, settings_base: &str) -> String {
+    let catalogue = if context.trim().is_empty() {
+        format!(
+            "(no catalogue attached — fetch the current settings with an HTTP GET to \
+             {settings_base}/api/settings/all before deciding what to change)"
+        )
+    } else {
+        context.to_string()
+    };
+    format!(
+        "You are the VisionClaw graph settings assistant. The user issued this \
+view/graph configuration request via the in-app command box:\n\n\
+\"{command}\"\n\n\
+Below is the live settings catalogue. Each line is:\n  \
+<path> :: <label> (<type>) range=[min..max step S] :: current=<value> :: <description>\n\n\
+{catalogue}\n\n\
+TASK: Decide which setting path(s) best satisfy the request and compute new values \
+within the stated ranges. Apply EACH change with an HTTP PUT to \
+{settings_base}/api/settings/<path> with JSON body {{\"value\": <new_value>}} \
+(use the dotted path verbatim, e.g. \
+visualisation.graphs.logseq.physics.springKKnowledge). \
+Only change settings clearly implied by the request; do not touch unrelated paths. \
+If the request is not a view/graph configuration change, make no changes. \
+After applying, report a one-line summary of each path you changed and its new value.\n\n\
+**COMMUNICATION PROTOCOL:** Messages are shown in the user's telemetry panel in \
+real-time. Use it for progress, decisions, and results."
+    )
+}
+
 pub async fn process_settings_command(
     _auth: crate::settings::auth_extractor::AuthenticatedUser,
     state: web::Data<AppState>,
@@ -510,27 +543,7 @@ pub async fn process_settings_command(
         context.push_str("\n…(catalogue truncated to fit task limit)");
     }
 
-    let task = format!(
-        "You are the VisionClaw graph settings assistant. The user issued this \
-view/graph configuration request via the in-app command box:\n\n\
-\"{command}\"\n\n\
-Below is the live settings catalogue. Each line is:\n  \
-<path> :: <label> (<type>) range=[min..max step S] :: current=<value> :: <description>\n\n\
-{context}\n\n\
-TASK: Decide which setting path(s) best satisfy the request and compute new values \
-within the stated ranges. Apply EACH change with an HTTP PUT to \
-{settings_base}/api/settings/<path> with JSON body {{\"value\": <new_value>}} \
-(use the dotted path verbatim, e.g. \
-visualisation.graphs.logseq.physics.springKKnowledge). \
-Only change settings clearly implied by the request; do not touch unrelated paths. \
-If the request is not a view/graph configuration change, make no changes. \
-After applying, report a one-line summary of each path you changed and its new value.\n\n\
-**COMMUNICATION PROTOCOL:** Messages are shown in the user's telemetry panel in \
-real-time. Use it for progress, decisions, and results.",
-        command = command,
-        context = context,
-        settings_base = settings_base,
-    );
+    let task = settings_assistant_task(&command, &context, &settings_base);
 
     let provider = std::env::var("PRIMARY_PROVIDER").unwrap_or_else(|_| "gemini".to_string());
 

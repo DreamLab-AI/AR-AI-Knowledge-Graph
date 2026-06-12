@@ -24,6 +24,9 @@ use actix::prelude::*;
 use log::{error, info, warn};
 use serde_json::json;
 
+use crate::actors::elevation_voice::{
+    harvest_mentions, parse_elevation_intent, ConceptIndex, VoiceDemandLedger,
+};
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use crate::services::acsp::{
     build_action_request, build_panel_definition, build_panel_state, AcspClient, ActionPriority,
@@ -33,7 +36,9 @@ use crate::services::acsp::events::{
     ActionDef, ActionStyle, FieldDef, FieldType, LayoutHint, PanelDefinition, PanelSchema,
 };
 use crate::services::github_pr_service::GitHubPRService;
+use crate::services::speech_service::SpeechService;
 use crate::types::ontology_tools::AgentContext;
+use crate::types::speech::SpeechOptions;
 
 /// NIP-33 panel id (the `d` tag) for the elevation control surface.
 const PANEL_ID: &str = "vc-elevation";
@@ -52,6 +57,11 @@ struct RunCycle;
 #[rtype(result = "()")]
 struct Decision(CaseDecision);
 
+/// One transcription line from the local Whisper STT stream.
+#[derive(Message)]
+#[rtype(result = "()")]
+struct VoiceTranscript(String);
+
 #[derive(Debug, Clone)]
 struct PendingCase {
     label: String,
@@ -62,19 +72,30 @@ struct PendingCase {
 pub struct ElevationActor {
     kg_repo: Arc<dyn KnowledgeGraphRepository>,
     acsp: Option<Arc<AcspClient>>,
+    /// Local Kokoro TTS / Whisper STT bridge: transcripts guide candidate
+    /// selection; the actor speaks confirmations back into the session.
+    speech: Option<Arc<SpeechService>>,
     panel_secret: String,
     forum_relay_url: String,
     /// Open broker cases awaiting a human decision, keyed by case id.
     pending: HashMap<String, PendingCase>,
     /// Frontier labels already cased/decided this session (skip list).
     seen: HashSet<String>,
+    /// Conversational demand (decaying) — the PRIMARY elevation signal.
+    voice: VoiceDemandLedger,
+    /// Concept lookup over the latest graph snapshot's elevatable labels.
+    concept_index: Arc<ConceptIndex>,
     elevated_count: u32,
     rejected_count: u32,
+    voice_case_count: u32,
     last_pr_url: Option<String>,
 }
 
 impl ElevationActor {
-    pub fn new(kg_repo: Arc<dyn KnowledgeGraphRepository>) -> Option<Self> {
+    pub fn new(
+        kg_repo: Arc<dyn KnowledgeGraphRepository>,
+        speech: Option<Arc<SpeechService>>,
+    ) -> Option<Self> {
         let enabled = std::env::var("ELEVATION_ACTOR_ENABLED")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
@@ -88,14 +109,30 @@ impl ElevationActor {
         Some(Self {
             kg_repo,
             acsp: None,
+            speech,
             panel_secret,
             forum_relay_url,
             pending: HashMap::new(),
             seen: HashSet::new(),
+            voice: VoiceDemandLedger::new(),
+            concept_index: Arc::new(ConceptIndex::build(std::iter::empty())),
             elevated_count: 0,
             rejected_count: 0,
+            voice_case_count: 0,
             last_pr_url: None,
         })
+    }
+
+    /// Speak a short confirmation into the immersive session via local Kokoro
+    /// TTS. Fire-and-forget: voice feedback must never block case handling.
+    fn speak(&self, text: String) {
+        if let Some(speech) = self.speech.clone() {
+            tokio::spawn(async move {
+                if let Err(e) = speech.text_to_speech(text, SpeechOptions::default()).await {
+                    warn!("[Elevation] TTS confirmation failed: {e}");
+                }
+            });
+        }
     }
 
     fn panel_definition() -> PanelDefinition {
@@ -157,8 +194,69 @@ impl ElevationActor {
             "open_cases": self.pending.len(),
             "elevated": self.elevated_count,
             "rejected": self.rejected_count,
+            "voice_cases": self.voice_case_count,
+            "voice_guided": self.speech.is_some(),
             "last_pr_url": self.last_pr_url,
         })
+    }
+
+    /// Open a broker case for a candidate (shared by the cycle path and the
+    /// explicit voice-intent path). Returns the case spec to publish plus the
+    /// pending record.
+    fn case_for(
+        c: &FrontierCandidate,
+        voice: Option<&crate::actors::elevation_voice::VoiceDemand>,
+        priority: ActionPriority,
+    ) -> (CaseSpec, PendingCase) {
+        let (file_path, draft) = draft_class_page(c);
+        let name = canonical_name(&c.label);
+        let case_id = format!("{CASE_PREFIX}{}", slugify(&name));
+        let mut fields = json!({
+            "name": name,
+            "domain": c.domain,
+            "referenced_by": c.referenced_by,
+            "file_path": file_path.clone(),
+            "degree": c.degree,
+        });
+        let reasoning = match voice {
+            Some(v) => {
+                fields["voice_mentions"] = json!(v.mentions);
+                fields["voice_excerpts"] = json!(v.excerpts);
+                if !v.speakers.is_empty() {
+                    fields["voice_speakers"] = json!(v.speakers);
+                }
+                format!(
+                    "Raised in conversation: {} mention(s) in recent voice sessions \
+                     (latest: \"{}\"). Graph degree {}.",
+                    v.mentions,
+                    v.excerpts.last().cloned().unwrap_or_default(),
+                    c.degree
+                )
+            }
+            None => format!(
+                "Frontier concept with {} axiom references — most-cited unauthored class in the current graph snapshot.",
+                c.degree
+            ),
+        };
+        let spec = CaseSpec {
+            case_id,
+            title: format!("Elevate: {name}"),
+            priority,
+            category: CaseCategory::KnowledgeEnrichment,
+            subject_kind: SubjectKind::AutomationProposal,
+            subject_id: format!("urn:ngm:class:{}", slugify(&name)),
+            request: ActionRequest {
+                fields,
+                reasoning: Some(reasoning),
+                context_url: None,
+            },
+        };
+        let pending = PendingCase {
+            label: c.label.clone(),
+            file_path,
+            draft,
+        };
+        (spec, pending)
     }
 }
 
@@ -366,6 +464,85 @@ impl Actor for ElevationActor {
         ctx.run_interval(CYCLE_INTERVAL, |_act, ctx| {
             ctx.address().do_send(RunCycle);
         });
+
+        // Voice guidance: forward every local-Whisper transcription line into
+        // the actor. Conversation is the primary elevation signal; the stream
+        // is fire-and-forget and lossy (broadcast lag is tolerated).
+        if let Some(speech) = self.speech.clone() {
+            let addr = ctx.address();
+            tokio::spawn(async move {
+                let mut rx = speech.subscribe_to_transcriptions();
+                loop {
+                    match rx.recv().await {
+                        Ok(line) => addr.do_send(VoiceTranscript(line)),
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            warn!("[Elevation] transcription stream lagged ({n} lines skipped)");
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+            });
+            info!("[Elevation] voice guidance active (local Whisper STT → demand ledger; Kokoro TTS confirmations)");
+        }
+    }
+}
+
+impl Handler<VoiceTranscript> for ElevationActor {
+    type Result = ();
+
+    fn handle(&mut self, VoiceTranscript(line): VoiceTranscript, ctx: &mut Self::Context) {
+        let now = std::time::Instant::now();
+
+        // Explicit spoken command — jumps the queue entirely.
+        if let Some(phrase) = parse_elevation_intent(&line) {
+            let label = self
+                .concept_index
+                .lookup(&phrase)
+                .map(str::to_string)
+                .unwrap_or(phrase);
+            if self.seen.contains(&label)
+                || self.pending.values().any(|p| p.label == label)
+            {
+                self.speak(format!("{label} is already in elevation review."));
+                return;
+            }
+            self.voice.note(&label, &line, "", now);
+            let Some(acsp) = self.acsp.clone() else { return };
+            let candidate = FrontierCandidate {
+                label: label.clone(),
+                degree: 0,
+                domain: "infrastructure".into(),
+                referenced_by: Vec::new(),
+            };
+            let demand = self.voice.demand(&label).cloned();
+            let (spec, pending) =
+                Self::case_for(&candidate, demand.as_ref(), ActionPriority::High);
+            let case_id = spec.case_id.clone();
+            ctx.spawn(
+                actix::fut::wrap_future::<_, Self>(async move {
+                    acsp.publish(&build_action_request(&spec)).await.map(|_| ())
+                })
+                .map(move |result, act, _ctx| match result {
+                    Ok(()) => {
+                        info!("[Elevation] voice-commanded case {case_id} for '{}'", pending.label);
+                        act.voice_case_count += 1;
+                        act.seen.insert(pending.label.clone());
+                        let spoken = pending.label.clone();
+                        act.pending.insert(case_id, pending);
+                        act.speak(format!(
+                            "Opened an elevation case for {spoken}. Review it on the governance page."
+                        ));
+                    }
+                    Err(e) => warn!("[Elevation] voice case publish failed: {e}"),
+                }),
+            );
+            return;
+        }
+
+        // Ambient mentions feed the demand ledger that ranks the next cycle.
+        for label in harvest_mentions(&line, &self.concept_index) {
+            self.voice.note(&label, &line, "", now);
+        }
     }
 }
 
@@ -376,6 +553,8 @@ impl Handler<RunCycle> for ElevationActor {
         let Some(acsp) = self.acsp.clone() else {
             return;
         };
+        let now = std::time::Instant::now();
+        self.voice.prune(now);
         if self.pending.len() >= MAX_OPEN_CASES {
             return;
         }
@@ -388,16 +567,45 @@ impl Handler<RunCycle> for ElevationActor {
             .collect();
         let budget = MAX_OPEN_CASES - self.pending.len();
 
+        // Snapshot the conversational demand so the async block needs no
+        // access to the ledger. Voice is the PRIMARY ranking signal; degree
+        // breaks ties and carries the queue when nobody is talking.
+        let voice_scores: HashMap<String, f32> = skip
+            .iter()
+            .map(|l| (l.clone(), 0.0))
+            .chain(
+                self.voice
+                    .labels()
+                    .map(|l| (l.to_string(), self.voice.score(l, now))),
+            )
+            .collect();
+        let voice_demands: HashMap<String, crate::actors::elevation_voice::VoiceDemand> = self
+            .voice
+            .labels()
+            .filter_map(|l| self.voice.demand(l).map(|d| (l.to_string(), d.clone())))
+            .collect();
+
         ctx.spawn(
             actix::fut::wrap_future::<_, Self>(async move {
                 let graph = match kg.load_graph().await {
                     Ok(g) => g,
                     Err(e) => {
                         warn!("[Elevation] load_graph failed: {e}");
-                        return (Vec::new(), 0);
+                        return (Vec::new(), 0, Vec::new());
                     }
                 };
-                let candidates = select_frontier_candidates(&graph, &skip, budget);
+                // Wide candidate pool, then voice-first ordering.
+                let mut candidates = select_frontier_candidates(&graph, &skip, budget * 8);
+                candidates.sort_by(|a, b| {
+                    let va = voice_scores.get(&a.label).copied().unwrap_or(0.0);
+                    let vb = voice_scores.get(&b.label).copied().unwrap_or(0.0);
+                    vb.partial_cmp(&va)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then(b.degree.cmp(&a.degree))
+                        .then(a.label.cmp(&b.label))
+                });
+                candidates.truncate(budget);
+
                 let frontier_size = graph
                     .nodes
                     .iter()
@@ -405,52 +613,47 @@ impl Handler<RunCycle> for ElevationActor {
                     .filter(|n| !n.metadata.contains_key("source_file"))
                     .count();
 
+                // Refresh the concept index from this snapshot: frontier stubs
+                // plus working pages are the vocabulary voice mentions match.
+                let index_labels: Vec<String> = graph
+                    .nodes
+                    .iter()
+                    .filter(|n| {
+                        matches!(n.node_type.as_deref(), Some("owl_class") | Some("page"))
+                    })
+                    .map(|n| n.label.clone())
+                    .collect();
+
                 let mut opened: Vec<(String, PendingCase)> = Vec::new();
                 for c in candidates {
-                    let (file_path, draft) = draft_class_page(&c);
-                    let name = canonical_name(&c.label);
-                    let case_id = format!("{CASE_PREFIX}{}", slugify(&name));
-                    let spec = CaseSpec {
-                        case_id: case_id.clone(),
-                        title: format!("Elevate: {name}"),
-                        priority: ActionPriority::Medium,
-                        category: CaseCategory::KnowledgeEnrichment,
-                        subject_kind: SubjectKind::AutomationProposal,
-                        subject_id: format!("urn:ngm:class:{}", slugify(&name)),
-                        request: ActionRequest {
-                            fields: json!({
-                                "name": name,
-                                "domain": c.domain,
-                                "referenced_by": c.referenced_by,
-                                "definition_preview": draft.lines().find(|l| l.contains("definition")).unwrap_or("").trim(),
-                                "file_path": file_path,
-                                "degree": c.degree,
-                            }),
-                            reasoning: Some(format!(
-                                "Frontier concept with {} axiom references — most-cited unauthored class in the current graph snapshot.",
-                                c.degree
-                            )),
-                            context_url: None,
-                        },
+                    let voice = voice_demands.get(&c.label);
+                    let priority = if voice.is_some() {
+                        ActionPriority::High
+                    } else {
+                        ActionPriority::Medium
                     };
+                    let (spec, pending) = ElevationActor::case_for(&c, voice, priority);
+                    let case_id = spec.case_id.clone();
                     match acsp.publish(&build_action_request(&spec)).await {
                         Ok(_) => {
-                            info!("[Elevation] opened case {case_id} for '{}'", c.label);
-                            opened.push((
-                                case_id,
-                                PendingCase {
-                                    label: c.label.clone(),
-                                    file_path,
-                                    draft,
-                                },
-                            ));
+                            info!(
+                                "[Elevation] opened case {case_id} for '{}' (voice={})",
+                                c.label,
+                                voice.is_some()
+                            );
+                            opened.push((case_id, pending));
                         }
                         Err(e) => warn!("[Elevation] case publish failed for '{}': {e}", c.label),
                     }
                 }
-                (opened, frontier_size)
+                (opened, frontier_size, index_labels)
             })
-            .map(|(opened, frontier_size), act, ctx| {
+            .map(|(opened, frontier_size, index_labels), act, ctx| {
+                if !index_labels.is_empty() {
+                    act.concept_index = Arc::new(ConceptIndex::build(
+                        index_labels.iter().map(String::as_str),
+                    ));
+                }
                 for (case_id, pending) in opened {
                     act.seen.insert(pending.label.clone());
                     act.pending.insert(case_id, pending);
