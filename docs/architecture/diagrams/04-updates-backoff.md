@@ -50,7 +50,7 @@ sequenceDiagram
     Note over Orch: Handler (line 1431-1472):<br/>settle_mode_changed → reset fast_settle state<br/>unpause if paused, re-kick pipeline
     Orch->>FCA: UpdateSimulationParams (forwarded, line 1478-1479)
 
-    Note over FCA: Handler (lines 2061-2218):<br/>idempotency check (21-field epsilon compare)<br/>param-change detected:<br/>• spring_scale re-upload if pop springs changed<br/>• divergence recovery if sim_halted<br/>• broadcast_optimizer.reset_delta_state()<br/>• stability_warmup_remaining = 1800<br/>• reheat_factor = clamp(1+ln(ratio)*2, 1.0, 5.0)<br/>• suppress_intermediate_broadcasts = false<br/>• force_full_broadcast = false
+    Note over FCA: Handler (lines 2061-2218):<br/>idempotency check (21-field epsilon compare)<br/>param-change detected:<br/>• spring_scale re-upload if pop springs changed<br/>• divergence recovery if sim_halted<br/>• broadcast_optimizer.reset_delta_state()<br/>• stability_warmup_remaining = 1800<br/>• reheat_factor = clamp(1+ln(ratio)*2, 1.0, 5.0)<br/>  ratio = max(repel_ratio, spring_ratio), each direction-agnostic<br/>• suppress_intermediate_broadcasts = false<br/>• force_full_broadcast = false
 
     loop Per-step pipeline (FastSettle: 0ms delay; Continuous: 16ms)
         Orch->>FCA: ComputeForces
@@ -62,7 +62,7 @@ sequenceDiagram
         Note over FCA: Broadcast path (lines 1844-1955):<br/>• force_full_broadcast=true → FINAL full broadcast<br/>• suppress_intermediate_broadcasts → process_frame only (no send)<br/>• else → BroadcastOptimizer.process_frame() rate-gate (25 Hz default)<br/>  → full snapshot (all nodes) if should_broadcast<br/>  → OR periodic full at every 300 iters for late clients
         FCA->>GSS: UpdateNodePositions (all nodes, projected)
         Note over FCA: Undo projection (lines 1964-1968):<br/>restore position_velocity_buffer from last_good_positions<br/>(integrator never sees projected offsets)
-        Note over FCA: Decay reheat_factor *= 0.985 (~46-step half-life)<br/>Send PhysicsStepCompleted{kinetic_energy, iteration, ...}
+        Note over FCA: Decay reheat_factor *= 0.997 (~230-step half-life, ~21s to clear)<br/>Send PhysicsStepCompleted{kinetic_energy, iteration, ...}
         FCA->>Orch: PhysicsStepCompleted
 
         Note over Orch: Handler (lines 1716-1957):<br/>update physics_stats.kinetic_energy<br/>check GPU failure circuit-breaker (MAX=5)
@@ -102,11 +102,11 @@ sequenceDiagram
     participant FCA as ForceComputeActor
     participant GPU as CUDA
 
-    Note over FCA: On UpdateSimulationParams:<br/>reheat_factor = clamp(1 + ln(new_repel_k/old_repel_k)*2, 1.0, 5.0)<br/>stability_warmup_remaining = 1800
+    Note over FCA: On UpdateSimulationParams:<br/>repel_ratio = max(new/old, old/new) for repel_k<br/>spring_ratio = max(new/old, old/new) for spring_k<br/>ratio = max(repel_ratio, spring_ratio)<br/>reheat_factor = clamp(1 + ln(ratio)*2, 1.0, 5.0)<br/>stability_warmup_remaining = 1800
 
     loop Each physics step while reheat_factor > 0.02
         FCA->>GPU: inject_velocity_perturbation(reheat_factor)
-        Note over FCA: reheat_factor *= 0.985<br/>half-life ≈ 46 steps (~0.75s at 60fps)
+        Note over FCA: reheat_factor *= 0.997<br/>half-life ≈ 230 steps (~3.8s at 60fps)<br/>full decay to 0.02 ≈ 1300 steps (~21s),<br/>spanning most of the 30s stability warmup
         Note over FCA: if reheat_factor < 0.02 → set 0.0 (cleared)
     end
 

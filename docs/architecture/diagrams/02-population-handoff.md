@@ -19,6 +19,15 @@
 > geometry/colour can no longer disagree, so the ~23.5% "Z-spray" is eliminated.
 > The forked-authority flows below are kept for historical context; the collapsed
 > model is in §7.
+>
+> **UPDATED 2026-06-12.** The canonical GitHub sync path now classifies by
+> `EntityKind` (`entity.kind.as_node_type()`), setting `node_type` and
+> `metadata["type"]` together at write time; wikilink stubs no longer become
+> knowledge-graph nodes (stub purge), and `owl_class` frontier stubs are
+> legitimate ontology population (the elevation work queue, ADR-110). The node
+> counts in the header (10,676 / 2,551 divergent) are a snapshot of the
+> 2026-06-03 bug era — the current corpus is ~196 working pages, ~5.9k authored
+> classes, ~9.8k frontier stubs.
 
 ---
 

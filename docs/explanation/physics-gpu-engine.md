@@ -332,7 +332,7 @@ sequenceDiagram
         end
         Opt->>Opt: Delta compress
         Opt->>State: UpdatePositions
-        State->>WS: BinaryBroadcast (34 bytes × N active nodes)
+        State->>WS: BinaryBroadcast (V3: 52 bytes × N active nodes)
     end
 ```
 

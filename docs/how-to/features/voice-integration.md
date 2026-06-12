@@ -553,6 +553,38 @@ sequenceDiagram
     WS->>C: {"type": "stt_stopped"}
 ```
 
+### Server-Side Transcription Consumers (ADR-110)
+
+Every transcription line is also fanned out server-side via
+`SpeechService::subscribe_to_transcriptions()` (a `tokio::broadcast` channel).
+Two actors tap this stream — conversation inside the immersive interface
+guides both knowledge elevation and interface configuration:
+
+```mermaid
+sequenceDiagram
+    participant SS as SpeechService
+    participant BC as broadcast::Sender<String>
+    participant EV as ElevationActor<br/>(elevation_voice.rs harvest)
+    participant VI as VoiceInterfaceActor<br/>(voice_interface_actor.rs)
+    participant SA as Settings Assistant<br/>(settings_assistant_task → agentbox LLM)
+    participant ACSP as ACSP Producer<br/>(forum broker case)
+
+    SS->>BC: transcription line (unattributed)
+    BC-->>EV: recv()
+    Note over EV: harvest_mentions(): n-gram match against<br/>elevatable concept index (frontier stubs + pages)<br/>→ VoiceDemandLedger (30-min half-life decay)<br/>→ PRIMARY ranking for elevation candidates
+    Note over EV: explicit commands jump the queue:<br/>"elevate X", "formalise X", "make X a class"<br/>→ confirmed aloud via Kokoro TTS
+    EV->>ACSP: kind-31402 knowledge_enrichment case<br/>(voice provenance: mention counts, excerpts, priority high)
+
+    BC-->>VI: recv()
+    Note over VI: parse_interface_intent(): conservative gate —<br/>a CONFIG_VERB and an INTERFACE_NOUN must BOTH match<br/>("hide the ontology nodes", "increase spring strength")
+    VI->>SA: CreateTask (same assistant the Control Center<br/>command box drives) → PUT /api/settings/<path>
+    VI->>SS: text_to_speech("Adjusting the interface.")
+```
+
+Ordinary conversation that mentions graph concepts feeds elevation demand
+only; it is never hijacked into settings changes (the verb+noun gate keeps
+the two consumers disjoint).
+
 ### Voice Command Flow
 
 ```mermaid

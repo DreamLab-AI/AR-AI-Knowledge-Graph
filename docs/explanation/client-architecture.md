@@ -104,7 +104,7 @@ sequenceDiagram
     participant Three as Three.js
     participant WebGL as WebGL Driver
 
-    WS->>Worker: Binary frame (36 bytes/node)
+    WS->>Worker: Binary frame (52 bytes/node, V3)
     Worker->>SAB: Write position floats
 
     loop 60 fps
@@ -266,19 +266,23 @@ The client connects to the server's `/wss` endpoint immediately on `AppInitialis
 
 ### Wire Format
 
-**Protocol V2 (current default — 36 bytes/node):**
+**Protocol V3 (current default — 52 bytes/node, usually wrapped in a V5 sequence header):**
 
 | Offset | Bytes | Field | Notes |
 |--------|-------|-------|-------|
-| 0 | 4 | `node_id` (u32) | Upper bits encode type flags |
+| 0 | 4 | `node_id` (u32) | Upper bits (26–31) encode type flags |
 | 4 | 12 | `position` ([f32; 3]) | X, Y, Z in world units |
 | 16 | 12 | `velocity` ([f32; 3]) | Used for client-side interpolation |
 | 28 | 4 | `sssp_distance` (f32) | Shortest-path distance from source |
 | 32 | 4 | `sssp_parent` (i32) | Parent node in shortest-path tree |
+| 36 | 4 | `cluster_id` (u32) | DBSCAN/K-means cluster (0 = unclustered) |
+| 40 | 4 | `anomaly_score` (f32) | LOF/z-score, 0–1 |
+| 44 | 4 | `community_id` (u32) | Louvain community |
+| 48 | 4 | `centrality` (f32) | Normalised PageRank |
 
-**Protocol V3 (analytics — 48 bytes/node):** adds `cluster_id` (u32), `anomaly_score` (f32, 0–1), and `community_id` (u32). Decoded in `BinaryWebSocketProtocol.ts` when the frame header indicates V3.
+Legacy V2 (36 bytes/node, no analytics tail) is still decoded by stride detection. Full spec: [docs/binary-protocol.md](../binary-protocol.md).
 
-Bandwidth: 316 nodes × 36 bytes × 60 fps ≈ 684 KB/s. At 100K nodes: 3.6 MB/frame vs ~18 MB for equivalent JSON (80% savings).
+Bandwidth: 316 nodes × 52 bytes × 60 fps ≈ 986 KB/s. At 100K nodes: 5.2 MB/frame vs ~18 MB for equivalent JSON (~71% savings).
 
 ### Connection Lifecycle
 

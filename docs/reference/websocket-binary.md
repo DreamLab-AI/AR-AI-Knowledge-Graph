@@ -9,8 +9,10 @@ updated-date: 2026-04-30
 # VisionClaw WebSocket Binary Protocol
 
 > **Superseded by [ADR-061](../adr/ADR-061-binary-protocol-unification.md) (2026-04-30).**
-> The current single-source spec is **[docs/binary-protocol.md](../binary-protocol.md)**.
-> One binary protocol, no versions, 24 bytes/node fixed.
+> The current single-source spec is **[docs/binary-protocol.md](../binary-protocol.md)**:
+> the V3 graph wire — `0x03` version byte + 52-byte node records (id+flags, position,
+> velocity, and the analytics tail: sssp distance/parent, cluster, anomaly, community,
+> centrality), optionally wrapped in a V5 sequence header.
 >
 > The historical V2/V3/V4/V5 content below is preserved for archaeological reference.
 > Do not implement against it.
