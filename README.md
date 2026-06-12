@@ -178,11 +178,15 @@ flowchart TB
 <td width="50%">
 
 **Multi-User Immersive XR**
-- Babylon.js WebXR for immersive/VR mode — Meta Quest 3 optimised
-- React Three Fiber for desktop graph (dual-renderer architecture)
-- Vircadia World Server: avatar sync, HRTF spatial audio, collaborative editing
-- WebGPU with Three Shading Language (TSL) + WebGL fallback
-- Foveated rendering, DPR capping, dynamic resolution scaling on Quest 3
+- Native Godot 4 + godot-rust + OpenXR Quest 3 client (`xr-client/`, ADR-071/102)
+  — live V3 graph wire, analytics-driven rendering (community colours,
+  centrality sizing, anomaly tint), instanced edges, importance-capped LOD
+- Multi-avatar presence over BIP-340-authenticated `/ws/presence` with
+  `local_id`-attributed poses; server-authoritative node drag shared
+  across every connected client (NIP-98-authenticated)
+- Voice-guided knowledge elevation inside the session (local Whisper/Kokoro)
+- React Three Fiber desktop graph (dual-renderer architecture);
+  WebGPU + WebGL fallback in the browser path
 
 </td>
 </tr>
@@ -231,20 +235,51 @@ flowchart LR
     style A fill:#0A2A1A,stroke:#10B981
 ```
 
-### Agent Control Surface Protocol
+This loop runs live for knowledge: the elevation actor *discovers* frontier
+concepts (graph analytics + conversation), *codifies* them as draft OWL Class
+pages, the broker *validates* them on the governance page, and an approval
+*integrates* them into the corpus as a PR — see Knowledge Elevation below.
 
-VisionClaw does **not** currently emit governance panels. What ships today is the bead-provenance bridge (`src/services/nostr_bridge.rs`), which republishes kind 30001 bead records as kind 9 Nostr events. The Agent Control Surface Protocol — agents publishing structured panel events that a relay routes, a forum renders as decision surfaces, and humans answer with cryptographically signed responses — is a **planned integration**, not a shipped emitter. The authoritative contract for the panel kinds below lives in [docs/architecture/agent-control-surface-panels.md](docs/architecture/agent-control-surface-panels.md), which states plainly that VisionClaw does not publish panels; emission (kinds 31400/31402 via a future `ServerNostrActor`) is future work.
+### Agent Control Surface Protocol — shipped producer (ADR-110)
+
+VisionClaw **is** an ACSP producer: agentic actors publish structured panel
+events that the forum relay routes, the governance page renders as decision
+surfaces, and humans answer with cryptographically signed responses
+(`src/services/acsp/` — serde-exact wire types locked to the consumer
+contract by round-trip tests, `nostr_sdk` relay pool, kind-31403 decision
+return path routed per actor). The bead-provenance bridge
+(`src/services/nostr_bridge.rs`, kind 30001 → kind 9) remains the separate
+audit trail. Contract details: [docs/architecture/agent-control-surface-panels.md](docs/architecture/agent-control-surface-panels.md);
+decision record: [ADR-110](docs/adr/ADR-110-agentic-actors-acsp-control-surfaces.md).
 
 | Kind | Name | Flow |
 |---|---|---|
 | 31400 | PanelDefinition | Agent → declares a control panel |
 | 31401 | PanelState | Agent → current data snapshot |
-| 31402 | ActionRequest | Agent → requests a human decision |
-| 31403 | ActionResponse | Human → approve/reject (NIP-98 signed) |
+| 31402 | ActionRequest | Agent → requests a human decision (broker case) |
+| 31403 | ActionResponse | Human → approve/reject (admin-only, signed) |
 | 31404 | PanelUpdate | Agent → incremental state diff |
 | 31405 | PanelRetired | Agent → retires a control panel |
 
-*(Planned contract — no VisionClaw emitter exists today.)*
+### Knowledge Elevation — voice-guided, human-governed
+
+The flagship ACSP actor (`src/actors/elevation_actor.rs`) closes the
+informal→formal knowledge loop. The ontology's *frontier* — classes
+referenced by axioms but never authored — is a ranked work queue; the actor
+drafts canonical Class pages and opens `knowledge_enrichment` broker cases
+on the governance page. An **approve** commits the draft to the corpus repo
+as a PR; the next sync ingests it.
+
+**Conversation is the primary signal** (ADR-110 D3b, fully local: Whisper
+STT in, Kokoro TTS out). Transcripts inside the immersive session are
+matched against the graph's elevatable vocabulary; a decaying demand ledger
+(30-minute half-life) outranks raw graph degree, and cases carry
+conversational provenance — mention counts, utterance excerpts, speakers.
+Explicit commands ("elevate finality mechanism", "formalise X") open a
+high-priority case immediately and are confirmed aloud. Spoken interface
+requests ("hide the ontology nodes", "increase spring strength") route to
+the same settings assistant the Control Center command box drives
+(`src/actors/voice_interface_actor.rs`).
 
 ### Embodied Agent Loop
 
