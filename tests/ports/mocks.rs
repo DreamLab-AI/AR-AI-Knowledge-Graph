@@ -231,6 +231,20 @@ impl KnowledgeGraphRepository for MockKnowledgeGraphRepository {
         Ok(ids)
     }
 
+    async fn batch_add_nodes_if_absent(
+        &self,
+        nodes: Vec<Node>,
+    ) -> knowledge_graph_repository::Result<Vec<u32>> {
+        let mut ids = Vec::new();
+        for node in nodes {
+            let exists = self.graph.read().await.nodes.iter().any(|n| n.id == node.id);
+            if !exists {
+                ids.push(self.add_node(&node).await?);
+            }
+        }
+        Ok(ids)
+    }
+
     async fn update_node(&self, node: &Node) -> knowledge_graph_repository::Result<()> {
         let mut graph = self.graph.write().await;
         if let Some(existing) = graph.nodes.iter_mut().find(|n| n.id == node.id) {

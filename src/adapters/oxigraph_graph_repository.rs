@@ -384,11 +384,25 @@ impl GraphRepository for OxigraphGraphRepository {
             return Ok(Vec::new());
         }
 
-        // Build one INSERT DATA per node-batch. Splitting per named graph
-        // is mandatory because INSERT DATA does not allow GRAPH ... WHERE
-        // mixing; we instead emit one GRAPH block per node, which is
-        // legal inside a single INSERT DATA.
+        // Upsert semantics: drop each node's existing triples before the
+        // INSERT so a re-synced node replaces its prior state instead of
+        // accumulating conflicting values (a node carrying both
+        // `vc:meta "type=page"` and `vc:meta "type=ontology_node"` made
+        // population classification a per-reload coin flip). The DELETE
+        // WHERE sequence and the INSERT DATA run as one SPARQL update, so
+        // the whole upsert is atomic per batch.
+        //
+        // Splitting per named graph is mandatory because INSERT DATA does
+        // not allow GRAPH ... WHERE mixing; we instead emit one GRAPH
+        // block per node, which is legal inside a single INSERT DATA.
         let mut update = String::from(Self::PROLOGUE);
+        for node in &nodes {
+            update.push_str(&format!(
+                "DELETE WHERE {{ GRAPH <{graph}> {{ <{iri}> ?p ?o }} }} ;\n",
+                graph = graph_for_node_id(node.id),
+                iri = node_iri(node.id),
+            ));
+        }
         update.push_str("INSERT DATA {\n");
         for node in &nodes {
             update.push_str(&Self::node_insert_block(node));
@@ -489,9 +503,25 @@ impl GraphRepository for OxigraphGraphRepository {
             bridge_edges = valid_bridges?;
         }
 
-        // Build a single INSERT DATA that places same-graph edges in
-        // their owning named graph and bridge edges in the default graph.
+        // Build a single update that places same-graph edges in their
+        // owning named graph and bridge edges in the default graph. Each
+        // edge's existing triples are dropped first (upsert) so re-synced
+        // edges replace prior state instead of accumulating conflicting
+        // weight/relationshipType values across syncs.
         let mut update = String::from(Self::PROLOGUE);
+        for (edge, graph) in &same_graph_edges {
+            update.push_str(&format!(
+                "DELETE WHERE {{ GRAPH <{graph}> {{ <{iri}> ?p ?o }} }} ;\n",
+                graph = graph,
+                iri = edge_iri(edge),
+            ));
+        }
+        for edge in &bridge_edges {
+            update.push_str(&format!(
+                "DELETE WHERE {{ <{iri}> ?p ?o }} ;\n",
+                iri = edge_iri(edge),
+            ));
+        }
         update.push_str("INSERT DATA {\n");
 
         for (edge, graph) in &same_graph_edges {
@@ -880,6 +910,61 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
 
     async fn batch_add_nodes(&self, nodes: Vec<Node>) -> KgResult<Vec<u32>> {
         GraphRepository::add_nodes(self, nodes).await.map_err(kg_err)
+    }
+
+    async fn batch_add_nodes_if_absent(&self, nodes: Vec<Node>) -> KgResult<Vec<u32>> {
+        if nodes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Single-writer architecture (ADR-11 §D1) makes the check-then-insert
+        // pair race-free. One VALUES-constrained SELECT finds which candidate
+        // ids already exist anywhere in the dataset; only the absent ones are
+        // inserted. Existing nodes are left untouched — this is the stub path,
+        // and a stub must never replace or pollute an authored node.
+        let candidate_ids: Vec<u32> = nodes.iter().map(|n| n.id).collect();
+        let values: String = candidate_ids
+            .iter()
+            .map(|id| format!("\"{id}\"^^xsd:integer"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let exists_q = format!(
+            "{p}SELECT DISTINCT ?id WHERE {{\n  \
+             GRAPH ?g {{ ?s vc:nodeId ?id }}\n  \
+             VALUES ?id {{ {values} }}\n}}",
+            p = Self::PROLOGUE,
+        );
+
+        let store = self.store.clone();
+        let existing: std::collections::HashSet<u32> =
+            tokio::task::spawn_blocking(move || -> RepoResult<std::collections::HashSet<u32>> {
+                let mut found = std::collections::HashSet::new();
+                if let QueryResults::Solutions(sols) =
+                    store.query(exists_q.as_str()).map_err(access)?
+                {
+                    for sol in sols {
+                        let sol = sol.map_err(access)?;
+                        if let Some(oxigraph::model::Term::Literal(lit)) = sol.get("id") {
+                            if let Ok(id) = lit.value().parse::<u32>() {
+                                found.insert(id);
+                            }
+                        }
+                    }
+                }
+                Ok(found)
+            })
+            .await
+            .map_err(|e| kg_err(GraphRepositoryError::AccessError(format!("join error: {e}"))))?
+            .map_err(kg_err)?;
+
+        let absent: Vec<Node> = nodes
+            .into_iter()
+            .filter(|n| !existing.contains(&n.id))
+            .collect();
+        if absent.is_empty() {
+            return Ok(Vec::new());
+        }
+        GraphRepository::add_nodes(self, absent).await.map_err(kg_err)
     }
 
     async fn update_node(&self, node: &Node) -> KgResult<()> {
@@ -1499,4 +1584,98 @@ fn load_bridge_edges(store: &Store) -> RepoResult<Vec<Edge>> {
 fn iri_to_node_id(iri: &str) -> Option<u32> {
     iri.strip_prefix("urn:ngm:node:")
         .and_then(|tail| tail.parse::<u32>().ok())
+}
+
+#[cfg(test)]
+mod upsert_tests {
+    use super::*;
+    use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
+
+    fn test_node(id: u32, type_value: &str) -> Node {
+        let mut node = Node::default();
+        node.id = id;
+        node.metadata_id = format!("node-{id}");
+        node.label = format!("Node {id}");
+        node.node_type = Some(type_value.to_string());
+        node.metadata
+            .insert("type".to_string(), type_value.to_string());
+        node
+    }
+
+    fn repo() -> OxigraphGraphRepository {
+        OxigraphGraphRepository::from_store(Arc::new(Store::new().expect("in-memory store")))
+    }
+
+    /// Re-adding a node must REPLACE its triples, not accumulate conflicting
+    /// values. Regression: nodes carried both `vc:meta "type=page"` and
+    /// `vc:meta "type=ontology_node"` after incremental re-syncs, making
+    /// population classification a per-reload coin flip (28 of 196 authored
+    /// pages survived in the knowledge graph).
+    #[tokio::test]
+    async fn re_added_node_replaces_prior_triples() {
+        let repo = repo();
+
+        KnowledgeGraphRepository::batch_add_nodes(&repo, vec![test_node(42, "page")])
+            .await
+            .expect("first add");
+        KnowledgeGraphRepository::batch_add_nodes(&repo, vec![test_node(42, "ontology_node")])
+            .await
+            .expect("second add");
+
+        // The store must hold exactly ONE type= meta triple for the node.
+        let q = format!(
+            "{p}SELECT (COUNT(?m) AS ?n) WHERE {{ GRAPH ?g {{ <{iri}> vc:meta ?m . \
+             FILTER(STRSTARTS(?m, \"type=\")) }} }}",
+            p = OxigraphGraphRepository::PROLOGUE,
+            iri = node_iri(42),
+        );
+        let count = match repo.store().query(q.as_str()).expect("query") {
+            QueryResults::Solutions(mut sols) => sols
+                .next()
+                .and_then(|r| r.ok())
+                .and_then(|r| r.get("n").cloned())
+                .and_then(|t| match t {
+                    oxigraph::model::Term::Literal(l) => l.value().parse::<usize>().ok(),
+                    _ => None,
+                })
+                .unwrap_or(0),
+            _ => 0,
+        };
+        assert_eq!(count, 1, "duplicate type= meta triples must not accumulate");
+
+        let graph = repo.load_graph().await.expect("load");
+        let node = graph
+            .nodes
+            .iter()
+            .find(|n| n.id == 42)
+            .expect("node present");
+        assert_eq!(node.metadata.get("type").map(String::as_str), Some("ontology_node"));
+        assert_eq!(node.node_type.as_deref(), Some("ontology_node"));
+    }
+
+    /// A stub written via the if-absent path must never overwrite an
+    /// authored node, while genuinely new stubs are still written.
+    #[tokio::test]
+    async fn if_absent_never_overwrites_authored_node() {
+        let repo = repo();
+
+        KnowledgeGraphRepository::batch_add_nodes(&repo, vec![test_node(7, "page")])
+            .await
+            .expect("authored add");
+        let written = repo
+            .batch_add_nodes_if_absent(vec![test_node(7, "linked_page"), test_node(8, "linked_page")])
+            .await
+            .expect("if-absent add");
+
+        assert_eq!(written, vec![8], "only the absent id is written");
+
+        let graph = repo.load_graph().await.expect("load");
+        let authored = graph.nodes.iter().find(|n| n.id == 7).expect("node 7");
+        assert_eq!(
+            authored.metadata.get("type").map(String::as_str),
+            Some("page"),
+            "stub must not replace the authored node"
+        );
+        assert!(graph.nodes.iter().any(|n| n.id == 8), "new stub written");
+    }
 }

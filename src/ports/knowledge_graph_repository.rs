@@ -61,6 +61,12 @@ pub trait KnowledgeGraphRepository: Send + Sync {
     
     async fn batch_add_nodes(&self, nodes: Vec<Node>) -> Result<Vec<u32>>;
 
+    /// Insert nodes only where no node with the same id already exists in the
+    /// store. Used for wikilink/IRI stubs so they can never overwrite or
+    /// pollute a real authored node written by an earlier batch or a previous
+    /// incremental sync. Returns the ids that were actually written.
+    async fn batch_add_nodes_if_absent(&self, nodes: Vec<Node>) -> Result<Vec<u32>>;
+
     
     async fn update_node(&self, node: &Node) -> Result<()>;
 

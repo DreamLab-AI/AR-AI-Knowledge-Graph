@@ -11,7 +11,7 @@
 use crate::adapters::oxigraph_ontology_repository::{OxigraphOntologyRepository, GRAPH_ONTOLOGY};
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine;
 use crate::adapters::SqliteSettingsRepository;
-use visionclaw_domain::models::canonical_entity::{CanonicalEntity, EntityKind, OutboundLink};
+use visionclaw_domain::models::canonical_entity::{CanonicalEntity, EntityKind};
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::ports::inference_engine::InferenceEngine;
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
@@ -119,7 +119,18 @@ fn build_node_from_entity(
     node.id = id;
     node.metadata_id = entity.slug.clone();
     node.label = entity.display_label().to_string();
-    node.node_type = Some(entity.kind.as_node_type().to_string());
+    // Population policy: EntityKind is the discriminator. `@type: Class`
+    // (an OntologyBlock) marks formal ontology source → ontology_node;
+    // `@type: Page` only → Knowledge `page`. `entity.public` must NOT be
+    // used here: the canonical parser defaults `public` to true when the
+    // JSON-LD carries no Page node, which is the case for the entire
+    // ontology corpus (~5.8k files) — gating on it floods the Knowledge
+    // population. When a working-graph page and an ontology class share a
+    // slug (the cross-graph join), the later upsert wins wholesale; the
+    // working pages dir sorts after the ontology dir in the tree listing,
+    // so the authored `page` typing prevails for shared slugs.
+    let node_type = entity.kind.as_node_type();
+    node.node_type = Some(node_type.to_string());
     if matches!(
         entity.kind,
         EntityKind::OntologyClass | EntityKind::OntologyIndividual
@@ -127,7 +138,7 @@ fn build_node_from_entity(
         node.owl_class_iri = entity.class_iri.clone();
     }
     node.metadata
-        .insert("type".to_string(), entity.kind.as_node_type().to_string());
+        .insert("type".to_string(), node_type.to_string());
     if entity.public {
         node.metadata.insert("public".to_string(), "true".to_string());
     }
@@ -156,46 +167,13 @@ fn build_node_from_entity(
     node
 }
 
-/// Materialise a stub node for an outbound wikilink target if one does not
-/// already exist. The stub's type is inferred from the link's IRI shape:
-/// `urn:visionflow:owl:class:*` → `owl_class`, anything else → `linked_page`.
-fn ensure_stub_from_link(
-    id: u32,
-    link: &OutboundLink,
-    nodes: &mut std::collections::HashMap<u32, visionclaw_domain::models::node::Node>,
-) {
-    if nodes.contains_key(&id) {
-        return;
-    }
-    // ADR-100 D3: a wikilink target has no asserted `rdf:type` yet (its page
-    // may not be ingested), so IRI-shape is the documented last-resort
-    // classifier here. Real `rdf:type`-driven typing happens in
-    // `enrich_node_from_quads` once the target's own quads land.
-    let kind = classify_by_iri_shape(&link.target_iri);
-    let node_type = kind.as_node_type();
-
-    let mut node = visionclaw_domain::models::node::Node::default();
-    node.id = id;
-    node.metadata_id = link.target_slug.clone();
-    node.label = if link.target_label.is_empty() {
-        link.target_slug.replace('-', " ")
-    } else {
-        link.target_label.clone()
-    };
-    node.node_type = Some(node_type.to_string());
-    node.metadata.insert("type".to_string(), node_type.to_string());
-    if matches!(kind, OwlKind::Class | OwlKind::Individual) {
-        node.owl_class_iri = Some(link.target_iri.clone());
-    }
-    nodes.insert(id, node);
-}
-
 /// Materialise a stub node for the target of a typed semantic edge derived
 /// from JSON-LD axioms (`subClassOf`, `hasPart`, `enables`, …).
 fn ensure_stub_from_iri(
     id: u32,
     iri: &str,
     nodes: &mut std::collections::HashMap<u32, visionclaw_domain::models::node::Node>,
+    stub_ids: &mut std::collections::HashSet<u32>,
 ) {
     if nodes.contains_key(&id) {
         return;
@@ -203,6 +181,15 @@ fn ensure_stub_from_iri(
     // ADR-100 D3: typed-edge target stub with no `rdf:type` yet — IRI-shape is
     // the documented last-resort classifier (see `classify_by_iri_shape`).
     let kind = classify_by_iri_shape(iri);
+    if matches!(kind, OwlKind::LinkedPage) {
+        // Non-class IRI targets (page/linked shapes) must NOT materialise
+        // phantom nodes — this path minted tens of thousands of linked_page
+        // stubs per sync from JSON-LD axiom objects. The typed edge defers and
+        // either resolves to an authored node at the final pass or folds into
+        // the dangling-wikilink weight signal.
+        return;
+    }
+    stub_ids.insert(id);
     let node_type = kind.as_node_type();
     let local_name = iri.rsplit_once(':').map(|(_, r)| r).unwrap_or(iri);
     let local_name = local_name.rsplit_once('/').map(|(_, r)| r).unwrap_or(local_name);
@@ -270,6 +257,14 @@ impl GitHubSyncService {
 
     /// Synchronize graphs from GitHub — processes in batches with progress logging.
     pub async fn sync_graphs(&self) -> Result<SyncStatistics, String> {
+        self.sync_graphs_with(false).await
+    }
+
+    /// Run a sync, optionally forcing a full clear + re-process of every file
+    /// regardless of the SHA1 filter and the `FORCE_FULL_SYNC` env var. Used
+    /// by the admin endpoint (`POST /api/admin/sync?force_full=true`) to
+    /// rebuild the store from scratch without a container restart.
+    pub async fn sync_graphs_with(&self, force_full_override: bool) -> Result<SyncStatistics, String> {
         info!("Starting GitHub sync (batch size: {})", BATCH_SIZE);
         let start_time = Instant::now();
 
@@ -301,7 +296,8 @@ impl GitHubSyncService {
 
         stats.total_files = files.len();
 
-        let force_full_sync = base_path_changed
+        let force_full_sync = force_full_override
+            || base_path_changed
             || std::env::var("FORCE_FULL_SYNC")
                 .map(|v| v == "1" || v.to_lowercase() == "true")
                 .unwrap_or(false);
@@ -375,20 +371,150 @@ impl GitHubSyncService {
             }
         }
 
-        // Final pass: write all deferred bridge edges now that every node is present.
+        // Final pass: resolve deferred edges now that every authored node is
+        // present. Wikilink stubs are no longer materialised, so a deferred
+        // edge either (a) connects two authored nodes from different batches —
+        // write it — or (b) points at a target no file authored (a dangling
+        // wikilink). Dangling links contribute NO node and NO edge to the KG;
+        // they fold into the physics weight signal instead: +mass per
+        // referring page, plus a co-citation spring between pages that share
+        // a dangling target (bounded by FANOUT_NODE_THRESHOLD referrers so the
+        // pairwise expansion can't explode on hub targets like [[AI]]).
         if !deferred_edges.is_empty() {
-            info!(
-                "Writing {} deferred bridge edges (final pass)",
-                deferred_edges.len()
-            );
-            match self.kg_repo.batch_add_edges(deferred_edges.clone()).await {
-                Ok(ids) => {
-                    info!("Successfully wrote {} bridge edges", ids.len());
-                    stats.total_edges += ids.len();
-                }
+            const WEIGHT_PER_FOLDED_LINK: f32 = 0.1;
+            const COCITE_WEIGHT: f32 = 0.5;
+            let cocite_max_referrers: usize = std::env::var("FANOUT_NODE_THRESHOLD")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .filter(|&n| n >= 1)
+                .unwrap_or(3);
+
+            let graph_snapshot = match self.kg_repo.load_graph().await {
+                Ok(g) => Some(g),
                 Err(e) => {
-                    error!("Deferred bridge edges failed: {}", e);
-                    stats.errors.push(format!("bridge edges: {}", e));
+                    error!("load_graph for deferred-edge resolution failed: {}", e);
+                    stats.errors.push(format!("deferred resolution: {}", e));
+                    None
+                }
+            };
+            let existing: std::collections::HashSet<u32> = graph_snapshot
+                .as_ref()
+                .map(|g| g.nodes.iter().map(|n| n.id).collect())
+                .unwrap_or_default();
+
+            let (resolvable, dangling): (Vec<Edge>, Vec<Edge>) =
+                deferred_edges.drain(..).partition(|e| {
+                    existing.contains(&e.source) && existing.contains(&e.target)
+                });
+
+            info!(
+                "Deferred edge resolution: {} resolvable, {} dangling (folded to weights)",
+                resolvable.len(),
+                dangling.len()
+            );
+
+            if !resolvable.is_empty() {
+                match self.kg_repo.batch_add_edges(resolvable).await {
+                    Ok(ids) => {
+                        info!("Successfully wrote {} deferred edges", ids.len());
+                        stats.total_edges += ids.len();
+                    }
+                    Err(e) => {
+                        error!("Deferred edges failed: {}", e);
+                        stats.errors.push(format!("deferred edges: {}", e));
+                    }
+                }
+            }
+
+            if !dangling.is_empty() {
+                // Group referrers by the missing endpoint.
+                let mut referrers: std::collections::HashMap<u32, Vec<u32>> =
+                    std::collections::HashMap::new();
+                for edge in &dangling {
+                    let (missing, real) = if existing.contains(&edge.source) {
+                        (edge.target, edge.source)
+                    } else if existing.contains(&edge.target) {
+                        (edge.source, edge.target)
+                    } else {
+                        continue; // both endpoints missing — nothing to fold onto
+                    };
+                    referrers.entry(missing).or_default().push(real);
+                }
+
+                let mut weight_bonus: std::collections::HashMap<u32, f32> =
+                    std::collections::HashMap::new();
+                let mut cocite: std::collections::HashMap<(u32, u32), f32> =
+                    std::collections::HashMap::new();
+                for refs in referrers.values() {
+                    for &n in refs {
+                        *weight_bonus.entry(n).or_insert(0.0) += WEIGHT_PER_FOLDED_LINK;
+                    }
+                    if refs.len() <= cocite_max_referrers {
+                        for i in 0..refs.len() {
+                            for j in (i + 1)..refs.len() {
+                                if refs[i] == refs[j] {
+                                    continue;
+                                }
+                                let key = if refs[i] < refs[j] {
+                                    (refs[i], refs[j])
+                                } else {
+                                    (refs[j], refs[i])
+                                };
+                                *cocite.entry(key).or_insert(0.0) += COCITE_WEIGHT;
+                            }
+                        }
+                    }
+                }
+
+                if !cocite.is_empty() {
+                    let cocite_edges: Vec<Edge> = cocite
+                        .into_iter()
+                        .map(|((a, b), w)| Edge {
+                            id: format!("{}_{}_cocite", a, b),
+                            source: a,
+                            target: b,
+                            weight: w,
+                            edge_type: Some("co_citation".to_string()),
+                            owl_property_iri: None,
+                            metadata: None,
+                        })
+                        .collect();
+                    let n_cocite = cocite_edges.len();
+                    match self.kg_repo.batch_add_edges(cocite_edges).await {
+                        Ok(ids) => {
+                            info!("Wrote {} co-citation springs from dangling wikilinks", ids.len());
+                            stats.total_edges += ids.len();
+                        }
+                        Err(e) => {
+                            warn!("Co-citation spring write failed (non-fatal, {} edges): {}", n_cocite, e);
+                            stats.errors.push(format!("cocite_edges: {}", e));
+                        }
+                    }
+                }
+
+                if !weight_bonus.is_empty() {
+                    if let Some(ref g) = graph_snapshot {
+                        let updated: Vec<visionclaw_domain::models::node::Node> = g
+                            .nodes
+                            .iter()
+                            .filter_map(|n| {
+                                weight_bonus.get(&n.id).map(|bonus| {
+                                    let mut node = n.clone();
+                                    node.weight = Some(node.weight.unwrap_or(1.0) + bonus);
+                                    node
+                                })
+                            })
+                            .collect();
+                        let n_rw = updated.len();
+                        if !updated.is_empty() {
+                            if let Err(e) = self.kg_repo.batch_update_nodes(updated).await {
+                                warn!("Dangling-link mass nuance failed (non-fatal): {}", e);
+                                stats.errors.push(format!("weight_nuance: {}", e));
+                            } else {
+                                info!("Re-weighted {} pages from dangling wikilinks", n_rw);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1011,6 +1137,11 @@ impl GitHubSyncService {
         let mut batch_nodes = std::collections::HashMap::new();
         let mut batch_edges = std::collections::HashMap::new();
         let mut public_pages = std::collections::HashSet::new();
+        // IDs in `batch_nodes` that are wikilink/IRI stubs rather than authored
+        // nodes. Stubs persist via the insert-if-absent path so they can never
+        // overwrite a real node already in the store (from an earlier batch or
+        // a previous incremental sync).
+        let mut batch_stub_ids: std::collections::HashSet<u32> = std::collections::HashSet::new();
 
         const PARALLEL_FETCHES: usize = 8;
 
@@ -1073,6 +1204,7 @@ impl GitHubSyncService {
                             &mut batch_nodes,
                             &mut batch_edges,
                             &mut public_pages,
+                            &mut batch_stub_ids,
                         )
                         .await
                     {
@@ -1097,8 +1229,9 @@ impl GitHubSyncService {
             let all_edges: Vec<_> = batch_edges.into_values().collect();
 
             info!(
-                "Adding batch: {} nodes, {} edges",
+                "Adding batch: {} nodes ({} stubs), {} edges",
                 node_vec.len(),
+                batch_stub_ids.len(),
                 all_edges.len()
             );
 
@@ -1106,14 +1239,33 @@ impl GitHubSyncService {
             let batch_node_ids: std::collections::HashSet<u32> =
                 node_vec.iter().map(|n| n.id).collect();
 
-            match self.kg_repo.batch_add_nodes(node_vec.clone()).await {
+            // Authored nodes UPSERT (replace prior triples); stubs insert only
+            // if the id is absent from the store, so a wikilink stub can never
+            // wipe or pollute a real node written by an earlier batch or a
+            // previous incremental sync.
+            let (real_nodes, stub_nodes): (Vec<_>, Vec<_>) = node_vec
+                .into_iter()
+                .partition(|n| !batch_stub_ids.contains(&n.id));
+
+            match self.kg_repo.batch_add_nodes(real_nodes).await {
                 Ok(ids) => {
                     stats.total_nodes += ids.len();
-                    info!("  Wrote {} nodes", ids.len());
+                    info!("  Wrote {} authored nodes", ids.len());
                 }
                 Err(e) => {
                     error!("batch_add_nodes failed: {}", e);
                     return Err(format!("batch_add_nodes: {}", e));
+                }
+            }
+
+            match self.kg_repo.batch_add_nodes_if_absent(stub_nodes).await {
+                Ok(ids) => {
+                    stats.total_nodes += ids.len();
+                    info!("  Wrote {} stub nodes (if-absent)", ids.len());
+                }
+                Err(e) => {
+                    error!("batch_add_nodes_if_absent failed: {}", e);
+                    return Err(format!("batch_add_nodes_if_absent: {}", e));
                 }
             }
 
@@ -1173,6 +1325,7 @@ impl GitHubSyncService {
         nodes: &mut std::collections::HashMap<u32, visionclaw_domain::models::node::Node>,
         edges: &mut std::collections::HashMap<String, Edge>,
         public_pages: &mut std::collections::HashSet<String>,
+        stub_ids: &mut std::collections::HashSet<u32>,
     ) -> Result<(), String> {
         debug!("Processing file: {} ({} bytes)", file.name, content.len());
 
@@ -1188,7 +1341,7 @@ impl GitHubSyncService {
                 // populate the force-directed graph as `page` nodes joined by
                 // their wikilinks — the dual-source ingest the system was
                 // designed for.
-                self.process_plain_logseq_file(file, content, nodes, edges);
+                self.process_plain_logseq_file(file, content, nodes, edges, stub_ids);
                 return Ok(());
             }
             Err(e) => {
@@ -1204,21 +1357,33 @@ impl GitHubSyncService {
         let mut page_node = build_node_from_entity(&entity, source_id, self.kg_parser.as_ref());
         // WS-0: guarantee a non-NULL source_domain for this node.
         ensure_source_domain(&mut page_node, &file.path);
+        // Total outbound wikilink degree (resolved + dangling). Dangling links
+        // no longer materialise stub nodes, so this count is the weight signal
+        // the GPU can consume for connectivity-based mass.
+        page_node.metadata.insert(
+            "wikilink_count".to_string(),
+            entity.outbound_links.len().to_string(),
+        );
         nodes.insert(source_id, page_node);
+        // A real authored node always supersedes any stub a sibling file
+        // materialised earlier in this batch.
+        stub_ids.remove(&source_id);
         if entity.public {
             public_pages.insert(entity.slug.clone());
         }
 
         // 3. Emit edges from the page's outbound wikilinks. Each link's target
         //    slug hashes to the canonical id of that entity if it exists in the
-        //    corpus; if not, a stub is materialised (linked_page or owl_class
-        //    depending on the IRI shape).
+        //    corpus. NO stub node is materialised for missing targets: wikilinks
+        //    contribute connectivity between AUTHORED nodes only (dangling links
+        //    feed the node's wikilink_count weight signal instead — see
+        //    metadata below). Edges whose target never materialises are pruned
+        //    at the deferred-edge pass against the store's node-id set.
         for link in &entity.outbound_links {
             let target_id = self.kg_parser.page_name_to_id(&link.target_slug);
             if target_id == source_id {
                 continue;
             }
-            ensure_stub_from_link(target_id, link, nodes);
             let edge_id = format!("{}_{}_wikilink", source_id, target_id);
             edges.entry(edge_id.clone()).or_insert_with(|| Edge {
                 id: edge_id,
@@ -1226,6 +1391,42 @@ impl GitHubSyncService {
                 target: target_id,
                 weight: 1.0,
                 edge_type: Some("explicit_link".to_string()),
+                metadata: None,
+                owl_property_iri: None,
+            });
+        }
+
+        // 3b. Elevation provenance: `elevatedFrom:: [[Working Page]]` logseq
+        //     property lines (written by the 2026-06-12 twin-rename batch)
+        //     become typed bridge edges from the formal class node to its
+        //     working-graph origin page. The raw property is scanned here
+        //     because the canonical entity carries only JSON-LD wikilinks.
+        //     Targets that are not authored nodes (non-public working twins)
+        //     fold to weight at the deferred pass like any dangling link.
+        for line in content.lines() {
+            let Some(rest) = line.trim_start().strip_prefix("elevatedFrom::") else {
+                continue;
+            };
+            let Some(name) = rest
+                .trim()
+                .strip_prefix("[[")
+                .and_then(|r| r.split("]]").next())
+                .map(|n| n.split('|').next().unwrap_or(n).trim())
+                .filter(|n| !n.is_empty())
+            else {
+                continue;
+            };
+            let target_id = self.kg_parser.page_name_to_id(name);
+            if target_id == source_id {
+                continue;
+            }
+            let edge_id = format!("{}_{}_elevated_from", source_id, target_id);
+            edges.entry(edge_id.clone()).or_insert_with(|| Edge {
+                id: edge_id,
+                source: source_id,
+                target: target_id,
+                weight: 1.0,
+                edge_type: Some("elevated_from".to_string()),
                 metadata: None,
                 owl_property_iri: None,
             });
@@ -1248,7 +1449,7 @@ impl GitHubSyncService {
                     // Ensure a stub exists for the target if it wasn't already
                     // emitted by a sibling file's canonical entity ingest.
                     if let Some(ref iri) = target_iri {
-                        ensure_stub_from_iri(edge.target, iri, nodes);
+                        ensure_stub_from_iri(edge.target, iri, nodes, stub_ids);
                     }
                     // Typed edges overwrite the generic wikilink edge for the
                     // same (source, target) pair so the semantic type wins.
@@ -1295,6 +1496,7 @@ impl GitHubSyncService {
         content: &str,
         nodes: &mut std::collections::HashMap<u32, visionclaw_domain::models::node::Node>,
         edges: &mut std::collections::HashMap<String, Edge>,
+        stub_ids: &mut std::collections::HashSet<u32>,
     ) {
         let parsed = match self.kg_parser.parse(content, &file.name) {
             Ok(p) => p,
@@ -1326,12 +1528,41 @@ impl GitHubSyncService {
             return;
         }
 
+        // Parser output mixes the authored page node with `linked_page` stubs
+        // for its wikilink targets. Stubs are DROPPED entirely: wikilinks
+        // contribute edges between authored nodes only (dangling edges are
+        // pruned at the deferred pass), plus a wikilink_count weight signal on
+        // the page node. Materialising stubs put 11k+ phantom nodes in the
+        // Knowledge population.
+        let wikilink_count = parsed.edges.len();
         for mut node in parsed.nodes {
+            let is_stub = node
+                .metadata
+                .get("type")
+                .map(|t| t == "linked_page")
+                .unwrap_or(false);
+            if is_stub {
+                continue;
+            }
             // WS-0: plain working-graph pages never carry a `vc:sourceDomain`
             // quad, so without this they were the bulk of the ~100%-NULL
             // MetadataStore. Derive a deterministic domain from path + label.
             ensure_source_domain(&mut node, &file.path);
-            nodes.entry(node.id).or_insert(node);
+            node.metadata
+                .insert("wikilink_count".to_string(), wikilink_count.to_string());
+            // A real authored node upgrades any stub an earlier sibling file
+            // materialised (ontology IRI stubs still use stub_ids); it never
+            // clobbers another authored node a JSON-LD sibling emitted.
+            match nodes.entry(node.id) {
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    if stub_ids.remove(&node.id) {
+                        e.insert(node);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(node);
+                }
+            }
         }
 
         for edge in parsed.edges {
@@ -1470,6 +1701,7 @@ impl GitHubSyncService {
                 let iri = n.as_str();
                 if iri.contains(&slug)
                     && (iri.starts_with("urn:ngm:")
+                        || iri.starts_with("urn:visionclaw:")
                         || iri.contains("/class/")
                         || iri.contains("/individual/"))
                 {
@@ -1585,9 +1817,14 @@ impl GitHubSyncService {
     ) -> Result<Vec<GitHubFileBasicMetadata>, String> {
         let existing = self.get_existing_file_metadata().await?;
 
+        // Key on the full repo path, NOT the basename: the source dirs
+        // (e.g. mainKnowledgeGraph/pages/ + workingGraph/pages/) share
+        // hundreds of basenames, and a shared key makes each pair overwrite
+        // the other's SHA1 every sync — those files then re-process forever,
+        // re-stamping their (id-colliding) node triples on every run.
         Ok(files
             .iter()
-            .filter(|f| match existing.get(&f.name) {
+            .filter(|f| match existing.get(&f.path) {
                 Some(sha) if sha == &f.sha => false,
                 _ => true,
             })
@@ -1621,9 +1858,11 @@ impl GitHubSyncService {
 
         info!("[SHA1] Updating {} file SHA1 hashes in SQLite", files.len());
 
+        // Full path as key — see filter_changed_files for why basenames
+        // collide across source dirs.
         let pairs: Vec<(String, String)> = files
             .iter()
-            .map(|f| (f.name.clone(), f.sha.clone()))
+            .map(|f| (f.path.clone(), f.sha.clone()))
             .collect();
 
         self.sync_db

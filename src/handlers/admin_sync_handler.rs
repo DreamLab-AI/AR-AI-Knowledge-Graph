@@ -54,15 +54,28 @@ impl From<SyncStatistics> for SyncStatisticsDto {
     }
 }
 
+#[derive(serde::Deserialize)]
+pub struct SyncQuery {
+    /// `?force_full=true` clears the store and re-processes every file,
+    /// bypassing the SHA1 incremental filter — equivalent to a restart with
+    /// `FORCE_FULL_SYNC=1`.
+    #[serde(default)]
+    pub force_full: bool,
+}
+
 pub async fn trigger_sync(
     _auth: crate::settings::auth_extractor::AuthenticatedUser,
     sync_service: web::Data<Arc<GitHubSyncService>>,
     app_state: web::Data<AppState>,
+    query: web::Query<SyncQuery>,
 ) -> Result<impl Responder> {
     _auth.require_power_user()?;
-    info!("Admin sync endpoint triggered");
+    info!(
+        "Admin sync endpoint triggered (force_full={})",
+        query.force_full
+    );
 
-    match sync_service.sync_graphs().await {
+    match sync_service.sync_graphs_with(query.force_full).await {
         Ok(stats) => {
             info!(
                 "Sync completed successfully: {} nodes, {} edges from {} files",

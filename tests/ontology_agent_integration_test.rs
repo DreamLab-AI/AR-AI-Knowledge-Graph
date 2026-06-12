@@ -40,6 +40,7 @@ impl KnowledgeGraphRepository for EmptyKGRepo {
     async fn save_graph(&self, _g: &GraphData) -> KGResult<()> { Ok(()) }
     async fn add_node(&self, _n: &Node) -> KGResult<u32> { Ok(0) }
     async fn batch_add_nodes(&self, _n: Vec<Node>) -> KGResult<Vec<u32>> { Ok(vec![]) }
+    async fn batch_add_nodes_if_absent(&self, _n: Vec<Node>) -> KGResult<Vec<u32>> { Ok(vec![]) }
     async fn update_node(&self, _n: &Node) -> KGResult<()> { Ok(()) }
     async fn batch_update_nodes(&self, _n: Vec<Node>) -> KGResult<()> { Ok(()) }
     async fn remove_node(&self, _id: u32) -> KGResult<()> { Ok(()) }
