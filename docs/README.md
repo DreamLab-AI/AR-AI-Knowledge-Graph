@@ -255,6 +255,7 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 
 | ADR | Status | Title |
 |-----|--------|-------|
+| [ADR-111](adr/ADR-111-ecosystem-infographic-modernisation.md) | Proposed | Ecosystem Infographic Modernisation — audit + diagram-as-code / Nano Banana regeneration plan for stale images (image replacement is a separate follow-up) |
 | [ADR-110](adr/ADR-110-agentic-actors-acsp-control-surfaces.md) | Accepted | Agentic Actors Project Control Surfaces into the Forum (ACSP producer + knowledge-elevation flagship; resolves PRD-014 §8) |
 | [ADR-102](adr/ADR-102-xr-client-backend-transport-completion.md) | Accepted | XR Client ↔ Backend Transport Completion (live V3 wire; amends ADR-071) |
 
