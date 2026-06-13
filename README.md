@@ -297,6 +297,24 @@ Contract: **VisionClaw [ADR-059](docs/adr/ADR-059-bidirectional-agent-channel-se
 
 The agentbox consumer economy pipeline (PRD-015 Phase 1, 2026-06-12) adds a governed buy-side: agents can pay 402-gated resources from peer nodes via `payFetch()`, with fail-closed policy gates, receipt URNs on every attempt, and a `/.well-known/x402.json` discovery manifest — all Lightning-first (no EVM rail).
 
+### Provenance & traceability
+
+The elevation/governance loop above produces an authoritative record — a frontier
+concept the agent proposed, the signed Nostr broker case a human approved, the draft
+that became a corpus PR. Today that record is the content-addressed bead audit trail
+(`src/services/nostr_bridge.rs`). The ecosystem's sovereign data substrate
+(**solid-pod-rs 0.5.0-alpha.0**, ecosystem ADR-059) now ships the next layer beneath
+it: a hash-chained **provenance trail** that makes a decision tamper-evident and
+externally verifiable. Every decision earns a git-commit **mark** in its
+git-versioned pod (the same smart-HTTP pod history VisionClaw already clones);
+high-value or disputed decisions can additionally be anchored as a Bitcoin taproot
+**block-trail**, settling traceability on a global, sovereign trust ledger — sats and
+Lightning, no EVM. This is the provenance substrate the elevation/governance loop
+*will anchor into*: the primitives now exist in solid-pod-rs; carrying a decision's
+provenance from the bead/receipt path into a trail (mark always, block-trail on
+escalation) is the next increment, not yet wired into VisionClaw. Traceability is the
+value — verifiable provenance for human-governed knowledge, not a crypto project.
+
 <details>
 <summary><strong>7 MCP Ontology Tools (native)</strong></summary>
 
