@@ -1,0 +1,120 @@
+{
+  "n": 192,
+  "headline": {
+    "AUG": {
+      "f1": 0.714,
+      "halluc": 0.309
+    },
+    "ctl": {
+      "f1": 0.352,
+      "halluc": 0.655
+    }
+  },
+  "delta_f1": 0.362,
+  "by_model": {
+    "opus": {
+      "AUG": 0.69,
+      "ctl": 0.345
+    },
+    "sonnet": {
+      "AUG": 0.737,
+      "ctl": 0.358
+    }
+  },
+  "by_type": {
+    "neighbour": {
+      "AUG": 0.948,
+      "ctl": 0.486
+    },
+    "subclass": {
+      "AUG": 0.266,
+      "ctl": 0.093
+    },
+    "existence": {
+      "AUG": 0.693,
+      "ctl": 0.342
+    }
+  },
+  "per_question": {
+    "neighbour-smart-contract-execution": {
+      "aug": 1.0,
+      "ctl": 0.736,
+      "delta": 0.264
+    },
+    "neighbour-oracle-network": {
+      "aug": 0.611,
+      "ctl": 0.375,
+      "delta": 0.236
+    },
+    "neighbour-zero-knowledge-proof": {
+      "aug": 0.986,
+      "ctl": 0.472,
+      "delta": 0.514
+    },
+    "neighbour-nostr-protocol": {
+      "aug": 1.0,
+      "ctl": 0.194,
+      "delta": 0.806
+    },
+    "neighbour-gaussian-splatting": {
+      "aug": 1.0,
+      "ctl": 0.569,
+      "delta": 0.431
+    },
+    "neighbour-retrieval-augmented-generation": {
+      "aug": 0.986,
+      "ctl": 0.75,
+      "delta": 0.236
+    },
+    "neighbour-multi-agent-system": {
+      "aug": 1.0,
+      "ctl": 0.222,
+      "delta": 0.778
+    },
+    "neighbour-differential-privacy": {
+      "aug": 1.0,
+      "ctl": 0.57,
+      "delta": 0.43
+    },
+    "subclass-metaverse-avatar": {
+      "aug": 0.038,
+      "ctl": 0.087,
+      "delta": -0.049
+    },
+    "subclass-telecollaboration": {
+      "aug": 0.441,
+      "ctl": 0.111,
+      "delta": 0.33
+    },
+    "subclass-spatial-computing": {
+      "aug": 0.0,
+      "ctl": 0.0,
+      "delta": 0.0
+    },
+    "subclass-vector-database": {
+      "aug": 0.586,
+      "ctl": 0.173,
+      "delta": 0.413
+    },
+    "existence-knowledge-graph-query-language": {
+      "aug": 0.889,
+      "ctl": 0.174,
+      "delta": 0.715
+    },
+    "existence-reinforcement-learning": {
+      "aug": 0.714,
+      "ctl": 0.662,
+      "delta": 0.052
+    },
+    "existence-decentralized-identity": {
+      "aug": 0.485,
+      "ctl": 0.247,
+      "delta": 0.238
+    },
+    "existence-solid-pod": {
+      "aug": 0.685,
+      "ctl": 0.285,
+      "delta": 0.4
+    }
+  }
+}
