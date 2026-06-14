@@ -2,7 +2,7 @@
 
 **Status:** Proposed
 **Date:** 2026-06-13
-**Supersedes/relates:** ADR-110 (ACSP elevation control surfaces), ADR-032 (embed solid-pod-rs), agentbox ADR-032 (402 scheme grammar), agentbox PRD-015 (consumer broadcast economy), solid-pod-rs ADR-059 (provenance primitives: block-trails + git-marks)
+**Supersedes/relates:** ADR-110 (ACSP elevation control surfaces), ADR-032 (embed solid-pod-rs), agentbox ADR-032 (402 scheme grammar), agentbox PRD-015 (consumer broadcast economy), solid-pod-rs ADR-059 (provenance primitives: block-trails + git-marks), **PRD-020 + ADR-112 (pervasive ontology↔agentbox augmentation — in design; this ADR registers its diagram requirements §4.6)**
 **Scope:** Six repos — `project` (VisionClaw/VisionFlow), `agentbox`, `nostr-rust-forum`, `solid-pod-rs`, `dreamlab-ai-website`, and the VisionFlow ecosystem pitch/website asset tree.
 
 > **EXECUTION NOTE (read first):** This ADR is an **audit + prompt-layout plan only**. No images are generated, edited, deleted, re-rendered, or committed as part of this ADR. Image generation/regeneration/removal is a **separate follow-up task** that the operator runs later (see §7). Everything below — verdicts, mermaid skeletons, Nano Banana prompts — is the specification that follow-up task will execute against.
@@ -26,6 +26,8 @@ The DreamLab AI ecosystem has shipped a substantially new feature set through 20
 Per the **operator remove-legacy mandate**, stale images that depict retired tech (Babylon/Vircadia, Neo4j, Telegram/CTM, generic 2024 crypto/metaverse stock, pre-economy SOLID positioning) are **REPLACED-AND-DELETED**, not kept in parallel. We do not maintain two truths.
 
 The good news from the six inventories: the **technical diagram corpus is largely current** (most VisionClaw `docs/diagrams/*`, the solid-pod-rs `.mmd` sources updated 2026-06-12, all forum diagrams already mermaid). The drift is concentrated in (a) **rendered PNG staleness** vs updated mermaid sources, (b) **marketing/hero art** built in May 2024 from generic stock, and (c) a few **retired-tech / duplicate** marketing assets. There are also **net-new gaps**: no diagram anywhere yet depicts block-trails/git-marks, the 402/webledger flow, or the agentic-mycelia mesh.
+
+A further **net-new gap is now in scope**: the **pervasive ontology↔agentbox augmentation** binding (PRD-020 / ADR-112, in design as of 2026-06-14) — the seam by which *every* agentbox AI call gains the option to query VisionClaw's Oxigraph/Whelk knowledge graph (~40M-word corpus, ~123k triples) without overflowing context. This is a structural ecosystem capability the visual layer must depict; its diagram requirement is registered at §4.6 (provisional skeleton) and reflected in the §4.5 ecosystem topology. The authoritative `.mmd` lands with PRD-020/ADR-112; until then §4.6 is a forward-reference, not a work order.
 
 ---
 
@@ -168,7 +170,7 @@ All 8 core diagrams live under `crates/solid-pod-rs/docs/diagrams/rendered/` wit
 |---|---|
 | KEEP / KEEP-ARCHIVAL / KEEP-HIDDEN / KEEP-IGNORE | ~560 (incl. ~390 vendor icons + ~72 website photos) |
 | REGEN-AS-MERMAID (re-render or supersede PNG) | **15** (8 solid-pod-rs + 7 VisionFlow) |
-| NEW mermaid (gap-fill) | **3+** (402/webledger, block-trails+git-marks, did:nostr) + ecosystem-topology + agentic-mycelia (this ADR §4) |
+| NEW mermaid (gap-fill) | **3+** (402/webledger, block-trails+git-marks, did:nostr) + ecosystem-topology + agentic-mycelia (this ADR §4) + **pervasive ontology augmentation (§4.6, provisional — authoritative source lands with PRD-020/ADR-112)** |
 | REGEN-AS-NANOBANANA | **~16** (10 website + 5 VisionFlow + 1 agentbox) |
 | REMOVE-STALE | **14** (11 VC `rendered/` + agentbox_old + octave-lab-2017 + vc-graph-product) |
 | REMOVE-DUPLICATE | **7** (6 pitch dupes + agentbox wizard-sections) |
@@ -354,6 +356,7 @@ flowchart TB
     BOX ---|"kind-31402 elevation"| FORUM
     FORUM ---|"relay events"| VC
     BOX ---|"broker bridge (X-Agent-Key)"| VC
+    BOX ===|"ontology augmentation: every AI call may query Oxigraph KG (OAS §4.6, PRD-020/ADR-112)"| VC
     VC ---|"KG views"| WEB
     FORUM ---|"zone heroes"| WEB
     VF -. narrates .- WEB
@@ -362,6 +365,51 @@ flowchart TB
     classDef teal fill:#1A6B6B,stroke:#0f4747,color:#fff
     class POD,VC teal
 ```
+
+### 4.6 Pervasive ontology augmentation — push/pull binding (provisional)
+
+> **Provisional — registers a diagram requirement, not yet a work order.** Target: project new `docs/diagrams/23-ontology-augmentation-binding.mmd`. The **authoritative** skeleton now lives in **PRD-020 §4** and **ADR-112** (both written 2026-06-14); when rendering, prefer PRD-020 §4 as the source of truth. Note the finalised decision: the "one brain" is a **shared in-process retrieval library** (`@agentbox/ontology-retrieval`) + a RuVector class index + an offline Haiku-condensation mesh under a Sonnet lead (ADR-113) — **not a standalone HTTP service** (ADR-112 §2.1). The shape below (a shared retrieval brain mediating a PUSH per-turn hook channel and a PULL MCP-tool channel, governed write kept separate) is correct at diagram altitude. Source of truth (current): `agentbox/mcp/servers/ontology-bridge.js`, `agentbox/config/hooks/claude-flow-hook-adapter.cjs`, VisionClaw `POST /api/ontology/sparql` + `GET /api/ontology/inferred` + `GET /api/graph/data`, RuVector HNSW (`mcp__claude-flow__memory_*`), `ontology-propose.js` / `kg-elevation.js` (governed write).
+
+```mermaid
+flowchart LR
+    subgraph BOX["agentbox — every AI-call site"]
+        CONS["consultants\n{zai,codex,deepseek,perplexity,antigravity}"]
+        SWARM["claude-flow / ruv-swarm / voyager / expel"]
+        HOOK["UserPromptSubmit hook\n(claude-flow-hook-adapter.cjs)"]
+    end
+
+    subgraph OAS["Ontology Augmentation Service — shared retrieval brain"]
+        LINK["entity-link prompt -> seed IRIs"]
+        RET["hybrid retrieve:\nRuVector HNSW + SPARQL k-hop"]
+        SUM["tiered summarise + terse serialise\n(token-budgeted per model tier)"]
+    end
+
+    subgraph VC["VisionClaw — read surfaces"]
+        SPARQL["POST /api/ontology/sparql\n(read-only validated, power_user)"]
+        INF["GET /api/ontology/inferred\n(Whelk EL++ closure)"]
+        GRAPH["GET /api/graph/data?graph_type=…"]
+        RUV[("RuVector HNSW\n(xinference embeddings)")]
+    end
+
+    HOOK ==>|"PUSH: per-turn budgeted snippet (only when relevant)"| OAS
+    CONS -->|"PULL: ontology_* MCP tools (ontology-bridge.js)"| OAS
+    SWARM -->|PULL| OAS
+    OAS --> LINK --> RET --> SUM
+    RET --> SPARQL
+    RET --> INF
+    RET --> GRAPH
+    RET --> RUV
+
+    GOV["GOVERNED WRITE — separate path, unchanged\nontology-propose.js -> Whelk -> human approval -> PR\n(kg-elevation.js; ADR-041/110); NO ungoverned /api/ontology/load"]
+    BOX -.->|"propose / elevate only"| GOV
+
+    classDef teal fill:#1A6B6B,stroke:#0f4747,color:#fff
+    classDef orange fill:#C85A2A,stroke:#8f3d1c,color:#fff
+    class OAS,RET teal
+    class GOV orange
+```
+
+Drift-checks to assert when this lands: `ontology-bridge.js` registered for ALL agents in `agentbox/mcp/mcp.json` (pervasive pull); the hook PUSH path emits a `[ONTOLOGY]`-style line through the existing `ROUTE_SIGNAL` allowlist; a per-turn token budget is enforced and logged (verifiability — avoid the PRD-018 silent-dead-wiring trap); the write path remains routed only through `ontology-propose.js`/`kg-elevation.js`.
 
 ---
 
@@ -435,6 +483,7 @@ Ready-to-run `/art` prompts (Nano Banana 2, `gemini-3.1-flash-image-preview`). E
 - **solid-pod-rs ADR-059** — `provenance-primitives-block-trails-git-marks` (ProvenanceTrail, BIP-341 anchor, write-as-commit).
 - **agentbox ADR-032** — 402 scheme grammar (`/home/devuser/workspace/project/agentbox/docs/reference/adr/ADR-032-402-scheme-grammar.md`).
 - **agentbox PRD-015** — consumer broadcast economy (`…/docs/reference/prd/PRD-015-consumer-broadcast-economy.md`).
+- **PRD-020 + ADR-112** (project, in design 2026-06-14) — pervasive ontology↔agentbox augmentation (Ontology Augmentation Service; push hook + pull MCP over Oxigraph/Whelk/RuVector). Authoritative source for the §4.6 diagram; this ADR registers the requirement, those docs supply the final `.mmd`.
 
 **Narrative seed**
 - *Agentic-mycelia value-transfer mesh*: sovereign pods as nodes, did:nostr agents as hyphae, block-trails as nutrient/signal flow, value (402/MRC20/L402) settled across the Nostr relay mesh, anchored to Bitcoin as the global trust ledger. Carried by §4.4 (diagram) and §5.1 (flagship hero).

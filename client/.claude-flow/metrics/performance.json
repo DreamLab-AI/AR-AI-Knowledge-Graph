@@ -1,144 +1,17 @@
 {
-  "timestamp": "2026-06-02T17:22:18.469Z",
-  "mode": "headless",
-  "workerType": "optimize",
-  "model": "sonnet",
-  "durationMs": 111856,
-  "executionId": "optimize_1780420826613_omofc7",
-  "success": true,
-  "findings": {
-    "sections": [
-      {
-        "title": "Performance Analysis",
-        "content": "\n",
-        "level": 2
-      },
-      {
-        "title": "1. N+1 Query Patterns",
-        "content": "\n**`endpoints.ts` — Read-modify-write on every partial update**\n\n`updatePhysics`, `updateConstraints`, and `updateRendering` each do a GET before every PUT. Calling two of them in the same flow costs 4 HTTP round-trips instead of 2.\n\n```ts\n// CURRENT — 2 requests per update\nexport const updatePhysics = async (settings: Partial<PhysicsSettings>) => {\n  const current = await axios.get(`/api/settings/physics`);         // GET\n  const merged = { ...current.data?.data ?? current.data, ...settings };\n  return axios.put(`/api/settings/physics`, merged);                // PUT\n};\n```\n\n```ts\n// FIX — Use the existing getAll cache; skip the GET\nconst _physicsCache: { data: PhysicsSettings | null } = { data: null };\n\nexport const updatePhysics = async (settings: Partial<PhysicsSettings>) => {\n  const base = _physicsCache.data ?? (await getPhysics()).data;\n  _physicsCache.data = { ...base, ...settings } as PhysicsSettings;\n  return axios.put(`/api/settings/physics`, _physicsCache.data);\n};\n```\n\n**`pod-provisioning.ts` — Serial container creation in loop**\n\n```ts\n// CURRENT — 4 sequential HTTP calls\nfor (const memoryType of memoryTypes) {\n  await createContainer(jssBaseUrl, `${podPath}agent-memory/${memoryType}/`);\n}\n```\n\n```ts\n// FIX — parallel\nawait Promise.all(\n  memoryTypes.map(t => createContainer(jssBaseUrl, `${podPath}agent-memory/${t}/`))\n);\n```\n\n---\n\n",
-        "level": 3
-      },
-      {
-        "title": "2. Unnecessary Re-renders",
-        "content": "\n**`analyticsApi.ts` — Class instantiated per component**\n\nIf `AnalyticsAPI` is `new`-ed inside a component body or an effect without a stable ref, a fresh WebSocket is opened on every render cycle.\n\n```tsx\n// CURRENT (likely usage pattern) — new instance on every render\nfunction GraphPanel() {\n  const api = new AnalyticsAPI();   // ← reopens WS each render\n  useEffect(() => { api.subscribeToTask(...) }, []);\n}\n```\n\n```tsx\n// FIX — stable singleton via module scope or useMemo\nconst analyticsApi = new AnalyticsAPI();   // module level\n\nfunction GraphPanel() {\n  useEffect(() => {\n    const unsub = analyticsApi.subscribeToTask(taskId, handler);\n    return () => unsub();   // cleanup on unmount\n  }, [taskId]);\n}\n```\n\n**`endpoints.ts` — Path string split on every settings write**\n\n`updateSettingsByPaths` calls `.split('.')` on every path on each invocation, allocating temporary arrays:\n\n```ts\n// CURRENT\nconst key = path.split('.')[2];   // new array every call\n```\n\n```ts\n// FIX — pre-split or use indexOf for single character\nconst dotIdx = path.indexOf('.');\nconst key = dotIdx === -1 ? path : path.slice(dotIdx + 1);\n```\n\n---\n\n",
-        "level": 3
-      },
-      {
-        "title": "3. Caching Opportunities",
-        "content": "\n**`endpoints.ts` — Individual endpoint responses not cached**\n\nOnly `getAll()` has a 2-second TTL. `getPhysics()`, `getConstraints()`, `getRendering()` each always hit the network, even though settings change infrequently.\n\n```ts\n// ADD — per-endpoint caches matching the existing getAll pattern\nconst CACHE_TTL_MS = 2000;\n\ntype CacheEntry<T> = { data: T; ts: number };\nconst _physicsCache: CacheEntry<PhysicsSettings> | null = null;\n// ... repeat for constraints, rendering\n\nexport const getPhysics = async (): Promise<AxiosResponse<PhysicsSettings>> => {\n  const now = Date.now();\n  if (_physicsCache && now - _physicsCache.ts < CACHE_TTL_MS) {\n    return { data: _physicsCache.data } as AxiosResponse<PhysicsSettings>;\n  }\n  const res = await axios.get<PhysicsSettings>('/api/settings/physics');\n  _physicsCache = { data: res.data, ts: now };\n  return res;\n};\n```\n\n**`constraintsApi.ts` — `list()` has no cache**\n\nConstraint lists are stable between user actions; fetching on every mount wastes bandwidth.\n\n```ts\n// ADD — stale-while-revalidate with 5s TTL\nlet _constraintCache: { data: ConstraintListResponse; ts: number } | null = null;\nconst CONSTRAINT_TTL = 5_000;\n\nexport const constraintsApi = {\n  list: async (): Promise<AxiosResponse<ConstraintListResponse>> => {\n    const now = Date.now();\n    if (_constraintCache && now - _constraintCache.ts < CONSTRAINT_TTL) {\n      return { data: _constraintCache.data } as AxiosResponse<ConstraintListResponse>;\n    }\n    const res = await axios.get<ConstraintListResponse>(`${API_BASE}/constraints/list`);\n    _constraintCache = { data: res.data, ts: now };\n    return res;\n  },\n  // ...\n};\n```\n\n---\n\n",
-        "level": 3
-      },
-      {
-        "title": "4. Memory Leaks",
-        "content": "\n**`analyticsApi.ts` — WebSocket + subscription Map without guaranteed cleanup**\n\nThe `taskSubscriptions` map accumulates callbacks. If a subscriber never calls the returned cleanup function, the entry lives for the lifetime of the `AnalyticsAPI` instance.\n\n```ts\n// CURRENT — leak if caller drops the unsubscribe reference\nsubscribeToTask(taskId: string, callback: (task: AnalysisTask) => void): () => void {\n  this.taskSubscriptions.set(taskId, callback);\n  // ...\n  return () => this.taskSubscriptions.delete(taskId);\n}\n```\n\n```ts\n// FIX — add a WeakRef-based or TTL-based eviction, plus a destroy() method\ndestroy(): void {\n  this.taskSubscriptions.clear();\n  this.websocket?.close();\n  this.websocket = null;\n}\n```\n\n**`exportApi.ts` — DOM node appended but only removed on success path**\n\n```ts\n// CURRENT — if link.click() throws, the <a> leaks into the DOM\ndocument.body.appendChild(link);\nlink.click();\ndocument.body.removeChild(link);   // never reached on exception\n```\n\n```ts\n// FIX — use try/finally\ndocument.body.appendChild(link);\ntry {\n  link.click();\n} finally {\n  document.body.removeChild(link);\n}\n```\n\n**`analyticsApi.ts` — `reconnectAttempts` not reset on clean close**\n\nIf the WebSocket closes cleanly after a prior failed reconnect, `reconnectAttempts` stays elevated and the next failure window is shorter than intended.\n\n```ts\n// ADD — reset in the onopen handler\nws.onopen = () => {\n  this.reconnectAttempts = 0;   // ← add this line\n  // existing subscription re-send logic\n};\n```\n\n---\n\n",
-        "level": 3
-      },
-      {
-        "title": "5. Redundant Computations",
-        "content": "\n**`agent-memory.test.ts` — `typeMap` objects allocated on every function call**\n\n```ts\n// CURRENT — two reverse-lookup maps rebuilt on each call\nfunction memoryToJsonLd(memory: Memory) {\n  const typeMap = { episodic: 'EpisodicMemory', ... };  // new object every call\n}\nfunction jsonLdToMemory(jsonLd) {\n  const typeMap = { EpisodicMemory: 'episodic', ... };  // new object every call\n}\n```\n\n```ts\n// FIX — module-level constants\nconst MEMORY_TYPE_TO_JSONLD: Record<Memory['type'], string> = {\n  episodic: 'EpisodicMemory',\n  semantic: 'SemanticMemory',\n  procedural: 'ProceduralMemory',\n  session: 'SessionMemory',\n};\nconst JSONLD_TO_MEMORY_TYPE = Object.fromEntries(\n  Object.entries(MEMORY_TYPE_TO_JSONLD).map(([k, v]) => [v, k])\n) as Record<string, Memory['type']>;\n```\n\n**`constraintsApi.ts` — `getConstraintTypeName` rebuilds array every call**\n\n```ts\n// CURRENT\nexport const getConstraintTypeName = (type: number): string => {\n  const names = ['None', 'Separation', 'Boundary', 'Alignment', 'Cluster'];  // new array\n  return names[type] || 'Unknown';\n};\n```\n\n```ts\n// FIX\nconst CONSTRAINT_TYPE_NAMES = ['None', 'Separation', 'Boundary', 'Alignment', 'Cluster'] as const;\nexport const getConstraintTypeName = (type: number): string =>\n  CONSTRAINT_TYPE_NAMES[type] ?? 'Unknown';\n```\n\n**`schemaMappings.ts` — `deepMergeVisual` called with empty fallback objects**\n\nWhen the server returns no visual data, `v.glow || {}` passes a fresh `{}` into `deepMergeVisual`, which then iterates the entire defaults object to copy it — wasted work.\n\n```ts\n// CURRENT — always merges even when server provides nothing\nglow: deepMergeVisual(DEFAULT_GLOW_SETTINGS, v.glow || {}),\n```\n\n```ts\n// FIX — short-circuit when stored is empty\nglow: v.glow && Object.keys(v.glow).length > 0\n  ? deepMergeVisual(DEFAULT_GLOW_SETTINGS, v.glow)\n  : { ...DEFAULT_GLOW_SETTINGS },\n```\n\n**`workspaceApi.ts` — `searchParams.toString()` called twice**\n\n```ts\n// CURRENT\nconst url = `/list${searchParams.toString() ? `?${searchParams}` : ''}`;\n```\n\n```ts\n// FIX\nconst qs = searchParams.toString();\nconst url = qs ? `/list?${qs}` : '/list';\n```\n\n---\n\n",
-        "level": 3
-      },
-      {
-        "title": "Priority Order",
-        "content": "| # | Issue | Impact | Effort |\n|---|-------|--------|--------|\n| 1 | Serial container creation in `provisionUserPod` | High — 4× latency for pod setup | 1 line |\n| 2 | `AnalyticsAPI` no `destroy()` / leak on WS | High — unbounded growth in long sessions | Small |\n| 3 | `exportApi` DOM leak on exception | Medium — leaks `<a>` in error paths | 1 line |\n| 4 | Read-modify-write in `updatePhysics` etc. | Medium — doubles network cost per settings save | Small |\n| 5 | `typeMap`/`names` array per call | Low-medium — affects hot paths in test/transform code | Trivial |\n| 6 | Missing per-endpoint caches | Low — avoids redundant fetches in settings panels | Small |\n| 7 | `deepMergeVisual` with empty object | Low — wasted iteration on cold start | Trivial |",
-        "level": 3
-      }
-    ],
-    "codeBlocks": [
-      {
-        "language": "ts",
-        "code": "// CURRENT — 2 requests per update\nexport const updatePhysics = async (settings: Partial<PhysicsSettings>) => {\n  const current = await axios.get(`/api/settings/physics`);         // GET\n  const merged = { ...current.data?.data ?? current.data, ...settings };\n  return axios.put(`/api/settings/physics`, merged);                // PUT\n};"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — Use the existing getAll cache; skip the GET\nconst _physicsCache: { data: PhysicsSettings | null } = { data: null };\n\nexport const updatePhysics = async (settings: Partial<PhysicsSettings>) => {\n  const base = _physicsCache.data ?? (await getPhysics()).data;\n  _physicsCache.data = { ...base, ...settings } as PhysicsSettings;\n  return axios.put(`/api/settings/physics`, _physicsCache.data);\n};"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT — 4 sequential HTTP calls\nfor (const memoryType of memoryTypes) {\n  await createContainer(jssBaseUrl, `${podPath}agent-memory/${memoryType}/`);\n}"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — parallel\nawait Promise.all(\n  memoryTypes.map(t => createContainer(jssBaseUrl, `${podPath}agent-memory/${t}/`))\n);"
-      },
-      {
-        "language": "tsx",
-        "code": "// CURRENT (likely usage pattern) — new instance on every render\nfunction GraphPanel() {\n  const api = new AnalyticsAPI();   // ← reopens WS each render\n  useEffect(() => { api.subscribeToTask(...) }, []);\n}"
-      },
-      {
-        "language": "tsx",
-        "code": "// FIX — stable singleton via module scope or useMemo\nconst analyticsApi = new AnalyticsAPI();   // module level\n\nfunction GraphPanel() {\n  useEffect(() => {\n    const unsub = analyticsApi.subscribeToTask(taskId, handler);\n    return () => unsub();   // cleanup on unmount\n  }, [taskId]);\n}"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT\nconst key = path.split('.')[2];   // new array every call"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — pre-split or use indexOf for single character\nconst dotIdx = path.indexOf('.');\nconst key = dotIdx === -1 ? path : path.slice(dotIdx + 1);"
-      },
-      {
-        "language": "ts",
-        "code": "// ADD — per-endpoint caches matching the existing getAll pattern\nconst CACHE_TTL_MS = 2000;\n\ntype CacheEntry<T> = { data: T; ts: number };\nconst _physicsCache: CacheEntry<PhysicsSettings> | null = null;\n// ... repeat for constraints, rendering\n\nexport const getPhysics = async (): Promise<AxiosResponse<PhysicsSettings>> => {\n  const now = Date.now();\n  if (_physicsCache && now - _physicsCache.ts < CACHE_TTL_MS) {\n    return { data: _physicsCache.data } as AxiosResponse<PhysicsSettings>;\n  }\n  const res = await axios.get<PhysicsSettings>('/api/settings/physics');\n  _physicsCache = { data: res.data, ts: now };\n  return res;\n};"
-      },
-      {
-        "language": "ts",
-        "code": "// ADD — stale-while-revalidate with 5s TTL\nlet _constraintCache: { data: ConstraintListResponse; ts: number } | null = null;\nconst CONSTRAINT_TTL = 5_000;\n\nexport const constraintsApi = {\n  list: async (): Promise<AxiosResponse<ConstraintListResponse>> => {\n    const now = Date.now();\n    if (_constraintCache && now - _constraintCache.ts < CONSTRAINT_TTL) {\n      return { data: _constraintCache.data } as AxiosResponse<ConstraintListResponse>;\n    }\n    const res = await axios.get<ConstraintListResponse>(`${API_BASE}/constraints/list`);\n    _constraintCache = { data: res.data, ts: now };\n    return res;\n  },\n  // ...\n};"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT — leak if caller drops the unsubscribe reference\nsubscribeToTask(taskId: string, callback: (task: AnalysisTask) => void): () => void {\n  this.taskSubscriptions.set(taskId, callback);\n  // ...\n  return () => this.taskSubscriptions.delete(taskId);\n}"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — add a WeakRef-based or TTL-based eviction, plus a destroy() method\ndestroy(): void {\n  this.taskSubscriptions.clear();\n  this.websocket?.close();\n  this.websocket = null;\n}"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT — if link.click() throws, the <a> leaks into the DOM\ndocument.body.appendChild(link);\nlink.click();\ndocument.body.removeChild(link);   // never reached on exception"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — use try/finally\ndocument.body.appendChild(link);\ntry {\n  link.click();\n} finally {\n  document.body.removeChild(link);\n}"
-      },
-      {
-        "language": "ts",
-        "code": "// ADD — reset in the onopen handler\nws.onopen = () => {\n  this.reconnectAttempts = 0;   // ← add this line\n  // existing subscription re-send logic\n};"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT — two reverse-lookup maps rebuilt on each call\nfunction memoryToJsonLd(memory: Memory) {\n  const typeMap = { episodic: 'EpisodicMemory', ... };  // new object every call\n}\nfunction jsonLdToMemory(jsonLd) {\n  const typeMap = { EpisodicMemory: 'episodic', ... };  // new object every call\n}"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — module-level constants\nconst MEMORY_TYPE_TO_JSONLD: Record<Memory['type'], string> = {\n  episodic: 'EpisodicMemory',\n  semantic: 'SemanticMemory',\n  procedural: 'ProceduralMemory',\n  session: 'SessionMemory',\n};\nconst JSONLD_TO_MEMORY_TYPE = Object.fromEntries(\n  Object.entries(MEMORY_TYPE_TO_JSONLD).map(([k, v]) => [v, k])\n) as Record<string, Memory['type']>;"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT\nexport const getConstraintTypeName = (type: number): string => {\n  const names = ['None', 'Separation', 'Boundary', 'Alignment', 'Cluster'];  // new array\n  return names[type] || 'Unknown';\n};"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX\nconst CONSTRAINT_TYPE_NAMES = ['None', 'Separation', 'Boundary', 'Alignment', 'Cluster'] as const;\nexport const getConstraintTypeName = (type: number): string =>\n  CONSTRAINT_TYPE_NAMES[type] ?? 'Unknown';"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT — always merges even when server provides nothing\nglow: deepMergeVisual(DEFAULT_GLOW_SETTINGS, v.glow || {}),"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX — short-circuit when stored is empty\nglow: v.glow && Object.keys(v.glow).length > 0\n  ? deepMergeVisual(DEFAULT_GLOW_SETTINGS, v.glow)\n  : { ...DEFAULT_GLOW_SETTINGS },"
-      },
-      {
-        "language": "ts",
-        "code": "// CURRENT\nconst url = `/list${searchParams.toString() ? `?${searchParams}` : ''}`;"
-      },
-      {
-        "language": "ts",
-        "code": "// FIX\nconst qs = searchParams.toString();\nconst url = qs ? `/list?${qs}` : '/list';"
-      }
-    ]
+  "timestamp": "2026-06-08T08:11:04.540Z",
+  "mode": "local",
+  "memoryUsage": {
+    "rss": 73035776,
+    "heapTotal": 22962176,
+    "heapUsed": 16762456,
+    "external": 2281788,
+    "arrayBuffers": 17193
   },
-  "rawOutputPreview": "Good analysis. Now I'll compile the full findings into actionable recommendations.\n\n---\n\n## Performance Analysis\n\n### 1. N+1 Query Patterns\n\n**`endpoints.ts` — Read-modify-write on every partial update**\n\n`updatePhysics`, `updateConstraints`, and `updateRendering` each do a GET before every PUT. Calling two of them in the same flow costs 4 HTTP round-trips instead of 2.\n\n```ts\n// CURRENT — 2 requests per update\nexport const updatePhysics = async (settings: Partial<PhysicsSettings>) => {\n  const current = await axios.get(`/api/settings/physics`);         // GET\n  const merged = { ...current.data?.data ?? current.data, ...settings };\n  return axios.put(`/api/settings/physics`, merged);                // PUT\n};\n```\n\n```ts\n// FIX — Use the existing getAll cache; skip the GET\nconst _physicsCache: { data: PhysicsSettings | null } = { data: null };\n\nexport const updatePhysics = async (settings: Partial<PhysicsSettings>) => {\n  const base = _physicsCache.data ?? (await getPhysics()).data;\n  _physicsCache.data = { ...base, ...settings } as PhysicsSettings;\n  return axios.put(`/api/settings/physics`, _physicsCache.data);\n};\n```\n\n**`pod-provisioning.ts` — Serial container creation in loop**\n\n```ts\n// CURRENT — 4 sequential HTTP calls\nfor (const memoryType of memoryTypes) {\n  await createContainer(jssBaseUrl, `${podPath}agent-memory/${memoryType}/`);\n}\n```\n\n```ts\n// FIX — parallel\nawait Promise.all(\n  memoryTypes.map(t => createContainer(jssBaseUrl, `${podPath}agent-memory/${t}/`))\n);\n```\n\n---\n\n### 2. Unnecessary Re-renders\n\n**`analyticsApi.ts` — Class instantiated per component**\n\nIf `AnalyticsAPI` is `new`-ed inside a component body or an effect without a stable ref, a fresh WebSocket is opened on every render cycle.\n\n```tsx\n// CURRENT (likely usage pattern) — new instance on every render\nfunction GraphPanel() {\n  const api = new AnalyticsAPI();   // ← reopens WS each render\n  useEffect(() => { api.subscribeToTask(...) }, []);\n}\n```\n\n```tsx\n// FIX — stable singleton via modul",
-  "rawOutputLength": 8826
+  "uptime": 220399.019653933,
+  "optimizations": {
+    "cacheHitRate": 0.78,
+    "avgResponseTime": 45
+  },
+  "note": "Install Claude Code CLI for AI-powered optimization suggestions"
 }
