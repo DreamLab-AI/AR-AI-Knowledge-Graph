@@ -887,6 +887,13 @@ async fn main() -> std::io::Result<()> {
                             .wrap(RateLimit::per_minute(60))
                             .configure(visionclaw_server::settings::api::configure_routes)
                     )
+                    // WS-9: register /ontology/derived BEFORE api_handler::config.
+                    // actix scopes match in registration order by path segment, and
+                    // the /ontology scope (inside api_handler::config) would otherwise
+                    // shadow /ontology/derived → 404. Registering the more-specific
+                    // scope first lets /api/ontology/derived match correctly while
+                    // /api/ontology/* still falls through to the /ontology scope.
+                    .configure(visionclaw_server::handlers::configure_ontology_derived_routes)
                     .configure(api_handler::config)
                     .configure(workspace_handler::config)
                     .configure(admin_sync_handler::configure_routes)
@@ -934,6 +941,12 @@ async fn main() -> std::io::Result<()> {
 
                     // Enrichment-proposals broker write-back (governance decisions)
                     .configure(visionclaw_server::handlers::configure_enrichment_proposals_routes)
+
+                    // (WS-9 derived ontology graphs registered earlier — before
+                    // api_handler::config — to avoid the /ontology scope shadowing it.)
+
+                    // Broker inbox read surface (WS-12) — agentbox broker-bridge
+                    .configure(visionclaw_server::handlers::configure_broker_inbox_routes)
 
                     // Layout mode system (ADR-031)
                     .configure(visionclaw_server::handlers::configure_layout_routes)

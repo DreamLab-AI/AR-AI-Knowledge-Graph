@@ -48,10 +48,15 @@ pub use gpu_semantic_analyzer::GpuSemanticAnalyzerAdapter;
 // Canonical persistence adapters (ADR-11)
 pub mod oxigraph_graph_repository;
 pub mod sqlite_settings_repository;
+// WS-9: durable EnrichmentProposal lifecycle store (data/enrichment.sqlite3)
+pub mod sqlite_enrichment_repository;
 
 pub use oxigraph_ontology_repository::OxigraphOntologyRepository;
 pub use oxigraph_graph_repository::OxigraphGraphRepository;
 pub use sqlite_settings_repository::SqliteSettingsRepository;
+pub use sqlite_enrichment_repository::{
+    EnrichmentProposal, EnrichmentStoreError, SqliteEnrichmentRepository, StoredDecision,
+};
 
 pub use whelk_inference_engine::WhelkInferenceEngine;
 

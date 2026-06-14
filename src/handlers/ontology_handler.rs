@@ -888,67 +888,17 @@ pub async fn get_ontology_metrics(state: web::Data<AppState>) -> Result<HttpResp
     }
 }
 
-/// S1 + S2: previously this `/ontology` scope was mounted with NO auth wrapper,
-/// exposing schema-rewrite mutators (class/property/axiom POST/PUT/DELETE,
-/// full-graph save) and the raw SPARQL `/query` endpoint to anonymous callers.
-///
-/// We split it:
-///   * power_user (Admin) — every operation that rewrites the ontology
-///     (save graph, create/update/delete classes & properties, add/remove
-///     axioms, store inference results) plus the SPARQL `/query` endpoint
-///     (defence in depth: it is additionally validated to read-only SPARQL by
-///     `validate_read_only_sparql`, but it can still touch the store, so it is
-///     not anonymous).
-///   * authenticated — read-only inspection (GET listings, single-entity reads,
-///     validation report, metrics, hierarchy).
-///
-/// The power_user scope is registered first so its specific mutating routes win;
-/// the authenticated scope picks up the remaining read routes under the same
-/// `/ontology` prefix.
-pub fn config(cfg: &mut web::ServiceConfig) {
-    use crate::middleware::RequireAuth;
-
-    // Single `/ontology` scope: actix-web does NOT fall through duplicate-prefix
-    // scopes, so reads and mutators must share one scope. `mutations_only()` gates
-    // POST/PUT/DELETE (state-changing ops + the SPARQL /query endpoint) at
-    // power_user while leaving GET reads public — preserving the original
-    // anonymous read behaviour the client's ontology views depend on.
-    cfg.service(
-        web::scope("/ontology")
-            .wrap(RequireAuth::power_user().mutations_only())
-
-            // Mutating / SPARQL ops — power_user (enforced by mutations_only)
-            .route("/graph", web::post().to(save_ontology_graph))
-            .route("/classes", web::post().to(add_owl_class))
-            .route("/classes/{iri}", web::put().to(update_owl_class))
-            .route("/classes/{iri}", web::delete().to(remove_owl_class))
-            .route("/properties", web::post().to(add_owl_property))
-            .route("/properties/{iri}", web::put().to(update_owl_property))
-            .route("/axioms", web::post().to(add_axiom))
-            .route("/axioms/{id}", web::delete().to(remove_axiom))
-            .route("/inference", web::post().to(store_inference_results))
-            .route("/query", web::post().to(query_ontology))
-            // WS-4: read-only SPARQL passthrough. POST (carries a body) so it is
-            // power_user-gated by `mutations_only()` for defence in depth, and
-            // additionally validated to read-only SPARQL by
-            // `validate_read_only_sparql` before reaching Oxigraph.
-            .route("/sparql", web::post().to(sparql_query))
-
-            // Read-only inspection — public (safe methods bypass auth)
-            .route("/graph", web::get().to(get_ontology_graph))
-            // WS-4: inferred named graph for the InferencePanel (safe GET).
-            .route("/inferred", web::get().to(get_inferred_graph))
-            .route("/classes", web::get().to(list_owl_classes))
-            .route("/classes/{iri}", web::get().to(get_owl_class))
-            .route("/classes/{iri}/axioms", web::get().to(get_class_axioms))
-            .route("/properties", web::get().to(list_owl_properties))
-            .route("/properties/{iri}", web::get().to(get_owl_property))
-            .route("/inference", web::get().to(get_inference_results))
-            .route("/validate", web::get().to(validate_ontology))
-            .route("/metrics", web::get().to(get_ontology_metrics))
-            .route("/hierarchy", web::get().to(get_class_hierarchy)),
-    );
-}
+// WS-0: the `/ontology` scope previously declared here is REMOVED. actix-web
+// does not fall through duplicate-prefix scopes, and a second `web::scope(
+// "/ontology")` was simultaneously mounted by api_handler::ontology::config.
+// Both routing tables are now collapsed into the single canonical scope in
+// `crate::handlers::api_handler::ontology::config`, which imports the read /
+// mutate handlers below and gates every state-changing op at power_user via
+// `RequireAuth::power_user().mutations_only()`. The handler fns
+// (`save_ontology_graph`..`get_class_hierarchy`, `query_ontology`,
+// `sparql_query`, `get_inferred_graph`, `validate_ontology`, etc.) remain `pub`
+// here and are re-used from that scope; `validate_read_only_sparql` and its
+// tests also remain. There is no longer a `config` fn in this module.
 
 #[cfg(test)]
 mod sparql_validation_tests {

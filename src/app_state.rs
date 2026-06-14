@@ -9,7 +9,10 @@ use std::sync::{
 use tokio::sync::RwLock;
 
 // Oxigraph adapters — canonical persistence layer (ADR-11)
-use crate::adapters::{OxigraphGraphRepository, OxigraphOntologyRepository, SqliteSettingsRepository};
+use crate::adapters::{
+    OxigraphGraphRepository, OxigraphOntologyRepository, SqliteEnrichmentRepository,
+    SqliteSettingsRepository,
+};
 
 // CQRS Phase 1D: Graph domain imports
 use crate::adapters::actor_graph_repository::ActorGraphRepository;
@@ -304,6 +307,11 @@ pub struct AppState {
     // Concrete SQLite settings repository for user-specific operations (filters, etc.) — ADR-11
     pub sqlite_settings_repository: Arc<SqliteSettingsRepository>,
 
+    // WS-9: durable EnrichmentProposal lifecycle store (data/enrichment.sqlite3).
+    // Separate DB file from settings.sqlite3 to isolate the single-writer posture
+    // and keep WS-9 migrations independent.
+    pub sqlite_enrichment_repository: Arc<SqliteEnrichmentRepository>,
+
     // Oxigraph graph repository — canonical knowledge graph store (ADR-11)
     pub graph_adapter: Arc<OxigraphGraphRepository>,
 
@@ -393,6 +401,20 @@ impl AppState {
         let sqlite_settings_repository = sqlite_settings_repo;
         let ontology_repository = onto_repo;
         let graph_adapter = graph_repo;
+
+        // WS-9: durable EnrichmentProposal store — SEPARATE db file so its
+        // single-writer posture + migrations stay isolated from settings.sqlite3.
+        let enrichment_db_path = std::path::Path::new(&data_dir).join("enrichment.sqlite3");
+        let sqlite_enrichment_repository = Arc::new(
+            SqliteEnrichmentRepository::open(&enrichment_db_path)
+                .await
+                .map_err(|e| format!("Failed to open SQLite enrichment store: {}", e))?,
+        );
+        // Install the process-global handle so the WS-12 broker read accessors
+        // (`enrichment_proposals_handler::store::{all,get}`) reach the SAME store.
+        crate::handlers::enrichment_proposals_handler::store::init(
+            sqlite_enrichment_repository.clone(),
+        );
 
         info!("[AppState::new] Oxigraph + SQLite repositories initialized successfully");
         info!("[AppState::new] Database and settings service initialized successfully");
@@ -1136,6 +1158,7 @@ impl AppState {
 
             settings_repository,
             sqlite_settings_repository,
+            sqlite_enrichment_repository,
 
             graph_adapter,
 

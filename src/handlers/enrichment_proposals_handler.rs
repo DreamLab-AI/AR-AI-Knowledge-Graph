@@ -1,43 +1,42 @@
 //! Enrichment-proposals governance decision endpoint — closes the broker
-//! write-back loop.
+//! write-back loop with a DURABLE store and a REAL KG write.
 //!
-//! agentbox `management-api/routes/broker-bridge.js:356` POSTs broker decisions
-//! to VisionClaw at `POST /api/enrichment-proposals/:id/decide`. Before this
-//! handler that route had **zero** matches in `src/` — the broker's write-back
-//! call was a call into the void (HTTP 404), so governed elevation could be
-//! decided on the agentbox side but never recorded on the VisionClaw side.
-//!
-//! The durable proposal/KG store is not reachable on `main` yet (the
-//! `EnrichmentProposal` aggregate has not merged), so per the close-the-loop
-//! mandate this handler does the next-best, non-lossy thing: it
+//! agentbox `management-api/routes/broker-bridge.js:361` POSTs broker decisions
+//! to VisionClaw at `POST /api/enrichment-proposals/:id/decide`. This handler
 //!   1. validates the broker decision payload,
 //!   2. mints PROV-O provenance URNs through the converged `crate::uri` minter
 //!      (an `execution` activity URN content-addressed over the decision, and a
-//!      `kg` proposal URN when the broker pubkey scopes it), and
-//!   3. persists the decision into a process-global [`decision_log`] and
-//!      broadcasts an `enrichment_decision` event to every connected client so
-//!      the audit surface observes it.
+//!      `kg` proposal URN when the broker pubkey scopes it),
+//!   3. PERSISTS the decision into the durable [`SqliteEnrichmentRepository`]
+//!      (`data/enrichment.sqlite3`) — INSERT decision + UPDATE proposal status,
+//!      atomically — and
+//!   4. on an *attributed approval*, performs a REAL fenced Oxigraph write into
+//!      `:summary` via [`OxigraphOntologyRepository::append_derived_summary`],
+//!      then flips `writeback_committed`.
 //!
-//! When the durable store lands, step 3 becomes "apply to the proposal/KG
-//! aggregate"; the wire contract and provenance minting are already correct.
+//! ## writeback_triggered vs writeback_committed
+//!
+//! The previous in-memory ghost (a `Lazy<Mutex<Vec>>` + a `writeback_triggered`
+//! flag) CLAIMED a write-back but performed no write — `triggered` was a lie.
+//! That is deleted. Now the two facts are separated and both persisted:
+//!   * `writeback_triggered` — outcome qualifies (approve) AND attributed.
+//!   * `writeback_committed`  — the Oxigraph derived write actually returned Ok.
+//! The agentbox broker-bridge should key true closure off `committed`.
+//!
+//! Unattributed approvals are recorded durably (status transitions) but
+//! `writeback_committed` stays `false`: there is no owner DID to scope an
+//! owner-less KG node, so no fact is written. This preserves the loop while
+//! refusing to write owner-less facts — by design, not a bug.
 
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::{debug, info, warn};
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
-use tokio::sync::broadcast;
 
 use crate::actors::messages::BroadcastMessage;
 use crate::actors::ClientCoordinatorActor;
+use crate::adapters::sqlite_enrichment_repository::{EnrichmentProposal as StoredProposal, StoredDecision};
 use crate::uri;
-
-/// Decisions that trigger a KG write-back on approval. Mirrors the agentbox
-/// `WRITEBACK_DECISIONS` set so both sides agree on which outcomes mutate the KG.
-const WRITEBACK_DECISIONS: &[&str] = &["approve", "approved", "accept", "accepted"];
-
-/// Bounded audit fan-out buffer (same posture as `agent_events::hub`).
-const DECISION_HUB_CAPACITY: usize = 256;
+use crate::AppState;
 
 /// Broker decision payload (the exact body agentbox broker-bridge POSTs).
 #[derive(Debug, Clone, Deserialize)]
@@ -56,6 +55,18 @@ pub struct BrokerDecisionRequest {
     pub reasoning: Option<String>,
 }
 
+/// Classify an outcome → `(writeback, status)`. `writeback` is true for
+/// approval verbs; `status` is the coarse decided sub-state mirrored from the
+/// durable store's mapping. Shared by `record_decision` and the persistence path.
+fn classify(outcome: &str) -> (bool, &'static str) {
+    let o = outcome.trim().to_ascii_lowercase();
+    match o.as_str() {
+        "approve" | "approved" | "accept" | "accepted" | "promote" => (true, "approved"),
+        s if s.starts_with("reject") => (false, "rejected"),
+        _ => (false, "reviewed"),
+    }
+}
+
 /// A recorded governance decision (the durable audit record).
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct RecordedDecision {
@@ -65,7 +76,8 @@ pub struct RecordedDecision {
     pub attributed: bool,
     pub broker_pubkey: Option<String>,
     pub reasoning: Option<String>,
-    /// Whether this outcome triggers a KG write-back.
+    /// Whether this outcome triggers a KG write-back (approve + later gated on
+    /// attribution at the write site).
     pub writeback_triggered: bool,
     /// PROV-O activity URN (`urn:visionclaw:execution:<sha256-12>`).
     pub activity_urn: String,
@@ -76,13 +88,16 @@ pub struct RecordedDecision {
     pub decided_at_ms: u64,
 }
 
-/// JSON response — mirrors the shape the agentbox broker-bridge expects.
+/// JSON response — mirrors the shape the agentbox broker-bridge expects, now
+/// with the truthful `writeback_committed` bit alongside `writeback_triggered`.
 #[derive(Debug, Serialize)]
 struct DecideResponse {
     success: bool,
     decision: String,
     attributed: bool,
     writeback_triggered: bool,
+    /// True only when the Oxigraph derived write actually landed.
+    writeback_committed: bool,
     activity_urn: String,
     proposal_urn: Option<String>,
     owner_did: Option<String>,
@@ -96,26 +111,6 @@ struct DecisionBroadcast<'a> {
     data: &'a RecordedDecision,
 }
 
-/// Process-global durable decision log. Mirrors the `agent_events::hub`
-/// singleton posture rather than threading a field through `AppState`. When the
-/// `EnrichmentProposal` aggregate merges, reads here migrate to that store.
-static DECISION_LOG: Lazy<Mutex<Vec<RecordedDecision>>> = Lazy::new(|| Mutex::new(Vec::new()));
-
-/// Audit fan-out channel: every recorded decision is published here so a future
-/// audit-trail subscriber can observe the signed/unsigned distinction.
-static DECISION_HUB: Lazy<broadcast::Sender<RecordedDecision>> =
-    Lazy::new(|| broadcast::channel(DECISION_HUB_CAPACITY).0);
-
-/// Subscribe to the recorded-decision audit stream.
-pub fn subscribe() -> broadcast::Receiver<RecordedDecision> {
-    DECISION_HUB.subscribe()
-}
-
-/// Number of decisions recorded so far (audit-surface read).
-pub fn decision_count() -> usize {
-    DECISION_LOG.lock().map(|g| g.len()).unwrap_or(0)
-}
-
 /// Shared service credential for unattended service-to-service callers. Mirrors
 /// the established sibling pattern in `image_gen_handler::agent_key` so the
 /// agentbox broker-bridge authenticates against the same `VISIONCLAW_AGENT_KEY`
@@ -124,9 +119,8 @@ fn agent_key() -> String {
     std::env::var("VISIONCLAW_AGENT_KEY").unwrap_or_else(|_| "changeme-agent-key".to_string())
 }
 
-/// Constant-time-ish equality on the presented `X-Agent-Key`. Returns `Ok(())`
-/// when the request bears the valid service credential, else an `Unauthorized`
-/// response the caller can short-circuit on.
+/// Returns `Ok(())` when the request bears the valid service credential, else
+/// an `Unauthorized` response the caller can short-circuit on.
 fn require_agent_key(req: &HttpRequest) -> Result<(), HttpResponse> {
     let provided = req
         .headers()
@@ -151,7 +145,7 @@ fn now_ms() -> u64 {
 }
 
 /// Pure core: validate + mint provenance + build the durable record. Unit-
-/// testable without the actix actor (mirrors `agent_events::ingest::process_frame`).
+/// testable without the actix actor or the store.
 pub(crate) fn record_decision(
     case_id: &str,
     req: &BrokerDecisionRequest,
@@ -164,16 +158,13 @@ pub(crate) fn record_decision(
         return Err("empty decision outcome");
     }
 
-    let writeback_triggered = WRITEBACK_DECISIONS
-        .iter()
-        .any(|d| d.eq_ignore_ascii_case(outcome));
+    let (writeback_triggered, _status) = classify(outcome);
 
     // Attribution: a structurally-valid 64-hex pubkey ⇒ attributed. A malformed
     // or absent pubkey is recorded as unattributed rather than rejected.
     let (attributed, owner_did, proposal_urn) = match req.broker_pubkey.as_deref() {
         Some(pk) if uri::is_pubkey_hex(pk) => {
             let did = uri::did_nostr(pk).ok();
-            // The proposal node, owner-scoped + content-addressed on the case.
             let kg = uri::kg(pk, format!("enrichment-proposal:{case_id}")).ok();
             (true, did, kg)
         }
@@ -201,17 +192,32 @@ pub(crate) fn record_decision(
     })
 }
 
+/// Build the summary triples emitted into `:summary` on an approved + attributed
+/// decision. Uses the minted proposal URN as the subject so the KG node is
+/// owner-scoped + content-addressed.
+fn summary_triples_for(record: &RecordedDecision) -> Vec<(String, String, String)> {
+    const P_ENRICHMENT_DECISION: &str =
+        "https://narrativegoldmine.com/ns/v1#enrichmentDecision";
+    let subject = record
+        .proposal_urn
+        .clone()
+        .unwrap_or_else(|| format!("urn:ngm:enrichment-proposal:{}", record.case_id));
+    vec![(
+        subject,
+        P_ENRICHMENT_DECISION.to_string(),
+        record.outcome.clone(),
+    )]
+}
+
 /// `POST /api/enrichment-proposals/{id}/decide`.
 pub async fn decide(
     req: HttpRequest,
     path: web::Path<String>,
     body: web::Json<BrokerDecisionRequest>,
+    state: web::Data<AppState>,
     client_coordinator: web::Data<actix::Addr<ClientCoordinatorActor>>,
 ) -> HttpResponse {
-    // Gate first: this mutating governance route is a service-to-service call
-    // from the agentbox broker-bridge, not the human UI (no client/src caller).
-    // Require the established service credential before any decision is recorded,
-    // broadcast, or attributed — closes the unauthenticated write-back loop.
+    // Gate first: service-to-service call from the agentbox broker-bridge.
     if let Err(resp) = require_agent_key(&req) {
         return resp;
     }
@@ -229,15 +235,81 @@ pub async fn decide(
         }
     };
 
-    // Persist into the process-global decision log (durable for this process;
-    // migrates to the EnrichmentProposal aggregate when it merges).
-    if let Ok(mut log) = DECISION_LOG.lock() {
-        log.push(record.clone());
+    let repo = &state.sqlite_enrichment_repository;
+
+    // Ensure a proposal row exists. The broker may decide a case VisionClaw has
+    // not ingested yet — create a pending stub so the lifecycle stays closed.
+    if matches!(repo.get(&case_id).await, Ok(None)) {
+        let stub = StoredProposal {
+            case_id: case_id.clone(),
+            category: Some("knowledge_enrichment".to_string()),
+            source_iri: record.proposal_urn.clone(),
+            proposal_json: serde_json::json!({
+                "broker_pubkey": record.broker_pubkey,
+                "reasoning": record.reasoning,
+            }),
+            status: "pending".to_string(),
+            created_at: 0,
+            updated_at: 0,
+        };
+        if let Err(e) = repo.create_or_update(&stub).await {
+            warn!("[enrichment-decide] stub create failed case={case_id}: {e}");
+        }
     }
 
-    // Publish to the audit stream + broadcast to connected clients so the loop
-    // is observable, not a silent recording.
-    let _ = DECISION_HUB.send(record.clone());
+    // Persist the decision (atomic INSERT decision + UPDATE proposal.status).
+    let stored = StoredDecision {
+        case_id: case_id.clone(),
+        outcome: record.outcome.clone(),
+        attributed: record.attributed,
+        broker_pubkey: record.broker_pubkey.clone(),
+        reasoning: record.reasoning.clone(),
+        writeback_triggered: record.writeback_triggered,
+        writeback_committed: false,
+        activity_urn: record.activity_urn.clone(),
+        proposal_urn: record.proposal_urn.clone(),
+        owner_did: record.owner_did.clone(),
+        decided_at_ms: record.decided_at_ms as i64,
+    };
+    if let Err(e) = repo.record_decision(&stored).await {
+        warn!("[enrichment-decide] persist failed case={case_id}: {e}");
+        return HttpResponse::InternalServerError().json(serde_json::json!({
+            "success": false,
+            "error": format!("failed to persist decision: {e}"),
+        }));
+    }
+
+    // REAL write-back: on an attributed approval, write the fenced summary into
+    // Oxigraph :summary, then mark committed. Unattributed approvals are
+    // recorded but NOT written (no owner DID to scope an owner-less KG node).
+    let mut writeback_committed = false;
+    if record.writeback_triggered && record.attributed {
+        match state
+            .ontology_repository
+            .append_derived_summary(
+                record.owner_did.as_deref(),
+                &record.activity_urn,
+                summary_triples_for(&record),
+            )
+            .await
+        {
+            Ok(()) => {
+                if let Err(e) = repo
+                    .mark_writeback_committed(&case_id, &record.activity_urn)
+                    .await
+                {
+                    warn!("[enrichment-decide] commit-mark failed case={case_id}: {e}");
+                }
+                writeback_committed = true;
+            }
+            Err(e) => {
+                warn!("[enrichment-decide] derived write failed case={case_id}: {e}");
+                writeback_committed = false;
+            }
+        }
+    }
+
+    // Broadcast to connected clients so the loop is observable.
     if let Ok(json) = serde_json::to_string(&DecisionBroadcast {
         type_: "enrichment_decision",
         data: &record,
@@ -246,8 +318,12 @@ pub async fn decide(
     }
 
     info!(
-        "[enrichment-decide] case={case_id} outcome={} attributed={} writeback={} activity={}",
-        record.outcome, record.attributed, record.writeback_triggered, record.activity_urn
+        "[enrichment-decide] case={case_id} outcome={} attributed={} triggered={} committed={} activity={}",
+        record.outcome,
+        record.attributed,
+        record.writeback_triggered,
+        writeback_committed,
+        record.activity_urn
     );
     debug!("[enrichment-decide] full record: {record:?}");
 
@@ -256,6 +332,7 @@ pub async fn decide(
         decision: record.outcome.clone(),
         attributed: record.attributed,
         writeback_triggered: record.writeback_triggered,
+        writeback_committed,
         activity_urn: record.activity_urn.clone(),
         proposal_urn: record.proposal_urn.clone(),
         owner_did: record.owner_did.clone(),
@@ -267,6 +344,141 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         "/enrichment-proposals/{id}/decide",
         web::post().to(decide),
     );
+}
+
+/// Broker-facing projection of the durable enrichment store (WS-12 dependency).
+///
+/// WS-12's `broker_inbox_handler` imports `store::{EnrichmentProposal,
+/// ProposalStatus}` and projects them into the `{cases:[...],total:N}` wire
+/// shape the agentbox broker-bridge consumes. The accessors here map the durable
+/// [`crate::adapters::sqlite_enrichment_repository`] rows into this stable
+/// broker-facing shape; the inbox handler reads `state.sqlite_enrichment_repository`
+/// and converts via [`EnrichmentProposal::from_stored`].
+pub mod store {
+    use super::StoredProposal;
+    use crate::adapters::sqlite_enrichment_repository::SqliteEnrichmentRepository;
+    use once_cell::sync::OnceCell;
+    use serde::Serialize;
+    use std::sync::Arc;
+
+    /// Process-global handle to the durable enrichment repository, set once at
+    /// startup from `AppState`. Lets the broker read accessors (`all`/`get`)
+    /// reach the SINGLE durable store without threading `web::Data<AppState>`
+    /// through every read call site — the read and write surfaces share one
+    /// source of truth (the SQLite store), not two.
+    static REPO: OnceCell<Arc<SqliteEnrichmentRepository>> = OnceCell::new();
+
+    /// Install the durable repository handle. Idempotent; later calls are no-ops.
+    /// Called from `AppState::new` after the repo is opened.
+    pub fn init(repo: Arc<SqliteEnrichmentRepository>) {
+        let _ = REPO.set(repo);
+    }
+
+    /// Page bound for `all()` reads — the bridge paginates client-side, but cap
+    /// the projection to avoid unbounded reads.
+    const ALL_LIMIT: i64 = 500;
+
+    /// All proposals (newest-updated first), projected into the broker-facing
+    /// shape. Empty when the store handle is not yet installed.
+    pub async fn all() -> Vec<EnrichmentProposal> {
+        match REPO.get() {
+            Some(repo) => repo
+                .list(None, ALL_LIMIT, 0)
+                .await
+                .unwrap_or_default()
+                .iter()
+                .map(EnrichmentProposal::from_stored)
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// One proposal by id, projected into the broker-facing shape.
+    pub async fn get(id: &str) -> Option<EnrichmentProposal> {
+        let repo = REPO.get()?;
+        repo.get(id)
+            .await
+            .ok()
+            .flatten()
+            .map(|p| EnrichmentProposal::from_stored(&p))
+    }
+
+    /// Coarse broker case status. `as_str` returns the lowercase strings the
+    /// agentbox broker-bridge filters on (`broker-bridge.js:204`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+    pub enum ProposalStatus {
+        Pending,
+        Claimed,
+        Decided,
+    }
+
+    impl ProposalStatus {
+        pub fn as_str(&self) -> &'static str {
+            match self {
+                ProposalStatus::Pending => "pending",
+                ProposalStatus::Claimed => "claimed",
+                ProposalStatus::Decided => "decided",
+            }
+        }
+
+        /// Map the durable fine-grained status string to the coarse enum.
+        /// `pending` → Pending; anything decided (`approved`/`rejected`/
+        /// `reviewed`) → Decided; `claimed` → Claimed.
+        pub fn from_durable(s: &str) -> Self {
+            match s {
+                "pending" => ProposalStatus::Pending,
+                "claimed" => ProposalStatus::Claimed,
+                _ => ProposalStatus::Decided,
+            }
+        }
+    }
+
+    /// Broker-facing proposal projection. Field names are the WS-12 contract;
+    /// the inbox handler's `From` impl depends on them.
+    #[derive(Debug, Clone, Serialize)]
+    pub struct EnrichmentProposal {
+        pub id: String,
+        pub status: ProposalStatus,
+        pub target_path: Option<String>,
+        pub content: Option<String>,
+        pub enrichment_type: Option<String>,
+        pub proposer_did: Option<String>,
+        pub reasoning_summary: Option<String>,
+        pub reasoning_hash: Option<String>,
+        pub broker_did: Option<String>,
+        pub proposal_urn: Option<String>,
+        pub activity_urn: Option<String>,
+        pub created_at_ms: u64,
+        pub decided_at_ms: Option<u64>,
+    }
+
+    impl EnrichmentProposal {
+        /// Project a durable store row into the broker-facing shape. Metadata
+        /// fields are pulled from the `proposal_json` blob best-effort.
+        pub fn from_stored(p: &StoredProposal) -> Self {
+            let j = &p.proposal_json;
+            let s = |k: &str| j.get(k).and_then(|v| v.as_str()).map(|s| s.to_string());
+            EnrichmentProposal {
+                id: p.case_id.clone(),
+                status: ProposalStatus::from_durable(&p.status),
+                target_path: s("target_path").or_else(|| s("source_file")),
+                content: s("content").or_else(|| s("proposed_enrichment")),
+                enrichment_type: s("enrichment_type"),
+                proposer_did: s("proposed_by").or_else(|| s("agent_did")),
+                reasoning_summary: s("reasoning_summary").or_else(|| s("reasoning")),
+                reasoning_hash: s("reasoning_hash"),
+                broker_did: s("broker_did").or_else(|| s("broker_pubkey")),
+                proposal_urn: p.source_iri.clone().or_else(|| s("proposal_urn")),
+                activity_urn: s("activity_urn"),
+                created_at_ms: (p.created_at.max(0) as u64) * 1000,
+                decided_at_ms: if p.status == "pending" {
+                    None
+                } else {
+                    Some((p.updated_at.max(0) as u64) * 1000)
+                },
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -294,7 +506,6 @@ mod tests {
             .as_deref()
             .unwrap()
             .starts_with(&format!("urn:visionclaw:kg:{PK}:sha256-12-")));
-        // minted URNs are well-formed per the converged grammar.
         assert!(uri::parse(&rec.activity_urn).is_ok());
         assert!(uri::parse(rec.proposal_urn.as_deref().unwrap()).is_ok());
     }
@@ -311,7 +522,6 @@ mod tests {
         assert!(!rec.writeback_triggered);
         assert!(rec.owner_did.is_none());
         assert!(rec.proposal_urn.is_none());
-        // activity URN is still minted — provenance exists for unsigned actions.
         assert!(uri::parse(&rec.activity_urn).is_ok());
     }
 
@@ -345,11 +555,18 @@ mod tests {
 
     #[test]
     fn outcome_alias_decision_deserialises() {
-        // agentbox sends `outcome`; tolerate `decision`/`verdict` aliases too.
         let from_decision: BrokerDecisionRequest =
             serde_json::from_str(r#"{"decision":"accepted","pubkey":null}"#).unwrap();
         assert_eq!(from_decision.outcome, "accepted");
         let rec = record_decision("case-2", &from_decision).unwrap();
         assert!(rec.writeback_triggered);
+    }
+
+    #[test]
+    fn classify_matches_status_mapping() {
+        assert_eq!(classify("approve"), (true, "approved"));
+        assert_eq!(classify("Accepted"), (true, "approved"));
+        assert_eq!(classify("reject"), (false, "rejected"));
+        assert_eq!(classify("amend"), (false, "reviewed"));
     }
 }

@@ -126,7 +126,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         .configure(files::config)
         .configure(graph::config)
         .configure(crate::handlers::graph_state_handler::config)
-        .configure(crate::handlers::ontology_handler::config)
+        // WS-0: single canonical /ontology scope lives in
+        // api_handler::ontology::config (was duplicated by
+        // ontology_handler::config — collapsed; the read/mutate handlers from
+        // ontology_handler are now imported into ontology::config).
         .configure(bots::config)
 
         .configure(analytics::config)

@@ -48,12 +48,72 @@ pub const GRAPH_ONTOLOGY_INFERRED: &str = "urn:ngm:graph:ontology:inferred";
 pub const GRAPH_KNOWLEDGE: &str = "urn:ngm:graph:knowledge";
 pub const GRAPH_AGENT: &str = "urn:ngm:graph:agent";
 
+/// WS-9 derived named graphs. These are the ONLY graphs writable through the
+/// fenced `/api/ontology/derived` path: `:summary` holds approval-driven
+/// summary triples (broker write-back consequences), `:observed` holds
+/// externally-observed facts. `:assert`/`:inferred` are NEVER writable here.
+pub const GRAPH_ONTOLOGY_SUMMARY: &str = "urn:ngm:graph:ontology:summary";
+pub const GRAPH_ONTOLOGY_OBSERVED: &str = "urn:ngm:graph:ontology:observed";
+
+/// Server-side fence (WS-9): graphs the derived write path must REJECT.
+/// `GRAPH_ONTOLOGY` is `:assert`. Defence-in-depth — the handler also rejects
+/// these, but the repo method re-checks so any future caller (e.g. the approve
+/// path) inherits the fence and cannot bypass it.
+const DERIVED_FENCE: [&str; 2] = [GRAPH_ONTOLOGY, GRAPH_ONTOLOGY_INFERRED];
+
 /// Cache named graphs (own sub-domain so `CLEAR GRAPH` invalidates atomically).
 pub const GRAPH_CACHE_SSSP: &str = "urn:ngm:graph:cache:sssp";
 pub const GRAPH_CACHE_APSP: &str = "urn:ngm:graph:cache:apsp";
 
 /// `vc:` prefix expansion per ADR-11 §D3.
 pub const VC_NS: &str = "https://narrativegoldmine.com/ns/v1#";
+
+/// PRD-020 WS-0: server-side hard caps so a naive SPARQL SELECT
+/// (`SELECT ?s ?p ?o WHERE { ?s ?p ?o }`) cannot serialise the entire store.
+/// LIMIT is injected/clamped BEFORE execution so Oxigraph never materialises
+/// more than the cap; the row + byte fences below apply during serialisation
+/// as parse-independent defence in depth.
+const MAX_SPARQL_ROWS: usize = 10_000;
+const DEFAULT_SPARQL_LIMIT: usize = 10_000;
+const MAX_SPARQL_RESULT_BYTES: usize = 8 * 1024 * 1024;
+
+/// WS-0: inject/clamp a top-level LIMIT on a pre-validated read query.
+///
+/// A SELECT without a trailing LIMIT gets `LIMIT DEFAULT_SPARQL_LIMIT`; a SELECT
+/// whose trailing LIMIT exceeds the cap is rewritten down to `MAX_SPARQL_ROWS`.
+/// ASK/CONSTRUCT/DESCRIBE are returned unchanged (ASK is a single bool;
+/// CONSTRUCT/DESCRIBE are rejected by the result-kind arm in `sparql_select_json`).
+///
+/// This is a best-effort string rewrite, not a SPARQL parse — a LIMIT inside a
+/// sub-SELECT or appearing in a literal could be misdetected. The row + byte
+/// serialisation fences in `sparql_select_json` are the hard, parse-independent
+/// backstop. `validate_read_only_sparql` has already run on the input.
+fn clamp_select_limit(query: &str) -> String {
+    let upper = query.to_uppercase();
+    if !upper.contains("SELECT") {
+        return query.to_string();
+    }
+    // Scan from the end of the trimmed query for a trailing top-level LIMIT N.
+    let trimmed = query.trim_end();
+    let tail_upper = trimmed.to_uppercase();
+    if let Some(pos) = tail_upper.rfind("LIMIT") {
+        let after = trimmed[pos + 5..].trim_start();
+        // Only treat as a real LIMIT clause if what follows starts with digits.
+        let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() {
+            let n: usize = digits.parse().unwrap_or(usize::MAX);
+            if n > MAX_SPARQL_ROWS {
+                // Rewrite the numeric value down to the cap, preserving any
+                // trailing clause (e.g. OFFSET) after the digits.
+                let head = &trimmed[..pos + 5];
+                let rest = &after[digits.len()..];
+                return format!("{} {}{}", head, MAX_SPARQL_ROWS, rest);
+            }
+            return query.to_string();
+        }
+    }
+    format!("{}\nLIMIT {}", trimmed, DEFAULT_SPARQL_LIMIT)
+}
 
 /// SPARQL prologue applied to every UPDATE/QUERY string this adapter emits.
 const PROLOGUE: &str = concat!(
@@ -193,6 +253,29 @@ fn parse_property_type(iri: &str) -> PropertyType {
     } else {
         PropertyType::ObjectProperty
     }
+}
+
+/// True when `s` looks like an IRI we will interpolate as `<s>` (vs a literal).
+/// Same detection `store_inference_results` uses for axiom subjects/objects.
+fn looks_like_iri(s: &str) -> bool {
+    s.starts_with("urn:") || s.starts_with("http://") || s.starts_with("https://")
+}
+
+/// WS-9 SPARQL-injection guard for IRIs interpolated as `<iri>` in derived
+/// writes. The s/p/o come from a request body, so an IRI containing `>`,
+/// whitespace, or control characters could break out of the `<...>` token and
+/// inject arbitrary SPARQL. Accept only `urn:`/`http(s):` IRIs with no `<`,
+/// `>`, `"`, backslash, brace, or whitespace. Mirrors how
+/// `store_inference_results` only interpolates pre-validated axiom IRIs.
+fn iri_is_safe(s: &str) -> bool {
+    if !looks_like_iri(s) {
+        return false;
+    }
+    !s.chars().any(|c| {
+        c.is_whitespace()
+            || matches!(c, '<' | '>' | '"' | '\\' | '{' | '}' | '`' | '|' | '^')
+            || c.is_control()
+    })
 }
 
 /// Escape a string for embedding in a SPARQL string literal.
@@ -411,6 +494,181 @@ impl OxigraphOntologyRepository {
         .await
     }
 
+    // ------------------------------------------------------------------
+    // WS-9 — fenced derived-graph writes (:summary / :observed only)
+    //
+    // Inherent methods, NOT on the `OntologyRepository` trait — the trait
+    // surface is frozen. Mirrors `sparql_select_json`/`read_inferred_graph`
+    // which are likewise inherent. Handlers call the concrete
+    // `Arc<OxigraphOntologyRepository>` in `AppState` directly.
+    // ------------------------------------------------------------------
+
+    /// True iff `which` is one of the writable derived graphs (`summary` |
+    /// `observed`). Returns the canonical graph IRI on success.
+    fn derived_graph_iri(which: &str) -> RepoResult<&'static str> {
+        match which {
+            "summary" => Ok(GRAPH_ONTOLOGY_SUMMARY),
+            "observed" => Ok(GRAPH_ONTOLOGY_OBSERVED),
+            other => Err(db_err(format!(
+                "derived graph must be 'summary' or 'observed', got '{other}'"
+            ))),
+        }
+    }
+
+    /// Append quads to the derived graphs. Each tuple is `(graph, s, p, o)`.
+    ///
+    /// FENCE (defence-in-depth): every quad whose graph is `:assert` or
+    /// `:inferred` is REJECTED ([`DERIVED_FENCE`]); only `:summary`/`:observed`
+    /// are accepted. Subjects/predicates and IRI objects are validated by
+    /// [`iri_is_safe`] before interpolation; literal objects are escaped via
+    /// [`escape_literal`] — so a hostile `o` cannot break out of the
+    /// `INSERT DATA` block (SPARQL-injection guard). Mirrors
+    /// `store_inference_results`' single-`run_update` atomic INSERT DATA pattern.
+    pub async fn append_derived_quads(
+        &self,
+        quads: Vec<(String, String, String, String)>,
+    ) -> RepoResult<usize> {
+        if quads.is_empty() {
+            return Ok(0);
+        }
+
+        // Group bodies per graph so each named graph gets one INSERT DATA block.
+        let mut summary_body = String::new();
+        let mut observed_body = String::new();
+
+        for (g, s, p, o) in &quads {
+            // Server-side fence — reject assert/inferred outright.
+            if DERIVED_FENCE.contains(&g.as_str()) {
+                return Err(db_err(format!(
+                    "fenced graph {g} is not writable via the derived path"
+                )));
+            }
+            if g != GRAPH_ONTOLOGY_SUMMARY && g != GRAPH_ONTOLOGY_OBSERVED {
+                return Err(db_err(format!(
+                    "derived writes only target :summary/:observed, got {g}"
+                )));
+            }
+            // s and p MUST be safe IRIs.
+            if !iri_is_safe(s) {
+                return Err(db_err(format!("unsafe subject IRI in derived quad: {s}")));
+            }
+            if !iri_is_safe(p) {
+                return Err(db_err(format!("unsafe predicate IRI in derived quad: {p}")));
+            }
+            // o is an IRI when it looks like one, else a quoted literal.
+            let object_term = if looks_like_iri(o) {
+                if !iri_is_safe(o) {
+                    return Err(db_err(format!("unsafe object IRI in derived quad: {o}")));
+                }
+                format!("<{o}>")
+            } else {
+                format!("\"{}\"", escape_literal(o))
+            };
+
+            let triple = format!("<{s}> <{p}> {object_term} .\n");
+            if g == GRAPH_ONTOLOGY_SUMMARY {
+                summary_body.push_str(&triple);
+            } else {
+                observed_body.push_str(&triple);
+            }
+        }
+
+        // Combine into ONE update so both graphs commit atomically (store
+        // `;`-separated statements per ADR-11 §D9 / store_inference_results).
+        let mut stmts: Vec<String> = Vec::new();
+        if !summary_body.is_empty() {
+            stmts.push(format!(
+                "INSERT DATA {{ GRAPH <{GRAPH_ONTOLOGY_SUMMARY}> {{\n{summary_body}}} }}"
+            ));
+        }
+        if !observed_body.is_empty() {
+            stmts.push(format!(
+                "INSERT DATA {{ GRAPH <{GRAPH_ONTOLOGY_OBSERVED}> {{\n{observed_body}}} }}"
+            ));
+        }
+        let combined = stmts.join(" ;\n");
+        self.run_update(format!("{PROLOGUE}{combined}\n")).await?;
+        Ok(quads.len())
+    }
+
+    /// Convenience used by the WS-9 approve path: write `summary_triples`
+    /// `(s, p, o)` into `:summary`, plus a `prov:wasGeneratedBy <activity_urn>`
+    /// marker on each subject. Routes through [`append_derived_quads`] so it
+    /// INHERITS the fence + injection guards (never call `run_update` directly).
+    pub async fn append_derived_summary(
+        &self,
+        owner_did: Option<&str>,
+        activity_urn: &str,
+        summary_triples: Vec<(String, String, String)>,
+    ) -> RepoResult<()> {
+        const P_PROV_GENERATED_BY: &str = "http://www.w3.org/ns/prov#wasGeneratedBy";
+        const P_OWNER_DID: &str = "https://narrativegoldmine.com/ns/v1#ownerDid";
+
+        if !iri_is_safe(activity_urn) {
+            return Err(db_err(format!("unsafe activity URN: {activity_urn}")));
+        }
+
+        let mut quads: Vec<(String, String, String, String)> =
+            Vec::with_capacity(summary_triples.len() * 2 + 1);
+
+        for (s, p, o) in summary_triples {
+            // Provenance marker linking the subject to the generating activity.
+            quads.push((
+                GRAPH_ONTOLOGY_SUMMARY.to_string(),
+                s.clone(),
+                P_PROV_GENERATED_BY.to_string(),
+                activity_urn.to_string(),
+            ));
+            // Optional owner attribution (only when scoped).
+            if let Some(did) = owner_did {
+                quads.push((
+                    GRAPH_ONTOLOGY_SUMMARY.to_string(),
+                    s.clone(),
+                    P_OWNER_DID.to_string(),
+                    did.to_string(),
+                ));
+            }
+            // The summary triple itself.
+            quads.push((GRAPH_ONTOLOGY_SUMMARY.to_string(), s, p, o));
+        }
+
+        self.append_derived_quads(quads).await.map(|_| ())
+    }
+
+    /// Idempotent single-graph `CLEAR` of a derived graph (`summary`|`observed`).
+    /// Mirrors [`clear_inferred_graph`]. Never touches `:assert`/`:inferred`.
+    pub async fn clear_derived_graph(&self, which: &str) -> RepoResult<()> {
+        let graph = Self::derived_graph_iri(which)?;
+        self.run_update(format!("{PROLOGUE}CLEAR GRAPH <{graph}>\n"))
+            .await
+    }
+
+    /// Read a derived graph as `{ namedGraph, triples: [{s,p,o}] }`. Mirrors
+    /// [`read_inferred_graph`] but FROM `:summary` or `:observed` (validated).
+    pub async fn read_derived_graph(&self, which: &str) -> RepoResult<serde_json::Value> {
+        let graph = Self::derived_graph_iri(which)?;
+        let q = format!(
+            "{PROLOGUE}\
+             SELECT ?s ?p ?o\n\
+             FROM <{graph}>\n\
+             WHERE {{ ?s ?p ?o }}\n"
+        );
+        let (_vars, rows) = self.run_select(q).await?;
+        let triples: Vec<serde_json::Value> = rows
+            .iter()
+            .filter_map(|row| {
+                let s = row.first().and_then(|t| t.as_ref()).map(term_lexical)?;
+                let p = row.get(1).and_then(|t| t.as_ref()).map(term_lexical)?;
+                let o = row.get(2).and_then(|t| t.as_ref()).map(term_lexical)?;
+                Some(serde_json::json!({ "s": s, "p": p, "o": o }))
+            })
+            .collect();
+        Ok(serde_json::json!({
+            "namedGraph": graph,
+            "triples": triples,
+        }))
+    }
+
     /// Execute a *read-only* SPARQL SELECT/ASK and return SPARQL 1.1 Query
     /// Results JSON (`{ head: { vars }, results: { bindings } }` for SELECT,
     /// `{ head: {}, boolean }` for ASK). GPU-only constraint (PRD-018): this
@@ -420,6 +678,9 @@ impl OxigraphOntologyRepository {
     /// `Solutions`/`Boolean` result kinds and rejects anything else.
     pub async fn sparql_select_json(&self, query: String) -> RepoResult<serde_json::Value> {
         let store = Arc::clone(&self.store);
+        // WS-0: clamp/inject the LIMIT BEFORE execution so Oxigraph never
+        // materialises more than MAX_SPARQL_ROWS rows for a SELECT.
+        let query = clamp_select_limit(&query);
         tokio::task::spawn_blocking(move || -> RepoResult<serde_json::Value> {
             match store.query(&query).map_err(db_err)? {
                 QueryResults::Solutions(solutions) => {
@@ -429,7 +690,16 @@ impl OxigraphOntologyRepository {
                         .map(|v| v.as_str().to_string())
                         .collect();
                     let mut bindings: Vec<serde_json::Value> = Vec::new();
+                    // WS-0 defence in depth: row + running serialised-byte fences
+                    // independent of the LIMIT rewrite (a sub-SELECT LIMIT could
+                    // slip past the string rewrite; these caps cannot).
+                    let mut est_bytes = 0usize;
+                    let mut truncated = false;
                     for sol in solutions {
+                        if bindings.len() >= MAX_SPARQL_ROWS {
+                            truncated = true;
+                            break;
+                        }
                         let sol = sol.map_err(db_err)?;
                         let mut row = serde_json::Map::new();
                         for v in &vars {
@@ -437,11 +707,17 @@ impl OxigraphOntologyRepository {
                                 row.insert(v.clone(), term_to_json(term));
                             }
                         }
-                        bindings.push(serde_json::Value::Object(row));
+                        let row = serde_json::Value::Object(row);
+                        est_bytes += serde_json::to_string(&row).map(|s| s.len()).unwrap_or(0);
+                        if est_bytes > MAX_SPARQL_RESULT_BYTES {
+                            return Err(db_err("SPARQL result exceeds 8MiB cap"));
+                        }
+                        bindings.push(row);
                     }
                     Ok(serde_json::json!({
                         "head": { "vars": vars },
                         "results": { "bindings": bindings },
+                        "truncated": truncated,
                     }))
                 }
                 QueryResults::Boolean(b) => Ok(serde_json::json!({
@@ -462,13 +738,17 @@ impl OxigraphOntologyRepository {
     /// for the `InferencePanel`). Reuses the store's pattern scan over
     /// `urn:ngm:graph:ontology:inferred` only.
     pub async fn read_inferred_graph(&self) -> RepoResult<serde_json::Value> {
+        // WS-0: bound the server-built inferred-graph read so a large inferred
+        // closure cannot serialise unboundedly.
         let q = format!(
             "{PROLOGUE}\
              SELECT ?s ?p ?o\n\
              FROM <{GRAPH_ONTOLOGY_INFERRED}>\n\
-             WHERE {{ ?s ?p ?o }}\n"
+             WHERE {{ ?s ?p ?o }}\n\
+             LIMIT {MAX_SPARQL_ROWS}\n"
         );
         let (_vars, rows) = self.run_select(q).await?;
+        let truncated = rows.len() >= MAX_SPARQL_ROWS;
         let triples: Vec<serde_json::Value> = rows
             .iter()
             .filter_map(|row| {
@@ -497,6 +777,7 @@ impl OxigraphOntologyRepository {
             "namedGraph": GRAPH_ONTOLOGY_INFERRED,
             "runId": run_id,
             "triples": triples,
+            "truncated": truncated,
         }))
     }
 
@@ -2594,6 +2875,35 @@ mod tests {
 
     fn in_memory_repo() -> OxigraphOntologyRepository {
         OxigraphOntologyRepository::from_store(Arc::new(Store::new().unwrap()))
+    }
+
+    // ---- WS-0: SPARQL LIMIT clamp ----------------------------------------
+
+    #[test]
+    fn clamp_appends_limit_when_absent() {
+        let q = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+        let out = clamp_select_limit(q);
+        assert!(out.ends_with(&format!("LIMIT {}", DEFAULT_SPARQL_LIMIT)), "got: {out}");
+    }
+
+    #[test]
+    fn clamp_rewrites_oversized_limit() {
+        let q = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 999999";
+        let out = clamp_select_limit(q);
+        assert!(out.contains(&format!("LIMIT {}", MAX_SPARQL_ROWS)), "got: {out}");
+        assert!(!out.contains("999999"), "oversized limit not removed: {out}");
+    }
+
+    #[test]
+    fn clamp_preserves_small_limit() {
+        let q = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 50";
+        assert_eq!(clamp_select_limit(q), q);
+    }
+
+    #[test]
+    fn clamp_passes_through_ask() {
+        let q = "ASK { ?s ?p ?o }";
+        assert_eq!(clamp_select_limit(q), q);
     }
 
     fn make_class(iri: &str, label: &str) -> OwlClass {

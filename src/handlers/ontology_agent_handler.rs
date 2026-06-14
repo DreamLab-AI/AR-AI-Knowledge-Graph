@@ -13,6 +13,8 @@
 use crate::services::ontology_query_service::OntologyQueryService;
 use crate::services::ontology_mutation_service::OntologyMutationService;
 use crate::types::ontology_tools::*;
+use crate::settings::auth_extractor::AuthenticatedUser;
+use crate::middleware::{RequireAuth, RateLimit};
 use crate::{ok_json, error_json};
 use actix_web::{web, HttpResponse, Error};
 use log::{error, info};
@@ -169,13 +171,25 @@ pub async fn traverse(
     }
 }
 
-/// POST /ontology-agent/propose — Propose new note or amendment
+/// POST /ontology-agent/propose — Propose new note or amendment.
+///
+/// WS-1 / ADR-120: this is the ONLY mutating route in the `/ontology-agent`
+/// surface, so it is the only one gated by `RequireAuth::authenticated()` +
+/// per-user rate limiting (see `configure_ontology_agent_routes`). The
+/// `agent_id` / `user_id` are NOT trusted from the request body — they are
+/// OVERRIDDEN with the verified `did:nostr` pubkey from the NIP-98 / session
+/// auth, so a caller cannot self-assert another agent's identity.
 pub async fn propose(
+    auth: AuthenticatedUser,
     mutation_service: web::Data<Arc<OntologyMutationService>>,
     request: web::Json<ProposeRequest>,
 ) -> Result<HttpResponse, Error> {
-    let req = request.into_inner();
-    info!("ontology-agent/propose: agent={}", req.agent_context.agent_id);
+    let mut req = request.into_inner();
+    // WS-1 / ADR-120: bind the proposal to the authenticated identity,
+    // discarding whatever agent_id / user_id the body self-asserted.
+    req.agent_context.agent_id = auth.pubkey.clone();
+    req.agent_context.user_id = auth.pubkey.clone();
+    info!("ontology-agent/propose: authed agent={}", auth.pubkey);
 
     let result = match req.proposal {
         ProposeInput::Create(proposal) => {
@@ -315,6 +329,18 @@ async fn build_traversal(
 
 // ---------- Route Configuration ----------
 
+/// WS-1 / ADR-120: read-side tools (`discover`/`read`/`query`/`traverse`/
+/// `validate`/`status`) stay anonymous; the mutating `/propose` is the ONLY
+/// gated route. actix-web does not fall through duplicate prefixes, so `/propose`
+/// is mounted as a NESTED sub-scope carrying its own middleware while the rest
+/// of `/ontology-agent` stays open.
+///
+/// Middleware order: `RequireAuth::authenticated()` is wrapped INNERMOST so it
+/// runs FIRST on the request path and inserts the `AuthenticatedUser` into the
+/// request extensions; `RateLimit::per_minute(20)` is wrapped OUTERMOST so its
+/// `extract_identifier` reads that extension and keys the limit on
+/// `user:{pubkey}` rather than the source IP. (In actix, the last `.wrap()`
+/// applied is the outermost layer, so RateLimit is listed before RequireAuth.)
 pub fn configure_ontology_agent_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/ontology-agent")
@@ -322,8 +348,15 @@ pub fn configure_ontology_agent_routes(cfg: &mut web::ServiceConfig) {
             .route("/read", web::post().to(read_note))
             .route("/query", web::post().to(query))
             .route("/traverse", web::post().to(traverse))
-            .route("/propose", web::post().to(propose))
             .route("/validate", web::post().to(validate))
             .route("/status", web::get().to(status))
+            // WS-1: only /propose is authed + rate-limited (resolves to
+            // POST /ontology-agent/propose via the empty-path route).
+            .service(
+                web::scope("/propose")
+                    .wrap(RateLimit::per_minute(20))
+                    .wrap(RequireAuth::authenticated())
+                    .route("", web::post().to(propose)),
+            ),
     );
 }

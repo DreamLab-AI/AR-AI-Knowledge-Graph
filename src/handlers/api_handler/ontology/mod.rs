@@ -1337,31 +1337,87 @@ pub async fn websocket_handler(
 // ============================================================================
 
 /// SECURITY: All ontology endpoints require authentication
+/// WS-0: SINGLE canonical `/ontology` scope.
+///
+/// Previously TWO `web::scope("/ontology")` were mounted under `/api`:
+///   1. `ontology_handler::config` — `power_user().mutations_only()`, owned the
+///      schema-rewrite mutators + `/query` + `/sparql` + the read GETs.
+///   2. this `ontology::config` — `authenticated()`, owned `/load`,
+///      `/load-axioms`, `/validate` (POST), `/apply`, `/mapping`, `/cache`,
+///      `/report(s)`, `/inferences`, `/health`, `/ws`.
+///
+/// actix-web matches by registration order and does NOT fall through duplicate
+/// prefixes, so scope-2's `/axioms` GET + `/hierarchy` GET were dead-shadowed
+/// while its unique writes (`/load`, `/load-axioms`, …) ran at the *weaker*
+/// `authenticated()` gate. We collapse both into ONE scope wrapped
+/// `power_user().mutations_only()`:
+///   * every safe GET stays public (mutations_only bypasses GET),
+///   * every POST/PUT/DELETE — including `/load` + `/load-axioms` axiom ingest —
+///     is now gated at power_user (was `authenticated()`).
+///
+/// The read/mutate handlers are imported from `ontology_handler`; the GET-only
+/// `validate_ontology` is aliased to avoid clashing with the local POST
+/// `validate_graph` (`/validate` is registered for BOTH methods).
 pub fn config(cfg: &mut web::ServiceConfig) {
     use crate::middleware::RequireAuth;
+    use crate::handlers::ontology_handler::{
+        save_ontology_graph, add_owl_class, update_owl_class, remove_owl_class,
+        add_owl_property, update_owl_property, add_axiom, remove_axiom,
+        store_inference_results, query_ontology, sparql_query, get_ontology_graph,
+        get_inferred_graph, list_owl_classes, get_owl_class, get_class_axioms,
+        list_owl_properties, get_owl_property, get_inference_results,
+        validate_ontology as validate_ontology_ro, get_ontology_metrics,
+    };
 
     cfg.service(
         web::scope("/ontology")
-            .wrap(RequireAuth::authenticated())  // Require authentication for all ontology operations
+            // WS-0: every state-changing op (POST/PUT/DELETE) gated at power_user;
+            // safe GET reads remain public (mutations_only bypasses GET).
+            .wrap(RequireAuth::power_user().mutations_only())
 
+            // ---- Mutating / SPARQL ops (power_user via mutations_only) ----
+            .route("/graph", web::post().to(save_ontology_graph))
+            .route("/classes", web::post().to(add_owl_class))
+            .route("/classes/{iri}", web::put().to(update_owl_class))
+            .route("/classes/{iri}", web::delete().to(remove_owl_class))
+            .route("/properties", web::post().to(add_owl_property))
+            .route("/properties/{iri}", web::put().to(update_owl_property))
+            .route("/axioms", web::post().to(add_axiom))
+            .route("/axioms/{id}", web::delete().to(remove_axiom))
+            .route("/inference", web::post().to(store_inference_results))
+            .route("/query", web::post().to(query_ontology))
+            // WS-4: read-only SPARQL passthrough (POST body → power_user-gated as
+            // defence in depth; also validated read-only before reaching Oxigraph).
+            .route("/sparql", web::post().to(sparql_query))
+
+            // Axiom ingest — now power_user (was authenticated()). WS-0 hardening.
             .route("/load", web::post().to(load_axioms))
             .route("/load-axioms", web::post().to(load_axioms))
 
+            // Reasoner / mapping / cache mutators — power_user.
             .route("/validate", web::post().to(validate_graph))
-
-            .route("/reports/{id}", web::get().to(get_report_by_id))
-            .route("/report", web::get().to(get_validation_report))
-
-            .route("/axioms", web::get().to(list_axioms))
-
-            .route("/inferences", web::get().to(get_inferences))
-
-            .route("/hierarchy", web::get().to(get_hierarchy))
-
-            .route("/cache", web::delete().to(clear_caches))
-
             .route("/mapping", web::post().to(update_mapping))
             .route("/apply", web::post().to(apply_inferences))
+            .route("/cache", web::delete().to(clear_caches))
+
+            // ---- Read-only inspection — public (safe GET bypasses auth) ----
+            .route("/graph", web::get().to(get_ontology_graph))
+            .route("/inferred", web::get().to(get_inferred_graph))
+            .route("/classes", web::get().to(list_owl_classes))
+            .route("/classes/{iri}", web::get().to(get_owl_class))
+            .route("/classes/{iri}/axioms", web::get().to(get_class_axioms))
+            .route("/properties", web::get().to(list_owl_properties))
+            .route("/properties/{iri}", web::get().to(get_owl_property))
+            .route("/inference", web::get().to(get_inference_results))
+            // /validate served on BOTH methods (GET read-only report; POST graph).
+            .route("/validate", web::get().to(validate_ontology_ro))
+            .route("/metrics", web::get().to(get_ontology_metrics))
+            // /axioms served on BOTH methods (POST add; GET list).
+            .route("/axioms", web::get().to(list_axioms))
+            .route("/inferences", web::get().to(get_inferences))
+            .route("/hierarchy", web::get().to(get_hierarchy))
+            .route("/reports/{id}", web::get().to(get_report_by_id))
+            .route("/report", web::get().to(get_validation_report))
             .route("/health", web::get().to(get_health_status))
             .route("/ws", web::get().to(websocket_handler)),
     );

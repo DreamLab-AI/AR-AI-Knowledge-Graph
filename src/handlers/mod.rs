@@ -59,6 +59,14 @@ pub use memory_flash_handler::configure_routes as configure_memory_flash_routes;
 pub mod enrichment_proposals_handler;
 pub use enrichment_proposals_handler::configure_routes as configure_enrichment_proposals_routes;
 
+// Derived ontology graphs (WS-9 fenced write: :summary/:observed only)
+pub mod ontology_derived_handler;
+pub use ontology_derived_handler::configure_routes as configure_ontology_derived_routes;
+
+// Broker inbox read surface (WS-12) — serves the agentbox broker-bridge
+pub mod broker_inbox_handler;
+pub use broker_inbox_handler::configure_routes as configure_broker_inbox_routes;
+
 // Layout mode system (ADR-031)
 pub mod layout_handler;
 pub use layout_handler::configure_layout_routes;

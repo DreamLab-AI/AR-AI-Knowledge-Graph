@@ -35,10 +35,23 @@ CONSULT_ONTOLOGY_AUGMENT=1
 
 ```
 CONSULT_ONTOLOGY_MAX_TOKENS=1500
-ONTOLOGY_PUSH_MIN_RELEVANCE=0.3
 ONTOLOGY_PUSH_CACHE=/home/devuser/.claude-flow/data/ontology-classes-cache.json
 ONTOLOGY_TIMEOUT_MS=10000
 ```
+
+### ⚠️ REQUIRED until the next agentbox rebuild — PUSH relevance floor
+
+The PUSH breadcrumb's relevance floor was mis-calibrated (default `0.3`) — trigram
+scores run ~0.12–0.30 on-topic vs ~0.06–0.10 off-topic, so `0.3` suppressed
+**every** breadcrumb (alive-but-silent). The code default is now `0.11`, but the
+**baked** image still has `0.3` until the next rebuild. So add this to `agentbox/.env`
+for PUSH to actually emit now:
+
+```
+ONTOLOGY_PUSH_MIN_RELEVANCE=0.11
+```
+
+(After the next rebuild bakes the `0.11` default, this line is optional.)
 
 ---
 
