@@ -1,0 +1,75 @@
+{
+  "by_model": {
+    "opus": {
+      "aug": 0.805,
+      "ctl": 0.385,
+      "delta": 0.42,
+      "aug_halluc": 0.151,
+      "ctl_halluc": 0.573
+    },
+    "sonnet": {
+      "aug": 0.845,
+      "ctl": 0.354,
+      "delta": 0.491,
+      "aug_halluc": 0.12,
+      "ctl_halluc": 0.594
+    },
+    "haiku": {
+      "aug": 0.817,
+      "ctl": 0.273,
+      "delta": 0.544,
+      "aug_halluc": 0.073,
+      "ctl_halluc": 0.758
+    },
+    "gemini": {
+      "aug": 0.778,
+      "ctl": 0.473,
+      "delta": 0.305,
+      "aug_halluc": 0.125,
+      "ctl_halluc": 0.552
+    },
+    "zai": {
+      "aug": 0.817,
+      "ctl": 0.362,
+      "delta": 0.455,
+      "aug_halluc": 0.135,
+      "ctl_halluc": 0.64
+    }
+  },
+  "by_type": {
+    "neighbour": {
+      "aug": 0.917,
+      "ctl": 0.458,
+      "delta": 0.459
+    },
+    "subclass": {
+      "aug": 0.55,
+      "ctl": 0.048,
+      "delta": 0.502
+    },
+    "existence": {
+      "aug": 0.865,
+      "ctl": 0.513,
+      "delta": 0.352
+    }
+  },
+  "overall": {
+    "aug": 0.812,
+    "ctl": 0.369,
+    "delta": 0.443,
+    "aug_halluc": 0.121,
+    "ctl_halluc": 0.623
+  },
+  "telemetry": {
+    "gemini": {
+      "prompt_tokens": 4198,
+      "completion_tokens": 85,
+      "latency_ms": 11903
+    },
+    "zai": {
+      "prompt_tokens": 3620,
+      "completion_tokens": 62,
+      "latency_ms": 2425
+    }
+  }
+}
