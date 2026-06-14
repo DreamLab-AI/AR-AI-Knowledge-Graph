@@ -7,6 +7,11 @@
 
 > **EXECUTION NOTE (read first):** This ADR is an **audit + prompt-layout plan only**. No images are generated, edited, deleted, re-rendered, or committed as part of this ADR. Image generation/regeneration/removal is a **separate follow-up task** that the operator runs later (see §7). Everything below — verdicts, mermaid skeletons, Nano Banana prompts — is the specification that follow-up task will execute against.
 
+> **UPDATE 2026-06-14 — generator access confirmed + scope additions:**
+> - **Image creator confirmed live.** `agentbox/skills/art/` (Nano Banana) exists; `GOOGLE_API_KEY` in `~/.claude/.env` is valid (`models.list` HTTP 200). Reachable models: `gemini-3.1-flash-image-preview` (NB2, default, $0.067/img) and `gemini-3-pro-image-preview` (Pro, $0.134/img) — **and their now-GA variants** `gemini-3.1-flash-image` / `gemini-3-pro-image` (prefer GA over `-preview` once `tools/generate-image.ts` is updated). Generator: `bun run agentbox/skills/art/tools/generate-image.ts --prompt … --size 4K --aspect-ratio 16:9 --output …` (needs `bun` + `npm i` in `tools/`, or call the API directly). **512px preview → 4K final** workflow.
+> - **Highest-resolution target = `4K`** (`--size 4K`) for every final regen/hero; mermaid technical diagrams render at publication DPI. 512px is the cheap iterate-first preview.
+> - **New capabilities to depict (added since 2026-06-13).** Two ecosystem features now need visual coverage and are folded into the inventory totals (§3.7) and the diagram-as-code plan: **(a) the pervasive ontology↔agentbox augmentation binding** (PRD-020 / ADR-112; diagram §4.6); **(b) smart-contract / web-contract features** (ADR-124, web-contracts.org pattern on the single-use-seal / 402 / WebLedger / block-trail substrate; diagram §4.7). The VisionFlow marketing site (`dreamlab-ai-website` §3.5 + the VisionFlow pitch/asset tree §3.6) is in scope for both.
+
 ---
 
 ## 1. Context
@@ -170,8 +175,8 @@ All 8 core diagrams live under `crates/solid-pod-rs/docs/diagrams/rendered/` wit
 |---|---|
 | KEEP / KEEP-ARCHIVAL / KEEP-HIDDEN / KEEP-IGNORE | ~560 (incl. ~390 vendor icons + ~72 website photos) |
 | REGEN-AS-MERMAID (re-render or supersede PNG) | **15** (8 solid-pod-rs + 7 VisionFlow) |
-| NEW mermaid (gap-fill) | **3+** (402/webledger, block-trails+git-marks, did:nostr) + ecosystem-topology + agentic-mycelia (this ADR §4) + **pervasive ontology augmentation (§4.6, provisional — authoritative source lands with PRD-020/ADR-112)** |
-| REGEN-AS-NANOBANANA | **~16** (10 website + 5 VisionFlow + 1 agentbox) |
+| NEW mermaid (gap-fill) | **3+** (402/webledger, block-trails+git-marks, did:nostr) + ecosystem-topology + agentic-mycelia (this ADR §4) + **pervasive ontology augmentation (§4.6 — PRD-020/ADR-112)** + **smart-contract / web-contract trust-spectrum (§4.7 — ADR-124)** *(both added 2026-06-14)* |
+| REGEN-AS-NANOBANANA | **~17** (10 website + 5 VisionFlow + 1 agentbox + 1 NEW smart-contract economy hero §4.7/§5.4). **Target `4K`** (`--size 4K`), 512px preview-first; generator access **confirmed** 2026-06-14 (NB2 + Pro + GA models reachable). |
 | REMOVE-STALE | **14** (11 VC `rendered/` + agentbox_old + octave-lab-2017 + vc-graph-product) |
 | REMOVE-DUPLICATE | **7** (6 pitch dupes + agentbox wizard-sections) |
 | ASSESS (XR tech / PDF freshness) | **7+** |
@@ -410,6 +415,28 @@ flowchart LR
 ```
 
 Drift-checks to assert when this lands: `ontology-bridge.js` registered for ALL agents in `agentbox/mcp/mcp.json` (pervasive pull); the hook PUSH path emits a `[ONTOLOGY]`-style line through the existing `ROUTE_SIGNAL` allowlist; a per-turn token budget is enforced and logged (verifiability — avoid the PRD-018 silent-dead-wiring trap); the write path remains routed only through `ontology-propose.js`/`kg-elevation.js`.
+
+### 4.7 Smart-contract / web-contract features (provisional — added 2026-06-14)
+
+> **Provisional — registers a diagram requirement; authoritative source is ADR-124** (`docs/adr/ADR-124-smart-contract-features-web-contracts.md`, in flight). Target: project new `docs/diagrams/24-web-contract-trust-spectrum.mmd`; doubles as the structural reference for a refreshed `decentralised-agents` economy hero (§5.4). The "web contract" (webcontracts.org pattern, from Melvin Carvalho/team) is the four-layer state machine — **Contract** (pure validate()+transition() reducer) / **State** (WAC + 402-gated pod JSON) / **Ledger** (WebLedger + MRC20 + AMM) / **Trail** (BIP-341 single-use-seal block-trail) — with a **declared trust spectrum** L0 honest-or-caught → L1 reducible-custody → L2 DLC (trustless oracle) → L3 RGB/client-side-validation, the single-use-seal chain as the through-line. Source of truth: `solid-pod-rs` `mrc20.rs`/`trading.rs`/`payments.rs`/`bitcoin_tx.rs`, `/tmp/worldcup` (reference web-contract), ADR-124. Hero must depict the real stack (reducer + Solid pod + WebLedger + Bitcoin single-use-seal trail + the trust ladder) — **forbid** generic Solidity/EVM/coin clichés (this is Bitcoin-native, off-chain-state + client-side-validation).
+
+```mermaid
+flowchart LR
+    subgraph WC["Web contract (declared trust level)"]
+        R["Contract reducer\nvalidate() + transition() (pure)"]
+        S["State\nWAC + 402-gated pod JSON"]
+        L["Ledger\nWebLedger · MRC20 · AMM"]
+        T["Trail\nBIP-341 single-use-seal chain"]
+    end
+    R --> S --> L --> T
+    T == single-use-seal through-line ==> CHAIN[("Bitcoin")]
+    L0["L0 honest-or-caught"] --> L1["L1 reducible custody"] --> L2["L2 DLC trustless oracle"] --> L3["L3 RGB / client-side-validation"]
+    WC -. declares .- L0
+    classDef teal fill:#1A6B6B,stroke:#0f4747,color:#fff
+    classDef orange fill:#C85A2A,stroke:#8f3d1c,color:#fff
+    class T teal
+    class CHAIN orange
+```
 
 ---
 
