@@ -34,6 +34,11 @@ pub mod uri;
 pub mod utils;
 pub mod validation;
 
+// ADR-124 build-out: the gitmark/blocktrails web-contract substrate (4-layer
+// reducer/state/ledger/trail + validate/anchor/verify ritual). Identity-rail-
+// agnostic — carries did:nostr strings unchanged (I1-I4 hold trivially).
+pub mod web_contract;
+
 // #[cfg(test)]
 // pub mod test_settings_fix;
 

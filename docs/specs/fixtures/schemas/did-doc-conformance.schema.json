@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dreamlab.ai/schemas/fixtures/did-doc-conformance.schema.json",
-  "title": "DID Document conformance fixture (ADR-074 D2)",
+  "title": "DID Document conformance fixture (ADR-125 / ADR-074 §D2′ — Multikey single form)",
+  "description": "Envelope schema for did:nostr DID-document conformance vectors. The canonical document (valid:true vectors) is the ADR-125 §2 single form: two-context [https://w3id.org/did, https://w3id.org/nostr/context], top-level type 'DIDNostr', a single 'Multikey' verificationMethod whose publicKeyMultibase matches ^fe70102[0-9a-f]{64}$ and equals 'fe70102'+the DID-body hex (I2). The multibase==id-body, controller==id, lowercase-hex, and 71-char-length assertions are conformance-logic enforced by the harness per the vector's `valid` flag; this schema validates structure only (so negative documents still load and parse).",
   "type": "object",
   "required": ["_meta", "vectors"],
   "additionalProperties": false,
@@ -15,15 +16,43 @@
         "required": ["case", "tier", "document", "valid"],
         "properties": {
           "case": {"type": "string"},
-          "tier": {"enum": [1, 3]},
+          "tier": {
+            "enum": [1, 3],
+            "description": "Fixture-organisation label only. ADR-125 §D4′ collapses the Tier-1/Tier-3 split — the document shape is identical; service[] may be empty (minimal) or populated (production)."
+          },
           "document": {
             "type": "object",
             "required": ["@context", "id", "verificationMethod"],
+            "comment": "Canonical (valid:true) documents additionally REQUIRE a top-level 'type':'DIDNostr' (ADR-125 §2 / D13′). 'type' is intentionally NOT in this envelope-level `required` list so that negative vectors carrying the superseded 2019 shape (which has no top-level type) still load and parse — the 'type'=='DIDNostr' requirement is conformance logic the harness enforces per the vector's `valid` flag, not envelope structure.",
             "properties": {
               "@context": {"type": "array", "items": {"type": "string"}},
               "id": {"type": "string"},
-              "alsoKnownAs": {"type": "array", "items": {"type": "string"}},
-              "verificationMethod": {"type": "array"},
+              "type": {
+                "type": "string",
+                "description": "Top-level document type. Canonical (valid:true) value is REQUIRED and equals 'DIDNostr' (ADR-125 §2 / D13′). Absent on superseded 2019-shape negative vectors."
+              },
+              "verificationMethod": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "string"},
+                    "type": {
+                      "type": "string",
+                      "description": "Canonical (valid:true) value is 'Multikey' (ADR-125 D13′). Negative vectors may carry the superseded 'SchnorrSecp256k1VerificationKey2019'."
+                    },
+                    "controller": {"type": "string"},
+                    "publicKeyMultibase": {
+                      "type": "string",
+                      "description": "Canonical (valid:true) value matches ^fe70102[0-9a-f]{64}$ and equals 'fe70102'+document.id-body (I2 round-trip). Harness-enforced per `valid`."
+                    },
+                    "publicKeyHex": {
+                      "type": "string",
+                      "description": "REMOVED from the canonical form (ADR-125 §2.2). Present only on superseded negative vectors."
+                    }
+                  }
+                }
+              },
               "authentication": {"type": "array"},
               "assertionMethod": {"type": "array"},
               "service": {"type": "array"}

@@ -73,8 +73,8 @@ Wardley maps / strategic analysis? --> /wardley-maps, /report-builder
 UI/UX design? --> /ui-ux-pro-max-skill, /bencium-*, /design-audit, /typography
 Architecture review? --> /vanity-engineering-review, /renaissance-architecture, /human-architect-mindset
 Ground reasoning in our formal ontology/KG ("what does our KG say about X", subgraph, SPARQL, governed writeback)? --> /ontology-augment (PRD-020 binding; ontology_ask, fail-open, budget-bounded)
-Research + NotebookLM? --> /notebooklm, /perplexity-research, /gemini-url-context
-Deep cited research? --> /deep-research (parallel agents, provenance, verification)
+Web search — fast synthesized answer (closed engine)? --> /perplexity-research | verifiable, reputation-attached, you-pick-the-engine + trusted-domain lenses + verify_citation (academic/legal/clinical/SEC/patent)? --> /web-researcher (v1.33.0) | known URLs --> /gemini-url-context ; NotebookLM --> /notebooklm
+Deep cited research (multi-agent fan-out + adversarial verify, orchestrates the above)? --> /deep-research (parallel agents, provenance, verification)
 Optimize a metric iteratively? --> /autoresearch (experiment loop, keep/discard)
 Add source verification? --> /provenance-tracking (.provenance.md sidecar)
 Owner's personal email (invoices, threads, "did X email me", find a name)? --> /email-search (ask_email; local gateway, privacy-filtered; NOT work mail/calendar)

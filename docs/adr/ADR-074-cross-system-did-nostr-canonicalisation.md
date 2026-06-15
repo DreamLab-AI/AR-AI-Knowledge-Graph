@@ -2,8 +2,9 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Accepted — **§D2/§D3/§D4/§D13 SUPERSEDED by ADR-125 / ADR-074 §D2′ (2026-06-15)**; §D1 and §D5–§D12 RETAINED |
 | Drives | PRD-010 G1, G5, G6 |
+| Supersession | The DID-document *shape* clauses (§D2 2019-suite document, §D3 `z…` base58btc multibase, §D4 Tier-1/Tier-3 split, §D13 anti-drift) are superseded by `docs/adr/ADR-125-did-nostr-multikey-convergence.md` (= `ADR-074-D2-supersession-multikey-convergence.md`, §D2′), which adopts the canonical `DIDNostr`/`Multikey`/`publicKeyMultibase "fe70102<hex>"` single form. **§D1 (canonical hex pubkey) is RETAINED UNCHANGED (invariant I4).** §D5–§D12 (resolution, delegation grammar, kind-30033, WAC) are unaffected. |
 | Supersedes | ADR-027 (DID identity stack — extends) |
 | Companion ADRs | ADR-073, ADR-075, ADR-076 |
 | Companion DDD | `docs/ddd-mesh-federation-context.md` |
@@ -60,6 +61,12 @@ Enforcement points:
 
 ### D2 — Canonical DID Document shape (Tier-3, all emitters)
 
+> **SUPERSEDED by ADR-125 / §D2′ (2026-06-15).** The shape below (2019 suite,
+> `publicKeyHex`, `secp256k1-2019/v1` context, `#key-0`, absolute auth refs) is no
+> longer emitted. The canonical single form is `DIDNostr` / `Multikey` /
+> `publicKeyMultibase "fe70102<hex>"` — see ADR-125 §2 / ADR-074 §D2′ §1. Retained
+> here for historical reference only; conformance gates now **reject** this shape.
+
 ```jsonld
 {
   "@context": [
@@ -90,12 +97,23 @@ Required fields: `@context`, `id`, `verificationMethod`, `authentication`. `asse
 
 ### D3 — Multibase encoding
 
+> **SUPERSEDED by ADR-125 §D3′ / ADR-074 §D2′ §2.** The `z…` base58btc encoding
+> below is replaced by base16 `publicKeyMultibase = "fe70102" + <x-only-hex>`
+> (multibase `f`, secp256k1-pub varint `e701`, even-y parity `02`, then the
+> 32-byte x-only hex; 71 chars). The new §2 text states the varint framing
+> correctly; the prose below is retained verbatim (historical) and is not edited.
+
 `publicKeyMultibase` = `z` + base58btc(`0xe7 0x01` || `pk_32_bytes`).
 - `0xe7` = multicodec for `secp256k1-pub`.
 - `0x01` = varint-1 (the codec byte is itself encoded as varint; for codec values < 0x80, varint is 1 byte).
 - Per `pod-worker/src/did.rs:168 format_multibase_schnorr`, already correctly implemented forum-side.
 
 ### D4 — Tier-1 vs Tier-3
+
+> **SUPERSEDED by ADR-125 §D4′ / ADR-074 §D2′.** There is no tier split. One
+> canonical document; `service[]` MAY be empty (minimal) or populated
+> (production). `@context`, `id`, `type`, `verificationMethod`, `authentication`,
+> `assertionMethod` are fixed and always present.
 
 Tier-1 is the minimal DID Document — `@context`, `id`, `verificationMethod`. Used in low-bandwidth contexts (pure resolver responses with no service entries).
 
@@ -235,6 +253,17 @@ Out of scope for PRD-010 P0-P4 but specified here for forward compatibility:
 - After 7 days, K_old deactivated: DID Document service[].serviceEndpoint redirects, or DID Document carries `deactivated: true` (DID Core).
 
 ### D13 — Anti-drift CI assertions
+
+> **SUPERSEDED by ADR-125 §D13′ / ADR-074 §D2′ §5 (polarity inverted).** The
+> first two assertions below (require the 2019 suite type; require the
+> `secp256k1-2019/v1` context) are **deleted and inverted** — those shapes are now
+> the must-**reject** negatives. The replacement CI gate asserts:
+> `type == "DIDNostr"` (top-level), `verificationMethod[0].type == "Multikey"`,
+> `publicKeyMultibase` matches `^fe70102[0-9a-f]{64}$` AND equals
+> `"fe70102" + doc.id-body`, no `publicKeyHex` field, exact two-context
+> `["https://w3id.org/did","https://w3id.org/nostr/context"]`. The pubkey-form and
+> HKDF-info assertions below are **RETAINED** (the pubkey form is §D1, invariant
+> I4). Original text kept for history:
 
 Each repo's CI MUST assert:
 - DID Document type: `verificationMethod[0].type == "SchnorrSecp256k1VerificationKey2019"`.

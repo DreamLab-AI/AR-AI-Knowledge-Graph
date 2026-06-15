@@ -54,6 +54,15 @@ The semantic index reproduces the clue's crypto lineage verbatim and grades it:
 
 We **name the web-contract pattern as a first-class DreamLab/VisionClaw primitive** over `solid-pod-rs`, and commit to a **single block-trail / single-use-seal substrate** across **four trust levels**. **Only L0 and L1 are declarable today**; **L2 and L3 are research / audit-gated FUTURE levels** the capability gate must HARD-REFUSE (see §2.4, §4).
 
+> **Identity rail (ADR-125 / ADR-074 §D2′).** Every `did:nostr` reference in this
+> ADR is the unchanged BIP-340 x-only hex identity string. The DID-document shape
+> the rail resolves to is now the canonical `DIDNostr` / `Multikey` /
+> `publicKeyMultibase "fe70102<hex>"` single form (ADR-125 §2), not the superseded
+> 2019-suite/`publicKeyHex` shape. This is a pure re-encoding of the same key — the
+> web-contract substrate carries `did:nostr:<hex>` opaquely and never parses or
+> re-encodes the verification method (invariants I1–I4 hold; see the ADR-124
+> build-out §7 invariant boundary). No code change in this decision.
+
 ### 2.1 The four layers (canonical mapping)
 A **VisionClaw web-contract** is:
 
