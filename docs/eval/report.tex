@@ -67,7 +67,7 @@ Ground truth derived from the KG itself. DiffusionGemma 26B-A4B runs on a single
 % =============================================================================
 \section*{Abstract}
 We measure whether grounding a language model in DreamLab's formal knowledge graph (the
-\texttt{ontology-augment} skill, PRD-020) improves factual recall---and whether that improvement
+\texttt{ontology-augment} skill, PRD-020) improves factual recall, and whether that improvement
 lets a \emph{local} model outperform cloud frontier models running without grounding.
 Using the knowledge graph as its own oracle, we auto-generate 16 questions with exact ground truth
 and run a $2 \times 7 \times 3$ design: \{augmented, control\} $\times$ 7 models $\times$ 3 reps,
@@ -97,7 +97,7 @@ totalling 672 isolated sessions. Key findings:
 \section{Method}
 
 \begin{samepage}
-\textbf{KG-as-oracle.} Ground truth is generated from the live KG, not human judgement:
+\textbf{KG-as-oracle.} We generate ground truth from the live KG, not human judgement:
 concept\,$\to$\,IRI via the discovery endpoint, then neighbours / subclass edges via read-only
 SPARQL over the asserted graph (predicates \texttt{enables, requires, uses, supports, hasPart,
 implements, dependsOn, subClassOf}). This makes scoring objective by construction.
@@ -258,7 +258,7 @@ Gemini 3.5 Flash AUG & 0.595 & Yes (Google API) & \$\,0.003 & 5--10\,s \\
 \textbf{DG 26B AUG (local)} & \textbf{0.505} & \textbf{No} & \textbf{\$\,0\rlap{*}} & \textbf{2--4\,s} \\
 \bottomrule
 \end{tabular}
-\caption{Cost and privacy comparison. DiffusionGemma runs entirely on-premise---no data leaves
+\caption{Cost and privacy comparison. DiffusionGemma runs entirely on-premise: no data leaves
 the organisation, no per-query API cost, lowest latency. The ontology condense pass is a one-off
 6-hour batch (7{,}445 classes), not per-query.\\
 {\footnotesize *Amortised electricity/hardware only; no API billing.}}
@@ -278,11 +278,11 @@ single read from the alias cache (sub-millisecond).
 \section{Caveats on Lift Interpretation}
 \label{sec:caveats}
 
-The headline finding---that a local model with ontology grounding outperforms frontier models
-without it---requires careful interpretation. We detail the caveats below.
+The headline finding, that a local model with ontology grounding outperforms frontier models
+without it, requires careful interpretation.
 
 \begin{samepage}
-\subsection{The comparison is grounded-local vs.\ bare-frontier, not like-for-like}
+\subsection{Grounded-local vs.\ bare-frontier: not like-for-like}
 DiffusionGemma+ontology (0.505) beats Opus bare (0.350), but this is not an apples-to-apples
 capability comparison. The local model receives structured KG triples as input context; the
 frontier models receive only the question. If frontier models were also grounded, they would
@@ -295,7 +295,7 @@ reasoning.
 \subsection{Frontier models benefit far more from grounding}
 The ontology amplifies capability rather than substituting for it. Claude models gain
 +0.38--0.46 F1 from grounding; DiffusionGemma gains only +0.108. This asymmetry suggests that
-larger models are better at \emph{exploiting} structured context---they extract more from the
+larger models are better at \emph{exploiting} structured context: they extract more from the
 same triples. The ontology is a capability multiplier, and the multiplier scales with the base.
 \end{samepage}
 
@@ -303,7 +303,7 @@ same triples. The ontology is a capability multiplier, and the multiplier scales
 \subsection{DiffusionGemma's own augmentation lift is modest}
 At +0.108 F1, the local model's lift is statistically meaningful but operationally small compared
 to the frontier lifts. The primary driver of DiffusionGemma's competitive bare score (0.397) is
-surprisingly strong parametric knowledge---it already knows many of the domain concepts. The
+surprisingly strong parametric knowledge; it already knows many of the domain concepts. The
 ontology's contribution to the local model is more about \emph{precision} (hallucination drops
 from 0.498 to 0.299) than about \emph{recall}.
 \end{samepage}
@@ -318,8 +318,8 @@ over these disparate regimes; no single number captures the full picture.
 \end{samepage}
 
 \begin{samepage}
-\subsection{The condense pass is a one-off cost, not free}
-The ontology alias index was built by running DiffusionGemma over all 7{,}445 OWL classes
+\subsection{Condense pass: a one-off cost}
+We built the ontology alias index by running DiffusionGemma over all 7{,}445 OWL classes
 ($\sim$6 hours on a single GPU). This is amortised over all future queries, but it means the
 system requires upfront investment. Re-indexing is needed when the KG changes materially.
 \end{samepage}
@@ -354,11 +354,11 @@ domains is plausible but untested.
       validates the thesis that structured retrieval compensates for raw parameter
       count~\cite{lewis2020rag,liu2024chatqa}.
 
-\item \textbf{Grounding amplifies capability---frontier models gain the most.} Opus AUG (0.770)
+\item \textbf{Grounding amplifies capability: frontier models gain the most.} Opus AUG (0.770)
       is the highest score observed. The ontology is a force multiplier, not an
       equaliser~(\S\ref{sec:caveats}).
 
-\item \textbf{Subclass recall is the largest relative win.} From 0.099 (CTL) to 0.671 (AUG)---a
+\item \textbf{Subclass recall is the largest relative win.} From 0.099 (CTL) to 0.671 (AUG), a
       6.8$\times$ improvement. Models have almost no parametric knowledge of ontology hierarchies;
       the KG supplies it directly.
 

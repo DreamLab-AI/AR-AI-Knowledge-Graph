@@ -51,7 +51,7 @@
 \end{frame}
 
 % SLIDE 2: THE QUESTION
-\begin{frame}{The Question}
+\begin{frame}{One Question}
 \Large
 \begin{center}
 Can a \textcolor{softgreen}{\textbf{local model}} running on one GPU,\\[6pt]
@@ -85,7 +85,7 @@ match \textcolor{burnt}{\textbf{frontier cloud models}} on domain recall?
 \end{frame}
 
 % SLIDE 4: THE NUMBERS
-\begin{frame}{The Numbers}
+\begin{frame}{Full Results}
 \centering
 \small
 \begin{tabular}{lcccc}
@@ -191,10 +191,10 @@ GDPR-compliant? & \textcolor{softgreen}{\textbf{Yes}} & Depends & Depends \\
       question. If frontier models were also grounded, they score much higher (Opus AUG: 0.770).
 
 \item \textbf{Frontier models gain more from grounding.} Claude +0.38--0.46 vs.\ DiffusionGemma
-      +0.108. The ontology is a \emph{capability multiplier}---it scales with the base model.
+      +0.108. The ontology is a \emph{capability multiplier}; it scales with the base model.
 
 \item \textbf{DG's own lift is modest.} +0.108 F1. Its strength is a surprisingly competitive
-      bare score (0.397), not extraordinary use of the ontology.
+      bare score (0.397), not exceptional ontology use.
 
 \item \textbf{Performance varies by type.} DG excels on existence (0.875) but struggles on
       neighbour recall (0.323) due to the 256-token block decode limit.
@@ -207,15 +207,15 @@ GDPR-compliant? & \textcolor{softgreen}{\textbf{Yes}} & Depends & Depends \\
 \begin{frame}{Key Takeaways}
 \Large
 \begin{enumerate}
-\item \textcolor{teal0}{\textbf{Ontology grounding works}} --- universally, across 7 models\\
+\item \textcolor{teal0}{\textbf{Ontology grounding works.}} Universally, across 7 models.\\
       {\normalsize +0.265 F1, hallucination halved}
 
 \vspace{4mm}
-\item \textcolor{softgreen}{\textbf{Local + ontology $>$ frontier bare}} --- for domain recall\\
+\item \textcolor{softgreen}{\textbf{Local + ontology $>$ frontier bare.}} For domain recall.\\
       {\normalsize DiffusionGemma 0.505 beats Opus bare 0.350}
 
 \vspace{4mm}
-\item \textcolor{burnt}{\textbf{Data sovereignty is achievable}} --- without sacrificing accuracy\\
+\item \textcolor{burnt}{\textbf{Data sovereignty without sacrificing accuracy.}}\\
       {\normalsize Zero API cost, zero data exfiltration, GDPR-ready}
 \end{enumerate}
 

@@ -4,7 +4,7 @@ supported. Retrieval-Augmented Generation (RAG) was introduced to inject non-par
 knowledge into sequence models on knowledge-intensive tasks~\cite{lewis2020rag}, and the
 approach has since matured from flat vector retrieval into structured, graph-based variants.
 Microsoft's GraphRAG constructs an entity knowledge graph over a corpus and reports
-substantial gains over conventional vector RAG in answer comprehensiveness and diversity for
+substantial gains over conventional vector RAG in answer breadth and diversity for
 global ``sensemaking'' queries spanning million-token datasets~\cite{edge2024graphrag}, with
 subsequent work formalising graph-augmented retrieval~\cite{guo2024lightrag,hu2024grag} and
 automated evaluation harnesses~\cite{microsoft2025benchmarkqed}. A complementary literature
@@ -12,7 +12,7 @@ shows that retrieval narrows or eliminates the gap to frontier cloud models: Cha
 open weights, reports surpassing GPT-4 on conversational QA and RAG benchmarks~\cite{liu2024chatqa},
 while open-domain QA studies confirm retrieval as the dominant lever for factual
 accuracy~\cite{li2024improvingrag}. This matters because small open-weight models have
-themselves closed much of the capability gap --- the Phi-3~\cite{abdin2024phi3},
+themselves closed much of the capability gap. The Phi-3~\cite{abdin2024phi3},
 Qwen2~\cite{yang2024qwen2}, Gemma~3~\cite{gemma2025gemma3} and Llama~3~\cite{dubey2024llama3}
 families demonstrate strong reasoning at parameter counts deployable on local hardware.
 Independently, structured knowledge has been shown to suppress hallucination and improve
@@ -21,7 +21,7 @@ trustworthiness~\cite{agrawal2023kghallucination,sansford2024kgtrustworthy}, mot
 dedicated factuality benchmarks such as FACTS Grounding~\cite{jacovi2025facts}. A parallel
 architectural shift further strengthens the local-inference case: masked diffusion language
 models such as LLaDA now rival LLaMA3-8B in in-context learning~\cite{nie2025llada}, and
-diffusion decoders like Mercury achieve over 1{,}000 tokens/second on a single H100 --- up to
+diffusion decoders like Mercury achieve over 1{,}000 tokens/second on a single H100, up to
 10$\times$ faster than speed-optimised autoregressive models at comparable
 quality~\cite{labs2025mercury}, with commercial systems including Gemini
 Diffusion~\cite{deepmind2025geminidiffusion}. Together with evidence on inference unit
