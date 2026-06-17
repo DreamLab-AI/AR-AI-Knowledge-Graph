@@ -1,0 +1,78 @@
+{
+  "by_model": {
+    "diffusiongemma": {
+      "aug": 0.5054,
+      "ctl": 0.3973,
+      "delta": 0.1081,
+      "aug_halluc": 0.2986,
+      "ctl_halluc": 0.4979
+    },
+    "gemini-2.5-flash-lite": {
+      "aug": 0.5829,
+      "ctl": 0.3838,
+      "delta": 0.1991,
+      "aug_halluc": 0.2656,
+      "ctl_halluc": 0.4979
+    },
+    "gemini-3.5-flash": {
+      "aug": 0.5952,
+      "ctl": 0.4234,
+      "delta": 0.1718,
+      "aug_halluc": 0.25,
+      "ctl_halluc": 0.46
+    },
+    "haiku": {
+      "aug": 0.7131,
+      "ctl": 0.2498,
+      "delta": 0.4633,
+      "aug_halluc": 0.1059,
+      "ctl_halluc": 0.7136
+    },
+    "opus": {
+      "aug": 0.7701,
+      "ctl": 0.3497,
+      "delta": 0.4204,
+      "aug_halluc": 0.0521,
+      "ctl_halluc": 0.5806
+    },
+    "sonnet": {
+      "aug": 0.7549,
+      "ctl": 0.3725,
+      "delta": 0.3824,
+      "aug_halluc": 0.0792,
+      "ctl_halluc": 0.559
+    },
+    "zai": {
+      "aug": 0.4492,
+      "ctl": 0.3416,
+      "delta": 0.1076,
+      "aug_halluc": 0.1875,
+      "ctl_halluc": 0.3936
+    }
+  },
+  "by_type": {
+    "existence": {
+      "aug": 0.9104,
+      "ctl": 0.7782,
+      "delta": 0.1322
+    },
+    "neighbour": {
+      "aug": 0.4579,
+      "ctl": 0.2811,
+      "delta": 0.1768
+    },
+    "subclass": {
+      "aug": 0.6714,
+      "ctl": 0.0986,
+      "delta": 0.5728
+    }
+  },
+  "overall": {
+    "aug": 0.6244,
+    "ctl": 0.3597,
+    "delta": 0.2647,
+    "aug_halluc": 0.177,
+    "ctl_halluc": 0.529,
+    "n_rows": 672
+  }
+}
