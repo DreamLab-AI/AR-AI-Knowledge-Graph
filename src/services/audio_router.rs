@@ -31,7 +31,7 @@ pub struct UserVoiceSession {
     pub ptt_active: bool,
     /// LiveKit participant ID for spatial audio
     pub livekit_participant_id: Option<String>,
-    /// User's 3D position in the Vircadia world (for spatial audio)
+    /// User's 3D position in the XR world (for spatial audio)
     pub spatial_position: [f32; 3],
 }
 
@@ -45,7 +45,7 @@ pub struct AgentVoiceIdentity {
     pub voice_id: String,
     /// Speech speed multiplier
     pub speed: f32,
-    /// Agent's 3D position in Vircadia world
+    /// Agent's 3D position in XR world
     pub position: [f32; 3],
     /// Whether voice is public (all users hear spatially) or private (owner only)
     pub public_voice: bool,
@@ -287,7 +287,7 @@ impl AudioRouter {
             .collect()
     }
 
-    /// Update user's spatial position (for Vircadia presence sync)
+    /// Update user's spatial position (for XR presence sync)
     pub async fn update_user_position(&self, user_id: &str, position: [f32; 3]) {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(user_id) {

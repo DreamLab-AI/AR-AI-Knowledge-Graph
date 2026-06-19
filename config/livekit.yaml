@@ -17,7 +17,7 @@ keys:
 room:
   # Default room settings for VisionClaw voice
   empty_timeout: 300        # 5 min before closing empty rooms
-  max_participants: 50      # Matches Vircadia max users
+  max_participants: 50      # Max concurrent users
   auto_create: true
 
 audio:

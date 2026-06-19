@@ -9,12 +9,6 @@ interface ImportMetaEnv {
   readonly VITE_LOG_LEVEL?: string;
   readonly VITE_ENABLE_ANALYTICS?: string;
   readonly VITE_ENABLE_TELEMETRY?: string;
-  readonly VITE_VIRCADIA_SERVER_URL?: string;
-  readonly VITE_VIRCADIA_AUTH_TOKEN?: string;
-  readonly VITE_VIRCADIA_AUTH_PROVIDER?: string;
-  readonly VITE_VIRCADIA_ENABLED?: string;
-  readonly VITE_VIRCADIA_ENABLE_MULTI_USER?: string;
-  readonly VITE_VIRCADIA_ENABLE_SPATIAL_AUDIO?: string;
   readonly VITE_QUEST3_ENABLE_HAND_TRACKING?: string;
   readonly VITE_INSTANCED_RENDERING?: string;
   readonly VITE_JSS_URL?: string;

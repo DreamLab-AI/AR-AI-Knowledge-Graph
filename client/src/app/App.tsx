@@ -23,8 +23,6 @@ import { ConnectionWarning } from '../components/ConnectionWarning';
 import { useAutoBalanceNotifications } from '../hooks/useAutoBalanceNotifications';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { remoteLogger } from '../services/remoteLogger';
-import { VircadiaProvider } from '../contexts/VircadiaContext';
-import { VircadiaBridgesProvider } from '../contexts/VircadiaBridgesContext';
 import { useNostrAuth } from '../hooks/useNostrAuth';
 import { OnboardingWizard } from '../components/OnboardingWizard';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -180,24 +178,20 @@ function App() {
       case 'initialized':
         return shouldUseImmersiveClient() ? (
           <BotsDataProvider>
-            <VircadiaBridgesProvider enableBotsBridge={true} enableGraphBridge={true}>
-              <Suspense fallback={<LoadingScreen message="Loading immersive client..." />}>
-                <ImmersiveApp />
-              </Suspense>
-            </VircadiaBridgesProvider>
+            <Suspense fallback={<LoadingScreen message="Loading immersive client..." />}>
+              <ImmersiveApp />
+            </Suspense>
           </BotsDataProvider>
         ) : (
           <BotsDataProvider>
-            <VircadiaBridgesProvider enableBotsBridge={true} enableGraphBridge={false}>
-              <MainLayout />
-            </VircadiaBridgesProvider>
+            <MainLayout />
           </BotsDataProvider>
         );
     }
   };
 
   return (
-    <VircadiaProvider autoConnect={false}>
+    <>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-black">Skip to graph</a>
       <TooltipProvider delayDuration={300} skipDelayDuration={100}>
         <HelpProvider>
@@ -223,7 +217,7 @@ function App() {
           </OnboardingProvider>
         </HelpProvider>
       </TooltipProvider>
-    </VircadiaProvider>
+    </>
   );
 }
 

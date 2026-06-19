@@ -144,7 +144,7 @@ impl Default for TranscriptionOptions {
 pub struct AgentSpatialInfo {
     /// Agent identifier
     pub agent_id: String,
-    /// 3D position in Vircadia world coordinates
+    /// 3D position in XR world coordinates
     pub position: [f32; 3],
     /// Owner user ID (for private fallback)
     pub owner_user_id: String,

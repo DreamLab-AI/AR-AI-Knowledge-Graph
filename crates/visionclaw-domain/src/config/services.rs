@@ -159,10 +159,10 @@ pub struct LiveKitSettings {
     /// Room name template (default: "visionclaw-{world_id}")
     #[serde(skip_serializing_if = "Option::is_none", alias = "room_prefix")]
     pub room_prefix: Option<String>,
-    /// Enable spatial audio based on Vircadia entity positions
+    /// Enable spatial audio based on XR entity positions
     #[serde(default = "default_true", alias = "spatial_audio")]
     pub spatial_audio: bool,
-    /// Max distance (in Vircadia units) before audio falls to zero
+    /// Max distance (in XR units) before audio falls to zero
     #[serde(default = "default_spatial_max_distance", alias = "spatial_max_distance")]
     pub spatial_max_distance: f32,
 }

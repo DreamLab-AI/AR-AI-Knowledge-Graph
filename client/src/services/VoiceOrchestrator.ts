@@ -185,7 +185,7 @@ export class VoiceOrchestrator {
 
   /**
    * Update the local user's spatial position.
-   * Call this from the Vircadia presence sync loop.
+   * Call this from the XR presence sync loop.
    */
   updateUserPosition(position: SpatialPosition): void {
     this.livekit.updateListenerPosition(position);
@@ -193,7 +193,7 @@ export class VoiceOrchestrator {
 
   /**
    * Update a remote participant's (user or agent) spatial position.
-   * Call this when Vircadia entity positions change.
+   * Call this when XR entity positions change.
    */
   updateRemotePosition(participantId: string, position: SpatialPosition): void {
     this.livekit.updateParticipantPosition(participantId, position);

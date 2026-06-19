@@ -721,13 +721,6 @@ export interface XRGPUSettings {
   };
 }
 
-// Vircadia integration settings
-export interface VircadiaSettings {
-  enabled: boolean;
-  serverUrl: string;
-  autoConnect: boolean;
-}
-
 // Node filter settings for graph visualization
 export interface NodeFilterSettings {
   enabled: boolean;
@@ -763,7 +756,6 @@ export interface Settings {
   performance?: PerformanceSettings;
   developer?: DeveloperSettings;
   qualityGates?: QualityGatesSettings;
-  vircadia?: VircadiaSettings;
   // Node filter settings for graph visualization
   nodeFilter?: NodeFilterSettings;
   // Client-side tweening for server-authoritative positions

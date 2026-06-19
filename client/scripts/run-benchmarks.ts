@@ -8,7 +8,6 @@
  * - Multi-user load tests
  * - VR performance validation
  * - Network resilience tests
- * - Vircadia integration tests
  */
 
 import * as fs from 'fs';
@@ -34,11 +33,6 @@ import {
   DEFAULT_NETWORK_TEST_CONFIG,
   NetworkTestResult
 } from '../src/tests/network/LatencyTest';
-import {
-  VircadiaIntegrationTest,
-  DEFAULT_VIRCADIA_CONFIG,
-  VircadiaTestResult
-} from '../src/tests/integration/VircadiaTest';
 
 interface TestSuite {
   name: string;
@@ -54,7 +48,6 @@ interface BenchmarkReport {
     load?: LoadTestResult[];
     vr?: VRPerformanceResult;
     network?: NetworkTestResult[];
-    vircadia?: VircadiaTestResult;
   };
   summary: {
     totalTests: number;
@@ -187,13 +180,6 @@ class BenchmarkRunner {
       });
     }
 
-    // Vircadia test
-    if (results.vircadia) {
-      totalTests++;
-      if (results.vircadia.passed) passed++;
-      else failed++;
-      if (results.vircadia.issues.length > 0) warnings++;
-    }
 
     return { totalTests, passed, failed, warnings };
   }
@@ -251,13 +237,6 @@ class BenchmarkRunner {
       );
     }
 
-    if (report.results.vircadia) {
-      const md = VircadiaIntegrationTest.generateReport(report.results.vircadia);
-      fs.writeFileSync(
-        path.join(this.outputDir, `vircadia-${timestamp}.md`),
-        md
-      );
-    }
   }
 
   /**
@@ -296,7 +275,6 @@ program
   .option('-l, --load', 'Run load tests')
   .option('-v, --vr', 'Run VR performance tests')
   .option('-n, --network', 'Run network resilience tests')
-  .option('-i, --integration', 'Run Vircadia integration tests')
   .option('-a, --all', 'Run all tests (default)', true)
   .option('-o, --output <dir>', 'Output directory', './benchmark-results')
   .parse(process.argv);
@@ -304,12 +282,11 @@ program
 const options = program.opts();
 
 // Determine which tests to run
-const runAll = options.all || (!options.performance && !options.load && !options.vr && !options.network && !options.integration);
+const runAll = options.all || (!options.performance && !options.load && !options.vr && !options.network);
 const runPerformance = runAll || options.performance;
 const runLoad = runAll || options.load;
 const runVr = runAll || options.vr;
 const runNetwork = runAll || options.network;
-const runIntegration = runAll || options.integration;
 
 // Create runner
 const runner = new BenchmarkRunner(options.output);
@@ -334,11 +311,6 @@ runner.registerSuite('Network Resilience', async () => {
   const networkTest = new NetworkLatencyTest(DEFAULT_NETWORK_TEST_CONFIG);
   return await networkTest.run();
 }, runNetwork);
-
-runner.registerSuite('Vircadia Integration', async () => {
-  const vircadiaTest = new VircadiaIntegrationTest(DEFAULT_VIRCADIA_CONFIG);
-  return await vircadiaTest.run();
-}, runIntegration);
 
 // Run benchmarks
 runner.runAll()
