@@ -245,3 +245,14 @@ data/sqlite/
 agentbox/.env.solid-pods
 # Godot editor cache (xr-client)
 xr-client/.godot/
+
+# --- hardening: recursive variants + untracked artifacts ---
+**/.venv/
+**/venv/
+**/node_modules/
+**/target/
+**/__pycache__/
+**/*.pyc
+**/.claude-flow/
+**/test-results/
+client/test-results/
