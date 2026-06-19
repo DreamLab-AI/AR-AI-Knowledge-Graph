@@ -1,0 +1,155 @@
+\relax 
+\bibstyle{biblatex}
+\bibdata{report-blx,refs}
+\citation{biblatex-control}
+\abx@aux@refcontext{none/global//global/global/global}
+\citation{lewis2020rag}
+\abx@aux@cite{0}{lewis2020rag}
+\abx@aux@segm{0}{0}{lewis2020rag}
+\citation{edge2024graphrag}
+\abx@aux@cite{0}{edge2024graphrag}
+\abx@aux@segm{0}{0}{edge2024graphrag}
+\citation{guo2024lightrag}
+\abx@aux@cite{0}{guo2024lightrag}
+\abx@aux@segm{0}{0}{guo2024lightrag}
+\citation{hu2024grag}
+\abx@aux@cite{0}{hu2024grag}
+\abx@aux@segm{0}{0}{hu2024grag}
+\citation{microsoft2025benchmarkqed}
+\abx@aux@cite{0}{microsoft2025benchmarkqed}
+\abx@aux@segm{0}{0}{microsoft2025benchmarkqed}
+\citation{liu2024chatqa}
+\abx@aux@cite{0}{liu2024chatqa}
+\abx@aux@segm{0}{0}{liu2024chatqa}
+\citation{li2024improvingrag}
+\abx@aux@cite{0}{li2024improvingrag}
+\abx@aux@segm{0}{0}{li2024improvingrag}
+\citation{abdin2024phi3}
+\abx@aux@cite{0}{abdin2024phi3}
+\abx@aux@segm{0}{0}{abdin2024phi3}
+\citation{yang2024qwen2}
+\abx@aux@cite{0}{yang2024qwen2}
+\abx@aux@segm{0}{0}{yang2024qwen2}
+\citation{gemma2025gemma3}
+\abx@aux@cite{0}{gemma2025gemma3}
+\abx@aux@segm{0}{0}{gemma2025gemma3}
+\citation{dubey2024llama3}
+\abx@aux@cite{0}{dubey2024llama3}
+\abx@aux@segm{0}{0}{dubey2024llama3}
+\citation{agrawal2023kghallucination}
+\abx@aux@cite{0}{agrawal2023kghallucination}
+\abx@aux@segm{0}{0}{agrawal2023kghallucination}
+\citation{sansford2024kgtrustworthy}
+\abx@aux@cite{0}{sansford2024kgtrustworthy}
+\abx@aux@segm{0}{0}{sansford2024kgtrustworthy}
+\citation{jacovi2025facts}
+\abx@aux@cite{0}{jacovi2025facts}
+\abx@aux@segm{0}{0}{jacovi2025facts}
+\citation{nie2025llada}
+\abx@aux@cite{0}{nie2025llada}
+\abx@aux@segm{0}{0}{nie2025llada}
+\citation{labs2025mercury}
+\abx@aux@cite{0}{labs2025mercury}
+\abx@aux@segm{0}{0}{labs2025mercury}
+\citation{deepmind2025geminidiffusion}
+\abx@aux@cite{0}{deepmind2025geminidiffusion}
+\abx@aux@segm{0}{0}{deepmind2025geminidiffusion}
+\citation{introl2026inference}
+\abx@aux@cite{0}{introl2026inference}
+\abx@aux@segm{0}{0}{introl2026inference}
+\citation{advisori2026gdpr}
+\abx@aux@cite{0}{advisori2026gdpr}
+\abx@aux@segm{0}{0}{advisori2026gdpr}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Related Work}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Method}{1}{}\protected@file@percent }
+\citation{jacovi2025facts}
+\abx@aux@cite{0}{jacovi2025facts}
+\abx@aux@segm{0}{0}{jacovi2025facts}
+\citation{nie2025llada}
+\abx@aux@cite{0}{nie2025llada}
+\abx@aux@segm{0}{0}{nie2025llada}
+\citation{labs2025mercury}
+\abx@aux@cite{0}{labs2025mercury}
+\abx@aux@segm{0}{0}{labs2025mercury}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Headline: Local + Ontology vs.\ Frontier Bare}{2}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces F1 by model. The dashed green line marks DiffusionGemma+ontology (0.505). Every frontier model's \emph  {bare} score falls below this line. Grounding lets a local 26B model outperform cloud-hosted frontier models on domain-specific factual recall.}}{2}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Per-model results. All 7 models show positive augmentation delta and reduced hallucination. Claude models show the largest absolute lift; DiffusionGemma's own lift is modest but its grounded score exceeds every frontier bare score.}}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Performance by Question Type}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Hallucination Analysis}{2}{}\protected@file@percent }
+\citation{introl2026inference}
+\abx@aux@cite{0}{introl2026inference}
+\abx@aux@segm{0}{0}{introl2026inference}
+\citation{advisori2026gdpr}
+\abx@aux@cite{0}{advisori2026gdpr}
+\abx@aux@segm{0}{0}{advisori2026gdpr}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Subclass questions show the largest relative lift (+0.573 absolute). Existence questions are easy for both arms (high baseline). Neighbour-recall benefits moderately.}}{3}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Per-model $\times $ per-type F1. Claude models dominate subclass recall when grounded (0.75--1.00); smaller models plateau at 0.50. DiffusionGemma's existence score is strong (0.875) but neighbour recall is weak (0.323).}}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}Cost, Privacy, and Inference Economics}{3}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Cost and privacy comparison. DiffusionGemma runs entirely on-premise: no data leaves the organisation, no per-query API cost, lowest latency. The ontology condense pass is a one-off 6-hour batch (7{,}445 classes), not per-query.  {\footnotesize  *Amortised electricity/hardware only; no API billing.}}}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Ontology grounding reduces hallucination for every model. The largest reduction is Haiku (0.714\,$\to $\,0.106, --0.608). Even DiffusionGemma drops from 0.498 to 0.299.}}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Caveats on Lift Interpretation}{4}{}\protected@file@percent }
+\newlabel{sec:caveats}{{7}{4}{Caveats on Lift Interpretation}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Grounded-local vs.\ bare-frontier: not like-for-like}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Frontier models benefit far more from grounding}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}DiffusionGemma's own augmentation lift is modest}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.4}Performance varies sharply by question type}{4}{}\protected@file@percent }
+\citation{lewis2020rag}
+\abx@aux@cite{0}{lewis2020rag}
+\abx@aux@segm{0}{0}{lewis2020rag}
+\citation{liu2024chatqa}
+\abx@aux@cite{0}{liu2024chatqa}
+\abx@aux@segm{0}{0}{liu2024chatqa}
+\citation{agrawal2023kghallucination}
+\abx@aux@cite{0}{agrawal2023kghallucination}
+\abx@aux@segm{0}{0}{agrawal2023kghallucination}
+\citation{sansford2024kgtrustworthy}
+\abx@aux@cite{0}{sansford2024kgtrustworthy}
+\abx@aux@segm{0}{0}{sansford2024kgtrustworthy}
+\citation{advisori2026gdpr}
+\abx@aux@cite{0}{advisori2026gdpr}
+\abx@aux@segm{0}{0}{advisori2026gdpr}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.5}Condense pass: a one-off cost}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.6}Gold truth is the KG itself}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.7}Sample size and domain scope}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Findings}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Threats to Validity}{6}{}\protected@file@percent }
+\abx@aux@read@bbl@mdfivesum{E92E115488BC9B2BC8ACB498DF2F5257}
+\abx@aux@defaultrefcontext{0}{lewis2020rag}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{edge2024graphrag}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{guo2024lightrag}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{hu2024grag}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{microsoft2025benchmarkqed}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{liu2024chatqa}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{li2024improvingrag}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{abdin2024phi3}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{yang2024qwen2}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{gemma2025gemma3}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{dubey2024llama3}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{agrawal2023kghallucination}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{sansford2024kgtrustworthy}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{jacovi2025facts}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{nie2025llada}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{labs2025mercury}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{deepmind2025geminidiffusion}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{introl2026inference}{none/global//global/global/global}
+\abx@aux@defaultrefcontext{0}{advisori2026gdpr}{none/global//global/global/global}
+\abx@aux@defaultlabelprefix{0}{lewis2020rag}{}
+\abx@aux@defaultlabelprefix{0}{edge2024graphrag}{}
+\abx@aux@defaultlabelprefix{0}{guo2024lightrag}{}
+\abx@aux@defaultlabelprefix{0}{hu2024grag}{}
+\abx@aux@defaultlabelprefix{0}{microsoft2025benchmarkqed}{}
+\abx@aux@defaultlabelprefix{0}{liu2024chatqa}{}
+\abx@aux@defaultlabelprefix{0}{li2024improvingrag}{}
+\abx@aux@defaultlabelprefix{0}{abdin2024phi3}{}
+\abx@aux@defaultlabelprefix{0}{yang2024qwen2}{}
+\abx@aux@defaultlabelprefix{0}{gemma2025gemma3}{}
+\abx@aux@defaultlabelprefix{0}{dubey2024llama3}{}
+\abx@aux@defaultlabelprefix{0}{agrawal2023kghallucination}{}
+\abx@aux@defaultlabelprefix{0}{sansford2024kgtrustworthy}{}
+\abx@aux@defaultlabelprefix{0}{jacovi2025facts}{}
+\abx@aux@defaultlabelprefix{0}{nie2025llada}{}
+\abx@aux@defaultlabelprefix{0}{labs2025mercury}{}
+\abx@aux@defaultlabelprefix{0}{deepmind2025geminidiffusion}{}
+\abx@aux@defaultlabelprefix{0}{introl2026inference}{}
+\abx@aux@defaultlabelprefix{0}{advisori2026gdpr}{}
+\gdef \@abspage@last{8}

@@ -1,0 +1,32 @@
+# Standalone Cloudflare tunnel for the visionflow-hp instance (visionclaw.io).
+#
+# Token-based tunnel: the ingress mapping (visionclaw.io -> http://visionclaw-server:3001)
+# is configured as a "Public Hostname" in the Cloudflare Zero Trust dashboard, so no
+# local config.yml is needed here. The cloudflared container joins visionclaw_network
+# and reaches the VisionClaw dev/prod container by its network alias `visionclaw-server`
+# on nginx port 3001.
+#
+# Usage:
+#   1) put your tunnel token in .env:   CLOUDFLARE_TUNNEL_TOKEN=eyJ...
+#   2) docker compose -f docker-compose.cloudflared.yml up -d
+#   3) docker compose -f docker-compose.cloudflared.yml logs -f   # expect "Registered tunnel connection"
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-visionclaw-io
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env first}
+    networks:
+      - visionclaw_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  visionclaw_network:
+    external: true
+    name: visionclaw_network

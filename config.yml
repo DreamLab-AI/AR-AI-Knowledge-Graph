@@ -1,7 +1,7 @@
 tunnel: logseqXR
 
 ingress:
-  - hostname: www.visionclaw.info
+  - hostname: www.visionclaw.io
     service: http://visionclaw-server:3001
     originRequest:
       noTLSVerify: true
@@ -11,7 +11,7 @@ ingress:
       idleTimeout: 10m
       websocketIdleTimeout: 10m
       keepAliveConnections: 100
-      httpHostHeader: www.visionclaw.info
+      httpHostHeader: www.visionclaw.io
       proxyProtocol: false
     config:
       webSockets: true

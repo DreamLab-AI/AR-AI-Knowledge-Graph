@@ -45,12 +45,21 @@ ENV RUST_LOG=${RUST_LOG:-warn} \
     LD_LIBRARY_PATH="/opt/cuda/lib64:${LD_LIBRARY_PATH}" \
     PATH="/root/.cargo/bin:/opt/cuda/bin:${PATH}"
 
+# CachyOS mirror fix (added 2026-06-19): cdn77.cachyos.org has a package sync gap
+# and 404s on gcc14/gcc14-libs (confirmed against cachyos-v3:latest). Drop it so
+# pacman uses a healthy mirror from the list.
+RUN for f in /etc/pacman.d/cachyos-mirrorlist /etc/pacman.d/cachyos-v3-mirrorlist /etc/pacman.d/cachyos-v4-mirrorlist; do [ -f "$f" ] && sed -i '/cdn77/d' "$f"; done; true
+
 # Initialize pacman keyring (required for CachyOS signature verification)
 RUN pacman-key --init && \
     pacman-key --populate archlinux cachyos && \
     pacman -Sy --noconfirm archlinux-keyring cachyos-keyring && \
     pacman -Syu --noconfirm && \
     rm -rf /var/cache/pacman/pkg/*
+
+# Re-strip cdn77 AFTER `pacman -Syu` (which reinstalls cachyos-mirrorlist and restores
+# cdn77), so the package install below uses a healthy mirror deterministically.
+RUN for f in /etc/pacman.d/cachyos-mirrorlist /etc/pacman.d/cachyos-v3-mirrorlist /etc/pacman.d/cachyos-v4-mirrorlist; do [ -f "$f" ] && sed -i '/cdn77/d' "$f"; done; true
 
 # Install base system dependencies (with retry logic for transient failures)
 RUN for attempt in 1 2 3; do \
@@ -141,11 +150,15 @@ FROM base AS rust-deps
 COPY Cargo.toml build.rs ./
 COPY Cargo.lock* ./
 COPY crates ./crates
+# visionclaw-ontology embeds docs/data-sprint/context-v1.jsonld via include_str! at
+# compile time, so the dep-build stage needs it present (the dev stage's COPY docs
+# happens later, after this cargo build).
+COPY docs/data-sprint ./docs/data-sprint
 
 # solid-pod-rs is a crates.io dep — fetched by cargo during build, no COPY needed.
-
-# Copy CUDA source files needed by build.rs for PTX compilation
-COPY src/utils/*.cu src/utils/
+# CUDA .cu sources moved into crates/visionclaw-gpu/src/cuda_sources/ (copied via
+# `COPY crates ./crates` above); the gpu crate's build.rs compiles them to PTX.
+# The old `COPY src/utils/*.cu src/utils/` was removed — that path no longer exists.
 
 # Create dummy Rust source to build dependencies without real code
 # Must create placeholders for all [[bin]] targets in Cargo.toml
@@ -155,6 +168,7 @@ RUN mkdir -p src/bin examples && \
     echo "fn main() {}" > src/bin/generate_types.rs && \
     echo "fn main() {}" > src/bin/sync_local.rs && \
     echo "fn main() {}" > src/bin/sync_github.rs && \
+    echo "fn main() {}" > src/bin/validate_md.rs && \
     echo "fn main() {}" > examples/constraint_integration_debug.rs && \
     echo "fn main() {}" > examples/metadata_debug.rs && \
     echo "fn main() {}" > examples/ontology_constraints_example.rs && \
@@ -321,12 +335,18 @@ ENTRYPOINT ["./dev-entrypoint.sh"]
 # To update: docker manifest inspect cachyos/cachyos-v3:<tag> and repin the index digest.
 FROM cachyos/cachyos-v3@sha256:cacb78623e2b3fc41df6cdeafca92bc92a1a963bd545ce3c01dacfbd73d5c73c AS production
 
+# CachyOS mirror fix (added 2026-06-19): drop cdn77 (gcc14 sync gap / 404s).
+RUN for f in /etc/pacman.d/cachyos-mirrorlist /etc/pacman.d/cachyos-v3-mirrorlist /etc/pacman.d/cachyos-v4-mirrorlist; do [ -f "$f" ] && sed -i '/cdn77/d' "$f"; done; true
+
 # Initialize pacman keyring for production stage
 RUN pacman-key --init && \
     pacman-key --populate archlinux cachyos && \
     pacman -Sy --noconfirm archlinux-keyring cachyos-keyring && \
     pacman -Syu --noconfirm && \
     rm -rf /var/cache/pacman/pkg/*
+
+# Re-strip cdn77 after `pacman -Syu` restores it (see base stage note).
+RUN for f in /etc/pacman.d/cachyos-mirrorlist /etc/pacman.d/cachyos-v3-mirrorlist /etc/pacman.d/cachyos-v4-mirrorlist; do [ -f "$f" ] && sed -i '/cdn77/d' "$f"; done; true
 
 # Install only runtime dependencies (no base-devel, no cuda dev headers)
 RUN for attempt in 1 2 3; do \
