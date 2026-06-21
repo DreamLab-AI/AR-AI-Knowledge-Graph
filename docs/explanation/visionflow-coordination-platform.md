@@ -88,9 +88,10 @@ No shared session store. No token exchange between tiers. The cryptographic prim
 The shared semantic substrate where humans and agents reason together. VisionClaw ingests knowledge, applies OWL 2 EL formal reasoning, renders it as a navigable 3D space, and exposes it to agents through MCP tools. Its unique contribution to the coordination layer:
 
 - **Shared ontology** — agents and humans work against the same formal vocabulary. "Deliverable" means the same thing to a Creative Production agent and a Governance agent.
+- **W3C SHACL validation** — every write path passes through shape constraints before reaching the store. Dual-mode gate: enforcing on mutations, advisory on reads.
 - **GPU-accelerated sense-making** — semantic forces make related concepts cluster visually. Humans see patterns; agents traverse them algorithmically.
 - **Judgment Broker** — the human-in-the-loop governance surface. Agents publish control panels (kind 31400); humans approve/reject via signed Nostr events (kind 31403).
-- **Immutable provenance** — every reasoning chain traces back through content-addressed beads to source evidence.
+- **W3C PROV-O provenance** — every reasoning chain reified as queryable RDF in an append-only graph. Agents can SPARQL-query "who asserted this, when, with what evidence."
 
 ### Agentbox — Harness Engineering
 

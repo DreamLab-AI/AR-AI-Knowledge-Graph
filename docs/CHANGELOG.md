@@ -5,6 +5,18 @@ All notable changes to VisionClaw will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-06-21
+
+### Added — Semantic Trust Layer (PRD-022 Phase 1, ADR-127)
+
+- **W3C SHACL shape catalogue** (`crates/visionclaw-ontology/shapes/*.ttl`): 5 shapes for OntologyClass, InferredAxiom, BridgeRecord, KnowledgeNode, AgentNode. Loaded into dedicated `urn:ngm:graph:shapes` named graph via SPARQL migration.
+- **Dual-mode SHACL gate** (`shacl_gate.rs`): Enforcing mode (write paths reject violations) and Advisory mode (read paths log and proceed). Gate produces `ShaclGateReport` with severity-tagged violations.
+- **W3C PROV-O provenance reification** (`provenance_emitter.rs`): `reify_activity()` inserts PROV-O triples into append-only `urn:ngm:graph:provenance` named graph. `query_agent_activities()` and `count_*()` SPARQL queries for liveness.
+- **BC20 provenance crossing** (`receipt-minter.js`): `crossActivityOutbound()` wired into `mintSpendActivity()` — every spend activity auto-crosses through the BC20 bridge to the VisionClaw provenance graph. Fail-open.
+- **Trust status endpoint** (`GET /api/ontology-physics/trust-status`): WS-5 liveness canary reporting shapes loaded, provenance triples, gate modes, federation status.
+- **SPARQL migrations**: `0002_bootstrap_shapes_graph` and `0003_bootstrap_provenance_graph` added to the migration registry.
+- **Docs**: PRD-022, ADR-127 (keystone), DDD Semantic Trust Layer bounded context (BC22).
+
 ## [Unreleased] - 2026-05-12
 
 ### Added — Agent Control Surface Protocol Integration

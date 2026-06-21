@@ -73,10 +73,20 @@ impl Migration {
 /// `0001` is ADR-100's canonical IRI re-mint. ADR-099's provenance back-fill
 /// (`0002`) is owned by the reasoning agent and is intentionally NOT embedded
 /// here (PRD-018 WS-2 handoff).
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: "0001_canonical_iri_remint",
-    sparql: include_str!("../migrations/sparql/0001_canonical_iri_remint.rups"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: "0001_canonical_iri_remint",
+        sparql: include_str!("../migrations/sparql/0001_canonical_iri_remint.rups"),
+    },
+    Migration {
+        version: "0002_bootstrap_shapes_graph",
+        sparql: include_str!("../migrations/sparql/0002_bootstrap_shapes_graph.rups"),
+    },
+    Migration {
+        version: "0003_bootstrap_provenance_graph",
+        sparql: include_str!("../migrations/sparql/0003_bootstrap_provenance_graph.rups"),
+    },
+];
 
 /// Errors from the migration runner.
 #[derive(Debug)]
@@ -259,7 +269,8 @@ mod tests {
         let count = store
             .quads_for_pattern(None, None, None, Some(GraphNameRef::NamedNode(graph)))
             .count();
-        assert_eq!(count, 4, "type + version + checksum + appliedAt");
+        // 4 quads per migration (type + version + checksum + appliedAt)
+        assert_eq!(count, 4 * MIGRATIONS.len(), "4 ledger quads per migration");
     }
 
     #[test]

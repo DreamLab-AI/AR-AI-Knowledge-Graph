@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
 ---
 
-**92 CUDA kernels · GPU clustering, anomaly detection and PageRank · Multi-user immersive XR · 88 agent skills · OWL 2 ontology governance · Nostr DID identity · Solid Pod sovereignty**
+**92 CUDA kernels · GPU clustering, anomaly detection and PageRank · Multi-user immersive XR · 88 agent skills · OWL 2 + SHACL ontology governance · W3C PROV-O provenance · Nostr DID identity · Solid Pod sovereignty**
 
 ---
 
@@ -119,7 +119,7 @@ flowchart TB
 
     subgraph Layer2["LAYER 2 — ORCHESTRATION"]
         Skills["88 Agent Skills\nClaude-Flow DAG Pipelines"]
-        Ontology["OWL 2 EL Reasoning\nWhelk-rs Inference Engine"]
+        Ontology["OWL 2 EL + SHACL\nWhelk-rs + PROV-O"]
         MCP["17 MCP Tools\nKnowledge Graph Read/Write"]
         GPU["GPU Compute\n92 CUDA Kernels"]
     end
@@ -147,6 +147,8 @@ flowchart TB
 
 **Semantic Governance**
 - OWL 2 EL reasoning via Whelk-rs (EL++ inference)
+- W3C SHACL shape validation — dual-mode gate (enforcing on writes, advisory on reads)
+- W3C PROV-O provenance reified as queryable RDF in an append-only named graph
 - `subClassOf` → attraction, `disjointWith` → repulsion in GPU physics
 - Every ontology mutation creates a GitHub PR — human veto before commit
 - Content-addressed immutable provenance beads (Nostr)
@@ -676,7 +678,7 @@ Each context has its own aggregate roots, domain events, and anti-corruption lay
 | **Graph Store** | Oxigraph + SQLite | ADR-11 canonical persistence (SPARQL triple store) |
 | **Vector Memory** | RuVector PostgreSQL · pgvector | 1.17M+ entries · HNSW 384-dim · MiniLM-L6-v2 · 61µs search |
 | **GPU** | CUDA 13.1 · cudarc | 92 kernel functions · 6,585 LOC · PTX ISA auto-downgrade |
-| **Ontology** | OWL 2 EL · Whelk-rs | EL++ subsumption · consistency checking |
+| **Ontology** | OWL 2 EL · Whelk-rs · SHACL | EL++ subsumption · consistency checking · W3C shape validation · PROV-O provenance |
 | **Multi-User** | Vircadia World Server | Avatar sync · spatial HRTF audio · collaborative editing |
 | **Voice** | LiveKit SFU · turbo-whisper · Kokoro | CUDA STT · TTS · Opus 48kHz · 4-plane routing |
 | **Identity** | Nostr NIP-07/NIP-98 · DID:Nostr | Browser extension signing · NIP-26 delegation · W3C key rotation |

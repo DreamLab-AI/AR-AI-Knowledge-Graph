@@ -1,0 +1,26 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix vc:    <https://narrativegoldmine.com/ns/v1#> .
+@prefix vcsh:  <urn:ngm:shape:> .
+
+vcsh:AgentNodeShape
+    a sh:NodeShape ;
+    sh:targetClass vc:AgentNode ;
+    sh:name "AgentNode shape" ;
+    sh:description "Every agent node must have a pubkey matching did:nostr pattern." ;
+
+    sh:property [
+        sh:path vc:agent_pubkey ;
+        sh:minCount 1 ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+        sh:severity sh:Violation ;
+        sh:message "AgentNode must have vc:agent_pubkey as a 64-character hex string." ;
+    ] ;
+
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "AgentNode should have rdfs:label." ;
+    ] .

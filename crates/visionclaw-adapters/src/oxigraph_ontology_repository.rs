@@ -48,6 +48,12 @@ pub const GRAPH_ONTOLOGY_INFERRED: &str = "urn:ngm:graph:ontology:inferred";
 pub const GRAPH_KNOWLEDGE: &str = "urn:ngm:graph:knowledge";
 pub const GRAPH_AGENT: &str = "urn:ngm:graph:agent";
 
+/// PRD-022 trust-layer named graphs.
+/// `:shapes` holds W3C SHACL shape triples loaded from .ttl files at startup.
+/// `:provenance` holds append-only PROV-O activity triples (reified provenance).
+pub const GRAPH_SHAPES: &str = "urn:ngm:graph:shapes";
+pub const GRAPH_PROVENANCE: &str = "urn:ngm:graph:provenance";
+
 /// WS-9 derived named graphs. These are the ONLY graphs writable through the
 /// fenced `/api/ontology/derived` path: `:summary` holds approval-driven
 /// summary triples (broker write-back consequences), `:observed` holds

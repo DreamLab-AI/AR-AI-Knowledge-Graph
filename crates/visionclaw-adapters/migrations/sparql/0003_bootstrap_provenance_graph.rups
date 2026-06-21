@@ -1,0 +1,23 @@
+# Migration 0003: Bootstrap the PROV-O provenance named graph (PRD-022 WS-2).
+#
+# Creates urn:ngm:graph:provenance as an append-only audit trail for
+# reified PROV-O activity triples. The sentinel triple marks the graph
+# as a provenance container.
+#
+# INVARIANT: This graph accepts only INSERT DATA. No DELETE, DROP, or
+# CLEAR operations are permitted against it. Enforcement is at the
+# handler level (validate_read_only_sparql + provenance-specific guard).
+#
+# Idempotent: INSERT DATA is additive.
+
+INSERT DATA {
+    GRAPH <urn:ngm:graph:provenance> {
+        <urn:ngm:provenance:catalogue>
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+            <http://www.w3.org/ns/prov#Collection> .
+
+        <urn:ngm:provenance:catalogue>
+            <http://www.w3.org/2000/01/rdf-schema#comment>
+            "Append-only PROV-O provenance trail for VisionClaw (PRD-022)." .
+    }
+}

@@ -1,0 +1,28 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix vc:    <https://narrativegoldmine.com/ns/v1#> .
+@prefix vcsh:  <urn:ngm:shape:> .
+
+vcsh:BridgeRecordShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf vc:bridgeTo ;
+    sh:name "BridgeRecord shape" ;
+    sh:description "vc:bridgeTo must target a concrete entity, not a LinkedPage stub." ;
+
+    sh:property [
+        sh:path vc:bridgeTo ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "BridgeRecord must have vc:bridgeTo targeting an IRI." ;
+    ] ;
+
+    sh:property [
+        sh:path vc:bridgeTo ;
+        sh:not [
+            sh:pattern "^urn:visionclaw:linked:" ;
+        ] ;
+        sh:severity sh:Violation ;
+        sh:message "vc:bridgeTo must not target a LinkedPage stub (urn:visionclaw:linked:*)." ;
+    ] .

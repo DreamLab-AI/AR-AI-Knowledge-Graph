@@ -42,3 +42,8 @@ pub use sparql_migrations::{run_pending as run_sparql_migrations, MigrationError
 // WS-1 / ADR-100 — standards-grade RDF round-trip serialisation over oxigraph's
 // bundled oxrdfio (Turtle / JSON-LD / N-Quads). No new dependency.
 pub mod rdf_serializer;
+
+// PRD-022 WS-2 — PROV-O provenance reification emitter. Reifies activity
+// URNs as RDF triples in the append-only urn:ngm:graph:provenance graph.
+pub mod provenance_emitter;
+pub use provenance_emitter::{reify_activity, ActivityRecord, ProvenanceError};

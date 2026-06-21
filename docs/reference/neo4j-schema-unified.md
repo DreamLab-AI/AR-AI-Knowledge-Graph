@@ -34,6 +34,8 @@ graph TB
         Oxigraph[(Oxigraph\nembedded RDF triple store)]
         Oxigraph --> KG[Knowledge Graph]
         Oxigraph --> Onto[Ontology Store]
+        Oxigraph --> Shapes[SHACL Shapes]
+        Oxigraph --> Prov[PROV-O Provenance]
     end
 
     subgraph "Settings"

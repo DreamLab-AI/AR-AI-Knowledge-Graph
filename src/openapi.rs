@@ -29,7 +29,7 @@ WebXR Graph Visualization Server with GPU-accelerated physics, QUIC transport, a
 ## Features
 - **Real-time Physics**: GPU-accelerated force-directed graph layout
 - **Ultra-low Latency**: QUIC/WebTransport with 0-RTT connections
-- **Semantic Reasoning**: OWL ontology integration with Whelk reasoner
+- **Semantic Reasoning**: OWL ontology + W3C SHACL validation + PROV-O provenance
 - **High Throughput**: Postcard serialization (12 GB/s vs 2 GB/s JSON)
 
 ## Authentication

@@ -30,7 +30,7 @@ use oxigraph::model::Quad;
 use super::errors::{JsonLdIngestError, Result};
 use super::expander::expand_block;
 use super::extractor::extract_jsonld_blocks;
-use super::shacl_gate::{gate_block, ShaclGateReport};
+use super::shacl_gate::{gate_block_advisory, ShaclGateReport};
 use super::triple_emitter::emit_quads;
 use super::validator::validate;
 use crate::services::jsonld_ingest::graph_port_shim::GraphRepository;
@@ -104,7 +104,7 @@ pub fn parse_and_emit(markdown: &str, metadata: &PageMetadata) -> Result<IngestO
         // in `expand_block`, so this re-parse cannot fail; on the off chance
         // it does, the shape gate simply records nothing for that block.
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(&block.body) {
-            gate_block(&value, block.index, &mut shacl_report);
+            gate_block_advisory(&value, block.index, &mut shacl_report);
         }
         let quads = emit_quads(&doc);
         all_quads.extend(quads);

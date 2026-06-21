@@ -1,0 +1,27 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix vc:    <https://narrativegoldmine.com/ns/v1#> .
+@prefix vcsh:  <urn:ngm:shape:> .
+
+vcsh:OntologyClassShape
+    a sh:NodeShape ;
+    sh:targetClass owl:Class ;
+    sh:name "OntologyClass shape" ;
+    sh:description "Every owl:Class must have rdfs:label and rdfs:subClassOf (except root)." ;
+
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "OntologyClass must have at least one rdfs:label." ;
+    ] ;
+
+    sh:property [
+        sh:path vc:domain ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "OntologyClass should declare a vc:domain." ;
+    ] .

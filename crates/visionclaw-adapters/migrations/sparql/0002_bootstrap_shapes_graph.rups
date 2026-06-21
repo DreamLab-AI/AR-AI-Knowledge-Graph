@@ -1,0 +1,21 @@
+# Migration 0002: Bootstrap the SHACL shapes named graph (PRD-022 WS-0).
+#
+# Creates urn:ngm:graph:shapes and loads a sentinel triple so the graph
+# is discoverable via SPARQL ASK. The actual shape triples are loaded
+# programmatically from the embedded .ttl files at startup — this
+# migration only ensures the graph exists and is queryable.
+#
+# Idempotent: INSERT DATA is additive; re-running is a no-op if the
+# sentinel already exists.
+
+INSERT DATA {
+    GRAPH <urn:ngm:graph:shapes> {
+        <urn:ngm:shape:catalogue>
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+            <http://www.w3.org/ns/shacl#Schema> .
+
+        <urn:ngm:shape:catalogue>
+            <http://www.w3.org/2000/01/rdf-schema#comment>
+            "SHACL shape catalogue for VisionClaw domain types (PRD-022)." .
+    }
+}

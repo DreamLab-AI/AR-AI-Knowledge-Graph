@@ -130,6 +130,8 @@ store for both knowledge-graph and ontology data ([ADR-11](../migration-sprint/1
 
 **Current Architecture**:
 - ✅ Embedded Oxigraph for knowledge-graph nodes/edges and ontology (named graphs)
+- ✅ W3C SHACL shape validation in `urn:ngm:graph:shapes` — dual-mode gate (ADR-127 D1)
+- ✅ W3C PROV-O provenance reification in append-only `urn:ngm:graph:provenance` (ADR-127 D2)
 - ✅ Embedded SQLite for user settings (`SqliteSettingsRepository`)
 - ✅ In-memory ontology cache for fast Whelk reasoning, snapshotted to Oxigraph
 - ✅ OntologyQueryService and OntologyMutationService for agent read/write paths

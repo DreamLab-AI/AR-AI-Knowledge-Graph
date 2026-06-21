@@ -255,6 +255,7 @@ Design decisions recorded as ADRs in [docs/adr/](adr/).
 
 | ADR | Status | Title |
 |-----|--------|-------|
+| [ADR-127](adr/ADR-127-semantic-trust-layer.md) | Accepted | Semantic Trust Layer — SHACL shapes in Oxigraph, PROV-O as reified RDF, relay-mediated SPARQL federation (deferred) |
 | [ADR-111](adr/ADR-111-ecosystem-infographic-modernisation.md) | Proposed | Ecosystem Infographic Modernisation — audit + diagram-as-code / Nano Banana regeneration plan for stale images (image replacement is a separate follow-up) |
 | [ADR-110](adr/ADR-110-agentic-actors-acsp-control-surfaces.md) | Accepted | Agentic Actors Project Control Surfaces into the Forum (ACSP producer + knowledge-elevation flagship; resolves PRD-014 §8) |
 | [ADR-102](adr/ADR-102-xr-client-backend-transport-completion.md) | Accepted | XR Client ↔ Backend Transport Completion (live V3 wire; amends ADR-071) |
@@ -457,6 +458,7 @@ This section indexes the three lifecycle document types that govern VisionClaw's
 | 010 | [PRD-010: DID:Nostr Mesh Federation](PRD-010-did-nostr-mesh-federation.md) | Phase 0-1 complete; federation in progress | ADR-073–076 | [Mesh Federation](ddd-mesh-federation-context.md) |
 | 011 | [PRD-011: Forum Kit Extraction](PRD-011-visionclaw-forum-kit-extraction.md) | Phase 2 complete; kit on crates.io | ADR-079, ADR-080 | [Mesh Federation](ddd-mesh-federation-context.md) |
 | 012 | [PRD-012: Website Kit Adoption](PRD-012-dreamlab-ai-website-kit-adoption.md) | Phase 3 forum-config/ created; cutover pending | ADR-083–085 | [Mesh Federation](ddd-mesh-federation-context.md) |
+| 022 | [PRD-022: Semantic Trust Layer](PRD-022-semantic-trust-layer.md) | Phase 1 implemented (WS-0/1/2/5); federation deferred | ADR-127 | [Semantic Trust Layer (BC22)](ddd-semantic-trust-layer-context.md) |
 | QE-001 | [PRD-QE-001: Integration Quality Engineering](PRD-QE-001-integration-quality-engineering.md) | Draft | ADR-062 | [QE Traceability (BC21)](ddd-qe-traceability-graph-context.md) |
 | QE-002 | [PRD-QE-002: XR Godot Quality Engineering](PRD-QE-002-xr-godot-quality-engineering.md) | In Progress | ADR-071 | [XR Godot (BC22)](ddd-xr-godot-context.md) |
 | — | [PRD: Agent Orchestration Improvements](archive/PRD-agent-orchestration-improvements.md) | Accepted (archived) | ADR-031 | — |
@@ -489,6 +491,7 @@ This section indexes the three lifecycle document types that govern VisionClaw's
 | Graph Cognition | BC-GC | [DDD Graph Cognition](ddd-graph-cognition-context.md) | Active | PRD-005 |
 | XR Godot | BC22 | [DDD XR Godot](ddd-xr-godot-context.md) | Implemented | PRD-008 |
 | Feature Engineering | BC23 | [DDD Feature Engineering](ddd-feature-engineering-context.md) | Active | PRD-009 |
+| Semantic Trust Layer | BC22 | [DDD Semantic Trust Layer](ddd-semantic-trust-layer-context.md) | Active | PRD-022 |
 
 #### Superseded DDD Documents
 

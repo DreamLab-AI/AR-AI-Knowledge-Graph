@@ -1,0 +1,29 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:   <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov:  <http://www.w3.org/ns/prov#> .
+@prefix vc:    <https://narrativegoldmine.com/ns/v1#> .
+@prefix vcsh:  <urn:ngm:shape:> .
+
+vcsh:InferredAxiomShape
+    a sh:NodeShape ;
+    sh:targetSubjectsOf vc:derivation ;
+    sh:name "InferredAxiom shape" ;
+    sh:description "Every inferred axiom must carry prov:wasGeneratedBy linking to its reasoner run." ;
+
+    sh:property [
+        sh:path prov:wasGeneratedBy ;
+        sh:minCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Violation ;
+        sh:message "Inferred axiom must have prov:wasGeneratedBy with a reasoner run IRI." ;
+    ] ;
+
+    sh:property [
+        sh:path vc:derivation ;
+        sh:minCount 1 ;
+        sh:in ( "inferred" "proposed" ) ;
+        sh:severity sh:Violation ;
+        sh:message "vc:derivation must be 'inferred' or 'proposed'." ;
+    ] .

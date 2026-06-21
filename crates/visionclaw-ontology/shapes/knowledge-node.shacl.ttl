@@ -1,0 +1,34 @@
+@prefix sh:    <http://www.w3.org/ns/shacl#> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix vc:    <https://narrativegoldmine.com/ns/v1#> .
+@prefix vcsh:  <urn:ngm:shape:> .
+
+vcsh:KnowledgeNodeShape
+    a sh:NodeShape ;
+    sh:targetClass vc:KnowledgeNode ;
+    sh:name "KnowledgeNode shape" ;
+    sh:description "Every knowledge node must have a source file and a public boolean." ;
+
+    sh:property [
+        sh:path vc:source_file ;
+        sh:minCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Violation ;
+        sh:message "KnowledgeNode must have vc:source_file." ;
+    ] ;
+
+    sh:property [
+        sh:path vc:public ;
+        sh:minCount 1 ;
+        sh:datatype xsd:boolean ;
+        sh:severity sh:Violation ;
+        sh:message "KnowledgeNode must have vc:public (boolean)." ;
+    ] ;
+
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:severity sh:Warning ;
+        sh:message "KnowledgeNode should have rdfs:label." ;
+    ] .
