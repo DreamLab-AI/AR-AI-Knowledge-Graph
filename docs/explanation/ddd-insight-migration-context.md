@@ -334,7 +334,7 @@ sequenceDiagram
     participant GH as GitHub PR
 
     KG->>DE: WikilinkToOntology signal (count=7)
-    DE->>MC: append signal; recalculate confidence
+    DE->>MC: append signal and recalculate confidence
     MC-->>DE: confidence=0.61 (below threshold)
     DE->>MC: SemanticCooccurrence signal (similarity=0.88)
     MC-->>DE: confidence=0.81 (threshold crossed)

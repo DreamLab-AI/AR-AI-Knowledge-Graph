@@ -113,4 +113,4 @@ These are designed to run post-sync (after new ontology data is ingested from Gi
 
 ## Bounded Context
 
-The feature engineering pipeline sits downstream of Ontology Ingest (reads nodes and edges) and upstream of both GPU Physics (materialised edges, force config) and Client Discovery (similarity search API). See [DDD Feature Engineering Context](../ddd-feature-engineering-context.md) for the full domain model.
+The feature engineering pipeline sits downstream of Ontology Ingest (reads nodes and edges) and upstream of both GPU Physics (materialised edges, force config) and Client Discovery (similarity search API). See [DDD Feature Engineering Context](../ddd/ddd-feature-engineering-context.md) for the full domain model.

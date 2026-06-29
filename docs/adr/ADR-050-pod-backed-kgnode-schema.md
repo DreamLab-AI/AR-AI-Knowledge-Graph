@@ -126,7 +126,7 @@ opaque_id = hex_truncate_24(
 > caller cannot see; the wire id is the raw u32. Anonymous viewers therefore
 > receive no positions, no labels, and no metadata for private nodes — same
 > end-state as the prior bit-29 mechanism, simpler implementation. The
-> single-source wire-format spec is [docs/binary-protocol.md](../binary-protocol.md).
+> single-source wire-format spec is [docs/binary-protocol.md](../reference/binary-protocol.md).
 
 #### Historical (pre-ADR-061): Bit 29 reservation on `node_id`
 
@@ -238,6 +238,6 @@ pre-sovereign corpus; it becomes the public canon by default.
 
 - `src/models/node.rs` — `KGNode` struct and `Visibility` enum
 - `src/utils/binary_protocol.rs` — `encode_position_frame` (post-ADR-061;
-  no flag bits, raw u32 ids); see [docs/binary-protocol.md](../binary-protocol.md)
+  no flag bits, raw u32 ids); see [docs/binary-protocol.md](../reference/binary-protocol.md)
 - `docs/reference/neo4j-schema-unified.md` — master schema reference
 - Commit `89c8d800e` — `refactor/kg-node-rename`

@@ -4,9 +4,9 @@
 - **Status**: Active — sign-off on landing
 - **Target release**: `solid-pod-rs v0.4.0-alpha.1`
 - **Related artefacts**:
-  - Gap analysis: [`crates/solid-pod-rs/GAP-ANALYSIS.md`](../../crates/solid-pod-rs/GAP-ANALYSIS.md) (6,000 words, 97 rows)
-  - Parity table: [`crates/solid-pod-rs/PARITY-CHECKLIST.md`](../../crates/solid-pod-rs/PARITY-CHECKLIST.md) (4,400 words)
-  - JSS feature inventory: [`crates/solid-pod-rs/docs/reference/jss-feature-inventory.md`](../../crates/solid-pod-rs/docs/reference/jss-feature-inventory.md) (2,800 words)
+  - Gap analysis: `crates/solid-pod-rs/GAP-ANALYSIS.md` (6,000 words, 97 rows)
+  - Parity table: `crates/solid-pod-rs/PARITY-CHECKLIST.md` (4,400 words)
+  - JSS feature inventory: `crates/solid-pod-rs/docs/reference/jss-feature-inventory.md` (2,800 words)
   - Licence conformance: `crates/solid-pod-rs/LICENSE` (AGPL-3.0-only, inherited from JSS)
 
 ---

@@ -717,5 +717,5 @@ Sessions automatically:
 ## Related Documentation
 
 - [Agent Orchestration Guide](../agent-orchestration.md)
-- [WebSocket API Reference](../../reference/websocket-binary.md)
-- [Configuration Reference](../../reference/configuration/environment-variables.md)
+- [WebSocket API Reference](../../reference/websocket-protocol.md)
+- [Configuration Reference](../../reference/configuration.md)

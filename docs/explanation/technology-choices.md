@@ -33,7 +33,7 @@ dependencies:
 > replaced by an **embedded Oxigraph** RDF triple store (W3C SPARQL 1.1, RocksDB-backed,
 > opened in-process by the `visionclaw-server` binary — no separate database container).
 > The "Database: Why Neo4j?" section below is retained for historical rationale but is
-> **superseded**; see [ADR-11 — Persistence Strategy Migration](../migration-sprint/11-persistence-migration/ADR-11.md).
+> **superseded**; see [ADR-11 — Persistence Strategy Migration](../reference/graph-schema.md).
 
 ## Overview
 
@@ -218,7 +218,7 @@ Rust's FFI (Foreign Function Interface) provides safe bindings to CUDA:
 > (SPARQL 1.1, RocksDB-backed, in-process) — there is no Neo4j container in the current
 > stack. The graph-shaped data model and index-free-adjacency reasoning below still hold,
 > but the engine and query language changed (Cypher → SPARQL). See
-> [ADR-11](../migration-sprint/11-persistence-migration/ADR-11.md). The rest of this
+> [ADR-11](../reference/graph-schema.md). The rest of this
 > section documents the original Neo4j decision for historical context.
 
 ### The Decision
@@ -404,7 +404,7 @@ XR has been moved off the browser entirely. The Quest 3 immersive client
 is a **native APK** built from a Godot 4.3 project with godot-rust (gdext)
 hot paths and OpenXR runtime access — see the **XR Client** section
 below ([ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md),
-[PRD-008](../PRD-008-xr-godot-replacement.md)).
+[PRD-008](../prd/PRD-008-xr-godot-replacement.md)).
 
 The desktop R3F path remains the entry point for users without an XR
 headset; it consumes the same V3 52 B/node binary protocol the APK consumes.
@@ -430,7 +430,7 @@ headset; it consumes the same V3 52 B/node binary protocol the APK consumes.
 - ❌ Still browser-bound — same WebXR feature ceiling that pushed us to a native APK
 - **Decision:** XR is not a browser concern in VisionClaw v2. The native Quest 3 APK
   per [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md) /
-  [PRD-008](../PRD-008-xr-godot-replacement.md) is the only XR surface — see the
+  [PRD-008](../prd/PRD-008-xr-godot-replacement.md) is the only XR surface — see the
   **XR Client** section below.
 
 **Svelte + Threlte:**
@@ -465,7 +465,7 @@ The Quest 3 immersive client is a **native Android APK** built from a
 godot-rust (gdext)** and runtime XR access through **OpenXR**.
 
 The full decision record is [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md);
-the product spec is [PRD-008](../PRD-008-xr-godot-replacement.md). This
+the product spec is [PRD-008](../prd/PRD-008-xr-godot-replacement.md). This
 section summarises the rationale for the technology-choice doc.
 
 ### Rationale
@@ -541,7 +541,7 @@ ADR-071 §"Considered Options" enumerates six. Summary here:
 Quest users side-load (developer mode) or eventually install via the Quest
 Store. The audience already used the headset that way; the "click-to-enter
 VR from a web page" flow was theoretical. Mitigation: side-load instructions
-in [`docs/how-to/xr-setup-quest3.md`](../how-to/xr-setup-quest3.md);
+in [`docs/how-to/xr-setup-quest3.md`](../how-to/xr-quest3-setup.md);
 Meta Quest Store submission tracked separately.
 
 **godot-rust learning curve.**
@@ -960,7 +960,7 @@ struct WireNodeDataItemV3 {
 
 **Limited Flexibility:**
 - Fixed 24-byte/node format can't encode arbitrary data
-- Mitigation: Separate JSON API for non-position data (node labels, metadata, analytics — see [docs/binary-protocol.md](../binary-protocol.md))
+- Mitigation: Separate JSON API for non-position data (node labels, metadata, analytics — see [docs/binary-protocol.md](../reference/binary-protocol.md))
 
 ---
 
@@ -976,16 +976,16 @@ quadrantChart
     quadrant-2 Mature Tooling
     quadrant-3 Evaluate Carefully
     quadrant-4 Cutting Edge
-    Rust: [0.92, 0.68]
-    Oxigraph (embedded): [0.74, 0.55]
-    CUDA: [0.96, 0.62]
-    React: [0.62, 0.96]
-    Three.js: [0.70, 0.86]
-    Whelk-rs: [0.82, 0.28]
-    Solid Pods: [0.48, 0.38]
-    Binary WebSocket: [0.88, 0.52]
-    MCP Protocol: [0.65, 0.35]
-    OWL/RDF: [0.55, 0.72]
+    "Rust": [0.92, 0.68]
+    "Oxigraph (embedded)": [0.74, 0.55]
+    "CUDA": [0.96, 0.62]
+    "React": [0.62, 0.96]
+    "Three.js": [0.70, 0.86]
+    "Whelk-rs": [0.82, 0.28]
+    "Solid Pods": [0.48, 0.38]
+    "Binary WebSocket": [0.88, 0.52]
+    "MCP Protocol": [0.65, 0.35]
+    "OWL/RDF": [0.55, 0.72]
 ```
 
 ---

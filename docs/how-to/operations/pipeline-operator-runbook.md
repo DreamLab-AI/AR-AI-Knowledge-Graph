@@ -680,7 +680,7 @@ echo "RECOVERY COMPLETE - $(date)"
 ## Related Documentation
 
 - [XR Architecture](../../explanation/xr-architecture.md)
-- [Deployment Guide](../deployment-guide.md)
+- [Deployment Guide](../deployment.md)
 - [Contributing Guidelines](../../CONTRIBUTING.md)
 - [Agent Orchestration Guide](../agent-orchestration.md)
 

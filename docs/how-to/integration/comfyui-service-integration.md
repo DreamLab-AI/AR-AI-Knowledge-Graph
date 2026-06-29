@@ -377,7 +377,7 @@ Then rebuild and access at http://localhost:8188
 ## Related Documentation
 
 - [ComfyUI SAM3D Setup](../comfyui-sam3d-setup.md)
-- [Development Guide](../development-guide.md)
+- [Development Guide](../development.md)
 - [Pipeline Operator Runbook](../operations/pipeline-operator-runbook.md)
 
 ## Status

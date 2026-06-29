@@ -42,10 +42,10 @@ difficulty-level: intermediate
 3. 
 
 #### **Develop a Feature**
-1. [Development Setup](development/01-development-setup.md)
+1. [Development Setup](development.md)
 2.
-3. [Adding Features](development/04-adding-features.md)
-4. [Testing Guide](development/testing-guide.md)
+3. [Adding Features](development.md)
+4. [Testing Guide](development.md)
 
 #### **Work with Ontologies**
 1. 
@@ -54,19 +54,19 @@ difficulty-level: intermediate
 4. 
 
 #### **Setup XR/VR**
-1. [Vircadia Complete Guide](explanation/xr-architecture.md)
+1. [Vircadia Complete Guide](../explanation/xr-architecture.md)
 2. [XR Architecture](../explanation/xr-architecture.md)
 
 #### **Understand the Architecture**
 1.
 2.
-3. [Graph Schema](../reference/neo4j-schema-unified.md) (Oxigraph/RDF, ADR-11)
+3. [Graph Schema](../reference/graph-schema.md) (Oxigraph/RDF, ADR-11)
 
 #### **Use the API**
 1. 
 2. [REST API](../reference/rest-api.md)
-3. [WebSocket API](../reference/websocket-binary.md)
-4. [Binary Protocol](../reference/websocket-binary.md) - 36-byte binary format specification
+3. [WebSocket API](../reference/websocket-protocol.md)
+4. [Binary Protocol](../reference/binary-protocol.md) - 36-byte binary format specification
 
 #### **Debug Issues**
 1. 
@@ -83,17 +83,17 @@ difficulty-level: intermediate
 | **Ontology** |  •  •  |
 | **GPU Acceleration** |  • [Architecture](../explanation/physics-gpu-engine.md) • [Optimizations](../explanation/physics-gpu-engine.md) |
 | **AI Agents** |  |
-| **Multi-Agent System** | [Architecture](../explanation/concepts/multi-agent-system.md) |
-| **XR/VR** | [XR Architecture](../explanation/xr-architecture.md) • [VR Development](explanation/xr-architecture.md) |
-| **Graph Store** | [Schema](../reference/neo4j-schema-unified.md) (Oxigraph/RDF, ADR-11) |
-| **Binary Protocol** | [WebSocket](../reference/websocket-binary.md) • [Specification](../reference/websocket-binary.md) |
+| **Multi-Agent System** | Architecture |
+| **XR/VR** | [XR Architecture](../explanation/xr-architecture.md) • [VR Development](../explanation/xr-architecture.md) |
+| **Graph Store** | [Schema](../reference/graph-schema.md) (Oxigraph/RDF, ADR-11) |
+| **Binary Protocol** | [WebSocket](../reference/websocket-protocol.md) • [Specification](../reference/binary-protocol.md) |
 
 ### Key Features
 | Feature | Quick Link | Complete Docs |
 |---------|------------|---------------|
 | **Ontology Reasoning** |  |  |
 | **Semantic Physics** |  |  |
-| **Multi-User XR** |  | [Complete Guide](explanation/xr-architecture.md) |
+| **Multi-User XR** |  | [Complete Guide](../explanation/xr-architecture.md) |
 | **CQRS Pattern** |  |  |
 | **GPU Compute** |  | [Architecture](../explanation/physics-gpu-engine.md) |
 

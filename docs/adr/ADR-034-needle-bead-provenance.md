@@ -6,9 +6,9 @@ Accepted — Implemented 2026-04-13
 
 ## Related Documents
 
-- **PRD**: [Bead Provenance Upgrade](../prd-bead-provenance-upgrade.md)
-- **DDD**: [Bead Provenance Bounded Context](../ddd-bead-provenance-context.md)
-- **Schema**: [Neo4j Schema — §2d](../reference/neo4j-schema-unified.md#2d-provenance-context-nostr-beads)
+- **PRD**: [Bead Provenance Upgrade](../prd/prd-bead-provenance-upgrade.md)
+- **DDD**: [Bead Provenance Bounded Context](../ddd/ddd-bead-provenance-context.md)
+- **Schema**: [Graph Schema — §2d](../reference/graph-schema.md#8-provenance-graph)
 - **Config**: [Operations — Bead Provenance](../how-to/operations/configuration.md#nostr-bead-provenance)
 - **Upstream**: [jedarden/NEEDLE](https://github.com/jedarden/NEEDLE)
 

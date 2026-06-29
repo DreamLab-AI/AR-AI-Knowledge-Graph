@@ -292,10 +292,10 @@ When agents finish:
 
 | Guide | What you will learn |
 |-------|---------------------|
-| [Deployment Guide](../how-to/deployment-guide.md) | Run VisionClaw in production with TLS and persistent volumes |
-| [Development Guide](../how-to/development-guide.md) | Contribute to the codebase; frontend, Rust backend, CUDA kernel |
+| [Deployment Guide](../how-to/deployment.md) | Run VisionClaw in production with TLS and persistent volumes |
+| [Development Guide](../how-to/development.md) | Contribute to the codebase; frontend, Rust backend, CUDA kernel |
 | [Agent Orchestration](../how-to/agent-orchestration.md) | Advanced agent topologies, Byzantine fault tolerance, hive-mind consensus |
-| [Graph Schema](../reference/neo4j-schema-unified.md) | Full node and relationship schema (Oxigraph/RDF logical model, ADR-11) |
+| [Graph Schema](../reference/graph-schema.md) | Full node and relationship schema (Oxigraph/RDF logical model, ADR-11) |
 
 ---
 

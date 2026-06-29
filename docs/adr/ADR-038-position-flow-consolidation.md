@@ -4,7 +4,7 @@
 > the push-path consolidation decision in this ADR remains in effect. The wire-format
 > language below (legacy V3/V5 frame names and versioning vocabulary) is historical;
 > the current spec is one binary protocol with no versioning. See
-> [docs/binary-protocol.md](../binary-protocol.md).
+> [docs/binary-protocol.md](../reference/binary-protocol.md).
 
 ## Status
 

@@ -67,7 +67,7 @@ Previously known issues that are now fixed. Listed here so that old bug reports,
 | Issue | Status | Fixed In | Reference |
 |-------|--------|----------|-----------|
 | ONT-001: Ontology Edge Gap — 62% of ontology nodes isolated due to empty `iri_to_id` map in `neo4j_adapter.rs` | Fixed Apr 2026 | `neo4j_adapter.rs` — added `iri_to_id` population loop after KGNode loading | `docs/explanation/ontology-pipeline.md` |
-| WS-001: Delta Encoding — permanently retired; caused position state divergence and latency spikes | Resolved by design | [ADR-037](adr/superseded/ADR-037-binary-protocol-consolidation.md), [ADR-061](adr/ADR-061-binary-protocol-unification.md) | [docs/binary-protocol.md](binary-protocol.md) |
+| WS-001: Delta Encoding — permanently retired; caused position state divergence and latency spikes | Resolved by design | [ADR-037](adr/superseded/ADR-037-binary-protocol-consolidation.md), [ADR-061](adr/ADR-061-binary-protocol-unification.md) | [docs/binary-protocol.md](reference/binary-protocol.md) |
 | GPU-002: Analytics actors missing SharedGPUContext — PageRank, SSSP, APSP endpoints returned "GPU context not initialized" | Fixed Apr 2026 | Forward `SetSharedGPUContext` from `PhysicsSupervisor` to `AnalyticsSupervisor` | `src/actors/gpu/` |
 | PHYS-001: No graph position reset endpoint — extreme parameters could not be recovered without container restart | Fixed Apr 2026 | `POST /api/graph/reset-positions` randomizes GPU positions and triggers reheat | `src/actors/gpu/force_compute_actor.rs` |
 | UI-001: Client slider init race — sliders sent values before fetching server state | Fixed Apr 2026 | Slider ranges capped; `settingsLoaded` gate added | `client/src/features/physics/` |

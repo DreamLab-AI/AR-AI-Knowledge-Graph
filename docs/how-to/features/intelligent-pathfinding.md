@@ -157,8 +157,8 @@ Typical performance:
 - [Natural Language Queries Tutorial](natural-language-queries.md)
 - [Physics & GPU Engine](../../explanation/physics-gpu-engine.md)
 - [VisionClaw Guides](../index.md)
-- [Goalie Integration - Goal-Oriented AI Research](../infrastructure/goalie-integration.md)
-- [Troubleshooting Guide](../infrastructure/troubleshooting.md)
+- Goalie Integration - Goal-Oriented AI Research
+- [Troubleshooting Guide](../operations/troubleshooting.md)
 
 ## Examples
 

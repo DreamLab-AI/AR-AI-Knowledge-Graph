@@ -1,140 +1,73 @@
 ---
-title: Reference Documentation
-description: Technical reference for APIs, configuration, protocols, and database schemas
-category: reference
-difficulty-level: intermediate
-tags:
-  - reference
-  - api
-  - configuration
-  - protocols
-  - database
-updated-date: 2025-01-29
+title: VisionClaw Reference
+description: Master index for VisionClaw's technical reference — REST and WebSocket APIs, the binary wire protocol, MCP ontology tools, graph schema, configuration, physics parameters, the agent catalogue, CLI, error codes, glossary, and benchmarks.
 ---
 
-# VisionClaw Reference Documentation
+# VisionClaw Reference
 
-Complete technical reference documentation for VisionClaw APIs, protocols, configurations, database schemas, and error codes.
+> [VisionClaw Docs](../README.md) · Reference
+
+Exhaustive, dry lookup material for the VisionClaw mesh: every endpoint, wire format, environment variable, parameter, and error code. For learning paths see [tutorials](../tutorials/README.md); for task recipes see [how-to guides](../how-to/README.md); for the concepts and rationale behind these contracts see [explanation](../explanation/system-overview.md).
+
+Each page is self-contained and back-links to its governing ADR(s) in [../adr/](../adr/).
 
 ---
 
-## Reference Sections
+## API and protocols
 
-| Section | Description |
-|---------|-------------|
-| **[REST API](./rest-api.md)** | All REST endpoints with request/response schemas |
-| **[WebSocket Binary Protocol](./websocket-binary.md)** | V2/V3/V4 binary protocol specification |
-| **[Graph Schema](./neo4j-schema-unified.md)** | Unified graph store schema (embedded Oxigraph/RDF, ADR-11) across all bounded contexts |
-| **[Agents Catalog](./agents-catalog.md)** | All 54 agent skills with invocation patterns |
-| **[Configuration](./configuration/README.md)** | Environment variables, Docker Compose options |
-| **[Protocol Reference](./protocols/README.md)** | MCP protocol, skill classification |
-| **[CLI Reference](./cli/README.md)** | Cargo and Docker command reference |
-| **[Error Codes](./error-codes.md)** | Complete error code reference with solutions |
-| **[Glossary](./glossary.md)** | Technical term definitions |
+| Reference | Covers |
+|-----------|--------|
+| [REST API](rest-api.md) | Every HTTP endpoint on the API server (`:4000`) — graph data, settings, Nostr NIP-98 auth, ontology, pathfinding, and Solid pod operations, with request/response schemas. |
+| [WebSocket Protocol](websocket-protocol.md) | WebSocket endpoints, handshake, authentication, heartbeat, subprotocols, and reconnection lifecycle. |
+| [Binary Protocol](binary-protocol.md) | The canonical wire format — `MessageType` frame table, V2 (36-byte) and V3 (52-byte, `BINARY_NODE_SIZE_V3`) node records, the V4 delta default, and the `AGENT_ACTION` header. |
+| [MCP Tools](mcp-tools.md) | The 7 native ontology MCP tools (`discover`, `read`, `query`, `traverse`, `propose`, `validate`, `status`), their input/output contracts, and the cross-reference to the agentbox ontology-bridge tools. |
 
----
+## Schema and data
 
-## Quick Access
+| Reference | Covers |
+|-----------|--------|
+| [Graph Schema](graph-schema.md) | RDF/SPARQL schema for the embedded Oxigraph triple store — node types, the `u32` node-id flag-bit encoding, edge and namespace relationships, ontology axioms, provenance, and SPARQL query patterns. |
+| [URN–Solid Mapping](urn-solid-mapping.md) | Binds VisionClaw's per-domain vocabulary IRIs (`bc:`, `mv:`, `rb:`, `dt:`, `ai:`) to canonical `urn:solid:` terms for ecosystem alignment (gated by `URN_SOLID_ALIGNMENT`). |
 
-### API Reference
+## Physics and performance
 
-| Document | Description |
-|----------|-------------|
-| [REST API](./rest-api.md) | All REST endpoints — Nostr NIP-98 auth, graph, settings, ontology, Solid |
-| [WebSocket Binary Protocol](./websocket-binary.md) | V2 (36-byte), V3 analytics, V4 compact — V1 JSON is removed |
+| Reference | Covers |
+|-----------|--------|
+| [Physics Parameters](physics-parameters.md) | Every force-directed layout parameter — type, range, default, and effect — plus the authoritative tuning table for large knowledge graphs. |
+| [Performance Benchmarks](performance-benchmarks.md) | GPU physics speedup (55×: 246 ms CPU at 4 FPS → 4.5 ms GPU at 222 FPS for 100K nodes), WebSocket latency, binary bandwidth savings, and API response times. |
 
-### Configuration
+## Operations
 
-| Document | Description |
-|----------|-------------|
-| [Environment Variables](./configuration/environment-variables.md) | All env var options |
-| [Docker Compose](./configuration/docker-compose-options.md) | Container configuration |
+| Reference | Covers |
+|-----------|--------|
+| [Configuration](configuration.md) | Exhaustive reference for environment variables, ports (API `:4000`, frontend `:3001`, Solid pod `:8484`, legacy MCP TCP `:9500`), and Docker Compose options, organised by domain. |
+| [CLI](cli.md) | Cargo, launcher, and Docker Compose commands for building, testing, and running VisionClaw. |
 
-### Protocols
+## Agents and diagnostics
 
-| Document | Description |
-|----------|-------------|
-| [Binary WebSocket](./websocket-binary.md) | V2/V3/V4 wire formats |
-| [MCP Protocol](./protocols/mcp-protocol.md) | Agent orchestration protocol |
-
-### Database
-
-| Document | Description |
-|----------|-------------|
-| [Graph Schema (Unified)](./neo4j-schema-unified.md) | Graph store schema including ontology storage (embedded Oxigraph/RDF, ADR-11) |
-
-### CLI
-
-| Document | Description |
-|----------|-------------|
-| [Cargo Commands](./cli/cargo-commands.md) | Rust build, test, run |
-| [Docker Commands](./cli/docker-commands.md) | Docker Compose commands |
+| Reference | Covers |
+|-----------|--------|
+| [Agents Catalogue](agents-catalog.md) | The 54 specialist skills across 12 domains (83+ with the full environment) plus the 7 built-in MCP ontology tools, with invocation patterns and capability descriptions. |
+| [Error Codes](error-codes.md) | The full `[SYSTEM]-[SEVERITY]-[NUMBER]` hierarchy — API, database, graph/ontology, GPU/physics, and WebSocket codes — each with a solution. |
+| [Glossary](glossary.md) | Definitions for the domain-specific terms used across VisionClaw documentation. |
 
 ---
 
-## Additional Documentation
+## How reference fits the documentation set
 
-### Specialized References
+Reference is one of four Diátaxis categories. Use the others when you need something other than a lookup:
 
-| Document | Description |
-|----------|-------------|
-| [Physics Parameters](./physics-parameters.md) | UI slider → settings key → CUDA kernel mapping with effective ranges |
-| [Performance Benchmarks](./performance-benchmarks.md) | Performance metrics and targets |
-| Implementation Status | Feature implementation status (see main README) |
-| Code Quality | Code quality metrics (see main README) |
-
-### API Deep Dives
-
-| Document | Description |
-|----------|-------------|
-| [REST API](./rest-api.md) | All REST endpoints including pathfinding, semantic features, and Solid pod integration |
+| You want to… | Go to |
+|--------------|-------|
+| Learn by doing, from zero | [Tutorials](../tutorials/README.md) |
+| Accomplish a specific task | [How-to guides](../how-to/README.md) |
+| Understand a concept or decision | [Explanation](../explanation/system-overview.md) |
+| Look up an exact contract or value | This section |
 
 ---
 
-## Documentation Standards
+## See also
 
-### Frontmatter Format
-
-All reference documents use standardised frontmatter:
-
-```yaml
----
-title: Document Title
-description: Brief description
-category: reference
-difficulty-level: intermediate
-updated-date: 2025-01-29
----
-```
-
-### Difficulty Levels
-
-| Level | Audience |
-|-------|----------|
-| `beginner` | New users |
-| `intermediate` | Experienced users |
-| `advanced` | System architects, contributors |
-
----
-
-## Related Documentation
-
-### Guides
-
-- [Configuration Guide](../how-to/operations/configuration.md) - Practical examples
-- [Deployment Guide](../how-to/deployment-guide.md) - Production deployment
-- [Troubleshooting Guide](../how-to/operations/troubleshooting.md) - Common issues
-
-### Concepts
-
-- [Architecture Overview](../explanation/system-overview.md) - System architecture
-- [Data Flow](../explanation/backend-cqrs-pattern.md) - Data flow diagrams
-
-### Getting Started
-
-- [Installation Guide](../tutorials/installation.md) - Setup instructions
-- [First Graph](../tutorials/first-graph.md) - Quick start tutorial
-
----
-
-**Last Updated**: January 29, 2025
+- [Documentation Hub](../README.md) — top-level entry point for all VisionClaw docs
+- [System Overview](../explanation/system-overview.md) — architecture context for the contracts indexed here
+- Governing ADRs: [ADR-064 Typed Graph Schema](../adr/ADR-064-typed-graph-schema.md), [ADR-061 Binary Protocol Unification](../adr/ADR-061-binary-protocol-unification.md), [ADR-090 Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-089 CQRS Bus Removal](../adr/ADR-089-cqrs-bus-removal.md)

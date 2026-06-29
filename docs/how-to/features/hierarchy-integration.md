@@ -422,16 +422,16 @@ label.scale.set(4 * scale, 1 * scale, 1);
 
 ```mermaid
 flowchart LR
-    OWL[OWL Ontology\nTurtle / RDF] --> Whelk[Whelk Reasoner\nSub-class closure]
-    Whelk --> SC[Oxigraph (embedded)\nSUBCLASS_OF rels\n:OwlClass nodes]
-    SC --> GSA[GraphStateActor\nClassifies nodes\nby type sets]
-    GSA --> GPU[GPU Physics\nSemantic force kernel\nhierarchy spring weights]
-    GPU --> Pos[Node Positions\nSAB broadcast]
-    Pos --> Client[3D Client\nHierarchyRenderer\nSemanticZoomControls]
+    OWL["OWL Ontology<br/>Turtle / RDF"] --> Whelk["Whelk Reasoner<br/>Sub-class closure"]
+    Whelk --> SC["Oxigraph (embedded)<br/>SUBCLASS_OF rels<br/>:OwlClass nodes"]
+    SC --> GSA["GraphStateActor<br/>Classifies nodes<br/>by type sets"]
+    GSA --> GPU["GPU Physics<br/>Semantic force kernel<br/>hierarchy spring weights"]
+    GPU --> Pos["Node Positions<br/>SAB broadcast"]
+    Pos --> Client["3D Client<br/>HierarchyRenderer<br/>SemanticZoomControls"]
 
-    SC -->|depth field| Depth[Depth metadata\n0 = root\nN = leaf]
-    Depth --> Color[Depth-based colour\nCyan → Blue gradient]
-    Depth --> Zoom[Semantic zoom filter\nLevel 0–5 visibility]
+    SC -->|depth field| Depth["Depth metadata<br/>0 = root<br/>N = leaf"]
+    Depth --> Color["Depth-based colour<br/>Cyan → Blue gradient"]
+    Depth --> Zoom["Semantic zoom filter<br/>Level 0–5 visibility"]
     Color --> Client
     Zoom --> Client
 ```

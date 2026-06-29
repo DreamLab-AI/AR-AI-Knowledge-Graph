@@ -1,189 +1,185 @@
 ---
-title: VisionClaw XR Architecture (Godot 4 + godot-rust + OpenXR)
-description: VisionClaw's XR architecture. A native Quest 3 APK built on Godot 4.3 + godot-rust (gdext) + OpenXR talks the existing V3 52 B/node binary protocol and a new presence WebSocket. Replaces the prior browser-based WebXR design.
+title: XR Architecture (Godot 4 + godot-rust + OpenXR)
+description: VisionClaw's XR client is a native Meta Quest 3 APK built on Godot 4.3 + godot-rust (gdext) + OpenXR. It decodes the existing V3 52 B/node binary graph stream unchanged, runs multi-user presence over a BIP-340-authenticated /ws/presence WebSocket, treats node drags as server-authoritative, and carries voice through a Whisper/Kokoro command plane and a LiveKit spatial plane. Supersedes the browser-hosted Babylon.js + Vircadia design.
 category: explanation
-tags: [xr, vr, godot, godot-rust, gdext, openxr, quest3, presence, livekit, binary-protocol]
-updated-date: 2026-05-02
-status: accepted
-related:
-  - docs/PRD-008-xr-godot-replacement.md
-  - docs/adr/ADR-071-godot-rust-xr-replacement.md
-  - docs/ddd-xr-godot-context.md
-  - docs/xr-godot-system-architecture.md
-  - docs/xr-godot-threat-model.md
-  - docs/binary-protocol.md
-  - docs/adr/ADR-061-binary-protocol-unification.md
-  - docs/how-to/xr-setup-quest3.md
+tags: [xr, vr, godot, godot-rust, gdext, openxr, quest3, presence, bip-340, binary-protocol, whisper, kokoro, livekit]
 ---
 
-# VisionClaw XR Architecture
+# XR Architecture (Godot 4 + godot-rust + OpenXR)
 
-> **Architectural decision.** VisionClaw's XR client is a **native Meta Quest 3
-> APK** built from a **Godot 4.3** project, with performance-critical paths
-> implemented in **Rust via godot-rust (gdext)** and runtime XR access through
-> **OpenXR**. Multi-user presence rides a new **`/ws/presence`** WebSocket
-> served by a Rust `PresenceActor`; the existing V3 **52 B/node** binary
-> position stream (version byte `0x03`, per
-> [docs/binary-protocol.md](../binary-protocol.md)) is consumed unchanged.
-> Voice continues to ride **LiveKit** (Android AAR on the
-> headset; HRTF spatialised in the Godot audio bus).
->
-> **Predecessor.** The prior browser-hosted WebXR client is removed wholesale
-> per [PRD-008](../PRD-008-xr-godot-replacement.md) and
-> [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md); both documents
-> reference the file-by-file removal manifest. The browser entry point is
-> gone. Quest 3 users side-load `visionclaw-xr.apk`; non-XR users continue
-> to use the desktop browser graph view (unchanged).
+> [VisionClaw Docs](../README.md) · [Explanation](README.md)
+
+VisionClaw's XR client is a **native Meta Quest 3 APK** built from a **Godot 4.3**
+project, with the performance-critical paths — protocol decode, WebSocket
+lifecycle, authentication, pose validation, LOD — written in **Rust through
+godot-rust (gdext)**, and runtime headset access through **OpenXR**. The client
+decodes the existing **V3 binary graph stream** byte-for-byte, joins rooms over a
+new **BIP-340-authenticated `/ws/presence`** WebSocket, treats node manipulation
+as **server-authoritative**, and routes voice through two planes: a local
+**Whisper/Kokoro** command-and-assistant loop and a **LiveKit** spatial voice
+overlay.
+
+This design is recorded in [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md);
+the transport and authentication completion is recorded in
+[ADR-102](../adr/ADR-102-xr-client-backend-transport-completion.md).
+
+> **Superseded predecessor.** The prior browser-hosted **WebXR** client
+> (Babylon.js render path, Three.js fallback, and a **Vircadia** world server with
+> its own PostgreSQL entity store) is replaced wholesale. Babylon.js and Vircadia
+> appear in this document only as the stack being retired. Quest 3 users side-load
+> the APK; non-XR users continue to use the desktop React Three Fiber graph view
+> ([client-architecture.md](client-architecture.md)), which is unchanged.
 
 ---
 
 ## 1. Why a native APK
 
-The browser-hosted WebXR client could not deliver the headline experience on
-the headline device, for five structural reasons documented in PRD-008 §1:
+The browser-hosted WebXR client could not deliver the target experience on the
+target device. The native APK removes five structural ceilings:
 
-1. **Silent-fail multi-user coupling** — the prior world-server detector was
-   hard-coded against `ws://localhost:3020`; users entered "VR" against a stub.
-2. **Two competing renderers** — separate immersive and fallback render trees;
-   identity, scene graph, and input pipelines duplicated.
-3. **JS/PostgreSQL multi-user against a Rust substrate** — the prior world
-   server owned its own entity store in its own Postgres; VisionClaw's
-   authoritative graph state lives in the embedded Oxigraph store + RuVector +
-   `GraphStateActor` (ADR-11). Two sources of truth.
-4. **WebXR feature ceiling on Quest 3** — no scene mesh, no spatial anchors,
-   no FB passthrough composition layer, no foveated-rendering hints; JS GC in
-   the render loop competing with the WebXR compositor for an 11.1 ms budget.
-5. **The reach we actually have is Quest Browser** — Safari has no WebXR; the
-   "browser-universal" justification was never real.
-
-The native APK lifts the ceiling: full OpenXR extension surface, no JS GC,
-Rust-substrate alignment, and the same V3 52 B/node binary protocol the
-desktop client speaks. See
-[ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md) for the full decision
-analysis (six options considered).
+1. **Single source of truth for position.** The Vircadia world server kept its own
+   entity store, duplicating state that is already canonical in the embedded
+   graph store (Oxigraph + SQLite, ADR-11), RuVector, and the GPU physics actor
+   mesh. The APK consumes the graph position stream directly — there is no
+   second entity store to reconcile.
+2. **Full OpenXR extension surface.** Native OpenXR gives passthrough, scene mesh,
+   spatial anchors, foveated rendering, and display-refresh control that the Meta
+   browser's WebXR profile does not expose.
+3. **No JS garbage collector in the render loop.** The 90 Hz / 11.1 ms frame
+   budget is met in Rust with zero steady-state allocation, not contended against
+   a browser GC.
+4. **One renderer.** The browser stack carried two competing render trees
+   (immersive and fallback) with duplicated identity, scene-graph, and input
+   pipelines. The APK has a single Godot scene tree.
+5. **Substrate alignment.** The hot paths link the same Rust transport crate the
+   server links, so wire semantics cannot drift between client and server.
 
 ---
 
 ## 2. System view
+
+The Rust substrate is unchanged. The only server-side additions are one WebSocket
+handler and one actor, plus a transport-agnostic crate shared with the client.
 
 ```mermaid
 graph TB
     User(["User<br/>(Quest 3 headset)"])
     DesktopUser(["User<br/>(desktop browser, unchanged)"])
 
-    subgraph QuestDevice ["Meta Quest 3 (Android, Horizon OS)"]
+    subgraph QuestDevice ["Meta Quest 3 (Horizon OS)"]
         APK["Godot 4.3 APK<br/><b>NEW</b>"]
-        GDExt["gdext crate<br/>visionclaw-xr-gdext<br/><b>NEW</b>"]
-        OpenXR["OpenXR runtime<br/>(Meta)"]
+        GDExt["gdext crate<br/>xr-client/rust/<br/><b>NEW</b>"]
+        OpenXR["OpenXR runtime (Meta)"]
         APK --> GDExt
         APK --> OpenXR
     end
 
-    subgraph DesktopBrowser ["Desktop browser (unchanged)"]
-        R3F["React + R3F client<br/>client/src/"]
-    end
-
     subgraph VisionclawContainer ["visionclaw container (Rust / Actix)"]
-        WSGraph["/wss<br/>graph stream<br/>(unchanged)"]
+        WSGraph["/wss<br/>graph stream + drag<br/>(unchanged)"]
         WSPresence["/ws/presence<br/><b>NEW</b>"]
         PresHandler["presence_handler.rs<br/><b>NEW</b>"]
         PresActor["PresenceActor<br/><b>NEW</b>"]
         Supervisor["GraphServiceSupervisor<br/>(unchanged)"]
-        ClientCoord["ClientCoordinatorActor<br/>(unchanged)"]
         Physics["PhysicsOrchestratorActor<br/>(unchanged)"]
         ForceCompute["ForceComputeActor + CUDA<br/>(unchanged)"]
         GraphState["GraphStateActor<br/>(unchanged)"]
+        Crate["crates/visionclaw-xr-presence<br/>transport-agnostic codec<br/><b>NEW</b>"]
 
-        WSGraph --> ClientCoord
+        WSGraph --> Physics
         WSPresence --> PresHandler --> PresActor
-        Supervisor --> ClientCoord
         Supervisor --> Physics
         Supervisor --> GraphState
         Supervisor --> PresActor
-        ForceCompute --> ClientCoord
-        Physics --> ForceCompute
+        Physics --> ForceCompute --> WSGraph
+        PresActor -.links.-> Crate
     end
 
-    subgraph LK ["LiveKit (existing voice overlay)"]
-        LiveKit["livekit :7880"]
+    subgraph Voice ["Voice"]
+        LiveKit["livekit :7880<br/>(spatial overlay)"]
+        Speech["speech_socket_handler.rs<br/>Whisper STT / Kokoro TTS"]
     end
 
     User --> APK
-    DesktopUser --> R3F
-    APK -- "TLS WebSocket" --> WSGraph
-    APK -- "TLS WebSocket" --> WSPresence
+    DesktopUser --> WSGraph
+    APK -- "TLS WSS :3001/wss" --> WSGraph
+    APK -- "TLS WSS :3001/ws/presence" --> WSPresence
     APK -- "WebRTC" --> LiveKit
+    APK -- "TLS WSS" --> Speech
+    GDExt -.links.-> Crate
 
     classDef new fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
     classDef unchanged fill:#eceff1,stroke:#546e7a
-    class APK,GDExt,WSPresence,PresHandler,PresActor new
-    class WSGraph,Supervisor,ClientCoord,Physics,ForceCompute,GraphState,R3F unchanged
+    classDef voice fill:#e0f7fa,stroke:#006064
+
+    class APK,GDExt,WSPresence,PresHandler,PresActor,Crate new
+    class WSGraph,Supervisor,Physics,ForceCompute,GraphState,DesktopUser unchanged
+    class LiveKit,Speech voice
 ```
 
-The five highlighted components are the entire server-side surface area of
-this work. The embedded Oxigraph graph store, the GPU physics pipeline, the
-broadcast optimiser, the desktop client, and the LiveKit voice overlay are
-consumed as-is.
+The new server surface is three files —
+[`src/handlers/presence_handler.rs`](../../src/handlers/presence_handler.rs),
+`src/actors/presence_actor.rs`, and the
+[`crates/visionclaw-xr-presence`](../../crates/visionclaw-xr-presence) workspace
+member — wired into the existing supervisor tree on the existing `:4000` port
+behind nginx `:3001`. No new containers and no new ports.
 
 ---
 
-## 3. Repository layout
+## 3. Godot ↔ Rust split
 
-```
-xr-client/                              Godot 4.3 project (NEW)
-├── project.godot
-├── scenes/
-│   ├── XRBoot.tscn                    OpenXR init, capability probe, error overlay
-│   ├── GraphScene.tscn                MultiMeshInstance3D nodes + ImmediateMesh edges
-│   ├── AvatarRig.tscn                 Head + 2 hands + nameplate (one per remote user)
-│   ├── LocalRig.tscn                  XROrigin3D + XRCamera3D + XRController3D x2
-│   └── HUD.tscn                       Settings, room picker, mute, debug overlay
-├── scripts/                           GDScript: scene wiring, signal dispatch, UI
-├── addons/
-│   ├── visionclaw_xr_gdext/           Compiled gdext .so, packaged with the APK
-│   └── livekit/                       LiveKit Android AAR + binding shim
-├── export_presets.cfg                 Quest 3 export preset (arm64-v8a, OpenXR)
-└── android/                           Custom Gradle template (NDK r26+)
+The split is deliberate. GDScript owns scene composition, signal wiring, UI state,
+OpenXR feature toggles, and scene-graph manipulation in response to gdext signals.
+It performs **no** wire-format parsing, **no** WebSocket state, and **no** pose
+validation. The gdext crate owns protocol decode, WebSocket lifecycle, BIP-340
+auth, pose validation, and LOD math, exposed to GDScript through
+`#[derive(GodotClass)]` types that emit signals into the scene tree.
 
-crates/
-├── visionclaw-xr-gdext/               gdext crate (NEW) — APK hot paths
-│   └── src/{lib,protocol_decoder,presence_client,pose_validator,lod,perf_tap}.rs
-├── visionclaw-xr-presence/            Server presence crate (NEW)
-│   └── src/{lib,room,pose_validator,messages,auth}.rs
-└── binary-protocol/                   (extracted per PRD-007) — workspace member
+| Godot scene | Root node | gdext module | Responsibility |
+|---|---|---|---|
+| `XRBoot` | `Node3D` | `boot.rs` | OpenXR instance creation, capability probe, error overlay |
+| `GraphScene` | `Node3D` | `graph_renderer.rs` | Instanced nodes (MultiMeshInstance3D) + edges, LOD |
+| `AvatarRig` | `Node3D` | `avatar.rs` | Remote head + hands + nameplate, one per remote user |
+| `LocalRig` | `XROrigin3D` | `interaction.rs` | Local pose, controller ray, grab, haptics |
+| `HUD` | `Control` | `hud.rs` | Settings, room picker, mute, debug overlay |
 
-src/
-├── handlers/presence_handler.rs       Actix WS handler at /ws/presence (NEW)
-└── actors/presence_actor.rs           Wires into GraphServiceSupervisor (NEW)
-```
-
-The desktop browser tree (`client/src/` non-`immersive/`) is untouched. The
-prior immersive and world-server-bridge trees are deleted per the removal
-plan referenced by [PRD-008 §5.6](../PRD-008-xr-godot-replacement.md) and
-[ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md).
+The shared `crates/visionclaw-xr-presence` library is **transport-agnostic**: it
+knows nothing about Actix actors, godot signals, or LiveKit. It is the single
+source of truth for the avatar pose wire format (opcode `0x43`), the
+`PresenceRoom` aggregate invariants, and the pose validators. Both the client
+gdext crate and the server `presence_actor.rs` link it, so wire-level pose
+semantics cannot drift.
 
 ---
 
-## 4. gdext modules (Godot ↔ Rust split)
+## 4. Live V3 graph wire
 
-The split is deliberate:
+The client decodes the **same binary position stream as the desktop client**, on
+the existing `/wss` endpoint. The V3 layout is a fixed **52 bytes per node** behind
+a 1-byte version header (`0x03`) — `BINARY_NODE_SIZE_V3` — carrying id + flags,
+position, velocity, SSSP distance and parent, cluster id, anomaly, community id,
+and centrality. V4 delta encoding is the current default optimisation for the
+desktop path; the canonical layout, the version registry, and the delta scheme are
+documented in [reference/binary-protocol.md](../reference/binary-protocol.md)
+([ADR-061](../adr/ADR-061-binary-protocol-unification.md)).
 
-- **GDScript** owns scene composition, signal wiring, UI state, OpenXR
-  feature toggles, and scene-graph manipulation in response to gdext
-  signals. **No** wire-format parsing, **no** WebSocket state, **no** pose
-  validation.
-- **gdext (Rust)** owns protocol decode, WS lifecycle, NIP-98 auth, pose
-  validation, LOD math, and perf taps. Exposed to GDScript via
-  `#[derive(GodotClass)]` classes that emit signals to the scene tree.
-
-The shared `crates/visionclaw-xr-presence` library is **transport-agnostic**
-— it is consumed by both the gdext crate (on the APK) and
-`presence_actor.rs` (on the server). Wire-level pose semantics cannot drift
-between client and server because both link the same encoder.
+The frame loop drains pending position frames over an `mpsc` channel each
+`_process(dt)` tick and writes directly into MultiMesh transform buffers — no
+per-frame allocation. LOD buckets are recomputed every second frame to hold CPU
+under 8 ms; bucket assignments are diffed against the previous frame, so only
+changed instances incur a transform write. If the local head is stationary
+(position delta < 1 cm, quaternion dot > 0.9999) the outbound pose frame is
+dropped by the delta encoder, keeping AFK bandwidth near zero.
 
 ---
 
-## 5. Boot sequence
+## 5. Presence over BIP-340 `/ws/presence`
+
+Multi-user presence rides a dedicated WebSocket served by
+`presence_handler.rs`. Authentication is a Nostr-style challenge/response over
+**BIP-340 Schnorr signatures (secp256k1)** — the same identity primitive the
+graph socket's `authenticate` flow uses. The handshake binds the socket to a
+verified `did:nostr:<pubkey>` so a client can never select its own avatar id or
+impersonate another member.
 
 ```mermaid
 sequenceDiagram
@@ -191,212 +187,194 @@ sequenceDiagram
     participant APK as Godot APK
     participant GDExt as gdext crate
     participant XR as OpenXR (Meta)
-    participant Server as Rust visionclaw container
+    participant Pres as presence_handler.rs
+    participant Room as PresenceActor
 
     APK->>GDExt: boot::initialize()
     GDExt->>XR: xrCreateInstance(required extensions)
     XR-->>GDExt: XrInstance handle
-    GDExt->>GDExt: capability probe (immutable for process lifetime)
+    GDExt->>GDExt: capability probe (fixed for process lifetime)
 
-    GDExt->>Server: WSS /wss (graph stream)
-    GDExt->>Server: {"type":"subscribe_position_updates","data":{interval, binary:true}}
-    GDExt->>Server: {"type":"authenticate", event: <NIP-98 kind-27235>} (unlocks server-authoritative drag)
+    GDExt->>Pres: WSS /wss subscribe + authenticate (NIP-98)
+    Note over GDExt,Pres: graph stream unlocks server-authoritative drag
 
-    GDExt->>Server: WSS /ws/presence
-    Server-->>GDExt: {"type":"challenge", nonce, ts}
-    GDExt->>GDExt: schnorr_sign(SHA256(nonce || ts_le), did_priv)
-    GDExt->>Server: {"type":"auth", did, signature, room_id, metadata}
-    Server-->>GDExt: {"type":"joined", room_id, avatar_id, members[]}
+    GDExt->>Pres: WSS /ws/presence (upgrade)
+    Pres-->>GDExt: challenge with nonce 32B and ts
+    GDExt->>GDExt: schnorr_sign(nonce + ts_le, did_priv)
+    GDExt->>Pres: auth with did, signature, room_id, metadata
+    Pres->>Pres: verify_signed_challenge BIP-340, did must equal verified pubkey
+    Pres->>Room: JoinRoom did, metadata, recipients
+    Room-->>Pres: JoinAck avatar_id, members
+    Pres-->>GDExt: joined with room_id, avatar_id, members
 
     APK->>APK: load GraphScene.tscn
-    Server-->>GDExt: V3 frame (version byte 0x03, 52 B/node)
-    GDExt->>GDExt: parse → MultiMesh buffers
-    APK->>XR: xrBeginSession() → first compositor frame
+    Pres-->>GDExt: V3 graph frames (0x03, 52 B/node)
+    APK->>XR: xrBeginSession() — first compositor frame
 ```
 
-Graph WS connects before presence WS — graph state is the load-bearing
-context. Presence is allowed to fail without aborting boot; the user enters
-a single-user session and a yellow indicator appears in the HUD. Cold-launch
-to first immersive frame: **≤ 3 s** on warm cache (PRD-008 M2).
+The graph WebSocket is connected before the presence WebSocket because graph
+state is the load-bearing context. Presence is allowed to fail without aborting
+boot: the user enters a single-user session and a yellow indicator appears in the
+HUD. The handshake has a 10 s deadline and a 15 s ping heartbeat; a failed or
+replayed signature closes the socket with code **4401**.
+
+### 5.1 Pose ingest and broadcast
+
+Once joined, the client sends binary **`0x43` avatar pose frames** and the server
+fans out coalesced **sibling frames** at a fixed 90 Hz room tick. The client→server
+frame, encoded by `crates/visionclaw-xr-presence/src/wire.rs`, is variable-length
+and little-endian:
+
+```text
+[u8  opcode = 0x43]
+[u16 frame_len_LE]            bytes that follow this field
+[u8;16 room_id_hash]
+[u8  avatar_id_len][u8;N avatar_id_utf8]
+[u64 timestamp_us_LE]
+[u8  transform_mask]          bit0=head bit1=left_hand bit2=right_hand
+[{28 B} transforms...]        present slots in head, left, right order
+```
+
+Hands are optional via the mask, so a head-only frame is far smaller than a full
+head+hands frame. The server→client sibling frame prepends a
+`[u64 broadcast_seq][u32 room_id][u16 user_count]` header and contains every
+current member's latest pose, attributed by an opaque per-session `local_id` that
+each `avatar_joined` event maps to a named DID.
+
+`presence_handler.rs` rate-limits inbound frames to **120 per second** (sliding
+window; code **4429** on breach). `PresenceActor` then runs the shared validators
+before re-broadcasting to every peer **except the sender**:
+
+| Check | Bound | On failure |
+|---|---|---|
+| Velocity (head Δposition / Δt) | ≤ 20 m/s; NaN/∞ rejected | drop frame |
+| World bounds (AABB) | default ±50 m symmetric | drop frame |
+| Quaternion magnitude | within [0.99, 1.01] | drop frame |
+| Timestamp monotonicity | strictly increasing, ≥ 8 ms apart | drop frame |
+| Hand-to-head reach | ≤ 1.2 m anatomical | drop frame |
+
+A session accumulating **10 violations in a 1 s window** is kicked. Re-broadcast
+respects the sovereign visibility-transition rules
+([ADR-051](../adr/ADR-051-visibility-transitions.md)) — invisible avatars are
+dropped from each receiver's frame. A
+`PresenceActor` self-stops when its room empties; the handler replaces any
+disconnected actor address before the next joiner reuses the room, so a rejoin
+never lands on a dead mailbox.
 
 ---
 
-## 6. Frame loop
+## 6. Server-authoritative node drag
 
-Quest 3 target: 90 Hz steady state. Render loop splits between Godot's main
-loop and the gdext per-frame Rust callback.
+Node manipulation is **server-authoritative**. The headset never treats its own
+local position as truth: grabbing a node with the controller ray emits
+`nodeDragStart` / `nodeDragUpdate` / `nodeDragEnd` text messages on the `/wss`
+graph socket. The server (`socket_flow_handler`) gates every drag:
+
+1. **Authentication required** — drags from a socket without a verified pubkey
+   (no completed `authenticate` handshake) are rejected.
+2. **`nodeId` must fit `u32`** — oversized ids are rejected rather than silently
+   truncated.
+3. **Position sanitised** — NaN, infinity, and out-of-bounds coordinates are
+   rejected.
+4. **Concurrent-drag cap** — a per-client limit on simultaneous dragged nodes.
+
+A validated drag **pins the node in the GPU physics actor**, freezing it against
+the force-directed layout. The pinned position re-enters the V3 broadcast and
+every client — the dragger, other headsets, and desktop browsers — renders the
+same authoritative coordinate. Orphaned drags (a socket dropping before
+`nodeDragEnd`) are released server-side after a 500 ms timeout, so a crashed
+client can never leave a node permanently pinned.
+
+---
+
+## 7. Voice
+
+Voice runs in two independent planes, multiplexed per user by
+`src/services/audio_router.rs` and gated by push-to-talk (PTT). The local plane is
+a **Whisper / Kokoro** command-and-assistant loop; the spatial plane is the
+**LiveKit** overlay carrying positioned peer and agent audio.
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    participant Godot as Godot main loop (90Hz)
-    participant GDExt as gdext _process(dt)
-    participant LOD as lod.rs
-    participant Multi as MultiMeshInstance3D
+flowchart TB
+    Mic["Quest mic<br/>(AudioStreamMicrophone)"]
+    PTT{"PTT held?"}
+    Mic --> PTT
 
-    loop every 11.1 ms
-        Godot->>GDExt: _process(dt)
-        GDExt->>GDExt: drain pending position frames (mpsc)
-        alt scheduler tick (every 2nd frame)
-            GDExt->>LOD: classify_avatars(camera_pose) + visible_subset(centrality, cap)
-            LOD-->>GDExt: LOD levels + top-N-by-centrality node subset
-        end
-        GDExt->>Multi: set_instance_transform(i, xf) per visible instance
-        GDExt->>GDExt: emit local pose (90 Hz, throttled)
-        GDExt-->>Godot: frame complete
-        Godot->>Godot: render compositor layers
+    subgraph Local ["Local plane (private, per user)"]
+        Whisper["Whisper STT<br/>speech_socket_handler.rs"]
+        Agent["Agent command<br/>voice_interface_actor.rs"]
+        Kokoro["Kokoro TTS"]
+        Whisper --> Agent --> Kokoro
     end
+
+    subgraph Spatial ["Spatial plane (public, all users)"]
+        LKin["LiveKit SFU :7880"]
+        Panner["AudioStreamPlayer3D<br/>at remote AvatarRig head"]
+        LKin --> Panner
+    end
+
+    PTT -->|"held → command"| Whisper
+    PTT -->|"released → chat"| LKin
+    Kokoro -->|"confirmation to owner"| Earpiece(["Owner's ears"])
+    Panner -->|"HRTF bus"| Earpiece
+
+    classDef voice fill:#e0f7fa,stroke:#006064
+    class Whisper,Agent,Kokoro,LKin,Panner voice
 ```
 
-LOD recomputation is **every 2 frames** to keep CPU under 8 ms. Bucket
-assignments are diffed; only changed instances incur a transform write. If
-the local user is stationary (head pose Δ < 1 cm and quaternion dot >
-0.9999) the frame is dropped server-side by the delta encoder — bandwidth
-stays near zero for AFK users.
+- **Plane 1 — command (private).** With PTT held, mic audio routes to local
+  **Whisper STT**; the transcript drives graph/view configuration and agent
+  commands through `voice_interface_actor.rs`.
+- **Plane 2 — assistant (private).** Agent and confirmation responses are spoken
+  by local **Kokoro TTS** into the owner's ears only.
+- **Plane 3 — spatial chat (public).** With PTT released, mic audio routes to the
+  **LiveKit** SFU; each remote track plays from an `AudioStreamPlayer3D` parented
+  to that user's avatar head, spatialised on a dedicated HRTF bus
+  (`ATTENUATION_INVERSE_DISTANCE`). The LiveKit room id equals the presence room
+  id (1:1).
+- **Plane 4 — spatial agent voice (public).** Agent TTS can also be injected into
+  the LiveKit room at the agent's graph position, so co-located users hear it
+  spatially.
+
+The local Whisper/Kokoro stack is the same one the desktop and elevation flows
+use; the spatial plane reuses the existing LiveKit token path
+(`src/handlers/livekit_token_handler.rs`) with no XR-specific changes. Opus at
+32 kbps mono (≈ 64 kbps on the wire with redundancy) keeps a four-user room near
+256 kbps of voice — comfortably inside the 100 KB/s per-user budget.
 
 ---
 
-## 7. Binary protocol — reuse and extension
+## 8. OpenXR feature set
 
-> **UPDATED 2026-06-12.** The design-era 28 B / `0x42` / `0x50` figures below
-> were superseded by the shipped implementation (ADR-102): the graph stream
-> is **V3, version byte `0x03`, 52 B/node** (canonical spec
-> [docs/binary-protocol.md](../binary-protocol.md)), and the avatar pose
-> opcode is **`0x43`** on `/ws/presence`
-> (`crates/visionclaw-xr-presence/src/wire.rs`).
-
-The Godot client consumes the same V3 position stream byte-for-byte as the
-desktop client (`xr-client/rust/src/binary_protocol.rs`). The avatar pose
-frame is a **separate opcode on `/ws/presence`** — not a version bump of the
-graph stream.
-
-### 7.1 Frame dispatch
-
-| First byte | Meaning | Endpoint / sender | Description | Spec |
-|---|---|---|---|---|
-| `0x03` | V3 position frame | `/wss`, server → all subscribed clients | 52 B/node: id+flags, pos, vel, sssp_distance, sssp_parent, cluster_id, anomaly, community_id, centrality | [`docs/binary-protocol.md`](../binary-protocol.md) |
-| `0x43` | avatar_pose_frame | `/ws/presence`, bidirectional, room scoped | Head + optional hand transforms (mask-encoded) | `crates/visionclaw-xr-presence/src/wire.rs` |
-
-Future opcodes (e.g. spatial annotations) do not break existing clients —
-the dispatch table treats unknown opcodes as a logged drop, not a
-connection close.
-
-### 7.2 Avatar pose frame layout
-
-As implemented in `crates/visionclaw-xr-presence/src/wire.rs` (variable
-length, little-endian):
-
-```
-[u8  opcode = 0x43]
-[u16 frame_len_LE]            // bytes that follow this field
-[u8;16 room_id_hash]
-[u8  avatar_id_len]
-[u8;N avatar_id_utf8]
-[u64 timestamp_us_LE]
-[u8  transform_mask]          // bit0=head bit1=left_hand bit2=right_hand
-[{28 B} transforms...]        // present slots in head, left, right order
-```
-
-Hands are optional (mask-encoded), so a head-only frame is far smaller than
-a full head+hands frame. Inbound multi-avatar broadcast ("sibling") frames
-use a related layout with a `[u64 broadcast_seq][u32 room_id][u16 user_count]`
-header (`xr-client/rust/src/presence.rs::decode_sibling_frame`).
+A missing **required** extension produces a fatal, user-visible error — there is
+no silent degraded mode. Required: hand tracking and hand interaction, passthrough,
+scene mesh and capture, spatial anchors, foveated rendering, composition-layer
+depth, performance settings, display-refresh-rate control, and local-floor
+reference. Optional: visibility mask and eye-gaze interaction (Pro variants only,
+PII-gated and opt-in). Scene-mesh and gaze data stay client-side; the gdext
+bindings expose no serialiser for them.
 
 ---
 
-## 8. Presence service
+## 9. Failure modes
 
-`PresenceActor` joins the `GraphServiceSupervisor` tree as a sibling of
-`GraphStateActor` and `PhysicsOrchestratorActor`. Per-room state is
-in-memory; an optional audit-trail RuVector entry is written per
-join/leave/kick if `PRESENCE_AUDIT=true`. Room membership does not survive
-a server restart.
+The XR client is more sensitive to transient failure than the desktop client —
+losing positional tracking for 200 ms in VR is nauseating. Each mode degrades
+gracefully rather than freezing the compositor.
 
-`src/handlers/presence_handler.rs` mounts at `/ws/presence`:
-
-1. **Challenge on upgrade.** Server sends JSON
-   `{"type":"challenge", nonce, ts}` immediately after the upgrade.
-2. **Auth handshake.** Client replies with
-   `{"type":"auth", did, signature, room_id, metadata}` where `signature`
-   is `schnorr(SHA256(nonce || ts_le))` over the claimed
-   `did:nostr:<hex-pubkey>`. On success the server replies
-   `{"type":"joined", room_id, avatar_id, members[]}`, binding the
-   `local_id ↔ did:nostr` mapping; mid-session impersonation is impossible.
-3. **Pose ingest.** Inbound `0x43` frames are decoded via the shared
-   `visionclaw-xr-presence` wire crate, validated, then forwarded
-   to `PresenceActor`.
-4. **Broadcast.** `PresenceActor` coalesces in-flight poses per room,
-   encodes one `0x43` sibling frame containing all current members'
-   latest pose, and sends to each subscribed socket **except** the
-   sender.
-5. **Visibility filter.** Re-broadcast respects [ADR-050](../adr/ADR-050-sovereign-graph-visibility.md)
-   sovereign visibility — invisible avatars are dropped from the frame
-   each receiver sees.
-
-### 8.1 Pose validation
-
-| Check | Bound | Action |
-|---|---|---|
-| Head position within world bounds | per-room (default ±50 m) | Drop frame, increment `presence.invalid_pose.bounds` |
-| Head linear velocity | ≤ 20 m/s | Drop frame, increment `…head_velocity` |
-| Hand-to-head distance | ≤ 1.2 m (anatomical reach) | Drop frame, increment `…hand_reach` |
-| Quaternion magnitude | within [0.99, 1.01] | Drop frame, increment `…bad_quat` |
-| Frame rate per user | ≤ 120 Hz averaged over 1 s | Token-bucket throttle |
-
-A user accumulating > 5 invalid frames in a 10-s window is disconnected
-with a `presence_kick` reason code.
+| Failure | Behaviour |
+|---|---|
+| **WebSocket disconnect** | Exponential backoff 1 s → 30 s cap, 10 attempts. The last-received graph snapshot keeps rendering at 90 Hz so the compositor stays alive. After 5 failures, snapshot mode pauses pose tx; the HUD shows a reconnecting spinner. |
+| **OpenXR runtime crash** (`XR_ERROR_INSTANCE_LOST`) | gdext flips to a 2D error overlay and tears down OpenXR. Restart requires a fresh launch — Meta's runtime owns process-wide GPU compositor resources. |
+| **Voice failure** (LiveKit `RoomDisconnected`) | Non-fatal. Spatial voice indicators hide, a mic-off icon appears, pose continues; LiveKit reconnect every 30 s. The local Whisper/Kokoro plane is unaffected. |
+| **Packet-loss degradation** | Per-remote-avatar pose ladder: 90 Hz → 30 Hz (loss > 5%) → 10 Hz (loss > 15%) → snapshot-on-significant-change (loss > 30%), recovering on the same thresholds in reverse. |
 
 ---
 
-## 9. OpenXR feature set
+## 10. Performance budget
 
-A missing **required** extension produces a fatal user-visible error;
-there is no degraded mode.
-
-| Feature | OpenXR ID | Required? |
-|---|---|---|
-| Hand tracking | `XR_EXT_hand_tracking` | required |
-| Hand interaction | `XR_EXT_hand_interaction` | required |
-| Passthrough | `XR_FB_passthrough` | required |
-| Scene mesh | `XR_FB_scene` + `XR_FB_scene_capture` | required |
-| Spatial anchors | `XR_FB_spatial_entity` + `XR_FB_spatial_entity_storage` | required |
-| Foveated rendering | `XR_FB_foveation` + `XR_FB_foveation_configuration` | required |
-| Composition layer depth | `XR_KHR_composition_layer_depth` | required |
-| Performance settings | `XR_EXT_performance_settings` | required |
-| Display refresh rate | `XR_FB_display_refresh_rate` | required |
-| Local floor reference | `XR_EXT_local_floor` | required |
-| Visibility mask | `XR_KHR_visibility_mask` | optional |
-| Eye tracking | `XR_EXT_eye_gaze_interaction` | optional (Pro variants only; PII-gated) |
-
----
-
-## 10. Voice routing
-
-LiveKit is retained. Its Android AAR is exposed to Godot via a binding shim
-in `addons/livekit/`. LiveKit room id is the same as the presence room id
-(1:1). The auth token is minted by `src/handlers/livekit_token_handler.rs`
-(no changes from the existing desktop voice path) and requested by gdext
-over the existing HTTPS API at session start.
-
-```
-[Quest mic] -> AudioStreamMicrophone -> LiveKit AAR encoder (Opus) -> LiveKit room
-                                                                          ^
-[remote audio] <- LiveKit AAR decoder <- LiveKit room <-------------------/
-
-Per remote track: AAR exposes a PCM stream to AudioStreamPlayer3D
-positioned at the remote AvatarRig.HeadPivot. AudioServer applies HRTF
-on the dedicated bus with attenuation_model = ATTENUATION_INVERSE_DISTANCE.
-```
-
-Bandwidth: Opus at 32 kbps mono (default); ~64 kbps wire cost per track
-with redundancy. 4-user room ≈ 256 kbps voice — comfortably inside the
-100 KB/s per-user network budget.
-
----
-
-## 11. Performance budget
-
-CI gates fail on any sustained breach.
+The 90 Hz target imposes an 11.1 ms hard frame budget. CI gates fail on any
+sustained breach.
 
 | Resource | Budget |
 |---|---|
@@ -409,92 +387,18 @@ CI gates fail on any sustained breach.
 | Network egress | < 30 KB/s per user |
 | Battery drain | < 12 %/hour |
 
-Headline targets (PRD-008 G1–G3): **90 fps stable on Quest 3 with 5 K
-visible nodes + 4 remote avatars, 99th-pct frame time ≤ 12 ms, MTP < 20 ms,
-presence join < 500 ms p95.**
+Headline target: 90 fps stable on Quest 3 with 5 K visible nodes and 4 remote
+avatars, 99th-percentile frame time ≤ 12 ms, motion-to-photon < 20 ms, presence
+join < 500 ms p95.
 
 ---
 
-## 12. Failure modes and resilience
+## See also
 
-The XR client is more sensitive to transient failure than the desktop
-client — losing positional tracking for 200 ms in VR is nauseating. The
-state machines below degrade gracefully rather than crash or freeze.
-
-| Failure | Behaviour |
-|---|---|
-| **WebSocket disconnect** | Exponential backoff 1 s → 30 s cap, 10 attempts. Last-received graph snapshot continues to render at 90 Hz so the compositor stays alive. After 5 failures, snapshot mode pauses pose tx; the HUD shows a reconnecting spinner. |
-| **OpenXR runtime crash** (`XR_ERROR_INSTANCE_LOST`) | gdext flips to a 2D error overlay and tears down OpenXR. Restart requires a fresh APK launch — Meta's runtime owns process-wide GPU compositor resources. |
-| **Voice failure** (LiveKit `RoomDisconnected`) | Non-fatal. Voice indicators hide; mic-off icon appears in HUD. Pose continues. LiveKit reconnect every 30 s. |
-| **Packet-loss degradation** | Pose tx ladder per remote avatar: 90 Hz → 30 Hz (loss > 5%) → 10 Hz (loss > 15%) → snapshot-on-significant-change (loss > 30%). Recovery on the same thresholds in reverse. |
-
-The full state-diagrams are in
-[`docs/xr-godot-system-architecture.md` §11](../xr-godot-system-architecture.md).
-
----
-
-## 13. Security baseline
-
-Full STRIDE/DREAD analysis: [`docs/xr-godot-threat-model.md`](../xr-godot-threat-model.md).
-Invariants this architecture relies on:
-
-| Invariant | Threat ID |
-|---|---|
-| **NIP-98 challenge handshake** at WS upgrade; HTTP 401 fails closed; pubkey bound to socket | T-WS-1, T-WS-3 |
-| **Server-bound avatar id** — client cannot select its own; any `user_id` in inbound pose is ignored | T-AVATAR-1 |
-| **`validate_pose()` gate** — velocity ≤ 20 m/s, position within world AABB, hand reach ≤ 1.2 m, quat magnitude in [0.99, 1.01] | T-POSE-1, T-HAND-1 |
-| **Rate limit** at 120 Hz/session via token bucket; per-room actor isolation prevents cross-room starvation | T-DOS-1 |
-| **Frame format frozen** — additions require an ADR superseding ADR-061; enforced by `crates/binary-protocol/tests/frame_field_snapshot.rs` | T-PROTO-3 |
-| **Scene mesh stays client-side** — gdext `XR_FB_scene` binding is `pub(crate)` only with no serialiser; CI lints reject `serde::Serialize` on scene-mesh types | T-PII-1 |
-| **Eye tracking is opt-in** — default disabled; consent flow in `XRBoot.tscn`; gaze stays local | T-PII-2 |
-| **Visibility filter** — same per-user rule that drops invisible nodes (ADR-050) drops invisible avatars; anonymous viewers cannot enumerate the room | (architectural) |
-| **APK supply chain** — `cargo-deny` + `cargo-audit` in CI; SBOM per release; v3 APK signing; in-app About screen shows signing fingerprint | T-APK-1, T-APK-3 |
-
----
-
-## 14. Migration map
-
-The full removal manifest is referenced by [PRD-008 §5.6](../PRD-008-xr-godot-replacement.md)
-and [ADR-071 §"Implementation Plan"](../adr/ADR-071-godot-rust-xr-replacement.md).
-The wholesale removal of the prior browser-hosted XR stack
-(`client/src/immersive/*`, world-server bridges and contexts, WebXR npm
-deps, vendored world-server SDK, and the world-server compose file) lands
-in a single cutover commit; the new layout is `xr-client/` (Godot project)
-+ `crates/visionclaw-xr-gdext/` + `crates/visionclaw-xr-presence/` plus the
-two new server files (`src/handlers/presence_handler.rs`,
-`src/actors/presence_actor.rs`). The desktop browser path
-(`client/src/` non-`immersive/`) is **untouched**.
-
----
-
-## 15. Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| APK fails to launch with OpenXR error | Missing required extension | Confirm Horizon OS ≥ 71; check `adb logcat -s visionclaw-xr` for the failing extension ID |
-| Black screen after first frame | Graph WS not connected before XR session begin | Boot aborts XR begin if `graph_ws_ready` not signalled — check NIP-98 auth in logcat |
-| 401 from `/wss` or `/ws/presence` | NIP-98 signature invalid or replayed nonce | Regenerate Nostr key; verify clock skew < 60 s; check `presence.auth.rejected` server counter |
-| Remote avatars not appearing | Pose frames dropping validation | Inspect `presence.invalid_pose.*` counters; widen room policy thresholds for unusually tall users |
-| Frame rate dips below 90 fps | LOD policy too permissive | Verify `lod.rs` is in Tier2Standalone bucket; enable `aggressive_culling`; reduce visible node count |
-| Voice plays but is not spatial | `AudioStreamPlayer3D` not parented to remote `AvatarRig.HeadPivot` | Inspect `avatar_rig.gd::on_voice_track_attached`; confirm HRTF bus assigned |
-| APK size exceeds 80 MB | Debug symbols not stripped from gdext `.so` | Add `strip xr-client/addons/visionclaw_xr_gdext/aarch64/*.so` to CI |
-| Hand tracking does not detect pinch | Headset in controller mode | Quest Settings → Movement Tracking → Hand and Controller Tracking → Hand Tracking |
-
-CI artefact capture: `adb logcat -d -s visionclaw-xr` is saved to
-`xr-client/build/logs/run-<timestamp>.log` and uploaded to the GitHub
-Actions run. Setup-time troubleshooting lives in
-[`xr-setup-quest3.md`](../how-to/xr-setup-quest3.md).
-
----
-
-## 16. See also
-
-- [PRD-008 — XR Client Replacement](../PRD-008-xr-godot-replacement.md)
-- [ADR-071 — Godot 4 + godot-rust + OpenXR](../adr/ADR-071-godot-rust-xr-replacement.md)
-- [DDD: XR Godot Bounded Context](../ddd-xr-godot-context.md)
-- [XR Godot System Architecture](../xr-godot-system-architecture.md) — authoritative deep-dive
-- [XR Godot Threat Model](../xr-godot-threat-model.md)
-- [Quest 3 APK Setup](../how-to/xr-setup-quest3.md)
-- [Binary Protocol](../binary-protocol.md) — wire format, opcode registry
-- [ADR-061 — Binary Protocol Unification](../adr/ADR-061-binary-protocol-unification.md)
-- [Client Architecture](client-architecture.md) — desktop React Three Fiber graph view (unchanged)
+- [ADR-071 — Godot 4 + godot-rust + OpenXR XR replacement](../adr/ADR-071-godot-rust-xr-replacement.md) — governing decision (supersedes Babylon.js + Vircadia)
+- [ADR-102 — XR client / backend transport completion](../adr/ADR-102-xr-client-backend-transport-completion.md) — shipped handshake, opcode `0x43`, `/ws/presence`
+- [ADR-061 — Binary protocol unification](../adr/ADR-061-binary-protocol-unification.md) — single-wire authority
+- [reference/binary-protocol.md](../reference/binary-protocol.md) — V3 52 B/node layout and opcode registry
+- [how-to/xr-quest3-setup.md](../how-to/xr-quest3-setup.md) — build, side-load, and troubleshoot the Quest 3 APK
+- [security-model.md](security-model.md) — BIP-340 identity, pose-injection gates, visibility filtering
+- [client-architecture.md](client-architecture.md) — desktop React Three Fiber graph view (unchanged)

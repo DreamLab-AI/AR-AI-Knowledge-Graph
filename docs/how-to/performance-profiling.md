@@ -141,7 +141,7 @@ cuobjdump -ptx ./libphysics.so | grep ".target"
 
 ### Binary Frame Size Monitoring
 
-VisionClaw uses the V3 52-byte per-node wire format for client position updates (version byte `0x03`, see [docs/binary-protocol.md](../../binary-protocol.md)). Each binary WebSocket frame carries `N` node updates, where `N` depends on the delta filter output:
+VisionClaw uses the V3 52-byte per-node wire format for client position updates (version byte `0x03`, see [docs/binary-protocol.md](../reference/binary-protocol.md)). Each binary WebSocket frame carries `N` node updates, where `N` depends on the delta filter output:
 
 | Wire format | Bytes per node | When used |
 |-------------|---------------|-----------|
@@ -387,7 +387,7 @@ The diagram below shows the full position update pipeline from physics kernel to
 ```mermaid
 sequenceDiagram
     participant GPU as ForceComputeActor<br/>(CUDA kernels)
-    participant Opt as BroadcastOptimizer
+    participant BO as BroadcastOptimizer
     participant GSS as GraphServiceSupervisor<br/>→ GraphStateActor
     participant POA as PhysicsOrchestratorActor
     participant CCA as ClientCoordinatorActor
@@ -399,15 +399,15 @@ sequenceDiagram
     GPU->>GPU: check_system_stability_kernel (KE threshold)
 
     alt iters_since_full >= 300 OR nodes still moving
-        GPU->>Opt: UpdateNodePositions(delta_mask, positions[])
-        Note over GPU,Opt: TIMING PROBE B<br/>CPU timestamp: message send
+        GPU->>BO: UpdateNodePositions(delta_mask, positions[])
+        Note over GPU,BO: TIMING PROBE B<br/>CPU timestamp: message send
     end
 
-    Opt->>Opt: Delta compress (filter nodes below threshold)
-    Note over Opt: TIMING PROBE C<br/>Log: filtered_count / total_count
+    BO->>BO: Delta compress (filter nodes below threshold)
+    Note over BO: TIMING PROBE C<br/>Log: filtered_count / total_count
 
-    Opt->>GSS: UpdatePositions(active_nodes[])
-    Note over Opt,GSS: TIMING PROBE D<br/>Actor message latency
+    BO->>GSS: UpdatePositions(active_nodes[])
+    Note over BO,GSS: TIMING PROBE D<br/>Actor message latency
 
     GSS->>GSS: GraphStateActor: update in-memory position cache
     GSS->>POA: BroadcastPositions(positions[])

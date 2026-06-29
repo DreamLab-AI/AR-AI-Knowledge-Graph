@@ -4,7 +4,7 @@ This Wardley map positions VisionClaw's components along the evolution axis (Gen
 
 ## Strategic Map
 
-![VisionClaw Strategic Wardley Map](visionclaw-wardley-map.png)
+![VisionClaw Strategic Wardley Map](visionflow-wardley-map.png)
 
 <details>
 <summary>Mermaid source (wardleyMap syntax, requires Mermaid 12+)</summary>
@@ -14,80 +14,40 @@ This Wardley map positions VisionClaw's components along the evolution axis (Gen
 config:
   theme: base
 ---
-wardleyMap
+quadrantChart
   title VisionClaw Coordination Platform
-  anchor User Need [0.97, 0.59]
-  anchor Hard Problems [0.92, 0.20]
-
-  component Governance UI [0.85, 0.35] label [10, -15]
-  component Knowledge Graph [0.82, 0.28] label [-70, -15]
-  component Agent Skills [0.78, 0.32] label [10, 10]
-  component Immersive XR [0.75, 0.25] label [-80, 10]
-
-  component Judgment Broker [0.72, 0.22] label [-100, -15]
-  component OWL 2 Reasoning [0.68, 0.18] label [-110, 10]
-  component GPU Semantic Physics [0.65, 0.15] label [-130, -15]
-  component Agent Control Surface [0.70, 0.30] label [10, -15]
-
-  component VisionClaw [0.62, 0.25] label [-85, 10]
-  component Agentbox [0.58, 0.35] label [10, -15]
-  component Nostr Relay Mesh [0.55, 0.38] label [10, 10]
-
-  component solid-pod-rs [0.50, 0.30] label [-85, -15]
-  component DID Nostr [0.48, 0.28] label [-75, 10]
-  component WAC Access Control [0.45, 0.32] label [-120, -15]
-  component Web Ledger Payments [0.42, 0.20] label [-140, 10]
-
-  component Nix Flakes [0.35, 0.55] label [10, -15]
-  component MCP Protocol [0.40, 0.45] label [10, 10]
-  component Nostr Protocol [0.30, 0.55] label [-100, -15]
-  component Solid Protocol [0.28, 0.50] label [-100, 10]
-
-  component CUDA [0.22, 0.72] label [10, -15]
-  component Cloudflare Workers [0.18, 0.82] label [10, 10]
-  component Docker [0.15, 0.85] label [10, -15]
-  component PostgreSQL [0.12, 0.90] label [10, 10]
-  component secp256k1 [0.08, 0.88] label [-75, -15]
-
-  User Need --> Governance UI
-  User Need --> Knowledge Graph
-  User Need --> Agent Skills
-  Hard Problems --> Judgment Broker
-  Hard Problems --> Immersive XR
-
-  Governance UI --> Agent Control Surface
-  Knowledge Graph --> OWL 2 Reasoning
-  Knowledge Graph --> GPU Semantic Physics
-  Agent Skills --> Agentbox
-  Agent Skills --> MCP Protocol
-
-  Judgment Broker --> Agent Control Surface
-  Agent Control Surface --> Nostr Relay Mesh
-  OWL 2 Reasoning --> VisionClaw
-  GPU Semantic Physics --> CUDA
-
-  VisionClaw --> solid-pod-rs
-  Agentbox --> solid-pod-rs
-  Agentbox --> Nix Flakes
-  Agentbox --> Docker
-  Nostr Relay Mesh --> Nostr Protocol
-
-  solid-pod-rs --> DID Nostr
-  solid-pod-rs --> WAC Access Control
-  solid-pod-rs --> Web Ledger Payments
-  solid-pod-rs --> Solid Protocol
-  DID Nostr --> secp256k1
-
-  Nostr Protocol --> secp256k1
-  Governance UI --> Cloudflare Workers
-  solid-pod-rs --> PostgreSQL
-
-  evolve OWL 2 Reasoning 0.35
-  evolve GPU Semantic Physics 0.30
-  evolve Agent Control Surface 0.45
-  evolve Web Ledger Payments 0.35
-  evolve Nostr Relay Mesh 0.52
-  evolve DID Nostr 0.42
+  x-axis Genesis --> Commodity
+  y-axis Invisible --> Visible
+  quadrant-1 Visible commodity
+  quadrant-2 Visible differentiators
+  quadrant-3 Emerging infrastructure
+  quadrant-4 Commodity infrastructure
+  User Need: [0.59, 0.97]
+  Hard Problems: [0.20, 0.92]
+  Governance UI: [0.35, 0.85]
+  Knowledge Graph: [0.28, 0.82]
+  Agent Skills: [0.32, 0.78]
+  Immersive XR: [0.25, 0.75]
+  Judgment Broker: [0.22, 0.72]
+  Agent Control Surface: [0.30, 0.70]
+  OWL 2 Reasoning: [0.18, 0.68]
+  GPU Semantic Physics: [0.15, 0.65]
+  VisionClaw: [0.25, 0.62]
+  Agentbox: [0.35, 0.58]
+  Nostr Relay Mesh: [0.38, 0.55]
+  "solid-pod-rs": [0.30, 0.50]
+  DID Nostr: [0.28, 0.48]
+  WAC Access Control: [0.32, 0.45]
+  Web Ledger Payments: [0.20, 0.42]
+  MCP Protocol: [0.45, 0.40]
+  Nix Flakes: [0.55, 0.35]
+  Nostr Protocol: [0.55, 0.30]
+  Solid Protocol: [0.50, 0.28]
+  CUDA: [0.72, 0.22]
+  Cloudflare Workers: [0.82, 0.18]
+  Docker: [0.85, 0.15]
+  PostgreSQL: [0.90, 0.12]
+  secp256k1: [0.88, 0.08]
 ```
 
 </details>

@@ -1,560 +1,245 @@
 ---
-title: VisionClaw Ontology Pipeline
-description: End-to-end guide to VisionClaw's OWL 2 ontology processing pipeline — from GitHub Markdown ingestion through embedded Oxigraph storage to Whelk-rs EL++ reasoning and GPU constraint application
+title: Ontology Pipeline
+description: How VisionClaw turns Logseq Markdown into a reasoned, validated, provenance-bearing RDF knowledge graph — GitHub sync, OWL extraction, the horned-owl assembler/converter, Whelk-rs OWL 2 EL reasoning, embedded Oxigraph storage, SHACL-lite and JSON-LD validation, and PROV-O provenance.
 category: explanation
-tags: [ontology, owl, whelk, reasoning, pipeline, oxigraph, knowledge-graph]
-updated-date: 2026-05-28
+tags: [ontology, owl, whelk, oxigraph, sparql, shacl, prov-o, reasoning, pipeline]
 ---
 
-# VisionClaw Ontology Pipeline
+# Ontology Pipeline
 
-End-to-end guide to VisionClaw's OWL 2 ontology processing pipeline — from GitHub Markdown ingestion through embedded Oxigraph storage to Whelk-rs EL++ reasoning and GPU constraint application.
+> [VisionClaw Docs](../README.md) · [Explanation](README.md)
 
-> **Graph store changed (ADR-11)**: storage is now an **embedded Oxigraph** RDF triple store
-> (in-process, RocksDB-backed, W3C SPARQL 1.1) — there is no Neo4j container, Bolt URI, or
-> `NEO4J_*` configuration. Where this document says "Neo4j", read "the embedded Oxigraph
-> graph store". The Cypher snippets are historical (Neo4j-era) and are retained only to show
-> the shape of each query; the live system resolves the equivalent patterns via SPARQL
-> (endpoints that still accept a `cypher` field do so for backwards compatibility only).
+VisionClaw maintains a formal OWL 2 ontology alongside its display knowledge graph. The pipeline ingests Logseq-formatted Markdown from a GitHub repository, extracts OWL axioms, reasons over them with a native Rust EL reasoner, stores everything as RDF in an embedded triple store, and validates and signs each contribution. This document explains the stages, the data contracts between them, and where each lives in the `visionclaw-ontology` and `visionclaw-adapters` crates.
+
+The graph store is an **embedded Oxigraph** RDF quad-store (in-process, RocksDB-backed, W3C SPARQL 1.1). It is the sole store for both knowledge-graph and ontology data under the persistence migration (ADR-11), implemented by the triple-store migration framework (ADR-101). Neo4j is fully removed: there is no Bolt URI, no `NEO4J_*` configuration, and no separate database-browser UI. User settings persist in an embedded SQLite store.
 
 ---
 
-## 1. Pipeline Overview
+## 1. Pipeline at a glance
 
-The ontology pipeline is a 5-stage process that converts Logseq-formatted Markdown files from a GitHub repository into GPU-enforced semantic physics constraints rendered in the 3D graph.
+Two ingestion fronts feed the same store. Logseq pages carry OWL axioms either as **OWL Functional Syntax** (fenced code or an `owl:functional-syntax::` block) or as **JSON-LD** fenced blocks. Both land as RDF quads in Oxigraph; Whelk-rs then reasons over the asserted graph and materialises inferred axioms into a separate named graph.
 
 ```mermaid
 flowchart LR
-    A[GitHub Repo\nMarkdown Files] --> B[OntologyParser\nRust]
-    B --> C[Oxigraph\nEmbedded Graph Store]
-    C --> D[Whelk-rs\nEL++ Reasoner]
-    D --> E[GPU\nConstraints]
-    E --> F[Client\n3D Graph]
+    GH["GitHub Logseq repo<br/>Markdown pages"]
 
-    style A fill:#4A90D9,color:#fff
-    style B fill:#4A90D9,color:#fff
-    style C fill:#27AE60,color:#fff
-    style D fill:#E67E22,color:#fff
-    style E fill:#8E44AD,color:#fff
-    style F fill:#2C3E50,color:#fff
+    subgraph Extract["Extraction (visionclaw-ontology)"]
+        LP["Logseq parser<br/>LogseqPage: title, properties, owl_blocks"]
+        CONV["converter<br/>logseq_properties_to_owl"]
+        ASM["assembler<br/>OntologyAssembler"]
+        HORN["horned-owl<br/>OFN parse + validate"]
+    end
+
+    subgraph Reason["Reasoning (visionclaw-adapters)"]
+        WHELK["Whelk-rs<br/>OWL 2 EL reasoner"]
+    end
+
+    subgraph Store["Embedded Oxigraph (RocksDB)"]
+        ASSERT["graph:ontology:assert<br/>asserted axioms"]
+        INFER["graph:ontology:inferred<br/>Whelk subsumptions"]
+        KNOW["graph:knowledge<br/>KGNode + KGEdge"]
+    end
+
+    GH --> LP
+    LP -->|"owl_blocks"| ASM
+    LP -->|"properties"| CONV
+    CONV -->|"OWL axioms"| ASM
+    ASM -->|"OWL Functional Syntax"| HORN
+    HORN -->|"classes + axioms"| WHELK
+    WHELK -->|"asserted"| ASSERT
+    WHELK -->|"inferred"| INFER
+    LP -->|"page + wikilink triples"| KNOW
+    ASSERT -->|"GPU constraints"| GPU["Force / Ontology<br/>constraint actors"]
 ```
 
-**End-to-end timing** (production, warm cache):
-- GitHub sync → Oxigraph save: ~10 ms per file
-- Reasoning (cache hit): < 1 ms
-- Reasoning (cache miss, 50 classes): ~50 ms
-- Constraint generation: ~1 ms per 100 axioms
-- GPU upload: ~10–50 ms for 1,000 constraints
-- **Total pipeline**: ~65–600 ms depending on ontology size and cache state
+The JSON-LD front (modern path) runs `extractor -> expander -> validator -> SHACL-lite gate -> triple_emitter`, producing quads directly without the OFN assembler. Both fronts share the Oxigraph store, the trust layer (Section 5), and the query surface (Section 7).
 
 ---
 
-## 2. Stage 1: GitHub Markdown Ingestion
+## 2. Stage 1 — GitHub Logseq ingestion
 
-### Entry point
+`GitHubSyncService::sync_graphs()` is the entry point. It pulls Markdown from the configured repository path (`GITHUB_BASE_PATH`, default `mainKnowledgeGraph/pages/`) in batches, and skips unchanged files by SHA-1 comparison. `FORCE_FULL_SYNC=1` bypasses the incremental filter and reprocesses every file; reset it to `0` afterwards.
 
-`GitHubSyncService::sync_graphs()` in `src/services/github-sync-service.rs` is the synchronization entry point. It fetches Markdown files from the configured GitHub repository (default path: `mainKnowledgeGraph/pages/`) in batches of 50 files.
+Each page is classified by content. A page tagged `public:: true` becomes a knowledge-graph page node and its `[[wikilink]]` targets become edges in `urn:ngm:graph:knowledge`. **Independently of the `public::` flag**, every page is scanned for ontology content — OWL Functional Syntax blocks and `### OntologyBlock` property sections — so private notes still contribute axioms.
 
-### Incremental filtering
-
-Sync uses SHA1 hashing to skip unchanged files. Set `FORCE_FULL_SYNC=1` to bypass SHA1 filtering and reprocess all files. Reset to `0` after a forced sync.
-
-### File type detection
-
-`detect_file_type()` classifies each file. Files tagged `public:: true` become `KnowledgeGraph` page nodes. Files lacking this tag are still scanned for `### OntologyBlock` sections (see below).
-
-### OntologyBlock extraction
-
-**Only `public:: true` files** produce KG page nodes and `[[wikilink]]` → `linked_page` conversions.
-
-**All files regardless of `public:: true` status** are scanned for `### OntologyBlock` sections. These sections contain OWL class definitions, axioms, and properties in a structured Logseq property format.
-
-```
-### OntologyBlock
-- term-id:: CL:0000540
-- preferred-term:: Neuron
-- owl:class:: Cell
-- is-subclass-of:: [[Cell]]
-- owl-axioms:: DisjointClasses(Neuron, Astrocyte)
-```
-
-After detecting an OntologyBlock, `save_ontology_data()` triggers the full downstream pipeline.
-
-### Data flow in this stage
-
-```
-sync_graphs()
-  └── process_single_file(page.md)
-        ├── detect_file_type() → KnowledgeGraph | Ontology
-        ├── KnowledgeGraphParser::parse() → page/linked_page nodes
-        └── OntologyParser::parse() → OntologyData
-              └── save_ontology_data()
-                    ├── UnifiedOntologyRepository::save_ontology()
-                    └── OntologyPipelineService::on_ontology_modified() [async task]
-```
-
----
-
-## 3. Stage 2: OWL Parsing
-
-### Enhanced parser architecture
-
-The enhanced OntologyParser (`src/services/parsers/ontology_parser.rs`, version 2.0.0) extracts the complete metadata set from OntologyBlock sections. It compiles regex patterns once at startup using `Lazy<Regex>` for zero-overhead parsing.
-
-Key regex patterns:
-- Property extraction: `^\s*-\s*([a-zA-Z0-9_:-]+)::\s*(.+)$`
-- Wiki links: `\[\[([^\]]+)\]\]` — converted to `linked_page` nodes
-- OWL axioms in code blocks: ` ```clojure ... ``` `
-- Cross-domain bridges: `^\s*-\s*(bridges-(?:to|from))::\s*\[\[([^\]]+)\]\]\s*via\s+(\w+)`
-
-### Three-tier property validation
-
-Properties are divided into three tiers:
-
-| Tier | Requirement | Examples |
-|------|-------------|---------|
-| 1 | Required | `term-id`, `preferred-term`, `owl:class`, `is-subclass-of` |
-| 2 | Recommended | `alt-terms`, `quality-score`, `source`, `has-part`, `depends-on` |
-| 3 | Optional | `bridges-to`, `bridges-from`, `owl-axioms`, domain extensions |
-
-### OWL 2 EL profile support
-
-The parser recognises the OWL 2 EL subset: SubClassOf, EquivalentClasses, DisjointClasses, ObjectSomeValuesFrom, ObjectIntersectionOf, transitive and reflexive properties. Universal quantification, negation, cardinality restrictions, and disjunction are outside EL++ scope and will produce "missing inferred axioms" warnings if used.
-
-### Node types created
-
-| Node Type | Source |
-|-----------|--------|
-| `page` | File with `public:: true` |
-| `linked_page` | `[[wikilink]]` targets |
-| `owl_class` | OntologyBlock with `owl:class` |
-| `owl_property` | OntologyBlock with `owl:role` |
-| `owl_individual` | OntologyBlock individual declarations |
-
----
-
-## 4. Stage 3: Graph-Store Persistence (embedded Oxigraph)
-
-### Embedded Oxigraph as the sole graph store
-
-The graph store is an **embedded Oxigraph** RDF triple store (in-process, RocksDB-backed,
-W3C SPARQL 1.1), the **primary and sole** store as of ADR-11 (Neo4j removed). Nodes and
-relationships are persisted as RDF triples in named graphs; the `OxigraphGraphRepository` and
-`OxigraphOntologyRepository` adapters serialise the logical `KGNode`/`EDGE` model below into
-subject–predicate–object triples.
-
-> The Cypher node/edge/index snippets in this section are **historical (Neo4j-era)**. They
-> describe the same logical schema that Oxigraph now stores as RDF — Oxigraph maintains
-> SPO/POS/OSP indexes automatically, so the `CREATE CONSTRAINT`/`CREATE INDEX` statements no
-> longer apply.
-
-### Node schema (logical model)
-
-```cypher
-(:KGNode {
-  id: Integer,              // Sequential u32 from NEXT_NODE_ID atomic counter
-  metadata_id: String,      // File path or IRI
-  label: String,
-  owl_class_iri: String,    // OWL ontology class (populated for owl_* nodes)
-  node_type: String,        // "page", "linked_page", "owl_class", etc.
-  x, y, z: Float,          // Physics positions
-  vx, vy, vz: Float        // Velocities
-})
-```
-
-```cypher
-[:EDGE {
-  weight: Float,
-  relation_type: String,   // "SUBCLASS_OF", "LINKS_TO", "HAS_PROPERTY", etc.
-  owl_property_iri: String
-}]
-```
-
-### Indexes and constraints
-
-```cypher
-CREATE CONSTRAINT kg_node_id IF NOT EXISTS FOR (n:KGNode) REQUIRE n.id IS UNIQUE
-CREATE INDEX kg_node_metadata_id IF NOT EXISTS FOR (n:KGNode) ON (n.metadata_id)
-CREATE INDEX kg_node_owl_class IF NOT EXISTS FOR (n:KGNode) ON (n.owl_class_iri)
-```
-
-### Edge types created by the ontology pipeline
-
-| Relationship | Meaning |
-|--------------|---------|
-| `SUBCLASS_OF` | OWL SubClassOf axiom |
-| `LINKS_TO` | `[[wikilink]]` or `relates-to` |
-| `HAS_PROPERTY` | `owl:role` declaration |
-| `EQUIVALENT_TO` | EquivalentClasses axiom |
-| `DISJOINT_WITH` | DisjointClasses axiom |
-| `HAS_PART` | `has-part` property |
-| Namespace edges | Generated from `--` prefix convention |
-
-### The 623 SUBCLASS_OF relationships
-
-There are 623 `SUBCLASS_OF` relationships originating from `OwlClass` nodes in the graph store. These require **label matching** to link `OwlClass` nodes to the corresponding `KGNode` entries. Without this mapping, the client graph receives isolated OwlClass nodes — see the **Ontology Edge Gap** section below.
-
-### Namespace edge generation
-
-Nodes whose `metadata_id` contains a `--` prefix (e.g., `ai--machine-learning`) automatically generate namespace grouping edges during `GraphStateActor` startup, placing them into the correct sub-graph cluster.
-
----
-
-## 5. Stage 4: Whelk-rs Reasoning (EL++)
-
-### What is Whelk-rs?
-
-Whelk-rs is a high-performance OWL 2 EL reasoner written in Rust. It offers 10–100× speedup over traditional Java-based reasoners (Pellet, HermiT). Integration uses `horned-owl` (a Rust OWL parser) as the parsing layer.
-
-```toml
-horned-owl = { version = "1.2.0", features = ["remote"], optional = true }
-whelk = { path = "./whelk-rs", optional = true }
-```
-
-### EL++ reasoning capabilities
-
-| Construct | Inference |
-|-----------|-----------|
-| SubClassOf transitivity | A ⊑ B, B ⊑ C ⇒ A ⊑ C |
-| DisjointClasses propagation | A ⊥ B, C ⊑ A ⇒ C ⊥ B |
-| EquivalentClasses | Symmetric and transitive |
-| Transitive properties | part-of-part propagates |
-| FunctionalProperty constraints | Cardinality enforcement |
-
-### Reasoning algorithms in CustomReasoner
-
-The `CustomReasoner` (`src/reasoning/custom-reasoner.rs`, 466 lines) implements three algorithms:
-
-1. **infer_transitive_subclass()** — computes transitive closure of SubClassOf, using `transitive_cache: HashMap<String, HashSet<String>>`. Worst-case O(n³), average O(n²).
-2. **infer_disjoint()** — propagates disjointness to subclasses. Example: `Neuron ⊥ Astrocyte` → `PyramidalNeuron ⊥ Astrocyte`.
-3. **infer_equivalent()** — symmetric and transitive equivalence closure.
-
-All inferred axioms receive `confidence: 1.0` (deductive reasoning is certain).
-
-### Inference caching
-
-Results are cached with a Blake3 hash key:
+`parse_logseq_file` (`crates/visionclaw-ontology/src/ontology/parser/parser.rs`) produces a `LogseqPage`:
 
 ```rust
-let cache_key = blake3::hash(
-    format!("{}:{}:{}", ontology_id, cache_type, ontology_hash).as_bytes()
-).to_hex();
+pub struct LogseqPage {
+    pub title: String,
+    pub properties: HashMap<String, Vec<String>>, // term-id, owl:class, has-part, ...
+    pub owl_blocks: Vec<String>,                    // raw OWL Functional Syntax
+}
 ```
 
-The in-memory `RwLock<HashMap<String, InferenceCacheEntry>>` provides sub-millisecond cache hits. A persistent SQLite `inference_cache` table exists for cross-session persistence (optional, database-backed caching).
+`extract_owl_blocks` recognises three shapes: a ```` ```clojure ```` fence, a bare fence whose first line is `owl:functional-syntax:: |`, and an inline `owl:functional-syntax:: |` block. A block is treated as OWL only if it contains a `Declaration(`, `SubClassOf(`, `EquivalentClasses(`, `DisjointClasses(`, `ObjectProperty(`, or `DataProperty(` construct.
 
-Cache invalidation triggers when the ontology content hash changes or on explicit `InvalidateCache` message.
+---
 
-### Sequence diagram
+## 3. Stage 2 — OWL extraction (converter and assembler)
+
+Two small, pure modules turn a `LogseqPage` into a single OWL Functional Syntax document that `horned-owl` can parse.
+
+**`converter`** (`ontology/parser/converter.rs`) — `logseq_properties_to_owl` walks the page's typed properties and emits axioms. Relationship properties (`has-part`, `is-part-of`, `requires`, `depends-on`, `enables`, …) become existential restrictions:
+
+```text
+SubClassOf(mv:Avatar ObjectSomeValuesFrom(mv:hasPart mv:VisualMesh))
+```
+
+Property names are kebab-to-camel normalised (`has-part` → `hasPart`); wikilink values (`[[Visual Mesh]]`) are slugged to IRIs (`VisualMesh`). Data properties such as `maturity` and `term-id` become `ClassAssertion(DataHasValue(...))`. Bookkeeping keys (`owl:*`, `term-*`, `definition`, `source`, `preferred-term`, `synonyms`) are skipped — they are metadata, not axioms.
+
+**`assembler`** (`ontology/parser/assembler.rs`) — `OntologyAssembler` joins the page's raw `owl_blocks` (the header/`Ontology(...)` envelope) with the converter's generated axioms into one document. `to_string()` re-indents each axiom block inside the `Ontology(...)` parentheses; `validate()` round-trips the result through `horned_owl::io::ofn::reader::read` into a `SetOntology<Arc<str>>`. A parse failure here aborts the page before any reasoning or storage, so malformed OWL never reaches the store.
+
+> The assembler validates **syntax** only. Logical consistency (satisfiability, `owl:Nothing` collapse) is the reasoner's job in Stage 3.
+
+---
+
+## 4. Stage 3 — Whelk-rs OWL 2 EL reasoning
+
+`WhelkInferenceEngine` (`crates/visionclaw-adapters/src/whelk_inference_engine.rs`) implements the `InferenceEngine` port using `horned-owl` for ontology construction and `whelk-rs` for EL classification. Whelk is the primary reasoner posture (ADR-099): a native Rust OWL 2 EL reasoner with no JVM dependency.
+
+`load_ontology(classes, axioms)` builds a `SetOntology<ArcStr>`. Each domain `OwlAxiom` is mapped to a horned-owl component:
+
+| Axiom type | horned-owl component | Notes |
+|------------|----------------------|-------|
+| `SubClassOf` | `SubClassOf` | directed subsumption |
+| `EquivalentClass` | `EquivalentClasses` | native — Whelk derives both directions (ADR-099 D2) |
+| `DisjointWith` | `DisjointClasses` | EL-derivable; collapse to `owl:Nothing` surfaces inconsistency (ADR-099 D3) |
+| `SubPropertyOf` | `SubObjectPropertyOf` | role hierarchy |
+| `TransitiveProperty` / `SymmetricProperty` / `InverseProperties` | corresponding property axioms | |
+| `SomeValuesFrom` | `SubClassOf(C, ObjectSomeValuesFrom(p, D))` | existential restriction |
+| `ObjectPropertyAssertion` | (skipped for EL Tbox) | mereological/associative facts (`hasPart`, `partOf`, `sameAs`) drive GPU forces directly, not classification |
+
+`infer()` calls `whelk::owl::translate_ontology` then `whelk::reasoner::assert`, and reads `named_subsumptions()`. `convert_subsumptions_to_axioms` returns the directed `SubClassOf` closure **plus** one canonical `EquivalentClass(A, B)` per bidirectional, non-reflexive, non-sentinel pair (`owl:Thing`/`owl:Nothing` are excluded). Equivalence therefore survives end-to-end rather than degrading to two opaque sub-class edges.
+
+**Caching.** `compute_ontology_checksum` hashes the sorted axiom set (`DefaultHasher`). If the checksum is unchanged since the last load, `infer()` returns the cached subsumptions without re-running the classifier. **Consistency.** `check_consistency` reports `false` when any class other than `owl:Nothing` is inferred to be `⊑ owl:Nothing`. Results carry `reasoner_version: whelk-rs-<pkg-version>`.
+
+Inferred axioms are materialised into `urn:ngm:graph:ontology:inferred`; the asserted axioms stay in `urn:ngm:graph:ontology:assert`. Asserted-vs-inferred provenance is preserved by graph membership, so a consumer can always tell what was stated from what was derived.
+
+---
+
+## 5. Stage 4 — Oxigraph storage and the trust layer
+
+`OxigraphOntologyRepository` (`crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs`) serialises classes, properties, axioms, nodes, and edges into RDF quads across a fixed family of named graphs.
+
+### Named graphs
+
+| Named graph IRI | Contents |
+|-----------------|----------|
+| `urn:ngm:graph:ontology:assert` | asserted OWL classes, properties, axioms |
+| `urn:ngm:graph:ontology:inferred` | Whelk-derived subsumptions (Section 4) |
+| `urn:ngm:graph:knowledge` | `KGNode` + `KGEdge` display triples |
+| `urn:ngm:graph:agent` | agent-scoped triples |
+| `urn:ngm:graph:shapes` | W3C SHACL `NodeShape` triples loaded from `.ttl` at startup (PRD-022) |
+| `urn:ngm:graph:provenance` | append-only PROV-O activity triples (PRD-022) |
+| `urn:ngm:graph:ontology:summary` / `:observed` | approval-driven write-back and observed facts (the only graphs the fenced derived path may write) |
+| `urn:ngm:graph:cache:sssp` / `:apsp` | pathfinding caches (own sub-domain so `CLEAR GRAPH` invalidates atomically) |
+| `urn:ngm:graph:migrations` | migration ledger (ADR-101) |
+| (default graph) | cross-graph bridges + schema |
+
+### IRI minting
+
+All IRIs use the `vc:` prefix expanding to `https://narrativegoldmine.com/ns/v1#`. Classes mint `urn:ngm:class:<slug>`, properties `urn:ngm:property:<slug>`, and axioms `urn:ngm:axiom:<sha256-12>` (content-addressed, so identical axioms deduplicate). The `:assert` and `:inferred` graphs are fenced from the derived write path; the migration framework records each applied SPARQL migration in the ledger graph exactly once.
+
+### Validation and provenance
 
 ```mermaid
-sequenceDiagram
-    participant Sync as GitHubSyncActor
-    participant Parser as OntologyParser
-    participant Oxigraph as Oxigraph (embedded)
-    participant Whelk as Whelk-rs / CustomReasoner
-    participant GPU as SemanticForcesActor
+flowchart TD
+    IN["Ingest: OFN axioms<br/>or JSON-LD block"]
 
-    Sync->>Parser: parse_files(markdown_batch)
-    Parser->>Parser: Extract OntologyBlocks
-    Parser->>Oxigraph: Create/update OWL nodes
-    Oxigraph-->>Parser: Node IDs
-
-    Parser->>Whelk: TriggerReasoning(ontology_id)
-    Whelk->>Whelk: Check Blake3 cache
-    alt Cache miss
-        Whelk->>Oxigraph: get_classes() + get_axioms()
-        Whelk->>Whelk: EL++ completion (~50ms for 50 classes)
-        Whelk->>Oxigraph: Store inferred_edges (is_inferred=true)
-        Whelk->>Whelk: Store in-memory cache
-    else Cache hit
-        Whelk->>Whelk: Return cached axioms (<1ms)
+    subgraph Gate["Write-path validation (fail-closed)"]
+        SCHEMA["JSON-LD schema / profile /<br/>PROV-O validator (hard gate)"]
+        ELP["OWL 2 EL profile check"]
+        SHACL["SHACL-lite shape gate<br/>(graph:shapes)"]
     end
-    Whelk->>GPU: UpdateSemanticConstraints(class_hierarchy)
-    GPU-->>Whelk: ACK
+
+    IN --> SCHEMA
+    SCHEMA --> ELP
+    ELP --> SHACL
+    SHACL -->|"valid"| WRITE["INSERT quads<br/>graph:ontology:assert"]
+    SHACL -->|"violation"| REJECT["Reject payload"]
+    WRITE --> PROV["Reify PROV-O Activity<br/>graph:provenance (append-only)"]
+    WRITE --> WHELK2["Whelk reasoning<br/>graph:ontology:inferred"]
+    READ["Query path"] -->|"shape check advisory"| OUT["Results<br/>(log + metric, never block)"]
 ```
 
-### Performance benchmarks
+**SHACL-lite + JSON-LD validation.** On the write path, the JSON-LD validator (schema, profile, and PROV-O attribution checks) is a hard gate — a failure rejects the payload. The SHACL-lite shape gate (`jsonld_ingest/shacl_gate.rs`, `jsonld_validator/shacl_lite.rs`) then checks every parsed shape against the shapes graph. Shape gating is **fail-closed on writes** (a violation on ingest rejects) and **fail-open on reads** (a violation on a consumer query is advisory: logged and metered, never blocking). The OWL 2 EL profile validator (`jsonld_validator/owl_el_profile.rs`) flags constructs outside EL (universal quantification, cardinality, disjunction) before they reach the reasoner.
 
-| Operation | 10 classes | 50 classes | 100+ classes |
-|-----------|-----------|-----------|--------------|
-| Cold reasoning | ~15 ms | ~50 ms | ~150 ms |
-| Cached retrieval | < 1 ms | < 1 ms | < 1 ms |
-| Cache hit rate | > 90% in production |
+**PROV-O provenance (PRD-022).** `provenance_emitter::reify_activity` writes each contribution as PROV-O triples into the append-only provenance graph (`INSERT DATA` only — no `DELETE`/`DROP`/`CLEAR`):
 
-| Operation | 1,000 classes | 5,000 classes | 10,000 classes |
-|-----------|---------------|---------------|----------------|
-| First inference | ~500 ms | ~2,000 ms | ~5,000 ms |
-| Cached retrieval | < 10 ms | < 15 ms | < 20 ms |
+```turtle
+<urn:visionclaw:execution:sha256-12-…> a prov:Activity ;
+    prov:wasAssociatedWith <did:nostr:{hex-pubkey}> ;
+    prov:startedAtTime "{iso8601}"^^xsd:dateTime ;
+    prov:used <{source-iri}> ;        # optional
+    prov:generated <{output-urn}> ;   # optional
+    prov:wasInformedBy <{prior-urn}> ; # optional, causal chain
+    vc:action "{verb}" ;              # propose | infer | ingest | enrich
+    vc:derivation "{asserted|inferred|proposed}" .
+```
+
+Each record is 5–8 triples. The provenance graph does not participate in Whelk reasoning and is not covered by ontology forces — it is a pure audit trail, queryable per agent DID.
 
 ---
 
-## 6. Stage 5: GPU Constraint Application
+## 6. Stage 5 — GPU constraint application
 
-### Axiom-to-constraint translation
-
-`OntologyPipelineService::generate_constraints_from_axioms()` converts inferred axioms to typed physics constraints:
-
-| Axiom Type | Constraint Kind | Default Strength | Effect |
-|------------|----------------|-----------------|--------|
-| `SubClassOf(A, B)` | Clustering / HierarchicalAttraction | 1.0× | Child nodes cluster near parent |
-| `EquivalentClass(A, B)` | Alignment / Colocation | 1.5× | Nodes align strongly |
-| `DisjointWith(A, B)` | Separation | 2.0× | Nodes repel (strong force) |
-
-The `constraint_strength` multiplier in `SemanticPhysicsConfig` scales all constraint forces:
-
-```rust
-pub struct SemanticPhysicsConfig {
-    pub auto_trigger_reasoning: bool,      // default: true
-    pub auto_generate_constraints: bool,    // default: true
-    pub constraint_strength: f32,           // default: 1.0 (range 0–10)
-    pub use_gpu_constraints: bool,          // default: true
-    pub max_reasoning_depth: usize,         // default: 10
-    pub cache_inferences: bool,             // default: true
-}
-```
-
-### Priority blending
-
-When multiple constraints affect the same nodes, priorities resolve conflicts using exponential decay:
-
-```
-weight(priority) = 10^(-(priority-1)/9)
-
-Priority 1: User-defined  → weight = 1.000 (100%)
-Priority 5: Asserted axioms → weight = 0.359 (36%)
-Priority 7: Inferred axioms → weight = 0.215 (22%)
-Priority 10: Lowest        → weight = 0.100 (10%)
-```
-
-Inferred constraints receive priority 7; asserted constraints priority 5; user-defined priority 1.
-
-### GPU upload path
-
-1. `OntologyPipelineService::upload_constraints_to_gpu()` sends `ApplyOntologyConstraints` to `OntologyConstraintActor`
-2. `OntologyConstraintActor` converts `Constraint` structs to `ConstraintData` (GPU format, 64-byte aligned) via `OntologyConstraintTranslator`
-3. `upload_constraints_to_gpu()` calls `unified_compute.upload_constraints(&self.constraint_buffer)`
-4. `ForceComputeActor` receives `UpdateOntologyConstraintBuffer` and caches the buffer
-5. Each physics frame: `apply_ontology_forces()` re-uploads cached buffer before main force pass
-
-### CUDA kernel invocations
-
-Constraint kind `SEMANTIC = 10` in `ontology_constraints.cu`:
-- `apply_disjoint_classes_kernel` — block size 256, target ~0.8 ms / 10K nodes
-- `apply_subclass_hierarchy_kernel` — block size 256, target ~0.6 ms / 10K nodes
-- `apply_sameas_colocate_kernel` — block size 256, target ~0.3 ms / 10K nodes
-- **Total ontology constraint overhead**: ~2 ms / frame for 10K nodes
-
-GPU data structures (64-byte aligned):
-
-```cuda
-struct OntologyNode {
-    uint32_t graph_id;         // 4 bytes
-    uint32_t node_id;          // 4 bytes
-    uint32_t ontology_type;    // 4 bytes
-    uint32_t constraint_flags; // 4 bytes
-    float3 position;           // 12 bytes
-    float3 velocity;           // 12 bytes
-    float mass;                // 4 bytes
-    float radius;              // 4 bytes
-    uint32_t parent_class;     // 4 bytes
-    uint32_t property_count;   // 4 bytes
-    uint32_t padding[6];       // 24 bytes — TOTAL: 64 bytes
-};
-
-struct OntologyConstraint {
-    uint32_t type;             // DisjointClasses=1, SubClassOf=2
-    uint32_t source_id;        // 4 bytes
-    uint32_t target_id;        // 4 bytes
-    uint32_t graph_id;         // 4 bytes
-    float strength;            // 4 bytes
-    float distance;            // 4 bytes
-    float padding[10];         // 40 bytes — TOTAL: 64 bytes
-};
-```
-
-Memory footprint: 10K nodes = 640 KB, 1K constraints = 64 KB.
+Axioms in the asserted graph become physics constraints. `SubClassOf` clusters children near parents, `EquivalentClass` aligns/colocates, and `DisjointWith` separates. Mereological object-property assertions (`hasPart`, `partOf`) drive forces directly without classification (Section 4). The `OntologyConstraintActor` translates axioms into 64-byte-aligned GPU constraint records, which the `ForceComputeActor` re-applies each physics frame. The constraint formats, CUDA kernels, priority blending, and `SemanticPhysicsConfig` parameters are documented in [Physics & GPU Engine](physics-gpu-engine.md).
 
 ---
 
-## 7. Ontology Query Interface
+## 7. Query surface — MCP tools and read-only SPARQL
 
-### Graph traversal patterns (historical Cypher → Oxigraph SPARQL)
+Agents reason over the ontology through **7 MCP ontology tools** (`crates/visionclaw-ontology/src/types/ontology_tools.rs`):
 
-> The Cypher patterns below are **historical (Neo4j-era)**. They show the shape of the
-> traversals the system performs; the live store is embedded Oxigraph and resolves the
-> equivalent property paths via SPARQL.
+| Tool | Purpose |
+|------|---------|
+| `ontology_discover` | semantic class discovery via hierarchy + Whelk inference |
+| `ontology_read` | read a note with full ontology context and inferred axioms |
+| `ontology_query` | validated read-only graph query |
+| `ontology_traverse` | walk the ontology graph from a start IRI to a depth |
+| `ontology_propose` | propose a new note or amendment (staged → PR) |
+| `ontology_validate` | check candidate axioms for Whelk consistency |
+| `ontology_status` | reasoner / store health and statistics |
 
-```cypher
--- Find all subclasses of a given class (including inferred)
-MATCH (n:KGNode {owl_class_iri: $iri})<-[:SUBCLASS_OF*]-(child)
-RETURN child.label, child.id
+SPARQL reaches the store through a fenced read path. `clamp_select_limit` injects or clamps a top-level `LIMIT` (default and hard cap 10,000 rows); serialisation enforces an 8 MB byte ceiling; `validate_read_only_sparql` rejects mutations; and the SPARQL `SERVICE` keyword is blocked at the handler boundary to prevent SSRF and data exfiltration (auth enforcement, ADR-011). The legacy Cypher endpoint was removed in the Oxigraph migration; tool inputs that still carry a `cypher` field resolve against Oxigraph via SPARQL for backward compatibility.
 
--- Find nodes by OWL class
-MATCH (n:KGNode {owl_class_iri: $iri})
-RETURN n.id, n.label, n.metadata
-
--- Multi-hop ontology path
-MATCH (n:KGNode {id: $start})-[:SUBCLASS_OF|:LINKS_TO*1..5]-(m:KGNode)
-RETURN DISTINCT m.id, m.label
-```
-
-### REST API (ontology query service)
-
-> **Removed (ADR-11)**: the dedicated `POST /api/query/cypher` endpoint and its `CypherQueryHandler`
-> were **deleted** in the Oxigraph migration (see `src/main.rs`: "Cypher query endpoint removed").
-> Graph queries now go through the ontology / natural-language query services
-> (e.g. `/api/nl-query/*`), which accept a `cypher` field for backwards compatibility but resolve
-> it against the embedded Oxigraph store via SPARQL, with safety limits (timeout, result cap,
-> read-only enforcement).
-
-**POST** `/api/ontology-physics/enable` — Enable ontology force constraints:
-```json
-{
-  "ontologyId": "university-ontology",
-  "mergeMode": "replace",
-  "strength": 0.8
-}
-```
-
-**GET** `/api/ontology-physics/constraints` — List active constraints with GPU stats.
-
-**PUT** `/api/ontology-physics/weights` — Adjust constraint strength at runtime.
-
-### MCP Ontology Tools (7 tools)
-
-The system exposes 7 MCP tools for ontology operations:
-1. `infer_axioms` — trigger EL++ reasoning for an ontology ID
-2. `get_class_hierarchy` — retrieve complete class tree
-3. `get_disjoint_classes` — list disjoint class pairs
-4. `invalidate_cache` — force cache invalidation
-5. `get_cache_stats` — reasoning cache statistics
-6. `query_cypher` — execute a Cypher-style query (resolved against the embedded Oxigraph store; `cypher` field kept for backwards compatibility)
-7. `get_constraints` — list active GPU constraints
-
-### OntologyReasoningService API
-
-```rust
-// Core service methods
-pub async fn infer_axioms(&self, ontology_id: &str) -> Result<Vec<InferredAxiom>>
-pub async fn get_class_hierarchy(&self, ontology_id: &str) -> Result<ClassHierarchy>
-pub async fn get_disjoint_classes(&self, ontology_id: &str) -> Result<Vec<DisjointClassPair>>
-
-// Data structures
-pub struct InferredAxiom {
-    pub axiom_type: String,       // "SubClassOf", "DisjointWith", etc.
-    pub subject_iri: String,
-    pub object_iri: Option<String>,
-    pub confidence: f32,          // 1.0 for deductive, 0.7-0.9 for inferred
-    pub inference_path: Vec<String>,
-    pub user_defined: bool,
-}
-
-pub struct ClassHierarchy {
-    pub root_classes: Vec<String>,
-    pub hierarchy: HashMap<String, ClassNode>,
-}
-
-pub struct ClassNode {
-    pub iri: String,
-    pub label: String,
-    pub parent_iri: Option<String>,
-    pub children_iris: Vec<String>,
-    pub node_count: usize,  // Descendant count
-    pub depth: usize,
-}
-```
+The pervasive ontology binding (ADR-112, `ontology_ask`) layers a budget-bounded, provenance-scoped retrieval over this surface — read-pervasive and write-governed, fail-open so it never blocks a turn. See the [MCP tools reference](../reference/mcp-tools.md).
 
 ---
 
-## 8. The Ontology Edge Gap Problem
+## 8. Crate layout and actor wiring
 
-This is a known architectural debt item affecting the current production system.
+The ontology subsystem is the `visionclaw-ontology` crate, extracted under the hexagonal modularisation (ADR-090 Phase A4). It is one of eight workspace crates — `visionclaw-{contracts, domain, protocol, adapters, gpu, ontology, actors, xr-presence}` — and sits at the tail of the dependency DAG: `contracts → domain → adapters → ontology`.
 
-### Symptom
+| Module | Responsibility |
+|--------|----------------|
+| `inference` | OWL 2 EL++ parser, inference cache, optimisation |
+| `reasoning` | custom Whelk-backed reasoner |
+| `ontology` | Logseq parser, converter, assembler |
+| `services/jsonld_ingest` | extractor → expander → validator → SHACL gate → triple emitter |
+| `services/jsonld_validator` | EL profile, SHACL-lite, IRI/class checks |
+| `validation`, `types`, `utils` | actor-state validation, MCP tool surface, time helpers |
 
-62% of `OwlClass` nodes in the client graph are isolated — they have no edges connecting them to other nodes, even though 623 `SUBCLASS_OF` relationships exist in the graph store.
+Services that need actors, GPU, or config stay in the `webxr` crate: the ontology query, mutation, pipeline, enrichment, reasoner, and schema services.
 
-### Root cause
-
-`OwlClass` nodes in the graph store have a different label format than `KGNode` entries. The 623 `SUBCLASS_OF` relationships originate from `OwlClass` source nodes, but the client-side `KGNode` entries use a different ID scheme. The mapping between `OwlClass` nodes and `KGNode` entries requires label-based matching that is not currently implemented.
-
-### Impact
-
-- 62% of ontology nodes are visually isolated in the 3D graph
-- Ontology hierarchy is not visually represented
-- SemanticForcesActor receives incomplete constraint data
-
-### Proposed fix
-
-Map `OwlClass` → `KGNode` via `owl_class_iri` field matching:
-
-```cypher
-MATCH (oc:OwlClass)-[:SUBCLASS_OF]->(parent:OwlClass)
-MATCH (gn_child:KGNode {owl_class_iri: oc.iri})
-MATCH (gn_parent:KGNode {owl_class_iri: parent.iri})
-CREATE (gn_child)-[:SUBCLASS_OF]->(gn_parent)
-```
-
-This is tracked as a P1 architectural debt item.
+The `OntologyActor` (`src/actors/ontology_actor.rs`) handles **validation and coordination** — OWL validation via `OwlValidatorService`, a priority job queue (`Critical`/`High`/`Normal`/`Low`), TTL report caching, and propagation to the `PhysicsOrchestratorActor` (constraints) and `SemanticProcessorActor` (inference). Classification inference itself is owned by the `ReasoningActor`, not the `OntologyActor`.
 
 ---
 
-## 9. Environment Variables and Configuration
+## 9. Cross-pack — agentbox elevation bridge
 
-```bash
-# Reasoning configuration
-REASONING_CACHE_TTL=3600          # Cache lifetime (seconds)
-REASONING_TIMEOUT=30000           # Max reasoning time (ms)
-REASONING_MAX_AXIOMS=100000       # Axiom limit
-
-# Sync configuration
-FORCE_FULL_SYNC=0                 # Set to 1 to bypass SHA1 filtering
-GITHUB_BASE_PATH=mainKnowledgeGraph/pages/
-
-# Graph store (embedded Oxigraph — ADR-11)
-# No connection URI / user / password: Oxigraph runs in-process.
-# The RocksDB dataset lives under ${DATA_DIR}/oxigraph/ (DATA_DIR defaults to ./data;
-# Docker images set it to /app/data). The former NEO4J_URI / NEO4J_USER /
-# NEO4J_PASSWORD / NEO4J_ENABLED variables are removed and no longer read.
-DATA_DIR=/app/data
-```
-
-```toml
-[features]
-ontology_validation = true
-reasoning_cache = true
-ontology = ["horned-owl", "whelk", "walkdir", "clap"]
-```
+VisionClaw is the **host** ontology platform: it ingests, reasons, validates, and stores. The agentbox subsystem is where personal-pod knowledge graphs are **elevated** into this shared ontology. An agent grows a private knowledge graph on its Solid pod, and selected concepts are promoted into VisionClaw's shared ontology behind a Whelk consistency gate and ACSP approval, with PROV-O provenance crossing the federation boundary. VisionClaw links into that subsystem; it never duplicates it. See the agentbox [ecosystem](../../agentbox/docs/developer/ecosystem.md) developer guide for the elevation path and the BC20 anti-corruption mapping between the `urn:visionclaw:*` and `urn:agentbox:*` namespaces.
 
 ---
 
-## 10. Troubleshooting
+## See also
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| "Reasoning timeout" | Large ontology / complex axioms | Increase `REASONING_TIMEOUT` or reduce ontology size |
-| "Cache invalidation loop" | Ontology hash changes on every read | Ensure consistent serialisation; normalise whitespace |
-| "Missing inferred axioms" | Axiom uses OWL 2 construct outside EL++ | Verify no universal quantification, negation, or cardinality restrictions |
-| Constraints not applied | `auto_generate_constraints` disabled | Check pipeline config |
-| GPU upload failures | Constraint actor not initialized / OOM | Check CUDA logs; CPU fallback activates automatically |
-| OntologyBlock not detected | Missing `### OntologyBlock` header | Verify exact header format in Markdown |
-
-**Debug log patterns to watch:**
-```
-🔄 Triggering ontology reasoning pipeline after ontology save
-✅ Reasoning complete: 67 inferred axioms
-🔧 Generating constraints from 67 axioms
-📤 Uploading 67 constraints to GPU
-✅ Constraints uploaded to GPU successfully
-🎉 Ontology pipeline complete: 67 axioms inferred, 67 constraints generated, GPU upload: true
-```
-
----
-
-## Related Documentation
-
-- [Physics & GPU Engine](physics-gpu-engine.md) — how constraints affect node positioning
-- `docs/explanation/ontology-pipeline.md` — actor wire-up analysis
-- `docs/reference/neo4j-schema-unified.md` — full graph storage schema (Oxigraph/RDF, ADR-11)
-- `docs/explanation/ontology-pipeline.md` — detailed sequence diagrams including error and backpressure paths
+- [DDD: Semantic Pipeline — Bounded Contexts](ddd-semantic-pipeline.md) — the domain model and edge-type contracts feeding this pipeline
+- [Physics & GPU Engine](physics-gpu-engine.md) — how asserted axioms become constraint forces
+- [Bounded Contexts](bounded-contexts.md) — where the ontology context sits in the system
+- [MCP Tools reference](../reference/mcp-tools.md) · [Graph Schema reference](../reference/graph-schema.md)
+- agentbox [ecosystem](../../agentbox/docs/developer/ecosystem.md) — the KG-elevation bridge subsystem
+- Governing decisions: [ADR-101 — Triple-Store Migration Framework (Oxigraph, the ADR-11 persistence migration)](../adr/ADR-101-triple-store-migration-framework.md), [ADR-099 — Whelk EL Reasoner Posture](../adr/ADR-099-reasoner-posture-whelk-el-primary.md), [ADR-014 — Semantic Pipeline Unification](../adr/ADR-014-semantic-pipeline-unification.md), [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-127 — Semantic Trust Layer](../adr/ADR-127-semantic-trust-layer.md), [ADR-011 — Auth Enforcement (SPARQL SERVICE fence)](../adr/ADR-011-auth-enforcement.md), [PRD-022 — Semantic Trust Layer](../prd/PRD-022-semantic-trust-layer.md)
+</content>
+</invoke>

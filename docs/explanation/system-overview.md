@@ -1,661 +1,263 @@
 ---
 title: VisionClaw System Overview
-description: End-to-end architectural blueprint for VisionClaw — all three layers, service actors, hexagonal CQRS pattern, and data flow from GitHub ingestion to GPU-accelerated 3D rendering
+description: The canonical architecture explanation for VisionClaw — how the client and XR surfaces, the Actix backend, the Oxigraph/RuVector/Solid data layer, the CUDA physics engine, and the coordination mesh fit together.
 category: explanation
-tags: [architecture, system, overview, hexagonal, cqrs, actors, gpu]
-updated-date: 2026-04-09
+tags: [architecture, system, overview, actors, hexagonal, gpu, oxigraph]
 ---
 
+# VisionClaw System Overview
 
-# Complete Hexagonal Architecture Migration - Overview
+> [VisionClaw Docs](../README.md) · [Explanation](README.md)
 
-## Executive Summary
+VisionClaw renders a living knowledge graph in 3D. Markdown notes and OWL
+ontologies become nodes; formal reasoning and GPU physics arrange them in space;
+a binary WebSocket streams positions at interactive frame rates to a web client
+and to an immersive XR client on Quest 3. Around that core sits a coordination
+mesh — a Nostr relay, the agentbox agent harness, and the DreamLab forum — that
+lets humans and AI agents reason against the same graph under cryptographic
+identity and explicit governance.
 
-This document provides a complete architectural blueprint for migrating the VisionClaw application to a fully database-backed hexagonal architecture. All designs are **production-ready with NO stubs, TODOs, or placeholders**.
+This document is the map. It explains the four layers, why they are shaped the
+way they are, and where to read the detail. It does not duplicate the deep-dives
+it links to.
 
-## Architecture Documents
-
-1. **** - Port layer (interfaces)
-   - SettingsRepository
-   - KnowledgeGraphRepository
-   - OntologyRepository
-   - GpuPhysicsAdapter
-   - GpuSemanticAnalyzer
-   - InferenceEngine
-
-2. **** - Adapter implementations
-   - OxigraphGraphRepository ✅ **ACTIVE** (embedded Oxigraph RDF triple store for graph data — ADR-11; replaces the former Neo4jKnowledgeGraphRepository)
-   - OxigraphOntologyRepository ✅ **ACTIVE** (ontology persisted in the same embedded store — ADR-11)
-   - PhysicsOrchestratorAdapter
-   - SemanticProcessorAdapter
-   - WhelkInferenceEngine
-   - OntologyQueryService ✅ **NEW** (agent read path)
-   - OntologyMutationService ✅ **NEW** (agent write path)
-   - GitHubPRService ✅ **NEW** (ontology change PRs)
-
-3. **** - CQRS business logic
-   - Directives (write operations)
-   - Queries (read operations)
-   - Handlers for all domains
-
-4. **Database Schemas** - Complete database designs
-   - Oxigraph RDF/named-graph schema (graph nodes, edges, ontology) — ADR-11; user settings persist in an embedded SQLite store
-
-## Ontology Reasoning Pipeline
-
-### System Overview
-
-VisionClaw integrates a complete ontology reasoning pipeline that transforms static OWL definitions into intelligent, self-organizing knowledge structures:
+## Top-level architecture
 
 ```mermaid
-graph LR
-    A[GitHub OWL Files<br/>900+ Classes] --> B[Horned-OWL Parser]
-    B --> C[(Oxigraph embedded<br/>RDF triple store)]
-    C --> D[Whelk-rs Reasoner<br/>OWL 2 EL]
-    D --> E[Inferred Axioms<br/>is-inferred=1]
-    E --> C
-    C --> F[Constraint Builder<br/>8 types]
-    F --> G[CUDA Physics<br/>crates/visionclaw-gpu kernels]
-    G --> H[Binary WebSocket V3<br/>52 bytes/node]
-    H --> I[3D Client]
+flowchart TB
+    subgraph Clients["Clients"]
+        WEB["Web client<br/>(React + TS, served via nginx :3001)"]
+        XR["XR client<br/>(Godot gdext, Quest 3)"]
+    end
+    subgraph Backend["Actix backend (:4000)"]
+        API["HTTP + WebSocket API"]
+        ACT["Actor system<br/>(35 Actix actors)"]
+        HEX["Hexser handlers<br/>(44: 19 write / 25 read)"]
+    end
+    subgraph Data["Data layer"]
+        OXI["Oxigraph<br/>(embedded RDF + SQLite)"]
+        RUV["RuVector<br/>(pgvector memory)"]
+        SOLID["Solid pod<br/>(:8484)"]
+    end
+    GPU["CUDA engine<br/>(82 kernels, 9 .cu files)"]
+    subgraph Mesh["Coordination mesh"]
+        NOSTR["Nostr relay<br/>(NIP-42 AUTH)"]
+        BOX["agentbox<br/>(agent harness)"]
+        FORUM["DreamLab forum<br/>(governance UI)"]
+    end
 
-    style D fill:#e1f5ff
-    style G fill:#ffe1e1
-    style C fill:#f0e1ff
+    WEB -->|"REST + binary WS"| API
+    XR -->|"binary V4 delta"| API
+    API --> ACT
+    API --> HEX
+    ACT -->|"semantic constraints"| GPU
+    GPU -->|"node positions"| ACT
+    HEX --> OXI
+    ACT --> OXI
+    ACT --> RUV
+    HEX --> SOLID
+    ACT <-->|"signed events"| NOSTR
+    NOSTR <--> BOX
+    NOSTR <--> FORUM
 ```
 
-### Semantic Physics Integration
+The flow is one-directional through the core and bidirectional at the edges.
+Clients send intent (REST mutations, WebSocket subscriptions); the backend
+resolves it through actors and handlers; the data layer persists it; the GPU
+computes layout; positions stream back out. The mesh wraps the whole thing in a
+shared identity and event fabric so that agents are first-class participants,
+not external callers.
 
-The system translates ontological relationships into physical forces for intelligent 3D visualization:
+## The four layers
 
-| Ontological Axiom | Physics Force | Visual Effect |
-|-------------------|---------------|---------------|
-| `SubClassOf` | Attraction (spring) | Child classes cluster near parents |
-| `DisjointWith` | Repulsion (Coulomb) | Disjoint classes pushed apart |
-| `EquivalentClasses` | Strong attraction | Synonyms rendered together |
-| `ObjectProperty` | Directed alignment | Property domains/ranges aligned |
-| **Inferred axioms** | Weaker forces (0.3x) | Subtle influence vs. asserted |
+### Clients
 
-### Data Flow with Reasoning
+Two surfaces consume the same backend.
+
+- **Web client** — a React + TypeScript single-page app, 465 `.ts`/`.tsx` files
+  (422 non-test) across 16 feature modules, roughly 103K lines. It owns the
+  WebGPU/WebGL render loop, the instanced node and edge geometry, label layout,
+  and the settings control panel. nginx serves it on `:3001` and reverse-proxies
+  the API.
+- **XR client** — a Godot gdext (Rust `cdylib`) build targeting Quest 3,
+  packaged as its own workspace context (PRD-008). It consumes the same binary
+  position stream plus an XR presence channel for multi-user co-location.
+
+Both clients read node positions from the binary WebSocket protocol rather than
+JSON: it is the only representation that sustains interactive frame rates at
+100K nodes. See [Client Architecture](client-architecture.md) and
+[XR Architecture](xr-architecture.md).
+
+### Actix backend
+
+The backend is a single Rust binary, `visionclaw-server` — 428 `.rs` files,
+about 178K lines — built on Actix. Two mechanisms carry the work.
+
+**Actors (35).** Long-lived, stateful, message-driven units: 19 service actors
+(graph state, settings, metadata, GitHub sync, ontology, semantic processing,
+client coordination, workspace, presence, and supervisors) plus 16 GPU actors
+(force compute, clustering, PageRank, shortest-path, stress majorisation,
+constraint and ontology-constraint actors under their supervisors). A further
+10 short-lived WebSocket session actors spin up per connection — 45 actor types
+in total, but 35 form the persistent service spine. Actors own all mutable
+runtime state; nothing else holds an `Arc<RwLock<T>>` over graph or physics
+data.
+
+**Hexser handlers (44).** The application layer is hexagonal: 19 `DirectiveHandler`
+implementations (writes) and 25 `QueryHandler` implementations (reads) sit behind
+9 ports with 12 concrete adapters. The Directive/Query split is a typing
+discipline, not a runtime message bus — **there is no CQRS dispatch bus**. The
+bus was removed under [ADR-089](../adr/ADR-089-cqrs-bus-removal.md); handlers are
+invoked directly as plain async calls, which removed a layer of indirection
+without losing the read/write separation.
+
+Read the detail in [Backend Architecture](backend-architecture.md) and the
+[Actor Hierarchy](actor-hierarchy.md).
+
+### Data layer
+
+Three stores, each with a distinct job. None is Neo4j — Neo4j was removed
+entirely (ADR-11); there is no graph database container and no DB browser UI.
+
+- **Oxigraph** — an embedded, RocksDB-backed RDF quad store opened in-process.
+  It holds both the knowledge graph and the ontology as named graphs, queried
+  with W3C SPARQL 1.1. SHACL-lite shapes gate writes; PROV-O provenance is
+  reified into an append-only graph (PRD-022, [ADR-127](../adr/ADR-127-semantic-trust-layer.md)).
+- **SQLite** — an embedded store for user settings, kept relational because
+  settings are key/value rather than graph-shaped.
+- **RuVector** — a pgvector-backed semantic memory (MiniLM-L6-v2, 384-dim,
+  HNSW-indexed) used for cross-session agent memory and similarity search. See
+  [RuVector Integration](ruvector-integration.md).
+- **Solid pod** — a per-actor data pod on `:8484`, the sovereign store for agent
+  output, accessed under WAC access control and `did:nostr` identity. See
+  [Solid Sidecar Architecture](solid-sidecar-architecture.md).
+
+The ontology pipeline — Whelk-rs OWL 2 EL reasoning, SHACL-lite plus JSON-LD
+validation, PROV-O provenance, and the 7 MCP ontology tools
+(`discover`/`read`/`query`/`traverse`/`propose`/`validate`/`status`) — is the
+subject of [Ontology Pipeline](ontology-pipeline.md).
+
+### GPU engine
+
+Layout is the expensive part, and it runs on CUDA. The `visionclaw-gpu` crate
+carries 82 `__global__` kernels across 9 `.cu` files (about 5,854 lines) in
+`crates/visionclaw-gpu/src/cuda_sources/`: a unified force-directed solver plus
+specialised kernels for SSSP, connected components, clustering, PageRank,
+landmark APSP, AABB reduction, dynamic spatial grids, and semantic forces.
+
+Ontological structure becomes physical force: `SubClassOf` pulls children toward
+parents, `DisjointWith` pushes classes apart, inferred axioms apply weaker
+influence than asserted ones. The result is a layout that reflects meaning.
+
+At 100K nodes the GPU path delivers roughly a **55× speedup** over the CPU
+fallback — 246 ms per frame (about 4 FPS) collapses to 4.5 ms (about 222 FPS).
+Computed positions stream out over the binary protocol. See
+[Physics GPU Engine](physics-gpu-engine.md) and
+[Agent–Physics Bridge](agent-physics-bridge.md).
+
+## Workspace structure
+
+The backend is split into 8 workspace crates under
+[ADR-090](../adr/ADR-090-hexagonal-crate-modularisation.md), so a one-line change
+to a domain type recompiles one crate and the linker rather than the whole
+server:
+
+| Crate | Responsibility |
+|---|---|
+| `visionclaw-contracts` | Shared wire/DTO contracts, independently buildable |
+| `visionclaw-domain` | Domain types and value objects |
+| `visionclaw-protocol` | Binary and WebSocket protocol codecs |
+| `visionclaw-adapters` | Port adapter implementations |
+| `visionclaw-gpu` | CUDA kernels and the GPU compute path |
+| `visionclaw-ontology` | Whelk reasoning, SHACL, provenance |
+| `visionclaw-actors` | The Actix actor system |
+| `visionclaw-xr-presence` | XR room registry and presence wire codec |
+
+The root `visionclaw-server` package re-exports through thin shims, so callers
+see one cohesive API while builds stay incremental. See
+[Bounded Contexts](bounded-contexts.md) for how these crates map onto domains.
+
+## Request and data lifecycle
+
+The end-to-end path from ingestion to render:
 
 ```mermaid
 sequenceDiagram
-    participant GH as GitHub
-    participant Parser as OWL Parser
-    participant DB as Oxigraph (embedded RDF store)
-    participant Whelk as Whelk Reasoner
-    participant GPU as CUDA Physics
-    participant Client as 3D Client
+    participant GH as "GitHub / OWL"
+    participant SYNC as "GitHubSyncService"
+    participant OXI as "Oxigraph"
+    participant WHELK as "Whelk reasoner"
+    participant GPU as "CUDA engine"
+    participant CLIENT as "Client / XR"
 
-    GH->>Parser: Fetch OWL files
-    Parser->>DB: Store asserted axioms<br/>(is-inferred=0)
-    DB->>Whelk: Load ontology
-    Whelk->>Whelk: Compute inferences
-    Whelk->>DB: Store inferred axioms<br/>(is-inferred=1)
-    DB->>GPU: Generate semantic constraints
-    GPU->>GPU: Simulate physics forces
-    GPU->>Client: Stream positions (binary)
-    Client->>Client: Render self-organizing graph
+    GH->>SYNC: fetch markdown + ontology
+    SYNC->>OXI: write asserted triples (SHACL-gated)
+    OXI->>WHELK: load ontology
+    WHELK->>OXI: store inferred axioms + PROV-O
+    OXI->>GPU: emit semantic constraints
+    GPU->>GPU: force-directed solve (60 Hz)
+    GPU->>CLIENT: stream positions (binary V4 delta)
+    CLIENT->>CLIENT: render self-organising graph
 ```
 
-**Key Benefits**:
-- **Automatic Inference**: Derive new relationships (10-100x faster with Whelk-rs)
-- **Consistency Checking**: Detect logical contradictions in real-time
-- **Semantic Visualization**: Graph layouts reflect ontological structure
-- **LRU Caching**: 90x speedup for repeated reasoning operations
-
-**See the ontology pipeline explanation for reasoning details: [Ontology Pipeline](ontology-pipeline.md)**
-
----
-
-## Key Architectural Decisions
-
-### 1. Database Architecture (Migrated to embedded Oxigraph: ADR-11)
-
-**Decision**: ✅ Use an **embedded Oxigraph** RDF triple store (W3C SPARQL 1.1 Query +
-Update, RocksDB-backed, opened in-process by `visionclaw-server`) as the primary graph
-store for both knowledge-graph and ontology data ([ADR-11](../migration-sprint/11-persistence-migration/ADR-11.md)).
-
-**Rationale**:
-- **Graph-native storage**: RDF quad-store with native named graphs — one for the knowledge graph, one for ontology, etc.
-- **SPARQL 1.1 queries**: Standard query/update language for complex graph patterns
-- **No separate container**: Embedded in the backend process; no Bolt URI, no DB password, simpler ops
-- **Built-in indexing**: Oxigraph maintains SPO/POS/OSP indexes automatically (no manual index DDL)
-
-**Migration History**:
-- ❌ Previous SQLite unified.db architecture deprecated (November 2025)
-- ❌ Neo4j graph database deprecated and removed (ADR-11) — superseded by Oxigraph
-- ✅ All graph and ontology data now persisted in the embedded Oxigraph store
-- ⚙️ One-shot importer `tools/migrate-neo4j-to-oxigraph` converts legacy Neo4j exports
-
-**Current Architecture**:
-- ✅ Embedded Oxigraph for knowledge-graph nodes/edges and ontology (named graphs)
-- ✅ W3C SHACL shape validation in `urn:ngm:graph:shapes` — dual-mode gate (ADR-127 D1)
-- ✅ W3C PROV-O provenance reification in append-only `urn:ngm:graph:provenance` (ADR-127 D2)
-- ✅ Embedded SQLite for user settings (`SqliteSettingsRepository`)
-- ✅ In-memory ontology cache for fast Whelk reasoning, snapshotted to Oxigraph
-- ✅ OntologyQueryService and OntologyMutationService for agent read/write paths
-- ✅ GitHubPRService for automated ontology change PRs
-
-**Unified Database Structure**:
-
-> **SUPERSEDED 2026-06-12.** A relational ER diagram of the deprecated SQLite
-> `unified.db` schema (`graph_nodes`, `owl_classes`, `owl_axioms`, …)
-> previously appeared here. That schema was removed with the migration to the
-> embedded Oxigraph RDF store (ADR-11): the same logical entities now live as
-> RDF named graphs queried via SPARQL. See
-> [Unified Graph Schema](../reference/neo4j-schema-unified.md) for the
-> current logical model and node/edge/ontology entity reference.
-
-### 2. Hexagonal Architecture with hexser
-
-**Decision**: Use hexser crate for enforcing ports and adapters pattern.
-
-**Rationale**:
-- **Compile-time enforcement**: Derive macros ensure architectural compliance
-- **Testability**: Business logic depends on interfaces, not implementations
-- **Flexibility**: Can swap adapters (e.g., SQLite → PostgreSQL) without changing business logic
-- **Clear boundaries**: Explicit separation between domain, application, and infrastructure
-
-**Trade-offs**:
-- ❌ Additional abstraction layer (minimal performance impact)
-- ❌ More boilerplate code
-- ✅ Much better maintainability
-- ✅ Easier onboarding for new developers
-- ✅ Future-proof architecture
-
-### 3. CQRS with Directives and Queries
-
-**Decision**: Separate read and write operations using CQRS pattern.
-
-**Rationale**:
-- **Optimized queries**: Read operations can be optimized independently of writes
-- **Clear intent**: Directives clearly indicate state changes, queries indicate reads
-- **Event sourcing ready**: Easy to add event emission after directives
-- **Audit trail**: Can log all directives for compliance
-
-**Trade-offs**:
-- ❌ More code (separate handlers for reads and writes)
-- ✅ Much clearer code organization
-- ✅ Better scalability potential
-- ✅ Easier debugging (clear transaction boundaries)
-
-### 4. Async-First with tokio
-
-**Decision**: All ports and adapters use async/await with tokio runtime.
-
-**Rationale**:
-- **Non-blocking I/O**: Database operations don't block other requests
-- **Better resource utilization**: Can handle many concurrent connections
-- **Future compatibility**: Aligns with Rust ecosystem trends
-- **Actor integration**: Plays well with existing actix-actor system
-
-**Trade-offs**:
-- ❌ More complex error handling (async Result types)
-- ❌ Runtime dependency (tokio)
-- ✅ Better performance under load
-- ✅ Scalable to thousands of concurrent users
-
-### 5. Actor System as Adapters
-
-**Decision**: Keep existing actors, wrap them as adapters rather than rewriting.
-
-**Rationale**:
-- **Non-breaking migration**: Existing functionality continues to work
-- **Gradual transition**: Can migrate incrementally
-- **Preserve domain knowledge**: Actor logic represents valuable business rules
-- **Risk mitigation**: Don't rewrite what already works
-
-**Trade-offs**:
-- ❌ Maintains some complexity from actor system
-- ✅ Faster migration timeline
-- ✅ Lower risk of introducing bugs
-- ✅ Can refactor actors later if needed
-
-## Implementation Roadmap
-
-```mermaid
-gantt
-    title Hexagonal Architecture Migration Timeline
-    dateFormat YYYY-MM-DD
-    section Foundation
-    Database Setup           :2025-11-01, 7d
-    Port Definitions         :2025-11-01, 7d
-    Migration Scripts        :2025-11-08, 7d
-    section Adapters
-    Repository Adapters      :2025-11-15, 7d
-    Actor Adapters          :2025-11-22, 7d
-    Integration Tests       :2025-11-29, 7d
-    section CQRS Layer
-    Settings Domain         :2025-12-06, 7d
-    Graph Domain           :2025-12-13, 7d
-    Ontology Domain        :2025-12-20, 7d
-    section Integration
-    HTTP Handlers          :2026-01-03, 7d
-    WebSocket Updates      :2026-01-10, 7d
-    End-to-End Tests       :2026-01-17, 7d
-    section Actors
-    Actor Integration      :2026-01-24, 14d
-    section Cleanup
-    Legacy Removal         :2026-02-07, 14d
-    section Inference
-    Whelk Integration      :2026-02-21, 14d
-```
-
-### Phase 1: Foundation (Week 1-2)
-
-**Tasks**:
-1. Add hexser dependency to Cargo.toml
-2. Create `src/ports/` directory structure
-3. Define all port traits (copy from 01-ports-design.md)
-4. Create three SQLite database files with schemas (schemas.md)
-5. Write migration scripts to populate databases from existing config
-6. Test database connections and basic CRUD operations
-
-**Completion Criteria**:
-- ✅ Unified database created and initialized
-- ✅ All port traits compile without errors
-- ✅ Migration scripts successfully import existing data
-- ✅ Basic unit tests pass for database operations
-
-### Phase 2: Adapters (Week 3-4)
-
-**Tasks**:
-1. Create `src/adapters/` directory structure ✅ **COMPLETE**
-2. Implement settings repository (from 02-adapters-design.md) ✅ **COMPLETE** (November 2025; now `SqliteSettingsRepository` — ADR-11)
-3. Implement UnifiedGraphRepository ✅ **COMPLETE** (replaced SQLite)
-4. Implement OntologyRepository ✅ **COMPLETE** (replaced SQLite)
-5. Implement PhysicsOrchestratorAdapter (wraps existing actor) ✅ **COMPLETE**
-6. Implement SemanticProcessorAdapter (wraps existing actor) ✅ **COMPLETE**
-7. Implement WhelkInferenceEngine with whelk-rs integration ✅ **COMPLETE**
-8. Write integration tests for all adapters 🔄 **IN PROGRESS**
-
-**Completion Criteria**:
-- ✅ All adapters implement their respective ports
-- ✅ Integration tests pass for each adapter
-- ✅ Performance benchmarks show acceptable latency (<10ms per operation)
-- ✅ Error handling works correctly
-
-### Phase 3: CQRS Application Layer (Week 5-6)
-
-**Tasks**:
-1. Create `src/application/` directory structure
-2. Implement settings domain directives and queries
-3. Implement knowledge graph domain directives and queries
-4. Implement ontology domain directives and queries
-5. Implement physics domain directives and queries
-6. Implement semantic domain directives and queries
-7. Create ApplicationServices struct to hold all handlers
-8. Write unit tests for all handlers (using mock adapters)
-
-**Completion Criteria**:
-- ✅ All directives and queries compile and work
-- ✅ Unit tests pass with >90% coverage
-- ✅ Handlers correctly validate input
-- ✅ Error messages are clear and actionable
-
-### Phase 4: HTTP Handler Refactoring (Week 7-8)
-
-**Tasks**:
-1. Refactor settings endpoints to use directives/queries
-2. Refactor graph endpoints
-3. Refactor ontology endpoints
-4. Refactor physics endpoints
-5. Update WebSocket handlers to use application layer
-6. Remove direct database access from handlers
-7. Update API documentation
-8. End-to-end testing
-
-**Completion Criteria**:
-- ✅ All HTTP endpoints work correctly
-- ✅ WebSocket functionality preserved
-- ✅ No direct database access in handlers
-- ✅ API responses maintain backward compatibility
-- ✅ E2E tests pass
-
-### Phase 5: Actor System Integration (Week 9-10)
-
-**Tasks**:
-1. Update GraphStateActor to use KnowledgeGraphRepository
-2. Update PhysicsOrchestratorActor to use ports
-3. Update SemanticProcessorActor to use ports
-4. Update OntologyActor to use OntologyRepository
-5. Remove direct file I/O from actors
-6. Update AppState initialization
-7. Test actor message flows
-
-**Completion Criteria**:
-- ✅ All actors work with new architecture
-- ✅ No file-based config remaining
-- ✅ Actor tests pass
-- ✅ System integration tests pass
-
-### Phase 6: Cleanup and Optimization (Week 11-12)
-
-**Tasks**:
-1. Delete all legacy config files (YAML, TOML, JSON)
-2. Remove old file-based config modules
-3. Delete deprecated actors (GraphServiceSupervisor, etc.)
-4. Remove client-side caching layer
-5. Optimize database queries with EXPLAIN ANALYZE
-6. Add database connection pooling
-7. Implement caching layer where appropriate
-8. Performance testing and optimization
-9. Documentation updates
-
-**Completion Criteria**:
-- ✅ No legacy code remains
-- ✅ Performance benchmarks meet targets
-- ✅ All tests pass
-- ✅ Documentation is complete and accurate
-
-### Phase 7: Ontology Inference Engine (Week 13-14)
-
-**Tasks**:
-1. Add whelk-rs dependency
-2. Implement WhelkInferenceEngine (replace stub)
-3. Test inference with sample ontologies
-4. Integrate with OntologyActor
-5. Create inference UI in client
-6. Performance testing for inference
-7. Documentation for reasoning capabilities
-
-**Completion Criteria**:
-- ✅ whelk-rs integration works
-- ✅ Basic inferences are computed correctly
-- ✅ Inference results stored in database
-- ✅ UI displays inferred relationships
-
-## Testing Strategy
-
-### Unit Tests
-
-**Coverage Target**: >90% for all application layer code
-
-```rust
-// Example unit test with mock adapter
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mockall::predicate::*;
-    use mockall::mock;
-
-    mock! {
-        SettingsRepo {}
-        #[async-trait]
-        impl SettingsRepository for SettingsRepo {
-            async fn get-setting(&self, key: &str) -> Result<Option<SettingValue>, String>;
-            // ... other methods
-        }
-    }
-
-    #[tokio::test]
-    async fn test-update-setting-handler() {
-        let mut mock-repo = MockSettingsRepo::new();
-        mock-repo
-            .expect-set-setting()
-            .with(eq("key1"), eq(SettingValue::String("value1".to-string())), eq(None))
-            .times(1)
-            .returning(|-, -, -| Ok(()));
-
-        let handler = UpdateSettingHandler::new(mock-repo);
-        let directive = UpdateSetting {
-            key: "key1".to-string(),
-            value: SettingValue::String("value1".to-string()),
-            description: None,
-        };
-
-        let result = handler.handle(directive).await;
-        assert!(result.is-ok());
-    }
-}
-```
-
-### Integration Tests
-
-**Coverage**: All adapter implementations
-
-```rust
-// Example integration test (settings adapter — embedded SQLite, ADR-11)
-#[tokio::test]
-async fn test-sqlite-settings-repository-integration() {
-    let config = SqliteSettingsConfig::default();
-    let repo = SqliteSettingsRepository::new(config).await.unwrap();
-
-    // Schema initialized automatically
-
-    // Test set and get
-    repo.set-setting("test-key", SettingValue::String("test-value".to-string()), Some("Test setting"))
-        .await
-        .unwrap();
-
-    let value = repo.get-setting("test-key").await.unwrap();
-    assert!(matches!(value, Some(SettingValue::String(s)) if s == "test-value"));
-
-    // Test delete
-    repo.delete-setting("test-key").await.unwrap();
-    let value = repo.get-setting("test-key").await.unwrap();
-    assert-eq!(value, None);
-
-    // Test health check
-    assert!(repo.health-check().await.unwrap());
-}
-```
-
-### End-to-End Tests
-
-**Coverage**: Critical user workflows
-
-```rust
-#[actix-web::test]
-async fn test-settings-update-e2e() {
-    let app = test::init-service(App::new().configure(configure-routes)).await;
-
-    let req = test::TestRequest::post()
-        .uri("/api/settings")
-        .set-json(UpdateSetting {
-            key: "test-key".to-string(),
-            value: SettingValue::String("test-value".to-string()),
-            description: None,
-        })
-        .to-request();
-
-    let resp = test::call-service(&app, req).await;
-    assert!(resp.status().is-success());
-
-    // Verify persisted
-    let get-req = test::TestRequest::get()
-        .uri("/api/settings/test-key")
-        .to-request();
-
-    let get-resp = test::call-service(&app, get-req).await;
-    assert!(get-resp.status().is-success());
-}
-```
-
-### Performance Tests
-
-**Target Metrics**:
-- Database operations: <10ms p99
-- HTTP endpoints: <100ms p99
-- WebSocket latency: <50ms p99
-- Physics simulation: 60 FPS sustained
-
-```rust
-#[bench]
-fn bench-settings-repository-get(b: &mut Bencher) {
-    let runtime = tokio::runtime::Runtime::new().unwrap();
-    let repo = runtime.block-on(async {
-        let config = SqliteSettingsConfig::default();
-        SqliteSettingsRepository::new(config).await.unwrap()
-    });
-
-    b.iter(|| {
-        runtime.block-on(async {
-            repo.get-setting("benchmark-key").await.unwrap()
-        })
-    });
-}
-```
-
-## Monitoring and Observability
-
-### Logging Strategy
-
-```rust
-// Structured logging with tracing
-use tracing::{info, debug, warn, error, instrument};
-
-#[instrument(skip(self))]
-async fn handle(&self, directive: UpdateSetting) -> Result<(), String> {
-    info!(key = %directive.key, "Handling UpdateSetting directive");
-
-    match self.repository.set-setting(&directive.key, directive.value, directive.description.as-deref()).await {
-        Ok(-) => {
-            info!(key = %directive.key, "Setting updated successfully");
-            Ok(())
-        }
-        Err(e) => {
-            error!(key = %directive.key, error = %e, "Failed to update setting");
-            Err(e)
-        }
-    }
-}
-```
-
-### Metrics Collection
-
-```rust
-// Prometheus metrics
-use prometheus::{register-histogram, Histogram};
-
-lazy-static! {
-    static ref DIRECTIVE-DURATION: Histogram = register-histogram!(
-        "directive-duration-seconds",
-        "Directive execution duration",
-        vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0]
-    ).unwrap();
-}
-
-async fn handle(&self, directive: UpdateSetting) -> Result<(), String> {
-    let timer = DIRECTIVE-DURATION.start-timer();
-    let result = self.handle-internal(directive).await;
-    timer.observe-duration();
-    result
-}
-```
-
-## Deployment Strategy
-
-### Development Environment
-
-```bash
-# Initialize databases
-cargo run --bin init-databases
-
-# Run migrations
-cargo run --bin migrate-data
-
-# Start development server
-cargo run --features gpu,ontology
-
-# Run tests
-cargo test --all-features
-```
-
-### Production Environment
-
-```bash
-# Build optimized binary
-cargo build --release --features gpu,ontology
-
-# Initialize production databases
-./target/release/init-databases --env production
-
-# Run with production config
-./target/release/visionclaw-server --config production.toml
-```
-
-### Database Backup Strategy
-
-```bash
-# Automated backup script — the embedded Oxigraph dataset lives under the data dir
-# (no neo4j-admin / Bolt export needed; ADR-11)
-#!/bin/bash
-DATE=$(date +%Y%m%d-%H%M%S)
-tar czf data/backups/oxigraph-$DATE.tar.gz data/oxigraph
-```
-
-## Success Criteria
-
-### Functional Requirements
-
-- ✅ All existing features work correctly
-- ✅ No file-based config remains
-- ✅ Unified database operational
-- ✅ CQRS layer properly separates reads and writes
-- ✅ Actors integrated with new architecture
-- ✅ WebSocket and HTTP APIs functional
-- ✅ Ontology inference working
-
-### Non-Functional Requirements
-
-- ✅ Performance: All operations <100ms p99
-- ✅ Reliability: >99.9% uptime
-- ✅ Maintainability: >90% test coverage
-- ✅ Scalability: Handle 1000+ concurrent users
-- ✅ Security: All secrets encrypted at rest
-- ✅ Documentation: Complete and accurate
-
-### Quality Metrics
-
-- Code coverage: >90%
-- Zero critical security vulnerabilities
-- <5% memory increase from baseline
-- All compiler warnings resolved
-- All clippy lints pass
-
-## Team Coordination
-
-### Development Workflow
-
-1. **Architect** (this design) → Provides complete specifications
-2. **Coder** → Implements based on specifications
-3. **Tester** → Verifies implementation against specifications
-4. **Reviewer** → Ensures code quality and architectural compliance
-
-### Communication
-
-- All architecture decisions documented here
-- Designs stored in `/home/devuser/workspace/project/docs/explanations/architecture/`
-- Progress tracked in project management system
-- Daily standups to address blockers
-
----
-
-## Related Documentation
-
-- [Backend CQRS Pattern](backend-cqrs-pattern.md)
-- [DDD Bounded Contexts](ddd-bounded-contexts.md)
-- [Technology Choices](technology-choices.md)
-- [Deployment Topology](deployment-topology.md)
-
-## Conclusion
-
-This architecture provides a complete, production-ready blueprint for migrating to a hexagonal, database-backed system. All designs are fully specified with no stubs or placeholders, ready for immediate implementation.
-
-**Key Benefits**:
-- ✅ Complete separation of concerns
-- ✅ Highly testable architecture
-- ✅ Database-first approach (no file I/O)
-- ✅ Future-proof and maintainable
-- ✅ Performance optimized
-- ✅ Ready for ontology reasoning with whelk-rs
-
-**Estimated Timeline**: 14 weeks with 1-2 developers
-
-**Risk Level**: Low (gradual, non-breaking migration)
-
----
-
-**Navigation:**  |  |  | 
+Positions move over a versioned binary wire format. V2 used 36 bytes per node,
+V3 widened to 52 bytes (`BINARY_NODE_SIZE_V3`) to carry richer per-node state,
+and **V4 delta is the current default** — it transmits only changed nodes once
+the layout settles, which keeps bandwidth flat after convergence. The
+[Binary Protocol](../reference/binary-protocol.md) reference is exhaustive on the
+byte layout.
+
+## Coordination mesh
+
+The mesh is what makes VisionClaw a platform rather than an application. Every
+actor — human, agent, server — is one secp256k1 keypair expressed as
+`did:nostr:<pubkey>`, verified at the relay (NIP-42 AUTH) and on every HTTP
+request (NIP-98). There is no shared session store and no token exchange between
+tiers; the cryptographic primitive is the coordination primitive.
+
+- **Nostr relay** — the event transport. Governance events (the Agent Control
+  Surface, kinds 31400–31405) and session/project digests (kinds 30840/30841)
+  flow across it.
+- **agentbox** — the reproducible, hardened agent harness: 113 skills, 5 adapter
+  slots, 18 URN kinds, an embedded Solid pod, and a privacy filter on every
+  persistent write. agentbox is a subsystem in its own right; VisionClaw links
+  into it through a broker bridge rather than absorbing it. See its
+  [developer architecture](../../agentbox/docs/developer/architecture.md).
+- **DreamLab forum** — the human governance surface where agents publish control
+  panels and humans approve or reject signed actions.
+
+[Subsystems](subsystems.md) covers how these pieces compose, and
+[Deployment Topology](deployment-topology.md) covers where they run.
+
+## Numbers at a glance
+
+| Dimension | Value |
+|---|---|
+| Backend source | 428 `.rs` files, ~178K LOC |
+| Client source | 465 `.ts`/`.tsx` (422 non-test), ~103K LOC, 16 modules |
+| Actor types | 35 service spine (19 service + 16 GPU); 45 incl. WS sessions |
+| Hexser handlers | 44 (19 Directive / 25 Query), no CQRS bus (ADR-089) |
+| Ports / adapters | 9 ports, 12 adapters |
+| Workspace crates | 8 (ADR-090) |
+| CUDA kernels | 82 `__global__` across 9 `.cu` files, ~5,854 LOC |
+| GPU speedup @100K | ~55× — 246 ms (4 FPS) → 4.5 ms (222 FPS) |
+| Graph store | embedded Oxigraph (RDF) + SQLite (settings); Neo4j removed |
+| Ontology | Whelk-rs OWL 2 EL + SHACL-lite + JSON-LD + PROV-O (PRD-022) |
+| MCP ontology tools | 7 (discover/read/query/traverse/propose/validate/status) |
+| Binary wire | V2 36 B, V3 52 B, V4 delta (default) |
+| Ports | API :4000, frontend :3001, Solid pod :8484, legacy MCP TCP :9500 |
+| ADRs | ~98 (ADR-011 … ADR-127) |
+
+## See also
+
+- [Backend Architecture](backend-architecture.md) — actors, handlers, ports
+- [Actor Hierarchy](actor-hierarchy.md) — the supervision tree in detail
+- [Physics GPU Engine](physics-gpu-engine.md) — the CUDA layout solver
+- [Ontology Pipeline](ontology-pipeline.md) — reasoning, SHACL, provenance
+- [Subsystems](subsystems.md) — how VisionClaw, agentbox, and the mesh compose
+- [Deployment Topology](deployment-topology.md) — where each component runs
+- [Architecture Decision Records](../adr/README.md) — governing ADRs, especially
+  [ADR-089 (CQRS bus removal)](../adr/ADR-089-cqrs-bus-removal.md),
+  [ADR-090 (crate modularisation)](../adr/ADR-090-hexagonal-crate-modularisation.md),
+  [ADR-112 (ontology spine)](../adr/ADR-112-ontology-augmentation-retrieval-spine.md),
+  and [ADR-127 (semantic trust layer)](../adr/ADR-127-semantic-trust-layer.md)

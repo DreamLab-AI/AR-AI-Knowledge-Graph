@@ -145,6 +145,6 @@ When the dashboard shows an error banner at the bottom of the card, the last hea
 
 ## See Also
 
-- [Deployment Guide](../deployment-guide.md) — container health checks
+- [Deployment Guide](../deployment.md) — container health checks
 - [Troubleshooting](../operations/troubleshooting.md) — common failure patterns
 - [Physics & GPU Engine](../../explanation/physics-gpu-engine.md) — CUDA simulation internals

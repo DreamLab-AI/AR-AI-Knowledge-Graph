@@ -233,4 +233,4 @@ You have completed the full migration loop from note to live ontology class. Fro
 | Understand the broker workflow in detail | [ADR-049](../adr/ADR-049-insight-migration-broker-workflow.md) |
 | See how Whelk checks consistency | [Ontology Pipeline](../explanation/ontology-pipeline.md) |
 | Understand the DDD model behind migration | [DDD: Insight Migration Context](../explanation/ddd-insight-migration-context.md) |
-| Configure candidate scoring thresholds | [PRD §6 and §8](../prd-insight-migration-loop.md) |
+| Configure candidate scoring thresholds | [PRD §6 and §8](../prd/prd-insight-migration-loop.md) |

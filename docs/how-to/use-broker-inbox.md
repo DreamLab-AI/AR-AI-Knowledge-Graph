@@ -8,7 +8,7 @@ The Judgment Broker Inbox is the control surface for promoting Knowledge Graph
 top-right of the main graph view and appears as soon as the
 `BRIDGE_EDGE_ENABLED` feature flag is on.
 
-![Broker inbox panel](./screenshots/broker-inbox.png)
+Broker inbox panel
 *Screenshot placeholder &mdash; capture once the flag lands on staging.*
 
 ## Prerequisites

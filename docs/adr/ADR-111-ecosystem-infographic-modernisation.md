@@ -261,7 +261,7 @@ sequenceDiagram
     WL-->>P: ok
     P-->>C: 200 + resource
 
-    Note over WL: order book (/pay/.offers|.sell|.swap) + constant-product AMM\n(/pay/.pool) — trading.rs, routed in ADR-059 Phase 0; webledger keyed by did:nostr
+    Note over WL: order book (/pay/.offers, .sell, .swap) + constant-product AMM<br/>(/pay/.pool) — trading.rs, routed in ADR-059 Phase 0, webledger keyed by did:nostr
 ```
 
 ### 4.3 ACSP elevation — human-in-the-loop loop
@@ -288,7 +288,7 @@ sequenceDiagram
     alt Human approves
         HU->>FM: approve
         FM->>BR: decision = approved
-        BR->>PT: append decision (git-mark; anchor if high-value)
+        BR->>PT: append decision (git-mark, anchor if high-value)
         BR-->>AG: write-back POST /api/enrichment-proposals/{id}/decide (200)
         AG->>AG: apply action (now provenance-stamped)
     else Human rejects / edits

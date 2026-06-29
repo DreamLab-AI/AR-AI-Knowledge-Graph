@@ -267,7 +267,7 @@ The Judgment Broker isn't a bottleneck — it's a filter that lets everything el
 
 The following Wardley map positions VisionClaw's components along the value chain (visibility to the user) and evolution axis (genesis → custom → product → commodity). It illustrates why certain layers are custom-built (semantic physics, ontology reasoning, governance protocol) while others leverage commodity infrastructure (Cloudflare, CUDA, WebSocket).
 
-![VisionClaw Wardley Map](visionclaw-wardley-map.png)
+![VisionClaw Wardley Map](visionflow-wardley-map.png)
 
 Key observations:
 

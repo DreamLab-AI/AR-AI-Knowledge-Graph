@@ -1,91 +1,48 @@
 ---
-title: Getting Started with VisionClaw
-description: Your guided path to mastering VisionClaw - from installation to advanced features.
+title: Tutorials
+description: A guided learning path that takes you from understanding VisionClaw to running it, building your first 3D knowledge graph, and promoting a note into the formal ontology.
 category: tutorial
-tags:
-  - getting-started
-  - tutorial
-  - installation
-  - quickstart
-updated-date: 2026-04-09
 difficulty-level: beginner
 ---
 
-# Getting Started with VisionClaw
+# Tutorials
 
-Welcome to VisionClaw. This guide will take you from zero to visualising your first 3D knowledge graph with AI agents.
+> [VisionClaw Docs](../README.md) · Tutorials
 
-## Learning Path
+These four tutorials form a single learning path. Work through them in order: each one assumes what the previous one taught. You start by understanding what VisionClaw is, install and run the stack, build a graph you can walk around, then enrich that graph by promoting a plain note into the formal ontology. No prior knowledge of RDF, CUDA, or actor systems is required — every step is explained as you reach it. There is no separate database to set up; the graph store is an embedded Oxigraph triple store running in-process inside the Rust backend.
 
-Follow these tutorials in order for the best experience:
+By the end you can point VisionClaw at your own notes, navigate the result in 3D, and govern how concepts become first-class ontology classes.
 
-### 1. Overview
+## Learning path
 
-**[What is VisionClaw?](overview.md)**
+| # | Tutorial | What you learn | Time |
+|---|----------|----------------|------|
+| 1 | [What is VisionClaw?](what-is-visionclaw.md) | The mental model — what each part does and where your data flows, no commands typed | ~10 min |
+| 2 | [Installation](installation.md) | System requirements, Docker Compose setup, and optional NVIDIA GPU acceleration | ~20 min |
+| 3 | [Build Your First Graph](first-graph.md) | Start the stack, load notes from GitHub or JSON, navigate the 3D space, and enable GPU physics | 15–45 min |
+| 4 | [Promote a Note to the Ontology](promote-note-to-ontology.md) | Turn a Markdown page into a governed OWL class with SHACL validation and PROV-O provenance | ~30 min |
 
-Understand VisionClaw's purpose, capabilities, and who it's designed for. Learn how it transforms knowledge management with AI agents and 3D visualisation.
+## Before you begin
 
-- What problems VisionClaw solves
-- Key capabilities and differentiators
-- Real-world use cases
-- Technical foundation overview
+- **Docker Engine** with the Compose plugin (or Docker Desktop)
+- **8 GB RAM** minimum, 16 GB recommended
+- **A modern WebGL browser** (Chrome, Firefox, or Safari, current release)
+- **Optional:** an NVIDIA GPU with CUDA for the 55x physics speedup — VisionClaw runs without it on CPU
 
-### 2. Installation
+Tutorial 2 covers each of these in detail, including how to verify your setup.
 
-**[Installation Guide](installation.md)**
+## Where to go next
 
-Set up VisionClaw on your system with Docker or native installation.
+Once you have finished the path:
 
-- System requirements (minimum, recommended, enterprise)
-- Docker and Docker Compose setup
-- GPU acceleration configuration
-- Troubleshooting common issues
+- Pick a task from the [How-To Guides](../how-to/README.md) — deployment, agent orchestration, REST API usage, XR setup.
+- Understand the design in [Explanation](../explanation/system-overview.md) — architecture, the physics engine, the ontology pipeline.
+- Look things up in the [Reference](../reference/README.md) — REST and WebSocket APIs, the binary protocol, configuration, and the agents catalogue.
 
-### 3. First Graph
+## See also
 
-**[Build Your First VisionClaw Graph](first-graph.md)**
-
-Create your first 3D knowledge graph and deploy multi-agent workflows — with a quick path (15 min) and a deep path (45 min).
-
-- Start the stack and access the UI at http://localhost:3001
-- Connect a GitHub repository, import JSON, or build manually
-- Navigate the 3D space with mouse and keyboard
-- Enable GPU physics and watch the layout evolve
-- Launch AI agents and monitor execution in real-time
-
-### 4. Graph Store
-
-**[Neo4j Basics](neo4j-basics.md)** — OBSOLETE (ADR-11)
-
-> Neo4j has been removed. The graph store is now an embedded Oxigraph RDF triple
-> store running in-process inside the Rust backend (W3C SPARQL 1.1, RocksDB-backed).
-> There is no separate database to set up. This tutorial is retained only as a
-> historical reference and is a candidate for deletion.
-
-## Quick Links
-
-| Resource | Description |
-|----------|-------------|
-| [API Reference](../reference/) | REST and WebSocket API documentation |
-| [Architecture](../explanation/system-overview.md) | System design and component overview |
-| [Troubleshooting](../how-to/operations/troubleshooting.md) | Solutions to common problems |
-| [Configuration](../how-to/operations/configuration.md) | Customise VisionClaw settings |
-
-## Prerequisites
-
-Before you begin, ensure you have:
-
-- **Docker Desktop** (v20.10+) or Docker Engine with Compose
-- **8GB RAM** minimum (16GB recommended)
-- **Modern browser** with WebGL support (Chrome 90+, Firefox 88+, Safari 14+)
-- **Optional:** NVIDIA GPU with CUDA 11.8+ for acceleration
-
-## Getting Help
-
-- **[GitHub Issues](https://github.com/DreamLab-AI/VisionClaw/issues)** - Report bugs or request features
-- **[GitHub Discussions](https://github.com/DreamLab-AI/VisionClaw/discussions)** - Community support
-- **[Troubleshooting Guide](../how-to/operations/troubleshooting.md)** - Common solutions
-
----
-
-**Ready to begin?** Start with the [Overview](overview.md) to understand what VisionClaw can do for you.
+- [How-To Guides](../how-to/README.md) — task recipes once VisionClaw is running
+- [System Overview](../explanation/system-overview.md) — how the pieces fit together
+- [Reference Hub](../reference/README.md) — exhaustive API and configuration details
+- [Troubleshooting](../how-to/operations/troubleshooting.md) — fixes for common setup problems
+- Governing ADRs: [ADR-090 Hexagonal crate modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-112 Ontology augmentation retrieval spine](../adr/ADR-112-ontology-augmentation-retrieval-spine.md)

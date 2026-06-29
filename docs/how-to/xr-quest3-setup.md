@@ -464,11 +464,11 @@ nsec string for paper backup).
 
 - [XR Architecture](../explanation/xr-architecture.md) — Godot + gdext + OpenXR
   design, boot sequence, frame loop, security baseline
-- [PRD-008 — XR Client Replacement](../PRD-008-xr-godot-replacement.md) — full
+- [PRD-008 — XR Client Replacement](../prd/PRD-008-xr-godot-replacement.md) — full
   requirements and 8-week timeline
 - [ADR-071 — Godot 4 + godot-rust + OpenXR](../adr/ADR-071-godot-rust-xr-replacement.md) —
   decision rationale (six options considered)
-- [XR Godot System Architecture](../xr-godot-system-architecture.md) —
+- [XR Godot System Architecture](../explanation/xr-architecture.md) —
   authoritative deep-dive
-- [XR Godot Threat Model](../xr-godot-threat-model.md) — security analysis
-- [Deployment Guide](deployment-guide.md) — full port table and Compose profiles
+- [XR Godot Threat Model](../explanation/security-model.md) — security analysis
+- [Deployment Guide](deployment.md) — full port table and Compose profiles

@@ -295,10 +295,10 @@ COMPRESSION-ENABLED=true
 
 VisionClaw publishes a signed Nostr event (kind 30001, NIP-33) to the JSS relay for each
 completed brief → debrief cycle, providing cryptographic provenance. The
-[`BeadLifecycleOrchestrator`](../../../src/services/bead_lifecycle.rs) coordinates the full
+`BeadLifecycleOrchestrator` coordinates the full
 lifecycle with retry, outcome classification, and learning capture (see
 [ADR-034](../../adr/ADR-034-needle-bead-provenance.md) and
-[PRD](../../prd-bead-provenance-upgrade.md)).
+[PRD](../../prd/prd-bead-provenance-upgrade.md)).
 
 ```bash
 # Bridge bot private key (64-char hex). Generate with: openssl rand -hex 32
@@ -325,7 +325,7 @@ eb47d8a792a4709329270a9f85f012326c61867a913791dc5f89dc7a0a760754
 
 The publisher retries transient failures (timeout, connection error) with exponential backoff.
 Permanent failures (signing error, relay rejection) fail immediately. See
-[`BeadRetryConfig`](../../../src/services/bead_types.rs).
+`BeadRetryConfig`.
 
 ```bash
 # Maximum publish attempts before marking as failed (default: 3)
@@ -803,4 +803,4 @@ This guide covers the most common configuration scenarios for VisionClaw. For ad
 ## Related Topics
 
 -  - Comprehensive technical reference
-- [Deployment Guide](../deployment-guide.md) - Production deployment strategies
+- [Deployment Guide](../deployment.md) - Production deployment strategies

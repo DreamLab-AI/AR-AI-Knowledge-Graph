@@ -449,7 +449,7 @@ sequenceDiagram
         FC->>GSS: UpdateNodePositions (projected positions, 52 B V3 per node)
         GSS->>CC: BroadcastPositions
         CC->>WS: binary frame fan-out to all sessions
-        FC->>FC: RESTORE from last_good_positions<br/>(GPU state unchanged; next step sees pristine physics)
+        FC->>FC: RESTORE from last_good_positions<br/>(GPU state unchanged, next step sees pristine physics)
     end
 
     note over FC,GSS: After FastSettle plateau: PhysicsOrchestratorActor<br/>sends ForceFullBroadcast → pure GPU snapshot, projected.<br/>Periodic full broadcast every 300 iters prevents starvation.

@@ -8,13 +8,13 @@ updated-date: 2026-04-09
 
 # VisionClaw REST API Integration Guide
 
-This guide shows how to accomplish real tasks with the VisionClaw REST API. For raw endpoint listings, see [REST API Reference](../reference/rest-api.md). For WebSocket binary frame format, see [WebSocket Binary Protocol](../reference/websocket-binary.md).
+This guide shows how to accomplish real tasks with the VisionClaw REST API. For raw endpoint listings, see [REST API Reference](../reference/rest-api.md). For WebSocket binary frame format, see [WebSocket Binary Protocol](../reference/binary-protocol.md).
 
 ---
 
 ## 1. Prerequisites
 
-- VisionClaw running locally or deployed. See [deployment-guide.md](deployment-guide.md).
+- VisionClaw running locally or deployed. See [deployment.md](deployment.md).
 - A Nostr keypair. Generate one with `nostr-tools` (see Section 2) or a browser extension such as Alby or nos2x.
 - Any HTTP client: `curl`, `fetch`, `axios`, or similar.
 
@@ -29,14 +29,14 @@ All REST paths are prefixed with `/api/`. The OpenAPI UI is available at `http:/
 
 ```mermaid
 graph TD
-    API[VisionClaw API\nlocalhost:4000] --> Graph[/api/graph/*\nNodes · Edges · Data]
-    API --> Settings[/api/settings/*\nUser Preferences]
-    API --> Ontology[/api/ontology/*\nOWL Query · Update]
-    API --> Admin[/api/admin/*\nSync · Force-sync]
-    API --> Agents[/api/agents/*\nStatus · Run Skills]
-    API --> Analytics[/api/analytics/*\nGPU Metrics]
-    API --> Solid[/solid/*\nPod Resources]
-    API --> Health[/health\nService Status]
+    API["VisionClaw API<br/>localhost:4000"] --> Graph["/api/graph/*<br/>Nodes · Edges · Data"]
+    API --> Settings["/api/settings/*<br/>User Preferences"]
+    API --> Ontology["/api/ontology/*<br/>OWL Query · Update"]
+    API --> Admin["/api/admin/*<br/>Sync · Force-sync"]
+    API --> Agents["/api/agents/*<br/>Status · Run Skills"]
+    API --> Analytics["/api/analytics/*<br/>GPU Metrics"]
+    API --> Solid["/solid/*<br/>Pod Resources"]
+    API --> Health["/health<br/>Service Status"]
 ```
 
 *Figure: VisionClaw API endpoint groups — all paths are served from port 4000 (or via nginx on :3001)*
@@ -49,15 +49,15 @@ VisionClaw uses [NIP-98](https://github.com/nostr-protocol/nips/blob/master/98.m
 
 ```mermaid
 sequenceDiagram
-    participant App as Client App
-    participant Nostr as nostr-tools
-    participant API as VisionClaw API :4000
-    participant Store as Oxigraph (embedded)
+    participant App as "Client App"
+    participant Nostr as "nostr-tools"
+    participant API as "VisionClaw API :4000"
+    participant Store as "Oxigraph (embedded)"
 
-    App->>Nostr: signEvent(kind:27235, url, method, payload_hash)
+    App->>Nostr: signEvent(kind 27235, url, method, payload_hash)
     Nostr-->>App: signed event (Schnorr sig)
     App->>App: base64url encode event
-    App->>API: GET /api/graph/data\nAuthorization: Nostr <b64>
+    App->>API: GET /api/graph/data with Authorization Nostr b64
     API->>API: Decode + verify Schnorr sig
     API->>API: Check timestamp ≤60s
     API->>API: Check payload SHA-256 tag
@@ -335,12 +335,12 @@ The recommended pattern for real-time graph visualisation: load the static graph
 ```mermaid
 graph LR
     subgraph "Initial Load"
-        REST[REST\nGET /api/graph/data] --> Render[Initial\n3D Render]
+        REST["REST<br/>GET /api/graph/data"] --> Render["Initial<br/>3D Render"]
     end
     subgraph "Live Updates"
-        WS[WebSocket\nws://host/wss] --> Binary[Binary V3\n52 bytes/node]
-        Binary --> SAB[SharedArrayBuffer\nPosition Updates]
-        SAB --> RAF[requestAnimationFrame\nSmooth Animation]
+        WS["WebSocket<br/>ws://host/wss"] --> Binary["Binary V3<br/>52 bytes/node"]
+        Binary --> SAB["SharedArrayBuffer<br/>Position Updates"]
+        SAB --> RAF["requestAnimationFrame<br/>Smooth Animation"]
     end
     Render --> RAF
 ```
@@ -405,7 +405,7 @@ ws.onmessage = (event: MessageEvent) => {
 setInterval(() => ws.send(JSON.stringify({ type: 'heartbeat' })), 25_000)
 ```
 
-The server emits one binary protocol — there are no versions. The preamble byte (0x42) is a fixed sanity check, not a version dispatch. Sticky GPU outputs (`cluster_id`, `community_id`, `anomaly_score`, `sssp_distance`, `sssp_parent`) ride a separate `analytics_update` JSON message at recompute cadence. See [docs/binary-protocol.md](../binary-protocol.md) and [ADR-061](../adr/ADR-061-binary-protocol-unification.md).
+The server emits one binary protocol — there are no versions. The preamble byte (0x42) is a fixed sanity check, not a version dispatch. Sticky GPU outputs (`cluster_id`, `community_id`, `anomaly_score`, `sssp_distance`, `sssp_parent`) ride a separate `analytics_update` JSON message at recompute cadence. See [docs/binary-protocol.md](../reference/binary-protocol.md) and [ADR-061](../adr/ADR-061-binary-protocol-unification.md).
 
 ---
 

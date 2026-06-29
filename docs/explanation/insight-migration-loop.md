@@ -82,7 +82,7 @@ All of this happens in the [Judgment Broker Workbench](../explanation/ddd-insigh
 
 ## The Migration KPIs
 
-The loop's health is measured by six KPIs defined in [PRD §8](../prd-insight-migration-loop.md). These are not vanity metrics. They measure whether the loop is doing its job: surfacing candidates that deserve promotion, clearing the broker's queue in reasonable time, keeping the ontology stable after promotion, and ensuring provenance is never silent.
+The loop's health is measured by six KPIs defined in [PRD §8](../prd/prd-insight-migration-loop.md). These are not vanity metrics. They measure whether the loop is doing its job: surfacing candidates that deserve promotion, clearing the broker's queue in reasonable time, keeping the ontology stable after promotion, and ensuring provenance is never silent.
 
 Think of them as the pulse of the feedback cycle. High clearance rate and high surface precision together mean the discovery engine is proposing well and the broker is keeping up. Low rollback rate means promotions are lasting. Low ontology incoherence means Whelk is catching axiom problems before they reach production. These six signals give the platform owner visibility into whether the loop is tightening or fragmenting.
 
@@ -102,8 +102,8 @@ The **Judgment Broker Workbench** is the seat from which migration decisions are
 
 ## Further Reading
 
-- [PRD: Insight Migration Loop (MVP)](../prd-insight-migration-loop.md)
+- [PRD: Insight Migration Loop (MVP)](../prd/prd-insight-migration-loop.md)
 - [ADR-048: Dual-Tier Identity Model](../adr/ADR-048-dual-tier-identity-model.md)
 - [ADR-049: Insight Migration Broker Workflow](../adr/ADR-049-insight-migration-broker-workflow.md)
-- [Master Design: Insight Migration Loop](../design/2026-04-18-insight-migration-loop/00-master.md)
+- Master Design: Insight Migration Loop
 - [DDD: Insight Migration Context](./ddd-insight-migration-context.md)

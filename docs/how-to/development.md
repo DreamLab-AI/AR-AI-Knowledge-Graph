@@ -23,7 +23,7 @@ updated-date: 2026-04-09
 
 ---
 
-## 1. Development Environment Setup
+## Development Environment Setup
 
 ### Required Toolchain Versions
 
@@ -144,7 +144,7 @@ curl http://localhost:3001/api/health
 
 ---
 
-## 2. Project Structure
+## Project Structure
 
 VisionClaw is a Rust/Actix-web backend with a React 19 + Three.js frontend, an embedded Oxigraph RDF triple store (in-process, RocksDB-backed; ADR-11), and CUDA GPU physics kernels. The backend follows hexagonal (ports and adapters) architecture.
 
@@ -255,7 +255,7 @@ client/
 
 ---
 
-## 3. Development Workflow
+## Development Workflow
 
 ### Branch and Commit Strategy
 
@@ -340,7 +340,7 @@ docker exec -it visionclaw_container bash
 
 ---
 
-## 4. Backend Development (Rust)
+## Backend Development (Rust)
 
 ### Hexagonal Architecture
 
@@ -545,7 +545,7 @@ pub metadata: Option<serde_json::Value>,
 
 ---
 
-## 5. Frontend Development (React + Three.js)
+## Frontend Development (React + Three.js)
 
 ### Component Conventions
 
@@ -659,7 +659,7 @@ const data = await fetch('/api/physics/start').then(r => r.json()); // avoid
 
 ---
 
-## 6. Testing
+## Testing
 
 ### Test Infrastructure Overview
 
@@ -818,7 +818,7 @@ cd client && npm run build
 
 ---
 
-## 7. Adding New Features
+## Adding New Features
 
 ### Step-by-Step Process
 
@@ -913,7 +913,7 @@ async fn test_cluster_min_size() {
 
 ---
 
-## 8. Common Patterns
+## Common Patterns
 
 ### Actor Message Passing
 
@@ -999,7 +999,7 @@ match self.service.process(&id).await {
 
 ---
 
-## 9. Code Style
+## Code Style
 
 ### Rust
 
@@ -1072,7 +1072,7 @@ npm run prepare
 
 ---
 
-## 10. Debugging
+## Debugging
 
 ### Rust Backend
 
@@ -1172,7 +1172,7 @@ docker logs visionclaw_container 2>&1 | grep -i "ptx\|cuda\|nvcc"
 
 ## See Also
 
-- [Deployment Guide](./deployment-guide.md) — Docker Compose deployment reference
+- [Deployment Guide](./deployment.md) — Docker Compose deployment reference
 - [Actor Hierarchy](../explanation/actor-hierarchy.md) — Actix actor patterns in depth
 - [Backend CQRS Pattern](../explanation/backend-cqrs-pattern.md) — Hexagonal architecture details
 - [Contributing Guide](../CONTRIBUTING.md) — Contribution standards and testing workflow

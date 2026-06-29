@@ -1,79 +1,107 @@
 ---
 title: VisionClaw Security Model
-description: Comprehensive explanation of VisionClaw's security architecture — Nostr DID authentication, Solid Pod data sovereignty, CQRS authorization boundaries, and audit trail design
+description: How VisionClaw secures identity, authorisation, data sovereignty, transport, secrets and the XR APK — Nostr NIP-98 HTTP auth, NIP-07 browser signing, BIP-340 presence auth, Solid Web Access Control, SOPS-encrypted secrets, and a STRIDE threat model for the Godot/OpenXR Quest 3 client.
 category: explanation
-tags: [security, authentication, nostr, did, solid, authorization, audit]
-updated-date: 2026-04-10
+tags: [security, authentication, nostr, nip-98, nip-07, bip-340, solid, wac, sops, stride, xr]
 ---
 
 # VisionClaw Security Model
 
+> [VisionClaw Docs](../README.md) · [Explanation](README.md)
+
+VisionClaw has no central credential store, no password database, and no
+server-held private keys. Identity is a Nostr keypair the user controls;
+personal data lives in the user's own Solid pod; authorisation is enforced at
+the handler boundary inside the backend. This document explains the model, the
+threats it defends against, and the constraints it deliberately accepts.
+
 ---
 
-## 1. Security Philosophy
+## 1. Security philosophy
 
-VisionClaw's security model is built on three principles:
+Three principles shape every decision below.
 
-**Decentralised Identity** — Identity is rooted in a Nostr keypair (secp256k1). There is no central authentication server that can be compromised or that holds user credentials. A user's identity is their private key; the corresponding public key (`npub`) is their stable identifier across the entire system.
+**Decentralised identity.** Identity is rooted in a secp256k1 Nostr keypair.
+The public key (`npub` / hex) is the user's stable, self-certifying identifier
+across the entire system. There is no authentication server holding secrets to
+steal — a user's identity *is* their private key.
 
-**Data Sovereignty** — User-generated overlays, agent memories, and personal preferences are stored in the user's own Solid Pod, not in the shared graph store. The server cannot access Pod data without an active, user-granted delegation. Revoking Pod access removes the server's ability to read or write user data immediately.
+**Data sovereignty.** User-generated overlays, agent memories and personal
+preferences live in the user's Solid pod, not in the shared graph store. The
+server cannot read pod data without an active, user-granted delegation.
+Revoking the delegation removes the server's access immediately.
 
-**Semantic Governance** — The OWL ontology layer enforces coarse-grained access patterns at query time. Node types (knowledge, ontology, agent) carry class flags in their IDs; CQRS handlers inspect these flags before executing mutations. Access patterns are expressed as ontology constraints, not as ad-hoc permission checks scattered through the codebase.
+**Semantic governance.** The OWL ontology layer expresses coarse-grained access
+patterns at query time. Node types (knowledge, ontology, agent) carry class
+flags in their IDs; handlers inspect those flags before mutating. Access rules
+are ontology constraints, not ad-hoc checks scattered through the codebase.
 
-### Trust Boundary Model
+### Trust boundary
 
 ```mermaid
-graph TB
-    subgraph "User's Domain"
-        Key[Nostr Keypair]
-        Pod[Solid Pod]
+flowchart TB
+    subgraph user["User's Domain"]
+        Key["Nostr keypair (secp256k1 / BIP-340)"]
+        Ext["NIP-07 signer (browser ext or remote)"]
+        Pod["Solid pod (user-owned)"]
     end
-    subgraph "VisionClaw Server"
-        Auth[Auth Middleware]
-        CQRS[CQRS Handlers]
-        Oxigraph[(Oxigraph\nembedded graph store)]
+    subgraph net["Public Internet"]
+        TLS["TLS 1.3 (wss and https)"]
     end
-    Key -->|NIP-98 signed request| Auth
-    Auth -->|validated DID| CQRS
-    CQRS --> Oxigraph
-    Pod -.->|user overlay / NIP-26 delegation| CQRS
+    subgraph server["VisionClaw Server"]
+        Auth["AuthMiddleware (NIP-98 verify)"]
+        Handlers["hexser handlers (directive / query)"]
+        Store["Oxigraph + SQLite (in-process)"]
+    end
+    Key --> Ext
+    Ext -->|"NIP-98 signed event"| TLS
+    TLS --> Auth
+    Auth -->|"validated pubkey"| Handlers
+    Handlers --> Store
+    Pod -.->|"NIP-26 delegation"| Handlers
 ```
 
-The dashed arrow from Solid Pod represents an optional, user-initiated delegation. The server never holds the user's private key.
+The dashed edge is an optional, user-initiated delegation. The server never
+holds the user's private key.
 
 ---
 
-## 2. Authentication Architecture
+## 2. Authentication
 
-### Nostr Keypair Generation
+### Nostr keypairs and BIP-340
 
-Keypairs use the secp256k1 curve — the same elliptic curve used by Bitcoin. The private key is a 32-byte scalar; the public key is its compressed point representation. VisionClaw never generates keys on behalf of the user; the client either derives them from a NIP-07 browser extension (Alby, nos2x) or from locally generated material.
+Keys use secp256k1 — the curve Bitcoin uses. The private key is a 32-byte
+scalar; the public key is its compressed point. All Nostr signatures are
+**BIP-340 Schnorr** signatures over that curve. The same signature primitive
+underlies every authentication path in VisionClaw: NIP-98 HTTP auth, the XR
+presence handshake, and NIP-26 delegations. VisionClaw never generates a key on
+the user's behalf.
 
-```typescript
-import { generatePrivateKey, getPublicKey } from 'nostr-tools';
+### NIP-07 browser signing
 
-const sk = generatePrivateKey();   // 32-byte hex
-const pk = getPublicKey(sk);       // compressed secp256k1 pubkey, hex
-```
+In the browser the private key never enters VisionClaw's JavaScript. A NIP-07
+extension (Alby, nos2x) — or a remote signer — holds the key and exposes
+`window.nostr.signEvent()`. The client constructs the event to sign and hands it
+to the extension; only the signed result returns. This keeps the key off the
+page origin and out of `localStorage`, so an XSS payload cannot exfiltrate it.
 
-### NIP-98 HTTP Authentication
+### NIP-98 HTTP authentication
 
-NIP-98 is a Nostr-native HTTP authentication scheme. The client constructs a kind-27235 Nostr event, signs it with the private key, base64-encodes it, and sends it as an `Authorization` header. No password or shared secret is involved.
+NIP-98 is a Nostr-native HTTP scheme. The client builds a kind-27235 event,
+signs it (BIP-340), base64-encodes it, and sends it as an `Authorization`
+header. No password or shared secret is involved.
 
-**Required event tags**:
-
-| Tag | Description | When required |
-|-----|-------------|---------------|
+| Tag | Meaning | Required |
+|-----|---------|----------|
 | `u` | Full request URL including query string | Always |
-| `method` | HTTP method in uppercase (`GET`, `POST`, …) | Always |
+| `method` | HTTP method, uppercase (`GET`, `POST`, …) | Always |
 | `payload` | SHA-256 hex digest of the request body | POST / PUT only |
 
-**Validity constraints enforced by the server**:
-- `created_at` must be within 60 seconds of server clock (replay window)
-- Schnorr signature over the serialised event ID must verify against the embedded `pubkey`
-- Each event is single-use: the server maintains a short-lived replay cache keyed on event ID
+Server-side validity gates:
 
-**Example — constructing an auth header**:
+- `created_at` within 60 seconds of server clock (replay window).
+- Schnorr signature over the event ID verifies against the embedded `pubkey`.
+- Single-use: a short-lived replay cache keyed on event ID rejects re-sends.
 
 ```typescript
 import { finishEvent } from 'nostr-tools';
@@ -84,428 +112,452 @@ const authEvent = finishEvent({
   tags: [
     ['u', 'https://api.example.com/api/settings/bulk'],
     ['method', 'POST'],
-    ['payload', sha256HexOfBody]
+    ['payload', sha256HexOfBody],
   ],
-  content: ''
+  content: '',
 }, privateKey);
 
 const authHeader = `Nostr ${btoa(JSON.stringify(authEvent))}`;
 ```
 
-### Session Bearer Tokens
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant S as VisionClaw API
+    participant V as NIP-98 Verifier
+    C->>C: Sign kind-27235 event (BIP-340)
+    C->>S: HTTP request, Authorization Nostr base64-event
+    S->>V: Verify signature, u, method, payload, freshness
+    V-->>S: pubkey valid, single-use
+    S->>S: Issue session bearer token
+    S-->>C: 200 + bearer token
+    C->>S: Later requests with bearer + X-Nostr-Pubkey
+```
 
-Performing a full NIP-98 signature on every request is unnecessary and computationally expensive for high-frequency operations. After the first successful NIP-98 validation, the server issues a session bearer token:
+### Session bearer tokens
 
-- Stored client-side in `localStorage` under the key `nostr_session_token`
-- Bound to the validated `pubkey`; the server rejects tokens presented with a mismatched `X-Nostr-Pubkey` header
-- Lifetime controlled by `AUTH_TOKEN_EXPIRY` (default: 3600 seconds)
-- No automatic refresh: the client must re-authenticate via NIP-98 after expiry
+A full NIP-98 signature on every request is wasteful for high-frequency calls.
+After the first successful validation the server issues a session bearer token:
 
-**Subsequent requests**:
+- Bound to the validated `pubkey`; rejected if presented with a mismatched
+  `X-Nostr-Pubkey` header (ADR-011 rule 5 — the header is validated against the
+  active session, never trusted raw).
+- Lifetime from `AUTH_TOKEN_EXPIRY` (default 3600 s); no auto-refresh.
+- Stored client-side; the client re-authenticates via NIP-98 after expiry.
+
 ```http
-Authorization: Bearer <nostr_session_token>
+Authorization: Bearer <session_token>
 X-Nostr-Pubkey: <hex_pubkey>
 ```
 
-Server-side validation path: `nostr_service.validate_session(&pubkey, &token)`.
+### DID resolution
 
-### DID Resolution Flow
+The Nostr `pubkey` is treated as a lightweight, self-certifying DID
+(`did:nostr:<hex>`). There is no external resolver call. The user's pod profile
+at `…/profile/card` links the Nostr identity to a WebID via a `foaf:Person`
+record, making the identity resolvable in Linked Data contexts.
 
-VisionClaw treats the Nostr `pubkey` as a lightweight DID. There is no external DID resolver call; the public key is self-certifying. The Solid Pod profile at `/pods/{npub}/profile/card` links the Nostr identity to a WebID via a `foaf:Person` record, making the identity resolvable in Linked Data contexts.
+### Why not JWT
 
-### Why Not JWT (Deprecated November 2025)
-
-JWT email/password login was removed because:
-1. It required a credential store (email + bcrypt hash) that became an attack surface
-2. JWTs are bearer tokens with no built-in revocation; a stolen token was valid until expiry
-3. The `VIRCADIA_JWT_SECRET` environment variable default (`change_this_in_production`) was routinely left unchanged in early deployments, invalidating the security guarantee
-4. Nostr NIP-98 provides equivalent session bootstrapping with zero server-side secrets and replay protection built in
-
-**Do not use JWT endpoints in new integrations.** The `VIRCADIA_JWT_SECRET` env var is a dead relic — Vircadia has been fully removed from the stack. It can be safely deleted from compose files.
-
-### NIP-98 Authentication Sequence
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Server as VisionClaw API
-    participant Nostr as Nostr Validator
-
-    Client->>Client: Sign NIP-98 event with privkey
-    Client->>Server: HTTP request with Authorization: Nostr <base64-event>
-    Server->>Nostr: Validate event signature
-    Nostr-->>Server: pubkey + timestamp valid
-    Server->>Server: Issue session bearer token
-    Server-->>Client: 200 + Bearer token
-    Client->>Server: Subsequent requests with Bearer token
-```
+The legacy email/password JWT login was removed: it needed a credential store
+(an attack surface), JWTs had no revocation, and the shared signing secret was
+routinely left at its insecure default. NIP-98 bootstraps sessions with **zero
+server-side secrets** and built-in replay protection. The old JWT secret env
+var is a dead relic — remove it from any compose file.
 
 ---
 
-## 3. Authorization Model
+## 3. Authorisation
 
-### CQRS Boundary Checks
+### Handler-boundary enforcement (no CQRS bus)
 
-VisionClaw follows a CQRS pattern (see `docs/explanation/backend-cqrs-pattern.md`). Authorization is enforced at the handler boundary before any command or query reaches the domain model:
+VisionClaw uses hexser command/query handlers — **19 `DirectiveHandler`**
+(writes) and **25 `QueryHandler`** (reads). There is no central message bus
+(ADR-089): each handler is invoked directly, and authorisation is enforced at
+that boundary before the domain model is touched.
 
-- **Commands** (POST, PUT, DELETE): require an authenticated session; the validated `pubkey` is injected into the command envelope and becomes the `author` field in event-sourced state changes
-- **Queries** (GET): graph data and ontology queries are public by default; settings queries require authentication; analytics requiring user-specific state require authentication
+- **Directives** (POST/PUT/DELETE) require an authenticated session; the
+  validated `pubkey` is injected and becomes the `author` of any state change.
+- **Queries** (GET): graph and ontology reads are public-or-optional; settings
+  and user-specific analytics require authentication.
 
-### RBAC Roles
+`RequireAuth` middleware is applied at the route-scope level, not per handler
+(ADR-011): WebSocket upgrades and mutating REST endpoints fail **closed** — no
+"log and allow", and query-string token auth is disabled in production.
 
-VisionClaw uses two complementary role systems:
+### Optional auth and visibility tiers
 
-**NIP-98 auth roles** (graph/settings/ontology handlers in `middleware/auth.rs`):
+A binary authenticated/unauthenticated split cannot serve both a public
+showcase graph and per-user private nodes. ADR-028-ext introduces an
+`AccessLevel::Optional` variant gated by `NIP98_OPTIONAL_AUTH`:
 
-| Role | How assigned | Capabilities |
+| Caller | `/api/graph/data` sees |
+|--------|------------------------|
+| No `Authorization` header | `visibility = public` nodes only |
+| Valid NIP-98 header | public nodes + own private nodes |
+| Cross-user private nodes | opacified stubs (existence acknowledged, content redacted) |
+
+An **invalid** header still returns 401 — optional means "may be absent", not
+"may be wrong". The graph-store query filters on `visibility` and
+`owner_pubkey`; cross-user private nodes are never silently dropped and never
+leaked in full.
+
+### Roles
+
+**NIP-98 auth roles** (graph / settings / ontology handlers):
+
+| Role | Assigned by | Capabilities |
 |------|-------------|--------------|
-| `ReadOnly` | Default for unauthenticated or minimal-privilege sessions | Read graph data, view public ontology hierarchy, access health endpoints |
-| `WriteGraph` | Authenticated pubkey with graph write permissions | All ReadOnly capabilities + create/update/delete graph nodes and edges |
-| `WriteSettings` | Authenticated pubkey | All WriteGraph capabilities + modify own settings, provision own Pod |
-| `Admin` | `pubkey` listed in `POWER_USER_PUBKEYS` env var | All capabilities + modify physics simulation parameters, force graph resync, access admin diagnostics, trigger sync, manage ontology |
+| `ReadOnly` | Default / unauthenticated | Read public graph, view ontology hierarchy, health endpoints |
+| `WriteGraph` | Authenticated pubkey | + create/update/delete graph nodes and edges |
+| `WriteSettings` | Authenticated pubkey | + own settings, provision own pod |
+| `Admin` | `pubkey` in `POWER_USER_PUBKEYS` | + physics params, force resync, admin diagnostics, ontology management |
 
-There is no role stored in a database. Admin status is determined solely by membership in the comma-separated `POWER_USER_PUBKEYS` list at startup. This eliminates privilege escalation via database mutation.
+Admin status is membership in a comma-separated env list resolved at startup —
+no role is stored in a database, so there is no privilege escalation via data
+mutation.
 
-**Enterprise RBAC roles** (enterprise/broker handlers in `middleware/enterprise_auth.rs`):
+**Enterprise RBAC roles** (broker/governance handlers) layer a level hierarchy:
+`Admin (4) > Broker (3) > Auditor (2) > Contributor (1)`. A request passes if
+the caller's level is ≥ the required level. The `nip98-auth` Cargo feature
+resolves the role from a verified NIP-98 pubkey; without it, the middleware
+reads `X-Enterprise-Role` (dev / trusted-reverse-proxy mode).
 
-| Role | Level | Capabilities |
-|------|-------|--------------|
-| `Admin` | 4 | Full platform configuration, user management, policy editing |
-| `Broker` | 3 | Read all, decide on assigned cases, promote workflows |
-| `Auditor` | 2 | Read all, export compliance evidence, no mutation |
-| `Contributor` | 1 | Read assigned scope, propose workflows, execute approved workflows |
+### Auth-service consolidation (ADR-088)
 
-Enterprise roles are resolved via two compile-time paths controlled by the `nip98-auth` Cargo feature:
+Six auth modules (≈2,349 lines) grew independently. ADR-088 consolidates them
+behind a single `AuthService` trait yielding an `AuthIdentity`
+(`Nostr { pubkey, delegation }` / `Enterprise` / `Anonymous`), a
+`CompositeAuthService` chain (Nostr → Enterprise → Anonymous), and one Actix
+`AuthMiddleware`. Critically it **removes `SETTINGS_AUTH_BYPASS`**: dev mode
+returns `AuthIdentity::Anonymous` for localhost origins under
+`APP_ENV=development`, and no bypass path exists in production.
 
-- **`nip98-auth` enabled**: The `RequireRole` middleware reads an `Authorization: Nostr <base64>` header, verifies the NIP-98 Schnorr signature, and resolves the signer's pubkey to an `EnterpriseRole` via the `Nip98RoleResolver` trait. A `Nip98IdentityExt` request extension carries the verified pubkey and role to downstream handlers. The `X-Enterprise-Role` header is ignored.
-- **Default (feature disabled)**: The `RequireRole` middleware reads the `X-Enterprise-Role` header for role extraction. This is the dev/gateway mode, suitable for deployments behind a trusted reverse proxy.
+### Public vs protected operations
 
-Both paths enforce a strict hierarchy: a request is allowed if the caller's role level is >= the required level. See [ADR-040](../adr/ADR-040-enterprise-identity-strategy.md) for the full identity strategy.
-
-Auth guards are applied to 17+ write endpoints across graph mutations, ontology modifications, admin sync triggers, settings updates, and enterprise governance operations. Each guarded endpoint checks the caller's role before dispatching the command through the CQRS bus.
-
-### Public vs Protected Operations
-
-| Operation | Auth required |
-|-----------|--------------|
-| `GET /api/graph/data` | No (public read) |
+| Operation | Auth |
+|-----------|------|
+| `GET /api/graph/data` | Optional (anonymous → public tier) |
 | `GET /api/ontology/hierarchy` | No |
 | `GET /api/health/*` | No |
-| `GET /api/settings/:key` | Yes (own settings only) |
-| `PUT /api/settings/*` | Yes |
-| `POST /api/graph/*` (mutations) | Yes, power user |
-| `DELETE /api/graph/node/:id` | Yes, power user |
+| `GET/PUT /api/settings/*` | Yes (own settings only) |
+| `POST/DELETE /api/graph/*` | Yes, power user |
 | `POST /api/bots/*` | Yes |
-| Solid Pod (`/solid/pods/{npub}/*`) | Yes, delegated NIP-26 token |
-| WebSocket upgrade (`/wss`) | Token in query param |
+| Solid pod (`/solid/pods/{npub}/*`) | Yes, delegated NIP-26 token |
+| WebSocket upgrade (`/wss`, `/ws/presence`) | Token / challenge at upgrade |
 
-### Graph Node/Edge Access
-
-Node IDs encode type in their upper flag bits (bits 26–31). The CQRS handlers check the flag before applying mutations: ontology nodes (`owl_*`) are immutable by standard users; agent nodes can be mutated by the owning pubkey only. Knowledge nodes are read-only for all non-power users.
-
-### Settings Isolation
-
-Settings are stored keyed by `pubkey`. A request for `GET /api/settings/physics` returns settings for the pubkey in the bearer token, not a global value. There is no cross-user settings leakage.
+Node IDs encode type in their upper flag bits; handlers check the flag before
+mutating (ontology nodes immutable to standard users; agent nodes mutable by
+the owning pubkey only). Settings are keyed by `pubkey`, so there is no
+cross-user settings leakage.
 
 ---
 
-## 4. Data Sovereignty (Solid Pods)
+## 4. Data sovereignty (Solid pods)
 
-### What Lives Where
+### What lives where
 
-| Data | Location | Rationale |
-|------|----------|-----------|
-| Knowledge graph nodes / edges | Shared embedded Oxigraph store | Content is public or organisation-wide |
-| Ontology classes and relations | Shared embedded Oxigraph store | Immutable reference data |
-| Physics simulation parameters | Settings table (keyed by pubkey) | Per-user preference |
-| Agent episodic / semantic memories | User's Solid Pod | User owns their agent's memory |
-| Agent session summaries | User's Solid Pod | Personal data |
-| WebID profile | User's Solid Pod | Self-sovereign identity |
-| Delegation tokens | User's Solid Pod (`/delegations/`) | User grants and revokes |
+| Data | Location | Why |
+|------|----------|-----|
+| Knowledge / ontology nodes | Shared in-process Oxigraph + SQLite | Public or organisation-wide |
+| Physics / UI preferences | Settings, keyed by pubkey | Per-user preference |
+| Agent episodic / semantic memory | User's Solid pod | User owns agent memory |
+| Session summaries, WebID profile | User's Solid pod | Personal / self-sovereign |
+| Delegation tokens | User's Solid pod (`/delegations/`) | User grants and revokes |
 
-### WAC / ACP Access Control
+### Web Access Control
 
-Each pod is provisioned with a `.acl` resource at its root. The default ACL grants:
-- **Owner** (the `npub` WebID): read, write, append, control
-- **VisionClaw server WebID**: read, write (scoped to `agent-memory/`)
-- **Public**: no access
+Each pod is provisioned with a `.acl` resource at its root following WAC (Web
+Access Control) semantics. The default grant is:
 
-Access Control Policies follow WAC (Web Access Control) semantics. The server presents a delegation token (NIP-26 signed by the user) to JSS on each Pod request; JSS validates the delegation chain before granting access.
+- **Owner** (the `npub` WebID): read, write, append, control.
+- **VisionClaw server WebID**: read, write, scoped to `agent-memory/`.
+- **Public**: no access.
 
-### NIP-26 Delegation Flow
+The Solid pod server (`solid-pod-rs`, port 8484) validates the delegation chain
+on every request before honouring the WAC rule.
 
-```
-1. User authenticates to VisionClaw (NIP-07 browser extension)
-2. VisionClaw generates an ephemeral agent keypair (session-scoped)
-3. User signs a NIP-26 delegation: "I delegate {agent_pubkey} until {unix_expiry}"
-4. Delegation is stored in the user's Pod at /delegations/
-5. Agents use the delegated key to sign NIP-98 requests to JSS
-6. JSS validates the delegation chain; grants access as the user
-```
+### NIP-26 delegation and revocation
 
-### Pod Access Revocation
+1. User authenticates to VisionClaw via NIP-07.
+2. VisionClaw mints an ephemeral, session-scoped agent keypair.
+3. User signs a NIP-26 delegation: "delegate `{agent_pubkey}` until `{expiry}`".
+4. The delegation is stored in the user's pod under `/delegations/`.
+5. Agents sign NIP-98 requests to the pod server with the delegated key.
+6. The pod server validates the delegation chain and grants access as the user.
 
-When the user revokes delegation (or the delegation expires):
-- JSS rejects all subsequent NIP-98 requests signed by the delegated key
-- VisionClaw agents lose Pod access immediately (next Pod request returns 403)
-- No cached copy of Pod data is retained on the server; the agent gracefully degrades to the shared embedded Oxigraph graph data only
+On revocation or expiry the pod server rejects subsequent delegated requests;
+agents lose access on the next call (403). No pod payload is cached server-side,
+so the agent degrades gracefully to shared graph data only.
 
-### GDPR Implications
+### GDPR posture
 
-Because personal data lives in the user's Pod:
-- VisionClaw does not need to respond to data deletion requests for Pod content — the user deletes it themselves
-- The server's embedded Oxigraph graph contains only knowledge graph nodes (public content); no personal data is stored there
-- Settings stored server-side are keyed by pubkey (a pseudonymous identifier); users can request deletion via the `DELETE /api/settings/user` endpoint
-- The server MUST NOT log Pod payload contents (see Section 7)
+Personal data lives in the user's pod, so VisionClaw need not service deletion
+requests for pod content — the user deletes it. The shared store holds only
+public knowledge nodes. Server-side settings are keyed by a pseudonymous
+`pubkey` and purgeable via `DELETE /api/settings/user`. The server **must not**
+log pod payloads or setting values (§8).
 
 ---
 
-## 5. Transport Security
+## 5. Transport security
 
-### TLS Requirements
+### TLS
 
-All production traffic must use TLS 1.2 or later. The minimum cipher suite list follows Mozilla's Intermediate profile. Self-signed certificates are not acceptable for production deployments; use Let's Encrypt or an internal CA with a trusted root.
+All production traffic uses TLS 1.2+ (1.3 preferred), Mozilla Intermediate
+cipher profile, with a trusted CA — no self-signed certificates in production.
+HTTP redirects 80 → 443; WebSocket is `wss://` only (`ws://` permitted for
+`localhost` in development); the pod server is served over HTTPS.
 
-- HTTP API: serve on port 443 (TLS); redirect 80 → 443
-- WebSocket: `wss://` only; `ws://` is permitted only for `localhost` in development
-- Solid Pod (JSS): `https://` required; JSS must be behind the same reverse proxy as the main API or have its own TLS termination
+### WebSocket upgrade
 
-### WebSocket Upgrade Security
+The upgrade is validated before the connection is accepted:
 
-The WebSocket upgrade request is validated before the connection is accepted:
+1. `Upgrade: websocket` header present and correct.
+2. Bearer token in the query string (`?token=…`) — the WebSocket API forbids
+   custom headers at upgrade time.
+3. `validate_session()` checks the token against the session store; invalid or
+   expired tokens are rejected with 401 **before** the upgrade completes.
+4. After upgrade the client sends an explicit `authenticate` message
+   `{token, pubkey}`, re-validated server-side.
+5. Connections that fail to authenticate within 5 seconds are closed.
 
-1. `Upgrade: websocket` header must be present and correct
-2. Auth token must be present in the query string (`?token=<bearer>`) at upgrade time — the WebSocket API does not permit custom headers after the upgrade
-3. **Token validation via `validate_session()`**: The server validates the session token against the authenticated session store before completing the WebSocket upgrade. Invalid or expired tokens are rejected with a 401 before the upgrade completes.
-4. After upgrade, the client sends an explicit `authenticate` message `{token, pubkey}` which is validated again server-side
-5. Connections that fail to send the auth message within 5 seconds are closed
+Passing the token in the URL means it can appear in access logs and history.
+Mitigation: short-lived tokens (`AUTH_TOKEN_EXPIRY=300` for WS sessions) and
+strict WSS so the URL is never visible in transit.
 
-### Binary Protocol Security
+### BIP-340 presence auth
 
-The binary position update protocol (single unified format — see [docs/binary-protocol.md](../binary-protocol.md) and [ADR-061](../adr/ADR-061-binary-protocol-unification.md)) carries only numeric node IDs and f32 position/velocity components. No user-identifying information, pubkeys, or session tokens appear in binary frames. An eavesdropper on the binary channel learns only that nodes moved — no identity linkage is possible from the binary stream alone.
+The XR presence channel (`/ws/presence`) does not trust a claimed DID. Before
+the upgrade succeeds the server issues a 32-byte random nonce; the client signs
+`(nonce || ts)` with its Nostr key; the server verifies the **BIP-340 Schnorr**
+signature against the claimed pubkey. The nonce is single-use within a
+60-second window (mirroring the NIP-98 replay rule), so a captured handshake
+cannot be replayed. This closes DID forgery (T-WS-1, §7) and fails closed per
+ADR-011.
 
-The version byte (`0x03` for V3) is validated on every frame; frames with an unknown version are rejected, not truncated. Payload length must match `1 + 52 × node_count` (or `9 + 52 × node_count` under V5 sequence framing). See [docs/binary-protocol.md](../binary-protocol.md) for the canonical layout.
+### Binary protocol
 
-### Content Security Policy
+The position-update protocol carries only numeric node IDs and `f32`
+position/velocity components — no pubkeys, no tokens, no identifying fields. An
+eavesdropper learns only that nodes moved. The current default is the **V4
+delta** format; the fixed **V3** layout uses a 52-byte node record
+(`BINARY_NODE_SIZE_V3`), V2 used 36 bytes. The version byte is validated on
+every frame; unknown versions are rejected, not truncated, and payload length
+must match the declared node count exactly. Adding any per-frame field requires
+an ADR superseding the protocol unification decision — enforced by a schema
+snapshot test, so PII cannot accrete silently into the wire format.
 
-The client's `index.html` includes a Content-Security-Policy (CSP) header that restricts script sources, style sources, and connection targets. This mitigates XSS and data exfiltration risks in the WebXR client.
+### Input validation boundaries
 
-### Rate Limiting
+Defensive validation at every untrusted edge:
 
-Rate limiting is applied per IP address at the API gateway layer:
+| Boundary | Validation |
+|----------|------------|
+| WebSocket messages | `JSON.parse` in try/catch; malformed messages logged and discarded |
+| Binary frames | Header size, declared-vs-actual length, version check, per-record multiple, truncation skip |
+| Query responses | Request-ID matching, per-query timeout |
+| Remote avatar data | Position/rotation parsed with null checks |
+| Hand-tracking joints | Joint-array bounds check before mesh update |
 
-| Parameter | Default | Environment variable |
-|-----------|---------|---------------------|
-| Window size | 60 seconds | `RATE_LIMIT_WINDOW_MS` |
-| Max requests | 100 per window | `RATE_LIMIT_MAX_REQUESTS` |
+### CSP and rate limiting
+
+The client `index.html` ships a Content-Security-Policy restricting script,
+style and connection sources — mitigating XSS and exfiltration in the WebXR
+client. Rate limiting is per-IP at the gateway:
+
+| Parameter | Default | Env var |
+|-----------|---------|---------|
+| Window | 60 s | `RATE_LIMIT_WINDOW_MS` |
+| Max requests | 100 / window | `RATE_LIMIT_MAX_REQUESTS` |
 | WebSocket connections | 100 concurrent | `WS_MAX_CONNECTIONS` |
-| TCP connections | 50 concurrent | `TCP_MAX_CONNECTIONS` |
 
-IPs exceeding the limit receive `429 Too Many Requests`. Backing off with exponential backoff is the expected client behaviour; the server does not communicate retry-after in the current implementation.
+Exceeding the limit returns `429`; clients are expected to back off
+exponentially.
 
 ---
 
-## 6. Secret Management
+## 6. Secret management (SOPS + age)
 
-### Environment Variables for Secrets
+Secrets are encrypted at rest with **Mozilla SOPS v3 + age** (ADR-109), not
+left as plaintext on disk. The 15 live secrets — LLM API keys, a GitHub PAT,
+database passwords and `SERVER_NOSTR_PRIVKEY` — are split:
 
-All secrets are injected via environment variables. The following variables MUST be set to non-default values before production deployment:
+- `secrets.enc.yaml` — SOPS-encrypted (AES-256-GCM per value), **committed to
+  git**. Git history becomes the audit trail.
+- `.env.example` — non-secret vars and placeholders for documentation.
 
-| Variable | Purpose | Default (INSECURE — change immediately) |
-|----------|---------|------------------------------------------|
-| `SESSION_SECRET` | Session token signing key | none — required |
-| `WS_AUTH_TOKEN` | WebSocket pre-auth token | none — required |
-| ~~`VIRCADIA_JWT_SECRET`~~ | ~~Legacy Vircadia JWT~~ (dead — Vircadia removed) | Remove from env |
-| `POSTGRES_PASSWORD` | PostgreSQL / RuVector DB password | `visionclaw_secure` |
-| ~~`NEO4J_PASSWORD`~~ | ~~Neo4j database password~~ (removed — graph store is now embedded Oxigraph, ADR-11; no DB password) | Remove from env |
-| `POWER_USER_PUBKEYS` | Comma-separated power user pubkeys | none (no power users) |
-| `AUTH_TOKEN_EXPIRY` | Session token TTL in seconds | `3600` |
-| `RUVECTOR_PG_CONNINFO` | RuVector connection string | — |
+Each operator holds one age keypair (`~/.config/sops/age/keys.txt`); the public
+key is listed in `.sops.yaml`. `scripts/sops-env.sh` decrypts and exports at
+runtime via `sops exec-env`. Rotation re-encrypts with a new public key and
+commits — zero new infrastructure, both tools being single static binaries.
 
-### Production Security Hardening (`APP_ENV=production`)
+These secrets must hold non-default values before production:
 
-When `APP_ENV` is set to `production`, several additional security constraints are enforced:
+| Variable | Purpose |
+|----------|---------|
+| `SESSION_SECRET` | Session token signing key (required) |
+| `WS_AUTH_TOKEN` | WebSocket pre-auth token (required) |
+| `SERVER_NOSTR_PRIVKEY` | Server's own Nostr identity |
+| `POSTGRES_PASSWORD` | RuVector / PostgreSQL password |
+| `POWER_USER_PUBKEYS` | Comma-separated admin pubkeys |
 
-- **Release env hygiene (ADR-06 §D11)**: A `release`-profile build runs `enforce_release_env_hygiene()` at startup and **hard-exits with code 2** if any development-only escape hatch is present in the environment — `SETTINGS_AUTH_BYPASS`, `VISIONCLAW_DEV_MODE`, or `ALLOW_INSECURE_DEFAULTS`. The `--allow-skip-auth` CLI flag is likewise rejected in release builds. These variables are only honoured in debug builds / non-production environments.
-- **`ALLOW_INSECURE_DEFAULTS` is blocked**: The server refuses to start if any secret retains its insecure default value. In non-production environments, insecure defaults are permitted with a warning.
-- **`SETTINGS_AUTH_BYPASS` is blocked**: This variable has been removed from `docker-compose.yml` and is rejected at startup in production mode. It previously allowed unauthenticated access to settings endpoints during development.
-- **API keys masked in `Debug` output**: All API key and secret types implement custom `Debug` formatting that masks the value, preventing accidental credential leakage in log output or error messages.
-- **Docker socket mount removed**: The Docker socket (`/var/run/docker.sock`) is no longer mounted into any service container in the compose files, eliminating a container escape vector.
+Nostr private keys belong to users (and the operator) and are never rotated by
+the request path; rotating `SESSION_SECRET` invalidates all live tokens and
+forces re-authentication.
 
-### What MUST NOT Be Hardcoded
+### Production hardening (`APP_ENV=production`)
 
-- Private keys of any kind (Nostr, TLS, JWT)
-- Database passwords
-- API tokens for external services (GitHub, Nostr relays)
-- `POWER_USER_PUBKEYS` list (encodes operational privilege — changes frequently)
+- **Release env hygiene**: a release build hard-exits (code 2) on any dev escape
+  hatch — `SETTINGS_AUTH_BYPASS`, `VISIONCLAW_DEV_MODE`,
+  `ALLOW_INSECURE_DEFAULTS`, `--allow-skip-auth`. `SETTINGS_AUTH_BYPASS` is
+  removed entirely under ADR-088; no bypass path exists in production.
+- Secret types implement masking `Debug`, so credentials cannot leak into logs.
+- The Docker socket (`/var/run/docker.sock`) is not mounted into any container,
+  removing a container-escape vector.
 
-### Docker Secrets Integration
+---
 
-For Docker Swarm or Kubernetes deployments, use native secrets management rather than environment variables in `docker-compose.yml`:
+## 7. XR APK threat model (STRIDE)
 
-```yaml
-secrets:
-  session_secret:
-    external: true
-  postgres_password:
-    external: true
+The Godot 4 native Quest 3 client (`godot-rust`/gdext APK), the Rust presence
+service (`/ws/presence` + presence broadcast actor), the avatar pose stream and
+LiveKit voice add an untrusted-device threat surface that the browser client
+does not. This section folds the STRIDE/DREAD analysis into the security model;
+the device is untrusted from the server's perspective.
 
-services:
-  visionclaw:
-    secrets:
-      - session_secret
-      - postgres_password
-    environment:
-      SESSION_SECRET_FILE: /run/secrets/session_secret
+### Assets, ranked by impact-if-compromised
+
+| Asset | Sensitivity | Class |
+|-------|-------------|-------|
+| APK release signing key | Critical | Operational secret |
+| User Nostr private key (Keystore or remote signer) | Critical | Identity secret |
+| Eye-gaze vectors (Pro path only) | Critical | Biometric, GDPR Art. 9 |
+| Scene mesh / spatial anchors | Critical | Physical-location PII (Art. 9) |
+| Hand kinematics (joint angles) | High | Behavioural biometric (Art. 9 if persisted) |
+| Voice / audio stream (LiveKit) | High | Voice biometric |
+| Avatar pose stream (90 Hz) | Medium | Pseudonymous behavioural pattern |
+| Room metadata (ids, member DIDs, join/leave) | Medium | Pseudonymous PII |
+
+### Trust boundary
+
+```mermaid
+flowchart TB
+    subgraph dev["User's Domain (Quest 3)"]
+        XKey["Nostr key (Keystore or remote signer)"]
+        APK["Godot 4 APK + godot-rust hot path"]
+        Mesh["Scene mesh / eye gaze (never leaves device)"]
+    end
+    subgraph wire["Public Internet"]
+        XTLS["wss and DTLS-SRTP"]
+    end
+    subgraph srv["VisionClaw Server"]
+        Pres["/ws/presence (BIP-340 challenge)"]
+        PAct["presence actor (pose broadcast)"]
+        Aud["Audit ledger (room join / leave)"]
+    end
+    subgraph lk["LiveKit"]
+        SFU["SFU (opaque encrypted RTP)"]
+    end
+    XKey -->|"sign challenge nonce"| APK
+    APK -->|"pose 90Hz, gestures"| XTLS
+    XTLS --> Pres
+    Pres -->|"validated DID"| PAct
+    PAct --> Aud
+    APK -.->|"encrypted RTP"| SFU
+    Mesh -.->|"DEFAULT DENY"| XTLS
 ```
 
-The application reads `SESSION_SECRET_FILE` and `POSTGRES_PASSWORD_FILE` (the `_FILE` suffix convention) when the plain variable is absent.
+### STRIDE summary and top threats
 
-### Key Rotation Procedure
+- **Spoofing** — the highest threat is a forged DID at the presence handshake,
+  closed by the BIP-340 challenge (§5). Avatar impersonation is blocked by
+  minting avatar IDs server-side at join; voice spoofing by deriving the LiveKit
+  `participant_identity` from a server-issued, DID-gated token.
+- **Tampering / DoS** — malformed frames are bounded (per-frame node cap, exact
+  length validation, `catch_unwind` per-room isolation, fuzz harness); floods
+  are per-session rate-limited (excess dropped); impossible pose and
+  non-anatomical hand kinematics are rejected by `validate_pose()`.
+- **Information disclosure (PII)** — the defining XR risk. **Scene mesh is
+  default-deny** (no serialiser; adding it to any wire format needs an ADR),
+  **eye gaze is opt-in** and on-device only, **pose and hand kinematics are
+  in-flight only** (broadcast and dropped), and passthrough texture is
+  non-readable in user space.
+- **Repudiation** — only a minimal membership ledger `(room_id, pubkey,
+  join_ts, leave_ts)` is kept for moderation; pose and voice are not logged.
 
-1. Generate a new secret value (minimum 32 random bytes, base64-encoded)
-2. Set the new value in your secrets manager
-3. Restart the service (rolling restart for multi-replica deployments)
-4. All existing session tokens become invalid immediately; users must re-authenticate via NIP-98
-5. Nostr keypairs belong to users and are not rotated by the server
+| Threat | STRIDE | Priority | Primary mitigation |
+|--------|--------|----------|--------------------|
+| Forged DID at handshake | S | Critical | BIP-340 single-use challenge |
+| Malformed frame → OOM/panic | T/D | Critical | Bounds + fuzz + per-room isolation |
+| Pose-frame flood | D | Critical | Per-session rate limit, drop excess |
+| Avatar impersonation in room | S | High | Server-minted avatar IDs |
+| Sybil DIDs flood public room | D | High | Invite-list ACL; IP-rate-limit joins |
+| Pose injection (velocity/OOB) | T | High | `validate_pose()` gate |
+| Scene-mesh exfiltration | I | High | Default-deny, no serialiser |
+| Room enumeration | I | High | UUIDv4 ids, opaque error |
+| Eye-tracking leak | I | High | Opt-in consent, on-device only |
+| APK reverse-engineering for keys | I | Medium | Android Keystore / remote signer |
 
----
+### Compliance
 
-## 7. Audit Trail
-
-### Logged Events
-
-The following events are written to the structured log at `INFO` level or above:
-
-| Event | Fields logged |
-|-------|--------------|
-| NIP-98 authentication attempt | `timestamp`, `pubkey`, `method`, `url`, `result` (success/fail), `ip` |
-| Session token issued | `timestamp`, `pubkey`, `expiry` |
-| Session token rejected | `timestamp`, `pubkey_claimed`, `reason`, `ip` |
-| CQRS command received | `timestamp`, `pubkey`, `command_type`, `entity_id` |
-| CQRS command rejected (authz) | `timestamp`, `pubkey`, `command_type`, `reason` |
-| WebSocket connection opened | `timestamp`, `ip`, `pubkey` |
-| WebSocket connection closed | `timestamp`, `pubkey`, `duration_s`, `reason` |
-| Rate limit exceeded | `timestamp`, `ip`, `endpoint` |
-| Pod delegation validated | `timestamp`, `pubkey`, `delegated_key`, `resource` |
-| Pod access denied (403) | `timestamp`, `pubkey`, `resource`, `reason` |
-| Settings mutation | `timestamp`, `pubkey`, `setting_key` (value NOT logged) |
-
-### Log Format
-
-Logs are structured JSON emitted to stdout, consumed by the container runtime. Example:
-
-```json
-{
-  "timestamp": "2026-04-09T14:23:01.442Z",
-  "level": "INFO",
-  "event": "nip98_auth",
-  "pubkey": "3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d",
-  "method": "POST",
-  "url": "/api/settings/bulk",
-  "result": "success",
-  "ip": "10.0.0.5"
-}
-```
-
-### Telemetry Integration
-
-The Rust backend emits OpenTelemetry spans for authentication and CQRS handler paths. Span attributes mirror the log fields above. Configure the OTLP exporter via `OTEL_EXPORTER_OTLP_ENDPOINT`.
-
-### GDPR: What Cannot Be Logged
-
-- Pod payload contents (user's personal data lives in their Pod; the server must not copy it to logs)
-- Setting values (only the key is logged, never the value — values may contain personal data)
-- Full request bodies for mutation endpoints
-- NIP-98 event `content` field (reserved for future use but could carry personal data)
-- IP addresses beyond the current request context (do not persist IPs to a database)
+Lawful basis for pose/voice is contract performance (the user joined the room).
+Eye gaze, scene mesh, persisted hand kinematics and voice-for-identification are
+GDPR Art. 9 special-category data: **none are persisted or transmitted
+server-side by default**, and enabling any requires explicit consent and a
+documented DPIA. Data minimisation holds — the server stores only the
+pseudonymous membership ledger; right-to-erasure inherits the §4 posture and
+extends `DELETE /api/settings/user` to purge the ledger.
 
 ---
 
-## 8. Known Security Constraints
+## 8. Audit trail
 
-This section documents what is deliberately not covered in the current architecture. These are honest constraints, not oversights — each has a recorded rationale.
+These events are written to structured JSON logs (stdout) at `INFO`+:
 
-### No mTLS Between Internal Services
+| Event | Fields |
+|-------|--------|
+| NIP-98 auth attempt | `pubkey`, `method`, `url`, `result`, `ip`, `ts` |
+| Session token issued / rejected | `pubkey`, `expiry` / `reason`, `ip` |
+| Directive received / rejected | `pubkey`, `command_type`, `entity_id` / `reason` |
+| WebSocket opened / closed | `ip`, `pubkey`, `duration_s`, `reason` |
+| Presence room join / leave | `pubkey`, `room_id`, `ts` |
+| Pod delegation validated / denied | `pubkey`, `delegated_key`, `resource` |
+| Settings mutation | `pubkey`, `setting_key` (value **not** logged) |
+| Rate limit exceeded | `ip`, `endpoint` |
 
-Communication between the Rust backend and the remaining networked services (JSS, RuVector, PostgreSQL) uses plain TCP within the Docker network. (The graph store is now embedded Oxigraph running in-process, so there is no network hop for graph traffic.) mTLS between internal services would require a certificate authority, certificate rotation, and per-service identity — engineering overhead not yet justified for single-host deployments. The Docker network boundary is the current internal isolation mechanism. For multi-host deployments, use a service mesh (Istio, Linkerd) or overlay network with encryption.
-
-### No Automated Secret Rotation
-
-`AUTH_TOKEN_EXPIRY` limits session token lifetimes, but rotation of the `SESSION_SECRET` itself is a manual procedure (see Section 6). There is no automated rotation or SOPS integration. Key rotation causes a service restart and session invalidation — the operational cost is acceptable for current deployment scale.
-
-### XR Client Authentication
-
-The Godot XR client authenticates to VisionClaw using NIP-98 signed HTTP Authorization headers, identical to the desktop browser client. See [XR Architecture](xr-architecture.md) for the presence WebSocket join handshake.
-
-### Token in WebSocket URL
-
-WebSocket bearer tokens are passed as a URL query parameter (`?token=…`) because the WebSocket protocol does not support custom headers at upgrade time. This means the token appears in server access logs and browser history. Mitigation: use short-lived tokens (`AUTH_TOKEN_EXPIRY=300` for WebSocket sessions) and ensure WSS is enforced so the URL is not visible in transit.
-
-
----
-
-## 9. Security Checklist
-
-Use this table to verify a deployment before exposing it to production traffic.
-
-### Pre-Deployment
-
-| Check | Verified |
-|-------|---------|
-| All required environment variables set (no defaults remaining) | [ ] |
-| `VIRCADIA_JWT_SECRET` removed from compose/env files (dead relic — Vircadia removed) | [ ] |
-| `SESSION_SECRET` set to a random 32+ byte value | [ ] |
-| `WS_AUTH_TOKEN` set to a random value | [ ] |
-| `.env` file absent from version control (check `.gitignore`) | [ ] |
-| `POWER_USER_PUBKEYS` contains only intended pubkeys | [ ] |
-| `SETTINGS_AUTH_BYPASS` is `false` or unset (blocked in production mode) | [ ] |
-| `ALLOW_INSECURE_DEFAULTS` is `false` or unset (release build hard-exits if set, code 2) | [ ] |
-| `VISIONCLAW_DEV_MODE` unset (release build hard-exits if set, ADR-06 §D11) | [ ] |
-| `NEO4J_PASSWORD` removed from env (graph store is embedded Oxigraph — no DB password) | [ ] |
-| `APP_ENV` set to `production` for production deployments | [ ] |
-| Rate limiting parameters reviewed for expected traffic | [ ] |
-| CORS origins restricted to known domains (`CORS_ALLOWED_ORIGINS`) | [ ] |
-
-### Transport
-
-| Check | Verified |
-|-------|---------|
-| TLS 1.2+ configured on reverse proxy | [ ] |
-| HTTP→HTTPS redirect active | [ ] |
-| `ws://` disabled; only `wss://` accepted in production | [ ] |
-| JSS (Solid) served over HTTPS | [ ] |
-| HSTS header configured on reverse proxy | [ ] |
-
-### Container / Network
-
-| Check | Verified |
-|-------|---------|
-| Docker containers run as non-root user | [ ] |
-| Docker socket (`/var/run/docker.sock`) not mounted into containers | [ ] |
-| `no-new-privileges` security option set | [ ] |
-| Only required ports exposed on host | [ ] |
-| Internal services (RuVector, PostgreSQL, JSS) not exposed on host | [ ] |
-| Docker image built from pinned base image (no `latest`) | [ ] |
-
-### Operational
-
-| Check | Verified |
-|-------|---------|
-| Structured log output flowing to central log aggregator | [ ] |
-| Alert configured for repeated `nip98_auth` failures from same IP | [ ] |
-| Alert configured for `rate_limit_exceeded` spikes | [ ] |
-| Solid Pod backups scheduled | [ ] |
-| Key rotation procedure documented and tested | [ ] |
-| Incident response contact list current | [ ] |
+The backend emits OpenTelemetry spans mirroring these fields
+(`OTEL_EXPORTER_OTLP_ENDPOINT`). **What must never be logged**: pod payloads,
+setting values, full mutation request bodies, NIP-98 event `content`, and
+persisted IP addresses.
 
 ---
 
-## Related Documentation
+## 9. Known constraints
 
-- [Solid Sidecar Architecture](solid-sidecar-architecture.md) — JSS deployment, LDP container structure, NIP-98 handler
-- [User-Agent Pod Design](user-agent-pod-design.md) — NIP-26 delegation, per-user Pod provisioning pseudocode
-- [Backend CQRS Pattern](backend-cqrs-pattern.md) — command/query handler structure and authorization injection points
-- [REST API Reference](../reference/rest-api.md) — endpoint authentication requirements, NIP-98 header construction
-- [Nostr Authentication How-To](../how-to/features/nostr-auth.md) — client-side implementation guide
-- [Security Operations](../how-to/operations/security.md) — deployment checklist, rate limiting configuration, Docker hardening
+These are recorded trade-offs, not oversights.
+
+- **No mTLS between internal services.** Backend ↔ pod server ↔ RuVector ↔
+  PostgreSQL use plain TCP inside the Docker network (the graph store is
+  in-process, so it has no network hop). Multi-host deployments should add a
+  service mesh.
+- **No automated secret rotation.** `AUTH_TOKEN_EXPIRY` bounds token lifetime,
+  but rotating `SESSION_SECRET` is a manual SOPS re-encrypt + restart.
+- **Token in WebSocket URL.** Unavoidable (no custom headers at upgrade);
+  mitigated with short-lived tokens and enforced WSS.
+- **Nostr DIDs are Sybil-prone.** Mitigation sits at the room-membership layer
+  (invite-list ACLs, per-IP join limits), not the identity layer.
+
+---
+
+## See also
+
+- [XR Architecture](xr-architecture.md) — presence channel and avatar pipeline
+- [Solid Sidecar Architecture](solid-sidecar-architecture.md) — pod server, WAC, NIP-98 handler
+- [User-Agent Pod Design](user-agent-pod-design.md) — NIP-26 delegation and per-user provisioning
+- [Backend Architecture](backend-architecture.md) — hexser directive/query handlers
+- [DDD Bounded Contexts](ddd-bounded-contexts.md) — context boundaries and ownership
+- [Technology Choices](technology-choices.md) — Oxigraph, Nostr, Solid rationale
+- [Binary Protocol](../reference/binary-protocol.md) · [WebSocket Protocol](../reference/websocket-protocol.md) · [REST API](../reference/rest-api.md) · [URN ↔ Solid mapping](../reference/urn-solid-mapping.md)
+- [Nostr Auth How-To](../how-to/features/nostr-auth.md) · [Security Operations](../how-to/operations/security.md) · [Server Nostr Identity](../how-to/operations/server-nostr-identity.md)
+- Governing ADRs: [ADR-011 Auth Enforcement](../adr/ADR-011-auth-enforcement.md) · [ADR-028-ext Optional Auth](../adr/ADR-028-ext-optional-auth.md) · [ADR-088 Auth Service Extraction](../adr/ADR-088-auth-service-extraction.md) · [ADR-109 SOPS Secrets Management](../adr/ADR-109-sops-secrets-management.md)

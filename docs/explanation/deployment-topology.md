@@ -245,7 +245,7 @@ docker compose \
   --profile prod up -d
 ```
 
-The voice overlay requires additional environment variables: `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_URL`. See [Environment Variables Reference](../reference/configuration/environment-variables.md) for the full list.
+The voice overlay requires additional environment variables: `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `LIVEKIT_URL`. See [Environment Variables Reference](../reference/configuration.md) for the full list.
 
 ### XR Profile (`docker-compose.vircadia.yml`) — DEPRECATED
 
@@ -323,9 +323,9 @@ The GPU physics engine (`visionclaw` with CUDA) is a special case. The `ForceCom
 
 For step-by-step deployment instructions, environment variable values, and troubleshooting commands, see:
 
-- [Deployment Guide](../how-to/deployment-guide.md) — prerequisites, quick start, profile activation commands, production hardening checklist
-- [Docker Compose Options Reference](../reference/configuration/docker-compose-options.md) — full YAML snippets for every service configuration option, GPU setup, resource limits, logging drivers
-- [Environment Variables Reference](../reference/configuration/environment-variables.md) — complete variable table with types, defaults, and examples for all services
+- [Deployment Guide](../how-to/deployment.md) — prerequisites, quick start, profile activation commands, production hardening checklist
+- [Docker Compose Options Reference](../reference/configuration.md) — full YAML snippets for every service configuration option, GPU setup, resource limits, logging drivers
+- [Environment Variables Reference](../reference/configuration.md) — complete variable table with types, defaults, and examples for all services
 - [System Overview](./system-overview.md) — higher-level architectural context, technology choices, and bounded context diagram
 - [Security Model](./security-model.md) — how authentication, authorisation, and network isolation are enforced across the topology
 - [RuVector Integration](./ruvector-integration.md) — detailed explanation of the external vector memory service, embedding pipeline, and HNSW search behaviour

@@ -192,8 +192,8 @@ cargo test user_filter -- --ignored
 
 - [Client-Side Filtering Implementation](filtering-nodes.md)
 
-- [Graph Schema Guide](../../reference/neo4j-schema-unified.md) (Oxigraph/RDF, ADR-11)
-- [Docker Compose Unified Configuration - Usage Guide](../deployment-guide.md)
+- [Graph Schema Guide](../../reference/graph-schema.md) (Oxigraph/RDF, ADR-11)
+- [Docker Compose Unified Configuration - Usage Guide](../deployment.md)
 - [Developer Guides](../../CONTRIBUTING.md)
 
 ## Future Enhancements

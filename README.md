@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
 ---
 
-**92 CUDA kernels · GPU clustering, anomaly detection and PageRank · Multi-user immersive XR · 88 agent skills · OWL 2 + SHACL ontology governance · W3C PROV-O provenance · Nostr DID identity · Solid Pod sovereignty**
+**82 CUDA kernels · GPU clustering, anomaly detection and PageRank · Multi-user immersive XR · 88 agent skills · OWL 2 + SHACL ontology governance · W3C PROV-O provenance · Nostr DID identity · Solid Pod sovereignty**
 
 ---
 
@@ -81,7 +81,7 @@ cd VisionClaw && cp .env.example .env
 <details>
 <summary><strong>Voice routing and multi-user XR overlays</strong></summary>
 
-The voice (LiveKit + whisper + TTS) and Vircadia World Server overlays are not currently shipped as separate compose files. `docker-compose.unified.yml` is the only compose file in the repository; there are no `docker-compose.voice.yml` or `docker-compose.vircadia.yml` overlays to stack on top of it. Any voice/XR services are configured within the unified compose definition or via the host launcher, not by overlaying additional compose files.
+The voice (LiveKit + whisper + TTS) and multi-user XR presence services are not shipped as separate compose files. `docker-compose.unified.yml` is the only compose file in the repository; there are no `docker-compose.voice.yml` or `docker-compose.xr.yml` overlays to stack on top of it. Any voice and presence services are configured within the unified compose definition or via the host launcher, not by overlaying additional compose files. The native XR client (`xr-client/`) builds as a separate Quest 3 APK, not a compose service.
 
 </details>
 
@@ -97,7 +97,7 @@ cd client && npm install && npm run build && cd ..
 ./target/release/visionclaw-server
 ```
 
-Requires CUDA 13.1 toolkit. See [Deployment Guide](docs/how-to/deployment-guide.md) for full GPU setup.
+Requires CUDA 13.1 toolkit. See [Deployment Guide](docs/how-to/deployment.md) for full GPU setup.
 
 </details>
 
@@ -120,8 +120,8 @@ flowchart TB
     subgraph Layer2["LAYER 2 — ORCHESTRATION"]
         Skills["88 Agent Skills\nClaude-Flow DAG Pipelines"]
         Ontology["OWL 2 EL + SHACL\nWhelk-rs + PROV-O"]
-        MCP["17 MCP Tools\nKnowledge Graph Read/Write"]
-        GPU["GPU Compute\n92 CUDA Kernels"]
+        MCP["7 Ontology MCP Tools\nKnowledge Graph Read/Write"]
+        GPU["GPU Compute\n82 CUDA Kernels"]
     end
 
     subgraph Layer1["LAYER 1 — DISCOVERY ENGINE"]
@@ -152,13 +152,13 @@ flowchart TB
 - `subClassOf` → attraction, `disjointWith` → repulsion in GPU physics
 - Every ontology mutation creates a GitHub PR — human veto before commit
 - Content-addressed immutable provenance beads (Nostr)
-- DDD bounded contexts with direct hexser dispatch — 56 `DirectiveHandler`/`QueryHandler` implementations across 5 application contexts (no CQRS bus; see ADR-089)
+- DDD bounded contexts with direct hexser dispatch — 44 `DirectiveHandler`/`QueryHandler` implementations across 5 application contexts (no CQRS bus; see ADR-089)
 
 </td>
 <td width="50%">
 
 **GPU-Accelerated Physics**
-- 92 CUDA kernel functions across 11 files (6,585 LOC)
+- 82 CUDA kernel functions across 9 files (5,854 LOC)
 - 55× speedup vs single-threaded CPU physics
 - Force-directed layout + semantic forces + stress majorisation
 - On-demand: K-Means clustering, Louvain communities, LOF anomaly, PageRank
@@ -209,7 +209,7 @@ flowchart TB
 - LiveKit SFU + turbo-whisper STT (CUDA) + Kokoro TTS
 - Plane 1: User mic → whisper → private agent channel
 - Plane 2: Agent TTS → user ear (private)
-- Planes 3–4: Public spatial audio via LiveKit + Vircadia HRTF
+- Planes 3–4: Public spatial audio via LiveKit SFU, HRTF from live presence positions
 - Opus 48kHz mono end-to-end
 
 </td>
@@ -251,7 +251,7 @@ surfaces, and humans answer with cryptographically signed responses
 contract by round-trip tests, `nostr_sdk` relay pool, kind-31403 decision
 return path routed per actor). The bead-provenance bridge
 (`src/services/nostr_bridge.rs`, kind 30001 → kind 9) remains the separate
-audit trail. Contract details: [docs/architecture/agent-control-surface-panels.md](docs/architecture/agent-control-surface-panels.md);
+audit trail. Contract details: [docs/explanation/agent-control-surface.md](docs/explanation/agent-control-surface.md);
 decision record: [ADR-110](docs/adr/ADR-110-agentic-actors-acsp-control-surfaces.md).
 
 | Kind | Name | Flow |
@@ -355,9 +355,9 @@ The agentbox ontology bridge (`mcp/servers/ontology-bridge.js`) proxies agents r
 </details>
 
 <details>
-<summary><strong>Binary WebSocket Protocol (V2/V3)</strong></summary>
+<summary><strong>Binary WebSocket Protocol (V3 full / V4 delta)</strong></summary>
 
-High-frequency position updates use a compact binary protocol instead of JSON, achieving 80% bandwidth reduction. The single per-tick position frame is specified in [docs/binary-protocol.md](docs/binary-protocol.md) (ADR-061).
+High-frequency position updates use a compact binary protocol instead of JSON, achieving 80% bandwidth reduction. V3 (52 bytes/node) is the full-snapshot baseline; **V4 delta — which transmits only changed nodes against the last V3 frame — is the current production default**. The wire format is specified in [docs/reference/binary-protocol.md](docs/reference/binary-protocol.md) (ADR-061).
 
 Each binary frame carries a one-byte `MessageType` header (`client/src/services/binaryProtocol/frameTypes.ts`). Position streaming is the hot path; the other frame types carry agent state, control, voice, and multi-user sync:
 
@@ -373,7 +373,7 @@ Each binary frame carries a one-byte `MessageType` header (`client/src/services/
 
 The `0x23 AGENT_ACTION` frame is a 15-byte identity-blind header (`sourceAgentId`, `targetNodeId`, `actionType` 0–5, `timestamp`, `durationMs`) plus optional payload. The six `AgentActionType` values (Query/Update/Create/Delete/Link/Transform) carry the `AGENT_ACTION_COLORS` palette consumed by the beam render layer. Identity (`source_urn`/`target_urn`/`pubkey`) rides the JSON `/wss/agent-events` ingest envelope and is resolved to numeric IDs server-side before the binary frame is emitted (ADR-059 Finding 2).
 
-**V3 (52 bytes/node)** — production default, includes GPU analytics (ADR-031):
+**V3 (52 bytes/node)** — full-snapshot record, includes GPU analytics (ADR-031); V4 deltas encode against it:
 
 | Bytes | Field | Type | Description |
 |:------|:------|:-----|:------------|
@@ -387,12 +387,12 @@ The `0x23 AGENT_ACTION` frame is a 15-byte identity-blind header (`sourceAgentId
 | 44–47 | Community ID | u32 | Louvain community assignment |
 | 48–51 | Centrality | f32 | PageRank centrality score |
 
-Each analytics field has a single writer (ADR-031 D3): ClusteringActor owns `cluster_id`/`community_id`, AnomalyDetectionActor owns `anomaly_score`. The 36-byte V2 record (no analytics tail) is retired — the server emits and decodes V3 only.
+Each analytics field has a single writer (ADR-031 D3): ClusteringActor owns `cluster_id`/`community_id`, AnomalyDetectionActor owns `anomaly_score`. The 36-byte V2 record (no analytics tail) is retired; the server emits V3 full snapshots and V4 deltas (the default), and decodes both.
 
 </details>
 
 <details>
-<summary><strong>Agent skill domains (83 skills)</strong></summary>
+<summary><strong>Agent skill domains (88 skills)</strong></summary>
 
 **Creative Production** — Script, storyboard, shot-list, grade & publish workflows. ComfyUI orchestration for image, video, and 3D asset generation.
 
@@ -438,7 +438,7 @@ Agent visual states: `#10b981` (idle) · `#fbbf24` (spawning/active) · `#ef4444
 | 3 | User mic → LiveKit SFU → All users | Public (spatial) | PTT released |
 | 4 | Agent TTS → LiveKit → All users | Public (spatial) | Agent configured public |
 
-Opus 48kHz mono end-to-end. HRTF spatial panning from Vircadia entity positions.
+Opus 48kHz mono end-to-end. HRTF spatial panning from live `/ws/presence` avatar positions.
 
 </details>
 
@@ -478,34 +478,36 @@ Opus 48kHz mono end-to-end. HRTF spatial panning from Vircadia entity positions.
 
 ### Workspace crates (ADR-090)
 
-The Rust backend is a Cargo workspace. The `visionclaw-server` binary depends on six extracted crates arranged as an acyclic DAG:
+The Rust backend is a Cargo workspace. The `visionclaw-server` binary depends on eight extracted crates arranged as an acyclic DAG:
 
 | Crate | Responsibility |
 |:------|:---------------|
+| `visionclaw-contracts` | Shared contract types and bindings; leaf crate with no framework deps |
 | `visionclaw-domain` | Domain model, port traits, no framework dependencies |
-| `visionclaw-protocol` | Binary V2/V3 wire protocol encode/decode |
+| `visionclaw-protocol` | Binary V2/V3/V4 wire protocol encode/decode |
 | `visionclaw-gpu` | CUDA kernels, force-directed physics, build.rs PTX compilation |
 | `visionclaw-ontology` | OWL 2 types, horned-owl pipeline, ontology services |
 | `visionclaw-adapters` | Oxigraph ontology store, Whelk inference engine |
 | `visionclaw-actors` | Actor message types; actor implementations remain in `visionclaw-server` |
+| `visionclaw-xr-presence` | Multi-user XR presence session ports and types |
 
-Dependency order (inner → outer): `contracts → domain → {gpu, ontology, protocol} → adapters → actors → visionclaw-server`
+Dependency order (inner → outer): `contracts → domain → {gpu, ontology, protocol} → adapters → actors → xr-presence → visionclaw-server`
 
 ```mermaid
 flowchart TB
     subgraph Client["Browser Client (React 19 + Three.js)"]
-        R3F["React Three Fiber\n(desktop graph)"]
-        BinProto["Binary Protocol V3/V5"]
+        R3F["React Three Fiber\n(desktop graph — WebGPU + WebGL)"]
+        BinProto["Binary Protocol V3/V4"]
         Voice["Voice Orchestrator"]
     end
 
-    XRClient["Native XR Client\n(Godot 4 + godot-rust, ADR-071/102)"]
+    XRClient["Native XR Client\n(Godot 4 + godot-rust + OpenXR, ADR-071/102)"]
 
-    subgraph Server["Rust Backend (Actix-web · Hexagonal · CQRS)"]
+    subgraph Server["Rust Backend (Actix-web · Hexagonal · hexser dispatch)"]
         Handlers["HTTP/WS Handlers\n(9 ports · 12 adapters)"]
-        Actors["21 Actix Actors\n(supervised concurrency)"]
+        Actors["35 Actix Actors\n(supervised concurrency)"]
         Services["OWL Ontology Pipeline\n(Whelk-rs EL++)"]
-        MCP["MCP Tool Server\n(:9500 TCP)"]
+        MCP["MCP Ontology Server\n(7 tools)"]
     end
 
     subgraph Data["Data Layer"]
@@ -525,8 +527,8 @@ flowchart TB
         Forum["Forum\n(governance UI)"]
     end
 
-    Client <-->|"Binary V3/V5 + REST"| Server
-    XRClient <-->|"Binary V3/V5 WS + NIP-98 auth"| Server
+    Client <-->|"Binary V3/V4 + REST"| Server
+    XRClient <-->|"Binary V3/V4 WS + presence (BIP-340)"| Server
     Server <--> Oxigraph
     Server <--> RuVector
     Server <--> Solid
@@ -543,7 +545,7 @@ flowchart TB
 ```
 
 <details>
-<summary><strong>Hexagonal architecture (9 ports · 12 adapters · 56 direct hexser DirectiveHandler/QueryHandler impls — no CQRS bus, see ADR-089)</strong></summary>
+<summary><strong>Hexagonal architecture (9 ports · 12 adapters · 44 direct hexser DirectiveHandler/QueryHandler impls — no CQRS bus, see ADR-089)</strong></summary>
 
 VisionClaw follows strict hexagonal architecture. Business logic in `src/services/` depends only on port traits in `src/ports/`. Concrete implementations live in `src/adapters/`, swapped at startup via dependency injection.
 
@@ -588,7 +590,7 @@ flowchart LR
 </details>
 
 <details>
-<summary><strong>21-Actor supervision tree</strong></summary>
+<summary><strong>Actor supervision tree (35 actors)</strong></summary>
 
 The backend uses Actix actors for supervised concurrency. GPU actors form a hierarchy: `GraphServiceSupervisor` → `PhysicsOrchestratorActor` → `ForceComputeActor`. All actors restart automatically on failure.
 
@@ -635,7 +637,7 @@ The backend uses Actix actors for supervised concurrency. GPU actors form a hier
 
 **Generic Domain:** User Management · Audit/Provenance · Configuration
 
-Each context has its own aggregate roots, domain events, and anti-corruption layers. Cross-context communication uses domain events, never direct model sharing. See [DDD Bounded Contexts](docs/explanation/ddd-bounded-contexts.md).
+Each context has its own aggregate roots, domain events, and anti-corruption layers. Cross-context communication uses domain events, never direct model sharing. See [DDD Bounded Contexts](docs/explanation/bounded-contexts.md).
 
 </details>
 
@@ -655,12 +657,12 @@ Each context has its own aggregate roots, domain events, and anti-corruption lay
 
 | Metric | Result | Conditions |
 |:-------|-------:|:-----------|
-| GPU physics speedup | 55× | vs single-threaded CPU |
+| GPU physics speedup | 55× | 246ms → 4.5ms @ 100K nodes, vs single-threaded CPU |
 | HNSW semantic search | 61µs p50 | RuVector pgvector, 1.17M entries |
-| WebSocket latency | 10ms | Local network, V2 binary |
-| Bandwidth reduction | 80% | Binary V2 vs JSON |
-| Concurrent XR users | 250+ | Vircadia World Server |
-| CUDA kernels | 92 | 6,585 LOC across 11 files |
+| WebSocket latency | 10ms | Local network, binary frame |
+| Bandwidth reduction | 80% | Binary V4 delta vs JSON |
+| Concurrent XR users | 250+ | Native `/ws/presence` (THG world record) |
+| CUDA kernels | 82 | 5,854 LOC across 9 files |
 
 ---
 
@@ -671,21 +673,21 @@ Each context has its own aggregate roots, domain events, and anti-corruption lay
 
 | Layer | Technology | Detail |
 |:------|:-----------|:-------|
-| **Backend** | Rust 2021 · Actix-web | 427 files, 175K LOC · hexagonal · direct hexser dispatch (no CQRS bus, ADR-089) · 9 ports · 12 adapters · 56 DirectiveHandler/QueryHandler impls |
-| **Frontend (desktop)** | React 19 · Three.js 0.182 · R3F | 370 files, 96K LOC · TypeScript 5.9 · InstancedMesh · SAB zero-copy |
-| **Frontend (XR)** | Babylon.js | Immersive/VR mode — Quest 3 foveated rendering, hand tracking |
+| **Backend** | Rust 2021 · Actix-web | 428 files, 178K LOC · hexagonal · direct hexser dispatch (no CQRS bus, ADR-089) · 9 ports · 12 adapters · 44 DirectiveHandler/QueryHandler impls · 8 workspace crates (ADR-090) |
+| **Frontend (desktop)** | React 19 · Three.js 0.182 · R3F | 465 files, 103K LOC · 16 feature modules · TypeScript 5.9 · dual renderer (WebGPU preferred, WebGL fallback) · InstancedMesh · SAB zero-copy |
+| **Frontend (XR)** | Godot 4 · godot-rust (gdext) · OpenXR | Native Quest 3 client (`xr-client/`, ADR-071/102) — V3 graph wire, analytics-driven rendering, instanced edges, importance-capped LOD. **Supersedes the retired Babylon.js path.** |
 | **WASM** | Rust → wasm-pack | `scene-effects` crate: zero-copy `Float32Array` view over `WebAssembly.Memory` |
-| **Graph Store** | Oxigraph + SQLite | ADR-11 canonical persistence (SPARQL triple store) |
+| **Graph Store** | Oxigraph + SQLite | ADR-11 canonical persistence (SPARQL triple store) · Neo4j fully removed |
 | **Vector Memory** | RuVector PostgreSQL · pgvector | 1.17M+ entries · HNSW 384-dim · MiniLM-L6-v2 · 61µs search |
-| **GPU** | CUDA 13.1 · cudarc | 92 kernel functions · 6,585 LOC · PTX ISA auto-downgrade |
+| **GPU** | CUDA 13.1 · cudarc | 82 kernel functions · 5,854 LOC · 9 `.cu` files in `crates/visionclaw-gpu/src/cuda_sources/` · PTX ISA auto-downgrade |
 | **Ontology** | OWL 2 EL · Whelk-rs · SHACL | EL++ subsumption · consistency checking · W3C shape validation · PROV-O provenance |
-| **Multi-User** | Vircadia World Server | Avatar sync · spatial HRTF audio · collaborative editing |
+| **Multi-User** | BIP-340 `/ws/presence` · server-authoritative drag | Multi-avatar presence with `local_id`-attributed poses · shared node drag (NIP-98 auth). **Supersedes the retired Vircadia World Server.** |
 | **Voice** | LiveKit SFU · turbo-whisper · Kokoro | CUDA STT · TTS · Opus 48kHz · 4-plane routing |
 | **Identity** | Nostr NIP-07/NIP-98 · DID:Nostr | Browser extension signing · NIP-26 delegation · W3C key rotation |
 | **User Data** | Solid Pods · solid-pod-rs (embedded) | Per-user data sovereignty · WAC access control · JSON-LD |
-| **Agents** | Claude-Flow · MCP · RAFT | 83 skills · 7 ontology tools · hive-mind consensus |
+| **Agents** | Claude-Flow · MCP · RAFT | 88 skills · 7 ontology tools · hive-mind consensus |
 | **Build** | Vite 6 · Vitest · Playwright | Frontend build · unit tests · E2E tests |
-| **Infra** | Docker Compose | 15+ services · multi-profile (dev/prod/voice/xr) |
+| **Infra** | Docker Compose | 15+ services · multi-profile (dev/prod) |
 
 </details>
 
@@ -693,16 +695,17 @@ Each context has its own aggregate roots, domain events, and anti-corruption lay
 
 ## Documentation
 
-VisionClaw uses the [Diataxis](https://diataxis.fr/) framework — 106 markdown files across four categories, 46 with embedded Mermaid diagrams:
+VisionClaw's documentation follows the [Diátaxis](https://diataxis.fr/) framework — tutorials, how-to guides, explanation, and reference — backed by the formal decision record (98 ADRs plus the PRD and DDD archives). Start at the [Documentation Hub](docs/README.md).
 
-| Category | Path | Content |
-|:---------|:-----|:--------|
-| **Tutorials** | [`docs/tutorials/`](docs/tutorials/) | First graph, platform overview |
-| **How-To Guides** | [`docs/how-to/`](docs/how-to/) | Deployment, agents, XR setup, performance profiling, operations |
-| **Explanation** | [`docs/explanation/`](docs/explanation/) | Architecture, DDD, ontology, GPU physics, VisionClaw platform, security |
-| **Reference** | [`docs/reference/`](docs/reference/) | REST API, WebSocket protocol, agents catalog, error codes |
+| Category | Entry point | Key pages |
+|:---------|:------------|:----------|
+| **Tutorials** | [docs/tutorials/](docs/tutorials/README.md) | [First graph](docs/tutorials/first-graph.md) · [Installation](docs/tutorials/installation.md) · [What is VisionClaw?](docs/tutorials/what-is-visionclaw.md) |
+| **How-To Guides** | [docs/how-to/](docs/how-to/README.md) | [Deployment](docs/how-to/deployment.md) · [Agent orchestration](docs/how-to/agent-orchestration.md) · [Quest 3 XR setup](docs/how-to/xr-quest3-setup.md) · [Performance profiling](docs/how-to/performance-profiling.md) |
+| **Explanation** | [docs/explanation/](docs/explanation/README.md) | [System overview](docs/explanation/system-overview.md) · [Backend architecture](docs/explanation/backend-architecture.md) · [GPU physics engine](docs/explanation/physics-gpu-engine.md) · [XR architecture](docs/explanation/xr-architecture.md) · [Security model](docs/explanation/security-model.md) · [Subsystems](docs/explanation/subsystems.md) · [Ontology pipeline](docs/explanation/ontology-pipeline.md) · [Bounded contexts](docs/explanation/bounded-contexts.md) |
+| **Reference** | [docs/reference/](docs/reference/README.md) | [REST API](docs/reference/rest-api.md) · [WebSocket protocol](docs/reference/websocket-protocol.md) · [Binary protocol](docs/reference/binary-protocol.md) · [MCP tools](docs/reference/mcp-tools.md) · [Configuration](docs/reference/configuration.md) · [Graph schema](docs/reference/graph-schema.md) · [CLI](docs/reference/cli.md) · [Physics parameters](docs/reference/physics-parameters.md) |
+| **Decisions & domain** | [docs/adr/](docs/adr/README.md) · [docs/prd/](docs/prd/README.md) · [docs/ddd/](docs/ddd/README.md) | 98 Architecture Decision Records, product requirements, and domain-driven design records |
 
-Key entry points: [Documentation Hub](docs/README.md) · [VisionClaw Platform](docs/explanation/visionclaw-coordination-platform.md) · [Wardley Map](docs/explanation/visionclaw-wardley-map.md) · [Architecture Overview](docs/explanation/system-overview.md) · [Deployment Topology](docs/explanation/deployment-topology.md) · [Known Issues](docs/KNOWN_ISSUES.md)
+Conceptual deep-dives: [VisionFlow platform](docs/explanation/visionflow-coordination-platform.md) · [Wardley map](docs/explanation/visionflow-wardley-map.md) · [Deployment topology](docs/explanation/deployment-topology.md). The agent runtime has its own subsystem hub at [agentbox/docs/](agentbox/docs/README.md). Active bugs live in [Known Issues](docs/KNOWN_ISSUES.md).
 
 ---
 
@@ -744,25 +747,36 @@ cd client && npm install && npm run build && npm test
 
 ```
 VisionClaw/
-├── src/                          # Rust backend (427 files, 175K LOC)
-│   ├── actors/                   #   23 Actix actors (GPU compute + services)
-│   ├── adapters/                 #   Oxigraph, Whelk, CUDA, Solid, RuVector adapters
-│   ├── handlers/                 #   HTTP/WebSocket request handlers (CQRS)
-│   ├── services/                 #   Business logic (ontology, voice, agents)
+├── src/                          # visionclaw-server binary (428 .rs files, ~178K LOC)
+│   ├── actors/                   #   35 Actix actors (19 service + 16 GPU)
+│   ├── adapters/                 #   Oxigraph, Whelk, Solid, RuVector adapters
+│   ├── handlers/                 #   HTTP/WebSocket request handlers
+│   ├── services/                 #   Business logic (ontology, voice, agents, ACSP)
 │   ├── ports/                    #   Trait definitions (9 hexagonal boundaries)
-│   ├── gpu/                      #   CUDA kernel bridge, memory, streaming
-│   └── utils/*.cu                #   92 CUDA kernel functions (11 files, 6,585 LOC)
-├── client/                       # React frontend (370 files, 96K LOC)
-│   ├── src/features/             #   13 feature modules (graph, settings, etc.)
+│   └── gpu/                      #   CUDA kernel bridge, memory, streaming
+├── crates/                       # 8 workspace crates (ADR-090)
+│   ├── visionclaw-contracts/     #   Shared contract types (leaf crate)
+│   ├── visionclaw-domain/        #   Domain model + port traits
+│   ├── visionclaw-protocol/      #   Binary V2/V3/V4 wire codec
+│   ├── visionclaw-gpu/           #   GPU physics + analytics
+│   │   └── src/cuda_sources/     #     82 CUDA kernels (9 .cu files, 5,854 LOC)
+│   ├── visionclaw-ontology/      #   OWL 2 types, horned-owl pipeline
+│   ├── visionclaw-adapters/      #   Oxigraph store, Whelk inference engine
+│   ├── visionclaw-actors/        #   Actor message types
+│   └── visionclaw-xr-presence/   #   Multi-user XR presence ports
+├── client/                       # React 19 frontend (465 .ts/.tsx, ~103K LOC)
+│   ├── src/features/             #   16 feature modules (graph, settings, ontology, …)
 │   ├── src/services/             #   Voice, WebSocket, Nostr auth, Solid
 │   └── crates/scene-effects/     #   Rust WASM crate — zero-copy scene FX
-├── agentbox/                     # Submodule: agent runtime (ontology bridge, 88 skills, browser setup wizard, governed payment consumer PRD-015 Phase 1)
-├── docs/                         # Diataxis documentation (106 files, 46 with Mermaid)
-│   ├── explanation/              #   Architecture (incl. VisionClaw platform doc)
-│   ├── adr/                      #   91 Architecture Decision Records
+├── xr-client/                    # Native Godot 4 + godot-rust Quest 3 client (ADR-071/102)
+├── agentbox/                     # Submodule: agent runtime (88 skills, ontology bridge, x402 payment consumer PRD-015)
+├── docs/                         # Diátaxis tree + 98 ADRs + PRD/DDD records
+│   ├── tutorials/  how-to/       #   four Diátaxis categories
+│   ├── explanation/  reference/  #
+│   ├── adr/  prd/  ddd/          #   decision, product, and domain records
 │   └── KNOWN_ISSUES.md           #   Active P1/P2 bugs
 ├── tests/                        # Integration tests
-└── scripts/                      # Build, migration, embedding ingestion
+└── scripts/                      # launch.sh, build, migration, embedding ingestion
 ```
 
 </details>

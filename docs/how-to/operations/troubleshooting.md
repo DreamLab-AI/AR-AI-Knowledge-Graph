@@ -1001,7 +1001,7 @@ docker-compose build visionclaw 2>&1 | grep -i "ptx\|cuda\|nvcc"
 > **removed** per ADR-071/ADR-102. The XR client is now a **native Godot 4
 > APK** (`visionclaw-xr.apk`) side-loaded onto the Quest 3 — there is no
 > browser entry point and no WebXR/HTTPS requirement for XR. For XR setup
-> and troubleshooting see [XR Setup (Quest 3)](../xr-setup-quest3.md) and
+> and troubleshooting see [XR Setup (Quest 3)](../xr-quest3-setup.md) and
 > [XR Architecture](../../explanation/xr-architecture.md).
 
 ### VNC Issues (GUI tools container)

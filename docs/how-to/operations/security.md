@@ -253,7 +253,7 @@ services:
 
 - 
 - [Configuration Guide](./configuration.md)
-- [Deployment Guide](../deployment-guide.md)
+- [Deployment Guide](../deployment.md)
 
 ---
 

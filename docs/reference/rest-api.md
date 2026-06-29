@@ -33,40 +33,40 @@ All REST API paths are prefixed with `/api/` unless otherwise noted. Solid Pod e
 
 ```mermaid
 graph LR
-    A[VisionClaw API] --> B[/api/graph/*]
-    A --> C[/api/settings/*]
-    A --> D[/api/ontology/*]
-    A --> E[/api/analytics/*]
-    A --> F[/api/bots/*]
-    A --> G[/api/ragflow/*]
-    A --> H[/api/health/*]
-    A --> I[/solid/*]
-    A --> J[/wss]
-    A --> K[Enterprise]
-    A --> L[/api/discovery/*]
-    A --> M[/api/broker/*]
+    A["VisionClaw API"] --> B["/api/graph/*"]
+    A --> C["/api/settings/*"]
+    A --> D["/api/ontology/*"]
+    A --> E["/api/analytics/*"]
+    A --> F["/api/bots/*"]
+    A --> G["/api/ragflow/*"]
+    A --> H["/api/health/*"]
+    A --> I["/solid/*"]
+    A --> J["/wss"]
+    A --> K["Enterprise"]
+    A --> L["/api/discovery/*"]
+    A --> M["/api/broker/*"]
 
-    L --> L1[search]
-    L --> L2[related/:iri]
-    L --> L3[gaps]
-    L --> L4[batch, index, train, materialize]
+    L --> L1["search"]
+    L --> L2["related/:iri"]
+    L --> L3["gaps"]
+    L --> L4["batch, index, train, materialize"]
 
-    B --> B1[data]
-    B --> B2[node/:id]
-    B --> B3[stats]
-    C --> C1[:key]
-    C --> C2[user/filter]
-    D --> D1[hierarchy]
-    D --> D2[classes]
-    E --> E1[pathfinding/*]
-    E --> E2[pagerank, clustering, community]
-    I --> I1[pods/*]
-    I --> I2[LDP resources]
-    K --> K1[/api/broker/*]
-    K --> K2[/api/workflows/*]
-    K --> K3[/api/connectors/*]
-    K --> K4[/api/policy/evaluate]
-    K --> K5[/api/mesh-metrics]
+    B --> B1["data"]
+    B --> B2["node/:id"]
+    B --> B3["stats"]
+    C --> C1[":key"]
+    C --> C2["user/filter"]
+    D --> D1["hierarchy"]
+    D --> D2["classes"]
+    E --> E1["pathfinding/*"]
+    E --> E2["pagerank, clustering, community"]
+    I --> I1["pods/*"]
+    I --> I2["LDP resources"]
+    K --> K1["/api/broker/*"]
+    K --> K2["/api/workflows/*"]
+    K --> K3["/api/connectors/*"]
+    K --> K4["/api/policy/evaluate"]
+    K --> K5["/api/mesh-metrics"]
 ```
 
 ---
@@ -220,7 +220,7 @@ VisionClaw supports three authentication modes via `AccessLevel` enum:
 sequenceDiagram
     participant Client
     participant API as VisionClaw API
-    participant Oxigraph as Oxigraph (embedded)
+    participant Oxigraph as "Oxigraph (embedded)"
     participant Solid as Solid Pod
 
     Client->>API: GET /api/graph/data (optional auth)
@@ -1699,7 +1699,7 @@ embedded relay and the forum relay via `external_fanout = "bidirectional"`.
 
 ## WebSocket Upgrade
 
-The primary real-time communication channel is not a REST endpoint but a WebSocket connection at `/wss`. For position streaming, graph updates, voice, and bot telemetry, see the [WebSocket Binary Protocol reference](./websocket-binary.md).
+The primary real-time communication channel is not a REST endpoint but a WebSocket connection at `/wss`. For position streaming, graph updates, voice, and bot telemetry, see the [WebSocket Binary Protocol reference](./websocket-protocol.md).
 
 | Path | Handler | Protocol |
 |------|---------|----------|

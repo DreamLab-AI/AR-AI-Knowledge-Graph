@@ -156,7 +156,7 @@ Returns:
 - [Intelligent Pathfinding Guide](intelligent-pathfinding.md)
 - [Physics & GPU Engine](../../explanation/physics-gpu-engine.md)
 - [Contributing Guidelines](../../CONTRIBUTING.md)
-- [Goalie Integration - Goal-Oriented AI Research](../infrastructure/goalie-integration.md)
+- Goalie Integration - Goal-Oriented AI Research
 - [VisionClaw Guides](../index.md)
 
 ## Schema Context

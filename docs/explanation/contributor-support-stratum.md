@@ -630,7 +630,7 @@ it is good at.
 
 ## Further reading
 
-- [PRD-003: Contributor AI Support Stratum](../prd-003-contributor-ai-support-stratum.md)
+- [PRD-003: Contributor AI Support Stratum](../prd/PRD-003-contributor-ai-support-stratum.md)
 - [ADR-057: Contributor Enablement Platform](../adr/ADR-057-contributor-enablement-platform.md)
 - [DDD Contributor Enablement Contexts](./ddd-contributor-enablement-context.md)
 - [DDD Enterprise Bounded Contexts](./ddd-enterprise-contexts.md)
@@ -639,4 +639,4 @@ it is good at.
 - [ADR-040: Enterprise Identity Strategy](../adr/ADR-040-enterprise-identity-strategy.md)
 - [ADR-049: Insight Migration Broker Workflow](../adr/ADR-049-insight-migration-broker-workflow.md)
 - [ADR-052: Pod Default WAC + Public Container](../adr/ADR-052-pod-default-wac-public-container.md)
-- [Contributor Studio master design](../design/2026-04-20-contributor-studio/00-master.md)
+- Contributor Studio master design

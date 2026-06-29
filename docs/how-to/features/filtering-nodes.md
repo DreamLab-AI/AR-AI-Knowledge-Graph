@@ -329,7 +329,7 @@ Result: Shows up to 10,000 nodes with quality ≥ 0.7
 
 - [Nostr Authentication Implementation](nostr-auth.md)
 - [XR Architecture](../../explanation/xr-architecture.md)
-- [Multi-Agent Docker Environment - Complete Documentation](../infrastructure/../deployment-guide.md)
+- [Multi-Agent Docker Environment - Complete Documentation](../deployment.md)
 
 ## Future Enhancements
 

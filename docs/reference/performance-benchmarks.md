@@ -80,7 +80,7 @@ xychart-beta
 
 > **Note (2026-06-12):** these numbers were measured against the V2-era
 > 36 B/node wire. The current wire is **V3: 52 B/node** (version byte `0x03`,
-> see [docs/binary-protocol.md](../binary-protocol.md)); absolute sizes scale
+> see [docs/binary-protocol.md](./binary-protocol.md)); absolute sizes scale
 > accordingly but the binary-vs-JSON ratios remain representative.
 
 **Test:** Stream 100K node updates @ 60 FPS for 60 seconds
@@ -397,8 +397,8 @@ VisionClaw delivers production-grade performance across all tiers:
 
 ## References
 
-- [Binary Protocol Specification](./websocket-binary.md)
-- [WebSocket Binary Protocol](./websocket-binary.md)
+- [Binary Protocol Specification](./binary-protocol.md)
+- [WebSocket Binary Protocol](./websocket-protocol.md)
 - 
 - 
 

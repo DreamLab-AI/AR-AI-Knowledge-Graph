@@ -35,5 +35,5 @@ Monitor these key metrics:
 
 ## Related
 
-- [Configuration](../../reference/configuration/README.md)
+- [Configuration](../../reference/configuration.md)
 - [Health API](../../reference/README.md)

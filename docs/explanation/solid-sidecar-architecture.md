@@ -519,9 +519,9 @@ services:
 
 | Topic | Documentation |
 |-------|---------------|
-| Protocol Specification | [PROTOCOL_REFERENCE.md](../reference/protocols/README.md#solidldp-protocol) |
+| Protocol Specification | [PROTOCOL_REFERENCE.md](../reference/mcp-tools.md) |
 | API Endpoints | [rest-api.md](../reference/rest-api.md) |
-| Configuration | [CONFIGURATION_REFERENCE.md](../reference/configuration/README.md#solid-integration-jss-sidecar) |
+| Configuration | [CONFIGURATION_REFERENCE.md](../reference/configuration.md#solid) |
 
 ---
 
