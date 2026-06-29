@@ -13,7 +13,7 @@ members = [
 # PRD-008: the Godot gdext client (xr-client/rust) is its own workspace context
 # (cdylib for the Quest APK, separate target). Exclude it from the server
 # workspace so a server `cargo build` does not try to compile the gdext bindings.
-exclude = ["xr-client/rust"]
+exclude = ["xr-client/rust", "agentbox/crates/headroom-napi"]
 # Note: visionclaw-contracts is independently buildable. To work around the
 # pre-existing `solid-pod-rs { rev = "main" }` resolution error in the root
 # visionclaw-server package (which Cargo treats as a commit SHA, not a branch), run:

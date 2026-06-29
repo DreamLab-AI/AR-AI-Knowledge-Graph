@@ -73,7 +73,13 @@ Wardley maps / strategic analysis? --> /wardley-maps, /report-builder
 UI/UX design? --> /ui-ux-pro-max-skill, /bencium-*, /design-audit, /typography
 Architecture review? --> /vanity-engineering-review, /renaissance-architecture, /human-architect-mindset
 Ground reasoning in our formal ontology/KG ("what does our KG say about X", subgraph, SPARQL, governed writeback)? --> /ontology-augment (PRD-020 binding; ontology_ask, fail-open, budget-bounded)
-Web search — fast synthesized answer (closed engine)? --> /perplexity-research | verifiable, reputation-attached, you-pick-the-engine + trusted-domain lenses + verify_citation (academic/legal/clinical/SEC/patent)? --> /web-researcher (v1.33.0) | known URLs --> /gemini-url-context ; NotebookLM --> /notebooklm
+Web search (ranked priority):
+  1. Default / first try? --> /ceramic-search (keyword, rich 8k extracts, fast)
+  2. Need authoritative sources, academic/policy filters, synthesized answer? --> /perplexity-research (secondary)
+  3. Quick built-in fallback, no API key needed? --> Claude WebSearch (tertiary)
+  Complex or important query? --> ALL THREE in parallel, dedupe + cross-verify
+  Verifiable citations + lenses (academic/legal/clinical/SEC/patent)? --> /web-researcher (v1.33.0)
+  Known URLs --> /gemini-url-context ; NotebookLM --> /notebooklm
 Deep cited research (multi-agent fan-out + adversarial verify, orchestrates the above)? --> /deep-research (parallel agents, provenance, verification)
 Optimize a metric iteratively? --> /autoresearch (experiment loop, keep/discard)
 Add source verification? --> /provenance-tracking (.provenance.md sidecar)
