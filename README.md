@@ -51,6 +51,10 @@ VisionClaw is the knowledge engineering substrate of the **[VisionFlow](https://
 
 *Live dual-graph: a dense knowledge-graph nucleus (red) wrapped in an ontology shell (blue), 21,038 nodes and 94,702 edges settling under GPU spring, repulsion, and ontology-driven semantic forces in real time. Degree-1 dangling wikilink stubs are pruned at ingest, so the surfaced graph is navigable structure rather than citation noise.*
 
+https://github.com/user-attachments/assets/0a4a84e5-b86f-4458-bba5-31b0565882a6
+
+*The same dual-graph in motion — GPU physics settling a complex knowledge graph in real time.*
+
 ![VisionClaw Control Center over the live graph](./graph-dual-control-center.png)
 
 *The Control Center: live WS / MCP / sync status, per-type node toggles (knowledge, ontology, agent), and force parameters — driving the same scene the backend streams over the binary WebSocket protocol.*
