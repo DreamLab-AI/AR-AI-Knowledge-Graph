@@ -206,7 +206,7 @@ impl CanonicalContext {
     pub fn v1() -> Result<Self, ValidatorInitError> {
         // Bake the canonical context file in at build time so the
         // validator does not require runtime file IO.
-        const V1_BYTES: &str = include_str!("../../../../../docs/data-sprint/context-v1.jsonld");
+        const V1_BYTES: &str = include_str!("context-v1.jsonld");
         let document = serde_json::from_str(V1_BYTES)
             .map_err(|e| ValidatorInitError::ContextParse(e.to_string()))?;
         Ok(Self {
