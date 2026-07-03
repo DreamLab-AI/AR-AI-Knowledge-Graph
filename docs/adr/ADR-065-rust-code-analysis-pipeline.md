@@ -1,6 +1,6 @@
 # ADR-065: Rust-Native Code Analysis Pipeline
 
-**Status:** Proposed
+**Status:** Deferred — frozen by closeout 2026-07-03 (was Proposed). Spec-only: only an empty `crates/graph-cognition-extract` scaffold exists (no Cargo.toml, no .rs). Unfreeze when the tree-sitter sandbox, LLM sanitiser and `vc analyze` CLI are scheduled as a workstream.
 **Date:** 2026-05-01
 **Deciders:** jjohare, VisionClaw platform team
 **Supersedes:** None

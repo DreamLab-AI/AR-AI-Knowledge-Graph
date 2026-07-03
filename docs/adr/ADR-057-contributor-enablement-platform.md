@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Deferred — frozen by closeout 2026-07-03 (was Proposed). Spec-only: no bounded-context implementation exists. Unfreeze when PRD-003 is produced and a Contributor Studio surface is scheduled as a workstream.
 
 ## Date
 

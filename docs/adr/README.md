@@ -14,7 +14,7 @@ revised by writing a new ADR that supersedes the old one, never by rewriting
 history in place. Superseded records move to [`superseded/`](superseded/) and keep
 a forward pointer to whatever replaced them.
 
-The numbering runs ADR-011 through ADR-127 with gaps (early consolidation records
+The numbering runs ADR-011 through ADR-128 with gaps (early consolidation records
 ADR-001..010 and ADR-015..026 were folded into later ones). Sections below group the
 records by theme; within a theme they are ordered by number. Status is read from
 each record's own `## Status` block, so it reflects the decision's real lifecycle
@@ -78,7 +78,7 @@ render loop. See [Physics & GPU engine](../explanation/physics-gpu-engine.md).
 | ADR | Title | Status |
 |-----|-------|--------|
 | [013](ADR-013-render-performance.md) | Zero-Allocation Render Loop | Accepted |
-| [031](ADR-031-gpu-analytics-correctness-and-wiring.md) | GPU Analytics Correctness and Wiring | Proposed |
+| [031](ADR-031-gpu-analytics-correctness-and-wiring.md) | GPU Analytics Correctness and Wiring | Partial |
 | [039](ADR-039-settings-consolidation.md) | Settings/Physics Object Consolidation | Implemented |
 | [069](ADR-069-force-preset-system.md) | Force-Preset System & Per-Edge-Category Forces | Implementing |
 | [070](ADR-070-cuda-integration-hardening.md) | CUDA Integration Hardening | Implementing |
@@ -101,7 +101,7 @@ governed ontology writeback loop. See [Ontology pipeline](../explanation/ontolog
 | [045](ADR-045-policy-engine-approach.md) | Policy Engine Approach | Accepted |
 | [049](ADR-049-insight-migration-broker-workflow.md) | Insight Migration Broker Workflow | Implemented |
 | [064](ADR-064-typed-graph-schema.md) | Typed Graph Schema (UA-Aligned, URN-Bound) | Implementing |
-| [067](ADR-067-ontobricks-mcp-bridge.md) | Ontobricks MCP Bridge & Reasoning Federation | Proposed |
+| [067](ADR-067-ontobricks-mcp-bridge.md) | Ontobricks MCP Bridge & Reasoning Federation | Deferred (frozen 2026-07-03) |
 | [072](ADR-072-autordf2gml-feature-engineering.md) | AutoRDF2GML-Inspired Feature Engineering Pipeline | Partial (1 of 6 components) |
 | [099](ADR-099-reasoner-posture-whelk-el-primary.md) | Reasoner Posture — Whelk-rs EL Primary, DL Deep-Check Offline | Accepted |
 | [100](ADR-100-canonical-iri-and-vocabulary-alignment.md) | Canonical IRI Scheme, rdf:type Classification, Vocabulary Alignment | Accepted |
@@ -164,7 +164,7 @@ and the [agentbox subsystem docs](../../agentbox/docs/README.md).
 | [034](ADR-034-needle-bead-provenance.md) | Adopt NEEDLE Patterns for Bead Provenance System | Accepted |
 | [058](ADR-058-mad-to-agentbox-migration.md) | Deprecate multi-agent-docker in Favour of agentbox | Accepted |
 | [059](ADR-059-bidirectional-agent-channel-server.md) | Bi-directional URI-keyed Agent Activity Channel | Accepted |
-| [073](ADR-073-private-nostr-relay-mesh-topology.md) | Private Nostr Relay Mesh Topology & NIP-42 AUTH | Proposed |
+| [073](ADR-073-private-nostr-relay-mesh-topology.md) | Private Nostr Relay Mesh Topology & NIP-42 AUTH | Deferred (frozen 2026-07-03) |
 | [075](ADR-075-is-envelope-message-contract.md) | Inter-System Message Envelope (IS-Envelope v1) | Proposed |
 | [076](ADR-076-nostr-core-absorption-into-upstream.md) | Absorb Forum nostr-core into Upstream nostr Crate | Proposed |
 | [092](ADR-092-android-nostr-client-and-signer.md) | Android Nostr Client and Signer for the Mobile Bridge | Deferred (frozen 2026-07-03) |
@@ -182,10 +182,10 @@ cutover, QE policy, secrets management, infographics and contracts. See
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [057](ADR-057-contributor-enablement-platform.md) | Contributor Enablement Platform | Proposed |
+| [057](ADR-057-contributor-enablement-platform.md) | Contributor Enablement Platform | Deferred (frozen 2026-07-03) |
 | [062](ADR-062-qe-prd-adr-ddd-graph-scaffolding.md) | QE Graph Scaffolding — PRD / ADR / DDD Traceability via URN | Accepted |
 | [063](ADR-063-urn-traced-operations.md) | URN-Traced Operations Across All Subsystems | Accepted |
-| [065](ADR-065-rust-code-analysis-pipeline.md) | Rust-Native Code Analysis Pipeline | Proposed |
+| [065](ADR-065-rust-code-analysis-pipeline.md) | Rust-Native Code Analysis Pipeline | Deferred (frozen 2026-07-03) |
 | [068](ADR-068-logseq-block-level-fidelity.md) | Logseq Block-Level Fidelity (Matryca-Heritage Parser) | Implementing |
 | [077](ADR-077-ecosystem-qe-policy.md) | Ecosystem Quality Engineering Policy | Proposed |
 | [078](ADR-078-cross-substrate-library-convergence.md) | Cross-Substrate Library Convergence | Deferred (frozen 2026-07-03) |

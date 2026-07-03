@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Mesh federation is standalone-first; the VC-side symmetric relay mesh / NIP-42 AUTH bridge is parked. Unfreeze when a mesh deployment mode is scheduled. |
 | Drives | PRD-010 G3, G4, G7 |
 | Supersedes | — |
 | Superseded by | — |

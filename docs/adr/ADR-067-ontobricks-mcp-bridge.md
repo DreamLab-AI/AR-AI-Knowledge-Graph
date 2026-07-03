@@ -1,6 +1,6 @@
 # ADR-067: Ontobricks MCP Bridge & Reasoning Federation
 
-**Status:** Proposed
+**Status:** Deferred — frozen by closeout 2026-07-03 (was Proposed). Spec-only: the isolating `crates/ontobricks-bridge` crate does not exist. Unfreeze when the boundary crate (TLS-pinning, inferred-triple quarantine, egress allowlist) is scheduled.
 **Date:** 2026-05-01
 **Deciders:** jjohare, VisionClaw platform team
 **Supersedes:** None

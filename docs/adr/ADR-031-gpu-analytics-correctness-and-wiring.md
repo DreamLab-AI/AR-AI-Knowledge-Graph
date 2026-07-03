@@ -1,6 +1,6 @@
 # ADR-031: GPU Analytics Correctness and Wiring
 
-**Status**: Proposed
+**Status**: Partial — updated 2026-07-03: the typed data-channel and the LOF kernel have landed (`crates/visionclaw-domain/src/analytics.rs` `NodeAnalytics`; `app_state.rs` consumes `binary_protocol::NodeAnalytics`; `compute_lof_kernel` rewritten with `lof_scores` in `crates/visionclaw-gpu/src/cuda_sources/gpu_clustering_kernels.cu`). The remaining kernel-correctness decisions — multi-level Louvain aggregation, DBSCAN border labelling and the PageRank FFI switch — are **not** yet confirmed in code. Originally proposed 2026-06-02.
 **Date**: 2026-06-02
 **Deciders**: VisionClaw team
 
