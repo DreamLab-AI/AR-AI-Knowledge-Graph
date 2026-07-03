@@ -443,10 +443,21 @@ pub async fn get_trust_status(state: web::Data<AppState>) -> impl Responder {
         "status": status,
         "shacl": {
             "shapesLoaded": shapes_loaded,
+            // The ingest gate is the SHACL-lite Rust matcher running in advisory
+            // mode: violations are logged + metered but NEVER block a write
+            // (`shacl_report` is surfaced for dashboards, no callsite rejects on
+            // it). Reporting "enforcing" here would be false — PRD-022 WS-1
+            // truthful state is advisory across both paths.
+            "engine": "shacl-lite",
             "gateModes": {
-                "writePaths": "enforcing",
+                "writePaths": "advisory",
                 "readPaths": "advisory"
             },
+            // The `shapesLoaded` count above are real W3C SHACL NodeShapes loaded
+            // into the shapes graph at startup (queryable/provenance), but the
+            // running validator does not yet consume them: full W3C-SHACL
+            // enforcement over these shapes is tracked WS-1 residual.
+            "w3cEnforcement": "deferred",
             "healthy": shapes_healthy
         },
         "provenance": {
