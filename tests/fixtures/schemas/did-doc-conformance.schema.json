@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://dreamlab.ai/schemas/fixtures/did-doc-conformance.schema.json",
   "title": "DID Document conformance fixture (ADR-125 / ADR-074 §D2′ — Multikey single form)",
-  "description": "Envelope schema for did:nostr DID-document conformance vectors. The canonical document (valid:true vectors) is the ADR-125 §2 single form: two-context [https://w3id.org/did, https://w3id.org/nostr/context], top-level type 'DIDNostr', a single 'Multikey' verificationMethod whose publicKeyMultibase matches ^fe70102[0-9a-f]{64}$ and equals 'fe70102'+the DID-body hex (I2). The multibase==id-body, controller==id, lowercase-hex, and 71-char-length assertions are conformance-logic enforced by the harness per the vector's `valid` flag; this schema validates structure only (so negative documents still load and parse).",
+  "description": "Envelope schema for did:nostr DID-document conformance vectors. The canonical document (valid:true vectors) is the ADR-125 §2 single form: two-context [https://www.w3.org/ns/cid/v1, https://w3id.org/nostr/context] (cid/v1 per updated did:nostr CG spec https://nostrcg.github.io/did-nostr/), top-level type 'DIDNostr', a single 'Multikey' verificationMethod whose publicKeyMultibase matches ^fe70102[0-9a-f]{64}$ and equals 'fe70102'+the DID-body hex (I2). The multibase==id-body, controller==id, lowercase-hex, and 71-char-length assertions are conformance-logic enforced by the harness per the vector's `valid` flag; this schema validates structure only (so negative documents still load and parse).",
   "type": "object",
   "required": ["_meta", "vectors"],
   "additionalProperties": false,

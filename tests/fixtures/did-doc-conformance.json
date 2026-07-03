@@ -16,7 +16,7 @@
       "tier": 3,
       "document": {
         "@context": [
-          "https://w3id.org/did",
+          "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd",
@@ -47,7 +47,7 @@
       "tier": 1,
       "document": {
         "@context": [
-          "https://w3id.org/did",
+          "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9",
@@ -95,7 +95,7 @@
       "tier": 1,
       "document": {
         "@context": [
-          "https://w3id.org/did",
+          "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9",
@@ -119,7 +119,7 @@
       "tier": 1,
       "document": {
         "@context": [
-          "https://w3id.org/did",
+          "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9",
@@ -143,7 +143,7 @@
       "tier": 1,
       "document": {
         "@context": [
-          "https://w3id.org/did",
+          "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:8E0D3D3EB2881EC137A11DEBE736A9086715A8C8BEEEDA615780064D68BC25DD",
@@ -167,7 +167,7 @@
       "tier": 1,
       "document": {
         "@context": [
-          "https://w3id.org/did",
+          "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd",
