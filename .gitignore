@@ -245,3 +245,4 @@ data/sqlite/
 agentbox/.env.solid-pods
 # Godot editor cache (xr-client)
 xr-client/.godot/
+nntp-stack/
