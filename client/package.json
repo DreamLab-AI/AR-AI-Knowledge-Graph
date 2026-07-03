@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "types:generate": "cd .. && cargo run --bin generate_types",
     "types:watch": "cd .. && cargo watch -x 'run --bin generate_types'",
     "types:clean": "rm -rf src/types/generated",

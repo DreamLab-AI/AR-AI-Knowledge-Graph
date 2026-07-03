@@ -1,0 +1,191 @@
+name: CI
+
+# VisionClaw backend + client CI (closeout 2026-07-03, FINISH F1).
+#
+# This is the workflow the removed README "Build" badge used to point at — it
+# never existed until now, so ~163 Rust test files and ~42 Vitest suites had
+# zero regression protection on push/PR.
+#
+# Gating policy
+# ------------
+#   BLOCKING (real merge gates — never continue-on-error):
+#     * rust-fmt   — cargo fmt --check across every crate
+#     * rust-cpu   — build + clippy + test the CUDA-free workspace crates
+#     * client     — the client Vitest unit/component suite
+#
+#   NON-BLOCKING (need physical hardware or a live stack — continue-on-error;
+#   do NOT add these to branch-protection required checks):
+#     * client-quality — eslint + tsc --noEmit (advisory until the tree is clean)
+#     * rust-gpu       — full workspace build + GPU kernel tests (self-hosted GPU)
+#     * playwright     — end-to-end suite against a running stack (manual only)
+#
+# Why the CPU/GPU split
+# ---------------------
+#   crates/visionclaw-gpu and the root visionclaw-server crate unconditionally
+#   link the CUDA driver (cust / cudarc) and their kernel tests execute CUDA at
+#   runtime, so they cannot build or run on a GPU-less GitHub-hosted runner. The
+#   other seven workspace crates (contracts, domain, protocol, adapters,
+#   ontology, actors, xr-presence) are CUDA-free and carry the bulk of the
+#   pure-logic test corpus, so they form the blocking gate here.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  # ── BLOCKING ──────────────────────────────────────────────────────────────
+  rust-fmt:
+    name: Rust format (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain (rustfmt)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      # rustfmt only parses source; it needs no CUDA and covers every crate,
+      # including visionclaw-gpu and the root server crate.
+      - name: cargo fmt --all --check
+        run: cargo fmt --all --check
+
+  rust-cpu:
+    name: Rust CPU crates — build, clippy, test (blocking)
+    runs-on: ubuntu-latest
+    env:
+      # The CUDA-free workspace crates. The gpu crate and the root
+      # visionclaw-server crate link libcuda and are covered by rust-gpu below.
+      CPU_CRATES: >-
+        -p visionclaw-contracts
+        -p visionclaw-domain
+        -p visionclaw-protocol
+        -p visionclaw-adapters
+        -p visionclaw-ontology
+        -p visionclaw-actors
+        -p visionclaw-xr-presence
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain (clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install native build deps
+        # oxigraph/oxrocksdb-sys (bindgen) and rusqlite `bundled` need clang +
+        # cmake; the rest are already present on ubuntu-latest.
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev cmake pkg-config
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+      - name: cargo build (CPU crates)
+        run: cargo build ${{ env.CPU_CRATES }}
+      - name: cargo clippy (CPU crates)
+        # Blocks on clippy hard errors (deny-by-default lints, compile errors).
+        # Tighten to `-- -D warnings` once the existing warning backlog is cleared.
+        run: cargo clippy ${{ env.CPU_CRATES }} --all-targets
+      - name: cargo test (CPU crates)
+        run: cargo test ${{ env.CPU_CRATES }}
+
+  client:
+    name: Client Vitest (blocking)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: npm ci
+        run: npm ci
+      # `npm run test` == `vitest run`. Vitest does not import the cargo-generated
+      # TypeScript types, so the suite runs without a Rust toolchain.
+      - name: Vitest unit/component suite
+        run: npm run test
+
+  # ── NON-BLOCKING (advisory / hardware-gated) ──────────────────────────────
+  client-quality:
+    name: Client lint + typecheck (advisory)
+    runs-on: ubuntu-latest
+    # Advisory only: the client tree has not yet been audited lint/type clean.
+    # Promote to a blocking gate (remove continue-on-error, fold into `client`)
+    # once eslint and `tsc --noEmit` both pass.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - name: ESLint
+        run: npm run lint
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+
+  rust-gpu:
+    name: Rust full workspace + GPU tests (non-blocking, self-hosted GPU)
+    # visionclaw-gpu and the root visionclaw-server crate link libcuda
+    # (cust/cudarc) and the kernel tests execute CUDA at runtime, so this needs
+    # a physical GPU. Runs on the project's self-hosted CUDA runner and on
+    # manual dispatch; skipped on pull_request so PRs never wait on GPU-runner
+    # availability. NON-BLOCKING — do not add to branch-protection required checks.
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, gpu]
+    continue-on-error: true
+    env:
+      # Force the portable sm_75 PTX baseline and skip nvidia-smi arch autodetect
+      # (see crates/visionclaw-gpu/build.rs).
+      DOCKER_ENV: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: cargo build (full workspace)
+        run: cargo build --workspace
+      - name: cargo test (full workspace, incl. GPU kernels)
+        run: cargo test --workspace
+
+  playwright:
+    name: Client Playwright E2E (optional, manual)
+    # The Playwright specs target a running stack: baseURL defaults to
+    # http://localhost:3001 and playwright.config.ts sets `webServer: undefined`,
+    # so the Rust backend + client must already be up. Manual-dispatch only —
+    # set TEST_BASE_URL to point at the live stack. Optional: not a merge gate.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E suite
+        run: npm run test:e2e
