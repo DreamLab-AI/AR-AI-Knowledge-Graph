@@ -3,17 +3,17 @@
     "source": "DreamLab-internal",
     "commit": "in-tree",
     "upstream_path": "docs/adr/ADR-125-did-nostr-multikey-convergence.md#2",
-    "fetched_at": "2026-06-15",
+    "fetched_at": "2026-07-03",
     "license": "internal",
-    "spec": "ADR-125 / ADR-074 §D2′ — Canonical did:nostr Multikey DID Document (single form, fe70102 multibase)",
-    "ground_truth": "melvincarvalho/create-agent index.js; did-nostr CG spec nostrcg.github.io/did-nostr",
-    "vector_count": 7,
-    "schema": "fields: case, tier (1|3 — fixture-organisation label only; ADR-125 §D4′ collapses the tier split), document (DID Document JSON-LD object), valid (bool), violation? (which D-rule from ADR-074 §D2′/ADR-125 the negative case targets), note?"
+    "spec": "did:nostr CG spec (https://nostrcg.github.io/did-nostr/) — canonical Multikey DID Document per ADR-074 §D2′ / ADR-125, fully aligned to the three CG-spec example shapes (minimal / enhanced / complete)",
+    "ground_truth": "https://nostrcg.github.io/did-nostr/ (canonical examples); melvincarvalho/create-agent index.js",
+    "vector_count": 8,
+    "schema": "fields: case, shape (minimal|enhanced|complete — which CG-spec example the positive vector mirrors), document (DID Document JSON-LD object), valid (bool), violation? (which rule the negative targets), note?"
   },
   "vectors": [
     {
-      "case": "canonical-multikey-full",
-      "tier": 3,
+      "case": "canonical-minimal-required-only",
+      "shape": "minimal",
       "document": {
         "@context": [
           "https://www.w3.org/ns/cid/v1",
@@ -30,27 +30,59 @@
           }
         ],
         "authentication": ["#key1"],
+        "assertionMethod": ["#key1"]
+      },
+      "valid": true,
+      "note": "CG-spec minimal (offline / Tier-2) form: the six REQUIRED fields only. Optional members (alsoKnownAs, service, profile, follows, modified) are OMITTED entirely — no empty service:[]. cid/v1 context, top-level type DIDNostr, single Multikey VM, publicKeyMultibase = fe70102 + the same x-only hex (I2 round-trip), relative #key1 refs."
+    },
+    {
+      "case": "canonical-enhanced-alsoknownas-relay",
+      "shape": "enhanced",
+      "document": {
+        "@context": [
+          "https://www.w3.org/ns/cid/v1",
+          "https://w3id.org/nostr/context"
+        ],
+        "id": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd",
+        "alsoKnownAs": [
+          "https://pod.example.com/8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd/profile/card#me",
+          "https://social.example.com/@alice",
+          "at://alice.bsky.social"
+        ],
+        "type": "DIDNostr",
+        "verificationMethod": [
+          {
+            "id": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd#key1",
+            "type": "Multikey",
+            "controller": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd",
+            "publicKeyMultibase": "fe701028e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd"
+          }
+        ],
+        "authentication": ["#key1"],
         "assertionMethod": ["#key1"],
         "service": [
           {
-            "id": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd#webid",
-            "type": "SolidWebID",
-            "serviceEndpoint": "https://pod.example.com/8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd/profile/card#me"
+            "id": "did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd#relay1",
+            "type": "Relay",
+            "serviceEndpoint": "wss://relay.damus.io/"
           }
         ]
       },
       "valid": true,
-      "note": "Canonical did:nostr Multikey document per ADR-125 §2 / ADR-074 §D2′. Two-context, top-level type DIDNostr, single Multikey VM, publicKeyMultibase = fe70102 + the same x-only hex (I2 round-trip), #key1 fragment, relative auth/assertionMethod. service[] carries the agentbox SolidWebID extension (§2.3) — optional production superset, not the create-agent minimal form."
+      "note": "CG-spec enhanced form: cross-platform identity links in TOP-LEVEL alsoKnownAs (WebID + ActivityPub + AT-proto) — the spec's canonical location, superseding the ADR-125 §2.3 interim service[] SolidWebID routing — plus a Relay service with a trailing-slash wss endpoint."
     },
     {
-      "case": "canonical-multikey-minimal-empty-service",
-      "tier": 1,
+      "case": "canonical-complete-profile-follows",
+      "shape": "complete",
       "document": {
         "@context": [
           "https://www.w3.org/ns/cid/v1",
           "https://w3id.org/nostr/context"
         ],
         "id": "did:nostr:611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9",
+        "alsoKnownAs": [
+          "https://pod.example.com/611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9/profile/card#me"
+        ],
         "type": "DIDNostr",
         "verificationMethod": [
           {
@@ -62,14 +94,31 @@
         ],
         "authentication": ["#key1"],
         "assertionMethod": ["#key1"],
-        "service": []
+        "service": [
+          {
+            "id": "did:nostr:611df01bfcf85c26ae65453b772d8f1dfd25c264621c0277e1fc1518686faef9#relay1",
+            "type": "Relay",
+            "serviceEndpoint": "wss://relay.damus.io/"
+          }
+        ],
+        "profile": {
+          "name": "Alice",
+          "about": "Building the decentralized web",
+          "picture": "https://example.com/alice.jpg",
+          "created_at": 1737906600
+        },
+        "follows": [
+          "did:nostr:32e1827635450ebb3c5a7d12c1f8e7b2b514439ac10a67eef3d9fd9c5c68e245",
+          "did:nostr:46fcbe3065eaf1ae7811465924e48923363ff3f526bd6f73d7c184147700e3a8"
+        ],
+        "modified": "2025-01-26T15:50:00Z"
       },
       "valid": true,
-      "note": "Minimal canonical form — byte-identical to the create-agent reference output (service: []). Same single shape as the full case; only service[] differs (ADR-125 §2.3). No tier distinction in the document itself (D4′)."
+      "note": "CG-spec complete form: enhanced + kind-0 profile object (name/about/picture/created_at), a bounded follows[] of bare did:nostr strings, and modified (dcterms:modified, ISO-8601 UTC). All optional members present."
     },
     {
       "case": "negative-stale-2019-suite-publickeyhex",
-      "tier": 3,
+      "shape": "minimal",
       "document": {
         "@context": [
           "https://www.w3.org/ns/did/v1",
@@ -87,12 +136,12 @@
         "authentication": ["did:nostr:8e0d3d3eb2881ec137a11debe736a9086715a8c8beeeda615780064d68bc25dd#key-0"]
       },
       "valid": false,
-      "violation": "ADR-074 §D2′ / ADR-125 D2′ (polarity inverted)",
-      "note": "The superseded 2019 shape: SchnorrSecp256k1VerificationKey2019 + publicKeyHex + secp256k1-2019/v1 context + #key-0 + no top-level DIDNostr. Was the canonical positive under ADR-074 §D2; now MUST be rejected by every conformance gate (ADR-125 §D13′)."
+      "violation": "ADR-125 D2′/D13′ (polarity inverted)",
+      "note": "The superseded 2019 shape: SchnorrSecp256k1VerificationKey2019 + publicKeyHex + secp256k1-2019/v1 context + #key-0 + no top-level DIDNostr. MUST be rejected by every conformance gate."
     },
     {
       "case": "negative-base58btc-z-multibase",
-      "tier": 1,
+      "shape": "minimal",
       "document": {
         "@context": [
           "https://www.w3.org/ns/cid/v1",
@@ -115,8 +164,8 @@
       "note": "base58btc (z…) multibase — the pre-convergence encoding. Canonical is base16 fe70102 (regex ^fe70102[0-9a-f]{64}$, length 71). MUST be rejected."
     },
     {
-      "case": "negative-missing-parity-67-char-multibase",
-      "tier": 1,
+      "case": "negative-missing-parity-multibase",
+      "shape": "minimal",
       "document": {
         "@context": [
           "https://www.w3.org/ns/cid/v1",
@@ -136,11 +185,11 @@
       },
       "valid": false,
       "violation": "ADR-125 D3′ (I2)",
-      "note": "The 67-char fe701<x> form that omits the 0x02 even-y parity byte — does NOT round-trip to the key. The secp256k1-pub codec is defined over the 33-byte compressed point (02 ‖ X); the parity byte is load-bearing, not a separator. Length 71 with the 02 prefix is invariant. MUST be rejected."
+      "note": "The fe701<x> form that omits the 0x02 even-y parity byte — does NOT round-trip to the key. The secp256k1-pub codec is defined over the 33-byte compressed point (02 ‖ X); the parity byte is load-bearing. MUST be rejected."
     },
     {
       "case": "negative-uppercase-hex-id",
-      "tier": 1,
+      "shape": "minimal",
       "document": {
         "@context": [
           "https://www.w3.org/ns/cid/v1",
@@ -160,11 +209,11 @@
       },
       "valid": false,
       "violation": "ADR-074 §D1 (retained, I4)",
-      "note": "DID id and multibase body contain uppercase hex; canonical form is lowercase only (regex ^[0-9a-f]{64}$). The §D1 negative survives the convergence unchanged."
+      "note": "DID id and multibase body contain uppercase hex; canonical form is lowercase only (regex ^[0-9a-f]{64}$). MUST be rejected."
     },
     {
       "case": "negative-mismatched-controller",
-      "tier": 1,
+      "shape": "minimal",
       "document": {
         "@context": [
           "https://www.w3.org/ns/cid/v1",
@@ -183,8 +232,8 @@
         "authentication": ["#key1"]
       },
       "valid": false,
-      "violation": "ADR-074 §D2′ / ADR-125 D2′",
-      "note": "verificationMethod.controller does not match document.id; verifiers MUST reject. The controller=id invariant survives the convergence unchanged."
+      "violation": "ADR-125 D2′ (controller=id)",
+      "note": "verificationMethod.controller does not match document.id; verifiers MUST reject."
     }
   ]
 }

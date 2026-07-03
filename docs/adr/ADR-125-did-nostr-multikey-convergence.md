@@ -101,6 +101,24 @@ Decision (not invariant-bound): the **WebID binding moves into a `service` entry
 
 The existing `solid-pod`, `nostr-relay`, and `mesh` service entries from ADR-074 §D2 remain permitted in the `service[]` array (they were always optional, and consumers tolerate absence — ADR-074 §D2 closing paragraph). `service: []` is the minimal/Tier-1-equivalent form; populated `service[]` is the production form. **This is the only place the document carries optional supersets; the `@context`, `type`, and `verificationMethod` block are fixed.** This does NOT reintroduce a tier split — it is one document with an optionally-populated `service[]`.
 
+> **Amendment 2026-07-03 (full CG-spec-example alignment — supersedes this §2.3 decision).**
+> The updated did:nostr CG spec (<https://nostrcg.github.io/did-nostr/>) publishes three
+> worked example shapes (minimal / enhanced / complete), and DreamLab now aligns to them
+> verbatim as a first-class collaborator on the standard. Two changes to the §2.3 decision:
+> **(1)** the WebID (and any cross-platform identity links — ActivityPub, AT-proto) move
+> to **top-level `alsoKnownAs`**, the spec's canonical location for such links, rather than
+> a `service[] SolidWebID` entry. `service[]` now carries only actual service endpoints;
+> relay entries use `type: "Relay"` with a trailing-slash `wss://…/` endpoint.
+> **(2)** Optional members follow the spec's **omit-when-empty** model — an empty
+> `service: []` is no longer emitted (the minimal form is the six required fields only), and
+> the `profile` (kind-0 metadata), `follows` (bounded array of bare `did:nostr:` strings),
+> and `modified` (`dcterms:modified`, ISO-8601 UTC) members from the spec's "complete"
+> example are now supported by the renderer (`render_did_document_complete`). The
+> `@context` (cid/v1), `type: DIDNostr`, `Multikey` / `fe70102` VM, and relative `#key1`
+> refs are unchanged. Conformance fixtures re-baselined to the three example shapes and
+> re-propagated byte-identically across solid-pod-rs, agentbox, nostr-rust-forum, and
+> VisionClaw.
+
 ## 3. Decision — replacement clauses for ADR-074
 
 ### D2′ (supersedes D2) — Canonical DID Document shape
