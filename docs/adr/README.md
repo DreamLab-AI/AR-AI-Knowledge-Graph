@@ -102,12 +102,12 @@ governed ontology writeback loop. See [Ontology pipeline](../explanation/ontolog
 | [049](ADR-049-insight-migration-broker-workflow.md) | Insight Migration Broker Workflow | Implemented |
 | [064](ADR-064-typed-graph-schema.md) | Typed Graph Schema (UA-Aligned, URN-Bound) | Implementing |
 | [067](ADR-067-ontobricks-mcp-bridge.md) | Ontobricks MCP Bridge & Reasoning Federation | Proposed |
-| [072](ADR-072-autordf2gml-feature-engineering.md) | AutoRDF2GML-Inspired Feature Engineering Pipeline | Accepted |
+| [072](ADR-072-autordf2gml-feature-engineering.md) | AutoRDF2GML-Inspired Feature Engineering Pipeline | Partial (1 of 6 components) |
 | [099](ADR-099-reasoner-posture-whelk-el-primary.md) | Reasoner Posture — Whelk-rs EL Primary, DL Deep-Check Offline | Accepted |
 | [100](ADR-100-canonical-iri-and-vocabulary-alignment.md) | Canonical IRI Scheme, rdf:type Classification, Vocabulary Alignment | Accepted |
 | [101](ADR-101-triple-store-migration-framework.md) | Triple-Store Migration Framework for Oxigraph | Accepted |
 | [106](ADR-106-sparql-patch-ontology.md) | SPARQL PATCH for Ontology Mutations | Accepted |
-| [112](ADR-112-ontology-augmentation-retrieval-spine.md) | Ontology Augmentation — Shared-Library Retrieval Spine | Proposed |
+| [112](ADR-112-ontology-augmentation-retrieval-spine.md) | Ontology Augmentation — Shared-Library Retrieval Spine | Implemented |
 | [114](ADR-114-ontology-class-index-memory-substrate.md) | Memory Substrate for the Ontology Class-Summary Index | Proposed |
 | [121](ADR-121-self-improving-ontology-writeback-loop.md) | Self-Improving Ontology via Governed Writeback | Deferred (frozen 2026-07-03) |
 | [122](ADR-122-two-speed-writeback-governance-routing.md) | Two-Speed Writeback — Governance Routing by Epistemic Class | Deferred (frozen 2026-07-03) |
@@ -124,7 +124,7 @@ per-user sovereignty. See [Solid sidecar architecture](../explanation/solid-side
 | [027](ADR-027-pod-backed-graph-views.md) | Pod-backed Graph Views | Implemented |
 | [029](ADR-029-type-index-discovery.md) | Type Index for Agent and View Discovery | Implemented |
 | [030](ADR-030-agent-memory-pods.md) | Agent Memory in Solid Pods | Accepted |
-| [032](ADR-032-embed-solid-pod-rs-library.md) | Embed solid-pod-rs as Rust Library (replace JSS sidecar) | Proposed |
+| [032](ADR-032-embed-solid-pod-rs-library.md) | Embed solid-pod-rs as Rust Library (replace JSS sidecar) | Implemented |
 | [044](ADR-044-connector-governance-privacy.md) | Connector Governance and Privacy Boundaries | Accepted |
 | [050](ADR-050-pod-backed-kgnode-schema.md) | Pod-backed KGNode Schema — Sovereign Private Nodes | Ratified |
 | [051](ADR-051-visibility-transitions.md) | Visibility Transitions — Publish / Unpublish Saga | Ratified |
