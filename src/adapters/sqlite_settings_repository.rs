@@ -1050,3 +1050,90 @@ fn _silence_unused_error_variant() -> SettingsRepositoryError {
 fn _silence_unused_rusqlite_helper(e: rusqlite::Error) -> SettingsRepositoryError {
     map_rusqlite_err(e)
 }
+
+#[cfg(test)]
+mod user_filter_persistence_tests {
+    //! Round-trip coverage for the per-user filter/settings persistence path
+    //! wired by the REST (`PUT/GET /api/user/filter`) and WebSocket
+    //! (`filter_update`) handlers. Both scope [`CURRENT_OWNER_PUBKEY`] to the
+    //! authenticated pubkey and read/write the `settings` table's owner layer
+    //! (ADR-11 §D5), so exercising the adapter under that scope verifies the
+    //! mechanism the handlers depend on.
+    use super::*;
+
+    async fn mem_repo() -> SqliteSettingsRepository {
+        SqliteSettingsRepository::open(Path::new(":memory:"))
+            .await
+            .expect("open in-memory settings repo")
+    }
+
+    #[tokio::test]
+    async fn user_filter_round_trips_within_owner_scope() {
+        let repo = mem_repo().await;
+        let alice = "npub_alice".to_string();
+
+        let filter = serde_json::json!({
+            "pubkey": alice,
+            "enabled": true,
+            "quality_threshold": 0.9,
+            "max_nodes": 500,
+        });
+
+        CURRENT_OWNER_PUBKEY
+            .scope(Some(alice.clone()), async {
+                repo.set_setting(
+                    "user_filter",
+                    SettingValue::Json(filter.clone()),
+                    Some("test"),
+                )
+                .await
+            })
+            .await
+            .expect("persist alice filter");
+
+        let got = CURRENT_OWNER_PUBKEY
+            .scope(Some(alice.clone()), async {
+                repo.get_setting("user_filter").await
+            })
+            .await
+            .expect("read alice filter");
+
+        if let Some(SettingValue::Json(v)) = got {
+            assert_eq!(v, filter, "persisted filter must round-trip unchanged");
+        } else {
+            panic!("expected Alice's persisted filter, got {:?}", got.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn user_filter_is_isolated_per_owner() {
+        let repo = mem_repo().await;
+        let alice = "npub_alice".to_string();
+        let bob = "npub_bob".to_string();
+
+        CURRENT_OWNER_PUBKEY
+            .scope(Some(alice.clone()), async {
+                repo.set_setting(
+                    "user_filter",
+                    SettingValue::Json(serde_json::json!({ "pubkey": alice, "enabled": true })),
+                    Some("test"),
+                )
+                .await
+            })
+            .await
+            .expect("persist alice filter");
+
+        // Bob stored nothing and no global row exists → the layered read yields None.
+        let bob_view = CURRENT_OWNER_PUBKEY
+            .scope(Some(bob.clone()), async {
+                repo.get_setting("user_filter").await
+            })
+            .await
+            .expect("read bob filter");
+
+        assert!(
+            bob_view.is_none(),
+            "Bob must not observe Alice's per-user filter"
+        );
+    }
+}

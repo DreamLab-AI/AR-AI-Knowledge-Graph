@@ -15,7 +15,8 @@ use crate::settings::models::{ConstraintSettings, NodeFilterSettings, QualityGat
 use crate::settings::auth_extractor::{AuthenticatedUser, OptionalAuth};
 use crate::adapters::SqliteSettingsRepository;
 /// Placeholder for the per-user filter record. Full SQLite migration in Phase 2.
-// todo!("Phase 2: migrate UserFilter to SqliteSettingsRepository / SQLite schema")
+// Persisted per-user via the `settings` table's owner layer (ADR-11 §D5) —
+// see `update_user_filter` / `get_user_filter`, keyed by `USER_FILTER_KEY`.
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize, Clone)]
 pub struct UserFilter {
     pub pubkey: String,
@@ -1065,11 +1066,25 @@ pub async fn get_all_settings(
     settings_repo: web::Data<Arc<SqliteSettingsRepository>>,
     auth: OptionalAuth,
 ) -> impl Responder {
-    // Per-user settings persistence deferred to Phase 2 (ADR-11 §D5).
-    // todo!("Phase 2: implement get_user_settings on SqliteSettingsRepository")
-    let _ = auth; // suppress unused warning while Phase 2 is pending
-    info!("GET /api/settings/all (user-specific settings pending Phase 2 SQLite migration)");
-    get_all_from_actor(&state, &settings_repo).await
+    use crate::adapters::sqlite_settings_repository::CURRENT_OWNER_PUBKEY;
+    // Per-user layered resolution (ADR-11 §D5): scope the repository reads to
+    // the authenticated owner so a user's own overrides win, falling back to
+    // the global layer (owner_pubkey = ''). Anonymous requests resolve the
+    // global layer only. The layered SELECT lives in SqliteSettingsRepository
+    // (`owner_pubkey = ?2 OR owner_pubkey = ''`), so scoping the task-local is
+    // all the handler needs to do.
+    match auth.0 {
+        Some(user) => {
+            info!("GET /api/settings/all (per-user layer for {})", user.pubkey);
+            CURRENT_OWNER_PUBKEY
+                .scope(Some(user.pubkey), get_all_from_actor(&state, &settings_repo))
+                .await
+        }
+        None => {
+            info!("GET /api/settings/all (global layer, anonymous)");
+            get_all_from_actor(&state, &settings_repo).await
+        }
+    }
 }
 
 async fn get_all_from_actor(
@@ -1142,29 +1157,107 @@ async fn get_all_from_actor(
 // User Filter Routes
 // ============================================================================
 
+/// Storage key for the per-user node visibility filter. The owner layer of the
+/// `settings` table (ADR-11 §D5) namespaces this per authenticated pubkey, so a
+/// single key resolves to distinct rows per user.
+const USER_FILTER_KEY: &str = "user_filter";
+
 /// GET /api/user/filter
-/// Phase 2 pending: per-user filter persistence via SQLite (ADR-11 §D5).
-/// todo!("Phase 2: implement get_user_filter on SqliteSettingsRepository")
+/// Reads the authenticated user's persisted filter from SQLite (ADR-11 §D5),
+/// scoping the layered read to the caller's owner layer. Falls back to the
+/// default filter when the user has never stored one.
 pub async fn get_user_filter(
-    _settings_repo: web::Data<Arc<SqliteSettingsRepository>>,
+    settings_repo: web::Data<Arc<SqliteSettingsRepository>>,
     auth: AuthenticatedUser,
 ) -> impl Responder {
-    info!("GET /api/user/filter for user: {} (returning defaults — Phase 2 pending)", auth.pubkey);
-    HttpResponse::Ok().json(UserFilter::default())
+    use crate::adapters::sqlite_settings_repository::CURRENT_OWNER_PUBKEY;
+
+    let repo = settings_repo.get_ref().clone();
+    let owner = auth.pubkey.clone();
+    let stored = CURRENT_OWNER_PUBKEY
+        .scope(Some(owner), async move { repo.get_setting(USER_FILTER_KEY).await })
+        .await;
+
+    match stored {
+        Ok(Some(SettingValue::Json(json))) => match serde_json::from_value::<UserFilter>(json) {
+            Ok(mut filter) => {
+                filter.pubkey = auth.pubkey.clone();
+                info!("GET /api/user/filter served persisted filter for user {}", auth.pubkey);
+                HttpResponse::Ok().json(filter)
+            }
+            Err(e) => {
+                warn!(
+                    "Stored user filter for {} failed to deserialize ({}); returning default",
+                    auth.pubkey, e
+                );
+                let mut filter = UserFilter::default();
+                filter.pubkey = auth.pubkey.clone();
+                HttpResponse::Ok().json(filter)
+            }
+        },
+        Ok(_) => {
+            info!("GET /api/user/filter no stored filter for user {}; returning default", auth.pubkey);
+            let mut filter = UserFilter::default();
+            filter.pubkey = auth.pubkey.clone();
+            HttpResponse::Ok().json(filter)
+        }
+        Err(e) => {
+            error!("Failed to read user filter for {}: {}", auth.pubkey, e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: format!("Failed to read user filter: {}", e),
+            })
+        }
+    }
 }
 
 /// PUT /api/user/filter
-/// Phase 2 pending: per-user filter persistence via SQLite (ADR-11 §D5).
-/// todo!("Phase 2: implement save_user_filter on SqliteSettingsRepository")
+/// Persists the authenticated user's filter to SQLite (ADR-11 §D5), scoping the
+/// write to the caller's owner layer so `GET /api/user/filter` round-trips it.
 pub async fn update_user_filter(
-    _settings_repo: web::Data<Arc<SqliteSettingsRepository>>,
+    settings_repo: web::Data<Arc<SqliteSettingsRepository>>,
     body: web::Json<UserFilter>,
     auth: AuthenticatedUser,
 ) -> impl Responder {
-    info!("PUT /api/user/filter for user: {} (Phase 2 pending — not persisted)", auth.pubkey);
+    use crate::adapters::sqlite_settings_repository::CURRENT_OWNER_PUBKEY;
+
     let mut filter = body.into_inner();
     filter.pubkey = auth.pubkey.clone();
-    HttpResponse::Ok().json(filter)
+
+    let filter_json = match serde_json::to_value(&filter) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Failed to serialize user filter for {}: {}", auth.pubkey, e);
+            return HttpResponse::InternalServerError().json(ErrorResponse {
+                error: format!("Failed to serialize user filter: {}", e),
+            });
+        }
+    };
+
+    let repo = settings_repo.get_ref().clone();
+    let owner = auth.pubkey.clone();
+    let persisted = CURRENT_OWNER_PUBKEY
+        .scope(Some(owner), async move {
+            repo.set_setting(
+                USER_FILTER_KEY,
+                SettingValue::Json(filter_json),
+                Some("Per-user node visibility filter (ADR-11 §D5)"),
+            )
+            .await
+        })
+        .await;
+
+    match persisted {
+        Ok(()) => {
+            info!("PUT /api/user/filter persisted for user {}", auth.pubkey);
+            HttpResponse::Ok().json(filter)
+        }
+        Err(e) => {
+            error!("Failed to persist user filter for {}: {}", auth.pubkey, e);
+            HttpResponse::InternalServerError().json(ErrorResponse {
+                error: format!("Failed to persist user filter: {}", e),
+            })
+        }
+    }
 }
 
 // ============================================================================

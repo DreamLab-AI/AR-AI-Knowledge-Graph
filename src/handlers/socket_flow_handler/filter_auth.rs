@@ -2,6 +2,9 @@ use actix::prelude::*;
 use log::{error, info, warn};
 
 use super::types::SocketFlowServer;
+use crate::settings::api::settings_routes::UserFilter;
+use crate::ports::settings_repository::{SettingValue, SettingsRepository};
+use crate::adapters::sqlite_settings_repository::CURRENT_OWNER_PUBKEY;
 
 /// Handle "authenticate" message -- NIP-98 and legacy token/pubkey paths.
 pub(crate) fn handle_authenticate(
@@ -233,15 +236,52 @@ pub(crate) fn handle_filter_update(
             })
             .map(|(success, pubkey_opt, update), act, ctx| {
                 if success {
-                    // Persist filter to SQLite settings repository if authenticated (ADR-11).
-                    // Phase 2 pending: save_user_filter not yet implemented on SqliteSettingsRepository.
-                    // todo!("Phase 2: implement save_user_filter on SqliteSettingsRepository")
+                    // Persist the per-user filter to SQLite (ADR-11 §D5) so it
+                    // round-trips with GET /api/user/filter. The filter is already
+                    // applied in-memory by the ClientCoordinatorActor above; this
+                    // writes the authenticated owner's layer via the same
+                    // `user_filter` key + task-local scope the REST handler uses.
                     if let Some(pubkey) = pubkey_opt {
-                        info!(
-                            "Filter updated for pubkey {}: enabled={}, max_nodes={:?} (SQLite persistence pending Phase 2)",
-                            pubkey, update.enabled, update.max_nodes
-                        );
-                        // Filter is applied in-memory only until Phase 2 SQLite migration is complete.
+                        let repo = act.app_state.sqlite_settings_repository.clone();
+                        let user_filter = UserFilter {
+                            pubkey: pubkey.clone(),
+                            enabled: update.enabled,
+                            quality_threshold: update.quality_threshold,
+                            authority_threshold: update.authority_threshold,
+                            filter_by_quality: update.filter_by_quality,
+                            filter_by_authority: update.filter_by_authority,
+                            filter_mode: update.filter_mode.clone(),
+                            max_nodes: update.max_nodes.map(|n| n as i64),
+                        };
+                        ctx.spawn(actix::fut::wrap_future::<_, SocketFlowServer>(async move {
+                            match serde_json::to_value(&user_filter) {
+                                Ok(json) => {
+                                    let persisted = CURRENT_OWNER_PUBKEY
+                                        .scope(Some(pubkey.clone()), async move {
+                                            repo.set_setting(
+                                                "user_filter",
+                                                SettingValue::Json(json),
+                                                Some("Per-user node visibility filter (ADR-11 §D5, WS filter_update)"),
+                                            )
+                                            .await
+                                        })
+                                        .await;
+                                    match persisted {
+                                        Ok(()) => info!(
+                                            "Persisted WS filter update for pubkey {} to SQLite",
+                                            pubkey
+                                        ),
+                                        Err(e) => error!(
+                                            "Failed to persist WS filter for {}: {}",
+                                            pubkey, e
+                                        ),
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to serialize WS filter for {}: {}", pubkey, e)
+                                }
+                            }
+                        }));
                     }
 
                     let response = serde_json::json!({
