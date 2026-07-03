@@ -1,7 +1,6 @@
 // Error handling components and utilities
 export { default as ErrorBoundary, useErrorBoundary } from '../ErrorBoundary';
 export { ErrorNotification, ConnectionStatusNotification, SettingsSyncErrorNotification, ValidationErrorNotification } from '../ErrorNotification';
-export { SettingsRetryStatus, GlobalSettingsRetryStatus } from '../SettingsRetryStatus';
 
 // Hooks
 export { useErrorHandler, type ErrorOptions, type ErrorContext } from '../../hooks/useErrorHandler';
