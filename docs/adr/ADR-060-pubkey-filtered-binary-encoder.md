@@ -1,6 +1,6 @@
 # ADR-060: Owner-pubkey-filtered binary position encoder
 
-**Status:** Proposed
+**Status:** Proposed — **not implemented** (verified 2026-07-03: no `PUBKEY_VISIBILITY_FILTER` flag, no `compute_private_opaque_ids` drop-set helper, and no visibility-filter drop path exist in `src/handlers/socket_flow_handler/position_updates.rs` or anywhere in the codebase; the design below is unbuilt and provides no privacy guarantee beyond ADR-050 bit-29 opacification today)
 **Date:** 2026-04-28
 **Author:** VisionClaw platform team
 **Supersedes:** —
@@ -41,7 +41,8 @@ Sent position snapshot with N nodes (M dropped by PUBKEY_VISIBILITY_FILTER)
 
 ## Phasing
 
-Land alongside ADR-059 Phase 4. The `PUBKEY_VISIBILITY_FILTER` flag
-exists today (default false). Promotion-to-default-on ships once the
-test matrix in ADR-059 §QE has been exercised against a multi-user
-session for ≥1 release.
+Land alongside ADR-059 Phase 4. The `PUBKEY_VISIBILITY_FILTER` flag and
+its drop-set path do **not** exist yet — they are to be built as part of
+this ADR (default false on introduction). Promotion-to-default-on ships
+once the flag lands and the test matrix in ADR-059 §QE has been exercised
+against a multi-user session for ≥1 release.

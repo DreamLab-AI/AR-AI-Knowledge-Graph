@@ -1,6 +1,6 @@
 # ADR-072: AutoRDF2GML-Inspired Feature Engineering Pipeline
 
-**Status:** Accepted
+**Status:** Partial (design accepted; ~1 of 6 components implemented) — verified 2026-07-03: only `src/services/semantic_type_registry.rs` exists. The five other named implementation files — `src/services/kge_trainer.rs`, `src/services/embedding_service.rs`, `src/services/nhop_materializer.rs`, `src/services/edge_type_physics.rs`, `src/handlers/discovery_handler.rs` — are **unbuilt**. Do not read this ADR as fully delivered.
 **Date:** 2026-05-05
 **Author:** Architecture Agent (SPARC)
 **Related:** ADR-048 (ontology edge weights), ADR-070 (CUDA integration), semantic_forces.cu, SemanticTypeRegistry
