@@ -26,7 +26,7 @@ This is the **only** DID-document `did:nostr:<hex>` resolves to. Drop the 2019 s
 ```jsonld
 {
   "@context": [
-    "https://w3id.org/did",
+    "https://www.w3.org/ns/cid/v1",
     "https://w3id.org/nostr/context"
   ],
   "id":   "did:nostr:<hex>",
@@ -44,6 +44,16 @@ This is the **only** DID-document `did:nostr:<hex>` resolves to. Drop the 2019 s
 ```
 
 Where `<hex>` is the **same 64-char lowercase BIP-340 x-only (even-y) hex pubkey** in every position (it is the identity per ADR-074 §D1, unchanged).
+
+> **Amendment 2026-07-03 (context reconciliation).** The updated did:nostr CG spec
+> ([nostrcg.github.io/did-nostr](https://nostrcg.github.io/did-nostr/)) canonical example uses
+> `@context[0] = "https://www.w3.org/ns/cid/v1"` (Controlled Identifiers v1.0), which is the
+> context that actually defines the `Multikey` term — `Multikey` is undefined under the generic
+> `https://w3id.org/did` context this ADR originally cited. The shipped `solid-pod-rs` renderer
+> (`did_nostr_types.rs`) already emitted `cid/v1`; this ADR text, its fixtures, schemas, and the
+> JSS reference were the stale ones and are corrected to `cid/v1` throughout (§2, §2.2, D13′).
+> The `authentication`/`assertionMethod` relative-`#key1` form and the `fe70102` multibase are
+> unchanged (both already match the updated spec example).
 
 ### 2.1 The `fe70102<hex>` multibase string (I2 ground truth — verified)
 
@@ -68,7 +78,7 @@ Concretely, for the operator identity `6407eed80e2a8646e41a5ddba0ae6619425fc54af
 
 | Dropped (superseded) | Replaced by |
 |---|---|
-| `@context: ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/secp256k1-2019/v1"]` | `["https://w3id.org/did", "https://w3id.org/nostr/context"]` |
+| `@context: ["https://www.w3.org/ns/did/v1", "https://w3id.org/security/suites/secp256k1-2019/v1"]` | `["https://www.w3.org/ns/cid/v1", "https://w3id.org/nostr/context"]` |
 | `type: "SchnorrSecp256k1VerificationKey2019"` | `type: "Multikey"` |
 | `publicKeyHex: "<hex>"` field | **removed entirely** (the key now lives only in `publicKeyMultibase`) |
 | `publicKeyMultibase: "z<base58btc(0xe7 0x01 ‖ pk_32)>"` (§D3) | `publicKeyMultibase: "fe70102<hex>"` (base16/`f`, with explicit `02` parity byte) |
@@ -112,7 +122,7 @@ Each repo's CI MUST assert, on every build:
 - `doc.verificationMethod[0].type == "Multikey"`.
 - `doc.verificationMethod[0].publicKeyMultibase` starts with `"fe70102"` AND equals `"fe70102" + doc.id["did:nostr:".len ..]` (the multibase body is the DID body — I2 round-trip in CI).
 - `doc.verificationMethod[0]` does **NOT** contain a `publicKeyHex` field.
-- `doc["@context"] == ["https://w3id.org/did", "https://w3id.org/nostr/context"]` (exact order).
+- `doc["@context"] == ["https://www.w3.org/ns/cid/v1", "https://w3id.org/nostr/context"]` (exact order).
 - The 2019 suite, the `…2022`/`…2024` suites, `secp256k1-2019/v1` context, and base58btc (`z…`) multibase are **rejected as stale** (the previous anti-drift rule that *required* the 2019 suite is deleted and inverted).
 - Pubkey form unchanged: `^[0-9a-f]{64}$` (ADR-074 §D1, retained).
 
@@ -176,7 +186,7 @@ All edits regenerate the DID-document shape and re-pin the conformance/CI artefa
 
 | File | Lines | Change |
 |---|---|---|
-| `crates/solid-pod-rs/src/did_nostr_types.rs` | 109–126 `render_did_document_tier1` | Emit §2 shape: `@context ["https://w3id.org/did","https://w3id.org/nostr/context"]`, add `type:"DIDNostr"`, VM `type:"Multikey"`, drop `publicKeyHex`, `publicKeyMultibase:"fe70102"+hex`, fragment `#key1`, `authentication/assertionMethod ["#key1"]`, `service:[]`. |
+| `crates/solid-pod-rs/src/did_nostr_types.rs` | 109–126 `render_did_document_tier1` | Emit §2 shape: `@context ["https://www.w3.org/ns/cid/v1","https://w3id.org/nostr/context"]`, add `type:"DIDNostr"`, VM `type:"Multikey"`, drop `publicKeyHex`, `publicKeyMultibase:"fe70102"+hex`, fragment `#key1`, `authentication/assertionMethod ["#key1"]`, `service:[]`. |
 | `crates/solid-pod-rs/src/did_nostr_types.rs` | 135–183 `render_did_document_tier3` | Collapse into the single canonical form (no tier split — D4′); `authentication/assertionMethod` → relative `"#key1"`; WebID → `service[]` SolidWebID entry (§2.3). |
 | `crates/solid-pod-rs/src/did_nostr_types.rs` **[encoder]** | 192–198 `format_multibase_schnorr` | Replace `'z' + base58btc(0xe7 0x01 ‖ pk)` with `"f" + "e70102" + hex(x_only_pk)` (I2). MUST round-trip to identical key bytes — assert in a unit test. |
 | `crates/solid-pod-rs/src/did_nostr_types.rs` | 202–230 `base58_encode` | Dead after the encoder change; remove. |
