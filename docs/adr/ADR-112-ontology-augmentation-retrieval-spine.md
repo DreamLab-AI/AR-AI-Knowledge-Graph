@@ -1,6 +1,11 @@
 # ADR-112 — Ontology Augmentation: one shared-library retrieval brain, two channels, condense offline, govern the write
 
-**Status:** Proposed
+**Status:** Implemented — updated 2026-07-03. The shared-library retrieval brain
+ships in agentbox (`agentbox/mcp/servers/ontology-bridge.js`,
+`agentbox/mcp/servers/lib/ontology-retrieval.js`,
+`agentbox/mcp/servers/lib/ontology-push.js`) and is treated as a live binding —
+the "pervasive ontology binding (PRD-020/ADR-112)" referenced in `CLAUDE.md` and
+the `ontology-augment` skill. Originally proposed 2026-06-14.
 **Date:** 2026-06-14
 **Decision-type:** Architecture (keystone) + Agent-Orchestration (§ Condensation mesh)
 **Relates:** PRD-020 (parent), `docs/ddd-ontology-augmentation-context.md` (bounded context), ADR-099/100/105/106 (ontology rigour, IRI, convergence, SPARQL patch), ADR-110/041 (ACSP / Judgment Broker — governed write), ADR-026 (3-tier model routing), agentbox ADR-015 (RuVector memory), agentbox ADR-005 (pluggable adapters), ADR-111 §4.6 (the diagram this decision finalises), PRD-018 (the silent-dead-wiring lesson this ADR is built to avoid)

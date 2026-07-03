@@ -18,9 +18,9 @@ The reuse directive: mirror the SQLite discipline that already exists rather tha
 
 ## Decision
 
-### D1 — Versioned, idempotent SPARQL migrations under `migrations/sparql/`
+### D1 — Versioned, idempotent SPARQL migrations under `crates/visionclaw-adapters/migrations/sparql/`
 
-Structural changes to the triple store are expressed as numbered SPARQL UPDATE files (`0001_*.rups`, `0002_*.rups`, …) under `migrations/sparql/`, mirroring `migrations/sqlite/`. Each migration is a single logical transaction (Oxigraph applies UPDATE atomically) and MUST be idempotent (guarded by an existence check or `DELETE/INSERT WHERE` that is safe to re-run).
+Structural changes to the triple store are expressed as numbered SPARQL UPDATE files (`0001_*.rups`, `0002_*.rups`, …) under `crates/visionclaw-adapters/migrations/sparql/` (crate-local, so inside the dev-container bind-mount scope; the repo-root `migrations/` holds only `sqlite/`), mirroring `migrations/sqlite/`. Each migration is a single logical transaction (Oxigraph applies UPDATE atomically) and MUST be idempotent (guarded by an existence check or `DELETE/INSERT WHERE` that is safe to re-run).
 
 ### D2 — Migration ledger in a dedicated named graph
 
@@ -32,9 +32,11 @@ Migrations and the repository's mutating queries use parameterised/escaped const
 
 ### D4 — First migrations are ADR-100's IRI re-mint and ADR-099's provenance back-fill
 
-The framework ships with its first real consumers:
+The framework ships with its first real consumers (as shipped under
+`crates/visionclaw-adapters/migrations/sparql/`):
 - `0001_canonical_iri_remint.rups` — rewrite existing entity IRIs to `vc:{domain}/{slug}` (ADR-100 D1), rewriting all subject/object positions in one transaction so no references dangle. Idempotent: re-running on already-canonical IRIs is a no-op.
-- `0002_inferred_provenance_backfill.rups` — tag existing inferred quads with provenance markers (ADR-099 D3).
+- `0002_bootstrap_shapes_graph.rups` — bootstrap the SHACL shapes named graph (ADR-127 trust layer).
+- `0003_bootstrap_provenance_graph.rups` — bootstrap the provenance named graph and tag inferred quads with provenance markers (ADR-099 D3).
 
 ### D5 — CI parity
 

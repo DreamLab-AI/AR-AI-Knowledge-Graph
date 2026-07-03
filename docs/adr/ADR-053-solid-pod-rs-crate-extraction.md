@@ -5,8 +5,9 @@
 Implemented 2026-04-20 (ratified 2026-04-19).
 
 JSS was retired 2026-04-20. `solid-pod-rs` has been extracted to
-`github.com/DreamLab-AI/solid-pod-rs` and is consumed by VisionClaw as
-an external git dependency pinned to `v0.4.0-alpha.1`. The local
+`github.com/DreamLab-AI/solid-pod-rs` and is consumed by VisionClaw as a
+published crates.io dependency (`solid-pod-rs = "0.4.0-alpha.15"`, per
+`Cargo.toml`; the initial cutover was at `v0.4.0-alpha.1`). The local
 workspace crates (`crates/solid-pod-rs*`), the JSS proxy handler, and
 the `SOLID_IMPL` shadow/dispatch scaffolding have all been removed.
 See the `chore/solid-pod-rs-externalise-jss-cut` commit and the

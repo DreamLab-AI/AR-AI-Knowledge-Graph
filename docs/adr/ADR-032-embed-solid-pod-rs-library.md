@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed
+Implemented (default-on) — updated 2026-07-03. The `solid-pod-embed` feature is
+in the default feature set (`Cargo.toml`: `default = [..., "solid-pod-embed"]`)
+and `solid-pod-rs` is a live crates.io dependency (`0.4.0-alpha.15`) consumed by
+`src/handlers/{pay_handler,image_gen_handler,solid_proxy_handler}.rs`. The JSS
+sidecar has been removed (`docker-compose.unified.yml`). Originally proposed
+2026-05-16.
 
 ## Date
 

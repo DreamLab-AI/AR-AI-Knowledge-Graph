@@ -6,6 +6,14 @@ Implemented : 2026-05-28 (commits a61a15f..70d979b)
 Supersedes  : Implicit single-crate monolith decision
 Related     : PRD-016, ADR-11 (Persistence Migration), ADR-061 (Binary Protocol)
 
+> **Amendment (2026-07-03):** the split produced **8** `visionclaw-*` workspace
+> crates, not the 7 planned in D1. `visionclaw-contracts` (the pre-existing leaf)
+> was retained and `visionclaw-xr-presence` (ADR-102) was added later, while the
+> planned `visionclaw-server` crate was folded back into the thin root `webxr`
+> binary. A `crates/graph-cognition-extract/` directory also exists on disk but is
+> not yet a `[workspace]` member. Current inventory:
+> `visionclaw-{actors,adapters,contracts,domain,gpu,ontology,protocol,xr-presence}`.
+
 ## Context
 
 The `webxr` crate is a 123k-line Rust monolith. With `codegen-units=1` (release profile), LLVM processes the entire crate as a single compilation unit. A one-line change in any `.rs` file triggers ~12 minutes of optimisation. During the current bug-squashing phase, this latency blocks rapid iteration.
