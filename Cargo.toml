@@ -14,12 +14,11 @@ members = [
 # (cdylib for the Quest APK, separate target). Exclude it from the server
 # workspace so a server `cargo build` does not try to compile the gdext bindings.
 exclude = ["xr-client/rust", "agentbox/crates/headroom-napi"]
-# Note: visionclaw-contracts is independently buildable. To work around the
-# pre-existing `solid-pod-rs { rev = "main" }` resolution error in the root
-# visionclaw-server package (which Cargo treats as a commit SHA, not a branch), run:
+# Note: visionclaw-contracts is independently buildable, e.g.:
 #   cargo build --manifest-path crates/visionclaw-contracts/Cargo.toml
-# from a fresh checkout. The baseline fix for solid-pod-rs is tracked separately
-# (ADR-032 M1 follow-up).
+# The former `solid-pod-rs { rev = "main" }` git-rev resolution error no longer
+# applies: solid-pod-rs is now a published crates.io version pin (see below), so
+# Cargo resolves it from the registry, not a git branch/commit SHA.
 
 [package]
 name = "visionclaw-server"
@@ -195,9 +194,9 @@ horned-functional = { version = "0.4.0" }
 clap = { version = "4.5", features = ["derive"] }
 
 # --- Solid Pod (ADR-032 M3) — embed solid-pod-rs as in-process library ---
-# Path dep against local workspace `../solid-pod-rs` at 0.4.0-alpha.15,
-# replacing the former crates.io pin at alpha.11. M3 (JSS sidecar removal)
-# — in progress.
+# Published crates.io dependency at 0.4.0-alpha.15 (superseding the former
+# alpha.11 pin). M3 (JSS sidecar removal) is COMPLETE: the JSS sidecar has been
+# removed and Solid Pod runs in-process (ADR-032 Implemented, default-on).
 # AGPL-3.0-only — see ADR-032 §"Licence implications".
 #
 # Crates pulled in (per ADR-032 §"Dependency surface"):
@@ -251,6 +250,9 @@ redis = ["dep:redis"]  # Enable Redis distributed caching
 # default — the legacy `UnifiedGPUCompute` buffer path remains the production
 # code path until every callsite enumerated in
 # `docs/migration-sprint/01-gpu-physics/WORKTREE-PLAN.md §2` is migrated.
+# FROZEN / EXPERIMENTAL (closeout 2026-07-03): this ~6k-LOC engine rewrite is not
+# on the production path — its engine `step()` bodies are stubs — and must not be
+# enabled in a shipped build until the ADR-01 T1 callsite migration completes.
 physics-v2 = []
 
 # Phase 11 persistence migration (ADR-11): Oxigraph (SPARQL 1.1 triple/quad
