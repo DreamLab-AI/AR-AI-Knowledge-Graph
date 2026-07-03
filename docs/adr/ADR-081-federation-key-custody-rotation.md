@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Federation key custody/rotation parked with the frozen mesh-federation surface. |
 | Drives | PRD-010 R7 (federation key proliferation), PRD-011 G7, ADR-074 D12 (key rotation), ADR-080 D6 (custody options) |
 | Companion ADRs | ADR-073, ADR-074, ADR-076, ADR-077, ADR-078, ADR-079, ADR-080 |
 | Companion PRDs | PRD-010, PRD-011 |

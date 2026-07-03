@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Cloud-infra mapping for kit consumers deferred: no kit consumers exist. |
 | Drives | PRD-012 G2, F4, F18, F19, F20, F27 |
 | Companion ADRs | ADR-073, ADR-080 D7, ADR-081, ADR-082, ADR-083, ADR-085 |
 | Companion PRDs | PRD-011, PRD-012 |

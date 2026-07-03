@@ -51,9 +51,9 @@ delegation. See [Security model](../explanation/security-model.md).
 | [048](ADR-048-dual-tier-identity-model.md) | Dual-Tier Identity Model — KG Notes and Ontology Classes | Implemented |
 | [074](ADR-074-cross-system-did-nostr-canonicalisation.md) | Cross-System DID:Nostr Canonicalisation & NIP-26 Trust Pivot | Accepted (§D2–D4/D13 superseded by 125) |
 | [074-D2](ADR-074-D2-supersession-multikey-convergence.md) | did:nostr Multikey convergence (canonical DID-document form) | Accepted |
-| [081](ADR-081-federation-key-custody-rotation.md) | Federation Key Custody & Rotation Protocol | Proposed |
+| [081](ADR-081-federation-key-custody-rotation.md) | Federation Key Custody & Rotation Protocol | Deferred (frozen 2026-07-03) |
 | [088](ADR-088-auth-service-extraction.md) | Auth Service Extraction | Proposed |
-| [094](ADR-094-admin-pubkey-permission-and-delegation.md) | Admin-Pubkey Permission Model and NIP-26 Phone Delegation | Proposed |
+| [094](ADR-094-admin-pubkey-permission-and-delegation.md) | Admin-Pubkey Permission Model and NIP-26 Phone Delegation | Deferred (frozen 2026-07-03) |
 | [125](ADR-125-did-nostr-multikey-convergence.md) | DID:Nostr Multikey Convergence (supersedes ADR-074 §D2–D4/D13) | Accepted |
 
 ## Binary Protocol & Transport
@@ -109,9 +109,9 @@ governed ontology writeback loop. See [Ontology pipeline](../explanation/ontolog
 | [106](ADR-106-sparql-patch-ontology.md) | SPARQL PATCH for Ontology Mutations | Accepted |
 | [112](ADR-112-ontology-augmentation-retrieval-spine.md) | Ontology Augmentation — Shared-Library Retrieval Spine | Proposed |
 | [114](ADR-114-ontology-class-index-memory-substrate.md) | Memory Substrate for the Ontology Class-Summary Index | Proposed |
-| [121](ADR-121-self-improving-ontology-writeback-loop.md) | Self-Improving Ontology via Governed Writeback | Proposed |
-| [122](ADR-122-two-speed-writeback-governance-routing.md) | Two-Speed Writeback — Governance Routing by Epistemic Class | Proposed |
-| [123](ADR-123-voice-mediated-governance-signoff.md) | Voice-Mediated Governance — Conversational Sign-Off | Proposed |
+| [121](ADR-121-self-improving-ontology-writeback-loop.md) | Self-Improving Ontology via Governed Writeback | Deferred (frozen 2026-07-03) |
+| [122](ADR-122-two-speed-writeback-governance-routing.md) | Two-Speed Writeback — Governance Routing by Epistemic Class | Deferred (frozen 2026-07-03) |
+| [123](ADR-123-voice-mediated-governance-signoff.md) | Voice-Mediated Governance — Conversational Sign-Off | Deferred (frozen 2026-07-03) |
 | [127](ADR-127-semantic-trust-layer.md) | Semantic Trust Layer — SHACL in Oxigraph, PROV-O, SPARQL Federation | Accepted |
 
 ## Solid / Pod & Sovereignty
@@ -134,7 +134,7 @@ per-user sovereignty. See [Solid sidecar architecture](../explanation/solid-side
 | [055](ADR-055-sovereign-debt-payoff-sprint.md) | Sovereign Debt Payoff + Phase 2 Sprint | Ratified |
 | [056](ADR-056-jss-parity-migration.md) | JSS Parity Migration Architecture | Ratified |
 | [066](ADR-066-pod-federated-graph-storage.md) | Pod-Federated Graph Storage with Anti-Replay Signing | Proposed |
-| [096](ADR-096-solid-pod-persistence-boundary.md) | Solid Pod Persistence Boundary for the Mobile Bridge | Proposed |
+| [096](ADR-096-solid-pod-persistence-boundary.md) | Solid Pod Persistence Boundary for the Mobile Bridge | Deferred (frozen 2026-07-03) |
 | [107](ADR-107-github-creds-in-pod.md) | GitHub Credentials in Pod — Sovereign Per-User Auth | Ratified |
 
 ## XR & Client Visualisation
@@ -167,10 +167,10 @@ and the [agentbox subsystem docs](../../agentbox/docs/README.md).
 | [073](ADR-073-private-nostr-relay-mesh-topology.md) | Private Nostr Relay Mesh Topology & NIP-42 AUTH | Proposed |
 | [075](ADR-075-is-envelope-message-contract.md) | Inter-System Message Envelope (IS-Envelope v1) | Proposed |
 | [076](ADR-076-nostr-core-absorption-into-upstream.md) | Absorb Forum nostr-core into Upstream nostr Crate | Proposed |
-| [092](ADR-092-android-nostr-client-and-signer.md) | Android Nostr Client and Signer for the Mobile Bridge | Proposed |
-| [093](ADR-093-mobile-bridge-messaging-substrate.md) | Mobile Bridge Messaging Substrate (NIP-17 / NIP-44 / NIP-59) | Proposed |
-| [095](ADR-095-session-summary-event-scheme.md) | Session-as-Summary Event Scheme (kind-30840) | Proposed |
-| [097](ADR-097-mobile-bridge-relay-topology.md) | Mobile Bridge Relay Topology and Phased Federation | Proposed |
+| [092](ADR-092-android-nostr-client-and-signer.md) | Android Nostr Client and Signer for the Mobile Bridge | Deferred (frozen 2026-07-03) |
+| [093](ADR-093-mobile-bridge-messaging-substrate.md) | Mobile Bridge Messaging Substrate (NIP-17 / NIP-44 / NIP-59) | Deferred (frozen 2026-07-03) |
+| [095](ADR-095-session-summary-event-scheme.md) | Session-as-Summary Event Scheme (kind-30840) | Deferred (frozen 2026-07-03) |
+| [097](ADR-097-mobile-bridge-relay-topology.md) | Mobile Bridge Relay Topology and Phased Federation | Deferred (frozen 2026-07-03) |
 | [110](ADR-110-agentic-actors-acsp-control-surfaces.md) | Agentic Actors Project Control Surfaces (ACSP) | Accepted |
 
 ## Ecosystem, Build & Crates
@@ -188,13 +188,13 @@ cutover, QE policy, secrets management, infographics and contracts. See
 | [065](ADR-065-rust-code-analysis-pipeline.md) | Rust-Native Code Analysis Pipeline | Proposed |
 | [068](ADR-068-logseq-block-level-fidelity.md) | Logseq Block-Level Fidelity (Matryca-Heritage Parser) | Implementing |
 | [077](ADR-077-ecosystem-qe-policy.md) | Ecosystem Quality Engineering Policy | Proposed |
-| [078](ADR-078-cross-substrate-library-convergence.md) | Cross-Substrate Library Convergence | Proposed |
-| [079](ADR-079-forum-setup-skill-provider-abstraction.md) | Forum-Setup Skill Provider Abstraction | Proposed |
-| [080](ADR-080-forum-kit-deployment-topology-patterns.md) | Forum Kit Deployment Topology Patterns | Proposed |
-| [082](ADR-082-cross-substrate-test-fixture-sharing.md) | Cross-Substrate Test Fixture Sharing Protocol | Proposed |
-| [083](ADR-083-dreamlab-ai-website-cutover-migration.md) | dreamlab-ai-website Cutover Migration Pattern | Proposed |
-| [084](ADR-084-cloud-infrastructure-mapping-for-kit-consumers.md) | Cloud Infrastructure Mapping for Kit Consumers | Proposed |
-| [085](ADR-085-forum-config-package-architecture.md) | forum-config/ Package Architecture & Branding Extension Points | Proposed |
+| [078](ADR-078-cross-substrate-library-convergence.md) | Cross-Substrate Library Convergence | Deferred (frozen 2026-07-03) |
+| [079](ADR-079-forum-setup-skill-provider-abstraction.md) | Forum-Setup Skill Provider Abstraction | Deferred (frozen 2026-07-03) |
+| [080](ADR-080-forum-kit-deployment-topology-patterns.md) | Forum Kit Deployment Topology Patterns | Deferred (frozen 2026-07-03) |
+| [082](ADR-082-cross-substrate-test-fixture-sharing.md) | Cross-Substrate Test Fixture Sharing Protocol | Deferred (frozen 2026-07-03) |
+| [083](ADR-083-dreamlab-ai-website-cutover-migration.md) | dreamlab-ai-website Cutover Migration Pattern | Deferred (frozen 2026-07-03) |
+| [084](ADR-084-cloud-infrastructure-mapping-for-kit-consumers.md) | Cloud Infrastructure Mapping for Kit Consumers | Deferred (frozen 2026-07-03) |
+| [085](ADR-085-forum-config-package-architecture.md) | forum-config/ Package Architecture & Branding Extension Points | Deferred (frozen 2026-07-03) |
 | [086](ADR-086-git-over-http-ingest-unification.md) | Git-Over-HTTP Ingest Unification | Implemented |
 | [087](ADR-087-rate-limit-consolidation.md) | Rate Limit Consolidation | Proposed |
 | [089](ADR-089-cqrs-bus-removal.md) | CQRS Dead Bus Removal | Accepted |

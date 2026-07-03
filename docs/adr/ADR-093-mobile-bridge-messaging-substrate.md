@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-06-02) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-06-02). Mobile-bridge NIP-17 transport partially landed in agentbox; the cluster is deferred. |
 | Drives | PRD-017 §5.2 (F5-F9), §5.5 (F20-F22) |
 | Companion ADRs | ADR-092 (client), ADR-094 (permissioning), ADR-095 (summaries), ADR-097 (topology) |
 | Affected repos | `agentbox` (relay-consumer call-site, outbound publisher); `nostr-rust-forum` (`nostr-bbs-core` crypto crate — consumed via WASM, one `wasm_bridge.rs` shim) |

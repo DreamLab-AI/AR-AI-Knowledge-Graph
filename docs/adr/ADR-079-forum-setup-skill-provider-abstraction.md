@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Forum-setup provider abstraction deferred: forum-kit is not built in this repo (standalone-first). |
 | Drives | PRD-011 G5, F7 |
 | Companion ADRs | ADR-073, ADR-074, ADR-075, ADR-076, ADR-077, ADR-078 |
 | Companion PRDs | PRD-010, PRD-011 |

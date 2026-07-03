@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). forum-config package architecture deferred: the package does not exist in this repo. |
 | Drives | PRD-012 G3, G4, G5, F1, F5; PRD-011 G3 (downstream consumer pattern) |
 | Companion ADRs | ADR-073, ADR-080 D7, ADR-082, ADR-083, ADR-084 |
 | Companion PRDs | PRD-011, PRD-012 |

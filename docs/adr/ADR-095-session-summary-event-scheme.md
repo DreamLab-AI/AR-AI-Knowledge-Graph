@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-06-02) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-06-02). kind-30840 session-summary digest is live in agentbox; the remaining scheme work is deferred. |
 | Drives | PRD-017 §5.4 (F15-F19) |
 | Companion ADRs | ADR-093 (substrate), ADR-096 (pod boundary), ADR-097 (topology) |
 | Affected repos | `agentbox` (summary generator, dual writer) |

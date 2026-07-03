@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Cross-substrate fixture sharing deferred: depends on the absent forum-config package/fixtures. |
 | Drives | ADR-077 P1 (reference vectors), ADR-077 P2 (cross-substrate contracts), PRD-010 G8 cryptographic correctness |
 | Companion ADRs | ADR-073, ADR-074, ADR-075, ADR-076, ADR-077, ADR-078, ADR-080, ADR-081 |
 | Companion PRDs | PRD-010, PRD-011 |

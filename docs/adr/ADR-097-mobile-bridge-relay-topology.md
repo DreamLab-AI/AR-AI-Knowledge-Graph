@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-06-02) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-06-02). Mobile-bridge relay topology deferred with the cluster. |
 | Drives | PRD-017 §5.3 (F10-F11, F14), §8 (phasing) |
 | Companion ADRs | ADR-093 (substrate), ADR-094 (permissioning), ADR-009 (gift-wrap deferral), PRD-010 (mesh federation) |
 | Affected repos | `agentbox` (embedded relay exposure, relay-consumer), `nostr-rust-forum` (CF relay-worker, federation forwarder) |

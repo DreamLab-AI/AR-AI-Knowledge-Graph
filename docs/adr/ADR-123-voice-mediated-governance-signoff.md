@@ -1,6 +1,6 @@
 # ADR-123 — Voice-mediated governance: conversational sign-off of the elevation backlog in the immersive system
 
-**Status:** Proposed
+**Status:** Deferred — frozen by closeout 2026-07-03 (was Proposed). Voice-mediated sign-off deferred to Phase 2: only voice scaffolding exists; the governed loop is unbuilt.
 **Date:** 2026-06-14
 **Decision-type:** Architecture + Security (authorisation surface) + UX
 **Parent:** ADR-122 (two-speed routing — this is the human surface for the L1 lane), ADR-121 (the loop that fills the backlog). **Relates:** ADR-110 / ADR-041 (ACSP forum agent-card / Judgment Broker — the *other* client of the same decision queue), ADR-120 (did:nostr identity — the authority behind a voice approval), PRD-020 (WS-12), `src/actors/elevation_voice.rs` + `crates/visionclaw-actors/src/voice_commands.rs` (`SwarmIntent`) + `src/actors/voice_interface_actor.rs` + `agentbox/management-api/routes/voice-intent.js` (the voice stack reused), `src/handlers/enrichment_proposals_handler.rs` (`/decide` write-back) + `agentbox/mcp/servers/governance-bridge.js` (panel kinds 31400/31402/31404).

@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-06-02) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-06-02). Mobile-bridge pod persistence boundary deferred with the cluster. |
 | Drives | PRD-017 §6, §5.4 (F17-F18) |
 | Companion ADRs | ADR-095 (summary scheme), ADR-094 (permissioning), ADR-017 (pod path convention) |
 | Affected repos | `agentbox` (pod-signer, mandate, summary writer), `solid-pod-rs` (pod server) |

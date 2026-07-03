@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-06-02) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-06-02). Admin-pubkey / NIP-26 delegation deferred: delegation is implemented but unwired into any ingress. |
 | Drives | PRD-017 §5.3 (F12-F13), §7.1 (BLOCK-3) |
 | Companion ADRs | ADR-092 (client/signer), ADR-093 (substrate), ADR-074 (did:nostr canonicalisation) |
 | Affected repos | `agentbox` (relay-consumer auth, management-api auth.js), `nostr-rust-forum` (`nip26.rs` source) |

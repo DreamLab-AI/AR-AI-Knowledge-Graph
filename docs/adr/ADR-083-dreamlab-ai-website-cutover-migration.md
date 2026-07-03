@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Website cutover migration deferred: outside standalone-first scope. |
 | Drives | PRD-011 G3 + G8 + R5 (cutover safety), Phase X5 |
 | Companion ADRs | ADR-073, ADR-074, ADR-075, ADR-076, ADR-077, ADR-078, ADR-079, ADR-080, ADR-081, ADR-082 |
 | Companion PRDs | PRD-010, PRD-011 |

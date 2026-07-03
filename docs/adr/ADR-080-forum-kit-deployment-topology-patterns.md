@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Forum-kit deployment topology deferred: mesh federation is standalone-first, not shipped. |
 | Drives | PRD-011 G1, G3, G4, G8; PRD-010 G3, G7 |
 | Companion ADRs | ADR-073, ADR-074, ADR-075, ADR-076, ADR-077, ADR-078, ADR-079 |
 | Companion PRDs | PRD-010, PRD-011 |

@@ -1,6 +1,6 @@
 # ADR-122 — Two-speed writeback: governance routing by epistemic class
 
-**Status:** Proposed
+**Status:** Deferred — frozen by closeout 2026-07-03 (was Proposed). Two-speed writeback routing deferred to Phase 2: depends on the unbuilt writeback loop (ADR-121).
 **Date:** 2026-06-14
 **Decision-type:** Security / Governance (policy)
 **Parent:** ADR-121 (self-improving writeback loop — the *mechanism* this routes). **Relates:** ADR-110 / ADR-041 (ACSP forum agent-card / Judgment Broker — the human-gated lane), ADR-099 (Whelk EL reasoner — the automatic consistency gate), ADR-105 (IRI scheme), PRD-020 (WS-9/10/11, open Q #8/#9), the dual-ingest design (mainKnowledgeGraph=formal vs workingGraph=informal/elevation-eligible — the static analog of this runtime split).

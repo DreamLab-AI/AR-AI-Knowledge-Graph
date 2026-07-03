@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-05-07) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-05-07). Forum-kit / cross-substrate convergence parked: no forum-kit consumers exist in this repo (standalone-first). |
 | Drives | PRD-010 G10 + F25–F30 (absorption batches); PRD-011 G10 |
 | Companion ADRs | ADR-073, ADR-074, ADR-075, ADR-076, ADR-077 |
 | Supersedes | — |

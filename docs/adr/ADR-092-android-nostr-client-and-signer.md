@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Proposed (2026-06-02) |
+| Status | Deferred — frozen by closeout 2026-07-03 (was Proposed 2026-06-02). Android Nostr client/signer deferred: mobile-bridge cluster parked (standalone-first). |
 | Drives | PRD-017 §5.1 (F1-F4) |
 | Companion ADRs | ADR-093 (messaging substrate), ADR-094 (permissioning), ADR-096 (pod boundary) |
 | Affected repos | `agentbox` (relay exposure, consumer); operator device (client install) |

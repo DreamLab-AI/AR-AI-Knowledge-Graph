@@ -1,6 +1,6 @@
 # ADR-121 — Self-improving ontology via governed writeback (the elevation flywheel)
 
-**Status:** Proposed
+**Status:** Deferred — frozen by closeout 2026-07-03 (was Proposed). Governed writeback flywheel deferred to Phase 2: gated behind ADR-112/114 acceptance; the loop is unbuilt.
 **Date:** 2026-06-14
 **Decision-type:** Architecture + Agent-Orchestration + Security (write boundary)
 **Parent:** ADR-112 (retrieval spine), PRD-020 (WS-9/10/11). **Relates:** ADR-113 (condensation mesh — the re-condense step), ADR-114 (RuVector index — the re-index step), ADR-119 (verifiable liveness — anti-ghost), ADR-120 (did:nostr agent identity — proposal attribution), ADR-041 / ADR-110 (Judgment Broker / ACSP — the human approval surface this reuses), `agentbox/management-api/lib/kg-proposal-extractor.js` + `agentbox/mcp/servers/ontology-propose.js` (the governed propose spine reused), PRD-018 (the silent-dead-wiring lesson), `docs/prd-insight-migration-loop.md` (sibling loop).
