@@ -10,6 +10,7 @@
 
 use crate::adapters::OxigraphOntologyRepository;
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
+use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 use crate::services::github::content_enhanced::EnhancedContentAPI;
 use crate::services::github::types::{OntologyFileMetadata, OntologyPriority};
 use crate::services::parsers::{KnowledgeGraphParser, OntologyParser};
@@ -33,7 +34,6 @@ pub struct LocalFileSyncService {
     kg_parser: Arc<KnowledgeGraphParser>,
     onto_parser: Arc<OntologyParser>,
     kg_repo: Arc<dyn KnowledgeGraphRepository>,
-    #[allow(dead_code)]
     onto_repo: Arc<OxigraphOntologyRepository>,
     enrichment_service: Arc<OntologyEnrichmentService>,
     content_analyzer: Arc<OntologyContentAnalyzer>,
@@ -463,12 +463,31 @@ impl LocalFileSyncService {
                     info!("🦉 Extracted ontology from {}: {} classes, {} properties",
                         file_name, onto_data.classes.len(), onto_data.properties.len());
 
-                    // Save ontology data to Oxigraph store (ADR-11).
-                    // OxigraphOntologyRepository implements save_ontology() via SPARQL INSERT.
-                    // todo!("Phase 2: wire onto_data → OxigraphOntologyRepository::save_ontology() here")
-                    // For now, ontology data is available in memory via the parser
-                    // and can be queried through the enrichment service.
-                    stats.ontology_files_processed += 1;
+                    // Persist the parsed ontology to the Oxigraph store (ADR-11).
+                    // OxigraphOntologyRepository::save_ontology writes classes,
+                    // properties and axioms via SPARQL INSERT, so local-file
+                    // OntologyBlock extraction reaches the OWL store on the same
+                    // path as the GitHub sync instead of being dropped out of scope.
+                    match self
+                        .onto_repo
+                        .save_ontology(&onto_data.classes, &onto_data.properties, &onto_data.axioms)
+                        .await
+                    {
+                        Ok(()) => {
+                            debug!(
+                                "Persisted ontology from {} to Oxigraph: {} classes, {} properties, {} axioms",
+                                file_name,
+                                onto_data.classes.len(),
+                                onto_data.properties.len(),
+                                onto_data.axioms.len()
+                            );
+                            stats.ontology_files_processed += 1;
+                        }
+                        Err(e) => {
+                            warn!("Failed to persist ontology from {} to Oxigraph: {}", file_name, e);
+                            stats.errors.push(format!("ontology persist {}: {}", file_name, e));
+                        }
+                    }
                 }
                 Err(e) => {
                     warn!("Failed to parse ontology from {}: {}", file_name, e);
