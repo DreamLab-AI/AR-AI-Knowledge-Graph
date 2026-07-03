@@ -24,32 +24,48 @@ use super::schema::AgentActionEnvelope;
 
 /// Whether an inbound action is attributable to a sovereign identity, and to
 /// what degree. The frame is accepted regardless (render compatibility); this is
-/// the audit dimension that distinguishes signed from unsigned provenance.
+/// the audit dimension that distinguishes attributed from unattributed frames.
+///
+/// SECURITY NOTE (audit truth): this is *structural attribution only*, not
+/// signature verification. The `agent_action` wire envelope carries a `pubkey`
+/// string but **no signature** — neither this repo's [`AgentActionEnvelope`]
+/// schema nor the agentbox publisher (`createMcpNotification`) attaches or
+/// verifies a Nostr signature. `Attributed` therefore means "a well-formed
+/// identity was asserted", NOT "a valid signature was checked". Real
+/// cryptographic verification needs a wire-contract change to carry `sig` + the
+/// signed event fields (id/created_at/kind/tags/content) on the frame; that is
+/// a cross-repo change tracked separately. The variant is deliberately named
+/// `Attributed` (not `Signed`) so the trail never overstates trust.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProvenanceStatus {
-    /// A structurally-valid 64-hex pubkey attributes the action. (Signature
-    /// *verification* — NIP-26 — is the Phase 5 fail-closed step; this records
-    /// that an identity was asserted.)
-    Signed,
+    /// A structurally-valid 64-hex pubkey attributes the action. Records that an
+    /// identity was *asserted* — NOT that a signature was verified (see the
+    /// type-level security note; the wire carries no signature to verify).
+    Attributed,
     /// Identity asserted but malformed (wrong length / non-hex). Recorded as a
     /// distinct degraded state rather than collapsed into anonymous.
     Malformed,
-    /// No identity asserted. Accepted for render, flagged unsigned for audit.
+    /// No identity asserted. Accepted for render, flagged unattributed for audit.
     Anonymous,
 }
 
 impl ProvenanceStatus {
-    /// True iff the action carried a well-formed sovereign attribution.
+    /// True iff the action carried a well-formed sovereign attribution. This is
+    /// an attribution check, not a signature check (see the type-level note).
     pub fn is_attributed(self) -> bool {
-        matches!(self, ProvenanceStatus::Signed)
+        matches!(self, ProvenanceStatus::Attributed)
     }
 }
 
 /// Classify the provenance of an inbound envelope from its `pubkey` field.
+///
+/// This inspects only the *structure* of the asserted pubkey (64-hex). No
+/// signature is verified because the envelope carries none — see the
+/// [`ProvenanceStatus`] security note.
 pub fn classify(event: &AgentActionEnvelope) -> ProvenanceStatus {
     match event.pubkey.as_deref() {
-        Some(pk) if uri::is_pubkey_hex(pk) => ProvenanceStatus::Signed,
+        Some(pk) if uri::is_pubkey_hex(pk) => ProvenanceStatus::Attributed,
         Some(_) => ProvenanceStatus::Malformed,
         None => ProvenanceStatus::Anonymous,
     }
@@ -112,10 +128,10 @@ mod tests {
 
     #[test]
     fn classify_signed_malformed_anonymous() {
-        assert_eq!(classify(&envelope(Some(PK), None, None)), ProvenanceStatus::Signed);
+        assert_eq!(classify(&envelope(Some(PK), None, None)), ProvenanceStatus::Attributed);
         assert_eq!(classify(&envelope(Some("xyz"), None, None)), ProvenanceStatus::Malformed);
         assert_eq!(classify(&envelope(None, None, None)), ProvenanceStatus::Anonymous);
-        assert!(ProvenanceStatus::Signed.is_attributed());
+        assert!(ProvenanceStatus::Attributed.is_attributed());
         assert!(!ProvenanceStatus::Anonymous.is_attributed());
     }
 
@@ -127,7 +143,7 @@ mod tests {
             Some(&format!("urn:agentbox:activity:{PK}:run-1")),
         );
         let p = record(&e);
-        assert_eq!(p.status, ProvenanceStatus::Signed);
+        assert_eq!(p.status, ProvenanceStatus::Attributed);
         let sc = p.source_crossing.unwrap();
         assert!(sc.visionclaw_id.starts_with(&format!("urn:visionclaw:kg:{PK}:")));
         assert_eq!(sc.agentbox_urn, format!("urn:agentbox:thing:{PK}:proposal-1"));

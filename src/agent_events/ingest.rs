@@ -60,9 +60,11 @@ pub(crate) enum IngestOutcome {
     Published {
         action: String,
         attributed: bool,
-        /// Recorded provenance status (signed / malformed / anonymous). The
-        /// frame is published regardless of status (render compatibility); this
-        /// is the audit dimension the Phase 3 trail distinguishes on.
+        /// Recorded provenance status (attributed / malformed / anonymous) —
+        /// structural attribution only, not signature verification (the wire
+        /// carries no signature; see [`super::provenance::ProvenanceStatus`]).
+        /// The frame is published regardless of status (render compatibility);
+        /// this is the audit dimension the Phase 3 trail distinguishes on.
         provenance_status: ProvenanceStatus,
         /// Number of foreign `urn:agentbox:*` source/target URNs translated
         /// through the BC20 bridge on this frame (0, 1, or 2).
@@ -297,7 +299,7 @@ mod tests {
             } => {
                 assert_eq!(action, "update");
                 assert!(attributed, "valid pubkey present ⇒ attributed");
-                assert_eq!(provenance_status, ProvenanceStatus::Signed);
+                assert_eq!(provenance_status, ProvenanceStatus::Attributed);
                 // canonical_frame carries no source/target URN ⇒ no crossing.
                 assert_eq!(crossings_recorded, 0);
                 assert!(receivers >= 1, "our own subscriber must be counted");
