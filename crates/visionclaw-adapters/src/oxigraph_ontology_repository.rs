@@ -315,6 +315,144 @@ fn db_err<E: std::fmt::Display>(e: E) -> OntologyRepositoryError {
     OntologyRepositoryError::DatabaseError(e.to_string())
 }
 
+// ----------------------------------------------------------------------
+// PRD-022 WS-1 — SHACL shape loading (real W3C shapes into GRAPH_SHAPES).
+//
+// The five canonical `.shacl.ttl` NodeShape files live in the sibling
+// `visionclaw-ontology` crate. They are embedded here at compile time and
+// loaded into `GRAPH_SHAPES` on startup so the shape catalogue is queryable
+// (`trust-status.shapesLoaded`) and available to any future W3C-SHACL engine.
+//
+// NOTE ON ENFORCEMENT (audit truth): loading these shapes makes them present
+// and countable; it does NOT make the ingest gate a W3C-SHACL validator. The
+// running ingest gate is the SHACL-lite Rust matcher (advisory mode). These
+// are the canonical W3C definitions the lite matcher approximates; full
+// W3C-SHACL enforcement over this graph is tracked WS-1 residual.
+// ----------------------------------------------------------------------
+
+/// The five embedded W3C SHACL shape files: `(logical-name, turtle-body)`.
+const SHACL_SHAPE_FILES: &[(&str, &str)] = &[
+    (
+        "knowledge-node",
+        include_str!("../../visionclaw-ontology/shapes/knowledge-node.shacl.ttl"),
+    ),
+    (
+        "ontology-class",
+        include_str!("../../visionclaw-ontology/shapes/ontology-class.shacl.ttl"),
+    ),
+    (
+        "agent-node",
+        include_str!("../../visionclaw-ontology/shapes/agent-node.shacl.ttl"),
+    ),
+    (
+        "bridge-record",
+        include_str!("../../visionclaw-ontology/shapes/bridge-record.shacl.ttl"),
+    ),
+    (
+        "inferred-axiom",
+        include_str!("../../visionclaw-ontology/shapes/inferred-axiom.shacl.ttl"),
+    ),
+];
+
+/// Catalogue sentinel IRI (mirrors migration 0002); re-inserted on reload.
+const SHAPES_CATALOGUE_IRI: &str = "urn:ngm:shape:catalogue";
+/// Marker predicate carrying the embedded-shapes content hash so a reload runs
+/// exactly once per distinct shape corpus (idempotent across restarts).
+const P_SHAPES_CONTENT_HASH: &str = "https://narrativegoldmine.com/ns/v1#shapesContentHash";
+const RDF_TYPE_IRI: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const SH_SCHEMA_IRI: &str = "http://www.w3.org/ns/shacl#Schema";
+
+/// Stable 16-hex content hash over the embedded shape corpus (name + body).
+fn shacl_shapes_hash() -> String {
+    let mut hasher = Sha256::new();
+    for (name, body) in SHACL_SHAPE_FILES {
+        hasher.update(name.as_bytes());
+        hasher.update([0u8]);
+        hasher.update(body.as_bytes());
+        hasher.update([0u8]);
+    }
+    hasher.finalize().iter().take(8).map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Read the content-hash marker currently stored in `GRAPH_SHAPES`, if any.
+fn stored_shapes_hash(store: &Store) -> Option<String> {
+    let q = format!(
+        "SELECT ?h FROM <{GRAPH_SHAPES}> WHERE {{ <{SHAPES_CATALOGUE_IRI}> <{P_SHAPES_CONTENT_HASH}> ?h }} LIMIT 1"
+    );
+    match store.query(&q) {
+        Ok(QueryResults::Solutions(mut sols)) => sols
+            .next()
+            .and_then(|r| r.ok())
+            .and_then(|s| match s.get("h") {
+                Some(Term::Literal(l)) => Some(l.value().to_string()),
+                _ => None,
+            }),
+        _ => None,
+    }
+}
+
+/// Load the embedded W3C SHACL shapes into `GRAPH_SHAPES`.
+///
+/// Idempotent and reload-safe. Keyed by a content hash: if the graph already
+/// carries the current corpus hash the load is skipped (no blank-node
+/// duplication on restart); a deploy with edited shapes clears the graph and
+/// reloads exactly once. Returns the number of `sh:NodeShape` subjects present
+/// after loading.
+pub fn load_shacl_shapes(store: &Store) -> RepoResult<usize> {
+    use oxigraph::io::{RdfFormat, RdfParser};
+    use oxigraph::model::{
+        GraphName, GraphNameRef, Literal, NamedNode, NamedNodeRef, QuadRef,
+    };
+
+    let want_hash = shacl_shapes_hash();
+    if stored_shapes_hash(store).as_deref() == Some(want_hash.as_str()) {
+        // Already current — count and return without touching the graph.
+        return crate::provenance_emitter::count_shapes_loaded(store).map_err(db_err);
+    }
+
+    // Stale or absent: clear the shapes graph and reload from scratch so blank
+    // property-shape nodes are never duplicated across deploys.
+    store
+        .update(&format!("CLEAR SILENT GRAPH <{GRAPH_SHAPES}>"))
+        .map_err(db_err)?;
+
+    let shapes_graph = NamedNode::new_unchecked(GRAPH_SHAPES);
+    for (name, body) in SHACL_SHAPE_FILES {
+        let parser = RdfParser::from_format(RdfFormat::Turtle)
+            .with_default_graph(GraphName::NamedNode(shapes_graph.clone()));
+        store
+            .load_from_reader(parser, body.as_bytes())
+            .map_err(|e| db_err(format!("loading SHACL shape '{name}': {e}")))?;
+    }
+
+    // Re-establish the catalogue sentinel + the content-hash marker.
+    let gref = GraphNameRef::NamedNode(shapes_graph.as_ref());
+    let marker = NamedNodeRef::new_unchecked(SHAPES_CATALOGUE_IRI);
+    store
+        .insert(QuadRef::new(
+            marker,
+            NamedNodeRef::new_unchecked(RDF_TYPE_IRI),
+            NamedNodeRef::new_unchecked(SH_SCHEMA_IRI),
+            gref,
+        ))
+        .map_err(db_err)?;
+    let hash_lit = Literal::new_simple_literal(&want_hash);
+    store
+        .insert(QuadRef::new(
+            marker,
+            NamedNodeRef::new_unchecked(P_SHAPES_CONTENT_HASH),
+            hash_lit.as_ref(),
+            gref,
+        ))
+        .map_err(db_err)?;
+
+    crate::provenance_emitter::count_shapes_loaded(store).map_err(db_err)
+}
+
+/// System agent DID attributed to machine-run Whelk EL++ inference activities
+/// in the PROV-O provenance ledger (PRD-022 WS-2).
+const REASONER_AGENT_DID: &str = "urn:visionclaw:agent:whelk-reasoner";
+
 /// Encode a `Term` as a SPARQL 1.1 Query Results JSON binding object
 /// (`{ "type": "uri"|"literal"|"bnode", "value": ..., "datatype"?, "xml:lang"? }`).
 fn term_to_json(t: &Term) -> serde_json::Value {
@@ -464,6 +602,17 @@ impl OxigraphOntologyRepository {
         if !applied.is_empty() {
             tracing::info!("applied {} SPARQL migration(s): {:?}", applied.len(), applied);
         }
+
+        // PRD-022 WS-1: load the real W3C SHACL shape files into GRAPH_SHAPES so
+        // the shape catalogue is populated and queryable at startup (the
+        // trust-status canary counts these). Idempotent + reload-safe. A load
+        // failure is fatal — a trust layer that silently ships with an empty
+        // shapes graph would be exactly the "loaded on paper" gap this closes.
+        let shape_store = Arc::clone(&store);
+        let shape_count = tokio::task::spawn_blocking(move || load_shacl_shapes(&shape_store))
+            .await
+            .map_err(|e| db_err(format!("join error: {e}")))??;
+        tracing::info!("loaded {shape_count} SHACL NodeShape(s) into {GRAPH_SHAPES}");
 
         Ok(Self { store })
     }
@@ -2370,7 +2519,36 @@ impl OntologyRepository for OxigraphOntologyRepository {
              WHERE  {{ GRAPH <{GRAPH_ONTOLOGY_INFERRED}> {{ ?s ?p ?o }} }} ;\n\
              INSERT DATA {{ GRAPH <{GRAPH_ONTOLOGY_INFERRED}> {{\n{body}  }} }}\n"
         );
-        self.run_update(update).await
+        self.run_update(update).await?;
+
+        // PRD-022 WS-2: reify the reasoner run as an append-only PROV-O activity
+        // in `GRAPH_PROVENANCE` so the inference is queryable through the trust
+        // ledger (the reified emitter's first production caller). This is an
+        // audit side-effect over an already-committed materialisation — a
+        // provenance failure is logged, never propagated back to the caller.
+        let prov_store = Arc::clone(&self.store);
+        let record = crate::provenance_emitter::ActivityRecord {
+            activity_urn: format!("urn:visionclaw:execution:inference-{run_id}"),
+            agent_did: REASONER_AGENT_DID.to_string(),
+            timestamp: results.timestamp.to_rfc3339(),
+            action: "infer".to_string(),
+            derivation: DERIVATION_INFERRED.to_string(),
+            used: Some(GRAPH_ONTOLOGY.to_string()),
+            generated: Some(GRAPH_ONTOLOGY_INFERRED.to_string()),
+            informed_by: None,
+        };
+        match tokio::task::spawn_blocking(move || {
+            crate::provenance_emitter::reify_activity(&prov_store, &record)
+        })
+        .await
+        {
+            Ok(Ok(n)) => {
+                tracing::debug!("inference provenance: reified {n} PROV-O triple(s) for run {run_id}")
+            }
+            Ok(Err(e)) => tracing::warn!("inference provenance emit failed (non-fatal): {e}"),
+            Err(e) => tracing::warn!("inference provenance join error (non-fatal): {e}"),
+        }
+        Ok(())
     }
 
     async fn get_inference_results(&self) -> RepoResult<Option<InferenceResults>> {
@@ -2883,6 +3061,48 @@ mod tests {
         OxigraphOntologyRepository::from_store(Arc::new(Store::new().unwrap()))
     }
 
+    // ---- WS-1: real SHACL shape loading ----------------------------------
+
+    #[test]
+    fn load_shacl_shapes_populates_shapes_graph() {
+        let store = Store::new().unwrap();
+        // Before loading, the catalogue carries no NodeShapes.
+        assert_eq!(
+            crate::provenance_emitter::count_shapes_loaded(&store).unwrap(),
+            0
+        );
+
+        let n = load_shacl_shapes(&store).expect("shapes load");
+        // All five embedded shape files declare at least one NodeShape.
+        assert!(n >= 5, "expected >=5 NodeShapes loaded, got {n}");
+        assert_eq!(
+            crate::provenance_emitter::count_shapes_loaded(&store).unwrap(),
+            n
+        );
+        // The content-hash marker is present so a restart is a no-op.
+        assert_eq!(stored_shapes_hash(&store).as_deref(), Some(shacl_shapes_hash().as_str()));
+    }
+
+    #[test]
+    fn load_shacl_shapes_is_idempotent_across_reloads() {
+        let store = Store::new().unwrap();
+        let first = load_shacl_shapes(&store).expect("first load");
+
+        // A second load with the same corpus hash must not duplicate blank-node
+        // property shapes: the total quad count in the shapes graph is stable.
+        let graph = oxigraph::model::NamedNodeRef::new_unchecked(GRAPH_SHAPES);
+        let before = store
+            .quads_for_pattern(None, None, None, Some(graph.into()))
+            .count();
+        let second = load_shacl_shapes(&store).expect("second load");
+        let after = store
+            .quads_for_pattern(None, None, None, Some(graph.into()))
+            .count();
+
+        assert_eq!(first, second, "NodeShape count stable across reloads");
+        assert_eq!(before, after, "reload must not duplicate shape triples");
+    }
+
     // ---- WS-0: SPARQL LIMIT clamp ----------------------------------------
 
     #[test]
@@ -3063,6 +3283,40 @@ mod tests {
         assert_eq!(g["namedGraph"], GRAPH_ONTOLOGY_INFERRED);
         assert!(g["runId"].is_string(), "runId surfaced: {g}");
         assert!(g["triples"].as_array().map(|a| !a.is_empty()).unwrap_or(false));
+    }
+
+    /// PRD-022 WS-2: a completed inference run is reified as an append-only
+    /// PROV-O activity in GRAPH_PROVENANCE (the reified emitter's production
+    /// caller), queryable through the trust ledger, attributed to the reasoner.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn inference_run_reified_into_provenance_graph() {
+        let repo = in_memory_repo();
+        // Provenance graph starts empty.
+        assert_eq!(
+            crate::provenance_emitter::count_provenance_triples(repo.store()).unwrap(),
+            0
+        );
+
+        let results = inference_results_with(vec![make_axiom("urn:test:A", "urn:test:B")]);
+        repo.store_inference_results(&results).await.unwrap();
+
+        // The reasoner run is present as a prov:Activity attributed to the
+        // system reasoner DID with action="infer" / derivation="inferred".
+        let acts = crate::provenance_emitter::query_agent_activities(
+            repo.store(),
+            REASONER_AGENT_DID,
+            10,
+        )
+        .unwrap();
+        assert_eq!(acts.len(), 1, "exactly one inference activity reified");
+        assert_eq!(acts[0].action, "infer");
+        assert_eq!(acts[0].derivation, "inferred");
+        assert_eq!(acts[0].generated.as_deref(), Some(GRAPH_ONTOLOGY_INFERRED));
+        assert!(acts[0].activity_urn.starts_with("urn:visionclaw:execution:inference-"));
+        assert!(
+            crate::provenance_emitter::count_provenance_triples(repo.store()).unwrap() >= 5,
+            "reified activity writes 5+ provenance triples"
+        );
     }
 
     /// ADR-099 D2: an EquivalentClass inference materialises owl:equivalentClass
