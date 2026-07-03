@@ -24,10 +24,13 @@
 //! context populated by NIP-98 middleware (Section 6) and consults it on
 //! every method.
 //!
-//! ## Phase-1 status
+//! ## Implementation status (updated 2026-07-03)
 //!
-//! See `oxigraph_ontology_repository.rs` header. Method bodies are
-//! mostly `todo!(SQL: ...)`; type signatures match the trait exactly.
+//! Fully implemented. Every method body executes real SQL against the
+//! `tokio-rusqlite` connection and returns concrete values — there are no
+//! live `todo!(SQL: ...)` macros remaining; type signatures match the trait
+//! exactly. (Earlier revisions of this header described Phase-1 scaffolding
+//! stubs; that description is no longer accurate.)
 
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -46,8 +49,9 @@ use crate::ports::settings_repository::{
 /// when no `migrations/` directory is shipped alongside the binary (e.g.
 /// in single-binary deployments per ADR-11 §D1). The on-disk file at
 /// `migrations/sqlite/0001_initial.sql` is the human-authoring source;
-/// changes there must be mirrored here and vice versa. A unit test in
-/// Phase 2 will assert byte equality (modulo whitespace).
+/// changes there must be mirrored here and vice versa. This equality is
+/// **not** currently guarded by a test, so the two sources must be kept in
+/// sync by hand until such a test is added.
 pub const CREATE_SCHEMA: &str = r#"
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous  = NORMAL;
