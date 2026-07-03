@@ -1,6 +1,6 @@
 # ADR-124 — Smart-Contract Features for the DreamLab / VisionClaw Ecosystem (Web-Contracts on a Single-Use-Seal Through-Line)
 
-- **Status**: Proposed
+- **Status**: Implemented — updated 2026-07-03: the 4-layer web-contract substrate decided here (reducer / state / ledger / trail + the `validate → anchor → verify` ritual) ships in `src/web_contract/{reducer,state,ledger,trail,ritual,mod}.rs`. Its build-out / implementation plan is **ADR-128** (formerly a duplicate ADR-124). Originally proposed 2026-06-14.
 - **Date**: 2026-06-14
 - **Deciders**: DreamLab AI / VisionClaw architecture (lead architect synthesis); web-contract pattern lineage from Melvin Carvalho (team).
 - **Builds on**: ADR-059 *provenance primitives — block-trails & git-marks* (**solid-pod-rs**: `crates/solid-pod-rs/docs/adr/ADR-059-provenance-primitives-block-trails-git-marks.md` — NOT the project ADR-059, which is *bidirectional-agent-channel-server*); ADR-032 *402 scheme grammar* (**agentbox**: `agentbox/docs/reference/adr/ADR-032-402-scheme-grammar.md` — NOT project ADR-032, which is *embed-solid-pod-rs-library*); ADR-041 (Judgment Broker), ADR-081 (federation key custody / rotation), ADR-110 (ACSP control surfaces), ADR-121/122/123 (writeback loop / two-speed governance routing / voice sign-off).

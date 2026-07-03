@@ -29,7 +29,6 @@ collisions in the corpus, not aliases — read both files:
 | Number | Files |
 |--------|-------|
 | ADR-074 | [Cross-System DID:Nostr Canonicalisation](ADR-074-cross-system-did-nostr-canonicalisation.md) · [§D2′ did:nostr Multikey convergence](ADR-074-D2-supersession-multikey-convergence.md) |
-| ADR-124 | [Build-Out: gitmark/blocktrails substrate](ADR-124-build-out-canonical-gitmark-blocktrails.md) · [Smart-Contract Features (Web-Contracts)](ADR-124-smart-contract-features-web-contracts.md) |
 
 ADR-074 §D2/§D3/§D4/§D13 are **superseded by [ADR-125](ADR-125-did-nostr-multikey-convergence.md)**;
 the remainder of ADR-074 still stands. One fully superseded record lives outside
@@ -204,8 +203,8 @@ cutover, QE policy, secrets management, infographics and contracts. See
 | [105](ADR-105-urn-visionclaw-convergence-and-ngm-cutover.md) | urn:visionclaw Convergence and urn:ngm Cutover | Accepted |
 | [109](ADR-109-sops-secrets-management.md) | SOPS + age for Ecosystem Secrets Management | Accepted |
 | [111](ADR-111-ecosystem-infographic-modernisation.md) | Ecosystem Infographic Modernisation — diagram-as-code | Proposed |
-| [124-build](ADR-124-build-out-canonical-gitmark-blocktrails.md) | Build-Out — Adopt gitmark/blocktrails as the Web-Contract Substrate | Accepted |
-| [124-smart](ADR-124-smart-contract-features-web-contracts.md) | Smart-Contract Features — Web-Contracts on a Single-Use-Seal Through-Line | Proposed |
+| [124](ADR-124-smart-contract-features-web-contracts.md) | Smart-Contract Features — Web-Contracts on a Single-Use-Seal Through-Line | Implemented |
+| [128](ADR-128-build-out-canonical-gitmark-blocktrails.md) | Build-Out — Adopt gitmark/blocktrails as the Web-Contract Substrate | Accepted |
 
 ### RVF integration set
 

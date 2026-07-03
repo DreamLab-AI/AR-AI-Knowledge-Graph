@@ -1,6 +1,6 @@
 //! Layer 4 — **Trail**: the `gitmark.json` + `blocktrails.json` envelopes.
 //!
-//! ADR-124 build-out (`docs/adr/ADR-124-build-out-gitmark-blocktrails-substrate.md`).
+//! ADR-124 build-out (`docs/adr/ADR-128-build-out-canonical-gitmark-blocktrails.md`).
 //! This is the VisionClaw projection of the Carvalho-lineage web-contract trail
 //! layer. The single substrate decision (ADR-124 §1) is: adopt the
 //! `gitmark.json` envelope **verbatim** and the `blocktrails.json` envelope

@@ -1,9 +1,13 @@
-# ADR-124 Build-Out (canonical) — Adopt gitmark/blocktrails Verbatim as the Single Web-Contract Substrate
+# ADR-128 Build-Out (canonical) — Adopt gitmark/blocktrails Verbatim as the Single Web-Contract Substrate
+
+> Renumbered from a duplicate **ADR-124** to **ADR-128** on 2026-07-03. This is the
+> implementation plan (build-out) for the decision recorded in ADR-124
+> (`ADR-124-smart-contract-features-web-contracts.md`).
 
 | Field | Value |
 |-------|-------|
 | Status | Accepted build-out plan (2026-06-15) |
-| Extends | **ADR-124** (`docs/adr/ADR-124-smart-contract-features-web-contracts.md`) — the trust-spectrum / web-contract decision. This is its implementation plan, not a new decision. Consolidates `docs/adr/ADR-124-build-out-gitmark-blocktrails-substrate.md`. |
+| Extends | **ADR-124** (`docs/adr/ADR-124-smart-contract-features-web-contracts.md`) — the trust-spectrum / web-contract decision. This record is its implementation plan, not a new decision. |
 | Decision (single impl) | **Adopt Melvin Carvalho's `gitmark` / `blocktrails` envelope as THE single web-contract substrate. NO parallel design.** Map the 4-layer web-contract (reducer / state / ledger / trail) and the `validate → anchor → verify` ritual onto the existing solid-pod-rs block-trails / git-marks engine (ADR-059 provenance primitives) and the VisionClaw `src/web_contract/` scaffolding. |
 | Identity rail | ADR-074 §D2′ (= agentbox ADR-033 / project ADR-125) `did:nostr` Multikey. **No part of this build-out touches I1–I4.** It adds JSON-LD envelopes + a verifier over the existing trail engine; the `agent_did` it carries is the unchanged `did:nostr:<hex>` string. |
 | Git surfaces (LIVE) | Two real, anchor-against git surfaces (§4). Build against them; do **not** stub. |
@@ -265,7 +269,6 @@ raw `nostr.privkey`/pubkey, NEVER the DID-doc VM. Flag any such change.
 
 ## 8. References
 - ADR-124 (decision) — `docs/adr/ADR-124-smart-contract-features-web-contracts.md`
-- ADR-124 build-out (prior) — `docs/adr/ADR-124-build-out-gitmark-blocktrails-substrate.md`
 - solid-pod-rs ADR-059 — provenance primitives (block-trails & git-marks)
 - agentbox ADR-032 — 402-scheme grammar; ADR-089 — git pods CF Workers limitation
 - ADR-074 §D2′ / agentbox ADR-033 / project ADR-125 — did:nostr Multikey identity rail

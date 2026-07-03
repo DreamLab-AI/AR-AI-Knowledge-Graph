@@ -1,6 +1,6 @@
-//! Web-contract substrate — the ADR-124 build-out 4-layer projection.
+//! Web-contract substrate — the ADR-124 (build-out: ADR-128) 4-layer projection.
 //!
-//! ADR-124 build-out: `docs/adr/ADR-124-build-out-gitmark-blocktrails-substrate.md`.
+//! ADR-124 build-out: `docs/adr/ADR-128-build-out-canonical-gitmark-blocktrails.md`.
 //!
 //! This module is the VisionClaw projection of the Carvalho-lineage web-contract
 //! substrate. The single-substrate decision (ADR-124 §1) is adopted: there is
