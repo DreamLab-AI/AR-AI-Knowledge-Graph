@@ -132,6 +132,12 @@ export function useKeyboardShortcuts(
 
       
       keyboardShortcutRegistry.getShortcuts().forEach((shortcut, id) => {
+        // Only handle shortcuts registered by THIS hook instance. Every
+        // useKeyboardShortcuts consumer attaches its own window listener over
+        // the shared registry; without this guard, N mounted consumers fire a
+        // matched handler N times (e.g. Ctrl+K toggling the palette open and
+        // shut in the same keypress).
+        if (!registeredIds.current.has(id)) return;
         if (!shortcut.enabled) return;
 
         const matchesKey = event.key.toLowerCase() === shortcut.key.toLowerCase();
