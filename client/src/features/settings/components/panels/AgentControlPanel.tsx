@@ -198,7 +198,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
       {}
       <div className="border rounded-lg p-4 bg-card">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
+          <h3 className="cc-title flex items-center gap-2">
             <Play className="w-4 h-4" />
             Agent Spawner
           </h3>
@@ -227,7 +227,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
           ))}
         </div>
 
-        <div className="mt-3 text-xs text-muted-foreground flex items-center justify-between">
+        <div className="cc-value-readout mt-3 flex items-center justify-between">
           <span>Active Agents: {agents.length} / {agentSettings.spawn?.max_concurrent || 10}</span>
           <span>Provider: {agentSettings.spawn?.default_provider || 'gemini'}</span>
         </div>
@@ -235,13 +235,13 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
 
       {}
       <div className="border rounded-lg p-4 bg-card">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <h3 className="cc-title mb-3 flex items-center gap-2">
           <Users className="w-4 h-4" />
           Active Agents
         </h3>
 
         {agents.length === 0 ? (
-          <div className="text-xs text-muted-foreground text-center py-4">
+          <div className="cc-helper-text text-center py-4">
             No active agents. Spawn an agent to get started.
           </div>
         ) : (
@@ -251,13 +251,13 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
                 <div className="flex items-center gap-2">
                   {getStatusIcon(agent.status)}
                   <div>
-                    <div className="text-xs font-medium">{agent.type}</div>
-                    <div className="text-xs text-muted-foreground">{agent.id.substring(0, 12)}...</div>
+                    <div className="cc-field-label font-medium">{agent.type}</div>
+                    <div className="cc-helper-text">{agent.id.substring(0, 12)}...</div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="text-muted-foreground">Health: {Math.round(agent.health)}%</span>
-                  <span className="text-muted-foreground">Tasks: {agent.tasksCompleted}</span>
+                <div className="flex items-center gap-3">
+                  <span className="cc-value-readout">Health: {Math.round(agent.health)}%</span>
+                  <span className="cc-value-readout">Tasks: {agent.tasksCompleted}</span>
                 </div>
               </div>
             ))}
@@ -267,7 +267,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
 
       {}
       <div className="border rounded-lg p-4 bg-card">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+        <h3 className="cc-title mb-3 flex items-center gap-2">
           <SettingsIcon className="w-4 h-4" />
           Agent Settings
         </h3>
@@ -275,10 +275,10 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
         <div className="space-y-3">
           {}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground">Spawning</h4>
+            <h4 className="cc-subgroup-label border-b border-border/40 pb-1">Spawning</h4>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Auto-Scale</label>
+              <label className="cc-field-label">Auto-Scale</label>
               <input
                 type="checkbox"
                 checked={agentSettings.spawn?.auto_scale ?? true}
@@ -288,7 +288,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Max Concurrent Agents</label>
+              <label className="cc-field-label">Max Concurrent Agents</label>
               <input
                 type="number"
                 value={agentSettings.spawn?.max_concurrent || 10}
@@ -300,7 +300,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">AI Provider</label>
+              <label className="cc-field-label">AI Provider</label>
               <select
                 value={agentSettings.spawn?.default_provider || 'gemini'}
                 onChange={(e) => updateSetting('agents.spawn.default_provider', e.target.value)}
@@ -313,7 +313,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Default Priority</label>
+              <label className="cc-field-label">Default Priority</label>
               <select
                 value={agentSettings.spawn?.default_priority || 'medium'}
                 onChange={(e) => updateSetting('agents.spawn.default_priority', e.target.value)}
@@ -327,7 +327,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Default Strategy</label>
+              <label className="cc-field-label">Default Strategy</label>
               <select
                 value={agentSettings.spawn?.default_strategy || 'adaptive'}
                 onChange={(e) => updateSetting('agents.spawn.default_strategy', e.target.value)}
@@ -342,10 +342,10 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
 
           {}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground">Lifecycle</h4>
+            <h4 className="cc-subgroup-label border-b border-border/40 pb-1">Lifecycle</h4>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Idle Timeout (seconds)</label>
+              <label className="cc-field-label">Idle Timeout (seconds)</label>
               <input
                 type="number"
                 value={agentSettings.lifecycle?.idle_timeout || 300}
@@ -357,7 +357,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Auto-Restart Failed Agents</label>
+              <label className="cc-field-label">Auto-Restart Failed Agents</label>
               <input
                 type="checkbox"
                 checked={agentSettings.lifecycle?.auto_restart ?? true}
@@ -367,7 +367,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Health Check Interval (seconds)</label>
+              <label className="cc-field-label">Health Check Interval (seconds)</label>
               <input
                 type="number"
                 value={agentSettings.lifecycle?.health_check_interval || 30}
@@ -381,10 +381,10 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
 
           {}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground">Monitoring</h4>
+            <h4 className="cc-subgroup-label border-b border-border/40 pb-1">Monitoring</h4>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Enable Telemetry</label>
+              <label className="cc-field-label">Enable Telemetry</label>
               <input
                 type="checkbox"
                 checked={agentSettings.monitoring?.telemetry_enabled ?? true}
@@ -394,7 +394,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Poll Interval (seconds)</label>
+              <label className="cc-field-label">Poll Interval (seconds)</label>
               <input
                 type="number"
                 value={agentSettings.monitoring?.telemetry_poll_interval || 5}
@@ -406,7 +406,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Log Level</label>
+              <label className="cc-field-label">Log Level</label>
               <select
                 value={agentSettings.monitoring?.log_level || 'info'}
                 onChange={(e) => updateSetting('agents.monitoring.log_level', e.target.value)}
@@ -422,10 +422,10 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
 
           {}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground">Visualization</h4>
+            <h4 className="cc-subgroup-label border-b border-border/40 pb-1">Visualization</h4>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Show in Main Graph</label>
+              <label className="cc-field-label">Show in Main Graph</label>
               <input
                 type="checkbox"
                 checked={agentSettings.visualization?.show_in_graph ?? true}
@@ -435,7 +435,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Agent Node Size</label>
+              <label className="cc-field-label">Agent Node Size</label>
               <input
                 type="range"
                 value={agentSettings.visualization?.node_size || 1.0}
@@ -445,13 +445,13 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
                 step={0.1}
                 className="flex-1 ml-2"
               />
-              <span className="text-xs text-muted-foreground ml-2 w-12">
+              <span className="cc-value-readout ml-2 w-12">
                 {(agentSettings.visualization?.node_size || 1.0).toFixed(1)}
               </span>
             </div>
 
             <div className="flex items-center justify-between">
-              <label className="text-xs">Agent Node Color</label>
+              <label className="cc-field-label">Agent Node Color</label>
               <input
                 type="color"
                 value={agentSettings.visualization?.node_color || '#ff8800'}
@@ -466,7 +466,7 @@ export const AgentControlPanel: React.FC<AgentControlPanelProps> = ({ className 
       {}
       {agentSettings.monitoring?.telemetry_enabled && (
         <div className="border rounded-lg p-4 bg-card">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <h3 className="cc-title mb-3 flex items-center gap-2">
             <Activity className="w-4 h-4" />
             Agent Telemetry
           </h3>

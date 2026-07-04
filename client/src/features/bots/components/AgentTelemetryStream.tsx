@@ -94,9 +94,9 @@ export const AgentTelemetryStream: React.FC = () => {
 
   const getLevelColor = (level: string): string => {
     switch (level) {
-      case 'error': return '#ff0000';
-      case 'warning': return '#ff8800';
-      case 'success': return '#00ff00';
+      case 'error': return '#dc2626';
+      case 'warning': return '#b45309';
+      case 'success': return '#15803d';
       default: return '#000000';
     }
   };
@@ -107,124 +107,57 @@ export const AgentTelemetryStream: React.FC = () => {
   };
 
   return (
-    <div style={{
-      marginTop: '8px',
-      borderTop: '1px solid rgba(255,255,255,0.15)',
-      paddingTop: '8px'
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '6px',
-        fontSize: '9px',
-        fontWeight: '600',
-        color: '#fbbf24'
-      }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
+    <div className="mt-2 border-t border-border/40 pt-2">
+      <div className="mb-1.5 flex items-center justify-between text-[9px] font-semibold text-amber-400">
+        <div className="flex gap-1.5">
           <button
             onClick={() => setActiveTab('telemetry')}
-            style={{
-              background: activeTab === 'telemetry' ? '#ff8800' : 'transparent',
-              color: activeTab === 'telemetry' ? '#000000' : '#fbbf24',
-              border: '1px solid #ff8800',
-              padding: '2px 6px',
-              borderRadius: '3px',
-              fontSize: '9px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            className={`rounded-[3px] border border-amber-500 px-1.5 py-0.5 text-[9px] font-semibold transition-colors ${
+              activeTab === 'telemetry' ? 'bg-amber-500 text-black' : 'bg-transparent text-amber-400'
+            }`}
           >
             TELEMETRY
           </button>
           <button
             onClick={() => setActiveTab('goap')}
             onDoubleClick={() => window.open('https://goal.ruv.io/', '_blank')}
-            style={{
-              background: activeTab === 'goap' ? '#ff8800' : 'transparent',
-              color: activeTab === 'goap' ? '#000000' : '#fbbf24',
-              border: '1px solid #ff8800',
-              padding: '2px 6px',
-              borderRadius: '3px',
-              fontSize: '9px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            className={`rounded-[3px] border border-amber-500 px-1.5 py-0.5 text-[9px] font-semibold transition-colors ${
+              activeTab === 'goap' ? 'bg-amber-500 text-black' : 'bg-transparent text-amber-400'
+            }`}
           >
             GOAP
           </button>
         </div>
-        <span style={{
-          width: '8px',
-          height: '8px',
-          borderRadius: '50%',
-          background: isConnected ? '#00ff00' : '#ff0000',
-          boxShadow: isConnected ? '0 0 4px #00ff00' : '0 0 4px #ff0000'
-        }} />
+        <span
+          aria-hidden="true"
+          className={`h-2 w-2 rounded-full ${
+            isConnected
+              ? 'bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.8)]'
+              : 'bg-destructive shadow-[0_0_4px_rgba(239,68,68,0.8)]'
+          }`}
+        />
       </div>
 
       {activeTab === 'telemetry' ? (
         <div
           ref={streamRef}
-          style={{
-            background: '#ff8800',
-            border: '2px solid #cc6600',
-            borderRadius: '4px',
-            padding: '8px',
-            height: '200px',
-            overflowY: 'auto',
-            fontFamily: 'DSEG7Classic, monospace',
-            fontSize: '10px',
-            lineHeight: '1.4',
-            color: '#000000',
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)'
-          }}
+          className="h-[200px] overflow-y-auto rounded border-2 border-amber-700 bg-amber-500 p-2 text-[10px] leading-snug text-black shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]"
+          style={{ fontFamily: "'DSEG7Classic', monospace" }}
         >
           {messages.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '20px',
-              color: 'rgba(0,0,0,0.5)',
-              fontFamily: 'monospace',
-              fontSize: '9px'
-            }}>
+            <div className="py-5 text-center font-mono text-[9px] text-black/50">
               WAITING FOR TELEMETRY...
             </div>
           ) : (
             messages.map((msg, idx) => (
-              <div key={idx} style={{
-                marginBottom: '4px',
-                padding: '2px 4px',
-                background: 'rgba(0,0,0,0.1)',
-                borderRadius: '2px',
-                display: 'flex',
-                gap: '8px',
-                fontSize: '9px'
-              }}>
-                <span style={{
-                  color: getLevelColor(msg.level),
-                  fontWeight: 'bold',
-                  minWidth: '60px'
-                }}>
+              <div key={idx} className="mb-1 flex gap-2 rounded-sm bg-black/10 px-1 py-0.5 text-[9px]">
+                <span className="min-w-[60px] font-bold" style={{ color: getLevelColor(msg.level) }}>
                   {formatTime(msg.timestamp)}
                 </span>
-                <span style={{
-                  color: '#000000',
-                  fontWeight: 'bold',
-                  minWidth: '80px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}>
+                <span className="min-w-[80px] overflow-hidden text-ellipsis whitespace-nowrap font-bold text-black">
                   {msg.agentId.substring(0, 12)}
                 </span>
-                <span style={{
-                  color: '#000000',
-                  flex: 1,
-                  fontFamily: 'DSEG7Classic, monospace'
-                }}>
+                <span className="flex-1 text-black" style={{ fontFamily: "'DSEG7Classic', monospace" }}>
                   {msg.message}
                 </span>
               </div>
@@ -232,18 +165,7 @@ export const AgentTelemetryStream: React.FC = () => {
           )}
         </div>
       ) : (
-        <div style={{
-          background: '#1a1a1a',
-          border: '2px solid #ff8800',
-          borderRadius: '4px',
-          padding: '4px',
-          height: '200px',
-          overflowY: 'auto',
-          fontFamily: 'monospace',
-          fontSize: '9px',
-          color: '#ff8800',
-          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)'
-        }}>
+        <div className="h-[200px] overflow-y-auto rounded border-2 border-amber-500 bg-background p-1 font-mono text-[9px] text-amber-400 shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]">
           <div id="goap-widget-container"></div>
           <style>{`
             #goap-widget-container * {

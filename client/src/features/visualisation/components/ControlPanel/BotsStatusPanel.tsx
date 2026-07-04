@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Zap } from 'lucide-react';
+import { Button } from '../../../design-system/components/Button';
 import { MultiAgentInitializationPrompt } from '../../../bots/components';
 import { AgentTelemetryStream } from '../../../bots/components/AgentTelemetryStream';
 import { unifiedApiClient } from '../../../../services/api/UnifiedApiClient';
@@ -12,6 +13,9 @@ import type { BotsData } from './types';
 interface BotsStatusPanelProps {
   botsData?: BotsData;
 }
+
+const statTileClass =
+  'flex flex-col items-center gap-0.5 rounded-[calc(var(--radius)-2px)] bg-foreground/5 py-1';
 
 export const BotsStatusPanel: React.FC<BotsStatusPanelProps> = ({ botsData }) => {
   const [showMultiAgentPrompt, setShowMultiAgentPrompt] = useState(false);
@@ -35,127 +39,75 @@ export const BotsStatusPanel: React.FC<BotsStatusPanelProps> = ({ botsData }) =>
         });
       }
     } catch (error) {
-      
+
     }
   };
 
   return (
     <>
-      <div style={{
-        marginBottom: '6px',
-        paddingBottom: '6px',
-        borderBottom: '1px solid rgba(255,255,255,0.15)'
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          marginBottom: '6px',
-          color: '#fbbf24',
-          fontWeight: '600',
-          fontSize: '10px'
-        }}>
-          <Zap size={12} />
-          VisionClaw ({botsData.dataSource.toUpperCase()})
+      <div data-testid="agents-panel" className="mb-1.5 border-b border-border/40 pb-1.5">
+        <div className="mb-1.5 flex items-center gap-1.5 text-amber-400">
+          <Zap size={12} aria-hidden="true" />
+          <span className="cc-rail-label font-semibold">
+            VisionClaw ({botsData.dataSource.toUpperCase()})
+          </span>
         </div>
 
         {botsData.nodeCount === 0 ? (
-          <div style={{ textAlign: 'center', padding: '6px 0' }}>
-            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', marginBottom: '6px' }}>
-              No active multi-agent
-            </div>
-            <button
+          <div className="py-1.5 text-center">
+            <div className="cc-helper-text mb-1.5">No active multi-agent</div>
+            <Button
+              data-testid="agents-initialize"
+              variant="default"
+              size="sm"
               onClick={() => setShowMultiAgentPrompt(true)}
-              style={{
-                background: 'linear-gradient(to right, #fbbf24, #f59e0b)',
-                color: 'black',
-                padding: '4px 10px',
-                borderRadius: '3px',
-                fontSize: '10px',
-                fontWeight: '600',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
+              className="h-auto px-2.5 py-1 text-[10px] font-semibold"
             >
               Initialize multi-agent
-            </button>
+            </Button>
           </div>
         ) : (
           <>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '4px',
-              fontSize: '10px',
-              marginBottom: '6px'
-            }}>
-              <div style={{
-                textAlign: 'center',
-                padding: '4px',
-                background: 'rgba(255,255,255,0.05)',
-                borderRadius: '3px'
-              }}>
-                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '9px' }}>Agents</div>
-                <div style={{ color: '#fbbf24', fontWeight: '600' }}>{botsData.nodeCount}</div>
+            <div className="mb-1.5 grid grid-cols-3 gap-1">
+              <div data-testid="agents-stat-agents" className={statTileClass}>
+                <span className="cc-helper-text">Agents</span>
+                <span className="cc-value-readout font-semibold text-amber-400">
+                  {botsData.nodeCount}
+                </span>
               </div>
-              <div style={{
-                textAlign: 'center',
-                padding: '4px',
-                background: 'rgba(255,255,255,0.05)',
-                borderRadius: '3px'
-              }}>
-                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '9px' }}>Links</div>
-                <div style={{ color: '#fbbf24', fontWeight: '600' }}>{botsData.edgeCount}</div>
+              <div data-testid="agents-stat-links" className={statTileClass}>
+                <span className="cc-helper-text">Links</span>
+                <span className="cc-value-readout font-semibold text-amber-400">
+                  {botsData.edgeCount}
+                </span>
               </div>
-              <div style={{
-                textAlign: 'center',
-                padding: '4px',
-                background: 'rgba(255,255,255,0.05)',
-                borderRadius: '3px'
-              }}>
-                <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: '9px' }}>Tokens</div>
-                <div style={{ color: '#f59e0b', fontWeight: '600', fontSize: '9px' }}>
+              <div data-testid="agents-stat-tokens" className={statTileClass}>
+                <span className="cc-helper-text">Tokens</span>
+                <span className="cc-value-readout font-semibold text-amber-500">
                   {botsData.tokenCount.toLocaleString()}
-                </div>
+                </span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <button
+            <div className="flex gap-1">
+              <Button
+                data-testid="agents-new-task"
+                variant="default"
+                size="sm"
                 onClick={() => setShowMultiAgentPrompt(true)}
-                style={{
-                  flex: 1,
-                  background: 'linear-gradient(to right, #22c55e, #16a34a)',
-                  color: 'white',
-                  padding: '4px 8px',
-                  borderRadius: '3px',
-                  fontSize: '10px',
-                  fontWeight: '600',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
+                className="h-auto flex-1 px-2 py-1 text-[10px] font-semibold"
               >
                 New Task
-              </button>
-              <button
+              </Button>
+              <Button
+                data-testid="agents-disconnect"
+                variant="destructive"
+                size="sm"
                 onClick={handleDisconnect}
-                style={{
-                  flex: 1,
-                  background: 'linear-gradient(to right, #ef4444, #dc2626)',
-                  color: 'white',
-                  padding: '4px 8px',
-                  borderRadius: '3px',
-                  fontSize: '10px',
-                  fontWeight: '600',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
+                className="h-auto flex-1 px-2 py-1 text-[10px] font-semibold"
               >
                 Disconnect
-              </button>
+              </Button>
             </div>
           </>
         )}

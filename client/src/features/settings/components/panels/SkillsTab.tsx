@@ -167,12 +167,12 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ className, onSkillInvoke }
       {/* Header */}
       <div className="border rounded-lg p-4 bg-card">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
+          <h3 className="cc-title flex items-center gap-2">
             <Zap className="w-4 h-4" />
             Skills Invocation
           </h3>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
+            <span className="cc-value-readout">
               {selectedSkills.size} selected
             </span>
             <Button
@@ -224,7 +224,7 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ className, onSkillInvoke }
           {/* Advanced filters */}
           {showSettings && (
             <div className="flex items-center gap-4 pt-2 border-t">
-              <label className="flex items-center gap-2 text-xs">
+              <label className="flex items-center gap-2 cc-field-label">
                 <input
                   type="checkbox"
                   checked={mcpOnly}
@@ -239,7 +239,7 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ className, onSkillInvoke }
 
         {/* Action buttons */}
         <div className="flex items-center justify-between mt-3 pt-3 border-t">
-          <div className="text-xs text-muted-foreground">
+          <div className="cc-value-readout">
             {filteredSkills.length} skills available
           </div>
           <div className="flex items-center gap-2">
@@ -275,10 +275,10 @@ export const SkillsTab: React.FC<SkillsTabProps> = ({ className, onSkillInvoke }
               ) : (
                 <ChevronDown className="w-4 h-4" />
               )}
-              <span className="text-sm font-semibold">
+              <span className="cc-subgroup-label">
                 {categoryIcons[category]} {categoryLabels[category]}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="cc-value-readout">
                 ({skills.length})
               </span>
             </div>
@@ -361,14 +361,14 @@ const SkillItem: React.FC<{
         <div className="flex items-center gap-2">
           <span className="text-base">{skill.icon}</span>
           <span className="text-sm font-medium">{skill.name}</span>
-          <span className="text-xs text-muted-foreground">v{skill.version}</span>
+          <span className="cc-value-readout">v{skill.version}</span>
           {skill.mcpServer && (
             <span className="text-xs px-1.5 py-0.5 bg-green-500/10 text-green-500 rounded">
               MCP
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+        <p className="cc-helper-text mt-0.5 line-clamp-1">
           {skill.description}
         </p>
         <div className="flex flex-wrap gap-1 mt-1">
@@ -381,7 +381,7 @@ const SkillItem: React.FC<{
             </span>
           ))}
           {skill.tags.length > 4 && (
-            <span className="text-xs text-muted-foreground">
+            <span className="cc-helper-text">
               +{skill.tags.length - 4}
             </span>
           )}

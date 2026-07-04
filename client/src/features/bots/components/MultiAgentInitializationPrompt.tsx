@@ -1,14 +1,16 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import { Bot, X, AlertTriangle } from 'lucide-react';
 import { createLogger } from '../../../utils/loggerConfig';
 import { unifiedApiClient } from '../../../services/api/UnifiedApiClient';
-import { botsWebSocketIntegration } from '../services/BotsWebSocketIntegration';
-import {
-  skillDefinitions,
-  categoryLabels,
-  categoryIcons,
-  SkillDefinition,
-} from '../../settings/components/panels/skillDefinitions';
+import { Button } from '../../design-system/components/Button';
+import { Textarea } from '../../design-system/components/Textarea';
+import { skillDefinitions, type SkillDefinition } from '../../settings/components/panels/skillDefinitions';
+import { AgentTypeGrid } from './AgentTypeGrid';
+import { AgentSkillsSection } from './AgentSkillsSection';
+import { AgentTopologyFields, type Topology } from './AgentTopologyFields';
 
 const logger = createLogger('MultiAgentInitializationPrompt');
 
@@ -23,7 +25,7 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [mcpConnected, setMcpConnected] = useState<boolean | null>(null);
-  const [topology, setTopology] = useState<'mesh' | 'hierarchical' | 'ring' | 'star'>('mesh');
+  const [topology, setTopology] = useState<Topology>('mesh');
   const [maxAgents, setMaxAgents] = useState(8);
   const [enableNeural, setEnableNeural] = useState(true);
   const [agentTypes, setAgentTypes] = useState({
@@ -83,7 +85,11 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
     });
   };
 
-  
+  const toggleAgentType = (type: string, enabled: boolean) => {
+    setAgentTypes((prev) => ({ ...prev, [type]: enabled }));
+  };
+
+
   useEffect(() => {
     const checkConnection = async () => {
       try {
@@ -95,17 +101,17 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
       }
     };
 
-    
+
     checkConnection();
 
-    
+
     const interval = setInterval(checkConnection, 3000);
 
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    
+
     const container = document.createElement('div');
     container.id = 'multi-agent-modal-portal';
     container.style.position = 'fixed';
@@ -128,7 +134,7 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
     setError(null);
 
     try {
-      
+
       const selectedAgentTypes = Object.entries(agentTypes)
         .filter(([_, enabled]) => enabled)
         .map(([type, _]) => type);
@@ -145,7 +151,7 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
         return;
       }
 
-      
+
       const config = {
         topology,
         maxAgents,
@@ -158,15 +164,15 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
 
       logger.info('Spawning hive mind with config:', config);
 
-      
+
       logger.info('Calling API endpoint: /bots/initialize-swarm');
       const response = await unifiedApiClient.postData('/bots/initialize-swarm', config);
 
       if (response.success) {
         logger.info('Hive mind spawned successfully:', response);
-        
-        
-        
+
+
+
         onInitialized();
       } else {
         throw new Error(response.error || 'Failed to spawn hive mind');
@@ -181,440 +187,97 @@ export const MultiAgentInitializationPrompt: React.FC<MultiAgentInitializationPr
 
   if (!portalContainer) return null;
 
+  const mcpDotClass =
+    mcpConnected === null ? 'bg-muted-foreground animate-pulse' : mcpConnected ? 'bg-green-500' : 'bg-destructive';
+  const mcpTextClass =
+    mcpConnected === null ? 'text-muted-foreground' : mcpConnected ? 'text-green-500' : 'text-destructive';
+
   return ReactDOM.createPortal(
-    <div style={{
-      position: 'fixed',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      backgroundColor: '#141414',  
-      border: '2px solid #F1C40F',
-      borderRadius: '8px',
-      padding: '20px',
-      maxWidth: '500px',
-      width: '90%',
-      maxHeight: '80vh',
-      overflow: 'auto',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.9), 0 0 80px rgba(241, 196, 15, 0.4)',
-      pointerEvents: 'auto',
-    }}>
-      <h2 style={{
-        margin: '0 0 20px 0',
-        color: '#F1C40F',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span>🧠 Spawn Hive Mind</span>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '14px',
-            color: mcpConnected === null ? '#999' : mcpConnected ? '#2ECC71' : '#E74C3C'
-          }}>
-            <div style={{
-              width: '10px',
-              height: '10px',
-              borderRadius: '50%',
-              backgroundColor: mcpConnected === null ? '#999' : mcpConnected ? '#2ECC71' : '#E74C3C',
-              boxShadow: mcpConnected ? '0 0 8px #2ECC71' : mcpConnected === false ? '0 0 8px #E74C3C' : 'none',
-              animation: mcpConnected === null ? 'pulse 1.5s infinite' : 'none'
-            }} />
-            <span style={{ fontSize: '12px' }}>
+    <div className="fixed inset-0 flex items-center justify-center bg-background/70 backdrop-blur-sm pointer-events-auto">
+      <div
+        data-testid="multi-agent-prompt"
+        className="cc-glass cc-glass--accent w-[90%] max-w-lg max-h-[80vh] overflow-auto p-5"
+      >
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="cc-title flex items-center gap-2 whitespace-nowrap">
+              <Bot size={16} className="text-amber-400" aria-hidden="true" />
+              Spawn Hive Mind
+            </span>
+            <span className={`flex items-center gap-1.5 text-xs whitespace-nowrap ${mcpTextClass}`}>
+              <span className={`h-2 w-2 shrink-0 rounded-full ${mcpDotClass}`} aria-hidden="true" />
               {mcpConnected === null ? 'Checking...' : mcpConnected ? 'MCP Connected' : 'MCP Disconnected'}
             </span>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="shrink-0 text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#E74C3C',
-            fontSize: '24px',
-            cursor: 'pointer',
-            padding: '0',
-            width: '30px',
-            height: '30px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          ×
-        </button>
-      </h2>
-      
-      <style>{`
-        @keyframes pulse {
-          0% { opacity: 1; }
-          50% { opacity: 0.5; }
-          100% { opacity: 1; }
-        }
-      `}</style>
 
-      {error && (
-        <div style={{
-          backgroundColor: 'rgba(231, 76, 60, 0.2)',
-          border: '1px solid #E74C3C',
-          borderRadius: '4px',
-          padding: '10px',
-          marginBottom: '15px',
-          color: '#E74C3C',
-        }}>
-          {error}
-        </div>
-      )}
-      
-      {mcpConnected === false && (
-        <div style={{
-          backgroundColor: 'rgba(243, 156, 18, 0.2)',
-          border: '1px solid #F39C12',
-          borderRadius: '4px',
-          padding: '10px',
-          marginBottom: '15px',
-          color: '#F39C12',
-        }}>
-          ⚠️ MCP service is not connected. The multi-agent system may not initialize properly.
-        </div>
-      )}
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', color: '#F1C40F' }}>
-          Topology
-        </label>
-        <select
-          value={topology}
-          onChange={(e) => setTopology(e.target.value as typeof topology)}
-          style={{
-            width: '100%',
-            padding: '8px',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.3)',
-            borderRadius: '4px',
-            color: 'white',
-          }}
-        >
-          <option value="mesh" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>
-            Mesh - Fully connected, best for collaboration
-          </option>
-          <option value="hierarchical" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>
-            Hierarchical - Structured with clear command chain
-          </option>
-          <option value="ring" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>
-            Ring - Sequential processing pipeline
-          </option>
-          <option value="star" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>
-            Star - Central coordinator with workers
-          </option>
-        </select>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', color: '#F1C40F' }}>
-          Maximum Agents: {maxAgents}
-        </label>
-        <input
-          type="range"
-          min="3"
-          max="20"
-          value={maxAgents}
-          onChange={(e) => setMaxAgents(Number(e.target.value))}
-          style={{ width: '100%' }}
-        />
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', color: '#F1C40F' }}>
-          Agent Types
-        </label>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: '8px',
-          fontSize: '14px',
-        }}>
-          {Object.entries(agentTypes).map(([type, enabled]) => {
-            const agentTypeInfo: Record<string, { icon: string; description: string }> = {
-              queen: { icon: '👑', description: 'Hive mind leader' },
-              coordinator: { icon: '🎯', description: 'Task orchestration' },
-              researcher: { icon: '🔍', description: 'Information gathering' },
-              coder: { icon: '💻', description: 'Code implementation' },
-              analyst: { icon: '📊', description: 'Data analysis' },
-              tester: { icon: '🧪', description: 'Quality assurance' },
-              architect: { icon: '🏗️', description: 'System design' },
-              optimizer: { icon: '⚡', description: 'Performance tuning' },
-              reviewer: { icon: '👁️', description: 'Code review' },
-              documenter: { icon: '📝', description: 'Documentation' },
-              monitor: { icon: '📡', description: 'System monitoring' },
-              specialist: { icon: '🔧', description: 'Specialized tasks' },
-            };
-
-            const info = agentTypeInfo[type] || { icon: '🤖', description: type };
-
-            return (
-              <label key={type} style={{
-                display: 'flex',
-                alignItems: 'center',
-                cursor: 'pointer',
-                color: enabled ? '#F1C40F' : 'rgba(255, 255, 255, 0.5)',
-                padding: '4px',
-                borderRadius: '4px',
-                backgroundColor: enabled ? 'rgba(241, 196, 15, 0.1)' : 'transparent',
-                transition: 'all 0.2s ease',
-              }}
-              title={info.description}
-              >
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={(e) => setAgentTypes(prev => ({
-                    ...prev,
-                    [type]: e.target.checked
-                  }))}
-                  style={{ marginRight: '8px' }}
-                />
-                <span style={{ marginRight: '4px' }}>{info.icon}</span>
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </label>
-            );
-          })}
-        </div>
-        <div style={{
-          fontSize: '12px',
-          color: 'rgba(255, 255, 255, 0.6)',
-          marginTop: '8px',
-        }}>
-          {topology === 'hierarchical' && !agentTypes.queen && (
-            <span style={{ color: '#F39C12' }}>
-              💡 Tip: Enable Queen agent for hierarchical topology
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{
-          display: 'flex',
-          alignItems: 'center',
-          marginBottom: '8px',
-          color: '#F1C40F',
-          cursor: 'pointer',
-        }}>
-          <input
-            type="checkbox"
-            checked={enableNeural}
-            onChange={(e) => setEnableNeural(e.target.checked)}
-            style={{ marginRight: '8px' }}
-          />
-          Enable Neural Enhancements
-        </label>
-        <div style={{
-          fontSize: '12px',
-          color: 'rgba(255, 255, 255, 0.6)',
-          marginLeft: '24px',
-        }}>
-          Activates WASM-accelerated neural networks for collective intelligence
-        </div>
-      </div>
-
-      {/* Skills Section */}
-      <div style={{ marginBottom: '20px' }}>
-        <button
-          onClick={() => setShowSkills(!showSkills)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-            padding: '10px',
-            backgroundColor: selectedSkills.size > 0 ? 'rgba(241, 196, 15, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-            border: selectedSkills.size > 0 ? '1px solid #F1C40F' : '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '4px',
-            color: '#F1C40F',
-            cursor: 'pointer',
-            fontSize: '14px',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ⚡ Skills
-            {selectedSkills.size > 0 && (
-              <span style={{
-                backgroundColor: '#F1C40F',
-                color: 'black',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-              }}>
-                {selectedSkills.size} selected
-              </span>
-            )}
-          </span>
-          <span>{showSkills ? '▼' : '▶'}</span>
-        </button>
-
-        {showSkills && (
-          <div style={{
-            marginTop: '10px',
-            padding: '10px',
-            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-            borderRadius: '4px',
-            maxHeight: '300px',
-            overflow: 'auto',
-          }}>
-            {/* Search */}
-            <input
-              type="text"
-              value={skillSearchQuery}
-              onChange={(e) => setSkillSearchQuery(e.target.value)}
-              placeholder="Search skills..."
-              style={{
-                width: '100%',
-                padding: '8px',
-                marginBottom: '10px',
-                backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '4px',
-                color: 'white',
-              }}
-            />
-
-            {/* Skills by category */}
-            {Object.entries(skillsByCategory).map(([category, skills]) => (
-              <div key={category} style={{ marginBottom: '10px' }}>
-                <div style={{
-                  fontSize: '12px',
-                  color: '#F1C40F',
-                  marginBottom: '6px',
-                  fontWeight: 'bold',
-                }}>
-                  {categoryIcons[category]} {categoryLabels[category]}
-                </div>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: '4px',
-                }}>
-                  {skills.map((skill) => (
-                    <label
-                      key={skill.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '4px 6px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        backgroundColor: selectedSkills.has(skill.id)
-                          ? 'rgba(241, 196, 15, 0.2)'
-                          : 'transparent',
-                        color: selectedSkills.has(skill.id)
-                          ? '#F1C40F'
-                          : 'rgba(255, 255, 255, 0.7)',
-                      }}
-                      title={skill.description}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedSkills.has(skill.id)}
-                        onChange={() => toggleSkill(skill.id)}
-                        style={{ marginRight: '2px' }}
-                      />
-                      <span>{skill.icon}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {skill.name}
-                      </span>
-                      {skill.mcpServer && (
-                        <span style={{
-                          fontSize: '9px',
-                          padding: '1px 4px',
-                          backgroundColor: 'rgba(46, 204, 113, 0.3)',
-                          color: '#2ECC71',
-                          borderRadius: '3px',
-                        }}>
-                          MCP
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            {filteredSkills.length === 0 && (
-              <div style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.5)', padding: '20px' }}>
-                No skills match your search
-              </div>
-            )}
+        {error && (
+          <div className="mb-4 rounded-[calc(var(--radius)-2px)] border border-destructive/40 bg-destructive/10 p-2.5 text-xs text-destructive">
+            {error}
           </div>
         )}
-      </div>
 
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', color: '#F1C40F' }}>
-          Task for Hive Mind <span style={{ color: '#E74C3C' }}>*</span>
-        </label>
-        <textarea
-          value={customPrompt}
-          onChange={(e) => setCustomPrompt(e.target.value)}
-          placeholder="Describe the task for the hive mind to accomplish..."
-          required
-          style={{
-            width: '100%',
-            minHeight: '100px',
-            padding: '8px',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.3)',
-            borderRadius: '4px',
-            color: 'white',
-            resize: 'vertical',
-          }}
+        {mcpConnected === false && (
+          <div className="mb-4 flex items-center gap-2 rounded-[calc(var(--radius)-2px)] border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs text-amber-500">
+            <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+            MCP service is not connected. The multi-agent system may not initialize properly.
+          </div>
+        )}
+
+        <AgentTopologyFields
+          topology={topology}
+          onTopologyChange={setTopology}
+          maxAgents={maxAgents}
+          onMaxAgentsChange={setMaxAgents}
+          enableNeural={enableNeural}
+          onEnableNeuralChange={setEnableNeural}
         />
-        <div style={{
-          fontSize: '12px',
-          color: 'rgba(255, 255, 255, 0.6)',
-          marginTop: '4px',
-        }}>
-          Example: "Build a REST API with user authentication and database integration"
-        </div>
-      </div>
 
-      <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-        <button
-          onClick={onClose}
-          disabled={isLoading}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.3)',
-            borderRadius: '4px',
-            color: 'white',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            opacity: isLoading ? 0.5 : 1,
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleInitialize}
-          disabled={isLoading}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#F1C40F',
-            border: 'none',
-            borderRadius: '4px',
-            color: 'black',
-            fontWeight: 'bold',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            opacity: isLoading ? 0.8 : 1,
-          }}
-        >
-          {isLoading ? 'Spawning...' : 'Spawn Hive Mind'}
-        </button>
+        <AgentTypeGrid agentTypes={agentTypes} onToggle={toggleAgentType} topology={topology} />
+
+        <AgentSkillsSection
+          showSkills={showSkills}
+          onToggleShow={() => setShowSkills((v) => !v)}
+          selectedSkills={selectedSkills}
+          onToggleSkill={toggleSkill}
+          searchQuery={skillSearchQuery}
+          onSearchChange={setSkillSearchQuery}
+          skillsByCategory={skillsByCategory}
+          filteredCount={filteredSkills.length}
+        />
+
+        <div className="mb-4">
+          <span className="cc-field-label mb-1.5 block">
+            Task for Hive Mind <span className="text-destructive">*</span>
+          </span>
+          <Textarea
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+            placeholder="Describe the task for the hive mind to accomplish..."
+            required
+            className="min-h-[100px] resize-y text-xs"
+          />
+          <p className="cc-helper-text mt-1">
+            Example: "Build a REST API with user authentication and database integration"
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={isLoading}>
+            Cancel
+          </Button>
+          <Button variant="default" onClick={handleInitialize} loading={isLoading} loadingText="Spawning...">
+            Spawn Hive Mind
+          </Button>
+        </div>
       </div>
     </div>,
     portalContainer
