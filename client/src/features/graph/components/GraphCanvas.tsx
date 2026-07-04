@@ -31,6 +31,8 @@ import { HeadTrackedParallaxController } from '../../visualisation/components/He
 import WasmSceneEffects from '../../visualisation/components/WasmSceneEffects';
 // Embedding cloud layer (PCA-projected RuVector vector embeddings)
 import EmbeddingCloudLayer from '../../visualisation/components/EmbeddingCloudLayer';
+// Echo Pulse — commit-time expanding ring wash (control-center signature flourish)
+import EchoPulseLayer from '../../control-center/echo/EchoPulseLayer';
 
 // Store and utils
 import { useSettingsStore } from '../../../store/settingsStore';
@@ -370,6 +372,10 @@ const GraphCanvas: React.FC = () => {
                     atmosphereEnabled={sceneEffects?.fogEnabled !== false}
                     atmosphereResolution={sceneEffects?.atmosphereResolution ?? 128}
                 />
+
+                {/* Echo Pulse — expanding ring wash on setting commit; self-gates on the
+                    control-center feature flag + prefers-reduced-motion, zero cost when idle */}
+                <EchoPulseLayer />
 
                 {/* Embedding cloud — background layer behind graph nodes */}
                 <EmbeddingCloudLayer enabled={embeddingCloudEnabled} />
