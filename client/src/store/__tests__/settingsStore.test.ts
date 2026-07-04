@@ -376,6 +376,62 @@ describe('settingsStore', () => {
     });
   });
 
+  // ---- ensureLoaded deep-merge (defect-4: server GET must not drop client keys) ----
+
+  describe('ensureLoaded (lazy hydration merge)', () => {
+    it('deep-merges server subtrees over client state without dropping client-only keys', async () => {
+      // Client has touched visualisation.rendering.labelLayoutEvery and holds two
+      // other client-known keys the server never round-trips.
+      useSettingsStore.setState({
+        partialSettings: {
+          visualisation: {
+            rendering: {
+              labelLayoutEvery: 5,
+              maxEdgesCeiling: 1000,
+              softwareFallback: true,
+              ambientLightIntensity: 0.1, // stale client value the server will overwrite
+            },
+          },
+        } as Record<string, unknown>,
+        settings: {} as Record<string, unknown>,
+        loadedPaths: new Set(['visualisation.rendering.labelLayoutEvery']),
+        initialized: true,
+      });
+
+      // getSettingsByPaths returns the FULL canonical tree; the server response
+      // omits the three client-known rendering keys.
+      mockGetSettingsByPaths.mockResolvedValueOnce({
+        visualisation: {
+          rendering: {
+            ambientLightIntensity: 0.7,
+            enableAntialiasing: true,
+          },
+        },
+      });
+
+      await useSettingsStore.getState().ensureLoaded(['visualisation.rendering']);
+
+      const rendering = ((useSettingsStore.getState().partialSettings as Record<string, unknown>)
+        .visualisation as Record<string, unknown>).rendering as Record<string, unknown>;
+
+      // Client-only keys survive the GET (this is the defect-4 regression).
+      expect(rendering.labelLayoutEvery).toBe(5);
+      expect(rendering.maxEdgesCeiling).toBe(1000);
+      expect(rendering.softwareFallback).toBe(true);
+      // Server values win per-key where present.
+      expect(rendering.ambientLightIntensity).toBe(0.7);
+      expect(rendering.enableAntialiasing).toBe(true);
+    });
+
+    it('short-circuits (no fetch) when every path is already loaded', async () => {
+      useSettingsStore.setState({
+        loadedPaths: new Set(['visualisation.rendering']),
+      });
+      await useSettingsStore.getState().ensureLoaded(['visualisation.rendering']);
+      expect(mockGetSettingsByPaths).not.toHaveBeenCalled();
+    });
+  });
+
   // ---- settingsStoreUtils helpers ----
 
   describe('settingsStoreUtils', () => {

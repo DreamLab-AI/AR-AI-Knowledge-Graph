@@ -1162,7 +1162,7 @@
       "subgroup": "Labels",
       "min": 0,
       "max": 0.01,
-      "step": 0.001
+      "step": 0.0001
     },
     {
       "key": "labelDistanceThreshold",
@@ -1394,7 +1394,7 @@
       "clientOnly": false,
       "server": "qualityGates",
       "subgroup": "GPU & Quality Gates",
-      "min": 1000,
+      "min": 0,
       "max": 500000,
       "step": 5000
     },

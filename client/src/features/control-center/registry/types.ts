@@ -27,6 +27,8 @@ export interface RegistryField {
   path?: string;
   /** transient client-local key (analytics grouping); mutually exclusive with path */
   localKey?: string;
+  /** seed value for a transient localKey field (initialises the panel's local map) */
+  default?: string | number | boolean;
   min?: number;
   max?: number;
   step?: number;

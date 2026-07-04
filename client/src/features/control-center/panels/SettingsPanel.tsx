@@ -13,7 +13,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { REGISTRY, GROUP_BY_ID } from '../registry/settingsRegistry';
+import { REGISTRY, GROUP_BY_ID, ALL_FIELDS } from '../registry/settingsRegistry';
 import { PANELS } from '../registry/manifest';
 import { GlassPanel } from '../primitives/GlassPanel';
 import { GroupSection } from '../primitives/GroupSection';
@@ -23,9 +23,25 @@ import { SolidPanel } from './SolidPanel';
 import { OntologyPanel } from './OntologyPanel';
 import { useControlCenterUI } from '../state/useControlCenterUI';
 import { useEnsureGroupLoaded } from '../state/useEnsureGroupLoaded';
+import { useLocalFieldMap } from '../hooks/useSettingField';
 import '../styles/control-center.css';
 
 const BESPOKE_IDS = new Set(PANELS.map((p) => p.id));
+
+/**
+ * Seed values for every transient `localKey` field across the registry. localKeys
+ * are globally unique, so a single panel-scoped map covers all groups. Seeding
+ * (not leaving fields undefined) is what makes the Run Grouping method select show
+ * a concrete value AND its showWhen-dependent sliders render on first open — see
+ * defect-1. Falls back to the select's first option / a slider's min when a field
+ * declares no explicit `default`.
+ */
+const INITIAL_LOCAL_VALUES: Record<string, unknown> = Object.fromEntries(
+  ALL_FIELDS.filter((f) => f.localKey).map((f) => [
+    f.localKey as string,
+    f.default ?? (f.type === 'select' ? f.options?.[0] : f.min),
+  ]),
+);
 
 export const SettingsPanel: React.FC = () => {
   const openPanel = useControlCenterUI((s) => s.openPanel);
@@ -33,6 +49,12 @@ export const SettingsPanel: React.FC = () => {
   const openGroup = useControlCenterUI((s) => s.openGroup);
   const closePanel = useControlCenterUI((s) => s.closePanel);
   const ensureGroupLoaded = useEnsureGroupLoaded();
+
+  // Transient inputs for the Run Grouping action (method/params). These are one-shot
+  // POST-body inputs, not settings paths, so they live in a panel-local map rather
+  // than the settings store. WP1 built GroupSection/SettingRow/SettingAction to accept
+  // localValues + onLocalChange; this lifts and threads them (defect-1: WP2 omitted it).
+  const { values: localValues, setValue: onLocalChange } = useLocalFieldMap(INITIAL_LOCAL_VALUES);
 
   const [query, setQuery] = useState('');
 
@@ -72,12 +94,27 @@ export const SettingsPanel: React.FC = () => {
           {filtered.length === 0 ? (
             <p className="cc-helper-text p-4 text-center">No settings match “{query}”.</p>
           ) : (
-            filtered.map((f) => <SettingRow key={f.key} field={f} groupId={group.id} />)
+            filtered.map((f) => (
+              <SettingRow
+                key={f.key}
+                field={f}
+                groupId={group.id}
+                localValues={localValues}
+                onLocalChange={onLocalChange}
+              />
+            ))
           )}
         </div>
       );
     }
-    return <GroupSection group={group} onFirstMount={ensureGroupLoaded} />;
+    return (
+      <GroupSection
+        group={group}
+        localValues={localValues}
+        onLocalChange={onLocalChange}
+        onFirstMount={ensureGroupLoaded}
+      />
+    );
   };
 
   return (

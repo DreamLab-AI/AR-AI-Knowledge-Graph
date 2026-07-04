@@ -24,6 +24,17 @@ import {
 
 const logger = createLogger('SettingsStore')
 
+/** Read the value at a dot-path within a settings object (undefined if absent). */
+function getValueFromPathLocal(obj: unknown, path: string): unknown {
+  if (!path) return undefined;
+  let current: unknown = obj;
+  for (const key of path.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
 export type CoreSlice = Pick<
   SettingsState,
   | 'partialSettings'
@@ -271,7 +282,31 @@ export const createCoreSlice: StateCreator<SettingsState, [], [], CoreSlice> = (
         const newLoadedPaths = new Set(state.loadedPaths);
 
         Object.entries(pathSettings).forEach(([path, value]) => {
-          setNestedValue(newPartialSettings as Record<string, unknown>, path, value);
+          // Deep-merge the incoming server subtree OVER the existing client subtree
+          // instead of wholesale-replacing it. A wholesale replace (the previous
+          // setNestedValue-only path) dropped client-known keys the server's GET
+          // response omits — e.g. touching visualisation.rendering.labelLayoutEvery
+          // and then any ensureLoaded() would replace the whole `visualisation`
+          // subtree with the server's canonical shape, silently losing
+          // labelLayoutEvery / maxEdgesCeiling / softwareFallback. deepMergeSettings
+          // (base = existing client, overlay = server) makes server values win
+          // per-key while unknown local keys survive. See defect-4.
+          const existing = getValueFromPathLocal(newPartialSettings, path);
+          if (
+            value !== null && typeof value === 'object' && !Array.isArray(value) &&
+            existing !== null && typeof existing === 'object' && !Array.isArray(existing)
+          ) {
+            setNestedValue(
+              newPartialSettings as Record<string, unknown>,
+              path,
+              deepMergeSettings(
+                existing as Record<string, unknown>,
+                value as Record<string, unknown>,
+              ),
+            );
+          } else {
+            setNestedValue(newPartialSettings as Record<string, unknown>, path, value);
+          }
           newLoadedPaths.add(path);
         });
 

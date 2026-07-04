@@ -45,6 +45,18 @@ export function useControlCenterHotkeys(): void {
       // the panel and left inert otherwise (canvas/global Esc handlers survive).
       if (e.key === 'Escape') {
         if (ui.openPanel) {
+          // A Radix Select dropdown (or any popper-positioned overlay) open inside
+          // the panel owns Escape first — it should close only itself, not the whole
+          // panel. The design-system Select renders position="popper" content, so an
+          // open dropdown is present as a [data-radix-popper-content-wrapper] with a
+          // role="listbox"/data-state="open" body. If one is mounted, bail and let
+          // Radix's own Escape handler dismiss the dropdown. See defect-2.
+          if (
+            typeof document !== 'undefined' &&
+            document.querySelector('[data-radix-popper-content-wrapper], [role="listbox"]')
+          ) {
+            return;
+          }
           e.preventDefault();
           ui.closePanel();
         }

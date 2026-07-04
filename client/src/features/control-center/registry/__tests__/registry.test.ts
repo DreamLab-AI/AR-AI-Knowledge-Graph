@@ -96,4 +96,44 @@ describe('control-center settings registry', () => {
       expect(Boolean(f.path) || Boolean(f.localKey) || isTransient).toBe(true);
     }
   });
+
+  // Every slider's range must be an exact whole number of steps: (max - min) / step
+  // must be integral, otherwise the max (and any default sitting on it) is off the
+  // step grid and silently snaps on first touch/restore — the defect-3 class of bug.
+  // Known pre-existing off-grid sliders are whitelisted by path (out of defect-3
+  // scope; documented here so future drift on the FIXED fields is still caught).
+  const OFF_GRID_WHITELIST = new Set<string>([
+    'visualisation.graphs.logseq.tweening.lerpBase',            // (0.15-0.0001)/0.001 = 149.9
+    'visualisation.graphs.logseq.physics.maxForce',            // (2000-1)/5     = 399.8
+    'visualisation.graphs.logseq.physics.constraintMaxForcePerNode', // (2000-1)/5 = 399.8
+    'perplexity.maxTokens',                                    // (4096-100)/100 = 39.96
+  ]);
+
+  it('(h) every slider range is a whole number of steps (no step-grid drift)', () => {
+    const offenders: string[] = [];
+    for (const f of ALL_FIELDS) {
+      if (f.type !== 'slider') continue;
+      const id = f.path ?? f.localKey ?? f.key;
+      expect(typeof f.min, `slider ${id} missing min`).toBe('number');
+      expect(typeof f.max, `slider ${id} missing max`).toBe('number');
+      expect(typeof f.step, `slider ${id} missing step`).toBe('number');
+      if (OFF_GRID_WHITELIST.has(f.path ?? '')) continue;
+      const steps = ((f.max as number) - (f.min as number)) / (f.step as number);
+      if (Math.abs(Math.round(steps) - steps) > 1e-6) {
+        offenders.push(`${id} → (max-min)/step = ${steps}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('(i) the defect-3 sliders now land exactly on their step grid', () => {
+    const maxNodeCount = ALL_FIELDS.find((f) => f.path === 'qualityGates.maxNodeCount')!;
+    expect(((maxNodeCount.max! - maxNodeCount.min!) / maxNodeCount.step!)).toBe(100);
+
+    const outline = ALL_FIELDS.find((f) => f.path === 'visualisation.graphs.logseq.labels.textOutlineWidth')!;
+    expect(outline.step).toBe(0.0001);
+    // the 0.0074725277 stored default now snaps to 0.0075 (loss ~2.7e-5) not 0.007 (loss ~4.7e-4)
+    const snapped = Math.round(0.0074725277 / outline.step!) * outline.step!;
+    expect(Math.abs(snapped - 0.0074725277)).toBeLessThan(0.0001);
+  });
 });
