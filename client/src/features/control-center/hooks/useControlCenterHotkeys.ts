@@ -83,7 +83,12 @@ export function useControlCenterHotkeys(): void {
       }
     };
 
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    // Capture phase: Radix's document-level Escape handler removes the open
+    // popper synchronously before bubble-phase listeners run, so a bubble
+    // listener's open-popover probe always misses and Escape collapses both
+    // the dropdown and the panel. Capturing first sees the popper while it is
+    // still mounted and bails, leaving the dropdown dismissal to Radix.
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
   }, []);
 }
