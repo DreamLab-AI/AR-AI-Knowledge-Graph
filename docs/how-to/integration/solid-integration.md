@@ -138,7 +138,7 @@ solidPodService.subscribeToGraphViewChanges((viewName) => {
 });
 ```
 
-**Natural language:** Collapse the control panel and type `save view AI Research` or `load view default` in the command input.
+**Natural language:** Open the Ask box in the [Control Center](../../explanation/control-center.md)'s dock and type `save view AI Research` or `load view default`.
 
 ### 2. SPARQL PATCH for Ontology Mutations (ADR-028)
 
@@ -277,8 +277,8 @@ Acknowledge:  ack {resourceUrl}
 
 ## Troubleshooting
 
-### "Login Required" in Pod tab
-You must be authenticated with Nostr. Install a NIP-07 browser extension (nos2x, Alby, or Nostr Connect) and log in via the System tab → Nostr Login.
+### "Login Required" in the Solid Pod panel
+You must be authenticated with Nostr. Install a NIP-07 browser extension (nos2x, Alby, or Nostr Connect) and log in via the [Control Center](../../explanation/control-center.md)'s System & Developer group → Nostr Login.
 
 ### JSS shows "unhealthy"
 JSS requires authentication for all requests including health checks. This is expected — the container shows "unhealthy" in Docker but the server is running. Check `/solid/health` with auth headers.

@@ -76,7 +76,7 @@ flowchart TD
     TIMEOUT -->|"yes"| WGPU["WebGPURenderer (true backend)"]
 ```
 
-The factory exposes an `isWebGPURenderer` flag so materials can branch on backend capability, and a user-facing override (the Effects tab "WebGPU Renderer" toggle, persisted in `localStorage` as `visionclaw-force-webgl`). The 5-second timeout guard exists because the Quest 3 Oculus Browser can hang during WebGPU adapter negotiation; on timeout the client discards the half-initialised renderer and proceeds on WebGL. Immersive XR is a **separate** native binary, not this renderer — see [XR Architecture](xr-architecture.md).
+The factory exposes an `isWebGPURenderer` flag so materials can branch on backend capability, and a user-facing override (the [Control Center](control-center.md)'s System & Developer group, "WebGPU Renderer" action, persisted in `localStorage` as `visionclaw-force-webgl`). The 5-second timeout guard exists because the Quest 3 Oculus Browser can hang during WebGPU adapter negotiation; on timeout the client discards the half-initialised renderer and proceeds on WebGL. Immersive XR is a **separate** native binary, not this renderer — see [XR Architecture](xr-architecture.md).
 
 ## Component composition
 
@@ -86,7 +86,7 @@ The factory exposes an `isWebGPURenderer` flag so materials can branch on backen
 flowchart TD
     APP["App.tsx"] --> INIT["AppInitializer (WS, settings, auth)"]
     APP --> LAYOUT["MainLayout"]
-    LAYOUT --> PANEL["IntegratedControlPanel (settings)"]
+    LAYOUT --> PANEL["ControlCenter (glass overlay, settings)"]
     LAYOUT --> CANVAS["R3F Canvas"]
     CANVAS --> GM["GraphManager"]
     CANVAS --> WASMFX["WasmSceneEffects"]
@@ -166,6 +166,7 @@ Particle and environment effects are implemented in a Rust crate compiled to WAS
 - [Backend Architecture](backend-architecture.md) — the Actix backend and hexagonal ports that feed the client.
 - [Actor Hierarchy](actor-hierarchy.md) — the actors that compute layout and broadcast positions.
 - [Physics & GPU Engine](physics-gpu-engine.md) — CUDA force computation and the settings pipeline behind the positions.
+- [Control Center](control-center.md) — the settings UI that writes into that pipeline.
 - [XR Architecture](xr-architecture.md) — the separate native immersive client.
 - [Binary protocol reference](../reference/binary-protocol.md) and [WebSocket protocol reference](../reference/websocket-protocol.md) — wire-level detail.
 - Governing ADRs: [ADR-012 WebSocket store decomposition](../adr/ADR-012-websocket-store-decomposition.md), [ADR-013 render performance](../adr/ADR-013-render-performance.md), [ADR-031 GPU analytics correctness and wiring](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-039 settings consolidation](../adr/ADR-039-settings-consolidation.md), [ADR-061 binary protocol unification](../adr/ADR-061-binary-protocol-unification.md).

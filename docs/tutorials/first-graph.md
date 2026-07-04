@@ -104,10 +104,10 @@ Open **http://localhost:3001** in your browser.
 
 You should see:
 
-- A dark 3D viewport in the centre of the screen.
-- A left sidebar with graph controls and the multi-agent panel.
-- A right sidebar with visual and physics settings.
-- A green **Connected** indicator in the bottom status bar.
+- A dark 3D viewport filling the whole screen — the graph canvas is the hero view; there are no permanent side panels.
+- A bottom-center glass dock with five macro dials (Density, Luminosity, Motion, Focus, Atmosphere), a physics toggle, a reset action, and an "Ask" button.
+- A top-right status pill — hover or focus it to expand the system health, multi-agent, and SpacePilot status widgets.
+- Press `1`–`8` or `Ctrl/Cmd+K` to reach any of the 168 graph, physics, and rendering settings — see the [Control Center](../explanation/control-center.md).
 
 **If the viewport is blank after 60 seconds:**
 

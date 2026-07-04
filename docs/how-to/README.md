@@ -19,7 +19,7 @@ Day-to-day tasks for deploying, building, and driving the system.
 |-------|------|
 | [Deploy VisionClaw](deployment.md) | Launch the Docker stack with `./scripts/launch.sh`, build natively with the GPU feature, install CUDA 13.1, and verify the service URLs. |
 | [Development Guide](development.md) | Set up the Rust/React toolchain locally, navigate the project structure, run the test workflow, and add new features. |
-| [Agent Orchestration](agent-orchestration.md) | Deploy, configure, and coordinate the multi-agent AI system via the Docker multi-container setup, MCP tools, and the WebUI control panel. |
+| [Agent Orchestration](agent-orchestration.md) | Deploy, configure, and coordinate the multi-agent AI system via the Docker multi-container setup, MCP tools, and the Control Center's agent status surface. |
 | [REST API Usage](rest-api-usage.md) | Integrate against the REST API — authentication, common workflows, error handling, pagination, and pairing with the WebSocket stream. |
 | [Performance Profiling](performance-profiling.md) | Identify and diagnose bottlenecks across GPU physics, WebSocket throughput, the render pipeline, and Oxigraph queries. |
 | [Quest 3 Setup](xr-quest3-setup.md) | Side-load the Godot 4 + OpenXR XR APK onto a Meta Quest 3, enable developer mode, pair LiveKit voice, and verify multi-user presence. |

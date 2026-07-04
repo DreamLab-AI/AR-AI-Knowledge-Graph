@@ -178,7 +178,7 @@ The backend needs to implement:
 ## Related Documentation
 
 - [Documentation Contributing Guidelines](../../CONTRIBUTING.md)
-- [Agent Control Panel User Guide](../agent-orchestration.md)
+- [Agent Orchestration Guide](../agent-orchestration.md)
 - [Pipeline Operator Runbook](../operations/pipeline-operator-runbook.md)
 - [Client-Side Filtering Implementation](filtering-nodes.md)
 - [Physics & GPU Engine](../../explanation/physics-gpu-engine.md)

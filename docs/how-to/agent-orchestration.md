@@ -1,9 +1,9 @@
 ---
 title: VisionClaw Agent Orchestration Guide
-description: Comprehensive guide to deploying, configuring, and orchestrating VisionClaw's multi-agent AI system using Docker multi-container setup, MCP tools, and the WebUI control panel
+description: Comprehensive guide to deploying, configuring, and orchestrating VisionClaw's multi-agent AI system using Docker multi-container setup, MCP tools, and the Control Center's agent status surface
 category: how-to
 tags: [agents, ai, orchestration, mcp, multi-agent, docker, claude-flow]
-updated-date: 2026-04-09
+updated-date: 2026-07-04
 ---
 
 # VisionClaw Agent Orchestration Guide
@@ -636,19 +636,34 @@ docker logs agentic-workstation -f
 
 ---
 
-## WebUI Control Panel
+## Agent Surface in the Control Center
 
-Access via **Settings → Agents** in the VisionClaw Control Centre.
+The docked, tabbed settings panel this section used to describe
+(`IntegratedControlPanel`) was replaced by the
+[Control Center](../explanation/control-center.md), a glass overlay with a
+bottom-center dock and a top-right status cluster. The live agent surface today
+is the **StatusCluster**: hover or focus its top-right pill to expand
+`BotsStatusPanel` — the Agent Spawner, Active Agents Monitor, and Telemetry
+Stream described below, restyled to the glass design language but functionally
+unchanged.
 
 ### Agent Spawner
 
-Six pre-configured agent type buttons: Researcher, Coder, Analyzer, Tester, Optimizer, Coordinator. Each spawns with default settings (priority, strategy, provider).
+Six pre-configured agent type buttons: Researcher, Coder, Analyzer, Tester, Optimizer, Coordinator. Each spawns with default settings (priority, strategy, provider), via the `MultiAgentInitializationPrompt` dialog.
 
 ### Active Agents Monitor
 
 Real-time view with status indicators: green (active), orange pulse (busy), red (error), gray (idle). Displays agent ID, type, health percentage, task count, uptime.
 
-### Settings (20+ options)
+### Settings (20+ options) — currently unreachable via the UI
+
+The `settings.agents.*` configuration surface below still exists server-side and
+in `AgentControlPanel`/`SkillsTab` (`client/src/features/settings/components/panels/`),
+but neither component is mounted anywhere in the Control Center's eight-group
+registry or any other surface — there is no "Agents" settings group. They are
+dead-code candidates pending a decision to wire them in or remove them; treat
+the table below as a record of what the settings key space supports, not as a
+path you can currently reach by clicking through the app.
 
 | Category | Setting | Range | Default |
 |----------|---------|-------|---------|
@@ -667,7 +682,7 @@ Real-time view with status indicators: green (active), orange pulse (busy), red 
 | Visualisation | Agent Node Size | 0.5–3.0 | 1.0 |
 | Visualisation | Agent Node Color | hex | configurable |
 
-Settings persist to `settings.agents.*` via the REST API and survive page refreshes.
+Where these settings are still writable (directly against the REST API), they persist to `settings.agents.*` and survive page refreshes.
 
 ### Telemetry Stream
 

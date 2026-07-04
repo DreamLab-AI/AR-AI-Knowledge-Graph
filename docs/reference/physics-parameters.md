@@ -13,8 +13,8 @@ authoritative source of truth is the Rust `PhysicsSettings` struct
 the GPU-aligned `SimParams` (`src/models/simulation_params.rs`, a 172-byte `#[repr(C)]`
 mirror of the CUDA `SimParams`) before each compute pass. Defaults quoted here are the
 canonical boot defaults from `PhysicsSettings::default()` — the values the simulation
-starts with whenever the SQLite `physics` key is absent. The Control Panel sliders edit
-the same fields through `PUT /api/settings/physics`.
+starts with whenever the SQLite `physics` key is absent. The [Control Center](../explanation/control-center.md)'s
+Motion & Forces group sliders edit the same fields through `PUT /api/settings/physics`.
 
 The empirical tuning guidance at the foot of this page is folded in from the parameter
 analysis of a 2,242-node knowledge graph and is the recommended starting point for graphs
@@ -26,7 +26,7 @@ of similar size and sparsity.
 
 ```mermaid
 flowchart TD
-  Slider["Control Panel slider<br/>(camelCase settings key)"]
+  Slider["Control Center slider<br/>(camelCase settings key)"]
   Store["React settings store (Zustand)"]
   Put["PUT /api/settings/physics<br/>(Actix-web handler)"]
   Phys["PhysicsSettings (Rust)<br/>canonical typed config"]

@@ -14,7 +14,7 @@ revised by writing a new ADR that supersedes the old one, never by rewriting
 history in place. Superseded records move to [`superseded/`](superseded/) and keep
 a forward pointer to whatever replaced them.
 
-The numbering runs ADR-011 through ADR-128 with gaps (early consolidation records
+The numbering runs ADR-011 through ADR-129 with gaps (early consolidation records
 ADR-001..010 and ADR-015..026 were folded into later ones). Sections below group the
 records by theme; within a theme they are ordered by number. Status is read from
 each record's own `## Status` block, so it reflects the decision's real lifecycle
@@ -151,6 +151,7 @@ handshake and removal of the legacy enterprise dashboard. See
 | [102](ADR-102-xr-client-backend-transport-completion.md) | XR Client ↔ Backend Transport Completion (Graph V3 + Presence) | Accepted |
 | [103](ADR-103-enterprise-dashboard-removal.md) | Enterprise Dashboard Removal — Migration to Nostr Forum | Accepted |
 | [126](ADR-126-omb-adoption-posture.md) | XR/MR Interface — OMB Adoption Posture | Proposed |
+| [129](ADR-129-control-center-reimagination.md) | Control Center Re-imagination — glass overlay replaces the docked settings panel | Accepted |
 
 ## Mesh Federation & agentbox
 
