@@ -2,7 +2,7 @@
  * SettingText — text input, commit on blur/Enter. design-spec.md §2.
  */
 
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import type { RegistryField } from '../registry/types';
 
 export interface SettingTextProps {
@@ -16,11 +16,25 @@ export interface SettingTextProps {
 export const SettingText: React.FC<SettingTextProps> = ({ field, testId, value, onChange, disabled }) => {
   const [draft, setDraft] = useState(value);
 
+  // Sync the draft when the store value changes underneath us (macro co-drive,
+  // palette reveal, external reset).
   useEffect(() => setDraft(value), [value]);
 
+  // Commit reads the latest draft/value through refs rather than closing over
+  // the render-time values. A handler that closes over a stale `draft` (or is
+  // memoized without `draft` in its deps) is the classic commit-path bug: the
+  // input looks accepted but blur/Enter commit an empty/stale string — or the
+  // guard sees draft===value and never calls onChange, so the store never
+  // receives the key. Refs make the setter fire the freshest text every time.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   const commit = useCallback(() => {
-    if (draft !== value) onChange(draft);
-  }, [draft, value, onChange]);
+    const nextDraft = draftRef.current;
+    if (nextDraft !== valueRef.current) onChange(nextDraft);
+  }, [onChange]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {

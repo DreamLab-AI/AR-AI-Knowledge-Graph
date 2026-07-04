@@ -24,6 +24,19 @@ export interface SettingSelectProps {
   disabled?: boolean;
 }
 
+/**
+ * Registry `options` are the REAL stored enum values (lowercase/kebab, per the
+ * frozen backend contract). The *stored* value must therefore be what
+ * `SelectItem.value` carries — that is what lets Radix mark the current option
+ * `aria-selected` (matching against the store value) and echo it in the trigger.
+ * The visible label is a light title-case view derived here, so no per-field
+ * label map is needed in the registry (RegistryField.options is `string[]` only).
+ */
+function labelize(value: string): string {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 export const SettingSelect: React.FC<SettingSelectProps> = ({ field, testId, value, onChange, disabled }) => {
   const handleValueChange = useCallback(
     (next: string) => {
@@ -36,12 +49,18 @@ export const SettingSelect: React.FC<SettingSelectProps> = ({ field, testId, val
   return (
     <Select value={value} onValueChange={handleValueChange} disabled={disabled}>
       <SelectTrigger id={testId} data-testid={testId} aria-label={field.label} className="h-7 text-xs">
-        <SelectValue placeholder={field.options?.[0]} />
+        {/* Render the current value's label deterministically so the trigger
+            reflects the store even before the listbox is first opened (Radix
+            otherwise resolves item text lazily on open). Empty value falls
+            through to the placeholder. */}
+        <SelectValue placeholder={field.options?.[0] ? labelize(field.options[0]) : undefined}>
+          {value ? labelize(value) : null}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {field.options?.map((option) => (
           <SelectItem key={option} value={option}>
-            {option}
+            {labelize(option)}
           </SelectItem>
         ))}
       </SelectContent>

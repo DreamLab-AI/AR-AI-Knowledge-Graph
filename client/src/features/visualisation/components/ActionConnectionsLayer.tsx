@@ -19,6 +19,7 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import { ActionConnection } from '../hooks/useActionConnections';
 import { AgentActionType } from '@/services/BinaryWebSocketProtocol';
 
@@ -325,25 +326,35 @@ export const ActionConnectionsStats: React.FC<{
     return byType;
   }, [connections]);
 
+  // This component lives INSIDE the R3F <Canvas> scene graph (it is rendered by
+  // AgentActionVisualization alongside the 3D ActionConnectionsLayer). A raw
+  // DOM <div> reconciled by react-three-fiber throws
+  // "R3F: Div is not part of the THREE namespace!" and takes down the canvas
+  // via CanvasErrorBoundary. drei's <Html fullscreen> portals the overlay out
+  // of the WebGL scene into a screen-space container, so the debug panel is
+  // valid inside the Canvas. `pointerEvents: none` keeps OrbitControls drivable
+  // through the full-screen wrapper; the inner panel pins to the lower-left.
   return (
-    <div style={{
-      position: 'absolute',
-      bottom: 10,
-      left: 10,
-      background: 'rgba(0,0,0,0.7)',
-      color: 'white',
-      padding: '8px 12px',
-      borderRadius: 4,
-      fontSize: 12,
-      fontFamily: 'monospace',
-    }}>
-      <div>Active Actions: {connections.length}</div>
-      {Object.entries(stats).map(([type, count]) => (
-        <div key={type} style={{ opacity: 0.8 }}>
-          {type}: {count}
-        </div>
-      ))}
-    </div>
+    <Html fullscreen zIndexRange={[100, 0]} style={{ pointerEvents: 'none' }}>
+      <div style={{
+        position: 'absolute',
+        bottom: 10,
+        left: 10,
+        background: 'rgba(0,0,0,0.7)',
+        color: 'white',
+        padding: '8px 12px',
+        borderRadius: 4,
+        fontSize: 12,
+        fontFamily: 'monospace',
+      }}>
+        <div>Active Actions: {connections.length}</div>
+        {Object.entries(stats).map(([type, count]) => (
+          <div key={type} style={{ opacity: 0.8 }}>
+            {type}: {count}
+          </div>
+        ))}
+      </div>
+    </Html>
   );
 };
 
