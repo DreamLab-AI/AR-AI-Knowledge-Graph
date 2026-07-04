@@ -13,7 +13,7 @@
  *   echoPulseEnabled UI flag), never per drag tick.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { MacroDef } from '../registry/types';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { autoSaveManager } from '../../../store/autoSaveManager';
@@ -66,20 +66,57 @@ export function useMacro(macro: MacroDef): MacroControl {
   const value = useSettingsStore((s) => macro.derive((p) => getByPath(s.settings, p)));
   const echoEnabled = useControlCenterUI((s) => s.echoPulseEnabled);
 
+  // rAF coalescing: a pointer drag fires onChange many times per frame (often
+  // faster than the display refresh). Applying every tick means one immer batch
+  // + full R3F fan-out + full label re-layout per event — the redraw thrash.
+  // We instead keep only the LATEST t and flush a single write per animation
+  // frame, so drag cost is bounded to one store update per rendered frame.
+  const rafRef = useRef<number | null>(null);
+  const pendingRef = useRef<number | null>(null);
+  const hasRaf = typeof requestAnimationFrame === 'function';
+
+  const flush = useCallback(() => {
+    rafRef.current = null;
+    const t = pendingRef.current;
+    if (t == null) return;
+    pendingRef.current = null;
+    applyMacroWrites(macro.apply(t));
+  }, [macro]);
+
+  const cancelPending = useCallback(() => {
+    if (rafRef.current != null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = null;
+    pendingRef.current = null;
+  }, []);
+
   const onChange = useCallback(
     (t: number) => {
-      applyMacroWrites(macro.apply(t));
+      if (!hasRaf) {
+        // No rAF (SSR / test env): apply synchronously, matching legacy behaviour.
+        applyMacroWrites(macro.apply(t));
+        return;
+      }
+      pendingRef.current = t;
+      if (rafRef.current == null) rafRef.current = requestAnimationFrame(flush);
     },
-    [macro],
+    [macro, flush, hasRaf],
   );
 
   const onCommit = useCallback(
     (t: number) => {
+      // The commit value is authoritative — drop any frame still queued so the
+      // final write is exactly `t`, never a stale coalesced tick landing after.
+      cancelPending();
       applyMacroWrites(macro.apply(t));
       if (echoEnabled) emitEchoPulse({ origin: 'camera-center', strength: 0.6 });
     },
-    [macro, echoEnabled],
+    [macro, echoEnabled, cancelPending],
   );
+
+  // Flush-safe unmount: never invoke a store write after the dial is gone.
+  useEffect(() => cancelPending, [cancelPending]);
 
   return { value, onChange, onCommit };
 }

@@ -12,6 +12,45 @@
 
 import { create } from 'zustand';
 
+/* ---------------------------------------------------------------------- */
+/* Docked-panel width (user-resizable via the GlassPanel edge handle).     */
+/*                                                                         */
+/* Persisted to localStorage ONLY — this is a client-side view preference, */
+/* NOT a settings path, so it never touches the frozen 168-path backend    */
+/* contract (§7 overrule 4). Clamped so a stale/tampered value can't strand */
+/* the panel off-screen or narrower than its rail.                         */
+/* ---------------------------------------------------------------------- */
+export const PANEL_MIN_WIDTH = 320;
+export const PANEL_MAX_WIDTH = 900;
+export const PANEL_DEFAULT_WIDTH = 380;
+const PANEL_WIDTH_STORAGE_KEY = 'controlCenter.panelWidth';
+
+export function clampPanelWidth(width: number): number {
+  if (!Number.isFinite(width)) return PANEL_DEFAULT_WIDTH;
+  return Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, Math.round(width)));
+}
+
+function readStoredPanelWidth(): number {
+  if (typeof window === 'undefined' || !window.localStorage) return PANEL_DEFAULT_WIDTH;
+  try {
+    const raw = window.localStorage.getItem(PANEL_WIDTH_STORAGE_KEY);
+    if (raw == null) return PANEL_DEFAULT_WIDTH;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) ? clampPanelWidth(n) : PANEL_DEFAULT_WIDTH;
+  } catch {
+    return PANEL_DEFAULT_WIDTH;
+  }
+}
+
+function persistPanelWidth(width: number): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(PANEL_WIDTH_STORAGE_KEY, String(width));
+  } catch {
+    /* storage unavailable / quota exceeded — width stays session-only */
+  }
+}
+
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   try {
@@ -31,6 +70,9 @@ export interface ControlCenterUIState {
   dockCollapsed: boolean;
   /** Echo Pulse feature flag (forced false under prefers-reduced-motion). */
   echoPulseEnabled: boolean;
+  /** Persisted width (px) of the docked SettingsPanel. User-resizable via the
+   *  GlassPanel edge handle; clamped to [PANEL_MIN_WIDTH, PANEL_MAX_WIDTH]. */
+  panelWidth: number;
 
   /** Open the panel to a group/panel id (used by hotkeys, rail, reveal). */
   openGroup: (id: string) => void;
@@ -42,6 +84,8 @@ export interface ControlCenterUIState {
   toggleDock: () => void;
   setDockCollapsed: (collapsed: boolean) => void;
   setEchoPulseEnabled: (enabled: boolean) => void;
+  /** Set + persist the docked panel width (clamped). */
+  setPanelWidth: (width: number) => void;
 }
 
 export const useControlCenterUI = create<ControlCenterUIState>((set) => ({
@@ -49,6 +93,7 @@ export const useControlCenterUI = create<ControlCenterUIState>((set) => ({
   activeGroup: null,
   dockCollapsed: false,
   echoPulseEnabled: !prefersReducedMotion(),
+  panelWidth: readStoredPanelWidth(),
 
   openGroup: (id) => set({ openPanel: true, activeGroup: id }),
   closePanel: () => set({ openPanel: false }),
@@ -62,6 +107,11 @@ export const useControlCenterUI = create<ControlCenterUIState>((set) => ({
   toggleDock: () => set((s) => ({ dockCollapsed: !s.dockCollapsed })),
   setDockCollapsed: (collapsed) => set({ dockCollapsed: collapsed }),
   setEchoPulseEnabled: (enabled) => set({ echoPulseEnabled: enabled }),
+  setPanelWidth: (width) => {
+    const w = clampPanelWidth(width);
+    persistPanelWidth(w);
+    set({ panelWidth: w });
+  },
 }));
 
 /**

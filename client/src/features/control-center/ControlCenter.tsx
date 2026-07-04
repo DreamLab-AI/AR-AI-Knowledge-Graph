@@ -14,11 +14,12 @@
  *    disconnect toggle the orbit controls, buttons stream into status.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { SpaceDriver } from '../../services/SpaceDriverService';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { ControlPanelProps } from '../visualisation/components/ControlPanel/types';
+import { CommandInput } from '../visualisation/components/CommandInput';
 import { GlassDock } from './primitives/GlassDock';
 import { MacroBar } from './macros/MacroBar';
 import { SettingsPanel } from './panels/SettingsPanel';
@@ -28,16 +29,6 @@ import { useControlCenterHotkeys } from './hooks/useControlCenterHotkeys';
 import { useRevealSetting } from './hooks/useRevealSetting';
 import './styles/control-center.css';
 
-/** Focus the ported CommandInput (mounted elsewhere today). Broadcasts an event
- *  WP3 can wire, and best-effort focuses a mounted input if one is present. */
-function focusCommandInput(): void {
-  window.dispatchEvent(new CustomEvent('controlcenter:focus-command-input'));
-  const input = document.querySelector<HTMLElement>(
-    '[data-command-input] input, [data-command-input] textarea',
-  );
-  input?.focus();
-}
-
 export const ControlCenter: React.FC<ControlPanelProps> = ({
   onOrbitControlsToggle,
   botsData,
@@ -45,6 +36,44 @@ export const ControlCenter: React.FC<ControlPanelProps> = ({
 }) => {
   const dockCollapsed = useControlCenterUI((s) => s.dockCollapsed);
   const toggleDock = useControlCenterUI((s) => s.toggleDock);
+
+  // Ask affordance: the dock button opens the natural-language CommandInput
+  // (the settings assistant). It renders only while open, so nothing extra is
+  // mounted at rest.
+  const [askOpen, setAskOpen] = useState(false);
+  const askRef = useRef<HTMLDivElement>(null);
+
+  const toggleAsk = useCallback(() => setAskOpen((open) => !open), []);
+
+  // Focus the input each time the Ask box opens. CommandInput mounts
+  // synchronously with this render, so focus on the next frame once it is live.
+  useEffect(() => {
+    if (!askOpen) return;
+    const raf = requestAnimationFrame(() => {
+      askRef.current?.querySelector<HTMLInputElement>('input, textarea')?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [askOpen]);
+
+  // Realise the ported broadcast contract: `controlcenter:focus-command-input`
+  // now opens the command input (previously it focused a phantom, unmounted
+  // element) so hotkeys / other surfaces can summon it.
+  useEffect(() => {
+    const open = () => setAskOpen(true);
+    window.addEventListener('controlcenter:focus-command-input', open);
+    return () => window.removeEventListener('controlcenter:focus-command-input', open);
+  }, []);
+
+  // Esc dismisses the Ask box, scoped to when it is open. The panel owns its own
+  // Esc via useControlCenterHotkeys, so this never fights it.
+  useEffect(() => {
+    if (!askOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAskOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [askOpen]);
 
   useControlCenterHotkeys();
   useRevealSetting();
@@ -126,14 +155,23 @@ export const ControlCenter: React.FC<ControlPanelProps> = ({
           <button
             type="button"
             data-testid="control-center-ask"
-            aria-label="Ask — focus the command input"
-            onClick={focusCommandInput}
+            aria-label="Ask — open the command input"
+            aria-expanded={askOpen}
+            aria-controls="control-center-command-input"
+            onClick={toggleAsk}
             className="cc-glass flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <MessageSquare size={14} aria-hidden="true" />
             Ask
           </button>
         </GlassDock>
+      </div>
+
+      {/* Ask command input — the ported settings-assistant box. It is
+          fixed-position and self-manages its own pointer events, and renders
+          only while open (isCollapsed toggles its visibility). */}
+      <div ref={askRef} id="control-center-command-input" data-command-input>
+        <CommandInput isCollapsed={askOpen} />
       </div>
     </div>
   );

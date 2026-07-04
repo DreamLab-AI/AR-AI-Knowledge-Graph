@@ -4,7 +4,8 @@
  * Layout: a left rail (the 8 semantic groups + the Solid / Ontology bespoke
  * entries) and an active body. The body shows a GroupSection for a semantic
  * group, or the bespoke panel for solid/ontology. A search box filters the
- * active group's fields by label or dot-path.
+ * active group's fields by label, key, description, dot-path or subgroup
+ * (case-insensitive).
  *
  * Non-modal region (§6.3): the canvas stays interactive behind it, so this is a
  * `role="region"` slide-out, not a focus trap — the palette remains the only
@@ -70,9 +71,16 @@ export const SettingsPanel: React.FC = () => {
   const filtered = useMemo(() => {
     if (!group || !query.trim()) return [];
     const q = query.trim().toLowerCase();
+    // Match label, key, and description (the spec's user-facing search surface),
+    // plus the backend dot-path and subgroup label for power users. The prior
+    // predicate omitted `key` and `description`, so a query that hit only a
+    // setting's prose (e.g. "louvain"/"pagerank" under colorScheme) or its
+    // camelCase key narrowed nothing — the "filter does nothing" symptom.
     return group.fields.filter(
       (f) =>
         f.label.toLowerCase().includes(q) ||
+        f.key.toLowerCase().includes(q) ||
+        (f.description ?? '').toLowerCase().includes(q) ||
         (f.path ?? '').toLowerCase().includes(q) ||
         (f.subgroup ?? '').toLowerCase().includes(q),
     );
@@ -194,6 +202,10 @@ export const SettingsPanel: React.FC = () => {
       {/* Body */}
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="flex items-center gap-2 p-2 border-b border-border/40">
+          {/* The filter is intentionally hidden for BESPOKE_IDS (Solid / Ontology):
+              those rail entries render their own bespoke panels (SolidPanel /
+              OntologyPanel) rather than flat registry rows, so there are no
+              `group.fields` to narrow — a search box there would be dead. */}
           {!BESPOKE_IDS.has(activeGroup ?? '') && (
             <div className="flex-1 min-w-0">
               <SearchInput

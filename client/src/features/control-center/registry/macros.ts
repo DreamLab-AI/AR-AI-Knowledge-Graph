@@ -57,15 +57,24 @@ export const MACROS: MacroDef[] = [
   },
   {
     id: 'focus',
+    // Depth-of-field label focus. Turning the dial UP tightens the field: the
+    // label draw distance pulls IN (fewer, nearer labels) while the font grows
+    // for readability. It deliberately does NOT touch nodeFilter.* — writing the
+    // node filter on every drag tick re-ran useGraphFiltering over the whole
+    // corpus and popped nodes (and their labels) in/out as minConnections
+    // quantised and includeLinkedPages flipped at t=0.5, which was the "labels
+    // cycle on/off" redraw thrash. The draw distance also never rises above the
+    // 1200 shipped default, so max focus can't flood the scene with every label.
     label: 'Focus',
     icon: Focus,
     apply: (t) => [
-      { path: 'nodeFilter.minConnections', value: Math.round(4 * t) },   // 0 → 4
-      { path: 'nodeFilter.includeLinkedPages', value: t < 0.5 },
-      { path: `${L}labelDistanceThreshold`, value: 400 + t * 1200 },      // 400 → 1600
+      { path: `${L}labelDistanceThreshold`, value: 1200 - t * 900 },      // 1200 → 300 (tightens)
       { path: `${L}desktopFontSize`, value: 0.25 + t * 0.35 },            // 0.25 → 0.6
     ],
-    derive: (get) => clamp01(num(get, 'nodeFilter.minConnections', 0) / 4),
+    // Derive from the same continuous primary param the dial writes (as every
+    // other macro does) — not the old Math.round(minConnections) read, whose
+    // 5-step quantisation made the dial position snap and never match the drag.
+    derive: (get) => clamp01((1200 - num(get, `${L}labelDistanceThreshold`, 1200)) / 900),
   },
   {
     id: 'atmosphere',
