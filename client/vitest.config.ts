@@ -7,6 +7,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    // Force NODE_ENV=test regardless of the ambient shell env: some dev
+    // containers export NODE_ENV=production globally, which makes React
+    // resolve its production build — that build strips `React.act`, which
+    // @testing-library/react's `render()` requires (react-dom/test-utils.act
+    // delegates to it). Without this, any test using RTL's `render` fails
+    // with "React.act is not a function".
+    env: { NODE_ENV: 'test' },
     setupFiles: ['./src/setupTests.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     exclude: ['node_modules', 'dist', '**/*.integration.*'],

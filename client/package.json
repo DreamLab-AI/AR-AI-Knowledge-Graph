@@ -13,6 +13,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "gen:manifest": "ts-node --project scripts/tsconfig.emit.json scripts/emit-settings-manifest.ts",
     "types:generate": "cd .. && cargo run --bin generate_types",
     "types:watch": "cd .. && cargo watch -x 'run --bin generate_types'",
     "types:clean": "rm -rf src/types/generated",

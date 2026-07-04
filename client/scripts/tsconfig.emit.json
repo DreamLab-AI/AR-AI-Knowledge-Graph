@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"],
+    "isolatedModules": false
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": { "module": "commonjs" },
+    "moduleTypes": {
+      "**/*": "cjs",
+      "../**/*": "cjs"
+    }
+  }
+}

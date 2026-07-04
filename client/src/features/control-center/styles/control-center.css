@@ -1,0 +1,173 @@
+/**
+ * VisionClaw Control Center — visual language tokens.
+ * design-spec.md §5. Tokenised from ../../../styles/base.css shadcn variables.
+ */
+
+/* ---------------------------------------------------------------------- */
+/* 5.1 Glass recipe                                                       */
+/* ---------------------------------------------------------------------- */
+
+.cc-glass {
+  background: linear-gradient(135deg, hsl(var(--card) / 0.62), hsl(var(--background) / 0.42));
+  backdrop-filter: blur(14px) saturate(160%) brightness(1.06);
+  -webkit-backdrop-filter: blur(14px) saturate(160%) brightness(1.06);
+  border: 1px solid hsl(var(--border) / 0.55);
+  border-radius: var(--radius);
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.08),
+    0 8px 32px hsl(var(--background) / 0.6);
+}
+
+.cc-glass--accent {
+  box-shadow:
+    inset 0 1px 0 hsl(0 0% 100% / 0.08),
+    0 0 0 1px hsl(var(--primary) / 0.35),
+    0 8px 32px hsl(var(--background) / 0.6);
+}
+
+.cc-glass--dock {
+  border-radius: 1rem;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.2 Typography scale                                                    */
+/* ---------------------------------------------------------------------- */
+
+.cc-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.cc-rail-label {
+  font-size: 11px;
+  color: hsl(var(--foreground));
+}
+
+.cc-subgroup-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+}
+
+.cc-field-label {
+  font-size: 11px;
+  color: hsl(var(--foreground));
+}
+
+.cc-value-readout {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: hsl(var(--muted-foreground));
+}
+
+.cc-helper-text {
+  font-size: 9px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.3 Motion                                                              */
+/* ---------------------------------------------------------------------- */
+
+.cc-panel-transition {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cc-dock-transition {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cc-reveal-highlight {
+  animation: cc-reveal-ring 600ms ease-out;
+}
+
+@keyframes cc-reveal-ring {
+  0% {
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.9);
+  }
+  100% {
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0);
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5.4 Reduced motion                                                      */
+/* ---------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-panel-transition,
+  .cc-dock-transition {
+    transition: opacity 120ms linear !important;
+    transform: none !important;
+  }
+
+  .cc-reveal-highlight {
+    animation: none !important;
+  }
+
+  .cc-macro-dial-indicator {
+    transition: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Macro dial                                                              */
+/* ---------------------------------------------------------------------- */
+
+.cc-macro-dial {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.cc-macro-dial:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+.cc-macro-dial-indicator {
+  transition: stroke-dashoffset 60ms linear;
+}
+
+.cc-macro-dial[data-dragging='true'] .cc-macro-dial-indicator {
+  transition: none;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Row layout                                                              */
+/* ---------------------------------------------------------------------- */
+
+.cc-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.cc-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cc-row-label-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cc-row-label-group > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
