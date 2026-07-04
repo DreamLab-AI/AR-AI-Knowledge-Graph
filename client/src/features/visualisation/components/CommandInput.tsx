@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { UNIFIED_SETTINGS_CONFIG } from './ControlPanel/unifiedSettingsConfig';
+import { UNIFIED_SETTINGS_CONFIG } from '../../control-center/registry/commandInputCompat';
+import { ALL_PATHS } from '../../control-center/registry/settingsRegistry';
 import { unifiedApiClient } from '../../../services/api/UnifiedApiClient';
 
 interface CommandInputProps {
@@ -653,6 +654,17 @@ export const CommandInput: React.FC<CommandInputProps> = ({ isCollapsed }) => {
   const [statusLines, setStatusLines] = useState<StatusLine[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const statusIdRef = useRef(0);
+  // One-time hydration guard: the LLM context (buildSettingsContext) reads
+  // live values off the store, but most of the 168 paths sit outside the
+  // ~30 ESSENTIAL_PATHS loaded at boot (design-spec.md §4.2). Load them all
+  // the first time the user actually engages this input, not at app boot.
+  const hasEnsuredAllSettingsRef = useRef(false);
+
+  const handleInputFocus = useCallback(() => {
+    if (hasEnsuredAllSettingsRef.current) return;
+    hasEnsuredAllSettingsRef.current = true;
+    void useSettingsStore.getState().ensureLoaded(ALL_PATHS);
+  }, []);
 
   const addStatus = useCallback((text: string) => {
     const id = ++statusIdRef.current;
@@ -733,6 +745,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({ isCollapsed }) => {
           type="text"
           value={command}
           onChange={(e) => setCommand(e.target.value)}
+          onFocus={handleInputFocus}
           placeholder={isProcessing ? 'Command queued...' : 'Configure view...'}
           style={{
             width: '100%',

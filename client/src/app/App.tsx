@@ -12,6 +12,7 @@ const ImmersiveApp = lazy(() => import('../immersive/components/ImmersiveApp'));
 import { BotsDataProvider } from '../features/bots/contexts/BotsDataContext';
 import { CommandPalette } from '../features/command-palette/components/CommandPalette';
 import { initializeCommandPalette } from '../features/command-palette/defaultCommands';
+import { registerSettingsCommands } from '../features/control-center/registry/paletteCommands';
 import { HelpProvider } from '../features/help/components/HelpProvider';
 import { registerSettingsHelp } from '../features/help/settingsHelp';
 import { OnboardingProvider } from '../features/onboarding/components/OnboardingProvider';
@@ -115,6 +116,7 @@ function App() {
     
     if (initialized) {
       initializeCommandPalette();
+      registerSettingsCommands();
       registerSettingsHelp();
       registerOnboardingCommands();
 
