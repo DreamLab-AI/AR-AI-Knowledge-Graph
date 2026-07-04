@@ -729,44 +729,39 @@ export const CommandInput: React.FC<CommandInputProps> = ({ isCollapsed }) => {
   if (!isCollapsed) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: '12px',
-      left: '58px',
-      width: '25vw',
-      minWidth: '300px',
-      maxWidth: '500px',
-      zIndex: 1000,
-      pointerEvents: 'auto',
-    }}>
-      <form onSubmit={handleSubmit}>
+    // cc-glass command line, anchored just above the bottom GlassDock so it
+    // reads as the dock's command input (design-spec.md §5.1). z-40 matches the
+    // dock / SettingsPanel / StatusCluster overlays; pointer-events restored
+    // because the cc-root wrapper is pointer-events:none.
+    <div
+      className="cc-glass cc-panel-transition fixed bottom-28 left-1/2 z-40 -translate-x-1/2 p-3 pointer-events-auto"
+      style={{ width: 'min(92vw, 560px)' }}
+    >
+      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="select-none font-mono text-sm leading-none text-primary/80"
+        >
+          &rsaquo;
+        </span>
         <input
           ref={inputRef}
           type="text"
           value={command}
           onChange={(e) => setCommand(e.target.value)}
           onFocus={handleInputFocus}
-          placeholder={isProcessing ? 'Command queued...' : 'Configure view...'}
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            background: 'rgba(0, 0, 0, 0.75)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '4px',
-            color: '#ffffff',
-            fontSize: '13px',
-            fontFamily: 'monospace',
-            outline: 'none',
-            backdropFilter: 'blur(8px)',
-          }}
+          placeholder={isProcessing ? 'Command queued…' : 'Configure view — ask in plain language…'}
+          className="w-full rounded-md border border-border/60 bg-input/40 px-3 py-1.5 font-mono text-[13px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus-visible:border-transparent focus-visible:ring-2 focus-visible:ring-ring"
         />
       </form>
 
-      <div style={{ marginTop: '4px', minHeight: '20px' }}>
-        {statusLines.map(line => (
-          <StatusText key={line.id} text={line.text} timestamp={line.timestamp} />
-        ))}
-      </div>
+      {statusLines.length > 0 && (
+        <div className="mt-2 min-h-[20px] space-y-0.5">
+          {statusLines.map(line => (
+            <StatusText key={line.id} text={line.text} timestamp={line.timestamp} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
