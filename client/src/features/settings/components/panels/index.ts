@@ -1,2 +1,0 @@
-
-export { AgentControlPanel } from './AgentControlPanel';
