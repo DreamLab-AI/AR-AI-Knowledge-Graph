@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import GraphCanvasWrapper from '../features/graph/components/GraphCanvasWrapper';
-import { IntegratedControlPanel } from '../features/visualisation/components/IntegratedControlPanel';
+import { ControlCenter } from '../features/control-center';
 import { useSettingsStore } from '../store/settingsStore';
 import { useBotsData } from '../features/bots/contexts/BotsDataContext';
 import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
@@ -73,7 +73,7 @@ const MainLayoutContent: React.FC = () => {
       </section>
 
       <nav id="control-panel" aria-label="Visualization controls">
-        <IntegratedControlPanel
+        <ControlCenter
           showStats={showStats}
           enableBloom={enableBloom}
           onOrbitControlsToggle={() => {}}

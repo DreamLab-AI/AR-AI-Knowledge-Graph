@@ -3,9 +3,10 @@ import { REGISTRY, ALL_FIELDS, ALL_PATHS, testIdFor } from '../settingsRegistry'
 import { buildManifest } from '../manifest';
 import { MACRO_PATHS } from '../macros';
 import manifestJson from '../settings-manifest.json';
-// The SOURCE OF TRUTH for the frozen backend contract. Every registry path must
-// equal one of these, and vice versa — zero drift.
-import { UNIFIED_SETTINGS_CONFIG } from '../../../visualisation/components/ControlPanel/unifiedSettingsConfig';
+// The SOURCE OF TRUTH for the frozen backend contract. Captured from the legacy
+// ControlPanel/unifiedSettingsConfig.ts (now deleted — WP5 cutover) before deletion.
+// Every registry path must equal one of these, and vice versa — zero drift.
+import legacyFixture from './legacy-paths.fixture.json';
 
 const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   motion: 48,
@@ -18,26 +19,20 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   system: 16,
 };
 
-/** Collect every `path` string declared in the legacy unifiedSettingsConfig. */
+/** The frozen `path` strings captured from the legacy unifiedSettingsConfig. */
 function legacyPaths(): string[] {
-  const out: string[] = [];
-  for (const section of Object.values(UNIFIED_SETTINGS_CONFIG)) {
-    for (const f of section.fields) {
-      if (f.path) out.push(f.path);
-    }
-  }
-  return out;
+  return legacyFixture.paths;
 }
 
 /** Every field (path or localKey/action) declared in the legacy config. */
 function legacyFieldCount(): number {
-  return Object.values(UNIFIED_SETTINGS_CONFIG).reduce((n, s) => n + s.fields.length, 0);
+  return legacyFixture.fieldCount;
 }
 
 describe('control-center settings registry', () => {
   it('(a) enumerates exactly 168 fields', () => {
     expect(ALL_FIELDS.length).toBe(168);
-    // and the legacy config it mirrors is also 168 (sanity on the source of truth)
+    // and the legacy config it mirrors is also 168 (sanity on the frozen fixture)
     expect(legacyFieldCount()).toBe(168);
   });
 
