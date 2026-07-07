@@ -1,0 +1,134 @@
+\chapter{Dogfooding the Mesh: A Roadmap for the DreamLab Ecosystem}
+\label{ch:ecosystem-roadmap}
+
+\epigraph{A consultancy that will not run its own prescriptions on its own systems is selling a diet it does not eat.}{}
+
+\section{Why This Chapter Exists}
+
+Chapter~\ref{ch:open-questions} acknowledges the structural conflict at the heart of this report: DreamLab AI Consulting is simultaneously the analyst producing the analysis, the framework creator proposing the Dynamic Agentic Mesh, and the vendor operating VisionClaw. Acknowledgement alone is cheap. The stronger answer to a positioning conflict is falsifiability: commit, in print, to specific and checkable changes in the author's own systems, derived from the report's own findings, and let the next edition report which commitments were met. If the mesh thesis is right, applying the July 2026 evidence base to DreamLab's ecosystem should produce measurable compounding within two quarters. If it is wrong, the same instrumentation will show that too --- and this report's brand of intellectual honesty obliges us to publish either result.
+
+This chapter therefore does something no other chapter does: it turns the report's prescriptions inward. Each recommendation below names real components, real endpoints, and real architecture decision records in the DreamLab codebase, verified against the repositories in the week this edition went to press. What gets built --- or conspicuously fails to get built --- is evidence either way.
+
+\section{The Ecosystem as It Stands}
+
+DreamLab's ecosystem comprises six components, bound together by a shared \texttt{did:nostr} identity mesh that currently has five active signing participants.
+
+\textbf{VisionFlow} is the umbrella coordination canon: the architectural doctrine, product-requirement corpus, and cross-repository contracts that bind the other five components into one system. It is where the mesh federation design (PRD-010) lives, and where the decision records that this chapter repeatedly cites are filed.
+
+\textbf{VisionClaw} is the knowledge substrate described in Chapter~\ref{ch:technical-substrate}: a Rust server with GPU-accelerated graph physics, an OWL~2 ontology engine with Whelk reasoning, and a multi-user WebXR client. Since the April 2026 audit it has grown a live agent-telemetry pipe --- an authenticated \texttt{/wss/agent-events} WebSocket (ADR-059) through which agent actions flow in from the runtime and are rendered as beams and transient attractive edges in the GPU graph --- and a re-imagined control centre (ADR-129) that is, at present, a settings surface rather than a governance one. Its decision-record corpus now runs to over a hundred ADRs, several of which matter greatly to what follows.
+
+\textbf{AgentBox} is the sovereign agent runtime: a hardened, reproducible container that hosts the agents themselves, with 109 active skills in its routing directory as of July 2026, a full-lifecycle hook surface for telemetry that is fail-open by enforced convention, RuVector vector memory holding over 1.17 million embeddings, and a Nostr session mirror that streams every running session to the operator's phone as encrypted self-messages. Its memory-and-learning workstream (its PRD-018) landed in production in early July 2026 --- with an important caveat examined in Recommendation~7 below.
+
+\textbf{solid-pod-rs} is the sovereign data layer: a seven-crate Rust implementation of the W3C Solid protocol, giving every human and agent a pod --- portable, access-controlled storage rooted in their own cryptographic identity, with every write recorded as a git commit carrying provenance. It is pre-1.0 software actively hardening: its 2026-07-03 closeout release fixed four security issues, and an independent audit the same week found that the shipped server binds only a slice of what the library implements.
+
+\textbf{nostr-rust-forum} is the governance surface: a self-hostable forum kit whose Agent Control Surface Protocol (ACSP) lets any agent publish a signed request for a human decision, and lets only a human administrator sign the response --- the relay rejects approval events from any agent key. This is the ecosystem's one production human-in-the-loop mechanism, and today it serves exactly one use case: ontology concept elevation, capped at five concurrent cases.
+
+\textbf{DreamLab Edge} (the \texttt{dreamlab-ai-website} repository) is the operator overlay: the branded, Cloudflare-edge-deployed public face at dreamlab-ai.com that renders the forum and consumes the pod layer. It is live, but as an independent component it is the earliest-stage of the six --- it is deliberately being de-specialised into a thin consumer of the forum kit (PRD-012), and that cutover is still mid-flight.
+
+\begin{keyinsight}[title={The Broker Is Already Half-Built}]
+The most striking fact the internal audit surfaced: the judgment broker --- the role this report coined in Chapter~\ref{ch:role-transformation} --- already partially exists in code. A \texttt{BrokerActor} governance component with a \texttt{handleGovernanceDecision()} loop sits in the ecosystem at roughly 65 per cent completion; its backend (ADR-041) ships a \texttt{BrokerCase} aggregate, a decision orchestrator, six decision outcomes (approve, reject, amend, delegate, promote, precedent), and a REST inbox. What does not exist is the front half: no broker inbox or decision canvas appears anywhere in VisionClaw's own client, and every live decision today round-trips through an external forum page. The report's central role is partially implemented --- and the gap between 65 per cent and a working judgment-broker practice is precisely the kind of gap this chapter exists to close, or to report honestly as unclosed.
+\end{keyinsight}
+
+\section{Fitting the Findings to the Architecture}
+
+The July 2026 evidence base maps onto this architecture with unusual directness. Table~\ref{tab:findings-fit} pairs each load-bearing finding with its architectural implication and the component where that implication lands.
+
+\begin{table}[h]
+\centering
+\caption{Mapping the revised report's findings onto the DreamLab ecosystem}
+\label{tab:findings-fit}
+\begin{tabularx}{\textwidth}{L{4.6cm} X L{3.6cm}}
+\toprule
+\textbf{Finding} & \textbf{Architectural implication} & \textbf{Ecosystem locus} \\
+\midrule
+Escalation beats approval: 71 vs 30 per cent median gains \parencite{Pereira2026Playbook} & Default authority boundaries to escalation; reserve approval for zero-tolerance actions & VisionClaw control centre; \texttt{BrokerActor} \\
+\addlinespace
+Contextual transaction cost governs collective efficiency \parencite{Liu2026} & Instrument handoffs, compression loss and verification burden per workflow & AgentBox hooks; agent-events trace schema \\
+\addlinespace
+Human-imitation forms underperform agent-native forms \parencite{Liu2026} & Shared-state coordination and adaptive orchestration, not role-played committees & RuVector memory; Claude-Flow routing \\
+\addlinespace
+Multi-agent failure is taxonomisable: 14 MAST modes \parencite{Cemri2025} & Failure telemetry tagged to a standard taxonomy, not free-text error logs & Agent-events envelope; QE fleet \\
+\addlinespace
+Diversity must be engineered, not assumed \parencite{Liu2026} & Multi-model verification with independent retrieval and evidence paths & AgentBox model routing \\
+\addlinespace
+Interface organisations connect agent context to human accountability \parencite{Liu2026} & Evidence-carrying escalation with mandatory human judgment points & Governed ontology writeback; forum ACSP \\
+\addlinespace
+Proprietary data is the moat; save everything \parencite{Pereira2026Playbook} & Durable, provenance-carrying memory across every substrate & RuVector; solid-pod-rs \\
+\addlinespace
+Security front-loading enables rather than blocks \parencite{Pereira2026Playbook} & Close authentication gaps before expanding features & solid-pod-rs PATCH; ontology endpoints \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Two rows deserve emphasis. The interface-organisation row is not a metaphor: the ecosystem's governed writeback path --- \texttt{ontology\_propose}, then Whelk consistency reasoning, then judgment-broker approval --- is a literal implementation of Liu's specification that agent outputs enter human workflows only with evidence attached and human judgment mandatory at defined points. And the security row is not hygiene housekeeping: the same audit that found the writeback path also found the ways around it, which is why the first recommendation below is the first recommendation.
+
+\section{Twelve Tangible Recommendations}
+
+Each recommendation names what to build or change, the finding that motivates it, and a priority. P0 items gate everything else; P1 items create the measurement layer; P2 items extend the loop outward.
+
+\begin{enumerate}
+  \item \textbf{Close the governed-writeback security gaps (P0).} Authenticate the \texttt{/api/\allowbreak ontology/\allowbreak propose} endpoint, which currently accepts unauthenticated proposals; remove or hard-gate the \texttt{/api/\allowbreak ontology/\allowbreak load} backdoor, which bypasses Whelk validation entirely; and fix the solid-pod-rs non-destructive PATCH bug. The Playbook's finding is that security requirements front-loaded early become enablers rather than blockers \parencite{Pereira2026Playbook} --- but the sharper point is internal: a governance pipeline with an unauthenticated front door and a validation bypass is not governance, it is theatre. Nothing else in this chapter is worth measuring until these are closed.
+
+  \item \textbf{Finish the BrokerActor (P0).} Complete the \texttt{handleGovernanceDecision()} loop from its current 65 per cent, and surface the broker case queue inside VisionClaw's control centre as an escalation-first review surface --- each case carrying the evidence, provenance, and uncertainty that motivated it. ADR-041 already ships the aggregate, the six decision outcomes, and the REST inbox; what is missing is the client surface (no broker inbox exists in \texttt{client/src}) and the closure of the loop inside the product rather than on an external forum page. This is Liu's interface organisation made concrete \parencite{Liu2026}, and it converts the report's coined role from 65 per cent of a backend into a daily practice.
+
+  \item \textbf{Instrument contextual transaction cost (P1).} Extend the agent-events envelope (ADR-059's trace schema in \texttt{src/agent\_events/schema.rs}) to record handoff counts, token burden, compression events, and verification outcomes per workflow, and report a CTC figure per DAG alongside Mesh Velocity. Chapter~\ref{ch:open-questions} names the absence of production CTC measurement as an open question in Liu's framework \parencite{Liu2026}; this ecosystem is positioned to produce the first production CTC instrumentation anywhere, because the trace plumbing already exists and only the accounting fields are missing.
+
+  \item \textbf{Ship the four KPIs as a control-centre dashboard (P1).} This is not a design task: ADR-043, accepted in April 2026, already specifies Mesh Velocity, Augmentation Ratio, Trust Variance, and HITL Precision verbatim, with a complete lineage data model --- and three months later not one line of implementation exists. Resurrect ADR-043 and compute the four metrics from live agent-events and ACSP escalation telemetry. The Playbook finds that organisations defining KPIs before deployment are significantly more likely to demonstrate value \parencite{Pereira2026Playbook}; this report proposed the KPIs in Chapter~\ref{ch:new-kpis} and must now be measured by them.
+
+  \item \textbf{Adopt MAST-aligned failure telemetry (P1).} Tag every agent failure flowing through the agent-events pipeline and the QE fleet with one of the fourteen MAST failure modes \parencite{Cemri2025} --- specification issues, inter-agent misalignment, task verification --- rather than free-text error strings. This makes the ecosystem's failure data comparable to the published taxonomy and enables the failure-mode analysis Chapter~\ref{ch:open-questions} calls for.
+
+  \item \textbf{Default AgentBox authority boundaries to escalation (P1).} New agent skills should default to the escalation operating model, with each skill's actions explicitly classified as recoverable or zero-tolerance; approval-on-every-output should be reserved for the zero-tolerance class. The ACSP wire protocol already carries the vocabulary (priority levels, a \texttt{trust\_alert} category); what is missing is that escalation is not discoverable --- no routed skill wraps the control-surface library, so an agent must already know it exists --- and there is no supported pattern for an agent to block on the human's signed response. Fix both. The motivating evidence is the Playbook's 71-versus-30 result \parencite{Pereira2026Playbook}.
+
+  \item \textbf{Make outcome learning real (P1).} The July 2026 audit verified, uncomfortably, that the memory system's advertised outcome learning does not yet run: the intelligence banner is text-relevance matching, and the router's confidence figure is a hardcoded constant. The remediation has begun honestly --- trajectory recording of graded outcomes landed in production on 5 July 2026 --- but the two consumers that would let outcomes influence retrieval and routing (\texttt{feed\_retrieval}, \texttt{feed\_routing}) remain gated off pending a statistical sample floor. Wire post-task success signals into pattern reuse once the floor clears, and delete the stale code comments that still claim the old path learns. The compounding organisation of Chapter~\ref{ch:compounding-org} is a claim about closed loops; this one must close with evidence, not intention.
+
+  \item \textbf{Engineer diversity in orchestration (P2).} Route verification and critique agents to different foundation models with independent retrieval paths. AgentBox already fronts Claude, Codex, Gemini, and DeepSeek, so the plumbing exists; the discipline does not. Liu's pseudo-diversity result --- same model, same tools, same retrieval equals one judge asked three times \parencite{Liu2026} --- says a reviewer drawn from the reviewed agent's own model family is decoration, not verification.
+
+  \item \textbf{Carry provenance to the human's pocket (P2).} Enrich the existing Nostr session mirror and the end-of-session digest so that every escalated decision reaches the operator's mobile surface with its evidence and uncertainty attached, not just its conclusion. Liu's interface-organisation specification makes uncertainty disclosure a design requirement, not a courtesy \parencite{Liu2026}; the encrypted per-turn mirror and the durable digest already exist, so this is an envelope-enrichment task, not new infrastructure.
+
+  \item \textbf{Run the Insight Ingestion Loop v1 across the mesh (P2).} Wire the loop end to end: forum and pods as the discovery surface, \texttt{ontology\_propose} (ADR-049) as codification, the BrokerActor as validation --- measuring Mesh Velocity across the whole path for the first time. This means engaging with, not ignoring, the frozen designs: the self-improving writeback flywheel (ADR-121) and the two-speed governance routing (ADR-122) were fully specified and then shelved in early July 2026, and the codebase carries a ghost flag (\texttt{writeback\_triggered} in \texttt{enrichment\_proposals\_handler.rs}) that reports writes it never performs. Any v1 must ship with a liveness canary --- the codebase's own hard-won precedent, after an earlier workstream left an entire constraint pipeline wired, flagged as live, and inert for months.
+
+  \item \textbf{Consolidate the data moat (P2).} Unify provenance across RuVector memory, the pods' git-mark and block-trail records, and the ontology's PROV-O reification (currently around 65 per cent complete, with cross-repository receipt crossing still test-only) into one queryable trace. The Playbook found 47 per cent of successful deployments citing accumulated data as a moat and counselled saving everything \parencite{Pereira2026Playbook}; in an agentic ecosystem the moat is not the data alone, it is the trace --- who proposed what, on what evidence, and what the human decided.
+
+  \item \textbf{Pilot the stack beyond one team (P2).} Complete the DreamLab Edge kit cutover (PRD-012) and the mesh federation prerequisites (PRD-010's Phase~0 cryptographic fixes, which currently block all cross-system messaging), then run one external pilot of the escalation-plus-KPI stack in a non-DreamLab context. Chapter~\ref{ch:open-questions} identifies bridging evidence as the thesis's largest missing piece; a single pilot outside the favourable home environment is worth more to the argument than any further refinement within it.
+\end{enumerate}
+
+\section{Measurement Commitments}
+
+Recommendations without measurement are marketing. Table~\ref{tab:measurement-commitments} states, for each of the four KPIs and for contextual transaction cost, the concrete data source in the stack and the review cadence to which DreamLab commits.
+
+\begin{table}[h]
+\centering
+\caption{Measurement commitments for the ecosystem roadmap}
+\label{tab:measurement-commitments}
+\begin{tabularx}{\textwidth}{L{3.2cm} X L{2.6cm}}
+\toprule
+\textbf{Measure} & \textbf{Concrete data source} & \textbf{Cadence} \\
+\midrule
+Mesh Velocity & Timestamps across the insight loop: \texttt{ontology\_propose} event to broker decision to merged enrichment & Quarterly \\
+\addlinespace
+Augmentation Ratio & Agent-action volume from \texttt{/wss/agent-events} against ACSP escalation volume & Monthly roll-up \\
+\addlinespace
+Trust Variance & Dispersion of broker decision outcomes (approve, amend, reject rates) over a rolling 30-day window & Monthly \\
+\addlinespace
+HITL Precision & Proportion of ACSP escalations where the human decision materially changed the outcome, from decision-outcome records & Monthly \\
+\addlinespace
+Contextual transaction cost & Handoff counts, token burden and verification outcomes per DAG from the extended agent-events envelope & Quarterly \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+The commitment is plain: if, two quarters from publication, the instrumented KPIs cannot be computed from these sources --- or can be computed and show no compounding --- that is evidence against the mesh thesis as deployed here, and the next edition of this report will say so in these terms. The falsification condition is stated now, before the data exists, precisely so that it cannot be quietly redefined afterwards.
+
+\section{Honest Limits}
+
+\begin{cautionbox}[title={What This Chapter Does Not Claim}]
+\begin{itemize}
+  \item Everything above unfolds in the same favourable context flagged in Chapters~\ref{ch:technical-substrate} and~\ref{ch:open-questions}: a 15-person, technically fluent team where the system architect is the primary user. Success here bridges nothing on its own; that is what Recommendation~12 is for.
+  \item These are commitments, not results. The codebase's own history shows accepted designs sitting unbuilt for months (the KPI model), fully specified designs frozen days before this edition (the writeback flywheel and governance routing), and wiring that reported itself live while doing nothing. The roadmap inherits that risk, which is why every loop-closing item carries a liveness-verification requirement.
+  \item The BrokerActor at 65 per cent is not a working judgment-broker practice. The only production escalation loop today serves one use case, capped at five concurrent cases, decided on an external forum page by a single administrator role.
+  \item DreamLab Edge is live as a deployment but is the earliest-stage component as an independent artefact, and relay federation across the mesh remains designed, not shipped.
+  \item The ecosystem's internal documentation cannot yet agree on its own scale --- three different skill counts were live in the same repository tree on the same day. Scale claims in this report are point-in-time snapshots of a fast-moving system, and selection bias cuts both ways: an author auditing their own system may be harsher than an outsider, or blinder.
+\end{itemize}
+\end{cautionbox}
+
+The report has argued throughout that the honest version is more defensible and more credible. This chapter is where that principle stops being a stance and becomes a schedule.

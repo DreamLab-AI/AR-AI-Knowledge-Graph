@@ -15,7 +15,7 @@ Formula 1 cars are the fastest production-adjacent vehicles on earth. They go fa
 
 An F1 car without telemetry, traction control, and pit-wall governance does not win. It crashes on lap three.
 
-The analogy is precise. An agentic mesh without embedded governance --- without real-time monitoring, without authority boundaries, without continuous trust measurement --- does not produce faster organisational outcomes. It produces the ant death spiral, 17-times error multiplication, and the catastrophic failures that cause organisations to retreat to hierarchical control.
+The analogy is precise. An agentic mesh without embedded governance --- without real-time monitoring, without authority boundaries, without continuous trust measurement --- does not produce faster organisational outcomes. It produces the ant death spiral, the correlated-failure cascades documented across state-of-the-art multi-agent frameworks \parencite{Cemri2025}, and the catastrophic failures that cause organisations to retreat to hierarchical control.
 
 \begin{keyinsight}
 Speed and governance are not in tension. Speed \emph{requires} governance. The question is not whether to govern the mesh, but how to architect governance so that it operates at mesh speed rather than human-review speed.
@@ -82,6 +82,16 @@ This cascading trust model prevents the accumulation of stale permissions that c
 
 \textcite{CyberArk2025} documents this pattern in financial services, where the ratio of machine identities to human employees has reached 96 to 1, with only 31 per cent of organisations having adequate controls. The cascading trust hierarchy addresses this directly: when an agent's identity or authority changes, the change propagates automatically through the dependency graph.
 
+\section{Security as Foundation, Not Friction}
+
+The claim that governance accelerates rather than brakes is not just architectural reasoning; it is now a field finding. Across the 51 mature deployments Stanford studied, security was never the sole reason a project was killed \parencite{Pereira2026Playbook}. More strikingly, requirements that initially blocked a project routinely went on to enable use cases that competitors without the same obligations could not touch. A large retail bank's PII-scrubbing and synthetic-substitution pipeline --- built to satisfy regulators before any customer data could go near a cloud model --- became the infrastructure that let it serve sensitive, regulated customer interactions with agentic AI at all.
+
+The security tax is real, but it is front-loaded. Once the scrubbing pipelines, the vendor contracts, and the archival and audit systems exist, every subsequent use case inherits them at close to zero marginal cost. This is the same compounding logic as the data moat described in Chapter~\ref{ch:compounding-org}, applied to governance infrastructure rather than data: the first regulated use case is expensive; the tenth is nearly free.
+
+Shadow AI is what happens when that tax goes unpaid rather than front-loaded. One manufacturer in the Playbook sample discovered 1,500 to 1,600 unauthorised AI tools already in use across the organisation before it built an internal platform to bring them into the light \parencite{Pereira2026Playbook}. The tools were being used regardless of governance; the only question was whether the organisation paid the security cost deliberately, once, or paid it chaotically, tool by tool, indefinitely. This is the governance paradox showing up in field data rather than architecture diagrams: the organisations with the strictest data obligations, having already made the investment, are the ones now running customer-facing agentic systems that their less-regulated competitors cannot build at all.
+
+The same field data revises who resists and why, and it matters for how the mesh's governance role should be presented. Staff functions --- Legal, HR, Risk, Compliance --- were the single largest source of resistance to AI programmes, at 35 per cent of cases, ahead of internal end-users at 23 per cent \parencite{Pereira2026Playbook}. But the Playbook found these functions converted into enablers, not obstacles, the moment they were given a governance role rather than a veto. Declarative governance is the mechanism that gives them exactly that role inside the mesh: their constraints stop being a review queue that runs at committee speed and become code that runs at mesh speed, checked on every transition rather than sampled at an audit. The staff function that used to be a phase gate becomes a co-author of the policy the mesh enforces automatically.
+
 \section{The Governance Paradox Resolved}
 
 The paradox dissolves once governance is understood as an architectural property rather than an external constraint. In a mesh with declarative governance, ontological provenance, and cascading trust:
@@ -92,6 +102,8 @@ The paradox dissolves once governance is understood as an architectural property
   \item \textbf{Governance provides competitive advantage} because it enables the organisation to deploy agentic automation in domains where ungoverned automation is unacceptable --- regulated industries, high-stakes decisions, customer-facing processes.
   \item \textbf{Governance enables trust} at the institutional level, allowing boards, regulators, and customers to accept agentic decision-making because the reasoning is auditable and the constraints are verifiable.
 \end{itemize}
+
+What this chapter calls embedded governance has an academic name. \textcite{Liu2026} (Chapter~\ref{ch:coordination-economics}) formalises this exact arrangement as an \meshterm{interface organisation} --- the designed structure that aligns human accountability with agentic context coordination: what evidence must travel with an agent's output before it enters a human workflow, what uncertainty must be disclosed alongside it, what permissions the agent held when it produced it, what trace of its reasoning is preserved, and where in the workflow human judgment is mandatory rather than optional. Declarative governance, ontological provenance, and cascading trust are DreamLab's specific implementation of an interface organisation; Liu's contribution is the general theory explaining why an arrangement of this kind is necessary at all, independent of any particular technology stack.
 
 \begin{keyinsight}[title={The VisionClaw Evidence}]
 This governance model is not theoretical. The VisionClaw system (Chapter~\ref{ch:technical-substrate}) implements OWL~2 ontology with formal reasoning, providing shared semantics across 83 agent skills. Task decomposition uses ontological subsumption, and every agent decision is grounded in the knowledge graph.

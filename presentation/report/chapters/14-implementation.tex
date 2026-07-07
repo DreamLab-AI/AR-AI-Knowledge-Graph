@@ -13,6 +13,19 @@ The contradiction noted in Chapter~\ref{ch:change-problem} --- that a phased roa
 The 90-day roadmap does not implement the mesh. It creates the conditions under which the mesh can begin to compound. The mesh implements itself --- through the Insight Ingestion Loop, through the judgment broker's validation cycle, through the workforce's ongoing discovery of shadow workflows. The roadmap's job is to make those mechanisms operational.
 \end{keyinsight}
 
+\section{Lessons from the Field: The Playbook Cross-Check}
+
+The 90-day sequence that follows was designed from first principles in the April 2026 edition of this report. It can now be checked against \textcite{Pereira2026Playbook}'s ground truth from 51 mature enterprise deployments. The cross-check holds on four points, and it surfaces one addition this roadmap did not originally make.
+
+\begin{enumerate}
+  \item \textbf{Invisible work first.} The playbook found that 77 per cent of the hardest challenges in successful deployments were change management, data quality, and process redesign --- not technology. Phase 1's insistence on auditing before deploying any technology is not caution for its own sake; it is the playbook's core prescription, arrived at independently.
+  \item \textbf{KPIs before deployment.} Organisations that defined success metrics before deployment were significantly more likely to scale their AI initiatives. Phase 1's baseline measurement of the four KPIs (Table~\ref{tab:baseline-kpis}) applies this principle directly --- measure before you build, not after.
+  \item \textbf{Iterate; do not wait for perfect.} Every successful project in the playbook's sample used an iterative approach; none used waterfall. The playbook's successful teams started small deliberately and framed early deployments explicitly as experiments, not commitments. The Agent Skill Pilot in Phase 2 is built the same way.
+  \item \textbf{Sponsor behaviourally, not ceremonially.} Weekly check-ins and proactive blocker removal --- what the playbook calls Active Steering --- distinguished sponsors who saw their programmes through from those who did not, and every organisation-wide transformation in the sample escalated sponsorship into corporate-OKR integration. Sponsor continuity through failure, not merely through success, is non-negotiable: in every traceable case in the playbook, the same executive who sponsored a failed AI attempt went on to sponsor the successful one.
+\end{enumerate}
+
+The addition: \textbf{build the model-abstraction layer from day one.} Model choice was fully interchangeable in 42 per cent of the playbook's deployments, and the authors are explicit that the durable competitive advantage sits in the orchestration layer, not in the choice of foundation model. This roadmap should treat foundation models as swappable components from the outset --- an architectural discipline, not an afterthought once a vendor relationship sours. It is also, as inference costs rise with agentic token consumption, the tokenomics hedge: an organisation locked into a single model's pricing and capability roadmap has no lever to pull when that changes.
+
 \section{Phase 1: Audit and Discovery (Days 1--30)}
 
 The first phase maps the territory. No technology is deployed into production during this phase. The objective is to understand the current state of coordination --- formal and informal --- before proposing changes to it.
@@ -139,6 +152,8 @@ Build the first validated Directed Acyclic Graphs from discovered shadow workflo
   \item The SLAs for each stage.
 \end{itemize}
 
+Escalation criteria are not a checkbox in this list --- they are the single design decision most responsible for whether a DAG succeeds. \textcite{Pereira2026Playbook}'s field evidence is worth restating in operational terms here: define authority boundaries so that the default is escalation-based oversight (the agent proceeds autonomously and a human reviews only the exceptions it flags) for high-volume, recoverable workflows, and reserve approval-based oversight (a human reviews every output before it proceeds) for the minority of workflows where error tolerance is genuinely zero or regulation requires sign-off. Getting this wrong in either direction is costly: defaulting to approval on recoverable, high-volume work throttles the productivity gain the mesh exists to capture --- 30 per cent instead of 71 per cent, on the playbook's figures --- while defaulting to escalation on zero-tolerance work exposes the organisation to exactly the failure the approval model exists to prevent. Wire escalation events to the HITL Precision metric (Chapter~\ref{ch:new-kpis}) from the first DAG onward, not retroactively: a metric introduced after the escalation boundaries are already live has nothing to calibrate against.
+
 \subsection{Judgment Broker Workshops}
 
 Run workshops that reframe the middle management identity from information router to judgment broker. These workshops are not training events in the conventional sense. They are identity-level conversations that address the resistance patterns documented in Chapter~\ref{ch:change-problem}: role obsolescence fear (67\%), competence anxiety (58\%), loss of information asymmetry (49\%), decision authority erosion (45\%), and accountability ambiguity (52\%) \parencite{Capgemini2025}.
@@ -225,6 +240,8 @@ Total Year 1 investment & \pounds 150--300K & \pounds 500K--1.2M & \pounds 2--5M
 \end{tabularx}
 \end{table}
 
+It is worth grounding these figures against what ``starting'' actually costs at the token-and-seat level, because the two are often confused. In the Ramp/Revelio dataset, the threshold separating high-intensity AI adopters from the rest of the market averaged roughly \$33.67 of AI spend per employee per month in the first three months after adoption \parencite{RampRevelio2026} --- not the four- or five-figure per-head number that dominates vendor sales conversations. The investment that actually matters, and that the ranges in Table~\ref{tab:cost-tiers} are trying to capture, is the organisational work in this roadmap: the audit, the ontology, the workshops, the governance function. The model bill is not where the money goes.
+
 These figures are indicative and will vary significantly by industry, regulatory burden, and existing technology infrastructure. They exclude opportunity costs and internal staff time. A COO approving this programme needs at minimum these ranges to compare against the cost of \emph{not} deploying --- the \$4.63 million average cost per shadow AI breach \parencite{IBM2025}, the 55 per cent regret rate for rushed AI replacement \parencite{OrgvueForrester2025}, and the competitive compounding that accrues to organisations that invest early.
 
 \section{Failure Criteria: When to Stop}
@@ -237,6 +254,7 @@ Every implementation plan should define what ``stop, this is not working'' looks
   \item \textbf{Legal counsel identifies irresolvable consultation obligations.} In unionised workplaces or jurisdictions with strong collective bargaining rights, the consultation timeline may exceed 90 days. This is not a failure of the mesh concept --- it is a failure of the timeline. Extend, do not abandon.
   \item \textbf{Trust Variance exceeds 0.25$\sigma$ on pilot workflows in the first two weeks.} This indicates that the selected tasks are outside the jagged frontier for the current model capabilities. Reselect tasks closer to the frontier's interior.
   \item \textbf{Executive sponsorship weakens.} If the C-Suite stops engaging with the programme before the first Mesh Intelligence Report, the programme will fail regardless of technical execution. The evidence on directed autonomy \parencite{MicrosoftDirectedAutonomy2025} is clear: leadership must set guardrails and investment priorities, not merely approve a budget and disengage.
+  \item \textbf{Escalation queues dominated by false positives.} If HITL Precision (Chapter~\ref{ch:new-kpis}) sits persistently below roughly 60 per cent in the pilot --- meaning most of what reaches the judgment broker did not actually need human intervention --- the authority boundaries are mis-scoped, not the reviewer pool undersized. The playbook's alert-fatigue evidence and the verification-failure modes documented by \textcite{Cemri2025} both point the same way: adding more reviewers to a queue full of false positives trains brokers to rubber-stamp the queue, reproducing the vigilance problem (Chapter~\ref{ch:vigilance}) inside the very escalation mechanism meant to solve it. Reselect the boundaries; do not add headcount to the review queue.
 \end{enumerate}
 
 \begin{keyinsight}
@@ -269,3 +287,5 @@ Accountability ambiguity (52\%) & 1 & Legal groundwork (Section~\ref{sec:legal-g
 \end{table}
 
 The 90-day roadmap is designed to be falsifiable. If the specified failure criteria are met, the organisation has learned something valuable --- that the prerequisites for mesh deployment are not yet in place --- and can adjust accordingly. An implementation plan that cannot fail is not a plan; it is a wish.
+
+The next chapter, Chapter~\ref{ch:ecosystem-roadmap}, takes this roadmap and applies it --- not hypothetically, but to DreamLab's own systems. It is a falsifiable exercise in following the sequence described here against the organisation's own coordination tax, rather than leaving the roadmap as a template intended for someone else's transformation.

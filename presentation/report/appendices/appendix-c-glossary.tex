@@ -9,6 +9,9 @@ The predictable adoption distribution identified by \textcite{BCGAgenticShift202
 \item[Agent Colony]
 An organisational model (associated with Every.to) in which every employee is given a persistent, personalised AI agent. Coordination emerges from cultural norms and public visibility rather than architectural design. Proven at approximately 20-person scale; subject to the ant death spiral at larger scales. See Chapter~\ref{ch:three-models}.
 
+\item[Agent-Native Organisation Forms]
+Coordination structures designed for the properties of agent collectives rather than copied from human org charts --- shared-state (blackboard) memory and adaptive, CTC-aware meta-organisation. In simulation, they outperform human-imitation forms (pipelines, hierarchies, committees) by wide margins \parencite{Liu2026}. See Chapter~\ref{ch:coordination-economics}.
+
 \item[Agentic Mesh]
 See \emph{Dynamic Agentic Mesh}.
 
@@ -29,6 +32,9 @@ A principle articulated by \textcite{Klaassen2025}: ``Each unit of engineering w
 
 \item[Compounding Organisation]
 An organisation in which each unit of organisational learning makes the next one easier. The flywheel proceeds: workforce discovers a shortcut, agents detect and codify it, the judgment broker validates it, the pattern propagates across the mesh, and the organisation's capability compounds. See Chapter~\ref{ch:compounding-org}.
+
+\item[Contextual Transaction Cost (CTC)]
+The cost of making task context usable across boundaries in an agent collective --- token and latency burden, handoffs, compression loss, semantic drift, verification burden, and governance cost \parencite{Liu2026}. The agent-layer formalisation of this report's coordination tax. See Chapter~\ref{ch:coordination-economics}.
 
 \item[Coordination Collapse]
 The central thesis of this report. For two thousand years, organisations have paid a ``coordination tax'' --- layers of humans whose primary function is routing information. AI collapses the cost of that coordination function to near-zero, dissolving the structural logic of hierarchical organisational design. Chapter~\ref{ch:open-questions} notes the qualification that ``information routing collapse'' may be a more precise term. See Chapter~\ref{ch:collapse-point}.
@@ -51,6 +57,9 @@ The bottom-up layer of the Dynamic Agentic Mesh that captures organisational ins
 \item[Dynamic Agentic Mesh]
 The organisational architecture proposed in this report. Three layers (Discovery Engine, Orchestration Layer, Declarative Governance) retain human judgment at intersection points while agentic orchestration handles information routing. Middle managers evolve into judgment brokers who operate at the jagged frontier. See Chapter~\ref{ch:three-models}.
 
+\item[Escalation Model]
+An operating model in which AI handles 80 per cent or more of a workflow autonomously and humans review only exceptions; associated with 71 per cent median productivity gains, versus roughly 30 per cent for approval-on-every-output models \parencite{Pereira2026Playbook}. The deployment-scale expression of the judgment broker pattern. See Chapters~\ref{ch:vigilance} and~\ref{ch:role-transformation}.
+
 \item[HITL (Human-in-the-Loop)]
 The practice of maintaining human oversight or decision-making authority within an automated system. This report argues that na\"{\i}ve HITL implementations degrade as AI quality improves (the vigilance problem) and that HITL must be architecturally supported through deliberate friction and active engagement. See Chapter~\ref{ch:vigilance}.
 
@@ -66,11 +75,17 @@ The five-stage process by which the Dynamic Agentic Mesh converts individual dis
 \item[Intelligence Layer]
 The organisational model proposed by \textcite{DorseyBotha2026} in which middle management is eliminated and coordination is handled by AI world models (Company World Model and Customer World Model) composed by an Intelligence Layer. Three roles remain: Individual Contributors, Directly Responsible Individuals, and Player-Coaches. See Chapter~\ref{ch:three-models}.
 
+\item[Interface Organisation]
+The designed arrangement connecting human accountability with agentic context coordination --- which outputs enter human workflows, what evidence and uncertainty travel with them, what permissions agents hold, which traces persist, and where human judgment is mandatory \parencite{Liu2026}. The academic articulation of judgment brokerage plus declarative governance. See Chapter~\ref{ch:coordination-economics}.
+
 \item[Jagged Frontier]
 The unpredictable boundary between tasks that AI performs well and tasks that AI performs poorly. Identified by \textcite{DellAcqua2026} based on a pre-registered experiment with 758 BCG consultants. The frontier is ``jagged'' because adjacent, similar-looking tasks can fall on opposite sides. This concept is the intellectual load-bearing wall of the report: it is the reason wholesale automation is reckless, change playbooks cannot be written once, and judgment brokers have a genuine future. See Chapter~\ref{ch:jagged-frontier}.
 
 \item[Judgment Broker]
 The evolved middle management role proposed in this report. The judgment broker operates at the jagged frontier, providing strategic direction, ethical adjudication, and relational intelligence that agentic systems cannot perform. Distinguished from the traditional information-routing role by its focus on edge cases, cross-functional coherence, and frontier navigation. See Chapter~\ref{ch:role-transformation}.
+
+\item[MAST (Multi-Agent System Failure Taxonomy)]
+A peer-reviewed taxonomy of 14 multi-agent failure modes in three categories --- specification issues, inter-agent misalignment, task verification --- derived from 1,600+ annotated traces; documents 41--86.7 per cent failure rates across seven state-of-the-art frameworks \parencite{Cemri2025}. Supersedes the informal 17$\times$ error-multiplication figure cited in the first edition.
 
 \item[Mesh Velocity (MV)]
 A proposed KPI: $MV = \Delta t(\text{insight} \rightarrow \text{codified workflow})$. Measures the elapsed time from insight discovery to codified, sanctioned workflow in the mesh. Target: $<48$ hours. The primary indicator of organisational learning speed. See Chapter~\ref{ch:new-kpis}.
@@ -80,6 +95,12 @@ The property of an agentic system in which every decision traces back through a 
 
 \item[OWL~2]
 Web Ontology Language 2 --- a W3C standard for formal knowledge representation. In VisionClaw, OWL~2 provides shared semantics for agent skill routing through ontological subsumption (understanding that ``risk assessment'' is a sub-task of ``governance review'' and routing accordingly). The EL++ profile, supported by the Whelk-rs reasoner, enables tractable inference while maintaining semantic precision. See Chapter~\ref{ch:technical-substrate}.
+
+\item[Pseudo-Diversity]
+The appearance of deliberation in multi-agent systems whose agents share the same model, prompts, and evidence, producing correlated paraphrase rather than independent judgment. The remedy is engineered diversity across models, tools, and retrieval paths \parencite{Liu2026}. See Chapter~\ref{ch:coordination-economics}.
+
+\item[Remote Labor Index (RLI)]
+A benchmark measuring whether AI can complete real freelance projects at paying-client quality, judged against professional gold-standard deliverables \parencite{RLI2025}. The automation rate rose from 2.5 per cent (October 2025) to 16.1 per cent (July 2026) \parencite{CAIS2026RLI}. See Chapter~\ref{ch:jagged-frontier}.
 
 \item[Secret Cyborg]
 A term from \textcite{Mollick2023SecretCyborgs} describing workers who use AI tools without disclosing this use to their employer. The secrecy is driven by rational calculation: disclosure risks headcount reduction if the worker demonstrates they have automated significant portions of their role. Over half of generative AI users report using the technology covertly at least some of the time. See Chapter~\ref{ch:collapse-point}.

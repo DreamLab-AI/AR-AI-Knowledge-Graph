@@ -99,6 +99,79 @@
       \verb 10.1257/jep.33.2.3
       \endverb
     \endentry
+    \entry{AltmanReversal2026}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=8ae3c719946f090ece232b13d46b0def}{%
+           family={Altman},
+           familyi={A\bibinitperiod},
+           given={Sam},
+           giveni={S\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{8ae3c719946f090ece232b13d46b0def}
+      \strng{fullhash}{8ae3c719946f090ece232b13d46b0def}
+      \strng{fullhashraw}{8ae3c719946f090ece232b13d46b0def}
+      \strng{bibnamehash}{8ae3c719946f090ece232b13d46b0def}
+      \strng{authorbibnamehash}{8ae3c719946f090ece232b13d46b0def}
+      \strng{authornamehash}{8ae3c719946f090ece232b13d46b0def}
+      \strng{authorfullhash}{8ae3c719946f090ece232b13d46b0def}
+      \strng{authorfullhashraw}{8ae3c719946f090ece232b13d46b0def}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{5}
+      \field{note}{Conversation with Matt Comyn (CEO, Commonwealth Bank of Australia), 26 May 2026; Altman describes his earlier AI-jobs predictions as ``pretty wrong'' and is ``delighted to be wrong''. Reported in Fortune and Reuters}
+      \field{title}{Remarks on {AI} and Employment}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://fortune.com/2026/05/26/sam-altman-dario-amodei-walking-back-ai-jobs-apocalypse-prophecies-ipo/
+      \endverb
+      \verb{url}
+      \verb https://fortune.com/2026/05/26/sam-altman-dario-amodei-walking-back-ai-jobs-apocalypse-prophecies-ipo/
+      \endverb
+    \endentry
+    \entry{Anthropic2025MultiAgent}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=f431db65cea024a5f19eab835afefee2}{%
+           family={{Anthropic}},
+           familyi={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{fullhash}{f431db65cea024a5f19eab835afefee2}
+      \strng{fullhashraw}{f431db65cea024a5f19eab835afefee2}
+      \strng{bibnamehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authorbibnamehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authornamehash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authorfullhash}{f431db65cea024a5f19eab835afefee2}
+      \strng{authorfullhashraw}{f431db65cea024a5f19eab835afefee2}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{6}
+      \field{note}{Engineering account of multi-agent coordination costs and the conditions under which multi-agent architectures help or hurt}
+      \field{title}{How We Built Our Multi-Agent Research System}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2025}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.anthropic.com/engineering/multi-agent-research-system
+      \endverb
+      \verb{url}
+      \verb https://www.anthropic.com/engineering/multi-agent-research-system
+      \endverb
+    \endentry
     \entry{BCGAgenticEnterprise2025}{report}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=3e2cfbd2f2461bae7dcbc515d263e44a}{%
@@ -258,6 +331,60 @@
       \verb https://www.bcg.com/publications/2025/ai-powered-kpis
       \endverb
     \endentry
+    \entry{Brynjolfsson2025Canaries}{report}{}{}
+      \name{author}{3}{}{%
+        {{un=0,uniquepart=base,hash=7bd9f54569cb8c0301da00ed49b5a752}{%
+           family={Brynjolfsson},
+           familyi={B\bibinitperiod},
+           given={Erik},
+           giveni={E\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=bc2a8f00bfc18bd49df7999b6c189977}{%
+           family={Chandar},
+           familyi={C\bibinitperiod},
+           given={Bharat},
+           giveni={B\bibinitperiod},
+           givenun=0}}%
+        {{un=1,uniquepart=given,hash=ab5d3f04b4a461107e7a700637de559a}{%
+           family={Chen},
+           familyi={C\bibinitperiod},
+           given={Ruyu},
+           giveni={R\bibinitperiod},
+           givenun=1}}%
+      }
+      \list{institution}{1}{%
+        {Stanford Digital Economy Lab}%
+      }
+      \strng{namehash}{9488c66e220dd58c117e636ff7818818}
+      \strng{fullhash}{9488c66e220dd58c117e636ff7818818}
+      \strng{fullhashraw}{9488c66e220dd58c117e636ff7818818}
+      \strng{bibnamehash}{9488c66e220dd58c117e636ff7818818}
+      \strng{authorbibnamehash}{9488c66e220dd58c117e636ff7818818}
+      \strng{authornamehash}{9488c66e220dd58c117e636ff7818818}
+      \strng{authorfullhash}{9488c66e220dd58c117e636ff7818818}
+      \strng{authorfullhashraw}{9488c66e220dd58c117e636ff7818818}
+      \field{sortinit}{B}
+      \field{sortinithash}{d7095fff47cda75ca2589920aae98399}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{11}
+      \field{note}{High-frequency ADP payroll data: early-career workers (22--25) in AI-exposed occupations show a 16\% relative employment decline since late 2022; software developers aged 22--25 nearly 20\%}
+      \field{title}{Canaries in the Coal Mine? Six Facts about the Recent Employment Effects of Artificial Intelligence}
+      \field{type}{Working Paper}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2025}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://digitaleconomy.stanford.edu/app/uploads/2025/11/CanariesintheCoalMine_Nov25.pdf
+      \endverb
+      \verb{url}
+      \verb https://digitaleconomy.stanford.edu/app/uploads/2025/11/CanariesintheCoalMine_Nov25.pdf
+      \endverb
+    \endentry
     \entry{Capgemini2025}{report}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=cf37f05f21e374fd814e10e02b63baec}{%
@@ -293,6 +420,326 @@
       \endverb
       \verb{url}
       \verb https://www.capgemini.com/insights/research-institute/
+      \endverb
+    \endentry
+    \entry{Cemri2025}{inproceedings}{}{}
+      \name{author}{13}{}{%
+        {{un=0,uniquepart=base,hash=057983fa84ef48408298a6a7b4653671}{%
+           family={Cemri},
+           familyi={C\bibinitperiod},
+           given={Mert},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=bc1fb91d76587917908d75c504b94616}{%
+           family={Pan},
+           familyi={P\bibinitperiod},
+           given={Melissa\bibnamedelima Z.},
+           giveni={M\bibinitperiod\bibinitdelim Z\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=a61427eb04e371cb2a502ef04f48635e}{%
+           family={Yang},
+           familyi={Y\bibinitperiod},
+           given={Shuyi},
+           giveni={S\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=0a69235f2e202338cd95ab9cacf29078}{%
+           family={Agrawal},
+           familyi={A\bibinitperiod},
+           given={Lakshya\bibnamedelima A.},
+           giveni={L\bibinitperiod\bibinitdelim A\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=e9dfe286775eb1b2d436e6d1f7a020e3}{%
+           family={Chopra},
+           familyi={C\bibinitperiod},
+           given={Bhavya},
+           giveni={B\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=900db37257b4b0531f56c9b29da6c8ea}{%
+           family={Tiwari},
+           familyi={T\bibinitperiod},
+           given={Rishabh},
+           giveni={R\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=994177386e5a63171a7be588e97df7e5}{%
+           family={Keutzer},
+           familyi={K\bibinitperiod},
+           given={Kurt},
+           giveni={K\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=9704c1cc1a74f1a7bf01ba9efa588f46}{%
+           family={Parameswaran},
+           familyi={P\bibinitperiod},
+           given={Aditya},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=9fb237891a1517d36109c68767dd6fae}{%
+           family={Klein},
+           familyi={K\bibinitperiod},
+           given={Dan},
+           giveni={D\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=e43e237d2215477ff03f2ac2e0208822}{%
+           family={Ramchandran},
+           familyi={R\bibinitperiod},
+           given={Kannan},
+           giveni={K\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=00dc518b94dfa6349c86e70661a1a5ef}{%
+           family={Zaharia},
+           familyi={Z\bibinitperiod},
+           given={Matei},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=80175f489665023b28dbb4cf1775c0ef}{%
+           family={Gonzalez},
+           familyi={G\bibinitperiod},
+           given={Joseph\bibnamedelima E.},
+           giveni={J\bibinitperiod\bibinitdelim E\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=51d9ef26181e2e8a9dc546b401e0bb26}{%
+           family={Stoica},
+           familyi={S\bibinitperiod},
+           given={Ion},
+           giveni={I\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{b2e2c865cc3b11c3d7a410aa75aa2c15}
+      \strng{fullhash}{956fdd27e85ee624474f5d0ce93d75b6}
+      \strng{fullhashraw}{956fdd27e85ee624474f5d0ce93d75b6}
+      \strng{bibnamehash}{956fdd27e85ee624474f5d0ce93d75b6}
+      \strng{authorbibnamehash}{956fdd27e85ee624474f5d0ce93d75b6}
+      \strng{authornamehash}{b2e2c865cc3b11c3d7a410aa75aa2c15}
+      \strng{authorfullhash}{956fdd27e85ee624474f5d0ce93d75b6}
+      \strng{authorfullhashraw}{956fdd27e85ee624474f5d0ce93d75b6}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{booktitle}{Advances in Neural Information Processing Systems 38 (NeurIPS 2025), Datasets and Benchmarks Track}
+      \field{eprinttype}{arxiv}
+      \field{note}{MAST: Multi-Agent System Failure Taxonomy. 41--86.7\% failure rates across seven state-of-the-art open-source multi-agent frameworks; 14 failure modes in three categories (specification issues, inter-agent misalignment, task verification) from 1,600+ annotated execution traces; inter-annotator agreement Cohen's $\kappa = 0.88$}
+      \field{title}{Why Do Multi-Agent {LLM} Systems Fail?}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2025}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2503.13657
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2503.13657
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2503.13657
+      \endverb
+    \endentry
+    \entry{MITNANDA2025}{report}{}{}
+      \name{author}{4}{}{%
+        {{un=0,uniquepart=base,hash=a5c1454e4268cd97d0fe035f76db3362}{%
+           family={Challapally},
+           familyi={C\bibinitperiod},
+           given={Aditya},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=4cc28f9cefef9c6e375c860c9f6cc0d1}{%
+           family={Pease},
+           familyi={P\bibinitperiod},
+           given={Chris},
+           giveni={C\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=8843732e3271ea6b1e5a66e24f6c6a43}{%
+           family={Raskar},
+           familyi={R\bibinitperiod},
+           given={Ramesh},
+           giveni={R\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=0758cdd5d53de2c0baaa6f6fd3fe4bfa}{%
+           family={Chari},
+           familyi={C\bibinitperiod},
+           given={Pradyumna},
+           giveni={P\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{institution}{1}{%
+        {MIT Project NANDA}%
+      }
+      \strng{namehash}{45f7bbc6a8126655a69d862d55b18c4b}
+      \strng{fullhash}{3dde0495d4f333c2a14e3750a093fe19}
+      \strng{fullhashraw}{3dde0495d4f333c2a14e3750a093fe19}
+      \strng{bibnamehash}{3dde0495d4f333c2a14e3750a093fe19}
+      \strng{authorbibnamehash}{3dde0495d4f333c2a14e3750a093fe19}
+      \strng{authornamehash}{45f7bbc6a8126655a69d862d55b18c4b}
+      \strng{authorfullhash}{3dde0495d4f333c2a14e3750a093fe19}
+      \strng{authorfullhashraw}{3dde0495d4f333c2a14e3750a093fe19}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{7}
+      \field{note}{Finds $\sim$95\% of generative AI pilot programmes produce no measurable financial impact; failures attributed to workflow integration and organisational incentives, not model quality}
+      \field{title}{The {GenAI} Divide: State of {AI} in Business 2025}
+      \field{type}{techreport}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2025}
+      \field{urldateera}{ce}
+    \endentry
+    \entry{Chatterji2026}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=5be50f62eeb7487f0783e149c639999f}{%
+           family={Chatterji},
+           familyi={C\bibinitperiod},
+           given={Aaron},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{organization}{1}{%
+        {European Central Bank, Sintra, Portugal}%
+      }
+      \strng{namehash}{5be50f62eeb7487f0783e149c639999f}
+      \strng{fullhash}{5be50f62eeb7487f0783e149c639999f}
+      \strng{fullhashraw}{5be50f62eeb7487f0783e149c639999f}
+      \strng{bibnamehash}{5be50f62eeb7487f0783e149c639999f}
+      \strng{authorbibnamehash}{5be50f62eeb7487f0783e149c639999f}
+      \strng{authornamehash}{5be50f62eeb7487f0783e149c639999f}
+      \strng{authorfullhash}{5be50f62eeb7487f0783e149c639999f}
+      \strng{authorfullhashraw}{5be50f62eeb7487f0783e149c639999f}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{6}
+      \field{note}{OpenAI Chief Economist Aaron ``Ronnie'' Chatterji, 30 June 2026: task exposure does not imply substitution; software developer employment has not shrunk to the extent predicted. Reported in PYMNTS and BigGo Finance, 1 July 2026}
+      \field{title}{Remarks at the {ECB} Forum on Central Banking 2026: A Conversation about Artificial Intelligence}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.ecb.europa.eu/press/conferences/ecbforum/html/speakers_and_papers.en.html
+      \endverb
+      \verb{url}
+      \verb https://www.ecb.europa.eu/press/conferences/ecbforum/html/speakers_and_papers.en.html
+      \endverb
+    \endentry
+    \entry{Chen2024MoreCalls}{article}{}{}
+      \name{author}{7}{}{%
+        {{un=1,uniquepart=given,hash=4722d1c517fb1393cd8f82862ffc9746}{%
+           family={Chen},
+           familyi={C\bibinitperiod},
+           given={Lingjiao},
+           giveni={L\bibinitperiod},
+           givenun=1}}%
+        {{un=0,uniquepart=base,hash=e7ca1a184acbd133d9c401f184441c69}{%
+           family={Davis},
+           familyi={D\bibinitperiod},
+           given={Jared\bibnamedelima Quincy},
+           giveni={J\bibinitperiod\bibinitdelim Q\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=cf9a954bd1391f7be502bbdd80737355}{%
+           family={Hanin},
+           familyi={H\bibinitperiod},
+           given={Boris},
+           giveni={B\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=751ac45f5dfde0130a2b00c11f848287}{%
+           family={Bailis},
+           familyi={B\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=51d9ef26181e2e8a9dc546b401e0bb26}{%
+           family={Stoica},
+           familyi={S\bibinitperiod},
+           given={Ion},
+           giveni={I\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=00dc518b94dfa6349c86e70661a1a5ef}{%
+           family={Zaharia},
+           familyi={Z\bibinitperiod},
+           given={Matei},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=1b868d50048a635fa27ffa744323fa41}{%
+           family={Zou},
+           familyi={Z\bibinitperiod},
+           given={James},
+           giveni={J\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{f2a2f8e38b957734c44c48a88fe983d6}
+      \strng{fullhash}{5051e351c4a3e2d199791ea071ef91b2}
+      \strng{fullhashraw}{5051e351c4a3e2d199791ea071ef91b2}
+      \strng{bibnamehash}{5051e351c4a3e2d199791ea071ef91b2}
+      \strng{authorbibnamehash}{5051e351c4a3e2d199791ea071ef91b2}
+      \strng{authornamehash}{f2a2f8e38b957734c44c48a88fe983d6}
+      \strng{authorfullhash}{5051e351c4a3e2d199791ea071ef91b2}
+      \strng{authorfullhashraw}{5051e351c4a3e2d199791ea071ef91b2}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprinttype}{arxiv}
+      \field{journaltitle}{arXiv preprint}
+      \field{title}{Are More {LLM} Calls All You Need? Towards Scaling Laws of Compound Inference Systems}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2024}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2403.02419
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2403.02419
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2403.02419
+      \endverb
+    \endentry
+    \entry{KlarnaHybrid2026}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=234db01727be899d8841da4e92159b01}{%
+           family={{CX Dive}},
+           familyi={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{234db01727be899d8841da4e92159b01}
+      \strng{fullhash}{234db01727be899d8841da4e92159b01}
+      \strng{fullhashraw}{234db01727be899d8841da4e92159b01}
+      \strng{bibnamehash}{234db01727be899d8841da4e92159b01}
+      \strng{authorbibnamehash}{234db01727be899d8841da4e92159b01}
+      \strng{authornamehash}{234db01727be899d8841da4e92159b01}
+      \strng{authorfullhash}{234db01727be899d8841da4e92159b01}
+      \strng{authorfullhashraw}{234db01727be899d8841da4e92159b01}
+      \field{sortinit}{C}
+      \field{sortinithash}{4d103a86280481745c9c897c925753c0}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{Klarna's post-reversal model is an AI-plus-human hybrid with gig-staffed human support, not a simple return to the pre-AI arrangement}
+      \field{title}{Klarna Changes Its {AI} Tune and Again Recruits Humans for Customer Service}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.customerexperiencedive.com/news/klarna-reinvests-human-talent-customer-service-AI-chatbot/747586/
+      \endverb
+      \verb{url}
+      \verb https://www.customerexperiencedive.com/news/klarna-reinvests-human-talent-customer-service-AI-chatbot/747586/
       \endverb
     \endentry
     \entry{CyberArk2025}{report}{}{}
@@ -493,6 +940,48 @@
       \verb https://www2.deloitte.com/global/en/insights/focus/human-capital-trends.html
       \endverb
     \endentry
+    \entry{Dochkina2026}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=f727045e3a550ef23460e0af3ae1e12c}{%
+           family={Dochkina},
+           familyi={D\bibinitperiod},
+           given={Victoria},
+           giveni={V\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{fullhash}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{fullhashraw}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{bibnamehash}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{authorbibnamehash}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{authornamehash}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{authorfullhash}{f727045e3a550ef23460e0af3ae1e12c}
+      \strng{authorfullhashraw}{f727045e3a550ef23460e0af3ae1e12c}
+      \field{sortinit}{D}
+      \field{sortinithash}{6f385f66841fb5e82009dc833c761848}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprinttype}{arxiv}
+      \field{journaltitle}{arXiv preprint}
+      \field{month}{3}
+      \field{title}{Drop the Hierarchy and Roles: How Self-Organizing {LLM} Agents Outperform Designed Structures}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2603.28990
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2603.28990
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2603.28990
+      \endverb
+    \endentry
     \entry{DorseyBotha2026}{online}{}{}
       \name{author}{2}{}{%
         {{un=0,uniquepart=base,hash=ce0014b60876e3662053a3abea508cec}{%
@@ -539,12 +1028,12 @@
     \endentry
     \entry{EdmondsonLei2025}{article}{}{}
       \name{author}{2}{}{%
-        {{un=0,uniquepart=base,hash=beb38b131c6b6b88de90ae06d0e0c52e}{%
+        {{un=1,uniquepart=given,hash=beb38b131c6b6b88de90ae06d0e0c52e}{%
            family={Edmondson},
            familyi={E\bibinitperiod},
            given={Amy\bibnamedelima C.},
            giveni={A\bibinitperiod\bibinitdelim C\bibinitperiod},
-           givenun=0}}%
+           givenun=1}}%
         {{un=0,uniquepart=base,hash=df64878a2b580ed0bb78fcc830968e41}{%
            family={Lei},
            familyi={L\bibinitperiod},
@@ -579,6 +1068,45 @@
       \endverb
       \verb{url}
       \verb https://hbr.org/
+      \endverb
+    \endentry
+    \entry{NYTChina2026}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=1,uniquepart=given,hash=41af47d8144a2f41f276d6f58b0a9a5a}{%
+           family={Edmondson},
+           familyi={E\bibinitperiod},
+           given={Catie},
+           giveni={C\bibinitperiod},
+           givenun=1}}%
+      }
+      \strng{namehash}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{fullhash}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{fullhashraw}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{bibnamehash}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{authorbibnamehash}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{authornamehash}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{authorfullhash}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \strng{authorfullhashraw}{41af47d8144a2f41f276d6f58b0a9a5a}
+      \field{sortinit}{E}
+      \field{sortinithash}{8da8a182d344d5b9047633dfc0cc9131}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{The New York Times}
+      \field{month}{5}
+      \field{note}{19 May 2026. Government pressure on firms to avoid AI-driven layoffs; April 2026 Hangzhou Intermediate People's Court ruling that a worker was illegally laid off after replacement by AI software}
+      \field{title}{China Wants {A.I.} to Flourish, but Not at the Expense of Jobs}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.nytimes.com/2026/05/19/business/china-ai-unemployment.html
+      \endverb
+      \verb{url}
+      \verb https://www.nytimes.com/2026/05/19/business/china-ai-unemployment.html
       \endverb
     \endentry
     \entry{ERA2025}{online}{}{}
@@ -864,6 +1392,116 @@
       \verb https://www.ibm.com/reports/data-breach
       \endverb
     \endentry
+    \entry{Khanal2026}{article}{}{}
+      \name{author}{3}{}{%
+        {{un=0,uniquepart=base,hash=5c13035a549d765637f7e6bc68d8aeb4}{%
+           family={Khanal},
+           familyi={K\bibinitperiod},
+           given={Aaditya},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=9cb322726bcbd336e103d9b516382c01}{%
+           family={Tao},
+           familyi={T\bibinitperiod},
+           given={Yangyang},
+           giveni={Y\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=4356a50101745b92e215ff5569b29708}{%
+           family={Zhou},
+           familyi={Z\bibinitperiod},
+           given={Junxiu},
+           giveni={J\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{fullhash}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{fullhashraw}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{bibnamehash}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{authorbibnamehash}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{authornamehash}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{authorfullhash}{fa77abbab9351a174e0acf5d397f1c99}
+      \strng{authorfullhashraw}{fa77abbab9351a174e0acf5d397f1c99}
+      \field{sortinit}{K}
+      \field{sortinithash}{c02bf6bff1c488450c352b40f5d853ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprinttype}{arxiv}
+      \field{journaltitle}{arXiv preprint}
+      \field{month}{3}
+      \field{note}{23,392 episodes across 10 models and 396 tasks. Reliability decay is domain-stratified; frontier models show the highest meltdown rates (up to 19\%) on ambitious multi-step strategies; memory scaffolds universally hurt long-horizon performance}
+      \field{title}{Beyond pass@1: A Reliability Science Framework for Long-Horizon {LLM} Agents}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2603.29231
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2603.29231
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2603.29231
+      \endverb
+    \endentry
+    \entry{RampRevelio2026}{report}{}{}
+      \name{author}{3}{}{%
+        {{un=0,uniquepart=base,hash=155c93c982d452f4bac2acf7fd9b8430}{%
+           family={Kharazian},
+           familyi={K\bibinitperiod},
+           given={Ara},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=32bd79087502174f1438d9b94899bc92}{%
+           family={Simon},
+           familyi={S\bibinitperiod},
+           given={Lisa},
+           giveni={L\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=4f832c20f49afe0f89cd5363ed066a35}{%
+           family={Stevens},
+           familyi={S\bibinitperiod},
+           given={Ryan},
+           giveni={R\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{institution}{2}{%
+        {Ramp Economics Lab}%
+        {Revelio Labs}%
+      }
+      \strng{namehash}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{fullhash}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{fullhashraw}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{bibnamehash}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{authorbibnamehash}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{authornamehash}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{authorfullhash}{cccdecef5da595455a48bb9ee99abdfb}
+      \strng{authorfullhashraw}{cccdecef5da595455a48bb9ee99abdfb}
+      \field{sortinit}{K}
+      \field{sortinithash}{c02bf6bff1c488450c352b40f5d853ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{6}
+      \field{note}{21,559 US firms, January 2021--February 2026. High-intensity adopters ($\sim$\$33.67 AI spend per employee per month post-adoption) grew headcount 10.2\% over two years versus no significant change for low-intensity adopters ($\sim$\$2.78); entry-level growth 12\%; growth began 6--12 months after adoption. Correlational, with matched like-for-like control groups}
+      \field{title}{A New Look at {AI}'s Impact on Jobs: Firm-Level {AI} Spending and Workforce Adjustment}
+      \field{type}{Company Research Paper}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://ramp.com/data/ai-jobs-impact/paper
+      \endverb
+      \verb{url}
+      \verb https://ramp.com/data/ai-jobs-impact/paper
+      \endverb
+    \endentry
     \entry{Klaassen2025}{online}{}{}
       \name{author}{1}{}{%
         {{un=0,uniquepart=base,hash=5e8039b3eda36ad9d9a32c05d3f557fe}{%
@@ -934,6 +1572,286 @@
       \endverb
       \verb{url}
       \verb https://www.cnbc.com/
+      \endverb
+    \endentry
+    \entry{METR2026}{online}{}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{3}{}{%
+        {{un=0,uniquepart=base,hash=2f7146f7829922e3107d06aa157b96d2}{%
+           family={Kwa},
+           familyi={K\bibinitperiod},
+           given={Thomas},
+           giveni={T\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=f086c618ed2a97b0ee20ae296291df00}{%
+           family={West},
+           familyi={W\bibinitperiod},
+           given={Ben},
+           giveni={B\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=77249691afd47d29da8ace361cd29e0d}{%
+           family={Becker},
+           familyi={B\bibinitperiod},
+           given={Joel},
+           giveni={J\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{52eea56f9bebee376502df64c44e298f}
+      \strng{fullhash}{52eea56f9bebee376502df64c44e298f}
+      \strng{fullhashraw}{52eea56f9bebee376502df64c44e298f}
+      \strng{bibnamehash}{52eea56f9bebee376502df64c44e298f}
+      \strng{authorbibnamehash}{52eea56f9bebee376502df64c44e298f}
+      \strng{authornamehash}{52eea56f9bebee376502df64c44e298f}
+      \strng{authorfullhash}{52eea56f9bebee376502df64c44e298f}
+      \strng{authorfullhashraw}{52eea56f9bebee376502df64c44e298f}
+      \field{sortinit}{K}
+      \field{sortinithash}{c02bf6bff1c488450c352b40f5d853ab}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprinttype}{arxiv}
+      \field{month}{2}
+      \field{note}{METR. arXiv:2503.14499v3, revised 25 February 2026, with the continuously updated time-horizons data page. 50\%-success task-time horizon doubled roughly every seven months since 2019, with recent acceleration; Claude Opus 4.6 measured at $\sim$14.5 human-expert hours (added 20 February 2026)}
+      \field{title}{Measuring {AI} Ability to Complete Long Software Tasks}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2503.14499
+      \endverb
+      \verb{urlraw}
+      \verb https://metr.org/time-horizons/
+      \endverb
+      \verb{url}
+      \verb https://metr.org/time-horizons/
+      \endverb
+    \endentry
+    \entry{Levie2026}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=bdc66c3b42727ff239243b57c02f2c01}{%
+           family={Levie},
+           familyi={L\bibinitperiod},
+           given={Aaron},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{fullhash}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{fullhashraw}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{bibnamehash}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{authorbibnamehash}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{authornamehash}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{authorfullhash}{bdc66c3b42727ff239243b57c02f2c01}
+      \strng{authorfullhashraw}{bdc66c3b42727ff239243b57c02f2c01}
+      \field{sortinit}{L}
+      \field{sortinithash}{7c47d417cecb1f4bd38d1825c427a61a}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{note}{58\% of respondents expect headcount to rise over the next three years; 79\% among the most mature AI adopters. Reported via Levie's own social-media post; no independently published Box methodology document identified}
+      \field{title}{Box Survey of 1,600+ Mid and Large Companies on {AI} and Headcount Expectations}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://x.com/levie/status/2071992799109824562
+      \endverb
+      \verb{url}
+      \verb https://x.com/levie/status/2071992799109824562
+      \endverb
+    \endentry
+    \entry{Liu2026}{article}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=2f32dc82e6dcc8f8f4d8db62fbd26aa7}{%
+           family={Liu},
+           familyi={L\bibinitperiod},
+           given={Canhui},
+           giveni={C\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{fullhash}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{fullhashraw}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{bibnamehash}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{authorbibnamehash}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{authornamehash}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{authorfullhash}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \strng{authorfullhashraw}{2f32dc82e6dcc8f8f4d8db62fbd26aa7}
+      \field{sortinit}{L}
+      \field{sortinithash}{7c47d417cecb1f4bd38d1825c427a61a}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprinttype}{arxiv}
+      \field{journaltitle}{arXiv preprint}
+      \field{month}{6}
+      \field{note}{University College London. Introduces contextual transaction cost and interface organisations; 8,000-task simulation across seven agent organisation forms plus trace-instrumented real-LLM runs}
+      \field{title}{The Organizational Behavior of Agentic {AI}: Context, Boundaries, and Collective Intelligence in Human-Agent Workflows}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2606.30986
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2606.30986
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2606.30986
+      \endverb
+    \endentry
+    \entry{AnthropicLabor2026}{online}{}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=0a9348f0422e4f61b90eb0fa2c4cbec3}{%
+           family={Massenkoff},
+           familyi={M\bibinitperiod},
+           given={Maxim},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=8323e659777394c64d38014383aa8d9d}{%
+           family={McCrory},
+           familyi={M\bibinitperiod},
+           given={Peter},
+           giveni={P\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{organization}{1}{%
+        {Anthropic}%
+      }
+      \strng{namehash}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{fullhash}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{fullhashraw}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{bibnamehash}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{authorbibnamehash}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{authornamehash}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{authorfullhash}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \strng{authorfullhashraw}{bb96c0aeddfe2484e54f6e0188bb1dc1}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{3}
+      \field{note}{Distinguishes theoretical AI exposure (up to 94\% in computer and mathematical occupations) from observed adoption (substantially lower); finds slowed hiring of younger workers in AI-exposed fields but no systematic unemployment increase to date}
+      \field{title}{Labor Market Impacts of {AI}: A New Measure and Early Evidence}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.anthropic.com/research/labor-market-impacts
+      \endverb
+      \verb{url}
+      \verb https://www.anthropic.com/research/labor-market-impacts
+      \endverb
+    \endentry
+    \entry{CAIS2026RLI}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=cf291551acefa6a31206eb6853b65648}{%
+           family={Mazeika},
+           familyi={M\bibinitperiod},
+           given={Mantas},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{organization}{1}{%
+        {Center for AI Safety}%
+      }
+      \strng{namehash}{cf291551acefa6a31206eb6853b65648}
+      \strng{fullhash}{cf291551acefa6a31206eb6853b65648}
+      \strng{fullhashraw}{cf291551acefa6a31206eb6853b65648}
+      \strng{bibnamehash}{cf291551acefa6a31206eb6853b65648}
+      \strng{authorbibnamehash}{cf291551acefa6a31206eb6853b65648}
+      \strng{authornamehash}{cf291551acefa6a31206eb6853b65648}
+      \strng{authorfullhash}{cf291551acefa6a31206eb6853b65648}
+      \strng{authorfullhashraw}{cf291551acefa6a31206eb6853b65648}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{7}
+      \field{note}{Remote Labor Index update, 1 July 2026. Automation rates against gold-standard professional deliverables: Claude Fable 5 16.1\%, Claude Opus 4.8 8.3\%, GPT-5.5 6.3\%; frontier more than quadrupled in under eight months from the initial 2.5\% (GPT-5.2, late 2025)}
+      \field{title}{A Significant Increase in Digital Labor Automation}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://safe.ai/blog/significant-increase-in-digital-labor-automation
+      \endverb
+      \verb{url}
+      \verb https://safe.ai/blog/significant-increase-in-digital-labor-automation
+      \endverb
+    \endentry
+    \entry{RLI2025}{online}{}{}
+      \true{moreauthor}
+      \true{morelabelname}
+      \name{author}{3}{}{%
+        {{un=0,uniquepart=base,hash=cf291551acefa6a31206eb6853b65648}{%
+           family={Mazeika},
+           familyi={M\bibinitperiod},
+           given={Mantas},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=ed77a0526d618ff8d17bdec4c727167f}{%
+           family={Gatti},
+           familyi={G\bibinitperiod},
+           given={Alice},
+           giveni={A\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=c2a01eb3e1a150477c9f16ec0adf2d48}{%
+           family={Menghini},
+           familyi={M\bibinitperiod},
+           given={Cristina},
+           giveni={C\bibinitperiod},
+           givenun=0}}%
+      }
+      \strng{namehash}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{fullhash}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{fullhashraw}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{bibnamehash}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{authorbibnamehash}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{authornamehash}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{authorfullhash}{899024812b44b98b257a94a3e4b1eb67}
+      \strng{authorfullhashraw}{899024812b44b98b257a94a3e4b1eb67}
+      \field{sortinit}{M}
+      \field{sortinithash}{4625c616857f13d17ce56f7d4f97d451}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{eprinttype}{arxiv}
+      \field{month}{10}
+      \field{note}{Center for AI Safety and Scale AI; 46 authors including Dan Hendrycks and Alexandr Wang. Real freelance projects judged by human evaluators against paid-professional gold-standard deliverables; top model automation rate 2.5\% at launch (30 October 2025)}
+      \field{title}{Remote Labor Index: Measuring {AI} Automation of Remote Work}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2025}
+      \field{urldateera}{ce}
+      \verb{eprint}
+      \verb 2510.26787
+      \endverb
+      \verb{urlraw}
+      \verb https://arxiv.org/abs/2510.26787
+      \endverb
+      \verb{url}
+      \verb https://arxiv.org/abs/2510.26787
       \endverb
     \endentry
     \entry{McKinseySixShifts2026}{report}{}{}
@@ -1226,18 +2144,55 @@
       \field{labelnamesource}{author}
       \field{labeltitlesource}{title}
       \field{journaltitle}{Nature Sustainability}
-      \field{note}{Estimates US AI servers produce 24--44 Mt CO$_2$ annually}
-      \field{title}{Carbon Footprint of {AI} Server Infrastructure in the {United States}}
-      \field{urlday}{10}
-      \field{urlmonth}{4}
-      \field{urlyear}{2026}
+      \field{note}{Projects US AI servers at 24--44 Mt CO2-equivalent annually through 2030}
+      \field{title}{{AI} Server Carbon Footprint Projections}
       \field{year}{2025}
-      \field{urldateera}{ce}
       \verb{urlraw}
-      \verb https://www.nature.com/natsustain/
+      \verb https://www.nature.com/articles/s41893-025-01681-y
       \endverb
       \verb{url}
-      \verb https://www.nature.com/natsustain/
+      \verb https://www.nature.com/articles/s41893-025-01681-y
+      \endverb
+    \endentry
+    \entry{Bloomberg2026Ford}{online}{}{}
+      \name{author}{1}{}{%
+        {{un=0,uniquepart=base,hash=b75d4aad51e248a8d268c979f1b89350}{%
+           family={Naughton},
+           familyi={N\bibinitperiod},
+           given={Keith},
+           giveni={K\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{organization}{1}{%
+        {Bloomberg}%
+      }
+      \strng{namehash}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{fullhash}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{fullhashraw}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{bibnamehash}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{authorbibnamehash}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{authornamehash}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{authorfullhash}{b75d4aad51e248a8d268c979f1b89350}
+      \strng{authorfullhashraw}{b75d4aad51e248a8d268c979f1b89350}
+      \field{sortinit}{N}
+      \field{sortinithash}{22369a73d5f88983a108b63f07f37084}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{6}
+      \field{note}{25 June 2026. $\sim$350 veteran ``greybeard'' engineers hired over three years to fix quality problems and retrain AI tools (Charles Poon, VP of Vehicle Hardware Engineering); Ford subsequently ranked top mainstream brand in the J.D. Power Initial Quality Study}
+      \field{title}{Ford Has Been Rehiring Quality Inspectors After {AI} Fell Short}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.bloomberg.com/news/articles/2026-06-25/ford-has-been-rehiring-quality-inspectors-after-ai-fell-short
+      \endverb
+      \verb{url}
+      \verb https://www.bloomberg.com/news/articles/2026-06-25/ford-has-been-rehiring-quality-inspectors-after-ai-fell-short
       \endverb
     \endentry
     \entry{OrgvueForrester2025}{report}{}{}
@@ -1319,6 +2274,107 @@
       \endverb
       \verb{url}
       \verb https://arxiv.org/abs/2509.20241
+      \endverb
+    \endentry
+    \entry{Pereira2026Playbook}{report}{}{}
+      \name{author}{3}{}{%
+        {{un=0,uniquepart=base,hash=139c831c2d96162e38f4ead2df854362}{%
+           family={Pereira},
+           familyi={P\bibinitperiod},
+           given={Elisa},
+           giveni={E\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=668982f9b69d9fe49ef3a4236e65f824}{%
+           family={Graylin},
+           familyi={G\bibinitperiod},
+           given={Alvin\bibnamedelima Wang},
+           giveni={A\bibinitperiod\bibinitdelim W\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=7bd9f54569cb8c0301da00ed49b5a752}{%
+           family={Brynjolfsson},
+           familyi={B\bibinitperiod},
+           given={Erik},
+           giveni={E\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{institution}{1}{%
+        {Stanford Digital Economy Lab, Stanford University}%
+      }
+      \strng{namehash}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{fullhash}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{fullhashraw}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{bibnamehash}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{authorbibnamehash}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{authornamehash}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{authorfullhash}{b7a3d6333ac4edd2d786760edf18f147}
+      \strng{authorfullhashraw}{b7a3d6333ac4edd2d786760edf18f147}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{4}
+      \field{note}{51 mature enterprise AI deployments across 41 organisations, 9 industries, 7 countries, 1M+ combined workforce; structured interviews August 2025--February 2026}
+      \field{title}{The Enterprise {AI} Playbook: Lessons from 51 Successful Deployments}
+      \field{type}{techreport}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://digitaleconomy.stanford.edu/app/uploads/2026/03/EnterpriseAIPlaybook_PereiraGraylinBrynjolfsson.pdf
+      \endverb
+      \verb{url}
+      \verb https://digitaleconomy.stanford.edu/app/uploads/2026/03/EnterpriseAIPlaybook_PereiraGraylinBrynjolfsson.pdf
+      \endverb
+    \endentry
+    \entry{Challenger2026}{online}{}{}
+      \name{author}{2}{}{%
+        {{un=0,uniquepart=base,hash=1905b469eb85143f8623e29ac898e2cd}{%
+           family={Prakash},
+           familyi={P\bibinitperiod},
+           given={Maya},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=539f0fc7566f7d87a7f4ac21c6e1e88d}{%
+           family={Boesler},
+           familyi={B\bibinitperiod},
+           given={Matthew},
+           giveni={M\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{organization}{1}{%
+        {Bloomberg}%
+      }
+      \strng{namehash}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{fullhash}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{fullhashraw}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{bibnamehash}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{authorbibnamehash}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{authornamehash}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{authorfullhash}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \strng{authorfullhashraw}{6f8ea3194ee9c3c8c9efdc4b8ed7acf4}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{month}{7}
+      \field{note}{BLS payroll data: tech and finance losing $\sim$28,000 jobs/month on average in 2026 against $\sim$113,000/month economy-wide gains. Includes Challenger, Gray \& Christmas job-cut tracking (Andy Challenger, SVP: AI ``making an impact in a way that no technology has before'') and Barclays economist Pooja Sriram on AI-investment-driven cost cutting}
+      \field{title}{Tech and Finance Sectors Losing 28,000 Jobs Monthly Show {AI} Impact on Labor}
+      \field{urlday}{7}
+      \field{urlmonth}{7}
+      \field{urlyear}{2026}
+      \field{year}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.bloomberg.com/news/articles/2026-07-01/tech-and-finance-sectors-losing-28-000-jobs-monthly-show-ai-impact-on-labor
+      \endverb
+      \verb{url}
+      \verb https://www.bloomberg.com/news/articles/2026-07-01/tech-and-finance-sectors-losing-28-000-jobs-monthly-show-ai-impact-on-labor
       \endverb
     \endentry
     \entry{Prosci2024}{online}{}{}

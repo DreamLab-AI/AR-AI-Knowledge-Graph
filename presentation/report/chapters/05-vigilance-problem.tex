@@ -57,6 +57,32 @@ The mesh must be designed to keep humans cognitively active at the jagged fronti
 
 Periodic review --- quarterly audits, annual risk assessments, monthly committee meetings --- is structurally inadequate. The vigilance problem operates at the level of individual decisions made in real time. Governance must be embedded in the flow of work, not bolted on at intervals. Chapter~\ref{ch:governance} develops this principle into the concept of declarative governance, where policy enforcement is architectural rather than procedural.
 
+\section{Calibrating Oversight: Evidence from the Field}
+
+The argument so far has been diagnostic: passive review degrades, and the mesh should be designed to keep humans cognitively active rather than comfortable. What has been missing is field evidence on which oversight architectures actually deliver that active engagement at scale. The Stanford Digital Economy Lab's Enterprise AI Playbook \parencite{Pereira2026Playbook} supplies it.
+
+\textcite{Pereira2026Playbook} classified 51 mature, production-grade AI deployments by their oversight model. Three patterns recurred: \textbf{escalation}, in which the AI system handles 80 per cent or more of volume autonomously and humans review only flagged exceptions; \textbf{approval}, in which a human reviews every output before it takes effect; and \textbf{collaboration}, in which human and AI work continuously on the same task. The productivity gap between the first two was not marginal. Escalation-based operating models produced 71 per cent median productivity gains; approval-based models produced roughly 30 per cent.
+
+\begin{evidencebox}[title={Escalation versus Approval: The Field Evidence}]
+\begin{itemize}
+  \item \textbf{Escalation} (AI autonomous on 80+ per cent of volume, humans handle exceptions): \textbf{71 per cent} median productivity gain.
+  \item \textbf{Approval} (human reviews every output): \textbf{$\sim$30 per cent} median productivity gain.
+  \item One 80/20 content-production deployment with zero-error tolerance still cut time-to-market from 7 weeks to 6 hours --- escalation and zero tolerance are not mutually exclusive when the escalation boundary is drawn correctly.
+\end{itemize}
+\end{evidencebox}
+
+Part of this gap is task selection: escalation architectures were deployed on high-volume, recoverable work, while approval architectures were reserved for regulated or zero-error-tolerance domains where the Playbook's authors identify four legitimate reasons for retaining human review --- zero error tolerance, regulatory mandate, enterprise risk exposure, and the need for a continuous improvement feedback loop back into the system. Approval workflows are not a mistake in those domains. They are frequently the correct design choice.
+
+But task selection does not explain away the finding; it sharpens it. The design lesson is not that oversight is optional wherever volume is high. It is that the vigilance problem's own logic --- review everything and you review nothing, because uniform review is exactly the condition under which human attention habituates and disengages --- has a field-tested architectural answer. That answer is not blanket approval workflows, which this chapter has already shown degrade into rubber-stamping precisely as the underlying AI improves. It is well-designed escalation, which concentrates scarce human attention on the cases that are genuinely novel, ambiguous, or high-stakes, and lets routine volume pass without consuming the cognitive resource that matters.
+
+\begin{keyinsight}[title={Deliberate Friction, Operationalised}]
+This is the operational form of the deliberate-friction principle introduced earlier in this chapter. A judgment broker asked to approve every output learns to stop reading them. A judgment broker whose attention is reserved for the exceptions an escalation architecture surfaces is, by construction, being shown the cases that require thought. Escalation is deliberate friction implemented as a routing decision rather than an interface design choice.
+
+This connects directly to two constructs elsewhere in this report. The HITL Precision KPI (Chapter~\ref{ch:new-kpis}) measures exactly what an escalation architecture is designed to produce: a high proportion of human interventions that materially change the outcome, rather than interventions that merely rubber-stamp an already-correct AI decision. And the judgment broker role (Chapter~\ref{ch:role-transformation}) is, in this light, not a euphemism for a smaller reviewing job --- it is the human half of an escalation boundary, positioned precisely where the Playbook's evidence says human attention produces the largest return.
+\end{keyinsight}
+
+The practical design question this raises --- and the one the mesh architecture must answer per deployment --- is where the escalation boundary should sit: what volume of decisions can be handled autonomously, what triggers an exception, and what evidence must accompany an escalated case so the human reviewer can act on it rather than merely rubber-stamp it under a different name. Getting that boundary wrong in either direction reproduces the vigilance problem: too permissive, and genuine errors pass unreviewed; too conservative, and the system reverts to the approval model this evidence shows underperforms.
+
 \section{The Atrophy Prediction}
 
 \textcite{Gartner2025} predicts that by 2026, 50 per cent of organisations will require ``AI-free'' skills assessments --- evaluations of employee capability conducted without AI assistance --- specifically because of critical-thinking atrophy from generative AI dependency.
@@ -69,6 +95,20 @@ The judgment broker role must include deliberate friction --- tasks that require
 This is a design requirement, not a training problem. No amount of training in ``critical thinking'' will overcome the cognitive dynamics that cause vigilance to degrade. The system architecture must compensate for the predictable tendency of humans to disengage from high-quality automated output.
 \end{cautionbox}
 
+\section{The Vigilance Problem at the Agent Layer}
+
+Everything so far has treated vigilance decay as a problem of human attention directed at a stable, if improving, AI system. \parencite{Khanal2026} shows the problem does not stop there: the agents themselves become less reliable, in a specific and counterintuitive way, exactly as they become more capable.
+
+Across 23,392 episodes spanning ten models, the frontier models --- the most capable systems tested --- showed the highest meltdown rates of any tier, up to 19 per cent on long-horizon tasks. This is not a paradox once the mechanism is examined: a more capable model is more willing to attempt ambitious, multi-step strategies rather than conservative, narrowly-scoped ones, and ambitious multi-step strategies have more places to spiral out of control before they fail. Capability does not translate uniformly into reliability; it can translate into more ambitious failure.
+
+A second finding compounds the first. Memory scaffolds --- the mechanism most naturally reached for when an agent's context runs out mid-task --- \emph{universally hurt} long-horizon performance in this study, across every model tested. The intuitive fix for an agent losing track of a long task is to give it more memory of what it has already done. The evidence says this makes long-horizon performance worse, not better.
+
+\begin{cautionbox}[title={Trust-the-Model Optimism Is Not a Strategy}]
+Read together, these two findings extend the vigilance problem down into the agent layer itself. It is not only that humans become less reliable overseers as AI improves; it is that AI agents become less reliable executors, in more ambitious and less predictable ways, as they become more capable --- and the most obvious engineering fix does not help. This is direct evidence against any design that assumes a sufficiently capable model can be trusted to self-manage a long-horizon task with a lighter oversight touch than a less capable one would need. The opposite is closer to true.
+
+This strengthens the case, made throughout this chapter, for architectural rather than optimistic vigilance: continuous Trust Variance monitoring and well-designed escalation boundaries (Chapter~\ref{ch:new-kpis}) that catch a meltdown in progress, rather than governance that relaxes as models improve on the assumption that better models need less watching.
+\end{cautionbox}
+
 \section{What This Means for the Three Models}
 
 The vigilance problem is the lens through which the three organisational models in the next chapter should be evaluated.
@@ -77,4 +117,4 @@ Block's intelligence layer model, which delegates coordination to an AI world mo
 
 Every's agent colony model partially mitigates the problem through personal relationship: because the agent is ``mine,'' there is reputational incentive to monitor its output. But this mitigation weakens at scale. When every employee has an agent, and when agents interact with other agents, the reputational feedback loop becomes diffuse. The ant death spiral --- agents responding to agents in loops --- is a manifestation of vigilance failure at the system level.
 
-The Dynamic Agentic Mesh addresses the vigilance problem architecturally, through embedded governance, continuous trust variance monitoring, and a judgment broker role designed around active engagement rather than passive review. Whether this architectural approach succeeds at scale is an open question. That it addresses the right problem is supported by the evidence.
+The Dynamic Agentic Mesh addresses the vigilance problem architecturally, through embedded governance, continuous trust variance monitoring, and a judgment broker role designed around active engagement rather than passive review. Whether this architectural approach succeeds at scale is an open question. That it addresses the right problem is supported by the evidence --- including, now, field evidence: the escalation architectures documented in \textcite{Pereira2026Playbook}, which produced the strongest productivity gains of any oversight model studied, are precisely the mesh's core pattern already operating in production.

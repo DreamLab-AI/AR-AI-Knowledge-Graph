@@ -92,6 +92,14 @@ The corrected story is still strong. A working OWL~2 + CUDA + WebXR + Nostr + Cl
   \item Multi-provider orchestration (only Claude-Flow is currently implemented).
 \end{itemize}
 
+Chapter~\ref{ch:ecosystem-roadmap} takes this list as its work queue: each gap is converted there into a prioritised, checkable roadmap commitment, so that the next edition of this report can state which were closed and which were not.
+
+\section{VisionClaw in Liu's Taxonomy}
+
+Chapter~\ref{ch:coordination-economics} introduced Liu's taxonomy of organisational forms for agent collectives, in which agent-native forms decisively outperform human-imitation ones \parencite{Liu2026}. VisionClaw's subsystems map onto that taxonomy with some precision. The RuVector memory layer is a blackboard: agents coordinate by reading and writing shared, durable state rather than relaying context through manager agents --- the form Liu finds achieves the highest quality of any he tests. Claude-Flow's ontology-grounded routing is a partial adaptive meta-organisation: task decomposition restructures the collective per task, using ontological subsumption as the routing signal, though without the explicit CTC-awareness of Liu's orchestrator. And the declarative governance layer combined with the judgment broker is an interface organisation: it specifies what may cross from the agentic side into human accountability, and with what evidence attached.
+
+This mapping is interpretive, not measured. Taxonomic resemblance is evidence that the architecture is pointed the right way; it is not evidence that VisionClaw's shared-state coordination pays the context tax at the favourable rates Liu's simulations report. Testing that requires the production CTC instrumentation that does not yet exist here --- a gap Chapter~\ref{ch:ecosystem-roadmap} converts into an explicit roadmap commitment.
+
 \section{Positioning Guidance}
 
 In any external presentation, the following guidelines should govern how VisionClaw is described:

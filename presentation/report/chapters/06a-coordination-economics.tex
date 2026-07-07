@@ -1,0 +1,117 @@
+\chapter{The Economics of Agent Coordination}
+\label{ch:coordination-economics}
+
+\epigraph{The coordination tax does not vanish when the coordinators become software. It migrates into the movement of context --- and it must be engineered.}{}
+
+\section{From Coase to Context}
+
+Ronald Coase's 1937 question --- why do firms exist at all, when markets can in principle coordinate every transaction through price? --- has organised a century of economic thought about the boundary between organisation and market. Coase's answer, sharpened by Oliver Williamson's transaction cost economics in 1985, is that firms exist wherever the cost of coordinating a transaction inside a hierarchy is lower than the cost of coordinating it across a market: search costs, negotiation costs, contracting costs, the risk of opportunism. Where those costs are low, markets win and the transaction stays outside the firm. Where those costs are high, hierarchy wins and the transaction is absorbed inside a boundary of authority.
+
+\textcite{Liu2026} asks what happens to this logic once the parties doing the coordinating are not people but software. His answer, and the central contribution of ``The Organizational Behavior of Agentic AI,'' is that the costly transaction has not disappeared --- it has changed substance. What moves across a boundary between two LLM agents, or between an agent and a human, is not price information or a signed contract. It is context: the state a task carries with it, the evidence that justifies a decision, the memory of what has already been tried, the schema that lets a downstream agent interpret an upstream agent's output. Liu names this cost \meshterm{contextual transaction cost}, and it does for agent collectives what Coase's transaction cost did for firms: it explains when organising several agents together earns its keep, and when it is a species of self-inflicted overhead.
+
+\begin{definitionbox}[title={Contextual Transaction Cost (CTC)}]
+The cost, denominated in context rather than money, of moving information, evidence and authority across a boundary between agents (or between an agent and a human) so that a task can proceed. At the level of a single coordination event $e$:
+
+\[
+CTC_e = w_\tau \tau_e + w_h H_e + w_c C_e + w_d D_e + w_v V_e + w_g G_e
+\]
+
+where $\tau_e$ is token and latency burden, $H_e$ is cross-agent handoffs, $C_e$ is compression loss, $D_e$ is semantic drift, $V_e$ is verification burden, and $G_e$ is governance cost, each scaled by a weight $w$.
+\end{definitionbox}
+
+A collective of agents is worth organising --- rather than leaving the task to a single agent --- only when the marginal gains from organising it exceed the marginal costs of doing so:
+
+\[
+\Delta G_s + \Delta G_p + \Delta G_d + \Delta G_v > \Delta CTC + \Delta K + \Delta R_g
+\]
+
+The left-hand side is the marginal gain from specialisation, parallelism, diversity and verification that a collective can offer over a single agent. The right-hand side is the marginal cost of the contextual transaction tax, the additional compute, and the governance risk that collective organisation introduces. Collective intelligence is not a free upgrade over a single competent agent; it is a trade that has to clear, task by task.
+
+Liu's evidence base deserves to be stated plainly rather than oversold. The paper is computational theorising: 8,000 synthetic knowledge-work tasks tested across seven organisation forms with task fixed effects, corroborated by trace-instrumented runs on real LLM agents performing software repair, long-document question answering, legal review and literature synthesis, and stress-tested with a prompt-free deep-Q-network organisation selector to check the results were not artefacts of hand-tuned prompts. It is a single-author arXiv preprint, posted 29 June 2026, and it has not yet been peer reviewed. Weighed against that: it is, so far as this report's research has found, the first attempt to give the coordination tax --- the mechanism this report has argued for since Chapter~\ref{ch:collapse-point} --- a formal, falsifiable treatment specifically at the level of the agent layer. The report treats it accordingly: as the best available theory, not as settled science.
+
+\section{Human-Imitation Forms Fail in Silicon}
+
+Liu tests seven ways of organising a collective of agents against a single-expert baseline, on 56,000 task-organisation observations with task fixed effects, significant at $p < .001$ for every comparison except market-contract efficiency. Four of the forms are borrowed directly from human organisational design: a pipeline of standard operating procedures, a hierarchy with a manager agent, a committee that debates in free text, and a market that allocates work by contract. Three are native to what agents can do that people cannot: the market-contract form itself, a blackboard architecture where agents read and write to shared, durable state, and an adaptive meta-organisation with a context-aware orchestrator that restructures the collective as tasks demand.
+
+The human-imitation forms lose, and lose by a wide margin.
+
+\begin{table}[h]
+\centering
+\caption{Liu's seven organisation forms against the single-expert baseline}
+\label{tab:liu-forms}
+\begin{tabularx}{\textwidth}{L{4.2cm} C{2.6cm} C{2.2cm} X}
+\toprule
+\textbf{Organisation form} & \textbf{Collective efficiency} & \textbf{Quality} & \textbf{Success probability} \\
+\midrule
+Pipeline SOP & $-4.28$ & $-6.17$ & $-5.3$pp \\
+\addlinespace
+Hierarchy manager & $-7.92$ & $-11.49$ & $-11.6$pp \\
+\addlinespace
+Committee debate & $-12.69$ & $-42.10$ & $-24.0$pp \\
+\addlinespace
+Market contract & $+0.03$ & $+3.33$ & $+5.8$pp \\
+\addlinespace
+Blackboard memory & $+7.60$ & $+11.74$ & $+19.5$pp \\
+\addlinespace
+Adaptive meta-organisation & $+11.43$ & $+14.00$ & $+23.2$pp \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+All figures in Table~\ref{tab:liu-forms} are point differences from the single-expert agent performing the same tasks \parencite{Liu2026}. The direction of the result is the finding. Pipelines propagate early errors downstream with no mechanism to catch them. Hierarchies force every decision through a manager agent that must compress, and therefore lose, the context beneath it --- repeatedly, at every level of the chain. Committees do worst of all: quality falls by 42.10 points against the single expert, because free-text debate between LLM agents does not produce independent judgement, it produces several instances of the same underlying distribution converging on the same errors together and mistaking agreement for verification.
+
+None of this is a surprise once the mechanism is named. Human hierarchies, pipelines and committees work --- to the extent they work at all --- because of a substrate this report has taken for granted throughout: role expectations that carry social weight, accountability that attaches to a named person, legitimacy that a manager or a committee chair can draw on to make a decision stick. Agents have none of this. Copy the org chart into a collective of language models and you do not get the org chart's benefits; you get its costs without its foundations. A hierarchy becomes repeated context compression. A committee becomes correlated paraphrase dressed as deliberation. A pipeline becomes a conveyor belt for whichever error entered first.
+
+The market-contract form is the only human-imitation form that survives translation into silicon, and it survives narrowly. Markets were never really about hierarchy in the first place: they coordinate through price and contract, which is closer to what an agentic collective can actually enforce --- a specification, a bid, an acceptance criterion --- than the social machinery a hierarchy or a committee depends on.
+
+At the family level, agent-native forms (blackboard, adaptive meta-organisation, and their hybrids) are approximately 395 per cent more efficient than the human-imitation family (pipeline, hierarchy, committee). This report finds a delicious, and slightly uncomfortable, symmetry here. The org chart fails in both directions at once. Chapter~\ref{ch:three-models} makes the case that humans should not be replaced wholesale by an AI hierarchy modelled on Block's Intelligence Layer. Liu's evidence makes the mirror-image case: agents should not be organised as though they were a human hierarchy either. The org chart is not a neutral scaffold that either species can be poured into. It is a specific technology, built for a specific coordination substrate, and neither silicon colonies aping human structure nor human structures automated wholesale by silicon get to skip that constraint.
+
+\section{The Goldilocks Zone of Coordination Cost}
+
+Liu's second headline result answers a question this report has asked in different words since Chapter~\ref{ch:collapse-point}: how much coordination is enough? Sorting tasks into quartiles by contextual transaction cost, collective efficiency peaks in the second quartile --- moderate CTC --- and then collapses by 91.4 per cent moving from the lowest-CTC quartile to the highest. The single expert stays competitive across the whole range, for the simple reason that a single agent pays no internal context tax: there is no boundary to cross, so there is no CTC to incur.
+
+Two independent bodies of evidence corroborate this shape from different directions. Anthropic's own engineering account of building a multi-agent research system \parencite{Anthropic2025MultiAgent} reports that agents consume roughly four times the tokens of a chat interaction, and multi-agent systems roughly fifteen times --- multi-agent architectures earn that spend back on parallelisable, breadth-first work, and lose on anything tightly coupled, where ``the lead agent can't steer subagents, subagents can't coordinate, and the entire system can be blocked while waiting for a single subagent.'' \textcite{Chen2024MoreCalls} derive the same shape mathematically for compound inference systems that aggregate LLM calls by majority vote: performance in the number of calls is non-monotonic, rising and then falling, because additional calls help on easy queries and actively hurt on hard ones by amplifying a wrong majority.
+
+\begin{keyinsight}
+The question a coordination designer should ask is never ``how many agents.'' It is ``which boundaries are worth their context cost.'' This is the agent-layer restatement of the claim this report has made about hierarchy since Chapter~\ref{ch:collapse-point}: coordination is not free, it does not scale by adding more of it, and the right amount is a property of the task, not an aspiration of the architecture.
+\end{keyinsight}
+
+\section{Pseudo-Diversity and the Death of the Committee}
+
+Liu's third result concerns scale, and it is the most direct rebuttal available to the instinct to solve a multi-agent problem by adding agents. Free-text debate --- the committee form, dressed up as deliberation --- has an optimal scale of exactly one agent, regardless of how correlated or independent the agents' errors are. Adding a second debater does not average out mistakes; it adds a second vote for whichever error the underlying model is most prone to making. Structured blackboard communication does better: it supports larger collectives, but only when error correlation between agents is kept low. Contract-latent hybrid communication --- agents exchanging structured commitments rather than free text --- supports the largest efficient collectives Liu finds, in the range of five to ten agents.
+
+The common thread is that diversity has to be engineered, not assumed. Three agents built on the same base model, given the same tools and the same retrieval index, are not three independent judges; they are one judge asked the same question three times with the temperature turned up. This is \meshterm{pseudo-diversity}: the appearance of deliberation without the substance of independent judgement, correlated conclusions dressed up as different transcripts. Real diversity requires different models, different tools, different retrieval paths and different evidence sources, deliberately assembled to decorrelate the ways the collective can be wrong.
+
+This gives the report's own error-multiplication story a firmer foundation than it had in April. The April edition cited a widely circulated ``17-times error multiplication'' figure sourced from a Towards Data Science blog post \parencite{TDS2026}, and flagged at the time that the figure's provenance was thin. The literature has since delivered something considerably stronger. \textcite{Cemri2025}, published at NeurIPS 2025 rather than as an unreviewed preprint, analysed 1,600-plus annotated execution traces across seven state-of-the-art open-source multi-agent frameworks and found failure rates of 41 to 86.7 per cent, organised into a 14-mode taxonomy across three categories --- specification issues, inter-agent misalignment, and task verification --- with inter-annotator agreement of Cohen's $\kappa = 0.88$. Their own framing is blunt: ``performance gains on popular benchmarks often remain minimal compared with single-agent frameworks.'' \textcite{Khanal2026} add the long-horizon dimension: across 23,392 episodes, frontier models show the highest meltdown rates of any model class studied --- up to 19 per cent --- precisely because their greater capability tempts them into more ambitious multi-step strategies that sometimes spiral, and memory scaffolds, far from helping, universally hurt long-horizon performance across every model tested.
+
+The \meshterm{ant death spiral} described in Chapter~\ref{ch:three-models} --- agents responding to agents in an unbounded loop until a human intervenes --- is not a quirky failure mode specific to Every's experiment. It is a special case of Cemri's inter-agent-misalignment category, and MAST's fourteen-mode taxonomy is the full family tree it belongs to. The report's original instinct that naive multi-agent colonies are dangerous at scale was correct; it can now cite a peer-reviewed taxonomy of exactly why, rather than a single contested multiplier.
+
+\section{Interface Organisations}
+
+Liu's culminating construct is the one in which this report has the most stake, because it arrives independently at something very close to what Chapters~\ref{ch:role-transformation} and~\ref{ch:governance} propose as the judgment broker and declarative governance.
+
+\begin{definitionbox}[title={Interface Organisation}]
+The designed arrangement that connects human accountability to agentic context coordination. An interface organisation specifies: which agent outputs may enter human workflows; what evidence must travel with those outputs; what uncertainty must be disclosed alongside a decision; what permissions each agent holds; what traces are preserved for later audit; and where human judgement remains mandatory regardless of agent confidence.
+\end{definitionbox}
+
+\begin{keyinsight}[title={An Independent Convergence}]
+To close approximation, an interface organisation is the academic articulation of the \meshterm{judgment broker} role, declarative governance as code, and ontological provenance --- the three mechanisms this report proposed for the Dynamic Agentic Mesh in Chapters~\ref{ch:role-transformation} and~\ref{ch:governance}. Liu did not have this report when he wrote his paper, and this report did not have Liu's paper when the mesh was designed. The two arrived at the same shape from different directions: Liu from simulation and trace evidence in an organisational-economics frame, this report from field observation and systems-architecture practice. Convergent design from independent methods is not proof of a good idea, but it is a great deal more than either argument had on its own in April.
+\end{keyinsight}
+
+Liu's cautions map onto the mesh's design rules with almost uncomfortable precision. A reviewer agent, he warns, may simply share the error it is supposed to catch --- which is why the mesh's governance layer insists on engineered diversity in verification rather than a single reviewer agent drawn from the same model family as the agent it checks. A manager agent, he warns, tends to become lossy summarisation under load --- which is why the mesh routes coordination through shared, durable state, the blackboard pattern, rather than a serial relay of manager agents each compressing what came before. Memory, he warns, can stabilise a mistake as readily as a fact --- which is why Trust Variance (Chapter~\ref{ch:new-kpis}) exists as a standing check on whether the mesh's decision quality is drifting rather than merely persisting. And committees, he warns, can manufacture consensus without producing judgement --- which is why the mesh escalates evidence to the judgment broker rather than asking agents to vote on it.
+
+\section{What This Means for the Three Models}
+
+Chapter~\ref{ch:three-models} described three positions on the spectrum from full AI delegation to structured human-AI collaboration without a formal theory of coordination cost against which to evaluate them. Liu's seven forms now provide one.
+
+Block's Intelligence Layer is, in Liu's vocabulary, a hierarchy-manager form deployed at civilisational confidence: a single AI system compresses the state of the company and routes decisions through it --- exactly the architecture that underperformed the single-expert baseline by 7.92 efficiency points and 11.49 quality points in Liu's simulation. The mechanism Liu identifies, lossy compression at every level of a compulsory hierarchy, is precisely the mechanism Block's critics point to when they observe that removing the humans who did the routing also removes the interpretation and correction they did along the way.
+
+Every's agent colony risks the committee dynamic at scale: personal agents debating in shared channels, without engineered independence, are the free-text-debate form Liu finds has an optimal scale of one. But Every's public channels are also, not coincidentally, closer to the blackboard pattern than to a committee proper --- durable, shared, inspectable state that any agent or human can read --- and that is exactly the structured communication Liu finds scales well when error correlation is kept low. The ant death spiral is the failure mode that appears when the colony drifts from blackboard toward uncontrolled committee.
+
+The Dynamic Agentic Mesh is, in Liu's vocabulary, blackboard memory plus adaptive meta-organisation, wrapped in an interface organisation: shared durable state for coordination, a context-aware orchestrator for restructuring the collective as tasks demand, and a judgment-broker layer governing what crosses from the agentic side into human accountability. This is the combination Liu's simulation ranks highest, at +11.43 efficiency and +14.00 quality points against the single expert.
+
+\textcite{Pereira2026Playbook} supply field corroboration from an entirely different methodology. Across 51 mature enterprise deployments, agentic implementations --- autonomous, end-to-end --- were only 20 per cent of the cases studied but delivered 71 per cent median productivity gains against 40 per cent for high-automation approaches, and succeeded precisely where tasks were high-volume, repetitive and recoverable from error: the exact boundary conditions under which Liu's framework predicts that collective organisation pays for itself.
+
+\begin{cautionbox}
+Liu's evidence is a large computational simulation and a modest set of trace-instrumented real-LLM runs, not a randomised field trial of the Dynamic Agentic Mesh. The mapping from his seven forms to this report's three models, and to the mesh specifically, is this report's own interpretation, not a claim Liu makes. And the design question is genuinely contested: \textcite{Dochkina2026} finds that self-organising agent collectives, given autonomous role selection within a fixed ordering, can outperform both centralised coordination and fully designed structures --- an ``endogeneity paradox'' that complicates any simple ``design more governance'' prescription. The honest conclusion is not that the mesh is proven. It is that the mesh's design principles --- shared durable state over serial compression, engineered rather than assumed diversity, a governed interface between agentic coordination and human accountability --- now have a formal economic theory behind them and an initial, independently derived body of evidence in front of them.
+\end{cautionbox}

@@ -61,11 +61,39 @@ These two predictions are in productive tension. The first says middle managemen
   \item The net positive figure conceals significant distributional effects: the new roles require different skills, are located in different regions, and are accessible to different populations than the displaced ones.
 \end{itemize}
 
+\section{The Deployment Ground Truth}
+
+The 2026 landscape gained something the April edition of this report did not have: systematic evidence from deployments that worked, not just survey data about intentions. \textcite{Pereira2026Playbook} studied 51 mature deployments across 41 organisations and 9 industries, and its headline findings read like a field validation suite for arguments made throughout this report:
+
+\begin{itemize}
+  \item 77 per cent of the hardest challenges were invisible, intangible costs, not technology (Chapter~\ref{ch:change-problem}).
+  \item Escalation-based oversight models --- AI acts autonomously, humans review exceptions --- produced 71 per cent median productivity gains versus 30 per cent for approval models requiring human sign-off on every output.
+  \item Staff functions (Legal, HR, Risk, Compliance), not frontline workers, were the most frequent source of resistance, at 35 per cent of cases.
+  \item Agentic implementations were only 20 per cent of cases but delivered 71 per cent median gains versus 40 per cent for high-automation-but-supervised approaches.
+  \item Model choice was a commodity in 42 per cent of cases; the durable competitive advantage, in the report's own words, is ``in the orchestration layer, not the foundation model.''
+\end{itemize}
+
+Read against \textcite{MITNANDA2025}'s finding that 95 per cent of generative-AI pilots produce no measurable financial impact, the Playbook is a study of the surviving 5 per cent --- a selection bias its own authors acknowledge. It is evidence about what success looks like when it happens, not a representative sample of what usually happens. Both facts belong in the same paragraph: AI deployment fails in the overwhelming majority of attempts, and the minority that succeeds shares identifiable, reproducible structural features.
+
+The headcount finding deserves the same care. Reduction was the largest single outcome, at 45 per cent of cases --- but the alternatives to reduction (hiring avoided, redeployment to other work, no reduction at all) summed to 55 per cent. The authors' own caveat is worth stating plainly: 45 per cent reduction ``may represent a floor, not a ceiling,'' since the sample captures early-adoption-phase behaviour before capabilities and confidence both increase. The honest reading is that headcount outcomes are a strategic choice available to organisations, not a technical inevitability imposed by the AI --- the same conclusion this report reaches independently in Chapters~\ref{ch:compounding-org} and \ref{ch:new-kpis}.
+
+\section{The Frontier and the Labour Market}
+
+Two further bodies of evidence completed the picture between April and July 2026; both are treated in depth elsewhere in this report and are registered here only for landscape completeness.
+
+The Remote Labor Index \parencite{CAIS2026RLI, RLI2025} put a number on how fast the frontier itself is moving: the client-quality automation rate for professional freelance deliverables rose from 2.5 per cent to 16.1 per cent in eight months. Chapter~\ref{ch:jagged-frontier} treats this measurement, and what it does and does not imply, in full.
+
+The labour market told a split-screen story. Displacement was visible and concentrated in tech and finance \parencite{Challenger2026}; entry-level hiring in AI-exposed occupations declined \parencite{Brynjolfsson2025Canaries}. At the same time, high-intensity AI adopters grew headcount rather than shrinking it \parencite{RampRevelio2026, Levie2026} --- the latter a CEO-reported survey without published methodology. Chapter~\ref{ch:collapse-point} holds both halves of that story together, because the report's argument requires it: the distribution of outcomes is an organisational choice, not a technological verdict.
+
+Three further data points shifted the narrative, rather than the numbers. OpenAI's own leadership walked back earlier replacement rhetoric \parencite{Chatterji2026, AltmanReversal2026}. China made augmentation-over-replacement a matter of legal precedent, with a Hangzhou court ruling a company's AI-driven layoff illegal \parencite{NYTChina2026}. And the reversal pattern already visible in this report's discussion of Klarna gained a second, unrelated case: Ford's rehiring of veteran ``greybeard'' engineers to fix quality problems AI tooling alone could not solve \parencite{Bloomberg2026Ford} --- treated in full in Chapter~\ref{ch:role-transformation}.
+
 \section{Agentic AI Adoption at Scale}
 
 The pace of adoption has been extraordinary. Agentic AI adoption surged 3,440 per cent in 2025, with 67 per cent of Fortune 500 companies deploying some form of agentic system. In financial services, the ratio of machine identities to human employees has reached 96 to 1 \parencite{CyberArk2025} --- but only 31 per cent of organisations have adequate controls in place.
 
 This gap between deployment velocity and governance capability is the defining challenge of the current moment. Organisations are deploying agentic systems faster than they are developing the capacity to govern them.
+
+Deployment data adds a second gap alongside it. \textcite{Pereira2026Playbook} found that true agentic implementations --- autonomous, end-to-end, performing a role rather than answering a prompt --- were still only 20 per cent of the 51 studied deployments, despite delivering a 71 per cent median productivity gain against 40 per cent for high-automation-but-human-supervised approaches. The premium for going fully agentic is large and the uptake is still small: organisations are racing to deploy AI but remain reluctant, or unready, to hand it the whole loop. That gap between what agentic AI can already return and how rarely organisations commit to it is the adoption-side mirror of the governance gap above.
 
 \section{Comparative Positioning}
 
@@ -87,6 +115,12 @@ Gartner & Structural predictions; vigilance warning & No implementation framewor
 \addlinespace
 WEF & Macro-economic context; skills shift & No organisational model \\
 \addlinespace
+Stanford DEL (Playbook) & Deployment ground truth from 51 successes; oversight calibration & Selection bias toward success; no architecture \\
+\addlinespace
+Liu (UCL) & Formal theory: contextual transaction cost, interface organisations & Simulation-based; not yet peer reviewed \\
+\addlinespace
+CAIS RLI & Longitudinal client-quality frontier measurement & Tasks, not jobs; freelance work only \\
+\addlinespace
 Block & Correct diagnosis; radical prescription & Ignores jagged frontier and vigilance \\
 \addlinespace
 Every & Cultural dynamics; personal agent model & Unproven beyond 20-person scale \\
@@ -104,7 +138,9 @@ The Dynamic Agentic Mesh sits between the consultancy frameworks (which are stra
   \item Deloitte measures maturity; DreamLab provides the KPIs.
   \item Every proves the cultural dynamics; DreamLab provides the structural framework for scaling them.
   \item Block proves the diagnosis; DreamLab corrects the prescription.
+  \item Liu supplies the theory the mesh anticipated: contextual transaction cost gives the coordination tax a name and a formalism at the agent layer, developed fully in Chapter~\ref{ch:coordination-economics} \parencite{Liu2026}.
+  \item Stanford's Playbook supplies deployment evidence for design rules the mesh predicted in isolation --- escalation-based oversight, iterative-only delivery, active sponsorship --- now corroborated in the field rather than argued from first principles \parencite{Pereira2026Playbook}.
 \end{itemize}
 
-The gap that none of them fills: a unified model of the compounding organisation with embedded governance, formal ontology, and measurable KPIs. That is the intellectual contribution --- and it is important to note that intellectual contribution is not the same as validated evidence. The model is ahead of the data. The question is whether the data will follow.
+The gap that none of them fills: a unified model of the compounding organisation with embedded governance, formal ontology, and measurable KPIs. That remains the intellectual contribution. But the honest revision this report owes its own thesis is that the model is no longer ahead of \emph{all} the data. Parts of it are now corroborated; what is still ahead of the evidence is the claim that these corroborated pieces cohere into one operating architecture, governed and measured as a whole. That claim remains the report's own to test.
 \end{keyinsight}

@@ -15,9 +15,11 @@ Three models have emerged for what replaces it.
 
 \textcite{DorseyBotha2026} propose the \textbf{Intelligence Layer}: eliminate middle management, build a Company World Model, centralise coordination in AI. The diagnosis is precise. The prescription is reckless. Ninety-five per cent of AI-generated code at Block still requires human modification. Klarna replaced 700 customer service agents with AI and reversed course when quality collapsed \parencite{Klarna2025}. The vigilance problem \parencite{DellAcqua2023} demonstrates that the better AI becomes, the harder it is for humans to maintain oversight --- and Block's model removes the humans who would maintain it. \textcite{Spicer2026} observes that every wave of office technology produces delayering that subsequently reverses as complexity reasserts itself. The Self-Automator mode of human--AI collaboration --- the mode that Block's architecture embodies --- produces the weakest outcomes in the BCG experiment \parencite{Randazzo2024}.
 
-\textcite{Shipper2026} describes the \textbf{Agent Colony}: give every employee a persistent personal AI agent, let culture self-organise. The experiment is the most honest account available of what actually happens when personal agents are deployed across an organisation. The insight that ``everyone is a manager now'' --- that management skill democratises rather than disappears --- directly contradicts Block's thesis and is supported by the evidence. But the model hits structural limits at scale. The ant death spiral, the 17$\times$ error multiplication in naive multi-agent systems \parencite{TDS2026}, and the memory gaps that cause context loss between sessions are failure modes that cultural norms cannot resolve at organisational scale.
+\textcite{Shipper2026} describes the \textbf{Agent Colony}: give every employee a persistent personal AI agent, let culture self-organise. The experiment is the most honest account available of what actually happens when personal agents are deployed across an organisation. The insight that ``everyone is a manager now'' --- that management skill democratises rather than disappears --- directly contradicts Block's thesis and is supported by the evidence. But the model hits structural limits at scale. The ant death spiral, the 41--86.7 per cent failure rates documented across naive multi-agent frameworks \parencite{Cemri2025}, and the memory gaps that cause context loss between sessions are failure modes that cultural norms cannot resolve at organisational scale.
 
 The \textbf{Dynamic Agentic Mesh} retains human judgment at the intersection points. Middle managers evolve from information routers to \meshterm{judgment brokers} --- federated guardians of a system where agentic orchestration handles the information routing that hierarchy was built for, while humans handle what AI cannot: navigating the jagged frontier, maintaining vigilance, adjudicating ethical dilemmas, and sustaining cultural coherence.
+
+Since the first edition, the argument has acquired an economics and an evidence base it did not have in April. \textcite{Liu2026} formalised the coordination tax at the agent layer --- contextual transaction cost --- and, working from organisational-economics first principles rather than consulting practice, independently arrived at the interface organisation: the academic twin of what this report calls the judgment broker. \textcite{Pereira2026Playbook} showed, across 51 production deployments, that escalation architectures outperform approval workflows by a wide margin: 71 per cent median productivity gains against 30 per cent. The Remote Labor Index \parencite{CAIS2026RLI} quantified how fast the frontier itself is moving. None of this evidence existed when this report first argued that hierarchy is an information-routing protocol under algorithmic pressure. The thesis has moved from provocative framing towards corroborated theory.
 
 \section{Block Was Right About the Diagnosis}
 
@@ -42,7 +44,7 @@ This is genuinely threatening to the current middle management cohort. The repor
 
 But the conductor problem resolves the threat. Everyone in an orchestra can play an instrument. That does not make the conductor redundant --- it makes the conductor essential in a different way. The musicians' skill is playing. The conductor's skill is ensuring that 80 individually excellent performances produce coherent music rather than 80 simultaneous solos.
 
-When every employee manages their own agent, the organisation has 200 individual human-agent pairs each optimising for their own task. Without a mesh coordinator --- without the judgment broker --- this produces the ant death spiral documented by Every at 20 people, the error multiplication documented in multi-agent systems research, and the quality collapse documented by Klarna in customer service. The evidence is consistent: uncoordinated agent deployment fails.
+When every employee manages their own agent, the organisation has 200 individual human-agent pairs each optimising for their own task. Without a mesh coordinator --- without the judgment broker --- this produces the ant death spiral documented by Every at 20 people, the systematic, taxonomisable failure documented in peer-reviewed multi-agent systems research \parencite{Cemri2025}, and the quality collapse documented by Klarna in customer service. The evidence is consistent: uncoordinated agent deployment fails.
 
 The middle manager's new differentiating skill is not managing an agent. Everyone does that. It is managing the \emph{coherence of the mesh} --- ensuring that 200 individually optimised human-agent pairs produce organisational outcomes rather than organisational noise. This is the difference between individual agent management (Stage 2--3 on Klaassen's compound engineering ladder) and mesh coherence management (Stage 4--5). The former is a personal productivity skill. The latter is systems thinking. It is genuinely hard. And it is the role that makes the coordination collapse survivable.
 
@@ -72,6 +74,10 @@ The following propositions are supported by the evidence reviewed in this report
   \item The 1-9-90 adoption pattern is predictable, and investing in the 9 per cent yields the highest return \parencite{BCGAgenticShift2025}.
   \item Psychological safety is the strongest predictor of successful AI adoption \parencite{EdmondsonLei2025, GoogleAristotle2025}. Protected experimentation time produces 3.1 times higher adoption rates.
   \item Providing sanctioned AI tools reduces unauthorised use dramatically. Ignoring shadow AI is not a neutral choice.
+  \item Human-imitation organisational forms underperform agent-native forms in agent collectives; collective efficiency collapses at high contextual transaction cost \parencite{Liu2026}.
+  \item Escalation-based oversight outperforms approval-based oversight in production deployments, with 71 versus 30 per cent median productivity gains \parencite{Pereira2026Playbook}.
+  \item Multi-agent failure is systematic and taxonomisable, with 41--86.7 per cent failure rates documented in naive frameworks \parencite{Cemri2025}.
+  \item Headcount reduction is the most common but not the majority outcome of successful AI deployment: 45 per cent, against 55 per cent for growth, redeployment, and avoided hiring combined \parencite{Pereira2026Playbook, RampRevelio2026}.
 \end{enumerate}
 
 \section{What the Evidence Does Not Yet Support}
@@ -80,10 +86,11 @@ The following propositions are advanced by this report but not yet validated by 
 
 \begin{enumerate}
   \item The full organisational compounding flywheel --- where each discovered insight makes the next discovery easier at the systems level --- has not been demonstrated at scale.
-  \item The proposed KPIs (Mesh Velocity, Augmentation Ratio, Trust Variance, HITL Precision) have not been validated empirically.
+  \item The proposed KPIs (Mesh Velocity, Augmentation Ratio, Trust Variance, HITL Precision) now have a theoretical anchor in Liu's contextual-transaction-cost and collective-efficiency framework (Chapter~\ref{ch:coordination-economics}), but they remain empirically unvalidated at scale.
   \item The judgment broker role has not been tested with brokers who did not build the underlying system.
   \item The Dynamic Agentic Mesh has not been proven beyond a 15-person team in a favourable context.
   \item The governance architecture (declarative governance, ontological provenance, cascading trust) has not been stress-tested in regulated industries.
+  \item The mapping between Liu's simulated organisation forms and production organisational architectures is interpretive, not demonstrated: blackboard memory and adaptive meta-organisation were validated against synthetic tasks and small real-LLM traces, not against functioning enterprise organisations.
 \end{enumerate}
 
 Acknowledging these gaps is not a weakness. It is a statement of where the research frontier lies and an invitation for others to test the propositions in their own contexts.
@@ -93,6 +100,8 @@ Acknowledging these gaps is not a weakness. It is a statement of where the resea
 \subsection{For Middle Managers}
 
 You are not being replaced. You are being promoted --- from information router to judgment broker. The promotion is not in title or compensation (those are organisational decisions outside this report's scope). The promotion is in \emph{complexity, scope, and strategic importance}. The skill you need is not technical. It is the willingness to map the jagged frontier in your domain and the judgment to know when to trust the mesh and when to override it.
+
+This is no longer only a projection. Ford rehired approximately 350 veteran ``greybeard'' engineers over three years specifically because AI tooling alone could not sustain quality, and used them to retrain the AI tools themselves --- becoming the top mainstream brand in the J.D. Power Initial Quality Study in the process \parencite{Bloomberg2026Ford}. The escalation-model evidence quantifies exactly what the judgment path is worth: production deployments built around human review of exceptions, rather than approval of every output, show 71 per cent median productivity gains against roughly 30 per cent for approval-on-everything models \parencite{Pereira2026Playbook}. The judgment broker is not a hopeful reframing of a shrinking role. It is what the highest-performing deployments already look like.
 
 The organisations that will outcompete are not the ones that eliminate middle management. They are the ones that give their middle managers experimentation time (3.1 times higher adoption), psychological safety (2.6 times more likely to report successful AI integration), and a clear path from coordination to judgment.
 
@@ -112,6 +121,8 @@ Providing approved tools drops unauthorised use by 89 per cent. The alternative 
 
 But surfacing shadow workflows requires psychological safety. Workers who have automated 90 per cent of their role will not volunteer that information if they believe it invites headcount reduction. \textcite{Mollick2025Management} is direct on this point: organisations that delegate AI strategy to IT without CEO engagement guarantee failure.
 
+The Stanford Digital Economy Lab's study of 51 successful deployments \parencite{Pereira2026Playbook} converges on the same imperatives from the opposite direction --- not theory, but ground truth from organisations that got it right: start with the invisible work, because 77 per cent of the hardest challenges were change management and process redesign, not technology; define your KPIs before deployment, not after; and build multi-model, abstraction-layer architecture from day one, because the durable advantage sits in the orchestration layer, not in any single foundation model. Chapter~\ref{ch:ecosystem-roadmap} demonstrated this report's own organisation applying exactly these prescriptions to its own systems --- the mesh audited, not merely proposed.
+
 \subsection{For All Three}
 
 Block diagnosed the right problem. The question is whether you agree with their prescription. The evidence reviewed in this report suggests you should not --- but you should take the diagnosis deadly seriously.
@@ -128,5 +139,5 @@ The coordination collapse is real. What you build in its place will determine wh
 {\small\textcolor{navyblue!70!black}{DreamLab AI Consulting Ltd\\
 Dr.\ John O'Hare\\
 DreamLab, Fairfield, Eskdale\\
-April 2026}}
+July 2026}}
 \end{center}

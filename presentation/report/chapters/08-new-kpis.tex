@@ -9,6 +9,8 @@ The transition from hierarchical coordination to agentic orchestration renders t
 
 The evidence for this inadequacy is quantitative. A joint research programme by \textcite{BCGAIKPIs2025}, surveying over 3,000 respondents across 25 industries, found that companies that revise their KPIs to account for AI capabilities are three times more likely to see greater financial benefit from AI deployment. AI-enabled KPIs make organisations five times more likely to align incentive structures with actual objectives.
 
+The Playbook adds a temporal dimension to that finding. \textcite{Pereira2026Playbook} shows that organisations which define clear KPIs \emph{before} deployment are significantly more likely to demonstrate value and to scale their AI investment than those that measure after the fact. Yet most default to a narrow band of efficiency metrics --- headcount, cost --- while overlooking the quality, customer-value, and revenue-growth indicators that the same deployments actually move. Defining the wrong KPIs early is barely better than defining none: it locks the organisation into measuring the postal service's speed before anyone has checked whether the email arrived.
+
 The four KPIs proposed below measure the speed and fidelity of the compounding loop directly. They replace measures of hierarchical efficiency with measures of organisational learning --- how fast the organisation converts discoveries into capability, how reliably the agentic layer handles cognitive load, whether the automated systems are drifting, and whether human attention is directed to the right problems.
 
 \begin{keyinsight}
@@ -49,6 +51,8 @@ The Augmentation Ratio tracks AI adoption depth --- not merely tool usage (how m
 
 The target band matters as much as the target value. A ratio below 50 per cent suggests the mesh is not yet handling enough cognitive load to justify its infrastructure. But a ratio above 85 per cent is a warning sign: it indicates that humans may be falling asleep at the wheel, the vigilance problem documented in Chapter~\ref{ch:vigilance}. The 65 per cent target represents a balance point where the agentic layer handles the majority of routine cognitive load while preserving sufficient human engagement to maintain vigilance at the jagged frontier.
 
+Field data now validates the shape of that band directly. The escalation-based operating models examined in Chapter~\ref{ch:vigilance} --- AI autonomous on more than 80 per cent of decisions, humans reviewing only exceptions --- delivered 71 per cent median productivity gains against roughly 30 per cent for approval-on-every-output models \parencite{Pereira2026Playbook}. That is deployment evidence for offloading above the 65 per cent floor, not licence to push toward 100 per cent: the same evidence carries the caution that oversight must match the task's error tolerance, echoing the band's upper warning that vigilance decays once offloading climbs too high.
+
 \section{Trust Variance}
 
 \begin{definitionbox}[title={Trust Variance (TV)}]
@@ -85,6 +89,34 @@ Low precision means humans are being interrupted for non-issues. This produces a
 
 High precision means the mesh has learned where the jagged frontier actually falls in its operational domain. The escalation system surfaces genuine edge cases --- the ambiguous decisions, the novel situations, the ethical dilemmas --- and handles routine decisions autonomously. This is the operational definition of a well-calibrated mesh.
 
+\section{Measuring the Context Tax}
+
+The four KPIs above were built empirically, from observing how agentic organisations actually behave. \textcite{Liu2026} (Chapter~\ref{ch:coordination-economics}) gives them a theoretical anchor they were missing: a formal account of why coordination among agents costs something, and how to measure that cost directly rather than infer it from downstream symptoms. Two additions extend the measurement stack.
+
+\begin{definitionbox}[title={Contextual Transaction Cost (CTC)}]
+\textbf{Target:} minimise per workflow; treat a sustained rise as an escalation trigger
+
+\[
+CTC_{to} = \sum_{e \in E(t,o)} CTC_e
+\]
+
+The summed cost, across every cross-agent handoff event $e$ in task $t$ under organisation $o$, of moving context across a boundary --- token and latency burden, compression loss, semantic drift, verification burden, and governance cost. The full six-term event-level decomposition is given in Chapter~\ref{ch:coordination-economics}.
+\end{definitionbox}
+
+Instrument every handoff in the mesh for \meshterm{Contextual Transaction Cost} the way Mesh Velocity instruments the speed of the learning loop: CTC is the mesh's cost-side complement, Mesh Velocity its speed-side. CTC earns its own dial rather than folding into Mesh Velocity because the relationship between coordination and payoff is not linear. Liu's simulations show collective efficiency collapsing by 91.4 per cent from the lowest to the highest CTC quartile --- a small rise in handoff cost near the top of the range can erase the entire benefit of splitting work across agents. A mesh that tracks Mesh Velocity alone can look healthy while quietly climbing toward that cliff.
+
+\begin{definitionbox}[title={Collective Efficiency (CE)}]
+\textbf{Target:} maximise; monitor trend, not a fixed threshold
+
+\[
+CE_{to} = \frac{Q_{to} \times P(S_{to}=1)}{1 + \lambda\,\mathrm{Cost}_{to}}
+\]
+
+Quality $Q_{to}$ multiplied by the probability of success $P(S_{to}=1)$, discounted by weighted cost.
+\end{definitionbox}
+
+\meshterm{Collective Efficiency} is Liu's outcome measure, and it is deliberately stricter than quality alone: an output that is marginally better but slow, expensive, or hard to audit scores as a worse organisational outcome than a slightly lower-quality output produced reliably and cheaply. That is the same discipline that Trust Variance and HITL Precision enforce qualitatively, now given a shared quantitative vocabulary with the wider organisational-science literature rather than four bespoke metrics invented for this report alone.
+
 \section{The KPI Dashboard as a Narrative}
 
 \begin{table}[h]
@@ -102,11 +134,15 @@ Augmentation Ratio & $AR$ & $> 65\%$ & How much cognitive load the mesh handles 
 Trust Variance & $TV$ & $< 0.12\sigma$ & Whether the mesh is drifting \\
 \addlinespace
 HITL Precision & $HP$ & $> 90\%$ & Whether humans are engaged on the right things \\
+\addlinespace
+Contextual Transaction Cost & $CTC$ & minimise & The context-movement cost of every cross-agent handoff \\
+\addlinespace
+Collective Efficiency & $CE$ & maximise & Quality and reliability delivered per unit of cost \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-These four metrics tell a coherent story when read together. Mesh Velocity measures the speed of the learning loop. Augmentation Ratio measures the depth of cognitive offloading. Trust Variance monitors whether the system is degrading. HITL Precision evaluates whether human attention is allocated efficiently.
+These six metrics tell a coherent story when read together. Mesh Velocity measures the speed of the learning loop. Augmentation Ratio measures the depth of cognitive offloading. Trust Variance monitors whether the system is degrading. HITL Precision evaluates whether human attention is allocated efficiently. Contextual Transaction Cost and Collective Efficiency, drawn from Chapter~\ref{ch:coordination-economics}, complete the picture from underneath: CTC prices the coordination the mesh is doing, and CE prices what that coordination is worth.
 
 For the C-Suite audience, this is a dashboard that replaces ``how many people do we have'' with ``how fast is our organisation learning and how reliable is the learning.'' For the change manager, it provides measurable progress indicators for the continuous transformation described in Chapter~\ref{ch:change-problem}. For the judgment broker, it defines the parameters of their role: they succeed when Trust Variance stays low and HITL Precision stays high.
 

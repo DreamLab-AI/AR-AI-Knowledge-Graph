@@ -34,7 +34,7 @@ The paper was published one month after Block cut 4,000 of its 10,000-plus emplo
 
 The operational evidence is sobering: 95 per cent of AI-generated code at Block still requires human modification, according to current and former employees. The comparison Block draws with Haier is structurally backwards: Haier \emph{decentralises} authority to micro-enterprises with profit-and-loss accountability; Block \emph{centralises} authority in an AI system and a single decision-maker.
 
-\textcite{Spicer2026} observes that ``every wave of office technology produces delayering that subsequently reverses as complexity reasserts itself.'' The Klarna cautionary tale is instructive: the CEO claimed AI was performing the work of 700 customer service agents, but customer satisfaction dropped sharply. Klarna is now quietly rehiring humans, and the CEO admitted that ``cost unfortunately seems to have been a too predominant evaluation factor'' \parencite{Klarna2025}. An Orgvue/Forrester survey found that 55 per cent of companies that rushed to replace humans with AI now regret the decision \parencite{OrgvueForrester2025}.
+\textcite{Spicer2026} observes that ``every wave of office technology produces delayering that subsequently reverses as complexity reasserts itself.'' The Klarna cautionary tale is instructive: the CEO claimed AI was performing the work of 700 customer service agents, but customer satisfaction dropped sharply, and the CEO admitted that ``cost unfortunately seems to have been a too predominant evaluation factor'' \parencite{Klarna2025}. Klarna's position has since evolved into an explicitly hybrid AI-plus-human model, with gig-staffed human support handling the interactions the AI could not \parencite{KlarnaHybrid2026} --- the reversal was real, but the end state is recalibration, not retreat. An Orgvue/Forrester survey found that 55 per cent of companies that rushed to replace humans with AI now regret the decision \parencite{OrgvueForrester2025}.
 
 \begin{cautionbox}
 Block is right about the diagnosis and wrong about the prescription. The leap from ``information routing is automated'' to ``eliminate the humans who do coordination'' ignores the jagged frontier, the vigilance problem, the Klarna evidence, and the historical pattern of delayering reversal.
@@ -69,7 +69,7 @@ Several features of the Every experiment are genuinely instructive:
 
 \textbf{The ant death spiral.} If one agent messages a channel monitored by other agents and the configurations are imprecise, the agents will respond to each other indefinitely --- ``burning millions of tokens'' until a human intervenes. This is a failure of coordination at the system level, precisely the function that hierarchy was designed to provide.
 
-\textbf{Error multiplication.} Naive multi-agent systems exhibit 17-times error multiplication \parencite{TDS2026}, where errors in one agent's output propagate and amplify through downstream agents.
+\textbf{Error multiplication.} Errors in one agent's output propagate and amplify through downstream agents. The first edition cited a community-sourced 17-times multiplication figure \parencite{TDS2026}; the peer-reviewed grounding is now stronger and starker --- \textcite{Cemri2025} document failure rates of 41 to 86.7 per cent across seven state-of-the-art open-source multi-agent frameworks, with inter-agent misalignment one of the three principal failure categories (Chapter~\ref{ch:coordination-economics}).
 
 \textbf{Scale limitations.} Every's experiment involved approximately twenty people. Cultural self-organisation works at this scale. At two hundred people, you need structure. At two thousand, you need architecture. The experiment is an existence proof of a dynamic that has not yet been shown to generalise.
 
@@ -141,9 +141,11 @@ Evidence & 95\% code needs humans; Klarna reversed & Works at small scale; ant d
 \addlinespace
 Collaboration mode & Self-Automator org & Cyborg org & Centaur org \\
 \addlinespace
-Primary risk & Falling asleep at the wheel & 17x error multiplication at scale & Unproven beyond 15-person team \\
+Primary risk & Falling asleep at the wheel & Correlated multi-agent failure at scale (41--86.7\% in naive frameworks) & Unproven beyond 15-person team \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 The evidence from Chapter~\ref{ch:jagged-frontier} indicates that Self-Automator organisations --- those that delegate wholesale to AI --- produce the weakest outcomes. This is the empirical case against Block's model and for organisational designs that maintain active human engagement at the frontier boundary.
+
+Until now, this comparison has rested on case evidence and the jagged frontier alone. \textcite{Liu2026}'s formal treatment of agent-collective organisation, developed in Chapter~\ref{ch:coordination-economics}, gives the three models a fourth lens: Block's Intelligence Layer maps onto the hierarchy-manager form, which underperforms a single competent agent on both efficiency and quality; Every's agent colony risks the committee-debate dynamic that Liu finds has an optimal scale of one agent, unless its public channels are deliberately kept closer to structured blackboard communication than free-text deliberation; and the Dynamic Agentic Mesh maps onto the combination Liu's simulation ranks highest --- blackboard memory and adaptive meta-organisation, governed by an interface organisation.

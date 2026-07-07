@@ -76,7 +76,7 @@ Expert commentary, practitioner accounts, and journalistic reporting. These prov
 Sources with limited editorial oversight or commercial incentives. Used cautiously and flagged where they appear:
 
 \begin{itemize}
-  \item \textcite{TDS2026}: the 17$\times$ error multiplication statistic. Flagged as non-peer-reviewed in Chapter~\ref{ch:open-questions}.
+  \item \textcite{TDS2026}: the original 17$\times$ error multiplication statistic. Superseded in this edition by \textcite{Cemri2025} (Chapter~\ref{ch:open-questions}); retained here in the bibliography for the correction record, not as an active source.
   \item \textcite{IBM2025} and \textcite{Gartner2025}: vendor-funded research with commercial incentives. Treated as directionally correct, per the methodological note in Chapter~\ref{ch:open-questions}.
 \end{itemize}
 
@@ -120,11 +120,30 @@ Five Wardley maps were produced for this report, each following Simon Wardley's 
 
 The maps are interpretive tools, not empirical measurements. The placement of components on the evolution axis reflects the author's assessment informed by the evidence assembled in this report. Different analysts may position components differently, particularly for novel concepts (judgment brokerage, mesh velocity) whose evolutionary stage is inherently uncertain.
 
+\section{The July 2026 Revision}
+
+This edition was produced through a second, distinct research and drafting cycle three months after the first. The process:
+
+\begin{enumerate}
+  \item \textbf{Verification.} Four research agents, each with live web search, verified every transcript-derived claim in the April edition against primary sources --- the CAIS blog, arXiv, Bloomberg, the \emph{New York Times}, Ramp's own research publication, and court-reporting coverage of the Hangzhou ruling --- correcting names, dates, and figures before any revision text was written. Corrections of substance are flagged explicitly at the point the original claim appears in the main text.
+  \item \textbf{Ecosystem exploration.} Three further agents mapped the current state of the VisionClaw, AgentBox, and federation codebases to ground Chapter~\ref{ch:ecosystem-roadmap}, which applies this report's own findings to DreamLab's operational systems.
+  \item \textbf{Drafting.} Chapter revisions were produced by section-scoped writing agents working against a single shared evidence brief with fixed citation keys, house style, and verified figures, so that no two chapters could independently introduce inconsistent numbers for the same claim. The drafts were then editorially reviewed for voice, argument continuity, and consistency with chapters outside each agent's assigned scope.
+\end{enumerate}
+
+The new sources introduced in this revision were tier-assigned using the same rubric as above:
+
+\begin{itemize}
+  \item \textbf{Tier 1}: \parencite{Cemri2025} --- peer-reviewed, NeurIPS 2025, Datasets and Benchmarks Track.
+  \item \textbf{Tier 2}: \parencite{Liu2026} (preprint with disclosed methodology, single author); \parencite{Pereira2026Playbook} (disclosed methodology, acknowledged selection bias toward successful deployments); \parencite{RLI2025}, \parencite{CAIS2026RLI}, and \parencite{METR2026} (benchmark reports with disclosed methodology); \parencite{RampRevelio2026} (corporate research, disclosed methodology, correlational with matched controls).
+  \item \textbf{Tier 3}: news reporting --- \parencite{Challenger2026}, \parencite{NYTChina2026}, \parencite{Bloomberg2026Ford}, \parencite{Chatterji2026}.
+  \item \textbf{Tier 4}: \parencite{Levie2026} --- a single social-media source with no published methodology, flagged wherever it is used.
+\end{itemize}
+
 \section{Limitations of the Research Process}
 
 \begin{enumerate}
   \item \textbf{Single-author synthesis}: while the research was conducted using multiple agents, the synthesis and editorial judgment are those of a single author. The report reflects one analytical perspective on a multi-faceted phenomenon.
-  \item \textbf{Temporal constraints}: the field is moving rapidly. Sources published after April 2026 are not included. The jagged frontier, in particular, has likely shifted since the foundational BCG study.
+  \item \textbf{Temporal constraints}: this edition incorporates sources through early July 2026; sources published after that point are not included. The jagged frontier, in particular, continues to shift --- the Remote Labor Index update alone recorded a 6.4-fold increase in client-quality automation in the eight months preceding this revision \parencite{CAIS2026RLI}, and there is no reason to expect the pace to slow before the next edition.
   \item \textbf{English-language bias}: the research draws almost exclusively on English-language sources. Organisational innovations in non-Anglophone contexts --- particularly Haier's micro-enterprise model in China --- are discussed secondhand rather than from primary sources.
   \item \textbf{Analyst-vendor conflict}: the author is the founder of DreamLab AI Consulting and the architect of VisionClaw. This conflict is acknowledged throughout the report and addressed directly in Chapter~\ref{ch:open-questions}.
   \item \textbf{Sample bias in practitioner evidence}: the Every experiment ($\sim$20 people) and VisionClaw deployment ($\sim$15--50 people) are both small-scale, technically sophisticated organisations. The generalisability of findings from these contexts to larger, less technical organisations is an open question.

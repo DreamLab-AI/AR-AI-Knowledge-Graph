@@ -418,16 +418,6 @@
 
 % ─── Energy / Sustainability ───────────────────────────────────────────────
 
-@article{NatureSustainability2025,
-  author    = {{Nature Sustainability}},
-  title     = {Carbon Footprint of {AI} Server Infrastructure in the {United States}},
-  journal   = {Nature Sustainability},
-  year      = {2025},
-  note      = {Estimates US AI servers produce 24--44 Mt CO$_2$ annually},
-  url       = {https://www.nature.com/natsustain/},
-  urldate   = {2026-04-10}
-}
-
 @techreport{MicrosoftResearchEnergy2025,
   author    = {{Microsoft Research}},
   title     = {Energy Cost of Reasoning Queries in Large Language Models},
@@ -573,4 +563,263 @@
   url       = {https://www.europarl.europa.eu/news/en/press-room/20251110IPR31358/},
   urldate   = {2026-04-13},
   note      = {Article 26(7) of the AI Act mandates employer consultation with works councils before deploying high-risk AI}
+}
+
+% ══════════════════════════════════════════════════════════════════════════════
+%  July 2026 revision — new sources
+% ══════════════════════════════════════════════════════════════════════════════
+
+% ─── Remote Labor Index / Frontier Measurement ─────────────────────────────
+
+@online{CAIS2026RLI,
+  author    = {Mazeika, Mantas},
+  title     = {A Significant Increase in Digital Labor Automation},
+  year      = {2026},
+  month     = {7},
+  organization = {Center for AI Safety},
+  url       = {https://safe.ai/blog/significant-increase-in-digital-labor-automation},
+  urldate   = {2026-07-07},
+  note      = {Remote Labor Index update, 1 July 2026. Automation rates against gold-standard professional deliverables: Claude Fable 5 16.1\%, Claude Opus 4.8 8.3\%, GPT-5.5 6.3\%; frontier more than quadrupled in under eight months from the initial 2.5\% (GPT-5.2, late 2025)}
+}
+
+@online{RLI2025,
+  author    = {Mazeika, Mantas and Gatti, Alice and Menghini, Cristina and others},
+  title     = {Remote Labor Index: Measuring {AI} Automation of Remote Work},
+  year      = {2025},
+  month     = {10},
+  eprint    = {2510.26787},
+  eprinttype = {arxiv},
+  url       = {https://arxiv.org/abs/2510.26787},
+  urldate   = {2026-07-07},
+  note      = {Center for AI Safety and Scale AI; 46 authors including Dan Hendrycks and Alexandr Wang. Real freelance projects judged by human evaluators against paid-professional gold-standard deliverables; top model automation rate 2.5\% at launch (30 October 2025)}
+}
+
+@online{METR2026,
+  author    = {Kwa, Thomas and West, Ben and Becker, Joel and others},
+  title     = {Measuring {AI} Ability to Complete Long Software Tasks},
+  year      = {2026},
+  month     = {2},
+  eprint    = {2503.14499},
+  eprinttype = {arxiv},
+  url       = {https://metr.org/time-horizons/},
+  urldate   = {2026-07-07},
+  note      = {METR. arXiv:2503.14499v3, revised 25 February 2026, with the continuously updated time-horizons data page. 50\%-success task-time horizon doubled roughly every seven months since 2019, with recent acceleration; Claude Opus 4.6 measured at $\sim$14.5 human-expert hours (added 20 February 2026)}
+}
+
+% ─── Organisational Science of Agent Collectives ───────────────────────────
+
+@article{Liu2026,
+  author    = {Liu, Canhui},
+  title     = {The Organizational Behavior of Agentic {AI}: Context, Boundaries, and Collective Intelligence in Human-Agent Workflows},
+  journal   = {arXiv preprint},
+  eprint    = {2606.30986},
+  eprinttype = {arxiv},
+  year      = {2026},
+  month     = {6},
+  url       = {https://arxiv.org/abs/2606.30986},
+  urldate   = {2026-07-07},
+  note      = {University College London. Introduces contextual transaction cost and interface organisations; 8,000-task simulation across seven agent organisation forms plus trace-instrumented real-LLM runs}
+}
+
+@inproceedings{Cemri2025,
+  author    = {Cemri, Mert and Pan, Melissa Z. and Yang, Shuyi and Agrawal, Lakshya A. and Chopra, Bhavya and Tiwari, Rishabh and Keutzer, Kurt and Parameswaran, Aditya and Klein, Dan and Ramchandran, Kannan and Zaharia, Matei and Gonzalez, Joseph E. and Stoica, Ion},
+  title     = {Why Do Multi-Agent {LLM} Systems Fail?},
+  booktitle = {Advances in Neural Information Processing Systems 38 (NeurIPS 2025), Datasets and Benchmarks Track},
+  year      = {2025},
+  eprint    = {2503.13657},
+  eprinttype = {arxiv},
+  url       = {https://arxiv.org/abs/2503.13657},
+  urldate   = {2026-07-07},
+  note      = {MAST: Multi-Agent System Failure Taxonomy. 41--86.7\% failure rates across seven state-of-the-art open-source multi-agent frameworks; 14 failure modes in three categories (specification issues, inter-agent misalignment, task verification) from 1,600+ annotated execution traces; inter-annotator agreement Cohen's $\kappa = 0.88$}
+}
+
+@article{Khanal2026,
+  author    = {Khanal, Aaditya and Tao, Yangyang and Zhou, Junxiu},
+  title     = {Beyond pass@1: A Reliability Science Framework for Long-Horizon {LLM} Agents},
+  journal   = {arXiv preprint},
+  eprint    = {2603.29231},
+  eprinttype = {arxiv},
+  year      = {2026},
+  month     = {3},
+  url       = {https://arxiv.org/abs/2603.29231},
+  urldate   = {2026-07-07},
+  note      = {23,392 episodes across 10 models and 396 tasks. Reliability decay is domain-stratified; frontier models show the highest meltdown rates (up to 19\%) on ambitious multi-step strategies; memory scaffolds universally hurt long-horizon performance}
+}
+
+@article{Chen2024MoreCalls,
+  author    = {Chen, Lingjiao and Davis, Jared Quincy and Hanin, Boris and Bailis, Peter and Stoica, Ion and Zaharia, Matei and Zou, James},
+  title     = {Are More {LLM} Calls All You Need? Towards Scaling Laws of Compound Inference Systems},
+  journal   = {arXiv preprint},
+  eprint    = {2403.02419},
+  eprinttype = {arxiv},
+  year      = {2024},
+  url       = {https://arxiv.org/abs/2403.02419},
+  urldate   = {2026-07-07}
+}
+
+@online{Anthropic2025MultiAgent,
+  author    = {{Anthropic}},
+  title     = {How We Built Our Multi-Agent Research System},
+  year      = {2025},
+  month     = {6},
+  url       = {https://www.anthropic.com/engineering/multi-agent-research-system},
+  urldate   = {2026-07-07},
+  note      = {Engineering account of multi-agent coordination costs and the conditions under which multi-agent architectures help or hurt}
+}
+
+@article{TheAgentCompany2024,
+  author    = {Xu, Frank F. and Song, Yufan and Li, Boxuan and others},
+  title     = {{TheAgentCompany}: Benchmarking {LLM} Agents on Consequential Real World Tasks},
+  journal   = {arXiv preprint},
+  eprint    = {2412.14161},
+  eprinttype = {arxiv},
+  year      = {2024},
+  month     = {12},
+  url       = {https://arxiv.org/abs/2412.14161},
+  urldate   = {2026-07-07},
+  note      = {Carnegie Mellon University; simulated software-company environment; state-of-the-art agents complete roughly 30\% of tasks autonomously}
+}
+
+@article{Dochkina2026,
+  author    = {Dochkina, Victoria},
+  title     = {Drop the Hierarchy and Roles: How Self-Organizing {LLM} Agents Outperform Designed Structures},
+  journal   = {arXiv preprint},
+  eprint    = {2603.28990},
+  eprinttype = {arxiv},
+  year      = {2026},
+  month     = {3},
+  url       = {https://arxiv.org/abs/2603.28990},
+  urldate   = {2026-07-07}
+}
+
+@online{KlarnaHybrid2026,
+  author    = {{CX Dive}},
+  title     = {Klarna Changes Its {AI} Tune and Again Recruits Humans for Customer Service},
+  year      = {2026},
+  url       = {https://www.customerexperiencedive.com/news/klarna-reinvests-human-talent-customer-service-AI-chatbot/747586/},
+  urldate   = {2026-07-07},
+  note      = {Klarna's post-reversal model is an AI-plus-human hybrid with gig-staffed human support, not a simple return to the pre-AI arrangement}
+}
+
+% ─── Enterprise Deployment Evidence ────────────────────────────────────────
+
+@techreport{Pereira2026Playbook,
+  author    = {Pereira, Elisa and Graylin, Alvin Wang and Brynjolfsson, Erik},
+  title     = {The Enterprise {AI} Playbook: Lessons from 51 Successful Deployments},
+  year      = {2026},
+  month     = {4},
+  institution = {Stanford Digital Economy Lab, Stanford University},
+  url       = {https://digitaleconomy.stanford.edu/app/uploads/2026/03/EnterpriseAIPlaybook_PereiraGraylinBrynjolfsson.pdf},
+  urldate   = {2026-07-07},
+  note      = {51 mature enterprise AI deployments across 41 organisations, 9 industries, 7 countries, 1M+ combined workforce; structured interviews August 2025--February 2026}
+}
+
+@techreport{MITNANDA2025,
+  author    = {Challapally, Aditya and Pease, Chris and Raskar, Ramesh and Chari, Pradyumna},
+  title     = {The {GenAI} Divide: State of {AI} in Business 2025},
+  year      = {2025},
+  month     = {7},
+  institution = {MIT Project NANDA},
+  urldate   = {2026-07-07},
+  note      = {Finds $\sim$95\% of generative AI pilot programmes produce no measurable financial impact; failures attributed to workflow integration and organisational incentives, not model quality}
+}
+
+% ─── Labour Market Evidence (2025--2026) ───────────────────────────────────
+
+@techreport{Brynjolfsson2025Canaries,
+  author    = {Brynjolfsson, Erik and Chandar, Bharat and Chen, Ruyu},
+  title     = {Canaries in the Coal Mine? Six Facts about the Recent Employment Effects of Artificial Intelligence},
+  year      = {2025},
+  month     = {11},
+  institution = {Stanford Digital Economy Lab},
+  type      = {Working Paper},
+  url       = {https://digitaleconomy.stanford.edu/app/uploads/2025/11/CanariesintheCoalMine_Nov25.pdf},
+  urldate   = {2026-07-07},
+  note      = {High-frequency ADP payroll data: early-career workers (22--25) in AI-exposed occupations show a 16\% relative employment decline since late 2022; software developers aged 22--25 nearly 20\%}
+}
+
+@online{AnthropicLabor2026,
+  author    = {Massenkoff, Maxim and McCrory, Peter},
+  title     = {Labor Market Impacts of {AI}: A New Measure and Early Evidence},
+  year      = {2026},
+  month     = {3},
+  organization = {Anthropic},
+  url       = {https://www.anthropic.com/research/labor-market-impacts},
+  urldate   = {2026-07-07},
+  note      = {Distinguishes theoretical AI exposure (up to 94\% in computer and mathematical occupations) from observed adoption (substantially lower); finds slowed hiring of younger workers in AI-exposed fields but no systematic unemployment increase to date}
+}
+
+@techreport{RampRevelio2026,
+  author    = {Kharazian, Ara and Simon, Lisa and Stevens, Ryan},
+  title     = {A New Look at {AI}'s Impact on Jobs: Firm-Level {AI} Spending and Workforce Adjustment},
+  year      = {2026},
+  month     = {6},
+  institution = {Ramp Economics Lab and Revelio Labs},
+  type      = {Company Research Paper},
+  url       = {https://ramp.com/data/ai-jobs-impact/paper},
+  urldate   = {2026-07-07},
+  note      = {21,559 US firms, January 2021--February 2026. High-intensity adopters ($\sim$\$33.67 AI spend per employee per month post-adoption) grew headcount 10.2\% over two years versus no significant change for low-intensity adopters ($\sim$\$2.78); entry-level growth 12\%; growth began 6--12 months after adoption. Correlational, with matched like-for-like control groups}
+}
+
+@online{Levie2026,
+  author    = {Levie, Aaron},
+  title     = {Box Survey of 1,600+ Mid and Large Companies on {AI} and Headcount Expectations},
+  year      = {2026},
+  url       = {https://x.com/levie/status/2071992799109824562},
+  urldate   = {2026-07-07},
+  note      = {58\% of respondents expect headcount to rise over the next three years; 79\% among the most mature AI adopters. Reported via Levie's own social-media post; no independently published Box methodology document identified}
+}
+
+@online{Chatterji2026,
+  author    = {Chatterji, Aaron},
+  title     = {Remarks at the {ECB} Forum on Central Banking 2026: A Conversation about Artificial Intelligence},
+  year      = {2026},
+  month     = {6},
+  organization = {European Central Bank, Sintra, Portugal},
+  url       = {https://www.ecb.europa.eu/press/conferences/ecbforum/html/speakers_and_papers.en.html},
+  urldate   = {2026-07-07},
+  note      = {OpenAI Chief Economist Aaron ``Ronnie'' Chatterji, 30 June 2026: task exposure does not imply substitution; software developer employment has not shrunk to the extent predicted. Reported in PYMNTS and BigGo Finance, 1 July 2026}
+}
+
+@online{Challenger2026,
+  author    = {Prakash, Maya and Boesler, Matthew},
+  title     = {Tech and Finance Sectors Losing 28,000 Jobs Monthly Show {AI} Impact on Labor},
+  year      = {2026},
+  month     = {7},
+  organization = {Bloomberg},
+  url       = {https://www.bloomberg.com/news/articles/2026-07-01/tech-and-finance-sectors-losing-28-000-jobs-monthly-show-ai-impact-on-labor},
+  urldate   = {2026-07-07},
+  note      = {BLS payroll data: tech and finance losing $\sim$28,000 jobs/month on average in 2026 against $\sim$113,000/month economy-wide gains. Includes Challenger, Gray \& Christmas job-cut tracking (Andy Challenger, SVP: AI ``making an impact in a way that no technology has before'') and Barclays economist Pooja Sriram on AI-investment-driven cost cutting}
+}
+
+@online{AltmanReversal2026,
+  author    = {Altman, Sam},
+  title     = {Remarks on {AI} and Employment},
+  year      = {2026},
+  month     = {5},
+  url       = {https://fortune.com/2026/05/26/sam-altman-dario-amodei-walking-back-ai-jobs-apocalypse-prophecies-ipo/},
+  urldate   = {2026-07-07},
+  note      = {Conversation with Matt Comyn (CEO, Commonwealth Bank of Australia), 26 May 2026; Altman describes his earlier AI-jobs predictions as ``pretty wrong'' and is ``delighted to be wrong''. Reported in Fortune and Reuters}
+}
+
+@article{NYTChina2026,
+  author    = {Edmondson, Catie},
+  title     = {China Wants {A.I.} to Flourish, but Not at the Expense of Jobs},
+  journal   = {The New York Times},
+  year      = {2026},
+  month     = {5},
+  url       = {https://www.nytimes.com/2026/05/19/business/china-ai-unemployment.html},
+  urldate   = {2026-07-07},
+  note      = {19 May 2026. Government pressure on firms to avoid AI-driven layoffs; April 2026 Hangzhou Intermediate People's Court ruling that a worker was illegally laid off after replacement by AI software}
+}
+
+@online{Bloomberg2026Ford,
+  author    = {Naughton, Keith},
+  title     = {Ford Has Been Rehiring Quality Inspectors After {AI} Fell Short},
+  year      = {2026},
+  month     = {6},
+  organization = {Bloomberg},
+  url       = {https://www.bloomberg.com/news/articles/2026-06-25/ford-has-been-rehiring-quality-inspectors-after-ai-fell-short},
+  urldate   = {2026-07-07},
+  note      = {25 June 2026. $\sim$350 veteran ``greybeard'' engineers hired over three years to fix quality problems and retrain AI tools (Charles Poon, VP of Vehicle Hardware Engineering); Ford subsequently ranked top mainstream brand in the J.D. Power Initial Quality Study}
 }
