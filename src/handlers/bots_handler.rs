@@ -1,5 +1,5 @@
 use crate::actors::messages::GetBotsGraphData;
-use crate::actors::{CreateTask, GetTaskStatus, InterruptAgentTask, StopTask};
+use crate::actors::{CreateTask, GetTaskStatus, InterruptAgentTask, InterruptError, StopTask};
 use crate::services::liveness_harness::CANARY_D2_STEER;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
@@ -317,6 +317,9 @@ pub async fn initialize_hive_mind_swarm(
         agent: agent_type.to_string(),
         task: task.clone(),
         provider: provider.clone(),
+        // Hive-mind init spawns by role; no distinct claude-flow agent id exists
+        // at creation time. None (do not fabricate).
+        claude_flow_agent_id: None,
     };
 
     match state
@@ -424,6 +427,11 @@ pub async fn spawn_agent_hybrid(
         agent: req.agent_type.clone(),
         task,
         provider: provider.clone(),
+        // `spawn_agent_hybrid` mints `swarm_id = task_response.task_id` (see the
+        // response below), so the spawned agent is already resolvable via the
+        // task_id path — there is no separate claude-flow agent id to carry, and a
+        // task_id is NOT a claude-flow agent id. None (do not fabricate the join).
+        claude_flow_agent_id: None,
     };
 
     match state
@@ -552,6 +560,8 @@ pub async fn process_settings_command(
         agent: "researcher".to_string(),
         task,
         provider: provider.clone(),
+        // Settings-assistant dispatch is role-only; no claude-flow agent id exists.
+        claude_flow_agent_id: None,
     };
 
     match state
@@ -731,6 +741,9 @@ pub async fn submit_task(
         agent: agent_type.clone(),
         task: task.clone(),
         provider: provider.clone(),
+        // Steer submit-task spawns by role/strategy; no distinct claude-flow agent
+        // id is known at creation time. None (do not fabricate).
+        claude_flow_agent_id: None,
     };
 
     match state
@@ -829,7 +842,31 @@ pub async fn interrupt_task(
                 "message": format!("Agent task {} interrupted", resolved_task_id),
             })))
         }
+        Ok(Err(InterruptError::Unresolved(msg))) => {
+            // Honest capability boundary (D2 final close): the id resolved to NO
+            // task in the registry and to no task's claude_flow_agent_id, so this is
+            // an externally-spawned / MCP-native claude-flow agent. The MCP surface
+            // (`utils/mcp_tcp_client.rs`) has NO terminate verb — it cannot be
+            // stopped from here. Return 422 (the client does NOT retry 4xx, so the
+            // panel no longer spins a dead retrying button) with a DISTINCT
+            // `resolution: "unresolved"` + `interruptible: false` so the panel
+            // discloses a disabled explanatory state.
+            log::warn!(
+                "Interrupt id {requested_id} unresolved — externally-spawned / MCP-native agent \
+                 (no terminate verb on the MCP surface): {msg}"
+            );
+            Ok(HttpResponse::UnprocessableEntity().json(json!({
+                "success": false,
+                "interruptible": false,
+                "resolution": "unresolved",
+                "requestedId": requested_id,
+                "error": msg,
+                "message": "externally spawned — not interruptible from here",
+            })))
+        }
         Ok(Err(e)) => {
+            // Operational fault (task list unavailable, or the stop call failed).
+            // Retryable — a genuine 500.
             error!("Failed to interrupt id {}: {}", requested_id, e);
             Ok(HttpResponse::InternalServerError().json(json!({
                 "success": false,
