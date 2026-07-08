@@ -75,6 +75,15 @@ pub use liveness_harness_handler::configure_routes as configure_liveness_routes;
 pub mod kpi_handler;
 pub use kpi_handler::configure_routes as configure_kpi_routes;
 
+// REC-10 (PRD-023 WP-12): Insight Ingestion Loop v1 —
+// /api/insight-loop/trace[/{case_id}]
+pub mod insight_loop_handler;
+pub use insight_loop_handler::configure_routes as configure_insight_loop_routes;
+
+// REC-11 (PRD-023 WP-12): data-moat unified provenance trace — /api/trace
+pub mod trace_handler;
+pub use trace_handler::configure_routes as configure_trace_routes;
+
 // RES-d (PRD-023 WP-12): script-queryable ontology class-count source for the
 // canon DriftCounter — /api/ontology/class-count
 pub mod ontology_class_count_handler;

@@ -52,11 +52,28 @@ CREATE TABLE IF NOT EXISTS kpi_agent_events (
     event_id         INTEGER NOT NULL,
     source_agent_id  INTEGER NOT NULL,
     action_type      INTEGER NOT NULL,
-    observed_at_ms   INTEGER NOT NULL
+    observed_at_ms   INTEGER NOT NULL,
+    -- REC-11 (PRD-023 WP-12, data-moat consolidation): the identity + CTC
+    -- attribution the unified provenance trace joins on. Nullable + additive so
+    -- the KPI volume count is untouched (it counts rows, not these columns) and a
+    -- pre-REC-11 store gains them via `apply_additive_migrations`. This is the
+    -- durable projection of the /wss/agent-events wire — the "agent-events /
+    -- hook-trajectory" source (agentbox emits the CTC fields since P1); the trace
+    -- is a read-time JOIN over it, not a new store (ADR-130).
+    agent_did        TEXT,
+    action_type_name TEXT,
+    source_urn       TEXT,
+    target_urn       TEXT,
+    handoff_id       TEXT,
+    token_count      INTEGER,
+    verification     TEXT
 );
 
 CREATE INDEX IF NOT EXISTS kpi_agent_events_time_idx
     ON kpi_agent_events(observed_at_ms);
+
+CREATE INDEX IF NOT EXISTS kpi_agent_events_agent_idx
+    ON kpi_agent_events(agent_did, observed_at_ms);
 
 CREATE TABLE IF NOT EXISTS kpi_snapshots (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +123,52 @@ fn map_db_err(e: tokio_rusqlite::Error) -> KpiStoreError {
     KpiStoreError::Database(e.to_string())
 }
 
+/// Idempotent additive migrations for a store created before the REC-11 identity
+/// + CTC columns existed. `CREATE_SCHEMA`'s `IF NOT EXISTS` cannot alter an
+/// existing table, so a pre-REC-11 `kpi.sqlite3` needs them added explicitly.
+/// Guarded by a `PRAGMA table_info` check so it is a no-op once applied.
+fn apply_additive_migrations(c: &rusqlite::Connection) -> rusqlite::Result<()> {
+    for (col, decl) in [
+        ("agent_did", "TEXT"),
+        ("action_type_name", "TEXT"),
+        ("source_urn", "TEXT"),
+        ("target_urn", "TEXT"),
+        ("handoff_id", "TEXT"),
+        ("token_count", "INTEGER"),
+        ("verification", "TEXT"),
+    ] {
+        add_column_if_missing(c, "kpi_agent_events", col, decl)?;
+    }
+    Ok(())
+}
+
+/// Add `column` to `table` iff not already present (SQLite `ADD COLUMN` has no
+/// `IF NOT EXISTS`).
+fn add_column_if_missing(
+    c: &rusqlite::Connection,
+    table: &str,
+    column: &str,
+    decl: &str,
+) -> rusqlite::Result<()> {
+    let present = {
+        let mut stmt = c.prepare(&format!("PRAGMA table_info({table})"))?;
+        let mut rows = stmt.query([])?;
+        let mut found = false;
+        while let Some(r) = rows.next()? {
+            let name: String = r.get(1)?;
+            if name == column {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if !present {
+        c.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------
@@ -150,6 +213,42 @@ pub struct KpiLineageRow {
     pub contribution: Option<f64>,
 }
 
+/// The identity + CTC attributes of one observed agent-event, captured at the
+/// hub tap for the REC-11 unified provenance trace. All attribution fields are
+/// optional (the wire keeps identity optional for render compatibility).
+#[derive(Debug, Clone)]
+pub struct NewAgentTrajectory {
+    pub event_id: u64,
+    pub source_agent_id: u32,
+    pub action_type: u8,
+    pub action_type_name: Option<String>,
+    /// `did:nostr:<pubkey>` derived from the envelope's `pubkey` / `source_urn`.
+    pub agent_did: Option<String>,
+    pub source_urn: Option<String>,
+    pub target_urn: Option<String>,
+    /// CTC handoff-chain correlation URN (REC-3), the trace's activity join key.
+    pub handoff_id: Option<String>,
+    pub token_count: Option<u64>,
+    pub verification: Option<String>,
+    pub observed_at_ms: i64,
+}
+
+/// A persisted agent-event trajectory row read back for the provenance trace.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentTrajectoryRow {
+    pub event_id: i64,
+    pub source_agent_id: i64,
+    pub action_type: i64,
+    pub action_type_name: Option<String>,
+    pub agent_did: Option<String>,
+    pub source_urn: Option<String>,
+    pub target_urn: Option<String>,
+    pub handoff_id: Option<String>,
+    pub token_count: Option<i64>,
+    pub verification: Option<String>,
+    pub observed_at_ms: i64,
+}
+
 // ---------------------------------------------------------------------------
 // Repository
 // ---------------------------------------------------------------------------
@@ -167,6 +266,7 @@ impl SqliteKpiRepository {
         let conn = Connection::open(db_path).await.map_err(map_db_err)?;
         conn.call(|c| {
             c.execute_batch(CREATE_SCHEMA)?;
+            apply_additive_migrations(c)?;
             Ok(())
         })
         .await
@@ -206,6 +306,78 @@ impl SqliteKpiRepository {
                     observed_at_ms,
                 ])?;
                 Ok(())
+            })
+            .await
+            .map_err(map_db_err)
+    }
+
+    /// Record one observed agent-event WITH its identity + CTC attribution (the
+    /// REC-11 trajectory capture). Superset of [`record_agent_event`]: the KPI
+    /// volume count still counts the row, and the unified provenance trace reads
+    /// the attribution columns. Used by the hub tap so both REC-4 volume and
+    /// REC-11 trace read one durable capture of the `/wss/agent-events` wire.
+    pub async fn record_agent_trajectory(&self, t: &NewAgentTrajectory) -> Result<()> {
+        let t = t.clone();
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "INSERT INTO kpi_agent_events
+                         (event_id, source_agent_id, action_type, observed_at_ms,
+                          agent_did, action_type_name, source_urn, target_urn,
+                          handoff_id, token_count, verification)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                )?;
+                stmt.execute(rusqlite::params![
+                    t.event_id as i64,
+                    t.source_agent_id as i64,
+                    t.action_type as i64,
+                    t.observed_at_ms,
+                    &t.agent_did,
+                    &t.action_type_name,
+                    &t.source_urn,
+                    &t.target_urn,
+                    &t.handoff_id,
+                    t.token_count.map(|n| n as i64),
+                    &t.verification,
+                ])?;
+                Ok(())
+            })
+            .await
+            .map_err(map_db_err)
+    }
+
+    /// Agent-event trajectories observed at or after `cutoff_ms`, newest first,
+    /// for the unified provenance trace (REC-11). Returns every row (identity may
+    /// be `None` for an anonymous frame); the trace join filters on `agent_did`.
+    pub async fn trajectories_since(&self, cutoff_ms: i64) -> Result<Vec<AgentTrajectoryRow>> {
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "SELECT event_id, source_agent_id, action_type, action_type_name,
+                            agent_did, source_urn, target_urn, handoff_id,
+                            token_count, verification, observed_at_ms
+                     FROM kpi_agent_events
+                     WHERE observed_at_ms >= ?1
+                     ORDER BY observed_at_ms DESC, id DESC",
+                )?;
+                let mut q = stmt.query(rusqlite::params![cutoff_ms])?;
+                let mut out = Vec::new();
+                while let Some(r) = q.next()? {
+                    out.push(AgentTrajectoryRow {
+                        event_id: r.get(0)?,
+                        source_agent_id: r.get(1)?,
+                        action_type: r.get(2)?,
+                        action_type_name: r.get(3)?,
+                        agent_did: r.get(4)?,
+                        source_urn: r.get(5)?,
+                        target_urn: r.get(6)?,
+                        handoff_id: r.get(7)?,
+                        token_count: r.get(8)?,
+                        verification: r.get(9)?,
+                        observed_at_ms: r.get(10)?,
+                    });
+                }
+                Ok(out)
             })
             .await
             .map_err(map_db_err)

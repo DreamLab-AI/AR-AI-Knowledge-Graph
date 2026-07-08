@@ -128,6 +128,20 @@ pub const CANARY_RESD_COUNT: &str = "CANARY-VC-RESD-COUNT";
 /// (P2): the repair loop is proven once a real utterance is held and clarified.
 pub const CANARY_V3_REPAIR: &str = "CANARY-VC-V3-REPAIR";
 
+/// The insight-ingestion-loop canary (REC-10, PRD-023 WP-12). Fires when the
+/// loop-trace read returns a loop that closed once end to end —
+/// `ontology_propose` → broker decision → merged enrichment with monotonic
+/// per-stage timestamps, so Mesh Velocity (insight-to-integration time) is
+/// computable. One-shot (P2): the loop is proven once it closes across the mesh.
+pub const CANARY_REC10_LOOP: &str = "CANARY-VC-REC10-LOOP";
+
+/// The data-moat unified-trace canary (REC-11, PRD-023 WP-12). Fires when the
+/// `GET /api/trace` query returns a trace that joins at least two live source
+/// kinds under one `did:nostr` (agent-events / hook-trajectory + broker
+/// decisions; pod git-marks incorporated when a `--features git` pod supplies
+/// them). One-shot (P2): the join is proven once it spans two live sources.
+pub const CANARY_REC11_TRACE: &str = "CANARY-VC-REC11-TRACE";
+
 /// The P1-wave canaries this repository seeds at start-up (PRD-023 canary
 /// table). Idempotent, so re-seeding on every boot is safe. Kept separate from
 /// [`P0_CANARIES`] so each wave's rows stay legible; more P1 rows land as their
@@ -191,6 +205,21 @@ pub const P2_CANARIES: &[(&str, &str, &str, &str)] = &[
         CANARY_V3_REPAIR,
         "Confidence gate holds a low-confidence / under-specified spoken command \
          and speaks a clarification instead of dispatching (a repair turn)",
+        "one-shot",
+        "P2",
+    ),
+    (
+        CANARY_REC10_LOOP,
+        "Insight loop closed once end to end: ontology_propose → broker decision \
+         → merged enrichment with monotonic per-stage timestamps (Mesh Velocity \
+         computable)",
+        "one-shot",
+        "P2",
+    ),
+    (
+        CANARY_REC11_TRACE,
+        "GET /api/trace returns a trace joining ≥2 live source kinds under one \
+         did:nostr (agent-events + broker decisions; pod git-marks when present)",
         "one-shot",
         "P2",
     ),

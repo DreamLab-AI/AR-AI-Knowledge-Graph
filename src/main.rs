@@ -974,6 +974,14 @@ async fn main() -> std::io::Result<()> {
                     // /api/kpi/{summary,lineage}
                     .configure(visionclaw_server::handlers::configure_kpi_routes)
 
+                    // REC-10 (PRD-023 WP-12): Insight Ingestion Loop v1 —
+                    // /api/insight-loop/trace[/{case_id}] (Mesh Velocity source)
+                    .configure(visionclaw_server::handlers::configure_insight_loop_routes)
+
+                    // REC-11 (PRD-023 WP-12): data-moat unified provenance trace —
+                    // /api/trace (joins agent-events + broker decisions on did:nostr)
+                    .configure(visionclaw_server::handlers::configure_trace_routes)
+
                     // (RES-d /ontology/class-count registered EARLIER — before
                     // api_handler::config — so the broad /ontology scope does not
                     // shadow it to a 404. See the WS-9/RES-d note above.)

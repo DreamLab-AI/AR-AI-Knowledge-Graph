@@ -411,8 +411,12 @@ pub(crate) async fn apply_decision(
             .await
         {
             Ok(()) => {
+                // REC-10: stamp the merged-enrichment stage instant so Mesh
+                // Velocity (insight-to-integration time) is computable for this
+                // loop. The write has just landed, so `now` is the integration
+                // instant.
                 if let Err(e) = repo
-                    .mark_writeback_committed(&case_id, &record.activity_urn)
+                    .mark_writeback_committed(&case_id, &record.activity_urn, now_ms() as i64)
                     .await
                 {
                     warn!("[enrichment-decide] commit-mark failed case={case_id}: {e}");

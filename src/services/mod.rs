@@ -68,6 +68,16 @@ pub mod canary_nostr_tap;
 // broker:case_decided) over the multiplexed graph socket (ADR-130 D2).
 pub mod broker_events;
 
+// REC-10 (PRD-023 WP-12): Insight Ingestion Loop v1 — the five-stage loop trace
+// (propose → queue → decide → merge → amplification[planned]) with per-stage
+// timestamps so Mesh Velocity is computable.
+pub mod insight_loop;
+
+// REC-11 (PRD-023 WP-12): the data-moat unified provenance trace — a query layer
+// joining agent-events/hook-trajectory + broker decisions (+ pod git-marks when a
+// --features git pod supplies them) on the did:nostr attribution (ADR-130).
+pub mod provenance_trace;
+
 // JSON-LD validator (Data Sprint Phase D-2). Pure markdown + JSON-LD
 // validation; does NOT depend on the persistence-oxigraph feature.
 pub mod jsonld_validator;

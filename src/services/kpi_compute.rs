@@ -32,7 +32,9 @@ use log::{debug, warn};
 use serde::Serialize;
 
 use crate::adapters::sqlite_enrichment_repository::SqliteEnrichmentRepository;
-use crate::adapters::sqlite_kpi_repository::{NewKpiSnapshot, SqliteKpiRepository};
+use crate::adapters::sqlite_kpi_repository::{
+    NewAgentTrajectory, NewKpiSnapshot, SqliteKpiRepository,
+};
 use crate::services::liveness_harness::{LivenessHarness, CANARY_REC4_KPI};
 
 /// The rolling window for both computed KPIs: 30 days (ADR-043 / the "30-day
@@ -387,16 +389,36 @@ pub async fn run_agent_event_tap(kpi_repo: Arc<SqliteKpiRepository>) {
         match rx.recv().await {
             Ok(env) => {
                 let observed_at_ms = chrono::Utc::now().timestamp_millis();
-                if let Err(e) = kpi_repo
-                    .record_agent_event(
-                        env.id,
-                        env.source_agent_id,
-                        env.action_type,
-                        observed_at_ms,
-                    )
-                    .await
-                {
-                    warn!("[kpi] failed to record agent-event volume: {e}");
+                // REC-11: derive the did:nostr attribution from the envelope's
+                // pubkey (a valid x-only hex ⇒ did:nostr:<pubkey>), falling back
+                // to a source_urn that is already a did:nostr. Anonymous frames
+                // record a NULL agent_did and still count toward volume.
+                let agent_did = env
+                    .pubkey
+                    .as_deref()
+                    .filter(|pk| crate::uri::is_pubkey_hex(pk))
+                    .and_then(|pk| crate::uri::did_nostr(pk).ok())
+                    .or_else(|| {
+                        env.source_urn
+                            .as_deref()
+                            .filter(|u| u.starts_with("did:nostr:"))
+                            .map(|u| u.to_string())
+                    });
+                let trajectory = NewAgentTrajectory {
+                    event_id: env.id,
+                    source_agent_id: env.source_agent_id,
+                    action_type: env.action_type,
+                    action_type_name: Some(env.action_type_name.clone()),
+                    agent_did,
+                    source_urn: env.source_urn.clone(),
+                    target_urn: env.target_urn.clone(),
+                    handoff_id: env.handoff_id.clone(),
+                    token_count: env.token_count,
+                    verification: env.verification.clone(),
+                    observed_at_ms,
+                };
+                if let Err(e) = kpi_repo.record_agent_trajectory(&trajectory).await {
+                    warn!("[kpi] failed to record agent-event trajectory: {e}");
                 }
             }
             Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
