@@ -14,6 +14,10 @@
 
 use proptest::prelude::*;
 use visionclaw_xr_presence::{
+    agent_presence::{
+        decode_agent_presence, dequantise_dir, encode_agent_presence, quantise_dir, AgentActivity,
+        AgentPresence, AgentPresenceDelta, AttentionTarget,
+    },
     delta::PoseDelta,
     monotonic_timestamp,
     types::{Aabb, AvatarMetadata, Did, HandPose, PoseFrame, RoomId, Transform},
@@ -226,5 +230,118 @@ proptest! {
         let delta = PoseDelta::between(&prev, &same_ts_next);
         // Head is bit-equal so the head slot must NOT be in the mask.
         prop_assert!(!delta.mask.has_head());
+    }
+}
+
+// -- agent-presence codec generators (opcode 0x44, ADR-130 Decision 4) --------
+
+fn arb_activity() -> impl Strategy<Value = AgentActivity> {
+    prop_oneof![
+        Just(AgentActivity::Idle),
+        Just(AgentActivity::Working),
+        Just(AgentActivity::AwaitingApproval),
+        Just(AgentActivity::Speaking),
+    ]
+}
+
+fn arb_attention() -> impl Strategy<Value = AttentionTarget> {
+    prop_oneof![
+        Just(AttentionTarget::None),
+        Just(AttentionTarget::User),
+        any::<u32>().prop_map(AttentionTarget::GraphNode),
+    ]
+}
+
+/// A non-degenerate direction so the quantiser's zero-fallback does not fire.
+fn arb_dir() -> impl Strategy<Value = [f32; 3]> {
+    (-1.0f32..1.0, -1.0f32..1.0, -1.0f32..1.0)
+        .prop_filter("non-degenerate", |(x, y, z)| {
+            (x * x + y * y + z * z).sqrt() > 0.05
+        })
+        .prop_map(|(x, y, z)| [x, y, z])
+}
+
+fn arb_delta() -> impl Strategy<Value = AgentPresenceDelta> {
+    (
+        any::<u32>(),
+        proptest::option::of(arb_activity()),
+        proptest::option::of(arb_dir()),
+        proptest::option::of(arb_attention()),
+    )
+        .prop_map(|(local_id, state, gaze_dir, attention)| AgentPresenceDelta {
+            local_id,
+            state,
+            gaze_dir,
+            attention,
+        })
+}
+
+fn dir_dot(a: [f32; 3], b: [f32; 3]) -> f32 {
+    let na = {
+        let m = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt().max(1e-9);
+        [a[0] / m, a[1] / m, a[2] / m]
+    };
+    na[0] * b[0] + na[1] * b[1] + na[2] * b[2]
+}
+
+proptest! {
+    /// PROP-AGENT-WIRE-1: any batch of well-formed agent-presence deltas
+    /// survives encode → decode with every discrete field (local_id, state,
+    /// attention) preserved exactly (T-PROTO-1 decoder totality + fidelity).
+    #[test]
+    fn agent_presence_round_trip(seq in any::<u64>(), deltas in prop::collection::vec(arb_delta(), 0..12)) {
+        let bytes = encode_agent_presence(seq, &deltas).expect("encode well-formed batch");
+        let batch = decode_agent_presence(&bytes).expect("decode must succeed");
+        prop_assert_eq!(batch.seq, seq);
+        prop_assert_eq!(batch.deltas.len(), deltas.len());
+        for (got, want) in batch.deltas.iter().zip(deltas.iter()) {
+            prop_assert_eq!(got.local_id, want.local_id);
+            prop_assert_eq!(got.state, want.state);
+            prop_assert_eq!(got.attention, want.attention);
+            prop_assert_eq!(got.gaze_dir.is_some(), want.gaze_dir.is_some());
+        }
+    }
+
+    /// PROP-AGENT-WIRE-2: the decoder is total over arbitrary bytes — it never
+    /// panics, only returns Ok or a WireError (fuzz contract, PRD-QE-002 §4.6).
+    #[test]
+    fn agent_presence_decode_is_total(bytes in prop::collection::vec(any::<u8>(), 0..256)) {
+        let _ = decode_agent_presence(&bytes);
+    }
+
+    /// PROP-GAZE-QUANT-1: 16-bit-per-component quantisation preserves any unit
+    /// direction to sub-milliradian angular error (cos θ > 0.9999). Underpins
+    /// the high-rate gaze channel's 10–20 Hz budget.
+    #[test]
+    fn gaze_quantisation_preserves_direction(d in arb_dir()) {
+        let restored = dequantise_dir(quantise_dir(d));
+        let dot = dir_dot(d, restored);
+        prop_assert!(dot > 0.9999, "angular error too large: dot={dot} for {d:?}");
+    }
+
+    /// PROP-GAZE-QUANT-2: quantise is idempotent through a decode round — a
+    /// direction that has already been through the wire does not drift on a
+    /// second pass (no accumulating error over a held gaze).
+    #[test]
+    fn gaze_quantisation_is_stable_on_second_pass(d in arb_dir()) {
+        let once = dequantise_dir(quantise_dir(d));
+        let twice = dequantise_dir(quantise_dir(once));
+        prop_assert_eq!(quantise_dir(once), quantise_dir(twice));
+    }
+
+    /// PROP-AGENT-APPLY-1: applying between(prev,next) over prev reconstructs
+    /// next for the discrete fields, regardless of which fields changed.
+    #[test]
+    fn agent_delta_apply_round_trip(
+        s1 in arb_activity(), s2 in arb_activity(),
+        d1 in arb_dir(), d2 in arb_dir(),
+        a1 in arb_attention(), a2 in arb_attention(),
+    ) {
+        let prev = AgentPresence::new(s1, d1, a1);
+        let next = AgentPresence::new(s2, d2, a2);
+        let delta = AgentPresenceDelta::between(0, &prev, &next);
+        let restored = delta.apply(&prev);
+        prop_assert_eq!(restored.state, next.state);
+        prop_assert_eq!(restored.attention, next.attention);
     }
 }

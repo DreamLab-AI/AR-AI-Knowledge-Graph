@@ -20,3 +20,10 @@ path = "fuzz_targets/wire_decode.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "agent_presence_decode"
+path = "fuzz_targets/agent_presence_decode.rs"
+test = false
+doc = false
+bench = false

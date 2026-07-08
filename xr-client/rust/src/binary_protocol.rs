@@ -149,6 +149,61 @@ pub fn parse_initial_graph_load(text: &str) -> Option<Vec<EdgeSpec>> {
     Some(out)
 }
 
+/// Extract `(node_id, did_nostr)` pairs for agent nodes from an
+/// `initialGraphLoad` text frame — the additive DID-carrying channel for the
+/// selection arbiter (COM-14 / M4, ADR-130 Decision 4/6).
+///
+/// The fixed 52-byte binary position record (0x03) has no room for a 32-byte
+/// pubkey, so agent identity rides the `initialGraphLoad` node metadata instead.
+/// This reads an optional `did_nostr` / `didNostr` string per node (keyed by the
+/// node's `id` / `node_id`, masked with [`NODE_ID_MASK`] to drop the type-flag
+/// bits) and returns only the nodes that carry one.
+///
+/// **Named server-side integration point:** the VisionClaw graph server must
+/// include `did_nostr` on each agent node in the `initialGraphLoad` payload
+/// (source: the agent record's `did_nostr` field landed by COM-14 P0 in
+/// `src/services/bots_client.rs` / `agent_visualization_protocol.rs`). Until the
+/// server emits it, this returns an empty map and selections carry `None` — an
+/// honest absence, not a fabricated identity. GDScript feeds the result into
+/// `SelectionArbiterNode::register_identity`.
+pub fn parse_agent_identities(text: &str) -> Vec<(u32, String)> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(text) else {
+        return Vec::new();
+    };
+    if v.get("type").and_then(|t| t.as_str()) != Some("initialGraphLoad") {
+        return Vec::new();
+    }
+    let Some(nodes) = v.get("nodes").and_then(|n| n.as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for node in nodes {
+        let did = node
+            .get("did_nostr")
+            .or_else(|| node.get("didNostr"))
+            .and_then(|d| d.as_str());
+        let Some(did) = did else { continue };
+        if did.is_empty() {
+            continue;
+        }
+        let raw_id = node
+            .get("id")
+            .or_else(|| node.get("node_id"))
+            .and_then(json_u32);
+        let Some(raw_id) = raw_id else { continue };
+        out.push((raw_id & NODE_ID_MASK, did.to_owned()));
+    }
+    out
+}
+
+/// Read a u32 from a JSON value that may be a number or a numeric string.
+fn json_u32(v: &serde_json::Value) -> Option<u32> {
+    if let Some(n) = v.as_u64() {
+        return (n <= u32::MAX as u64).then_some(n as u32);
+    }
+    v.as_str().and_then(|s| s.parse::<u32>().ok())
+}
+
 pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeError> {
     if bytes.len() < HEADER_BYTES {
         return Err(DecodeError::TooShort {
@@ -706,5 +761,37 @@ mod tests {
         assert!(
             parse_initial_graph_load(r#"{"type":"initialDataInfo","message":"x"}"#).is_none()
         );
+    }
+
+    #[test]
+    fn parse_agent_identities_extracts_did_and_masks_flags() {
+        let did_a = format!("did:nostr:{}", "a".repeat(64));
+        let did_b = format!("did:nostr:{}", "b".repeat(64));
+        // node 1 has snake_case did; node with agent flag uses camelCase and a
+        // numeric-string id; a third node has no DID and is dropped.
+        let agent_flag_id = 0x8000_0000u32 | 42;
+        let text = format!(
+            r#"{{"type":"initialGraphLoad","nodes":[
+                {{"id":1,"did_nostr":"{did_a}"}},
+                {{"id":"{agent_flag_id}","didNostr":"{did_b}"}},
+                {{"id":3}}
+            ],"edges":[],"timestamp":1}}"#
+        );
+        let ids = parse_agent_identities(&text);
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids[0], (1, did_a));
+        // flag bits masked off -> node id 42
+        assert_eq!(ids[1], (42, did_b));
+    }
+
+    #[test]
+    fn parse_agent_identities_ignores_empty_and_non_initial() {
+        assert!(parse_agent_identities(r#"{"type":"pong"}"#).is_empty());
+        assert!(parse_agent_identities("not json").is_empty());
+        // present-but-empty DID is not an identity
+        assert!(parse_agent_identities(
+            r#"{"type":"initialGraphLoad","nodes":[{"id":1,"did_nostr":""}],"edges":[],"timestamp":1}"#
+        )
+        .is_empty());
     }
 }

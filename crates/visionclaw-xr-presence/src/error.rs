@@ -19,6 +19,15 @@ pub enum WireError {
 
     #[error("avatar_id is not valid utf-8")]
     AvatarIdNotUtf8,
+
+    #[error("agent-presence frame body {len} exceeds u16 maximum {max}")]
+    FrameTooLarge { len: usize, max: usize },
+
+    #[error("invalid agent activity byte {state}: must be 0..=3")]
+    BadAgentState { state: u8 },
+
+    #[error("invalid attention tag {tag}: must be 0 (none), 1 (user), or 2 (node)")]
+    BadAttentionTag { tag: u8 },
 }
 
 #[derive(Debug, Clone, Error, PartialEq)]
