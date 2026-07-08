@@ -1,8 +1,8 @@
 # PRD-008: XR Client Replacement — Native Quest 3 APK via Godot 4 + godot-rust + OpenXR
 
-**Status:** In Progress — scaffold, protocol, presence, interaction, LOD, avatar rendering, and testing feature-complete; LiveKit AAR JNI bridge, WebXR removal, soak testing, and on-device profiling remain planned
+**Status:** In Progress — scaffold, protocol, presence, interaction, LOD, avatar rendering, and testing feature-complete; **copresence layer (gaze, geometric agent avatars, proxemics, in-headset identity + intervention) implemented post-Phase-2 (gap-close 2026-07, ADR-130 D4)**, on-device validation pending; LiveKit AAR JNI bridge, WebXR removal, soak testing, and on-device profiling remain planned
 **Priority:** P0 — current XR stack is silent-failing in production; the user-facing immersive path is effectively unshipped
-**Date:** 2026-05-02 (last updated 2026-05-04)
+**Date:** 2026-05-02 (last updated 2026-07-08)
 **Author:** Architecture Audit (xr-godot-replacement swarm `swarm-1777757491161-nl2bbv`)
 **Supersedes:**
 - `docs/prd-xr-modernization.md` — incremental fix to the Babylon/R3F/Vircadia stack; **superseded in full** by this PRD
@@ -574,6 +574,34 @@ prose). All must be green to advance.
   (e) 7-day continuous soak completed with zero crash, zero unhandled WS reconnect, zero pose-validation false-positive (smoke);
   (f) security review sign-off on `docs/xr-godot-threat-model.md`;
   (g) release tag `v1.0.0-xr-godot` exists on `main`.
+
+### 7.3 Gap-close copresence layer (2026-07-08, branch `gap-close/2026-07-xr`)
+
+A copresence layer landed **after Phase 2** under the gap-close sprint (PRD-023
+WP-9, ADR-130 Decision 4, driven by `scratchpad/xr-copresence-research-brief.md`).
+It is additive to the Phase-0–2 substrate above; it does not advance the Phase-3
+cutover (WebXR removal, LiveKit AAR) which stays **PLANNED**. The register items
+it closes are M1 (in-headset verified `did:nostr` badge), M2/COM-18 (per-agent
+intervention panel + ambient ACSP indicator), M3 (geometric agent avatars,
+gaze-attention, proxemics — held at the geometric subset), M4 (unified head/eye
+gaze + three-resolver selection arbiter), and M6 (Godot `use_xr` set correctly).
+
+What is **code + test-proven** here (headless, this container):
+
+- **Rust copresence core** — new `xr-client/rust/src/{gaze,selection,proxemics,avatar_state}.rs` and a 0x44 agent-presence wire in `crates/visionclaw-xr-presence`. `cargo test` green: **142** gdext lib tests + **52** gdext integration/property/visual-fixture tests, and **82** presence-crate tests (unit + integration + property + adversarial). Host `.so` release build proven: `libvisionclaw_xr_gdext.so`, 5.72 MB, `gdext_rust_init` exported.
+- **Scene/GDScript** — geometric `AgentAvatar.tscn` (core + gaze cone + DID badge + colour/motion state), HUD intervention panel + ACSP indicator + dwell reticle, DID badge on the human `Avatar.tscn`, arc-proxemics placement, eye-gaze probed behind a `has_method` guard after OpenXR init (godot #113717-safe). Receipted by GUT test files + static review — **no `godot` binary exists in this container**, so scene changes are not editor-run here.
+
+What is **pending on-device validation** (not claimed closed): every on-device
+render and the live canary fires (`CANARY-VC-M1-HUD`, `CANARY-VC-COM18-INTERV`,
+`CANARY-VC-M4-RAY`) run only in the **agentbox/xr-runtime Monado sidecar** (Godot
+4.3, VNC :5904) — the single executable MR verification route in this
+environment. The Quest APK build itself is likewise unproven here: the
+`aarch64-linux-android` std component and `cargo-ndk` are **not installed** and no
+`rustup` exists to add them (recorded, not worked around); the release proof is a
+host-target `.so`. Per ADR-130 Decision 4, M3 is not folded into a closed
+`integrated` claim without the sidecar render receipt, and body/face tracking
+stay out of scope (Quest 3 has no eye/face hardware). Per-item tiers and evidence:
+`docs/gap-close-evidence/P2-{M1,M2,M3,M4,M6}.md`.
 
 ---
 

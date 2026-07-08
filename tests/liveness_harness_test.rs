@@ -10,7 +10,9 @@
 use std::sync::Arc;
 
 use visionclaw_server::adapters::{CanaryRegistration, CanaryStoreError, SqliteCanaryRepository};
-use visionclaw_server::services::liveness_harness::{LivenessHarness, CANARY_KG};
+use visionclaw_server::services::liveness_harness::{
+    LivenessHarness, CANARY_COM18_INTERV, CANARY_KG, CANARY_M4_RAY,
+};
 
 const WINDOW_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
@@ -150,4 +152,37 @@ async fn kg_watchdog_gauge_transitions_fire_the_canary() {
         kg.fired && !kg.armed,
         "RESA-KG fired at the current sha within the window"
     );
+}
+
+#[tokio::test]
+async fn p2_seed_registers_the_mr_copresence_canaries_armed() {
+    // WP-9 (M4 / COM-18 / M2): the P2 seed must register the two MR canaries so
+    // the xr-runtime sidecar can fire them over the shared observe path. They are
+    // armed-not-fired at boot — no synthetic probe stands in for the on-device
+    // fire (DDD invariant 5).
+    let repo = Arc::new(temp_repo().await);
+    let harness = LivenessHarness::new(repo);
+    harness.seed_p2_canaries().await.unwrap();
+
+    let status = harness.status().await.unwrap();
+
+    let ray = status
+        .iter()
+        .find(|c| c.canary_id == CANARY_M4_RAY)
+        .expect("CANARY-VC-M4-RAY seeded by seed_p2_canaries");
+    assert_eq!(ray.kind, "one-shot", "M4 ray is a one-shot resolution proof");
+    assert_eq!(ray.wave.as_deref(), Some("P2"));
+    assert!(ray.armed && !ray.fired, "armed until the sidecar fires it live");
+    assert_eq!(ray.observation_count, 0);
+
+    let interv = status
+        .iter()
+        .find(|c| c.canary_id == CANARY_COM18_INTERV)
+        .expect("CANARY-VC-COM18-INTERV seeded by seed_p2_canaries");
+    assert_eq!(
+        interv.kind, "standing",
+        "COM-18 intervention is a standing governance monitor"
+    );
+    assert_eq!(interv.wave.as_deref(), Some("P2"));
+    assert!(interv.armed && !interv.fired);
 }

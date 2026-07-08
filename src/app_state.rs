@@ -455,6 +455,12 @@ impl AppState {
         if let Err(e) = liveness_harness.seed_p1_canaries().await {
             warn!("[AppState::new] failed to seed P1 liveness canaries: {}", e);
         }
+        // M4 / COM-18 / M2 (PRD-023 WP-9): register the MR copresence canaries
+        // (CANARY-VC-M4-RAY, CANARY-VC-COM18-INTERV) so the xr-runtime sidecar
+        // session can fire them over the shared observe path. M1-HUD rides P0.
+        if let Err(e) = liveness_harness.seed_p2_canaries().await {
+            warn!("[AppState::new] failed to seed P2 liveness canaries: {}", e);
+        }
 
         // REC-4 (ADR-130 Decision 5): durable KPI snapshot + lineage store —
         // SEPARATE db file so its single-writer posture stays isolated. The
