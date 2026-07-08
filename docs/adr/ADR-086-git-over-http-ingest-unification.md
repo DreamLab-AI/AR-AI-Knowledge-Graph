@@ -9,7 +9,17 @@
 | Supersedes | GitHub REST API ingest (`src/services/github/`) |
 | Companion PRD | `docs/PRD-013-solid-git-ingest-surface.md` |
 | Companion ADRs | ADR-041, ADR-049, ADR-051, ADR-074, ADR-075 |
-| DDD Contexts | BC2 (Graph Data), BC11 (Judgment Broker), BC13 (Discovery), BC20 (Agentbox Integration) |
+| DDD Contexts | BC2 (Graph Data), BC13 (Discovery), BC20 (Agentbox Integration), BC11 (Judgment Broker) |
+
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** This
+> ADR states "VisionClaw `BrokerActor` emits `broker:new_case` / `broker:case_decided`"
+> and "BrokerActor WebSocket events unchanged". That actor never merged to `main`
+> (unmerged `crashbug` branch, Neo4j-backed). Per ADR-130 Decision 2, on `main`
+> those events are emitted from the enrichment-decide handler
+> (`services::broker_events`) over the ported `src/domain/broker/` kernel, and
+> case queueing runs through the ADR-110 ACSP producer (`ElevationActor`). The
+> events themselves are unchanged and do ship; only the `BrokerActor` transport
+> is superseded.
 
 ## Context
 

@@ -8,6 +8,16 @@ Proposed
 
 2026-05-16
 
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** This
+> ADR references "ADR-041 (BrokerActor)" as the canonical publisher of governance
+> decisions. That `BrokerActor` never merged to `main` (ADR-130 Decision 2
+> supersedes its transport + Neo4j adapter). On `main` the publisher is the
+> ADR-110 ACSP producer (`ElevationActor`) plus the enrichment-decide handler,
+> both sitting over the storage-agnostic broker kernel now ported to
+> `src/domain/broker/`. Read "`BrokerActor`" below as "the broker governance
+> publisher" — the git-bead provenance design is unchanged by which actor writes
+> the `BrokerDecisionMade` event.
+
 ## Context
 
 Three converging workstreams make a git-backed audit trail for governance
@@ -18,10 +28,13 @@ events compelling — and cheap:
    PolicyChange — is published as a Nostr event signed by the actor's
    pod-resident key. Provenance today is the **signature chain**.
 
-2. **ADR-041 (BrokerActor)** is the canonical publisher of those signed
-   governance decisions to the server pod under `events/governance/`.
-   Currently those writes go through the JSS sidecar via HTTP PUT; after
-   ADR-032 M3 they will go through embedded `solid-pod-rs` directly.
+2. **ADR-041 (broker governance publisher)** is the canonical publisher of
+   those signed governance decisions to the server pod under
+   `events/governance/`. On `main` this is the ADR-110 ACSP producer +
+   enrichment-decide handler over the ported `src/domain/broker/` kernel (ADR-130
+   Decision 2), not the unmerged `crashbug` `BrokerActor`. Currently those writes
+   go through the JSS sidecar via HTTP PUT; after ADR-032 M3 they will go through
+   embedded `solid-pod-rs` directly.
 
 3. **JSS upstream + solid-pod-rs alpha.12 (in flight — see task #1)** add
    `git init` at pod provisioning, plus a `solid-pod-rs-git` sibling crate

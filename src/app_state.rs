@@ -1090,8 +1090,10 @@ impl AppState {
 
         // ADR-110: flagship ACSP agentic actor — knowledge elevation through
         // forum governance cases, voice-guided when the local speech stack
-        // (Whisper STT / Kokoro TTS) is up. Env-gated (ELEVATION_ACTOR_ENABLED=1
-        // + FORUM_RELAY_URL + panel secret); None means the gate is closed.
+        // (Whisper STT / Kokoro TTS) is up. ADR-130 Decision 2: the gate now
+        // defaults ON in dev/staging (opt-in in production) and still requires
+        // FORUM_RELAY_URL + a panel secret to publish; None means the gate is
+        // closed for this profile/config.
         match crate::actors::elevation_actor::ElevationActor::new(
             graph_adapter.clone()
                 as Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
@@ -1102,7 +1104,7 @@ impl AppState {
                 info!("[AppState] ElevationActor started (ACSP knowledge-elevation panel live)");
             }
             None => info!(
-                "[AppState] ElevationActor disabled (set ELEVATION_ACTOR_ENABLED=1 + FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY to enable)"
+                "[AppState] ElevationActor disabled (dev/staging default ON — set ELEVATION_ACTOR_ENABLED=0 to force off, or in production set ELEVATION_ACTOR_ENABLED=1; also requires FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY)"
             ),
         }
 

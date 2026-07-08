@@ -9,6 +9,15 @@
 **ADR (companion):** ADR-086 (to be written on acceptance)
 **DDD Context:** BC2 (Graph Data), BC11 (Judgment Broker), BC13 (Discovery), BC20 (Agentbox Integration)
 
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** This
+> PRD refers to "VisionClaw's BrokerActor" as the emitter of `broker:new_case`.
+> That actor never merged to `main` (unmerged `crashbug` branch, Neo4j-backed).
+> Per ADR-130 Decision 2, the emitter on `main` is the enrichment-decide handler
+> (`services::broker_events`) over the ported `src/domain/broker/` kernel, and
+> case queueing goes through the ADR-110 ACSP producer (`ElevationActor`). The
+> events named here (`broker:new_case`, `broker:case_decided`) do ship; the
+> `BrokerActor` label is the superseded transport.
+
 ---
 
 ## Problem Statement

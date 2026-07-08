@@ -48,6 +48,10 @@ pub mod nostr_identity_verifier;
 // RES-a: sprint-wide live-traffic observer + KG-backend watchdog (ADR-130 D3)
 pub mod liveness_harness;
 
+// REC-2 / D3: broker case-queue WebSocket events (broker:new_case /
+// broker:case_decided) over the multiplexed graph socket (ADR-130 D2).
+pub mod broker_events;
+
 // JSON-LD validator (Data Sprint Phase D-2). Pure markdown + JSON-LD
 // validation; does NOT depend on the persistence-oxigraph feature.
 pub mod jsonld_validator;

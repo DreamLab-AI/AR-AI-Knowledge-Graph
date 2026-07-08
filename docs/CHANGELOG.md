@@ -5,6 +5,16 @@ All notable changes to VisionClaw will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** Entries
+> below attribute governance-panel and case events to a `BrokerActor` in
+> `src/actors/broker_actor.rs`. That actor never merged to `main` (it lives only
+> on the unmerged `crashbug` branch, tied to a Neo4j store this stack does not
+> run). Per ADR-130 Decision 2, `main` ships ADR-110's ACSP producer
+> (`ElevationActor` over the ported `src/domain/broker/` kernel), and the
+> `broker:new_case` / `broker:case_decided` WebSocket events are emitted from the
+> enrichment-decide handler (`services::broker_events`) over the multiplexed graph
+> socket. Read "`BrokerActor`" below as "the broker governance publisher".
+
 ## [Unreleased] - 2026-06-21
 
 ### Added — Semantic Trust Layer (PRD-022 Phase 1, ADR-127)

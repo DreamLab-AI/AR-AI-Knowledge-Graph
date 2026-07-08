@@ -5,6 +5,48 @@ All notable changes to VisionClaw will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Judgment Broker: kernel ported, `BrokerActor` transport superseded (gap-close REC-2 — ADR-130 Decision 2)
+
+Branch `gap-close/2026-07`. Closes the REC-2 register gap on the architecture
+`main` actually committed to (ADR-110 ACSP), correcting five documents that
+described the unmerged `crashbug` `BrokerActor` as live `main` infrastructure.
+
+#### Added
+
+- **Storage-agnostic broker domain kernel** cherry-picked from `crashbug` to
+  `src/domain/broker/` (`BrokerCase` aggregate, `DecisionOrchestrator`,
+  six-variant `DecisionOutcome`, `PrecedentRegistry`; 21 kernel tests). The
+  kernel is the domain model behind the enrichment REST fallback and the ACSP
+  producer — the decision invariants (append-only history, no self-review,
+  terminal idempotency, forward-only share-state) live here.
+- **`broker:new_case` / `broker:case_decided` WebSocket events** emitted from the
+  enrichment-decide handler over the multiplexed `/wss` graph socket
+  (`services::broker_events`), so a control-centre case queue can subscribe
+  without a second transport.
+- **ACSP↔kernel vocabulary reconciliation** locked by tests in
+  `services::acsp::events` (kernel `CaseCategory`/`SubjectKind` serde forms are
+  byte-identical to the ACSP producer's tag values; `ActionResponse` parses into
+  a kernel `DecisionOutcome`).
+- **`CANARY-VC-REC2-CASE`** now fires from the decide path when a queued case
+  reaches a decision over live traffic (observed traffic only, never a probe).
+
+#### Changed
+
+- **`ElevationActor` (the ACSP consumer) defaults ON in dev/staging**, opt-in in
+  production (`ELEVATION_ACTOR_ENABLED` still overrides; also requires
+  `FORUM_RELAY_URL` + a panel secret to publish).
+
+#### Corrected (documentation)
+
+- `BrokerActor` was described as live `main` infrastructure in ADR-033, ADR-041,
+  `docs/explanation/ecosystem-convergence.md` and `docs/reference/rest-api.md`.
+  It never merged from `crashbug` and was tied to a Neo4j store this stack does
+  not run (Oxigraph + SQLite). Those documents now describe the ADR-110 ACSP
+  producer + ported kernel that actually ships; ADR-041 is marked
+  superseded-in-part.
+
 ## [1.2.0] - 2026-02-11
 
 ### Voice-to-Voice System (b92150b)

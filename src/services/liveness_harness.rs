@@ -31,6 +31,11 @@ use crate::adapters::sqlite_canary_repository::{
 /// The KG-backend liveness canary the watchdog fires on gauge transitions.
 pub const CANARY_KG: &str = "CANARY-VC-RESA-KG";
 
+/// The broker case-queue round-trip canary (REC-2 / D3). Fires from the
+/// enrichment-decision path when a queued case reaches a decision over live
+/// traffic (`broker:new_case` → `broker:case_decided`).
+pub const CANARY_REC2_CASE: &str = "CANARY-VC-REC2-CASE";
+
 /// Freshness window for the staleness rule (WP-11): a fire older than this
 /// re-arms its canary. 30 days per the canon default.
 pub const FRESHNESS_WINDOW_MS: i64 = 30 * 24 * 60 * 60 * 1000;
@@ -46,7 +51,7 @@ pub const P0_CANARIES: &[(&str, &str, &str, &str)] = &[
         "P0",
     ),
     (
-        "CANARY-VC-REC2-CASE",
+        CANARY_REC2_CASE,
         "broker:new_case then broker:case_decided on the multiplexed graph socket",
         "standing",
         "P0",

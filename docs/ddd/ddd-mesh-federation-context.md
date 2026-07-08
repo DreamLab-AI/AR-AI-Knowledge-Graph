@@ -11,6 +11,15 @@
 
 This document maps the bounded contexts involved in PRD-010's DID:Nostr Mesh Federation and PRD-013's Solid Pod Git Ingest Surface, names their aggregates, fixes their invariants, and specifies the anti-corruption layers (ACLs) at each context boundary. It is the single source of truth for *who owns what* and *what translates between them*.
 
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** The
+> event tables below name `BC-MESH-VC (BrokerActor)` as the publisher of
+> `broker:new_case` / `broker:case_decided`. That actor never merged to `main`
+> (unmerged `crashbug` branch, Neo4j-backed). Per ADR-130 Decision 2, on `main`
+> those events are emitted from the enrichment-decide handler
+> (`services::broker_events`) over the ported storage-agnostic `src/domain/broker/`
+> kernel, and case queueing runs through the ADR-110 ACSP producer
+> (`ElevationActor`). Read "`BrokerActor`" as "the VisionClaw broker publisher".
+
 The mesh's architectural challenge is not the wire protocol (ADR-073) nor the message envelope (ADR-075) but the **relational integrity** at boundaries. The forum's user-pubkey, agentbox's agent-pubkey, and VisionClaw's substrate-pubkey are three different identities that must be reasoned about together; the moment a translation drops one, attribution breaks, ACLs misfire, or duplicate side-effects cascade.
 
 ---

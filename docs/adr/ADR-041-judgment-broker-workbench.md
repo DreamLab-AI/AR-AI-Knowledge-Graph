@@ -2,13 +2,33 @@
 
 ## Status
 
-Implemented 2026-04-20
+Superseded-in-part by [ADR-110](./ADR-110-agentic-actors-acsp-control-surfaces.md)
+and [ADR-130](./ADR-130-gap-close-visionclaw-decisions.md) Decision 2.
+
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** The
+> "Implemented 2026-04-20" notes below describe the `crashbug`-branch
+> `BrokerActor`, which **never merged to `main`** and was tied to a Neo4j store
+> this stack does not run (the graph store is Oxigraph plus SQLite). `main`
+> instead adopted ADR-110's stateless ACSP producer (kinds 31400--31405 to the
+> forum's `broker_cases` store, accepted 2026-06-12) plus an enrichment REST
+> fallback. ADR-130 Decision 2 cherry-picks **only** the storage-agnostic domain
+> kernel from `crashbug` — `src/domain/broker/` (`BrokerCase`,
+> `DecisionOrchestrator`, `DecisionOutcome`, `PrecedentRegistry`) — as the domain
+> model behind that path, and supersedes the `BrokerActor` transport and its
+> Neo4j adapter. The `broker:new_case` / `broker:case_decided` WebSocket events
+> are now emitted from the enrichment-decide handler over the multiplexed graph
+> socket (`services::broker_events`), and `ElevationActor` is the ACSP producer
+> (dev/staging default ON, production opt-in). Read the notes below as the
+> historical `crashbug` design, not shipped `main` fact; the REST routes marked
+> `POST /api/broker/cases*` and `GET /api/broker/subscribe` do not exist on
+> `main` (see `docs/reference/rest-api.md` for the routes that do).
 
 ## Date
 
-2026-04-14 (accepted) / 2026-04-20 (implemented)
+2026-04-14 (accepted) / 2026-04-20 (implemented on `crashbug`, unmerged) /
+2026-07-08 (kernel cherry-picked to `main`, transport superseded per ADR-130 D2)
 
-## Implementation Notes (2026-04-20)
+## Implementation Notes (2026-04-20) — historical `crashbug` design, superseded
 
 Backend BC11 landed under `src/domain/broker/` (`BrokerCase` aggregate with
 `CaseCategory::ContributorMeshShare` + `SubjectKind` discriminator per ADR-057
