@@ -24,16 +24,25 @@
 //! non-browser clients do not send it, and a cross-site browser script cannot
 //! forge the bearer token cross-origin, so CSWSH is already mitigated.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use actix::{Actor, ActorContext, StreamHandler};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use log::{debug, info, warn};
 
 use crate::app_state::AppState;
+use crate::services::liveness_harness::{LivenessHarness, CANARY_REC3_CTC};
 
 use super::hub;
 use super::provenance::{self, ProvenanceStatus};
 use super::schema::AgentActionNotification;
+
+/// One-shot latch for `CANARY-VC-REC3-CTC` (REC-3, WP-7). The canary is one-shot,
+/// so the ingest fires it at most once per process even though many CTC-bearing
+/// frames may cross the wire; the harness re-arms it by the SHA/staleness rule.
+static CTC_CANARY_FIRED: AtomicBool = AtomicBool::new(false);
 
 /// Negotiated WebSocket subprotocol (ADR-059 §1).
 const SUBPROTOCOL: &str = "vc-agent-events.v1";
@@ -69,6 +78,9 @@ pub(crate) enum IngestOutcome {
         /// Number of foreign `urn:agentbox:*` source/target URNs translated
         /// through the BC20 bridge on this frame (0, 1, or 2).
         crossings_recorded: usize,
+        /// REC-3 (WP-7): true when the envelope carried a populated typed CTC
+        /// field. Drives the `CANARY-VC-REC3-CTC` fire from the actor.
+        ctc_present: bool,
         receivers: usize,
     },
     /// Parsed as JSON-RPC but failed [`AgentActionNotification::is_canonical`].
@@ -98,6 +110,10 @@ pub(crate) fn process_frame(text: &str) -> IngestOutcome {
             let crossings_recorded =
                 prov.source_crossing.is_some() as usize + prov.target_crossing.is_some() as usize;
 
+            // REC-3 (WP-7): read CTC presence before the envelope moves into the
+            // hub — a populated typed CTC field is the CANARY-VC-REC3-CTC predicate.
+            let ctc_present = event.has_ctc();
+
             if let Some(c) = prov.source_crossing.as_ref() {
                 debug!(
                     "agent-events: BC20 source crossing {} → {}",
@@ -119,6 +135,7 @@ pub(crate) fn process_frame(text: &str) -> IngestOutcome {
                 attributed,
                 provenance_status,
                 crossings_recorded,
+                ctc_present,
                 receivers,
             }
         }
@@ -132,11 +149,39 @@ pub(crate) fn process_frame(text: &str) -> IngestOutcome {
 pub struct AgentEventsIngestWs {
     /// did:nostr hex of the authenticated session, if any (Phase 1: optional).
     session_pubkey: Option<String>,
+    /// RES-a harness handle so a CTC-bearing frame can fire `CANARY-VC-REC3-CTC`
+    /// (REC-3, WP-7). `None` only in unit tests that drive the pure ingest.
+    harness: Option<Arc<LivenessHarness>>,
 }
 
 impl AgentEventsIngestWs {
-    fn new(session_pubkey: Option<String>) -> Self {
-        Self { session_pubkey }
+    fn new(session_pubkey: Option<String>, harness: Option<Arc<LivenessHarness>>) -> Self {
+        Self {
+            session_pubkey,
+            harness,
+        }
+    }
+
+    /// REC-3 (WP-7): fire `CANARY-VC-REC3-CTC` once per process on the first
+    /// CTC-bearing envelope. The harness records it as observed live traffic.
+    fn fire_ctc_canary(&self, action: &str) {
+        let Some(harness) = self.harness.clone() else {
+            return;
+        };
+        // One-shot: only the first CTC frame this process sees fires.
+        if CTC_CANARY_FIRED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let evidence = format!(
+            "agent-events envelope carried a populated typed CTC field (action={action})"
+        );
+        actix::spawn(async move {
+            if let Err(e) = harness.observe(CANARY_REC3_CTC, &evidence).await {
+                warn!("[agent-events] failed to record {CANARY_REC3_CTC} fire: {e}");
+            } else {
+                info!("[agent-events] {CANARY_REC3_CTC} fired: {evidence}");
+            }
+        });
     }
 }
 
@@ -160,13 +205,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for AgentEventsIngest
                     attributed,
                     provenance_status,
                     crossings_recorded,
+                    ctc_present,
                     receivers,
                 } => {
                     debug!(
                         "agent-events: published action={action} attributed={attributed} \
                          provenance={provenance_status:?} crossings={crossings_recorded} \
-                         → {receivers} subscriber(s)"
+                         ctc={ctc_present} → {receivers} subscriber(s)"
                     );
+                    if ctc_present {
+                        self.fire_ctc_canary(&action);
+                    }
                 }
                 IngestOutcome::NonCanonical => {
                     warn!("agent-events: non-canonical envelope rejected");
@@ -249,9 +298,17 @@ pub async fn agent_events_ws(
         Err(resp) => return Ok(resp),
     };
 
-    ws::WsResponseBuilder::new(AgentEventsIngestWs::new(session_pubkey), &req, stream)
-        .protocols(&[SUBPROTOCOL])
-        .start()
+    // REC-3 (WP-7): give the ingest actor the harness so a CTC-bearing frame
+    // fires CANARY-VC-REC3-CTC as observed live traffic.
+    let harness = Some(app_state.liveness_harness.clone());
+
+    ws::WsResponseBuilder::new(
+        AgentEventsIngestWs::new(session_pubkey, harness),
+        &req,
+        stream,
+    )
+    .protocols(&[SUBPROTOCOL])
+    .start()
 }
 
 #[cfg(test)]
@@ -295,6 +352,7 @@ mod tests {
                 attributed,
                 provenance_status,
                 crossings_recorded,
+                ctc_present,
                 receivers,
             } => {
                 assert_eq!(action, "update");
@@ -302,6 +360,8 @@ mod tests {
                 assert_eq!(provenance_status, ProvenanceStatus::Attributed);
                 // canonical_frame carries no source/target URN ⇒ no crossing.
                 assert_eq!(crossings_recorded, 0);
+                // canonical_frame carries no CTC field ⇒ canary predicate false.
+                assert!(!ctc_present, "no CTC field ⇒ ctc_present false");
                 assert!(receivers >= 1, "our own subscriber must be counted");
             }
             other => panic!("expected Published, got {other:?}"),
@@ -361,6 +421,41 @@ mod tests {
                 assert_eq!(provenance_status, ProvenanceStatus::Anonymous);
                 // both source + target were foreign agentbox URNs ⇒ 2 crossings.
                 assert_eq!(crossings_recorded, 2);
+            }
+            other => panic!("expected Published, got {other:?}"),
+        }
+    }
+
+    // REC-3 (WP-7): a canonical frame carrying a typed CTC field reports
+    // ctc_present — the CANARY-VC-REC3-CTC predicate the actor fires on.
+    fn canonical_frame_with_ctc(id: u64) -> String {
+        format!(
+            r#"{{
+              "jsonrpc": "2.0",
+              "method": "notifications/agent_action",
+              "params": {{
+                "type": "agent_action",
+                "event": {{
+                  "version": 3, "id": {id}, "source_agent_id": 7, "target_node_id": 4242,
+                  "action_type": 2, "action_type_name": "handoff",
+                  "timestamp": 1748500000000, "duration_ms": 250,
+                  "handoff_count": 3, "token_burden": 4200000000,
+                  "verification_outcome": "passed",
+                  "metadata": {{ "note": "x" }}
+                }},
+                "message_type": 35, "protocol_version": 2,
+                "timestamp": "2026-05-29T00:00:00.000Z"
+              }}
+            }}"#
+        )
+    }
+
+    #[test]
+    fn ctc_bearing_frame_reports_ctc_present() {
+        let outcome = process_frame(&canonical_frame_with_ctc(555_000_111));
+        match outcome {
+            IngestOutcome::Published { ctc_present, .. } => {
+                assert!(ctc_present, "populated CTC field ⇒ ctc_present true");
             }
             other => panic!("expected Published, got {other:?}"),
         }

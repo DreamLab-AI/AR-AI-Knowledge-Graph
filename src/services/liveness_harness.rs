@@ -99,6 +99,28 @@ pub const CANARY_D2_STEER: &str = "CANARY-VC-D2-STEER";
 /// `POST /api/canary/observe/{id}`. One-shot (P1).
 pub const CANARY_D8_OBS: &str = "CANARY-VC-D8-OBS";
 
+/// The embodiment-join canary (D1, PRD-023 WP-2). Fires when a live agent action
+/// reaches the client data path — a non-empty `/api/bots/agents` roster and/or a
+/// decoded `0x23` `AGENT_ACTION` beam frame. Observed by the sprint-end
+/// `scripts/canary/d1-beam-check.sh` against a running stack. Standing (P1).
+pub const CANARY_D1_BEAM: &str = "CANARY-VC-D1-BEAM";
+
+/// The contextual-transaction-cost canary (REC-3, PRD-023 WP-7). Fires from the
+/// `/wss/agent-events` ingest when an envelope carrying a populated typed CTC
+/// field ([`crate::agent_events::AgentActionEnvelope::has_ctc`]) crosses the
+/// wire. One-shot (P1) — the schema contract is proven once a live DAG emits it.
+pub const CANARY_REC3_CTC: &str = "CANARY-VC-REC3-CTC";
+
+/// The four-KPI-dashboard canary (REC-4, PRD-023 WP-8). Fires each time the KPI
+/// compute service persists a snapshot computed from real source events
+/// (agent-events volume, enrichment decision outcomes). Standing (P1).
+pub const CANARY_REC4_KPI: &str = "CANARY-VC-REC4-KPI";
+
+/// The ontology class-count canary (RES-d, PRD-023 WP-12). Fires when the
+/// class-count route returns a live count read from Oxigraph — the source the
+/// canon `DriftCounter` consumes. One-shot (P1).
+pub const CANARY_RESD_COUNT: &str = "CANARY-VC-RESD-COUNT";
+
 /// The P1-wave canaries this repository seeds at start-up (PRD-023 canary
 /// table). Idempotent, so re-seeding on every boot is safe. Kept separate from
 /// [`P0_CANARIES`] so each wave's rows stay legible; more P1 rows land as their
@@ -121,6 +143,34 @@ pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[
     (
         CANARY_D8_OBS,
         "Aggregate swarm-observability dashboard mounted with live poll data",
+        "one-shot",
+        "P1",
+    ),
+    (
+        CANARY_D1_BEAM,
+        "0x23 AGENT_ACTION beam frame / non-empty /api/bots/agents roster — live \
+         agent activity reaching the client data path",
+        "standing",
+        "P1",
+    ),
+    (
+        CANARY_REC3_CTC,
+        "Agent-events envelope carrying a populated typed CTC field \
+         (handoff_count / token_burden / verification_outcome)",
+        "one-shot",
+        "P1",
+    ),
+    (
+        CANARY_REC4_KPI,
+        "KPI snapshot computed from real source events (agent-events volume, \
+         enrichment decision outcomes), persisted and pushed to the dashboard",
+        "standing",
+        "P1",
+    ),
+    (
+        CANARY_RESD_COUNT,
+        "Class-count route returns a live ontology class count read from Oxigraph \
+         (the canon DriftCounter source)",
         "one-shot",
         "P1",
     ),

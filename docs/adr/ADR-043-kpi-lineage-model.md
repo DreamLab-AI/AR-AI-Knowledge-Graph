@@ -2,11 +2,28 @@
 
 ## Status
 
-Accepted
+Accepted (2026-04-14) — **Resurrection in progress** (2026-07-08, gap-close sprint REC-4 / PRD-023 WP-8).
+
+For three months this ADR carried zero implementation: it specified a Neo4j
+`OrganisationalMetricSnapshot` with `DERIVED_FROM` lineage, and the codebase runs
+Oxigraph + SQLite, not Neo4j — so a literal implementation needed a storage
+redesign before a single line of dashboard code. **ADR-130 Decision 5** re-targets
+the snapshot store from Neo4j to a SQLite metrics table
+(`adapters/sqlite_kpi_repository.rs`, `data/kpi.sqlite3`) with lineage held as
+`kpi_lineage` rows (the `DERIVED_FROM` model re-expressed relationally), and
+computes **Augmentation Ratio** and **Trust Variance** first, from sources that
+already exist (`/wss/agent-events` volume, `enrichment_decisions` outcomes)
+without new emit-site instrumentation. **Mesh Velocity** and **HITL Precision**
+remain deferred until the REC-10 loop and the WP-4 case queue supply their source
+events — the dashboard renders them honestly as "awaiting data source", never
+faked. The four-KPI panel (`client/src/features/control-center/kpi/`) and
+`GET /api/kpi/{summary,lineage}` land in this commit; the Neo4j storage
+assumption below is **superseded by ADR-130 Decision 5** and retained only for
+historical context.
 
 ## Date
 
-2026-04-14
+2026-04-14 (accepted); 2026-07-08 (resurrection, ADR-130 Decision 5)
 
 ## Context
 

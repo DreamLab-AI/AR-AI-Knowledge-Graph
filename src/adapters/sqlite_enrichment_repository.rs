@@ -438,6 +438,34 @@ impl SqliteEnrichmentRepository {
             .map_err(map_db_err)
     }
 
+    /// Decision outcomes recorded at or after `cutoff_ms`, newest first. Backs
+    /// the REC-4 KPI compute (ADR-130 D5): the escalation volume is the row
+    /// count and the Trust-Variance dispersion is over the `outcome` column, both
+    /// windowed on `decided_at_ms`. Returns `(outcome, activity_urn, decided_at_ms)`
+    /// so the KPI lineage can trace a value back to each contributing decision.
+    pub async fn decisions_since(
+        &self,
+        cutoff_ms: i64,
+    ) -> Result<Vec<(String, String, i64)>> {
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "SELECT outcome, activity_urn, decided_at_ms
+                     FROM enrichment_decisions
+                     WHERE decided_at_ms >= ?1
+                     ORDER BY decided_at_ms DESC, id DESC",
+                )?;
+                let mut q = stmt.query(rusqlite::params![cutoff_ms])?;
+                let mut out = Vec::new();
+                while let Some(r) = q.next()? {
+                    out.push((r.get(0)?, r.get(1)?, r.get(2)?));
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(map_db_err)
+    }
+
     /// All decisions for a case, newest first. Backs the WS-9 decision-log read
     /// (the broker-bridge `cases/{id}/history` follow-on).
     pub async fn decisions_for(&self, case_id: &str) -> Result<Vec<StoredDecision>> {
@@ -561,6 +589,34 @@ mod tests {
             .unwrap();
         let decisions = repo.decisions_for("case-3").await.unwrap();
         assert!(decisions[0].writeback_committed, "committed now true");
+    }
+
+    #[tokio::test]
+    async fn decisions_since_windows_on_decided_at() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("case-w1")).await.unwrap();
+        repo.create_or_update(&proposal("case-w2")).await.unwrap();
+        // Two decisions inside the window, one before the cutoff.
+        let mut d1 = decision("case-w1", true);
+        d1.decided_at_ms = 2_000;
+        d1.activity_urn = "urn:visionclaw:execution:sha256-12-aaaaaaaaaaaa".into();
+        let mut d2 = decision("case-w2", true);
+        d2.outcome = "reject".into();
+        d2.decided_at_ms = 3_000;
+        d2.activity_urn = "urn:visionclaw:execution:sha256-12-bbbbbbbbbbbb".into();
+        let mut d0 = decision("case-w1", true);
+        d0.decided_at_ms = 500;
+        d0.activity_urn = "urn:visionclaw:execution:sha256-12-cccccccccccc".into();
+        repo.record_decision(&d0).await.unwrap();
+        repo.record_decision(&d1).await.unwrap();
+        repo.record_decision(&d2).await.unwrap();
+
+        let windowed = repo.decisions_since(1_000).await.unwrap();
+        assert_eq!(windowed.len(), 2, "only decisions at/after cutoff are returned");
+        // Newest first.
+        assert_eq!(windowed[0].0, "reject");
+        assert_eq!(windowed[0].2, 3_000);
+        assert!(windowed.iter().all(|(_, _, ts)| *ts >= 1_000));
     }
 
     #[test]

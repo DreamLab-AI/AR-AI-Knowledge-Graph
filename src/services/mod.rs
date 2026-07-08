@@ -52,6 +52,10 @@ pub mod nostr_identity_verifier;
 // RES-a: sprint-wide live-traffic observer + KG-backend watchdog (ADR-130 D3)
 pub mod liveness_harness;
 
+// REC-4: four-KPI compute engine (Augmentation Ratio, Trust Variance) with
+// SQLite snapshots + lineage; ADR-043 resurrected per ADR-130 Decision 5.
+pub mod kpi_compute;
+
 // RES-a / WP-11 AC3: Nostr-relay tap so Nostr-only repositories (nostr-rust-forum,
 // solid-pod-rs) can fire canaries they cannot POST over HTTP (ADR-130 D3).
 pub mod canary_nostr_tap;

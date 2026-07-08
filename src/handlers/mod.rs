@@ -71,6 +71,15 @@ pub use broker_inbox_handler::configure_routes as configure_broker_inbox_routes;
 pub mod liveness_harness_handler;
 pub use liveness_harness_handler::configure_routes as configure_liveness_routes;
 
+// REC-4 (PRD-023 WP-8): four-KPI dashboard surface — /api/kpi/{summary,lineage}
+pub mod kpi_handler;
+pub use kpi_handler::configure_routes as configure_kpi_routes;
+
+// RES-d (PRD-023 WP-12): script-queryable ontology class-count source for the
+// canon DriftCounter — /api/ontology/class-count
+pub mod ontology_class_count_handler;
+pub use ontology_class_count_handler::configure_routes as configure_ontology_class_count_routes;
+
 // Layout mode system (ADR-031)
 pub mod layout_handler;
 pub use layout_handler::configure_layout_routes;

@@ -735,6 +735,9 @@ async fn main() -> std::io::Result<()> {
     // RES-a: capture the harness handle before `app_state_data` moves into the
     // server factory closure, so the KG watchdog spawned below can reach it.
     let watchdog_harness = app_state_data.liveness_harness.clone();
+    // REC-4: likewise capture the KPI store handle for the agent-event volume
+    // tap spawned below, before `app_state_data` moves into the closure.
+    let tap_kpi_repo = app_state_data.sqlite_kpi_repository.clone();
     let server =
         HttpServer::new(move || {
             // CORS configuration with security-aware origin handling
@@ -827,6 +830,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(app_state_data.clone())
             // RES-a: the LivenessHarness backs /api/canary/* and the KG watchdog.
             .app_data(web::Data::from(app_state_data.liveness_harness.clone()))
+            // REC-4: the KpiComputeService backs /api/kpi/{summary,lineage}.
+            .app_data(web::Data::from(app_state_data.kpi_compute_service.clone()))
             .app_data(pre_read_ws_settings_data.clone())
             .app_data(web::Data::new(metrics_handler::ProcessStartTime(process_start_time)))
 
@@ -956,6 +961,14 @@ async fn main() -> std::io::Result<()> {
                     // RES-a: LivenessHarness — /api/canary/{register,observe,status}
                     .configure(visionclaw_server::handlers::configure_liveness_routes)
 
+                    // REC-4 (ADR-043 resurrection): four-KPI dashboard —
+                    // /api/kpi/{summary,lineage}
+                    .configure(visionclaw_server::handlers::configure_kpi_routes)
+
+                    // RES-d: script-queryable ontology class-count source for the
+                    // canon DriftCounter — /api/ontology/class-count
+                    .configure(visionclaw_server::handlers::configure_ontology_class_count_routes)
+
                     // Layout mode system (ADR-031)
                     .configure(visionclaw_server::handlers::configure_layout_routes)
 
@@ -985,6 +998,19 @@ async fn main() -> std::io::Result<()> {
             self_url,
             std::time::Duration::from_secs(watchdog_secs),
         ));
+    }
+
+    // REC-4 (ADR-130 D5): the agent-event volume tap. Subscribes to the
+    // process-global /wss/agent-events hub (the same seam the render actor uses)
+    // and records one volume row per envelope into the KPI store — the
+    // Augmentation Ratio numerator source, read without new emit-site
+    // instrumentation. Detached; fail-open on a lagged/closed channel.
+    {
+        let kpi_repo = tap_kpi_repo.clone();
+        tokio::spawn(visionclaw_server::services::kpi_compute::run_agent_event_tap(
+            kpi_repo,
+        ));
+        info!("[main] KPI agent-event volume tap spawned");
     }
 
     // RES-a / WP-11 AC3 / ADR-130 D3: the Nostr-relay tap lets Nostr-only

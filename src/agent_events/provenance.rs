@@ -122,6 +122,9 @@ mod tests {
             source_urn: source.map(str::to_string),
             target_urn: target.map(str::to_string),
             pubkey: pubkey.map(str::to_string),
+            handoff_count: None,
+            token_burden: None,
+            verification_outcome: None,
             metadata: json!(null),
         }
     }

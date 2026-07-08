@@ -78,6 +78,30 @@ pub struct AgentActionEnvelope {
     #[serde(default)]
     pub pubkey: Option<String>,
 
+    /// REC-3 (PRD-023 WP-7) — contextual transaction cost, first-class typed.
+    ///
+    /// Additive and versioned: each field is `#[serde(default)]` so a producer
+    /// that omits it (every pre-REC-3 emitter) still deserialises, and a consumer
+    /// that does not read it is unaffected. agentbox emits these from
+    /// `management-api/utils/agent-event-publisher.js` (its ADR-037); the names
+    /// here are the contract fixed by PRD-023/ADR-130.
+    ///
+    ///   * `handoff_count`       — number of agent→agent handoffs on the DAG edge
+    ///                             this action closes.
+    ///   * `token_burden`        — cumulative model tokens spent to reach this
+    ///                             action (full width; a DAG can burn > u32).
+    ///   * `verification_outcome`— the DAG verification verdict for this action
+    ///                             (e.g. `"passed"` / `"failed"` / `"skipped"`).
+    ///
+    /// CTC data is a first-class member, NOT a free-form `metadata` key, so a
+    /// consumer can read it without parsing the untyped blob (WP-7 falsification).
+    #[serde(default)]
+    pub handoff_count: Option<u32>,
+    #[serde(default)]
+    pub token_burden: Option<u64>,
+    #[serde(default)]
+    pub verification_outcome: Option<String>,
+
     #[serde(default)]
     pub metadata: Value,
 }
@@ -85,6 +109,16 @@ pub struct AgentActionEnvelope {
 impl AgentActionEnvelope {
     pub fn action_type(&self) -> AgentActionType {
         AgentActionType::from(self.action_type)
+    }
+
+    /// True when at least one typed contextual-transaction-cost field is
+    /// populated (REC-3, PRD-023 WP-7). The `CANARY-VC-REC3-CTC` fire predicate:
+    /// an envelope carrying a populated typed CTC field proves CTC data rides the
+    /// wire as a first-class member, not the untyped `metadata` blob.
+    pub fn has_ctc(&self) -> bool {
+        self.handoff_count.is_some()
+            || self.token_burden.is_some()
+            || self.verification_outcome.is_some()
     }
 
     /// Project the identity-bearing JSON envelope onto the identity-blind binary
@@ -182,6 +216,62 @@ mod tests {
         assert!(n.params.event.target_urn.is_none());
         assert!(n.params.event.pubkey.is_none());
         assert!(n.params.event.metadata.is_null());
+    }
+
+    // REC-3 (WP-7): a canonical frame carrying the typed CTC fields.
+    fn canonical_json_with_ctc() -> &'static str {
+        r#"{
+          "jsonrpc": "2.0",
+          "method": "notifications/agent_action",
+          "params": {
+            "type": "agent_action",
+            "event": {
+              "version": 3, "id": 9, "source_agent_id": 3, "target_node_id": 88,
+              "action_type": 2, "action_type_name": "handoff",
+              "timestamp": 1748500000000, "duration_ms": 900,
+              "handoff_count": 4,
+              "token_burden": 5000000000,
+              "verification_outcome": "passed",
+              "metadata": { "dag": "d-1" }
+            },
+            "message_type": 35, "protocol_version": 2,
+            "timestamp": "2026-05-29T00:00:00.000Z"
+          }
+        }"#
+    }
+
+    #[test]
+    fn ctc_fields_deserialise_typed_and_report_present() {
+        let n: AgentActionNotification =
+            serde_json::from_str(canonical_json_with_ctc()).expect("parse");
+        let e = &n.params.event;
+        assert_eq!(e.handoff_count, Some(4));
+        // Full-width: 5_000_000_000 does not fit u32 — the field must be u64.
+        assert_eq!(e.token_burden, Some(5_000_000_000));
+        assert_eq!(e.verification_outcome.as_deref(), Some("passed"));
+        assert!(e.has_ctc(), "a populated CTC field ⇒ has_ctc()");
+    }
+
+    #[test]
+    fn ctc_absent_deserialises_as_none_and_has_ctc_false() {
+        // Backward compatibility: a pre-REC-3 producer omits every CTC field
+        // and must still parse, with has_ctc() false (the canary does not fire).
+        let n: AgentActionNotification =
+            serde_json::from_str(canonical_json_with_identity()).expect("parse");
+        let e = &n.params.event;
+        assert!(e.handoff_count.is_none());
+        assert!(e.token_burden.is_none());
+        assert!(e.verification_outcome.is_none());
+        assert!(!e.has_ctc(), "no CTC field ⇒ has_ctc() false");
+    }
+
+    #[test]
+    fn ctc_round_trips_through_serde() {
+        let n: AgentActionNotification =
+            serde_json::from_str(canonical_json_with_ctc()).expect("parse");
+        let s = serde_json::to_string(&n).expect("serialise");
+        let n2: AgentActionNotification = serde_json::from_str(&s).expect("reparse");
+        assert_eq!(n, n2);
     }
 
     #[test]

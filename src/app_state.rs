@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 // Oxigraph adapters — canonical persistence layer (ADR-11)
 use crate::adapters::{
     OxigraphGraphRepository, OxigraphOntologyRepository, SqliteEnrichmentRepository,
-    SqliteSettingsRepository,
+    SqliteKpiRepository, SqliteSettingsRepository,
 };
 
 // CQRS Phase 1D: Graph domain imports
@@ -317,6 +317,12 @@ pub struct AppState {
     // tokio watchdog spawned in main.rs. Own SQLite file (data/liveness.sqlite3).
     pub liveness_harness: Arc<crate::services::liveness_harness::LivenessHarness>,
 
+    // REC-4 (ADR-130 Decision 5): durable KPI snapshot + lineage store
+    // (data/kpi.sqlite3) and the compute engine over it. The store is fed by the
+    // agent-event volume tap spawned in main.rs; the service backs /api/kpi/*.
+    pub sqlite_kpi_repository: Arc<SqliteKpiRepository>,
+    pub kpi_compute_service: Arc<crate::services::kpi_compute::KpiComputeService>,
+
     // Oxigraph graph repository — canonical knowledge graph store (ADR-11)
     pub graph_adapter: Arc<OxigraphGraphRepository>,
 
@@ -449,6 +455,24 @@ impl AppState {
         if let Err(e) = liveness_harness.seed_p1_canaries().await {
             warn!("[AppState::new] failed to seed P1 liveness canaries: {}", e);
         }
+
+        // REC-4 (ADR-130 Decision 5): durable KPI snapshot + lineage store —
+        // SEPARATE db file so its single-writer posture stays isolated. The
+        // compute service reads the enrichment decision store + the agent-event
+        // volume (tapped from the hub in main.rs) and fires CANARY-VC-REC4-KPI.
+        let kpi_db_path = std::path::Path::new(&data_dir).join("kpi.sqlite3");
+        let sqlite_kpi_repository = Arc::new(
+            SqliteKpiRepository::open(&kpi_db_path)
+                .await
+                .map_err(|e| format!("Failed to open SQLite KPI store: {}", e))?,
+        );
+        let kpi_compute_service = Arc::new(
+            crate::services::kpi_compute::KpiComputeService::new(
+                sqlite_kpi_repository.clone(),
+                sqlite_enrichment_repository.clone(),
+                liveness_harness.clone(),
+            ),
+        );
 
         // COM-15 / D6 / M5: the previously consumerless AudioRouter now gets a
         // consumer — it holds the per-user selected-agent PTT binding the
@@ -1210,6 +1234,8 @@ impl AppState {
             sqlite_settings_repository,
             sqlite_enrichment_repository,
             liveness_harness,
+            sqlite_kpi_repository,
+            kpi_compute_service,
 
             graph_adapter,
 
