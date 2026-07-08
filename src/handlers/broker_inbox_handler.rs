@@ -164,7 +164,16 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/broker")
             .wrap(RequireAuth::power_user())
             .route("/inbox", web::get().to(inbox))
-            .route("/cases/{id}", web::get().to(case_by_id)),
+            .route("/cases/{id}", web::get().to(case_by_id))
+            // REC-2 / D3 (PRD-023 WP-4): the control-centre operator decide
+            // path. Power-user-gated by the surrounding scope; funnels through
+            // the same decision core as the agentbox `X-Agent-Key` route.
+            .route(
+                "/cases/{id}/decide",
+                web::post().to(
+                    crate::handlers::enrichment_proposals_handler::decide_as_operator,
+                ),
+            ),
     );
 }
 

@@ -8,6 +8,8 @@ import { SpaceMouseStatus } from '../components/SpaceMouseStatus';
 import { AudioInputService } from '../services/AudioInputService';
 import { graphDataManager, type GraphData } from '../features/graph/managers/graphDataManager';
 import { NodeDetailPanel } from '../features/graph/components/NodeDetailPanel';
+import { AgentOpsSurface } from '../features/control-center/agents/AgentOpsSurface';
+import { AcspCaseQueue } from '../features/control-center/governance/AcspCaseQueue';
 import { createLogger } from '../utils/loggerConfig';
 
 const logger = createLogger('MainLayout');
@@ -85,6 +87,14 @@ const MainLayoutContent: React.FC = () => {
 
       {/* Node detail slide-in panel — driven by visionclaw:node-selected events */}
       <NodeDetailPanel />
+
+      {/* D2/D8 (PRD-023 WP-3): per-agent steering + swarm observability, opened
+          behind an agent-node selection or the ambient "Agents" pill. */}
+      <AgentOpsSurface />
+
+      {/* REC-2/D3 (PRD-023 WP-4): broker case queue + ambient ACSP open-case
+          indicator, driven by broker:* WS events. */}
+      <AcspCaseQueue />
 
       {/* OntologyPanel is accessed via the control panel's ontology tab, not rendered as overlay */}
 

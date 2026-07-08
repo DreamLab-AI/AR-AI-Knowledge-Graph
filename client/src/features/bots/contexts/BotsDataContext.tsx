@@ -352,3 +352,12 @@ export const useBotsData = () => {
   }
   return context;
 };
+
+/**
+ * Non-throwing accessor for surfaces that may render outside a
+ * `BotsDataProvider` (e.g. the control-centre AgentOps surface in an isolated
+ * test harness). Returns `null` when no provider is present so the surface can
+ * degrade to an empty state instead of crashing.
+ */
+export const useBotsDataOptional = (): BotsDataContextType | null =>
+  useContext(BotsDataContext) ?? null;

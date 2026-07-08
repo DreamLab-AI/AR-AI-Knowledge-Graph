@@ -31,8 +31,12 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     progress?: number;
   }>({ status: 'idle' });
   const [taskPriority, setTaskPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const [interruptStatus, setInterruptStatus] = useState<{
+    status: 'idle' | 'interrupting' | 'done' | 'error';
+    message?: string;
+  }>({ status: 'idle' });
 
-  
+
   useEffect(() => {
     if (!botsData || !botsData.agents) {
       setSelectedAgent(null);
@@ -53,6 +57,30 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     setSelectedAgent(agent || null);
     if (onAgentSelect && agent) {
       onAgentSelect(agent.id);
+    }
+  };
+
+  // D2 steering: interrupt/stop the selected agent's current task. Agents are
+  // keyed by their MCP task id, so the agent id is the interrupt target.
+  const handleInterrupt = async () => {
+    if (!selectedAgent) return;
+    try {
+      setInterruptStatus({ status: 'interrupting', message: 'Interrupting agent…' });
+      const apiResponse = await unifiedApiClient.post('/bots/interrupt', {
+        taskId: selectedAgent.id,
+        agentId: selectedAgent.id,
+        swarmId: selectedAgent.swarmId || 'default',
+      });
+      const response = apiResponse.data;
+      if (response?.success) {
+        setInterruptStatus({ status: 'done', message: response.message || 'Agent interrupted' });
+        setTimeout(() => setInterruptStatus({ status: 'idle' }), 3000);
+      } else {
+        setInterruptStatus({ status: 'error', message: response?.error || 'Interrupt failed' });
+      }
+    } catch (error) {
+      logger.error('Failed to interrupt agent:', error);
+      setInterruptStatus({ status: 'error', message: 'Failed to interrupt agent' });
     }
   };
 
@@ -346,6 +374,28 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                    taskStatus.status === 'error' ? 'Retry Task' :
                    'Submit Task'}
                 </Button>
+
+                {/* D2 interrupt/stop control */}
+                <Button
+                  className="w-full"
+                  variant="destructive"
+                  disabled={interruptStatus.status === 'interrupting'}
+                  onClick={handleInterrupt}
+                >
+                  {interruptStatus.status === 'interrupting' ? 'Interrupting…' :
+                   interruptStatus.status === 'done' ? 'Interrupted' :
+                   'Interrupt / Stop Agent'}
+                </Button>
+
+                {interruptStatus.message && (
+                  <div className={`p-2 rounded text-xs ${
+                    interruptStatus.status === 'error' ? 'bg-red-50 text-red-600' :
+                    interruptStatus.status === 'done' ? 'bg-green-50 text-green-600' :
+                    'bg-blue-50 text-blue-600'
+                  }`}>
+                    {interruptStatus.message}
+                  </div>
+                )}
 
                 {}
                 {taskStatus.message && (

@@ -281,7 +281,8 @@ fn derive_kernel_decision(record: &RecordedDecision) -> (String, Option<serde_js
     }
 }
 
-/// `POST /api/enrichment-proposals/{id}/decide`.
+/// `POST /api/enrichment-proposals/{id}/decide` — the agentbox broker-bridge
+/// service-to-service decide route (gated by `X-Agent-Key`).
 pub async fn decide(
     req: HttpRequest,
     path: web::Path<String>,
@@ -293,9 +294,50 @@ pub async fn decide(
     if let Err(resp) = require_agent_key(&req) {
         return resp;
     }
+    apply_decision(
+        path.into_inner(),
+        body.into_inner(),
+        &state,
+        &client_coordinator,
+    )
+    .await
+}
 
-    let case_id = path.into_inner();
+/// `POST /api/broker/cases/{id}/decide` — the control-centre operator decide
+/// path (REC-2 / D3, PRD-023 WP-4). Mounted inside the `power_user()`-gated
+/// broker scope, so a human operator authenticated as a power user decides a
+/// queued case through the SAME kernel + persistence + `broker:case_decided`
+/// path as the agentbox bridge. The auth differs (session power-user vs the
+/// service `X-Agent-Key`); the decision core does not.
+///
+/// The operator's own pubkey attributes the decision (HITL provenance) when the
+/// body does not carry a broker pubkey and the operator presents a canonical
+/// x-only-hex key — a malformed key downgrades to unattributed, never an error.
+pub async fn decide_as_operator(
+    user: crate::settings::auth_extractor::AuthenticatedUser,
+    path: web::Path<String>,
+    body: web::Json<BrokerDecisionRequest>,
+    state: web::Data<AppState>,
+    client_coordinator: web::Data<actix::Addr<ClientCoordinatorActor>>,
+) -> HttpResponse {
+    let mut req = body.into_inner();
+    if req.broker_pubkey.is_none() && uri::is_pubkey_hex(&user.pubkey) {
+        req.broker_pubkey = Some(user.pubkey.clone());
+    }
+    apply_decision(path.into_inner(), req, &state, &client_coordinator).await
+}
 
+/// The shared decide core (REC-2 / D3): validate → mint provenance → persist →
+/// optional Oxigraph write-back → broadcast → `broker:new_case` /
+/// `broker:case_decided` → `CANARY-VC-REC2-CASE`. Both the service route
+/// (`decide`) and the operator route (`decide_as_operator`) funnel through here
+/// after their own auth gate, so there is exactly one decision path.
+pub(crate) async fn apply_decision(
+    case_id: String,
+    body: BrokerDecisionRequest,
+    state: &AppState,
+    client_coordinator: &actix::Addr<ClientCoordinatorActor>,
+) -> HttpResponse {
     let record = match record_decision(&case_id, &body) {
         Ok(r) => r,
         Err(e) => {

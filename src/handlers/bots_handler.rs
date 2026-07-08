@@ -1,5 +1,6 @@
 use crate::actors::messages::GetBotsGraphData;
-use crate::actors::{CreateTask, StopTask};
+use crate::actors::{CreateTask, GetTaskStatus, StopTask};
+use crate::services::liveness_harness::CANARY_D2_STEER;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::metadata::MetadataStore;
@@ -642,6 +643,229 @@ pub async fn remove_task(
     }
 }
 
+// ---------------------------------------------------------------------------
+// D2 steering surface (PRD-023 WP-3): per-agent submit-task / interrupt.
+//
+// `AgentDetailPanel.tsx` is the sole client call site of `/bots/submit-task`
+// (line 269) and — once mounted behind a node selection — of the new
+// `/bots/interrupt` route. Both reach the swarm through the SAME
+// `TaskOrchestratorActor` transport the sibling swarm routes already use
+// (`CreateTask` / `StopTask`), and both observe `CANARY-VC-D2-STEER` as live
+// traffic (DDD invariant 5 — the route was genuinely invoked, never a synthetic
+// probe). The responses are deliberately BARE JSON (not the `StandardResponse`
+// envelope) so the panel reads `response.taskId` / `statusRes.status` at the
+// top level, matching its existing contract.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmitTaskRequest {
+    /// Free-text task description entered in the panel.
+    pub task: String,
+    /// `low` | `medium` | `high` | `critical` (advisory; recorded in evidence).
+    #[serde(default)]
+    pub priority: Option<String>,
+    /// Swarm the steer targets; defaults to `default`.
+    #[serde(default)]
+    pub swarm_id: Option<String>,
+    /// Task-orchestration strategy hint (`adaptive` | `strategic` | `tactical`).
+    #[serde(default)]
+    pub strategy: Option<String>,
+    /// Explicit agent type; when absent it is derived from `strategy`.
+    #[serde(default)]
+    pub agent_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterruptRequest {
+    /// The task/agent id to interrupt. Agents are keyed by their MCP task id;
+    /// the field renames to `agentId` (camelCase), and `taskId`/`task_id` are
+    /// accepted as aliases for the same value.
+    #[serde(alias = "taskId", alias = "task_id")]
+    pub agent_id: String,
+    /// Swarm the interrupted agent belongs to (advisory; recorded in evidence).
+    #[serde(default)]
+    pub swarm_id: Option<String>,
+}
+
+/// `POST /api/bots/submit-task` — steer the selected agent's swarm with a new
+/// task. Mirrors `spawn_agent_hybrid`'s `CreateTask` transport; fires
+/// `CANARY-VC-D2-STEER` on a live invocation.
+pub async fn submit_task(
+    _auth: crate::settings::auth_extractor::AuthenticatedUser,
+    state: web::Data<AppState>,
+    req: web::Json<SubmitTaskRequest>,
+) -> Result<impl Responder> {
+    let task = req.task.trim().to_string();
+    if task.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "success": false,
+            "error": "task is empty",
+        })));
+    }
+
+    let strategy = req.strategy.clone().unwrap_or_else(|| "adaptive".to_string());
+    let agent_type = req.agent_type.clone().unwrap_or_else(|| {
+        match strategy.as_str() {
+            "strategic" => "planner",
+            "tactical" => "coder",
+            _ => "researcher",
+        }
+        .to_string()
+    });
+    let provider = std::env::var("PRIMARY_PROVIDER").unwrap_or_else(|_| "gemini".to_string());
+
+    let create_task_msg = CreateTask {
+        agent: agent_type.clone(),
+        task: task.clone(),
+        provider: provider.clone(),
+    };
+
+    match state
+        .get_task_orchestrator_addr()
+        .send(create_task_msg)
+        .await
+    {
+        Ok(Ok(task_response)) => {
+            info!(
+                "Steer submit-task dispatched via Management API - Task ID: {}",
+                task_response.task_id
+            );
+
+            // D2 canary: a steer action reached the server from a mounted panel.
+            let evidence = format!(
+                "submit-task agent={agent_type} priority={:?} swarm={:?} task_id={}",
+                req.priority, req.swarm_id, task_response.task_id
+            );
+            if let Err(e) = state.liveness_harness.observe(CANARY_D2_STEER, &evidence).await {
+                log::debug!("[bots/submit-task] D2 canary observe skipped: {e}");
+            }
+
+            // BARE JSON: the panel reads `response.taskId` at the top level.
+            Ok(HttpResponse::Accepted().json(json!({
+                "success": true,
+                "taskId": task_response.task_id,
+                "message": "Task submitted to swarm",
+                "agentType": agent_type,
+                "provider": provider,
+            })))
+        }
+        Ok(Err(e)) => {
+            error!("Failed to submit steer task: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": format!("Failed to create task: {}", e),
+            })))
+        }
+        Err(e) => {
+            error!("Steer submit-task actor communication error: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": format!("Actor communication error: {}", e),
+            })))
+        }
+    }
+}
+
+/// `POST /api/bots/interrupt` — stop the selected agent's task. Mirrors
+/// `remove_task`'s `StopTask` transport but takes the id in the body (the
+/// interrupt control lives inside the per-agent panel); fires
+/// `CANARY-VC-D2-STEER` on a live invocation.
+pub async fn interrupt_task(
+    _auth: crate::settings::auth_extractor::AuthenticatedUser,
+    state: web::Data<AppState>,
+    req: web::Json<InterruptRequest>,
+) -> Result<impl Responder> {
+    let task_id = req.agent_id.trim().to_string();
+    if task_id.is_empty() {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "success": false,
+            "error": "agent/task id is empty",
+        })));
+    }
+
+    info!("Interrupting agent/task via Management API: {}", task_id);
+
+    let stop_task_msg = StopTask {
+        task_id: task_id.clone(),
+    };
+
+    match state.get_task_orchestrator_addr().send(stop_task_msg).await {
+        Ok(Ok(())) => {
+            info!("Successfully interrupted task: {}", task_id);
+
+            // D2 canary: an interrupt steer action reached the server.
+            let evidence = format!(
+                "interrupt agent/task={task_id} swarm={:?}",
+                req.swarm_id
+            );
+            if let Err(e) = state.liveness_harness.observe(CANARY_D2_STEER, &evidence).await {
+                log::debug!("[bots/interrupt] D2 canary observe skipped: {e}");
+            }
+
+            Ok(HttpResponse::Ok().json(json!({
+                "success": true,
+                "taskId": task_id,
+                "message": format!("Agent task {} interrupted", task_id),
+            })))
+        }
+        Ok(Err(e)) => {
+            error!("Failed to interrupt task {}: {}", task_id, e);
+            Ok(HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "taskId": task_id,
+                "error": format!("Failed to interrupt task: {}", e),
+            })))
+        }
+        Err(e) => {
+            error!("Interrupt actor communication error: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "taskId": task_id,
+                "error": format!("Actor communication error: {}", e),
+            })))
+        }
+    }
+}
+
+/// `GET /api/bots/task-status/{id}` — poll a steered task's real status through
+/// the orchestrator (`GetTaskStatus`). Returns the bare `TaskStatus` so the
+/// panel reads `statusRes.status` (`running` | `completed` | `failed`) directly;
+/// an unknown id is a clean 404 that ends the panel's poll.
+pub async fn get_task_status(
+    state: web::Data<AppState>,
+    path: web::Path<String>,
+) -> Result<impl Responder> {
+    let task_id = path.into_inner();
+
+    match state
+        .get_task_orchestrator_addr()
+        .send(GetTaskStatus {
+            task_id: task_id.clone(),
+        })
+        .await
+    {
+        Ok(Ok(status)) => Ok(HttpResponse::Ok().json(status)),
+        Ok(Err(e)) => {
+            log::debug!("[bots/task-status] {task_id} not resolvable: {e}");
+            Ok(HttpResponse::NotFound().json(json!({
+                "success": false,
+                "taskId": task_id,
+                "status": "not_found",
+                "error": e,
+            })))
+        }
+        Err(e) => {
+            error!("Task-status actor communication error: {}", e);
+            Ok(HttpResponse::InternalServerError().json(json!({
+                "success": false,
+                "error": format!("Actor communication error: {}", e),
+            })))
+        }
+    }
+}
+
 // pause_task and resume_task removed - Management API does not support pause/resume
 
 // Helper function for socket handler to get bot positions
@@ -670,5 +894,41 @@ pub async fn get_bots_positions(bots_client: &Arc<BotsClient>) -> Vec<BotsNodeDa
             error!("Failed to get bots positions: {}", e);
             vec![]
         }
+    }
+}
+
+#[cfg(test)]
+mod steering_tests {
+    use super::*;
+
+    #[test]
+    fn submit_task_request_parses_camel_case() {
+        let req: SubmitTaskRequest = serde_json::from_str(
+            r#"{"task":"do the thing","priority":"high","strategy":"adaptive","swarmId":"swarm-a"}"#,
+        )
+        .unwrap();
+        assert_eq!(req.task, "do the thing");
+        assert_eq!(req.priority.as_deref(), Some("high"));
+        assert_eq!(req.swarm_id.as_deref(), Some("swarm-a"));
+        assert_eq!(req.strategy.as_deref(), Some("adaptive"));
+    }
+
+    #[test]
+    fn interrupt_request_accepts_task_and_agent_id_aliases() {
+        // Primary camelCase rename.
+        let by_agent: InterruptRequest =
+            serde_json::from_str(r#"{"agentId":"task-1","swarmId":"swarm-a"}"#).unwrap();
+        assert_eq!(by_agent.agent_id, "task-1");
+        assert_eq!(by_agent.swarm_id.as_deref(), Some("swarm-a"));
+
+        // taskId alias resolves to the same field.
+        let by_task: InterruptRequest = serde_json::from_str(r#"{"taskId":"task-2"}"#).unwrap();
+        assert_eq!(by_task.agent_id, "task-2");
+        assert!(by_task.swarm_id.is_none());
+
+        // snake_case alias too.
+        let by_snake: InterruptRequest =
+            serde_json::from_str(r#"{"task_id":"task-3"}"#).unwrap();
+        assert_eq!(by_snake.agent_id, "task-3");
     }
 }

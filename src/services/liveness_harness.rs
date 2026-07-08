@@ -88,17 +88,43 @@ pub const P0_CANARIES: &[(&str, &str, &str, &str)] = &[
 /// Kokoro TTS acknowledgement. Standing (P1).
 pub const CANARY_COM15_PTT: &str = "CANARY-VC-COM15-PTT";
 
+/// The steering-surface canary (D2, PRD-023 WP-3). Fires when a steer action
+/// (`/bots/submit-task` or `/bots/interrupt`) is invoked from a mounted
+/// per-agent panel — the route handler observes it as live traffic, so a fire
+/// means node selection opened a working steering control. Standing (P1).
+pub const CANARY_D2_STEER: &str = "CANARY-VC-D2-STEER";
+
+/// The swarm-observability canary (D8, PRD-023 WP-3). Fires when the aggregate
+/// swarm dashboard mounts with live poll data — the client observes it over
+/// `POST /api/canary/observe/{id}`. One-shot (P1).
+pub const CANARY_D8_OBS: &str = "CANARY-VC-D8-OBS";
+
 /// The P1-wave canaries this repository seeds at start-up (PRD-023 canary
 /// table). Idempotent, so re-seeding on every boot is safe. Kept separate from
 /// [`P0_CANARIES`] so each wave's rows stay legible; more P1 rows land as their
 /// items close.
-pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[(
-    CANARY_COM15_PTT,
-    "Spoken command bound to the selected agent → signed 31402 accepted by \
-     /v1/voice-intent → Kokoro TTS acknowledgement",
-    "standing",
-    "P1",
-)];
+pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[
+    (
+        CANARY_COM15_PTT,
+        "Spoken command bound to the selected agent → signed 31402 accepted by \
+         /v1/voice-intent → Kokoro TTS acknowledgement",
+        "standing",
+        "P1",
+    ),
+    (
+        CANARY_D2_STEER,
+        "Steer action (/bots/submit-task or /bots/interrupt) invoked from a \
+         mounted per-agent panel",
+        "standing",
+        "P1",
+    ),
+    (
+        CANARY_D8_OBS,
+        "Aggregate swarm-observability dashboard mounted with live poll data",
+        "one-shot",
+        "P1",
+    ),
+];
 
 // KG gauge tri-state (an atomic 3-valued gauge, mirroring the AtomicUsize
 // counter idiom used for `active_connections`).
