@@ -82,8 +82,8 @@ pub use supervisor::{
     ActorFactory, SupervisedActorInfo, SupervisedActorTrait, SupervisionStrategy, SupervisorActor,
 };
 pub use task_orchestrator_actor::{
-    CreateTask, GetSystemStatus, GetTaskStatus, ListActiveTasks, StopTask, SystemStatusInfo,
-    TaskOrchestratorActor, TaskState,
+    CreateTask, GetSystemStatus, GetTaskStatus, InterruptAgentTask, InterruptError,
+    ListActiveTasks, StopTask, SystemStatusInfo, TaskOrchestratorActor, TaskState,
 };
 pub use voice_commands::{SwarmIntent, SwarmVoiceResponse, VoiceCommand, VoicePreamble};
 pub use workspace_actor::WorkspaceActor;

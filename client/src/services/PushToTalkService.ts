@@ -10,6 +10,7 @@
  */
 
 import { createLogger } from '../utils/loggerConfig';
+import { isCanonicalDid } from '../features/voice/pttAgentBinding';
 
 const logger = createLogger('PushToTalkService');
 
@@ -45,7 +46,15 @@ export class PushToTalkService {
   private boundKeyDown: (e: KeyboardEvent) => void;
   private boundKeyUp: (e: KeyboardEvent) => void;
   private userId: string | null = null;
-  private wsNotifyCallback: ((pttActive: boolean) => void) | null = null;
+  private wsNotifyCallback: ((pttActive: boolean, selectedAgentDid: string | null) => void) | null = null;
+  /**
+   * COM-15 / D6: the selected agent's `did:nostr` this PTT session is bound to.
+   * When set, a spoken command is addressed to that agent (governed voice loop);
+   * when null, PTT is unbound and a command falls back to the settings assistant.
+   * This is the selected-agent binding the register found missing — PTT is no
+   * longer globally scoped.
+   */
+  private selectedAgentDid: string | null = null;
 
   private constructor(config?: Partial<PTTConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -81,9 +90,41 @@ export class PushToTalkService {
     logger.info('PTT deactivated');
   }
 
-  /** Register a callback to notify the server of PTT state changes */
-  onServerNotify(callback: (pttActive: boolean) => void): void {
+  /**
+   * Register a callback to notify the server of PTT state changes. The callback
+   * receives the PTT-active flag AND the currently bound agent `did:nostr` (or
+   * null), so the server can bind the selected agent onto the session at
+   * PTT-start (COM-15 / D6 AC1).
+   */
+  onServerNotify(callback: (pttActive: boolean, selectedAgentDid: string | null) => void): void {
     this.wsNotifyCallback = callback;
+  }
+
+  /**
+   * COM-15 / D6: bind (or clear) the selected agent for this PTT session. Driven
+   * by graph selection (see `usePushToTalkAgentBinding`). Only a canonical
+   * `did:nostr` binds; anything else clears the binding (verify before trust). If
+   * PTT is already commanding, the server is re-notified so the new target takes
+   * effect immediately.
+   */
+  setSelectedAgentDid(did: string | null): void {
+    const next = isCanonicalDid(did) ? did : null;
+    if (next === this.selectedAgentDid) return;
+    this.selectedAgentDid = next;
+    logger.debug(`PTT bound agent → ${next ?? '(none)'}`);
+    if (this.state === 'commanding' && this.wsNotifyCallback) {
+      this.wsNotifyCallback(true, this.selectedAgentDid);
+    }
+  }
+
+  /** The `did:nostr` this PTT session is currently bound to, if any. */
+  getSelectedAgentDid(): string | null {
+    return this.selectedAgentDid;
+  }
+
+  /** True iff PTT is bound to a selected agent (a governed target exists). */
+  isBoundToAgent(): boolean {
+    return this.selectedAgentDid !== null;
   }
 
   /** Listen for state changes */
@@ -183,9 +224,10 @@ export class PushToTalkService {
 
     logger.debug(`PTT state: ${oldState} → ${newState}`);
 
-    // Notify server of PTT state
+    // Notify server of PTT state AND the bound agent, so a PTT-start carries the
+    // selected agent's did:nostr onto the server session (COM-15 / D6 AC1).
     if (this.wsNotifyCallback) {
-      this.wsNotifyCallback(newState === 'commanding');
+      this.wsNotifyCallback(newState === 'commanding', this.selectedAgentDid);
     }
 
     // Notify listeners

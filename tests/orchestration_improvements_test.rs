@@ -113,6 +113,7 @@ mod task_orchestrator_tests {
                 agent: "test-agent".to_string(),
                 task: "do something".to_string(),
                 provider: "openai".to_string(),
+                claude_flow_agent_id: None,
             })
             .await
             .expect("mailbox send ok");
@@ -138,6 +139,7 @@ mod task_orchestrator_tests {
                 agent: "test-agent".to_string(),
                 task: "probe".to_string(),
                 provider: "openai".to_string(),
+                claude_flow_agent_id: None,
             })
             .await
             .expect("mailbox send ok");

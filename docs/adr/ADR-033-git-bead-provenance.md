@@ -8,6 +8,16 @@ Proposed
 
 2026-05-16
 
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** This
+> ADR references "ADR-041 (BrokerActor)" as the canonical publisher of governance
+> decisions. That `BrokerActor` never merged to `main` (ADR-130 Decision 2
+> supersedes its transport + Neo4j adapter). On `main` the publisher is the
+> ADR-110 ACSP producer (`ElevationActor`) plus the enrichment-decide handler,
+> both sitting over the storage-agnostic broker kernel now ported to
+> `src/domain/broker/`. Read "`BrokerActor`" below as "the broker governance
+> publisher" — the git-bead provenance design is unchanged by which actor writes
+> the `BrokerDecisionMade` event.
+
 ## Context
 
 Three converging workstreams make a git-backed audit trail for governance
@@ -18,10 +28,13 @@ events compelling — and cheap:
    PolicyChange — is published as a Nostr event signed by the actor's
    pod-resident key. Provenance today is the **signature chain**.
 
-2. **ADR-041 (BrokerActor)** is the canonical publisher of those signed
-   governance decisions to the server pod under `events/governance/`.
-   Currently those writes go through the JSS sidecar via HTTP PUT; after
-   ADR-032 M3 they will go through embedded `solid-pod-rs` directly.
+2. **ADR-041 (broker governance publisher)** is the canonical publisher of
+   those signed governance decisions to the server pod under
+   `events/governance/`. On `main` this is the ADR-110 ACSP producer +
+   enrichment-decide handler over the ported `src/domain/broker/` kernel (ADR-130
+   Decision 2), not the unmerged `crashbug` `BrokerActor`. Currently those writes
+   go through the JSS sidecar via HTTP PUT; after ADR-032 M3 they will go through
+   embedded `solid-pod-rs` directly.
 
 3. **JSS upstream + solid-pod-rs alpha.12 (in flight — see task #1)** add
    `git init` at pod provisioning, plus a `solid-pod-rs-git` sibling crate
@@ -71,7 +84,10 @@ working tree. Any other directory (`events/inbox/`, `events/outbox/`,
 
 ### D2 — Commit-on-write
 
-For each `BrokerDecisionMade` event written to the pod by `BrokerActor`:
+For each `BrokerDecisionMade` event written to the pod by the broker
+governance publisher (on `main`, the ADR-110 ACSP producer plus the
+enrichment-decide handler over the ported `src/domain/broker/` kernel; the
+`crashbug` `BrokerActor` transport was superseded, ADR-130 Decision 2):
 
 | Git field | Value |
 |---|---|
@@ -149,8 +165,8 @@ otherwise rely on `.gitignore`.
   earlier author-dates). Acceptable.
 - **Two provenance systems to keep in sync.** A write that succeeds
   on Nostr but fails on git (e.g. disk full) is a partial-success
-  failure mode. Mitigation: BrokerActor must treat the git commit
-  as part of the write transaction — fail the whole publish if the
+  failure mode. Mitigation: the broker governance publisher must treat the
+  git commit as part of the write transaction — fail the whole publish if the
   commit fails. This is a constraint on the M3 wiring code.
 
 ### Neutral
@@ -193,8 +209,9 @@ This ADR is **proposed only** and cannot be accepted until:
    the writes go via HTTP through JSS, which does not expose the
    underlying filesystem in a way that lets us commit-on-write.)
 
-When all three land, BrokerActor's `publish_governance_decision()`
-gains a commit step. That code change is **NOT** in scope for this
+When all three land, the broker governance publisher's decision-write path
+(`publish_governance_decision()` in the ADR-041 design) gains a commit step.
+That code change is **NOT** in scope for this
 ADR and **NOT** in scope for the current audit pass.
 
 ## Related decisions
@@ -205,8 +222,10 @@ ADR and **NOT** in scope for the current audit pass.
 - **ADR-034** — Nostr-signed bead provenance. This ADR adds a git
   audit layer **beneath** ADR-034; signature chain remains canonical
   provenance.
-- **ADR-041** — BrokerActor. The publisher whose `publish_*` methods
-  will gain a commit step when this ADR is accepted.
+- **ADR-041** — the broker governance publisher (the superseded `crashbug`
+  `BrokerActor` design). On `main` the publisher is the ADR-110 ACSP producer
+  plus the enrichment-decide handler over the ported `src/domain/broker/`
+  kernel; its decision-write path gains a commit step when this ADR is accepted.
 - **Upstream ADR-087 (solid-pod-rs)** — CF-Workers-portable cores.
   Orthogonal: VisionClaw runs native, so the Worker portability gap
   does not constrain this design.

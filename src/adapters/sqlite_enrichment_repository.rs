@@ -74,6 +74,12 @@ CREATE TABLE IF NOT EXISTS enrichment_decisions (
     reasoning            TEXT,
     writeback_triggered  INTEGER NOT NULL,
     writeback_committed  INTEGER NOT NULL DEFAULT 0,
+    -- REC-10 (PRD-023 WP-12, Insight Ingestion Loop v1): the wall-clock at which
+    -- the merged-enrichment stage (the fenced Oxigraph :summary write) actually
+    -- landed. NULL until the write-back commits, so Mesh Velocity
+    -- (insight-to-integration time) is computable per closed loop. Additive; an
+    -- on-disk store predating REC-10 gains it via `apply_additive_migrations`.
+    writeback_committed_at_ms INTEGER,
     activity_urn         TEXT    NOT NULL,
     proposal_urn         TEXT,
     owner_did            TEXT,
@@ -109,6 +115,48 @@ fn map_db_err(e: tokio_rusqlite::Error) -> EnrichmentStoreError {
 
 fn map_json_err<E: std::fmt::Display>(e: E) -> EnrichmentStoreError {
     EnrichmentStoreError::Serialization(e.to_string())
+}
+
+/// Idempotent additive migrations for an on-disk store created before a column
+/// was added. `CREATE_SCHEMA`'s `CREATE TABLE IF NOT EXISTS` cannot alter an
+/// existing table, so a pre-REC-10 `enrichment.sqlite3` needs the new
+/// stage-timestamp column added explicitly. Guarded by a `PRAGMA table_info`
+/// check so it is a no-op once applied (and safe to run on every `open`).
+fn apply_additive_migrations(c: &rusqlite::Connection) -> rusqlite::Result<()> {
+    add_column_if_missing(
+        c,
+        "enrichment_decisions",
+        "writeback_committed_at_ms",
+        "INTEGER",
+    )
+}
+
+/// Add `column` to `table` iff it is not already present. `ALTER TABLE … ADD
+/// COLUMN` cannot express `IF NOT EXISTS` in SQLite, so the presence check is
+/// explicit.
+fn add_column_if_missing(
+    c: &rusqlite::Connection,
+    table: &str,
+    column: &str,
+    decl: &str,
+) -> rusqlite::Result<()> {
+    let present = {
+        let mut stmt = c.prepare(&format!("PRAGMA table_info({table})"))?;
+        let mut rows = stmt.query([])?;
+        let mut found = false;
+        while let Some(r) = rows.next()? {
+            let name: String = r.get(1)?;
+            if name == column {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if !present {
+        c.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
+    }
+    Ok(())
 }
 
 /// Map a broker outcome string to the durable proposal status. Approvals (in
@@ -160,6 +208,49 @@ pub struct StoredDecision {
     pub decided_at_ms: i64,
 }
 
+/// One case's joined loop-trace row (REC-10, Insight Ingestion Loop v1). Joins a
+/// governed-write-back-queue proposal to its terminal decision (the latest
+/// `decided_at_ms`) so the five-stage loop timeline is assembled from one read.
+/// The decision columns are `None` for a proposal still pending in the queue.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoopTraceRow {
+    pub case_id: String,
+    pub category: Option<String>,
+    /// Fine-grained proposal status (`pending` / `approved` / `rejected` / …).
+    pub status: String,
+    /// The proposal body. Stage timestamps that agentbox/the discovery pipeline
+    /// stamps on the `ontology_propose` event ride here (`proposed_at_ms` /
+    /// `queued_at_ms`); the assembler falls back to `created_at` when absent.
+    pub proposal_json: serde_json::Value,
+    /// Proposal-row creation instant (unix **seconds**). The moment the insight
+    /// entered the governed write-back queue when no finer stamp is on the body.
+    pub created_at_s: i64,
+    pub updated_at_s: i64,
+    /// Terminal decision fields (latest `decided_at_ms`), `None` while pending.
+    pub decision_outcome: Option<String>,
+    pub decided_at_ms: Option<i64>,
+    pub writeback_triggered: Option<bool>,
+    pub writeback_committed: Option<bool>,
+    /// Merged-enrichment instant — when the fenced Oxigraph write landed (REC-10).
+    pub writeback_committed_at_ms: Option<i64>,
+    pub activity_urn: Option<String>,
+    pub owner_did: Option<String>,
+}
+
+/// A broker decision projected for the unified provenance trace (REC-11). Carries
+/// the `did:nostr` attribution (`owner_did`) the trace joins on, the PROV-O
+/// activity URN, the outcome and the decision instant.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProvenanceDecisionRow {
+    pub case_id: String,
+    pub owner_did: Option<String>,
+    pub activity_urn: String,
+    pub proposal_urn: Option<String>,
+    pub outcome: String,
+    pub attributed: bool,
+    pub decided_at_ms: i64,
+}
+
 // ---------------------------------------------------------------------------
 // Repository
 // ---------------------------------------------------------------------------
@@ -177,6 +268,7 @@ impl SqliteEnrichmentRepository {
         let conn = Connection::open(db_path).await.map_err(map_db_err)?;
         conn.call(|c| {
             c.execute_batch(CREATE_SCHEMA)?;
+            apply_additive_migrations(c)?;
             Ok(())
         })
         .await
@@ -414,13 +506,17 @@ impl SqliteEnrichmentRepository {
     }
 
     /// Flip `writeback_committed = 1` on the latest decision for a case + an
-    /// activity URN, after the Oxigraph derived write returned `Ok`. Scoped by
-    /// `activity_urn` so the correct decision row is marked even if a case has
-    /// multiple decisions.
+    /// activity URN, after the Oxigraph derived write returned `Ok`, and stamp
+    /// the merged-enrichment stage timestamp (`committed_at_ms`, REC-10). Scoped
+    /// by `activity_urn` so the correct decision row is marked even if a case has
+    /// multiple decisions. The timestamp is only written when it is not already
+    /// set, so a re-mark never rewrites the first-commit time (the Mesh Velocity
+    /// integration instant stays stable).
     pub async fn mark_writeback_committed(
         &self,
         case_id: &str,
         activity_urn: &str,
+        committed_at_ms: i64,
     ) -> Result<()> {
         let case_id_owned = case_id.to_string();
         let activity_owned = activity_urn.to_string();
@@ -428,11 +524,44 @@ impl SqliteEnrichmentRepository {
             .call(move |c| {
                 let mut stmt = c.prepare_cached(
                     "UPDATE enrichment_decisions
-                     SET writeback_committed = 1
+                     SET writeback_committed = 1,
+                         writeback_committed_at_ms = COALESCE(writeback_committed_at_ms, ?3)
                      WHERE case_id = ?1 AND activity_urn = ?2",
                 )?;
-                stmt.execute(rusqlite::params![&case_id_owned, &activity_owned])?;
+                stmt.execute(rusqlite::params![
+                    &case_id_owned,
+                    &activity_owned,
+                    committed_at_ms
+                ])?;
                 Ok(())
+            })
+            .await
+            .map_err(map_db_err)
+    }
+
+    /// Decision outcomes recorded at or after `cutoff_ms`, newest first. Backs
+    /// the REC-4 KPI compute (ADR-130 D5): the escalation volume is the row
+    /// count and the Trust-Variance dispersion is over the `outcome` column, both
+    /// windowed on `decided_at_ms`. Returns `(outcome, activity_urn, decided_at_ms)`
+    /// so the KPI lineage can trace a value back to each contributing decision.
+    pub async fn decisions_since(
+        &self,
+        cutoff_ms: i64,
+    ) -> Result<Vec<(String, String, i64)>> {
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "SELECT outcome, activity_urn, decided_at_ms
+                     FROM enrichment_decisions
+                     WHERE decided_at_ms >= ?1
+                     ORDER BY decided_at_ms DESC, id DESC",
+                )?;
+                let mut q = stmt.query(rusqlite::params![cutoff_ms])?;
+                let mut out = Vec::new();
+                while let Some(r) = q.next()? {
+                    out.push((r.get(0)?, r.get(1)?, r.get(2)?));
+                }
+                Ok(out)
             })
             .await
             .map_err(map_db_err)
@@ -477,6 +606,172 @@ impl SqliteEnrichmentRepository {
             .await
             .map_err(map_db_err)
     }
+
+    /// Joined loop-trace rows (REC-10), newest proposal first, capped at `limit`.
+    /// Each proposal is joined to its **terminal** decision — the one with the
+    /// greatest `decided_at_ms` — so the five-stage loop is assembled from a
+    /// single read. A pending proposal joins to a row with `None` decision fields.
+    pub async fn loop_traces(&self, limit: i64) -> Result<Vec<LoopTraceRow>> {
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "SELECT p.case_id, p.category, p.status, p.proposal_json,
+                            p.created_at, p.updated_at,
+                            d.outcome, d.decided_at_ms, d.writeback_triggered,
+                            d.writeback_committed, d.writeback_committed_at_ms,
+                            d.activity_urn, d.owner_did
+                     FROM enrichment_proposals p
+                     LEFT JOIN enrichment_decisions d
+                       ON d.case_id = p.case_id
+                      AND d.decided_at_ms = (
+                            SELECT MAX(d2.decided_at_ms)
+                            FROM enrichment_decisions d2
+                            WHERE d2.case_id = p.case_id)
+                     ORDER BY p.created_at DESC, p.case_id DESC
+                     LIMIT ?1",
+                )?;
+                let mut q = stmt.query(rusqlite::params![limit])?;
+                let mut out = Vec::new();
+                while let Some(r) = q.next()? {
+                    out.push(row_to_loop_trace(r)?);
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(map_db_err)?
+            .into_iter()
+            .map(finalise_loop_trace)
+            .collect()
+    }
+
+    /// One case's joined loop-trace row (REC-10), or `None` if the case id is
+    /// unknown to the governed write-back queue.
+    pub async fn loop_trace_for(&self, case_id: &str) -> Result<Option<LoopTraceRow>> {
+        let case_id_owned = case_id.to_string();
+        let raw: Option<RawLoopTrace> = self
+            .conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "SELECT p.case_id, p.category, p.status, p.proposal_json,
+                            p.created_at, p.updated_at,
+                            d.outcome, d.decided_at_ms, d.writeback_triggered,
+                            d.writeback_committed, d.writeback_committed_at_ms,
+                            d.activity_urn, d.owner_did
+                     FROM enrichment_proposals p
+                     LEFT JOIN enrichment_decisions d
+                       ON d.case_id = p.case_id
+                      AND d.decided_at_ms = (
+                            SELECT MAX(d2.decided_at_ms)
+                            FROM enrichment_decisions d2
+                            WHERE d2.case_id = p.case_id)
+                     WHERE p.case_id = ?1",
+                )?;
+                let mut q = stmt.query(rusqlite::params![&case_id_owned])?;
+                if let Some(r) = q.next()? {
+                    Ok(Some(row_to_loop_trace(r)?))
+                } else {
+                    Ok(None)
+                }
+            })
+            .await
+            .map_err(map_db_err)?;
+        raw.map(finalise_loop_trace).transpose()
+    }
+
+    /// Broker decisions recorded at or after `cutoff_ms` for the unified
+    /// provenance trace (REC-11), newest first. Distinct from
+    /// [`decisions_since`](Self::decisions_since) (the KPI numerator read) in that
+    /// it carries the `did:nostr` attribution and PROV-O URNs the trace joins on.
+    pub async fn provenance_decisions_since(
+        &self,
+        cutoff_ms: i64,
+    ) -> Result<Vec<ProvenanceDecisionRow>> {
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "SELECT case_id, owner_did, activity_urn, proposal_urn, outcome,
+                            attributed, decided_at_ms
+                     FROM enrichment_decisions
+                     WHERE decided_at_ms >= ?1
+                     ORDER BY decided_at_ms DESC, id DESC",
+                )?;
+                let mut q = stmt.query(rusqlite::params![cutoff_ms])?;
+                let mut out = Vec::new();
+                while let Some(r) = q.next()? {
+                    let attributed: i64 = r.get(5)?;
+                    out.push(ProvenanceDecisionRow {
+                        case_id: r.get(0)?,
+                        owner_did: r.get(1)?,
+                        activity_urn: r.get(2)?,
+                        proposal_urn: r.get(3)?,
+                        outcome: r.get(4)?,
+                        attributed: attributed != 0,
+                        decided_at_ms: r.get(6)?,
+                    });
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(map_db_err)
+    }
+}
+
+/// A raw loop-trace row before `proposal_json` is parsed (the SQL text column
+/// carries the JSON blob). Deserialised on the worker thread, parsed after.
+struct RawLoopTrace {
+    case_id: String,
+    category: Option<String>,
+    status: String,
+    proposal_json_text: String,
+    created_at_s: i64,
+    updated_at_s: i64,
+    decision_outcome: Option<String>,
+    decided_at_ms: Option<i64>,
+    writeback_triggered: Option<bool>,
+    writeback_committed: Option<bool>,
+    writeback_committed_at_ms: Option<i64>,
+    activity_urn: Option<String>,
+    owner_did: Option<String>,
+}
+
+fn row_to_loop_trace(r: &rusqlite::Row<'_>) -> rusqlite::Result<RawLoopTrace> {
+    let triggered: Option<i64> = r.get(8)?;
+    let committed: Option<i64> = r.get(9)?;
+    Ok(RawLoopTrace {
+        case_id: r.get(0)?,
+        category: r.get(1)?,
+        status: r.get(2)?,
+        proposal_json_text: r.get(3)?,
+        created_at_s: r.get(4)?,
+        updated_at_s: r.get(5)?,
+        decision_outcome: r.get(6)?,
+        decided_at_ms: r.get(7)?,
+        writeback_triggered: triggered.map(|n| n != 0),
+        writeback_committed: committed.map(|n| n != 0),
+        writeback_committed_at_ms: r.get(10)?,
+        activity_urn: r.get(11)?,
+        owner_did: r.get(12)?,
+    })
+}
+
+fn finalise_loop_trace(raw: RawLoopTrace) -> Result<LoopTraceRow> {
+    let proposal_json: serde_json::Value =
+        serde_json::from_str(&raw.proposal_json_text).map_err(map_json_err)?;
+    Ok(LoopTraceRow {
+        case_id: raw.case_id,
+        category: raw.category,
+        status: raw.status,
+        proposal_json,
+        created_at_s: raw.created_at_s,
+        updated_at_s: raw.updated_at_s,
+        decision_outcome: raw.decision_outcome,
+        decided_at_ms: raw.decided_at_ms,
+        writeback_triggered: raw.writeback_triggered,
+        writeback_committed: raw.writeback_committed,
+        writeback_committed_at_ms: raw.writeback_committed_at_ms,
+        activity_urn: raw.activity_urn,
+        owner_did: raw.owner_did,
+    })
 }
 
 #[cfg(test)]
@@ -556,11 +851,114 @@ mod tests {
         repo.create_or_update(&proposal("case-3")).await.unwrap();
         let d = decision("case-3", false);
         repo.record_decision(&d).await.unwrap();
-        repo.mark_writeback_committed("case-3", &d.activity_urn)
+        repo.mark_writeback_committed("case-3", &d.activity_urn, 1_700_000_003_000)
             .await
             .unwrap();
         let decisions = repo.decisions_for("case-3").await.unwrap();
         assert!(decisions[0].writeback_committed, "committed now true");
+    }
+
+    #[tokio::test]
+    async fn loop_trace_joins_proposal_to_terminal_decision_with_monotonic_stamps() {
+        // REC-10 (Insight Ingestion Loop v1) end-to-end over the store: a proposal
+        // enters the governed write-back queue, is decided, and the merged-
+        // enrichment stage commits. The joined loop-trace row must carry an
+        // ascending stage timeline so Mesh Velocity is computable.
+        let repo = temp_repo().await;
+        // The ontology_propose event stamps its capture + queue-entry instants on
+        // the proposal body; the assembler prefers them over the coarse created_at.
+        let mut p = proposal("loop-1");
+        p.proposal_json = serde_json::json!({
+            "target_path": "pages/foo.md",
+            "proposed_at_ms": 1_700_000_000_000_i64,
+            "queued_at_ms":   1_700_000_001_000_i64,
+        });
+        repo.create_or_update(&p).await.unwrap();
+
+        let mut d = decision("loop-1", false);
+        d.decided_at_ms = 1_700_000_002_000; // stage 3
+        repo.record_decision(&d).await.unwrap();
+        repo.mark_writeback_committed("loop-1", &d.activity_urn, 1_700_000_003_000) // stage 4
+            .await
+            .unwrap();
+
+        let row = repo.loop_trace_for("loop-1").await.unwrap().expect("present");
+        assert_eq!(row.decision_outcome.as_deref(), Some("approve"));
+        assert_eq!(row.decided_at_ms, Some(1_700_000_002_000));
+        assert_eq!(row.writeback_committed, Some(true));
+        assert_eq!(row.writeback_committed_at_ms, Some(1_700_000_003_000));
+        // Propose ≤ queued ≤ decided ≤ merged (monotonic, proven end to end).
+        let propose = row
+            .proposal_json
+            .get("proposed_at_ms")
+            .and_then(|v| v.as_i64())
+            .unwrap();
+        let queued = row
+            .proposal_json
+            .get("queued_at_ms")
+            .and_then(|v| v.as_i64())
+            .unwrap();
+        assert!(propose <= queued);
+        assert!(queued <= row.decided_at_ms.unwrap());
+        assert!(row.decided_at_ms.unwrap() <= row.writeback_committed_at_ms.unwrap());
+    }
+
+    #[tokio::test]
+    async fn loop_trace_for_pending_proposal_has_no_decision() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("loop-pending")).await.unwrap();
+        let row = repo.loop_trace_for("loop-pending").await.unwrap().expect("present");
+        assert_eq!(row.status, "pending");
+        assert!(row.decided_at_ms.is_none());
+        assert!(row.writeback_committed_at_ms.is_none());
+    }
+
+    #[tokio::test]
+    async fn provenance_decisions_since_carries_owner_did_and_activity() {
+        // REC-11: the trace-facing decision read carries the did:nostr attribution
+        // and PROV-O activity URN the unified trace joins on.
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("prov-1")).await.unwrap();
+        let mut d = decision("prov-1", true);
+        d.owner_did = Some("did:nostr:aaaa".into());
+        d.decided_at_ms = 2_000;
+        repo.record_decision(&d).await.unwrap();
+
+        let rows = repo.provenance_decisions_since(1_000).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].owner_did.as_deref(), Some("did:nostr:aaaa"));
+        assert!(rows[0].activity_urn.starts_with("urn:visionclaw:execution:"));
+        assert!(rows[0].attributed);
+        // A cutoff after the decision returns nothing.
+        assert!(repo.provenance_decisions_since(3_000).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn decisions_since_windows_on_decided_at() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("case-w1")).await.unwrap();
+        repo.create_or_update(&proposal("case-w2")).await.unwrap();
+        // Two decisions inside the window, one before the cutoff.
+        let mut d1 = decision("case-w1", true);
+        d1.decided_at_ms = 2_000;
+        d1.activity_urn = "urn:visionclaw:execution:sha256-12-aaaaaaaaaaaa".into();
+        let mut d2 = decision("case-w2", true);
+        d2.outcome = "reject".into();
+        d2.decided_at_ms = 3_000;
+        d2.activity_urn = "urn:visionclaw:execution:sha256-12-bbbbbbbbbbbb".into();
+        let mut d0 = decision("case-w1", true);
+        d0.decided_at_ms = 500;
+        d0.activity_urn = "urn:visionclaw:execution:sha256-12-cccccccccccc".into();
+        repo.record_decision(&d0).await.unwrap();
+        repo.record_decision(&d1).await.unwrap();
+        repo.record_decision(&d2).await.unwrap();
+
+        let windowed = repo.decisions_since(1_000).await.unwrap();
+        assert_eq!(windowed.len(), 2, "only decisions at/after cutoff are returned");
+        // Newest first.
+        assert_eq!(windowed[0].0, "reject");
+        assert_eq!(windowed[0].2, 3_000);
+        assert!(windowed.iter().all(|(_, _, ts)| *ts >= 1_000));
     }
 
     #[test]

@@ -35,6 +35,11 @@ use serde::{Deserialize, Serialize};
 use crate::actors::messages::BroadcastMessage;
 use crate::actors::ClientCoordinatorActor;
 use crate::adapters::sqlite_enrichment_repository::{EnrichmentProposal as StoredProposal, StoredDecision};
+use crate::domain::broker::{
+    BrokerCase, CaseCategory, DecisionOrchestrator, DecisionOutcome, SubjectKind, SubjectRef,
+};
+use crate::services::broker_events;
+use crate::services::liveness_harness::CANARY_REC2_CASE;
 use crate::uri;
 use crate::AppState;
 
@@ -209,7 +214,75 @@ fn summary_triples_for(record: &RecordedDecision) -> Vec<(String, String, String
     )]
 }
 
-/// `POST /api/enrichment-proposals/{id}/decide`.
+/// Route the decision through the broker domain kernel (ADR-130 Decision 2) to
+/// obtain the canonical action vocabulary and any contributor-mesh-share
+/// transition plan, so `broker:case_decided` carries the same
+/// [`DecisionOutcome`] the ACSP producer and the forum consumer speak.
+///
+/// The durable [`SqliteEnrichmentRepository`](crate::adapters::sqlite_enrichment_repository)
+/// stays the persistence adapter; the kernel is the storage-agnostic domain
+/// model behind the decision. Returns `(action, share_plan_json)`.
+///
+/// This preserves the REST fallback's deliberate record-don't-reject posture: a
+/// decision the kernel would flag on a domain invariant still degrades to the
+/// mapped action rather than failing the already-persisted decision — the note
+/// is logged, not fatal. A verb the kernel does not recognise (e.g. the coarse
+/// `reviewed` sub-state) degrades to the raw outcome string.
+fn derive_kernel_decision(record: &RecordedDecision) -> (String, Option<serde_json::Value>) {
+    let Some(outcome) = DecisionOutcome::from_action(&record.outcome, None) else {
+        return (record.outcome.clone(), None);
+    };
+    let broker = record
+        .broker_pubkey
+        .clone()
+        .unwrap_or_else(|| "anon".to_string());
+    // KnowledgeEnrichment cases carry no share-state ladder (no from/to), so the
+    // orchestrator produces no share plan; the kernel still owns the canonical
+    // action vocabulary. The creator is a sentinel URN no broker pubkey can
+    // equal, so the no-self-review invariant never spuriously fires here.
+    let mut case = BrokerCase::new(
+        record.case_id.clone(),
+        CaseCategory::KnowledgeEnrichment,
+        SubjectRef {
+            kind: SubjectKind::WorkArtifact,
+            id: record
+                .proposal_urn
+                .clone()
+                .unwrap_or_else(|| record.case_id.clone()),
+            from_state: None,
+            to_state: None,
+        },
+        record.case_id.clone(),
+        record.reasoning.clone().unwrap_or_default(),
+        "urn:visionclaw:broker-bridge",
+        50,
+    );
+    let orchestrator = DecisionOrchestrator::new();
+    match orchestrator.decide(
+        &mut case,
+        record.activity_urn.clone(),
+        outcome.clone(),
+        broker,
+        record.reasoning.clone().unwrap_or_default(),
+    ) {
+        Ok(report) => {
+            let share_plan = report
+                .share_plan
+                .and_then(|p| serde_json::to_value(p).ok());
+            (report.entry.outcome.action_str().to_string(), share_plan)
+        }
+        Err(e) => {
+            warn!(
+                "[enrichment-decide] kernel invariant note case={}: {e}",
+                record.case_id
+            );
+            (outcome.action_str().to_string(), None)
+        }
+    }
+}
+
+/// `POST /api/enrichment-proposals/{id}/decide` — the agentbox broker-bridge
+/// service-to-service decide route (gated by `X-Agent-Key`).
 pub async fn decide(
     req: HttpRequest,
     path: web::Path<String>,
@@ -221,9 +294,50 @@ pub async fn decide(
     if let Err(resp) = require_agent_key(&req) {
         return resp;
     }
+    apply_decision(
+        path.into_inner(),
+        body.into_inner(),
+        &state,
+        &client_coordinator,
+    )
+    .await
+}
 
-    let case_id = path.into_inner();
+/// `POST /api/broker/cases/{id}/decide` — the control-centre operator decide
+/// path (REC-2 / D3, PRD-023 WP-4). Mounted inside the `power_user()`-gated
+/// broker scope, so a human operator authenticated as a power user decides a
+/// queued case through the SAME kernel + persistence + `broker:case_decided`
+/// path as the agentbox bridge. The auth differs (session power-user vs the
+/// service `X-Agent-Key`); the decision core does not.
+///
+/// The operator's own pubkey attributes the decision (HITL provenance) when the
+/// body does not carry a broker pubkey and the operator presents a canonical
+/// x-only-hex key — a malformed key downgrades to unattributed, never an error.
+pub async fn decide_as_operator(
+    user: crate::settings::auth_extractor::AuthenticatedUser,
+    path: web::Path<String>,
+    body: web::Json<BrokerDecisionRequest>,
+    state: web::Data<AppState>,
+    client_coordinator: web::Data<actix::Addr<ClientCoordinatorActor>>,
+) -> HttpResponse {
+    let mut req = body.into_inner();
+    if req.broker_pubkey.is_none() && uri::is_pubkey_hex(&user.pubkey) {
+        req.broker_pubkey = Some(user.pubkey.clone());
+    }
+    apply_decision(path.into_inner(), req, &state, &client_coordinator).await
+}
 
+/// The shared decide core (REC-2 / D3): validate → mint provenance → persist →
+/// optional Oxigraph write-back → broadcast → `broker:new_case` /
+/// `broker:case_decided` → `CANARY-VC-REC2-CASE`. Both the service route
+/// (`decide`) and the operator route (`decide_as_operator`) funnel through here
+/// after their own auth gate, so there is exactly one decision path.
+pub(crate) async fn apply_decision(
+    case_id: String,
+    body: BrokerDecisionRequest,
+    state: &AppState,
+    client_coordinator: &actix::Addr<ClientCoordinatorActor>,
+) -> HttpResponse {
     let record = match record_decision(&case_id, &body) {
         Ok(r) => r,
         Err(e) => {
@@ -239,7 +353,10 @@ pub async fn decide(
 
     // Ensure a proposal row exists. The broker may decide a case VisionClaw has
     // not ingested yet — create a pending stub so the lifecycle stays closed.
-    if matches!(repo.get(&case_id).await, Ok(None)) {
+    // A freshly-created stub is a case entering the queue this call, so it also
+    // drives the `broker:new_case` event below (REC-2 round-trip).
+    let is_new_case = matches!(repo.get(&case_id).await, Ok(None));
+    if is_new_case {
         let stub = StoredProposal {
             case_id: case_id.clone(),
             category: Some("knowledge_enrichment".to_string()),
@@ -294,8 +411,12 @@ pub async fn decide(
             .await
         {
             Ok(()) => {
+                // REC-10: stamp the merged-enrichment stage instant so Mesh
+                // Velocity (insight-to-integration time) is computable for this
+                // loop. The write has just landed, so `now` is the integration
+                // instant.
                 if let Err(e) = repo
-                    .mark_writeback_committed(&case_id, &record.activity_urn)
+                    .mark_writeback_committed(&case_id, &record.activity_urn, now_ms() as i64)
                     .await
                 {
                     warn!("[enrichment-decide] commit-mark failed case={case_id}: {e}");
@@ -315,6 +436,42 @@ pub async fn decide(
         data: &record,
     }) {
         client_coordinator.do_send(BroadcastMessage { message: json });
+    }
+
+    // REC-2 / D3: publish the broker case-queue events over the multiplexed
+    // graph socket, threaded through the domain kernel (ADR-130 Decision 2) for
+    // the canonical action vocabulary and any share-transition plan. A case that
+    // entered the queue this call also emits `broker:new_case` first, giving the
+    // control-centre queue (P1) a `new_case → case_decided` round-trip.
+    let (kernel_action, share_plan) = derive_kernel_decision(&record);
+    if is_new_case {
+        broker_events::broadcast_new_case(
+            &client_coordinator,
+            &case_id,
+            &case_id,
+            "knowledge_enrichment",
+        );
+    }
+    broker_events::broadcast_case_decided(
+        &client_coordinator,
+        &case_id,
+        &record.activity_urn,
+        &kernel_action,
+        share_plan,
+    );
+
+    // REC-2 canary: a real decision over live traffic round-tripped the case
+    // queue. Observed traffic only — never a synthetic probe (DDD invariant 5).
+    let evidence = format!(
+        "case={case_id} action={kernel_action} new_case={is_new_case} activity={}",
+        record.activity_urn
+    );
+    if let Err(e) = state
+        .liveness_harness
+        .observe(CANARY_REC2_CASE, &evidence)
+        .await
+    {
+        debug!("[enrichment-decide] REC-2 canary observe skipped: {e}");
     }
 
     info!(
@@ -568,5 +725,35 @@ mod tests {
         assert_eq!(classify("Accepted"), (true, "approved"));
         assert_eq!(classify("reject"), (false, "rejected"));
         assert_eq!(classify("amend"), (false, "reviewed"));
+    }
+
+    #[test]
+    fn kernel_decision_yields_canonical_action() {
+        // An attributed approval routes through the kernel to the canonical
+        // "approve" action; KnowledgeEnrichment carries no share plan.
+        let req = BrokerDecisionRequest {
+            outcome: "accepted".into(),
+            broker_pubkey: Some(PK.into()),
+            reasoning: Some("ok".into()),
+        };
+        let rec = record_decision("case-7", &req).unwrap();
+        let (action, plan) = derive_kernel_decision(&rec);
+        assert_eq!(action, "approve", "approval synonyms collapse to the canonical verb");
+        assert!(plan.is_none(), "knowledge enrichment has no share-state ladder");
+    }
+
+    #[test]
+    fn kernel_decision_degrades_for_unknown_verb() {
+        // The coarse `reviewed` sub-state is not a kernel outcome; it degrades
+        // to the raw outcome rather than fabricating a decision.
+        let req = BrokerDecisionRequest {
+            outcome: "reviewed".into(),
+            broker_pubkey: None,
+            reasoning: None,
+        };
+        let rec = record_decision("case-8", &req).unwrap();
+        let (action, plan) = derive_kernel_decision(&rec);
+        assert_eq!(action, "reviewed");
+        assert!(plan.is_none());
     }
 }

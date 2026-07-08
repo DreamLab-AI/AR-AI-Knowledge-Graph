@@ -18,6 +18,23 @@ fn main() {
         println!("cargo:warning=webxr build.rs: GPU feature enabled — CUDA compilation delegated to visionclaw-gpu crate");
     }
 
+    // RES-a: embed the short git SHA so the LivenessHarness can bind a canary
+    // fire to the commit it fired at (staleness rule). Runtime VISIONCLAW_GIT_SHA
+    // overrides this build-time default; both fall back to "unknown".
+    if let Ok(out) = std::process::Command::new("git")
+        .args(["rev-parse", "--short=12", "HEAD"])
+        .output()
+    {
+        if out.status.success() {
+            let sha = String::from_utf8_lossy(&out.stdout);
+            let sha = sha.trim();
+            if !sha.is_empty() {
+                println!("cargo:rustc-env=VISIONCLAW_GIT_SHA={sha}");
+            }
+        }
+    }
+    println!("cargo:rerun-if-changed=.git/HEAD");
+
     // Notify Cargo to re-run if the GPU feature flag or CUDA env vars change.
     println!("cargo:rerun-if-env-changed=CARGO_FEATURE_GPU");
     println!("cargo:rerun-if-env-changed=CUDA_ARCH");

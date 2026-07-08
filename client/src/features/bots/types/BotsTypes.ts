@@ -3,6 +3,13 @@
 // UPDATED: Enhanced agent types to match claude-flow hive-mind system (15+ types including Maestro specs-driven agents)
 export interface BotsAgent {
   id: string;
+  /**
+   * Sovereign identity minted by agentbox at spawn (COM-14, ADR-125). When
+   * present it is the trust key that supersedes `id` (the task_id). Undefined
+   * until agentbox attaches it; wire key is snake_case `did_nostr` per the Rust
+   * Agent serialisation.
+   */
+  did_nostr?: string;
   type: 'coordinator' | 'researcher' | 'coder' | 'analyst' | 'architect' | 'tester' | 'reviewer' | 'optimizer' | 'documenter' | 'monitor' | 'specialist' |
         'requirements_analyst' | 'design_architect' | 'task_planner' | 'implementation_coder' | 'quality_reviewer' | 'steering_documenter' | 'queen';
   status: 'idle' | 'busy' | 'active' | 'error' | 'initializing' | 'terminating' | 'offline';
@@ -15,8 +22,18 @@ export interface BotsAgent {
   name?: string;
 
   
-  capabilities?: string[]; 
-  currentTask?: string; 
+  capabilities?: string[];
+  currentTask?: string;
+  /**
+   * D7 (PRD-023 / ADR-130 register position — pre-action intent legibility):
+   * the action the agent has DECLARED it is about to take, before it acts. When
+   * present the steering surface renders "about to: <declared action>" so the
+   * operator sees intent, not only past activity. Sourced from the additive
+   * `intent` field on the agent-events envelope (Rust `AgentActionEnvelope`),
+   * carried on node metadata as `declared_intent`. Undefined when the producer
+   * declares no intent (the panel then shows no "about to" line).
+   */
+  declaredIntent?: string;
   tasksActive?: number; 
   tasksCompleted?: number; 
   successRate?: number; 

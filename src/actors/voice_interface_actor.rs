@@ -126,6 +126,9 @@ impl Handler<VoiceLine> for VoiceInterfaceActor {
                         agent: "researcher".to_string(),
                         task,
                         provider,
+                        // Voice settings-assistant dispatch is role-only; no
+                        // claude-flow agent id exists at creation time.
+                        claude_flow_agent_id: None,
                     })
                     .await
             })

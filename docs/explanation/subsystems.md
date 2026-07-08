@@ -104,7 +104,7 @@ nostr-rust-forum is a separate repository of `nostr-bbs-*` Rust crates — a Clo
 | Seam | Contract |
 |------|----------|
 | **Governance page renders ACSP** | The forum's `/community/governance` page renders VisionClaw's ACSP panels (kinds 31400–31405) as interactive review surfaces. A VisionClaw agentic actor needing human sign-off opens a kind-31402 broker case; the forum renders it; a human decides; the signed kind-31403 `CaseDecision` returns to the owning actor. |
-| **Relay mesh membership** | The forum relay is one node in the NIP-42 AUTH-gated mesh alongside agentbox's embedded relay and VisionClaw's `ServerNostrActor`. Events are IS-Envelope-shaped and NIP-59 gift-wrapped across relay boundaries. |
+| **Relay mesh membership** | The forum relay is one node in the NIP-42 AUTH-gated mesh alongside agentbox's embedded relay and VisionClaw's server-side Nostr publisher (`src/services/nostr_service.rs`; there is no `ServerNostrActor` on `main` — that actor lives only on the unmerged `crashbug` branch). Events are IS-Envelope-shaped and NIP-59 gift-wrapped across relay boundaries. |
 | **Optional messaging** | Enrichment feedback and human-to-agent chat can flow as forum threads, but the forum is an optional surface — VisionClaw functions without it. |
 
 The agent-facing detail of how panels are produced and consumed is in [Agent Control Surface](./agent-control-surface.md). The forum's own architecture (auth flow, relay Durable Objects, client crates) stays in its repository.

@@ -28,6 +28,49 @@ impl LodLevel {
             LodLevel::Culled => 3,
         }
     }
+
+    /// Inverse of [`as_i32`]. Out-of-range values clamp to `Culled` (the safe,
+    /// least-work bucket) rather than panic, so a stray GDScript int can never
+    /// crash the render path.
+    pub fn from_i32(v: i32) -> LodLevel {
+        match v {
+            0 => LodLevel::High,
+            1 => LodLevel::Medium,
+            2 => LodLevel::Low,
+            _ => LodLevel::Culled,
+        }
+    }
+}
+
+// --- Agent-avatar feature LOD -------------------------------------------------
+//
+// The copresence brief (§1) is explicit about the drop order for the geometric
+// agent embodiment: "LOD-trivial: drop badge/cone first, billboard the core at
+// distance". These bits let GDScript read one integer per level instead of
+// re-deriving the policy scene-side. The DID badge is the cheapest cue to lose,
+// the gaze cone next; the core survives longest, switching from a lit mesh to a
+// camera-facing billboard before it culls entirely.
+
+/// The DID/name badge (a pooled `Label3D`).
+pub const AGENT_FEAT_BADGE: i32 = 1 << 0;
+/// The translucent gaze cone.
+pub const AGENT_FEAT_CONE: i32 = 1 << 1;
+/// The geometric core rendered as a full lit mesh.
+pub const AGENT_FEAT_CORE_MESH: i32 = 1 << 2;
+/// The geometric core rendered as a cheap camera-facing billboard.
+pub const AGENT_FEAT_CORE_BILLBOARD: i32 = 1 << 3;
+
+/// Which agent-avatar features are visible at `level`. Badge drops at Medium,
+/// cone drops at Low (where the core also degrades to a billboard), and Culled
+/// shows nothing. `AGENT_FEAT_CORE_MESH` and `AGENT_FEAT_CORE_BILLBOARD` are
+/// mutually exclusive by construction.
+pub fn agent_feature_mask(level: LodLevel) -> i32 {
+    match level {
+        LodLevel::High => AGENT_FEAT_BADGE | AGENT_FEAT_CONE | AGENT_FEAT_CORE_MESH,
+        LodLevel::Medium => AGENT_FEAT_CONE | AGENT_FEAT_CORE_MESH,
+        LodLevel::Low => AGENT_FEAT_CORE_BILLBOARD,
+        LodLevel::Culled => 0,
+    }
 }
 
 pub fn classify(distance_m: f32) -> LodLevel {
@@ -147,6 +190,15 @@ impl LodPolicy {
     #[func]
     fn classify_distance(&self, distance_m: f32) -> i32 {
         classify(distance_m).as_i32()
+    }
+
+    /// Feature-visibility bitmask for an agent avatar at LOD `level` (0 High ..
+    /// 3 Culled). Bits: 1 badge, 2 cone, 4 core-mesh, 8 core-billboard. The
+    /// scene reads this to drop the badge, then the cone, then billboard the
+    /// core as distance grows — the brief's LOD drop order in one integer.
+    #[func]
+    fn agent_feature_mask(&self, level: i32) -> i32 {
+        agent_feature_mask(LodLevel::from_i32(level))
     }
 
     /// Indices of the `cap` highest-centrality nodes (all indices when the
@@ -305,5 +357,80 @@ mod tests {
         let picked = select_top_by_centrality(&[f32::NAN, 0.9, 0.1], 2);
         assert_eq!(picked.len(), 2);
         assert!(picked.contains(&1), "real maximum must always survive NaNs");
+    }
+
+    #[test]
+    fn from_i32_round_trips_every_level() {
+        for lvl in [
+            LodLevel::High,
+            LodLevel::Medium,
+            LodLevel::Low,
+            LodLevel::Culled,
+        ] {
+            assert_eq!(LodLevel::from_i32(lvl.as_i32()), lvl);
+        }
+    }
+
+    #[test]
+    fn from_i32_clamps_out_of_range_to_culled() {
+        assert_eq!(LodLevel::from_i32(-1), LodLevel::Culled);
+        assert_eq!(LodLevel::from_i32(4), LodLevel::Culled);
+        assert_eq!(LodLevel::from_i32(9999), LodLevel::Culled);
+    }
+
+    #[test]
+    fn agent_features_drop_badge_first_then_cone() {
+        // High shows everything (badge + cone + core mesh).
+        let high = agent_feature_mask(LodLevel::High);
+        assert!(high & AGENT_FEAT_BADGE != 0, "badge visible at High");
+        assert!(high & AGENT_FEAT_CONE != 0, "cone visible at High");
+        assert!(high & AGENT_FEAT_CORE_MESH != 0, "core mesh at High");
+
+        // Medium drops the badge but keeps the cone and the core.
+        let med = agent_feature_mask(LodLevel::Medium);
+        assert!(med & AGENT_FEAT_BADGE == 0, "badge drops first at Medium");
+        assert!(med & AGENT_FEAT_CONE != 0, "cone survives Medium");
+        assert!(med & AGENT_FEAT_CORE_MESH != 0, "core mesh survives Medium");
+
+        // Low drops the cone and billboards the core.
+        let low = agent_feature_mask(LodLevel::Low);
+        assert!(low & AGENT_FEAT_CONE == 0, "cone drops at Low");
+        assert!(low & AGENT_FEAT_CORE_MESH == 0, "core is not a full mesh at Low");
+        assert!(low & AGENT_FEAT_CORE_BILLBOARD != 0, "core billboards at Low");
+
+        // Culled shows nothing.
+        assert_eq!(agent_feature_mask(LodLevel::Culled), 0);
+    }
+
+    #[test]
+    fn agent_core_mesh_and_billboard_never_coexist() {
+        for lvl in [
+            LodLevel::High,
+            LodLevel::Medium,
+            LodLevel::Low,
+            LodLevel::Culled,
+        ] {
+            let m = agent_feature_mask(lvl);
+            let both = (m & AGENT_FEAT_CORE_MESH != 0) && (m & AGENT_FEAT_CORE_BILLBOARD != 0);
+            assert!(!both, "mesh and billboard are mutually exclusive at {lvl:?}");
+        }
+    }
+
+    #[test]
+    fn agent_feature_visibility_is_monotone_non_increasing() {
+        // As the level index grows (further away) the visible-feature count must
+        // never increase — LOD only ever sheds detail.
+        let counts: Vec<u32> = [
+            LodLevel::High,
+            LodLevel::Medium,
+            LodLevel::Low,
+            LodLevel::Culled,
+        ]
+        .iter()
+        .map(|l| agent_feature_mask(*l).count_ones())
+        .collect();
+        for w in counts.windows(2) {
+            assert!(w[1] <= w[0], "feature count must not grow with distance: {counts:?}");
+        }
     }
 }

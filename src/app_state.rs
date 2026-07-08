@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 // Oxigraph adapters — canonical persistence layer (ADR-11)
 use crate::adapters::{
     OxigraphGraphRepository, OxigraphOntologyRepository, SqliteEnrichmentRepository,
-    SqliteSettingsRepository,
+    SqliteKpiRepository, SqliteSettingsRepository,
 };
 
 // CQRS Phase 1D: Graph domain imports
@@ -312,6 +312,17 @@ pub struct AppState {
     // and keep WS-9 migrations independent.
     pub sqlite_enrichment_repository: Arc<SqliteEnrichmentRepository>,
 
+    // RES-a: sprint-wide live-traffic observer + KG-backend watchdog gauge
+    // (ADR-130 Decision 3). Backs /api/canary/{register,observe,status} and the
+    // tokio watchdog spawned in main.rs. Own SQLite file (data/liveness.sqlite3).
+    pub liveness_harness: Arc<crate::services::liveness_harness::LivenessHarness>,
+
+    // REC-4 (ADR-130 Decision 5): durable KPI snapshot + lineage store
+    // (data/kpi.sqlite3) and the compute engine over it. The store is fed by the
+    // agent-event volume tap spawned in main.rs; the service backs /api/kpi/*.
+    pub sqlite_kpi_repository: Arc<SqliteKpiRepository>,
+    pub kpi_compute_service: Arc<crate::services::kpi_compute::KpiComputeService>,
+
     // Oxigraph graph repository — canonical knowledge graph store (ADR-11)
     pub graph_adapter: Arc<OxigraphGraphRepository>,
 
@@ -337,6 +348,22 @@ pub struct AppState {
     pub perplexity_service: Option<Arc<PerplexityService>>,
     pub ragflow_service: Option<Arc<RAGFlowService>>,
     pub speech_service: Option<Arc<SpeechService>>,
+    /// COM-15 / D6: per-user PTT sessions with the selected-agent `did:nostr`
+    /// binding (was defined but consumerless; now the governed voice loop's
+    /// binding store).
+    pub audio_router: Arc<crate::services::audio_router::AudioRouter>,
+    /// COM-15 / V1: the governed-voice-loop consumer (signs a 31402 targeted at
+    /// the bound agent and POSTs to agentbox `/v1/voice-intent`). `None` when the
+    /// loop is unconfigured for this profile.
+    pub voice_intent_client: Option<Arc<crate::services::voice_intent_client::VoiceIntentClient>>,
+    /// V3 (PRD-023 WP-10): per-session voice conversation state — the store that
+    /// carries a pending clarification across turns (the governed-voice repair
+    /// merge reads/writes `ConversationContext.pending_clarification` here).
+    pub voice_context_manager: Arc<crate::services::voice_context_manager::VoiceContextManager>,
+    /// V3 (PRD-023 WP-10): the configurable STT/intent confidence gate. Below
+    /// threshold (`VISIONCLAW_VOICE_CONFIDENCE_THRESHOLD`, default 0.55) a spoken
+    /// command is held for a clarification turn instead of dispatched.
+    pub clarification_gate: crate::services::voice_clarification::ClarificationGate,
     pub nostr_service: Option<web::Data<NostrService>>,
     pub feature_access: web::Data<FeatureAccess>,
     pub ragflow_session_id: String,
@@ -414,6 +441,76 @@ impl AppState {
         // (`enrichment_proposals_handler::store::{all,get}`) reach the SAME store.
         crate::handlers::enrichment_proposals_handler::store::init(
             sqlite_enrichment_repository.clone(),
+        );
+
+        // RES-a: durable LivenessCanary store — SEPARATE db file so its
+        // single-writer posture stays isolated. The harness seeds the P0-wave
+        // canaries at boot (idempotent) so the KG watchdog's target exists.
+        let liveness_db_path = std::path::Path::new(&data_dir).join("liveness.sqlite3");
+        let canary_repository = Arc::new(
+            crate::adapters::SqliteCanaryRepository::open(&liveness_db_path)
+                .await
+                .map_err(|e| format!("Failed to open SQLite liveness store: {}", e))?,
+        );
+        let liveness_harness = Arc::new(
+            crate::services::liveness_harness::LivenessHarness::new(canary_repository),
+        );
+        if let Err(e) = liveness_harness.seed_p0_canaries().await {
+            warn!("[AppState::new] failed to seed P0 liveness canaries: {}", e);
+        }
+        // COM-15 (PRD-023 WP-5): register the standing governed-voice-loop canary
+        // so `GET /api/canary/status` carries CANARY-VC-COM15-PTT from boot.
+        if let Err(e) = liveness_harness.seed_p1_canaries().await {
+            warn!("[AppState::new] failed to seed P1 liveness canaries: {}", e);
+        }
+        // P2 rows (PRD-023 WP-9/WP-10/WP-12): the MR copresence canaries
+        // (CANARY-VC-M4-RAY, CANARY-VC-COM18-INTERV — fired by the xr-runtime
+        // sidecar session over the shared observe path; M1-HUD rides P0), the
+        // one-shot voice-repair canary (CANARY-VC-V3-REPAIR), and the loop/trace
+        // canaries (CANARY-VC-REC10-LOOP, CANARY-VC-REC11-TRACE).
+        if let Err(e) = liveness_harness.seed_p2_canaries().await {
+            warn!("[AppState::new] failed to seed P2 liveness canaries: {}", e);
+        }
+
+        // REC-4 (ADR-130 Decision 5): durable KPI snapshot + lineage store —
+        // SEPARATE db file so its single-writer posture stays isolated. The
+        // compute service reads the enrichment decision store + the agent-event
+        // volume (tapped from the hub in main.rs) and fires CANARY-VC-REC4-KPI.
+        let kpi_db_path = std::path::Path::new(&data_dir).join("kpi.sqlite3");
+        let sqlite_kpi_repository = Arc::new(
+            SqliteKpiRepository::open(&kpi_db_path)
+                .await
+                .map_err(|e| format!("Failed to open SQLite KPI store: {}", e))?,
+        );
+        let kpi_compute_service = Arc::new(
+            crate::services::kpi_compute::KpiComputeService::new(
+                sqlite_kpi_repository.clone(),
+                sqlite_enrichment_repository.clone(),
+                liveness_harness.clone(),
+            ),
+        );
+
+        // COM-15 / D6 / M5: the previously consumerless AudioRouter now gets a
+        // consumer — it holds the per-user selected-agent PTT binding the
+        // governed voice loop reads (superseding the global-toggle-only path).
+        let audio_router = Arc::new(crate::services::audio_router::AudioRouter::new());
+        // COM-15 / V1: the governed-voice-loop consumer. `None` when unconfigured
+        // (no AGENTBOX_VOICE_INTENT_URL/ACSP_PANEL_NOSTR_PRIVKEY) — the loop stays
+        // off and a spoken command falls back to the settings assistant, honestly.
+        let voice_intent_client = crate::services::voice_intent_client::VoiceIntentClient::from_env();
+        if voice_intent_client.is_some() {
+            info!("[AppState::new] governed voice loop enabled (VoiceIntentClient configured)");
+        } else {
+            info!("[AppState::new] governed voice loop off (VoiceIntentClient unconfigured) — spoken commands use the settings assistant");
+        }
+        // V3 (PRD-023 WP-10): the conversational-repair store + confidence gate.
+        let voice_context_manager =
+            Arc::new(crate::services::voice_context_manager::VoiceContextManager::new());
+        let clarification_gate =
+            crate::services::voice_clarification::ClarificationGate::from_env();
+        info!(
+            "[AppState::new] voice confidence gate threshold = {:.2}",
+            clarification_gate.threshold()
         );
 
         info!("[AppState::new] Oxigraph + SQLite repositories initialized successfully");
@@ -1054,6 +1151,36 @@ impl AppState {
         info!("[AppState::new] Initializing BotsClient with graph service");
         let bots_client = Arc::new(BotsClient::with_graph_service(graph_service_addr.clone()));
 
+        // D1 (PRD-023 WP-2): start the agent-list poll at boot. connect() tests MCP
+        // reachability, initialises the session, and spawns the 2s polling loop that
+        // populates the agents cache behind /api/bots/agents — the beam and avatar
+        // layers starve without it. Fail-open with backoff: an unreachable MCP server
+        // must never block boot; CANARY-VC-D1-BEAM remains the proof that data flows.
+        {
+            let bots_client_boot = bots_client.clone();
+            tokio::spawn(async move {
+                let delays = [5u64, 15, 60, 300];
+                let mut attempt = 0usize;
+                loop {
+                    match bots_client_boot.connect("").await {
+                        Ok(()) => {
+                            info!("[AppState] BotsClient poll started at boot (attempt {})", attempt + 1);
+                            break;
+                        }
+                        Err(e) => {
+                            let delay = delays[attempt.min(delays.len() - 1)];
+                            warn!(
+                                "[AppState] BotsClient connect failed (attempt {}): {}; retrying in {}s",
+                                attempt + 1, e, delay
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+                            attempt += 1;
+                        }
+                    }
+                }
+            });
+        }
+
         info!("[AppState::new] Initializing TaskOrchestratorActor with Management API");
         let mgmt_api_host = std::env::var("MANAGEMENT_API_HOST")
             .unwrap_or_else(|_| "agentic-workstation".to_string());
@@ -1069,8 +1196,10 @@ impl AppState {
 
         // ADR-110: flagship ACSP agentic actor — knowledge elevation through
         // forum governance cases, voice-guided when the local speech stack
-        // (Whisper STT / Kokoro TTS) is up. Env-gated (ELEVATION_ACTOR_ENABLED=1
-        // + FORUM_RELAY_URL + panel secret); None means the gate is closed.
+        // (Whisper STT / Kokoro TTS) is up. ADR-130 Decision 2: the gate now
+        // defaults ON in dev/staging (opt-in in production) and still requires
+        // FORUM_RELAY_URL + a panel secret to publish; None means the gate is
+        // closed for this profile/config.
         match crate::actors::elevation_actor::ElevationActor::new(
             graph_adapter.clone()
                 as Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
@@ -1081,7 +1210,7 @@ impl AppState {
                 info!("[AppState] ElevationActor started (ACSP knowledge-elevation panel live)");
             }
             None => info!(
-                "[AppState] ElevationActor disabled (set ELEVATION_ACTOR_ENABLED=1 + FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY to enable)"
+                "[AppState] ElevationActor disabled (dev/staging default ON — set ELEVATION_ACTOR_ENABLED=0 to force off, or in production set ELEVATION_ACTOR_ENABLED=1; also requires FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY)"
             ),
         }
 
@@ -1159,6 +1288,9 @@ impl AppState {
             settings_repository,
             sqlite_settings_repository,
             sqlite_enrichment_repository,
+            liveness_harness,
+            sqlite_kpi_repository,
+            kpi_compute_service,
 
             graph_adapter,
 
@@ -1182,6 +1314,10 @@ impl AppState {
             perplexity_service,
             ragflow_service,
             speech_service,
+            audio_router,
+            voice_intent_client,
+            voice_context_manager,
+            clarification_gate,
             nostr_service: None,
             feature_access: web::Data::new(FeatureAccess::from_env()),
             ragflow_session_id,

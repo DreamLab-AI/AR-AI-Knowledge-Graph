@@ -11,10 +11,14 @@
 //! to the corpus repo as a PR via [`GitHubPRService`]; `reject` skips the
 //! candidate for the session.
 //!
-//! Boot is env-gated: the actor starts only when `ELEVATION_ACTOR_ENABLED=1`
-//! and `FORUM_RELAY_URL` + a panel secret are configured. The ACSP panel
-//! identity must be registered in the relay's `agent_registry` (the pubkey is
-//! logged at startup for the admin).
+//! Boot is env-gated. Per ADR-130 Decision 2 (REC-2), the gate now defaults ON
+//! in dev/staging and stays opt-in in production: `ELEVATION_ACTOR_ENABLED`
+//! defaults to `true` unless `APP_ENV`/`NODE_ENV` is `production`, and an
+//! explicit `ELEVATION_ACTOR_ENABLED=0`/`=1` always wins. The actor still
+//! additionally requires `FORUM_RELAY_URL` + a panel secret to publish and sign
+//! ACSP events, so a dev box without a relay configured stays dormant even with
+//! the gate open. The ACSP panel identity must be registered in the relay's
+//! `agent_registry` (the pubkey is logged at startup for the admin).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -91,14 +95,41 @@ pub struct ElevationActor {
     last_pr_url: Option<String>,
 }
 
+/// Is this a production deployment? Production is signalled by `APP_ENV` or
+/// `NODE_ENV` set to `production` (the prod docker-compose profile sets
+/// `NODE_ENV=production`; `main.rs` reads `APP_ENV=production` for the same
+/// intent). Anything else — dev, staging, an unset env — is non-production.
+fn is_production_env() -> bool {
+    is_production_from(
+        std::env::var("APP_ENV").ok(),
+        std::env::var("NODE_ENV").ok(),
+    )
+}
+
+/// Pure production check over the two environment signals, factored out so the
+/// dev-default-ON / prod-opt-in policy is unit-testable without mutating
+/// process-global env state.
+fn is_production_from(app_env: Option<String>, node_env: Option<String>) -> bool {
+    let is_prod = |v: &Option<String>| {
+        v.as_deref()
+            .map(|s| s.eq_ignore_ascii_case("production"))
+            .unwrap_or(false)
+    };
+    is_prod(&app_env) || is_prod(&node_env)
+}
+
 impl ElevationActor {
     pub fn new(
         kg_repo: Arc<dyn KnowledgeGraphRepository>,
         speech: Option<Arc<SpeechService>>,
     ) -> Option<Self> {
-        let enabled = std::env::var("ELEVATION_ACTOR_ENABLED")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        // REC-2 / ADR-130 Decision 2: the case queue only carries real cases if
+        // this consumer runs, so default the gate ON in dev/staging while
+        // keeping production opt-in. An explicit env value always wins.
+        let enabled = match std::env::var("ELEVATION_ACTOR_ENABLED") {
+            Ok(v) => v == "1" || v.eq_ignore_ascii_case("true"),
+            Err(_) => !is_production_env(),
+        };
         if !enabled {
             return None;
         }
@@ -751,6 +782,19 @@ mod tests {
     use visionclaw_domain::models::edge::Edge;
     use visionclaw_domain::models::graph::GraphData;
     use visionclaw_domain::models::node::Node;
+
+    #[test]
+    fn production_gate_defaults_dev_on_prod_off() {
+        // Unset env → non-production → ElevationActor defaults ON.
+        assert!(!is_production_from(None, None));
+        // Either signal at `production` (any case) → production → opt-in only.
+        assert!(is_production_from(Some("production".into()), None));
+        assert!(is_production_from(None, Some("Production".into())));
+        assert!(is_production_from(Some("PRODUCTION".into()), Some("development".into())));
+        // Dev/staging values are not production.
+        assert!(!is_production_from(Some("development".into()), Some("development".into())));
+        assert!(!is_production_from(Some("staging".into()), None));
+    }
 
     fn node(id: u32, label: &str, node_type: &str, authored: bool, domain: Option<&str>) -> Node {
         let mut n = Node::default();

@@ -391,3 +391,106 @@ mod tests {
         }
     }
 }
+
+/// Reconciliation contract between the ACSP wire vocabulary (this module) and
+/// the cherry-picked broker domain kernel ([`crate::domain::broker`], ADR-130
+/// Decision 2). One vocabulary must flow from the kernel through the ACSP
+/// producer to the forum consumer: the kernel's `CaseCategory` / `SubjectKind`
+/// serde forms are byte-identical to the tag values this module emits, and an
+/// ACSP [`ActionResponse`] parses into a kernel `DecisionOutcome`. If these
+/// drift, a case the kernel decides would project to a tag the consumer parses
+/// differently (or not at all) — the DDD invariant-7 failure this locks against.
+#[cfg(test)]
+mod broker_kernel_reconciliation {
+    use super::*;
+    use crate::domain::broker::{
+        broker_case::{
+            CaseCategory as KernelCaseCategory, SubjectKind as KernelSubjectKind,
+        },
+        DecisionOutcome,
+    };
+
+    /// The kernel `CaseCategory` snake_case serde form equals the ACSP producer
+    /// tag value for every variant.
+    #[test]
+    fn case_category_vocabulary_is_single_sourced() {
+        let pairs = [
+            (KernelCaseCategory::ContributorMeshShare, CaseCategory::ContributorMeshShare),
+            (KernelCaseCategory::WorkflowReview, CaseCategory::WorkflowReview),
+            (KernelCaseCategory::PolicyException, CaseCategory::PolicyException),
+            (KernelCaseCategory::TrustAlert, CaseCategory::TrustAlert),
+            (KernelCaseCategory::ManualSubmission, CaseCategory::ManualSubmission),
+            (KernelCaseCategory::KnowledgeEnrichment, CaseCategory::KnowledgeEnrichment),
+        ];
+        for (kernel, acsp) in pairs {
+            let kernel_wire = serde_json::to_value(&kernel).unwrap();
+            assert_eq!(
+                kernel_wire.as_str().unwrap(),
+                acsp.as_tag_value(),
+                "kernel serde vs ACSP tag drifted for {kernel:?}"
+            );
+        }
+    }
+
+    /// The kernel `SubjectKind` snake_case serde form equals the ACSP producer
+    /// tag value for every variant.
+    #[test]
+    fn subject_kind_vocabulary_is_single_sourced() {
+        let pairs = [
+            (KernelSubjectKind::WorkArtifact, SubjectKind::WorkArtifact),
+            (KernelSubjectKind::SkillPackage, SubjectKind::SkillPackage),
+            (KernelSubjectKind::AutomationProposal, SubjectKind::AutomationProposal),
+            (KernelSubjectKind::PolicyException, SubjectKind::PolicyException),
+            (KernelSubjectKind::Opaque, SubjectKind::Opaque),
+        ];
+        for (kernel, acsp) in pairs {
+            let kernel_wire = serde_json::to_value(&kernel).unwrap();
+            assert_eq!(
+                kernel_wire.as_str().unwrap(),
+                acsp.as_tag_value(),
+                "kernel serde vs ACSP tag drifted for {kernel:?}"
+            );
+        }
+    }
+
+    /// An ACSP kind-31403 `ActionResponse` (the forum human-decision content)
+    /// parses into a kernel `DecisionOutcome` via `from_action`.
+    #[test]
+    fn action_response_parses_into_kernel_outcome() {
+        let raw = r#"{"action":"approve","reasoning":"Human approve via governance UI"}"#;
+        let resp: ActionResponse = serde_json::from_str(raw).unwrap();
+        let outcome = DecisionOutcome::from_action(&resp.action, None)
+            .expect("approve maps to a kernel outcome");
+        assert_eq!(outcome, DecisionOutcome::Approve);
+        assert_eq!(outcome.action_str(), "approve");
+    }
+
+    /// The 31402 `CaseSpec` category/subject tags a case queued from a kernel
+    /// `KnowledgeEnrichment` case would carry match the kernel serde form, so a
+    /// case built by the kernel projects to the exact tags the consumer expects.
+    #[test]
+    fn knowledge_enrichment_case_projects_to_matching_tags() {
+        let spec = CaseSpec {
+            case_id: "case-1".into(),
+            title: "Elevate concept".into(),
+            priority: ActionPriority::Medium,
+            category: CaseCategory::KnowledgeEnrichment,
+            subject_kind: SubjectKind::WorkArtifact,
+            subject_id: "urn:visionclaw:concept:bc:x".into(),
+            request: ActionRequest {
+                fields: serde_json::json!({}),
+                reasoning: None,
+                context_url: None,
+            },
+        };
+        let ev = build_action_request(&spec);
+        assert_eq!(
+            extract_tag(&ev.tags, "category"),
+            Some(serde_json::to_value(KernelCaseCategory::KnowledgeEnrichment).unwrap().as_str().unwrap())
+        );
+        assert_eq!(
+            extract_tag(&ev.tags, "subject-kind"),
+            Some(serde_json::to_value(KernelSubjectKind::WorkArtifact).unwrap().as_str().unwrap())
+        );
+    }
+}

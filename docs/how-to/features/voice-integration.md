@@ -2,14 +2,34 @@
 
 This guide explains how to integrate with VisionClaw's voice system for speech-to-text (STT), text-to-speech (TTS), and voice command processing.
 
+> **Status (2026-07, PRD-023 WP-10 / V4).** The **shipped** React-client voice
+> command path is **push-to-talk to a selected actor**, not voice-to-swarm
+> orchestration. Holding PTT binds the selected agent's `did:nostr`; a spoken
+> command is signed into a governed ACSP kind-31402 `ActionRequest`, POSTed to
+> the agentbox `/v1/voice-intent` producer, and acknowledged over Kokoro TTS
+> (COM-15 / V1 — `src/services/voice_intent_client.rs`,
+> `src/handlers/speech_socket_handler.rs`; the P1 governed voice loop). A
+> low-confidence or under-specified utterance is held for a **clarification
+> turn** before dispatch (V3 — `src/services/voice_clarification.rs`).
+>
+> The **voice-to-swarm-orchestration** path described in the diagrams and
+> examples below — a spoken command driving `swarm_init` / `agent_spawn` over the
+> MCP connection — is **deprecated in the React client**. `is_swarm_command`
+> routes such commands to `handle_swarm_voice_command`, which returns
+> *"Swarm voice commands deprecated - use API endpoints instead"*
+> (`src/handlers/speech_socket_handler.rs`). Those sections describe the **legacy
+> design and the separate Godot native client**, not the current React
+> `voice_command` route. An **unbound** command (no selected `did:nostr`) falls
+> back to the settings assistant, not to swarm orchestration.
+
 ## Overview
 
 VisionClaw provides a comprehensive voice system that enables:
 
 - **Text-to-Speech (TTS)**: Convert text responses to audio using Kokoro or OpenAI
 - **Speech-to-Text (STT)**: Transcribe audio input using Whisper or OpenAI
-- **Voice Commands**: Natural language commands for swarm orchestration
-- **Conversation Context**: Multi-turn voice interactions with session persistence
+- **Voice Commands**: Push-to-talk commands addressed to a selected agent (governed kind-31402 → `/v1/voice-intent`, COM-15/V1). The legacy voice-to-swarm-orchestration parser is deprecated in the React client — see the status banner above.
+- **Conversation Grounding**: Low-confidence or under-specified commands trigger a clarification turn before dispatch (V3), and multi-turn context is persisted per session.
 
 ## Architecture
 
@@ -199,7 +219,16 @@ Send raw audio data as binary WebSocket frames. The system auto-detects the form
 
 ### Voice Commands
 
-Send natural language commands to control the swarm.
+> **Deprecated in the React client (V4).** The `voice_command` message below,
+> when it carries no selected agent `did:nostr`, no longer drives swarm
+> orchestration — a swarm-shaped command returns *"Swarm voice commands
+> deprecated - use API endpoints instead"*, and any other unbound command reaches
+> the settings assistant. The **shipped** governed request carries an `actorDid`
+> (and an optional `confidence`) and dispatches a signed 31402 to the selected
+> agent; see the status banner at the top of this guide. The example below is
+> retained to document the legacy / Godot-native shape.
+
+Send natural language commands (legacy voice-to-swarm shape).
 
 **Request:**
 
@@ -233,6 +262,13 @@ Send natural language commands to control the swarm.
 ```
 
 ## Voice Command Processing
+
+> **Legacy design (V4).** The flow below (STT → intent → MCP `swarm_init` /
+> `agent_spawn` / `task_orchestrate`) is the deprecated voice-to-swarm path and
+> the Godot native client's design, not the shipped React `voice_command` route.
+> In the React client a governed command instead becomes a signed 31402 to the
+> selected agent's `did:nostr`, gated by the V3 confidence check; see the status
+> banner at the top of this guide.
 
 ```mermaid
 flowchart LR
@@ -586,6 +622,13 @@ only; it is never hijacked into settings changes (the verb+noun gate keeps
 the two consumers disjoint).
 
 ### Voice Command Flow
+
+> **Legacy design (V4).** This sequence shows the deprecated voice-to-swarm flow
+> (`voice_command` → parser → MCP → swarm). In the shipped React client a
+> command bound to a selected agent's `did:nostr` instead takes the governed path
+> (signed 31402 → `/v1/voice-intent` → Kokoro ack), with the V3 confidence gate
+> inserting a clarification turn on low-confidence input; see the status banner at
+> the top of this guide.
 
 ```mermaid
 sequenceDiagram

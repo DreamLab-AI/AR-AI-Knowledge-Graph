@@ -453,12 +453,22 @@ impl McpTcpClient {
             .map(|neural_data| self.parse_neural_data(neural_data))
             .transpose()?;
 
+        // COM-14: consume the agentbox-minted did:nostr from the agent record if
+        // present, else None. Accept both the snake_case wire key and a camelCase
+        // fallback; validation to the trusted form happens at the Agent carry
+        // boundary (Agent::from), not here.
+        let did_nostr = agent_data
+            .get("did_nostr")
+            .or_else(|| agent_data.get("didNostr"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
         let now = time::now();
 
         Ok(MultiMcpAgentStatus {
             agent_id,
             swarm_id,
-            server_source: McpServerType::ClaudeFlow, 
+            server_source: McpServerType::ClaudeFlow,
             name,
             agent_type,
             status,
@@ -468,6 +478,7 @@ impl McpTcpClient {
             neural_info,
             created_at: now.timestamp(),
             last_active: now.timestamp(),
+            did_nostr,
         })
     }
 

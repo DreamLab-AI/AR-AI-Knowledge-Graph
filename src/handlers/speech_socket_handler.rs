@@ -48,6 +48,38 @@ struct VoiceCommandRequest {
     text: String,
     session_id: Option<String>,
     respond_via_voice: Option<bool>,
+    /// COM-15 / D6: the selected agent's `did:nostr` this command is addressed
+    /// to. When present (and canonical), the command takes the governed voice
+    /// path (signed 31402 → `/v1/voice-intent` → Kokoro ack) instead of the
+    /// global settings assistant. Threaded from the client graph selection
+    /// through the PTT-start binding.
+    actor_did: Option<String>,
+    /// V3 (PRD-023 WP-10): the STT confidence for this utterance, normalised to
+    /// `[0, 1]`. When present and below the configured threshold, the governed
+    /// path holds the command for a clarification turn instead of dispatching.
+    /// Absent (`None`) means the STT layer reported no confidence — the command
+    /// is not blocked on missing telemetry (the intent gate still applies).
+    confidence: Option<f32>,
+}
+
+/// COM-15 / D6: the PTT-start binding message. Threads the selected agent's
+/// `did:nostr` (from graph selection) onto this socket's `AudioRouter` session
+/// so a following spoken command has a verifiable target.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetPttRequest {
+    active: bool,
+    actor_did: Option<String>,
+}
+
+/// V3 (PRD-023 WP-10): the outcome of the governed voice path's confidence gate.
+enum GovernedVoiceResult {
+    /// The gate passed (or the repair resolved) — the command dispatched; carries
+    /// the spoken acknowledgement text.
+    Dispatched(String),
+    /// The gate held the utterance — the system spoke a clarification and did NOT
+    /// dispatch; carries the clarification prompt and the ambiguous slot name.
+    Clarified { prompt: String, slot: String },
 }
 
 pub struct SpeechSocket {
@@ -135,7 +167,144 @@ impl SpeechSocket {
         }
     }
 
-    
+    /// COM-15 / V1 / D6 (PRD-023 WP-5): the governed voice path. A spoken
+    /// command addressed to a selected agent's `did:nostr` is signed into a
+    /// kind-31402 and POSTed to agentbox `/v1/voice-intent`; on accepted
+    /// dispatch a Kokoro TTS acknowledgement plays and the standing
+    /// `CANARY-VC-COM15-PTT` records a live fire. Returns the spoken ack text for
+    /// the WS `voice_response`. `Err` lets the caller fall back to the settings
+    /// assistant (never the settings assistant when the governed loop succeeds —
+    /// the falsification statement's second clause).
+    async fn process_voice_intent(
+        app_state: Arc<AppState>,
+        transcript: String,
+        actor_did: String,
+    ) -> Result<String, String> {
+        let client = app_state
+            .voice_intent_client
+            .as_ref()
+            .ok_or_else(|| "governed voice loop unconfigured".to_string())?;
+
+        let accepted = client
+            .dispatch(&transcript, &actor_did, 200)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let ack = crate::services::voice_intent_client::ack_sentence(&accepted, &actor_did);
+
+        // COM-15 AC3: speak the acknowledgement over the Kokoro TTS path.
+        if let Some(speech_service) = &app_state.speech_service {
+            if let Err(e) = speech_service
+                .text_to_speech(ack.clone(), SpeechOptions::default())
+                .await
+            {
+                error!("[SpeechSocket] governed-voice ack TTS failed: {}", e);
+            }
+        }
+
+        // The full loop carried one utterance end to end → record a live fire on
+        // the standing canary (observed traffic, never a synthetic probe).
+        let evidence = format!(
+            "voice→31402→/v1/voice-intent accepted (event {:?}, verb '{}') → Kokoro ack",
+            accepted.event_id, accepted.intent.verb
+        );
+        if let Err(e) = app_state
+            .liveness_harness
+            .observe(
+                crate::services::liveness_harness::CANARY_COM15_PTT,
+                &evidence,
+            )
+            .await
+        {
+            error!("[SpeechSocket] failed to record CANARY-VC-COM15-PTT fire: {}", e);
+        }
+
+        Ok(ack)
+    }
+
+    /// V3 (PRD-023 WP-10): the confidence gate in front of the governed voice
+    /// dispatch. A low-confidence or under-specified spoken command is NOT
+    /// dispatched; instead the system speaks a targeted clarification (naming
+    /// what it heard and the ambiguous slot), holds a pending clarification for
+    /// this session, and merges the operator's next utterance before it will
+    /// dispatch. On the adequate/resolved path it delegates to
+    /// [`Self::process_voice_intent`] with the (possibly merged) transcript.
+    ///
+    /// `session_key` scopes the pending-clarification state (the client
+    /// `session_id`, or this socket's id when absent).
+    async fn process_governed_voice(
+        app_state: Arc<AppState>,
+        session_key: String,
+        transcript: String,
+        actor_did: String,
+        confidence: Option<f32>,
+    ) -> Result<GovernedVoiceResult, String> {
+        use crate::services::voice_clarification::{GateOutcome, PendingClarification};
+
+        let gate = app_state.clarification_gate;
+
+        // A repair turn if a clarification is pending for this session; else a
+        // fresh evaluation. `take_*` reads-and-clears, so a resolved repair does
+        // not leave stale pending state.
+        let pending = app_state
+            .voice_context_manager
+            .take_pending_clarification(&session_key)
+            .await
+            .and_then(|tok| PendingClarification::from_token(&tok));
+
+        let outcome = match &pending {
+            Some(p) => gate.merge(p, &transcript, confidence),
+            None => gate.evaluate(&transcript, confidence),
+        };
+
+        match outcome {
+            GateOutcome::Clarify { prompt, pending } => {
+                let slot = pending.slot.slot_name().to_string();
+                // Hold the clarification for the next utterance — this is the
+                // assignment of the previously-dead pending_clarification field.
+                app_state
+                    .voice_context_manager
+                    .set_pending_clarification(&session_key, Some(pending.to_token()))
+                    .await;
+
+                // Speak the clarification over the Kokoro TTS path (the operator
+                // hears what was misunderstood, and does not get a dispatch).
+                if let Some(speech_service) = &app_state.speech_service {
+                    if let Err(e) = speech_service
+                        .text_to_speech(prompt.clone(), SpeechOptions::default())
+                        .await
+                    {
+                        error!("[SpeechSocket] clarification TTS failed: {}", e);
+                    }
+                }
+
+                // A clarification turn is observed on live traffic → record a
+                // fire on the one-shot V3 canary (never a synthetic probe).
+                let evidence = format!(
+                    "low-confidence/ambiguous utterance held for repair (slot {slot})"
+                );
+                if let Err(e) = app_state
+                    .liveness_harness
+                    .observe(
+                        crate::services::liveness_harness::CANARY_V3_REPAIR,
+                        &evidence,
+                    )
+                    .await
+                {
+                    error!("[SpeechSocket] failed to record CANARY-VC-V3-REPAIR fire: {}", e);
+                }
+
+                Ok(GovernedVoiceResult::Clarified { prompt, slot })
+            }
+            GateOutcome::Dispatch { transcript } => {
+                let ack =
+                    SpeechSocket::process_voice_intent(app_state, transcript, actor_did).await?;
+                Ok(GovernedVoiceResult::Dispatched(ack))
+            }
+        }
+    }
+
+
     fn is_swarm_command(&self, text: &str) -> bool {
         let text_lower = text.to_lowercase();
         text_lower.contains("swarm")
@@ -412,13 +581,120 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SpeechSocket {
                                     ctx.text(json!({"type": "error", "message": "Invalid STT request format"}).to_string());
                                 }
                             }
+                            Some("set_ptt") => {
+                                // COM-15 / D6: the PTT-start binding message threads
+                                // the selected agent's did:nostr onto this socket's
+                                // AudioRouter session (keyed by the socket id).
+                                if let Ok(ptt_req) =
+                                    serde_json::from_value::<SetPttRequest>(msg)
+                                {
+                                    let app_state = self.app_state.clone();
+                                    let user_id = self.id.clone();
+                                    let fut = async move {
+                                        let _ = app_state.audio_router.register_user(&user_id).await;
+                                        app_state
+                                            .audio_router
+                                            .set_ptt_with_target(
+                                                &user_id,
+                                                ptt_req.active,
+                                                ptt_req.actor_did,
+                                            )
+                                            .await;
+                                    };
+                                    ctx.spawn(fut.into_actor(self));
+                                } else {
+                                    ctx.text(json!({"type": "error", "message": "Invalid set_ptt request format"}).to_string());
+                                }
+                            }
                             Some("voice_command") => {
-                                
+
                                 if let Ok(voice_req) =
                                     serde_json::from_value::<VoiceCommandRequest>(msg)
                                 {
-                                    
-                                    if self.is_swarm_command(&voice_req.text) {
+                                    // COM-15: a command addressed to a selected
+                                    // agent's did:nostr takes the GOVERNED voice
+                                    // path (signed 31402 → /v1/voice-intent → Kokoro
+                                    // ack). Only an UNBOUND command reaches the
+                                    // settings assistant — a bound command never
+                                    // does (falsification clause 2). A malformed DID
+                                    // is dropped here, not silently misrouted.
+                                    let bound_did = voice_req.actor_did.clone().filter(|d| {
+                                        crate::services::voice_intent_client::is_canonical_did(d)
+                                    });
+                                    if let Some(actor_did) = bound_did {
+                                        let app_state = self.app_state.clone();
+                                        let addr = ctx.address();
+                                        let text = voice_req.text.clone();
+                                        // V3: STT confidence + per-session key for
+                                        // the clarification/repair gate.
+                                        let confidence = voice_req.confidence;
+                                        let session_key = voice_req
+                                            .session_id
+                                            .clone()
+                                            .unwrap_or_else(|| self.id.clone());
+                                        let fut = async move {
+                                            match SpeechSocket::process_governed_voice(
+                                                app_state.clone(),
+                                                session_key,
+                                                text.clone(),
+                                                actor_did.clone(),
+                                                confidence,
+                                            )
+                                            .await
+                                            {
+                                                Ok(GovernedVoiceResult::Dispatched(ack)) => {
+                                                    let msg = json!({
+                                                        "type": "voice_response",
+                                                        "data": {
+                                                            "text": ack,
+                                                            "isFinal": true,
+                                                            "governed": true,
+                                                            "actorDid": actor_did,
+                                                            "timestamp": std::time::SystemTime::now()
+                                                                .duration_since(std::time::UNIX_EPOCH)
+                                                                .unwrap_or_default()
+                                                                .as_millis()
+                                                        }
+                                                    }).to_string();
+                                                    let _ = addr.try_send(ErrorMessage(msg));
+                                                }
+                                                Ok(GovernedVoiceResult::Clarified { prompt, slot }) => {
+                                                    // V3: a clarification turn — the
+                                                    // command is NOT dispatched; the
+                                                    // operator is asked to repair.
+                                                    let msg = json!({
+                                                        "type": "voice_clarification",
+                                                        "data": {
+                                                            "text": prompt,
+                                                            "slot": slot,
+                                                            "isFinal": false,
+                                                            "governed": true,
+                                                            "actorDid": actor_did,
+                                                            "timestamp": std::time::SystemTime::now()
+                                                                .duration_since(std::time::UNIX_EPOCH)
+                                                                .unwrap_or_default()
+                                                                .as_millis()
+                                                        }
+                                                    }).to_string();
+                                                    let _ = addr.try_send(ErrorMessage(msg));
+                                                }
+                                                Err(e) => {
+                                                    // Honest failure: a bound command
+                                                    // is NEVER re-routed to the
+                                                    // settings assistant. The client
+                                                    // is told the governed loop is
+                                                    // unreachable/unconfigured.
+                                                    let msg = json!({
+                                                        "type": "voice_intent_error",
+                                                        "message": format!("governed voice dispatch failed: {}", e),
+                                                        "actorDid": actor_did
+                                                    }).to_string();
+                                                    let _ = addr.try_send(ErrorMessage(msg));
+                                                }
+                                            }
+                                        };
+                                        ctx.spawn(fut.into_actor(self));
+                                    } else if self.is_swarm_command(&voice_req.text) {
                                         self.handle_swarm_voice_command(&voice_req.text, ctx);
                                     } else if let Some(speech_service) =
                                         &self.app_state.speech_service

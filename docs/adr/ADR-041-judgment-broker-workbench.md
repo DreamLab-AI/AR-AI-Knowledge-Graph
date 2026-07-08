@@ -2,13 +2,33 @@
 
 ## Status
 
-Implemented 2026-04-20
+Superseded-in-part by [ADR-110](./ADR-110-agentic-actors-acsp-control-surfaces.md)
+and [ADR-130](./ADR-130-gap-close-visionclaw-decisions.md) Decision 2.
+
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** The
+> "Implemented 2026-04-20" notes below describe the `crashbug`-branch
+> `BrokerActor`, which **never merged to `main`** and was tied to a Neo4j store
+> this stack does not run (the graph store is Oxigraph plus SQLite). `main`
+> instead adopted ADR-110's stateless ACSP producer (kinds 31400--31405 to the
+> forum's `broker_cases` store, accepted 2026-06-12) plus an enrichment REST
+> fallback. ADR-130 Decision 2 cherry-picks **only** the storage-agnostic domain
+> kernel from `crashbug` — `src/domain/broker/` (`BrokerCase`,
+> `DecisionOrchestrator`, `DecisionOutcome`, `PrecedentRegistry`) — as the domain
+> model behind that path, and supersedes the `BrokerActor` transport and its
+> Neo4j adapter. The `broker:new_case` / `broker:case_decided` WebSocket events
+> are now emitted from the enrichment-decide handler over the multiplexed graph
+> socket (`services::broker_events`), and `ElevationActor` is the ACSP producer
+> (dev/staging default ON, production opt-in). Read the notes below as the
+> historical `crashbug` design, not shipped `main` fact; the REST routes marked
+> `POST /api/broker/cases*` and `GET /api/broker/subscribe` do not exist on
+> `main` (see `docs/reference/rest-api.md` for the routes that do).
 
 ## Date
 
-2026-04-14 (accepted) / 2026-04-20 (implemented)
+2026-04-14 (accepted) / 2026-04-20 (implemented on `crashbug`, unmerged) /
+2026-07-08 (kernel cherry-picked to `main`, transport superseded per ADR-130 D2)
 
-## Implementation Notes (2026-04-20)
+## Implementation Notes (2026-04-20) — historical `crashbug` design, superseded
 
 Backend BC11 landed under `src/domain/broker/` (`BrokerCase` aggregate with
 `CaseCategory::ContributorMeshShare` + `SubjectKind` discriminator per ADR-057
@@ -26,26 +46,39 @@ idempotency, and six-variant coverage. `ShareOrchestratorActor` (C4) owns
 actual share-state transition execution; `ShareIntentBrokerAdapter` only
 produces the intent case.
 
-## Implementation Notes (2026-05-12) — Agent Control Surface Integration
+## Implementation Notes (2026-05-12) — Agent Control Surface Integration — historical `crashbug` design, superseded
 
-The broker workbench now publishes governance events to the DreamLab forum
-relay via the Nostr Agent Control Surface Protocol (kinds 31400-31405),
-enabling human-in-the-loop governance through the forum's reactive UI.
+> **Superseded (ADR-130 Decision 2).** These notes describe the `crashbug`-branch
+> `BrokerActor` / `ServerNostrActor` ACSP wiring, which **never merged to `main`**.
+> On `main` the equivalent kinds (31400/31402) are built by the stateless ADR-110
+> ACSP producer (`src/services/acsp/events.rs`) over the ported `src/domain/broker/`
+> kernel and signed through `src/services/nostr_service.rs`; no kind-30300 Nostr
+> emitter ships. Read every `BrokerActor` / `ServerNostrActor` verb below in the
+> past tense, as that superseded design.
+
+On the `crashbug` branch the broker workbench published governance events to the
+DreamLab forum relay via the Nostr Agent Control Surface Protocol (kinds
+31400-31405), enabling human-in-the-loop governance through the forum's reactive
+UI.
 
 ### Startup panel registration
 
-`BrokerActor::started()` publishes a `PanelDefinition` (kind 31400) with
+`BrokerActor::started()` published a `PanelDefinition` (kind 31400) with
 d-tag `visionclaw-broker` containing the broker's field schema (case_id,
 title, category, priority, state), action buttons (approve, reject,
-escalate), and table layout. The forum's `PanelRegistry` store discovers
-this panel via its relay subscription and renders it on the governance page.
+escalate), and table layout. The forum's `PanelRegistry` store discovered
+this panel via its relay subscription and rendered it on the governance page.
+(On `main` this panel is built by
+`src/services/acsp/events.rs::build_panel_definition`, not an actor `started()`
+hook.)
 
 ### Case submission → ActionRequest
 
-Every `SubmitBrokerCase` (all categories) now sends a `PublishActionRequest`
+Every `SubmitBrokerCase` (all categories) sent a `PublishActionRequest`
 (kind 31402) through `ServerNostrActor` to the forum relay. The relay-worker
-projects it into `broker_cases` in D1, and the forum UI displays it for
-human review with approve/reject buttons.
+projected it into `broker_cases` in D1, and the forum UI displayed it for
+human review with approve/reject buttons. (On `main` the kind-31402 case event
+is built by `src/services/acsp/events.rs::build_action_request`.)
 
 ### Decision event flow
 
@@ -62,15 +95,18 @@ BrokerActor.submit() → kind 31402 ActionRequest → forum relay
                                          → BrokerActor.decide()
 ```
 
-`SignBrokerDecision` (kind 30300) is now emitted for all case categories on
+`SignBrokerDecision` (kind 30300) was emitted for all case categories on
 `DecideBrokerCase`, broadened from the prior `KnowledgeEnrichment`-only gate.
+(No kind-30300 Nostr emitter ships on `main`; the decision audit is the durable
+`DecisionHistoryEntry` plus the WS audit frame.)
 
 ### Cross-repo alignment
 
 The governance event schema is defined in `nostr-bbs-core::governance` and
 shared across the forum kit (relay-worker, auth-worker, forum-client) and
-VisionClaw (server_nostr_actor local types wire-compatible with the core
-crate). BIP-340 Schnorr signing is compatible across all five repos
+VisionClaw (the `crashbug` `server_nostr_actor` local types were wire-compatible
+with the core crate; on `main` the equivalent types live under
+`src/services/acsp/`). BIP-340 Schnorr signing is compatible across all five repos
 (k256 `verify_raw`/`sign_raw` in Rust, `@noble/secp256k1` in JS).
 
 ## Context

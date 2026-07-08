@@ -1274,7 +1274,7 @@ Retrieve server identity, supported event kinds, and relay information. Public e
 }
 ```
 
-**Schema reference**: See ADR-050 for sovereign schema kinds (30023: migration approval, 30100: bridge promotion, 30200: bead stamp, 30300: audit/broker decision, 30301: enrichment proposal). Kinds 31400 (governance panel definition) and 31402 (action request) are Agent Control Surface Protocol events used by the BrokerActor for governance integration with the Forum Kit relay mesh.
+**Schema reference**: See ADR-050 for sovereign schema kinds (30023: migration approval, 30100: bridge promotion, 30200: bead stamp, 30300: audit/broker decision, 30301: enrichment proposal). Kinds 31400 (governance panel definition) and 31402 (action request) are Agent Control Surface Protocol events published by the ACSP producer (`ElevationActor`, ADR-110) over the storage-agnostic broker kernel for governance integration with the Forum Kit relay mesh (ADR-130 Decision 2; the earlier `BrokerActor` transport never merged to `main`).
 
 ---
 
@@ -1667,33 +1667,41 @@ WebSocket binary position updates are rate-limited to 60 frames/second per clien
 
 ## Broker / Governance Endpoints
 
-Broker endpoints serve the Judgment Broker Workbench (ADR-041). Cases submitted
-here are also published as kind-31402 ActionRequest events to the forum relay
-via the Agent Control Surface Protocol.
+Broker endpoints surface the Judgment Broker case queue (ADR-041, superseded-in-part
+by ADR-110 + ADR-130 Decision 2). On `main` this is the ACSP producer plus an
+enrichment REST fallback — **not** the standalone `BrokerActor` (which never
+merged from the `crashbug` branch and was tied to a Neo4j store this stack does
+not run). The storage-agnostic decision kernel (`src/domain/broker/`) is the
+domain model behind the decide path; case queueing and human decision travel over
+the Agent Control Surface Protocol (ACSP, kinds 31400--31405) to the forum's
+`broker_cases` store.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/api/broker/inbox` | NIP-98 / Enterprise | List open broker cases |
-| GET | `/api/broker/cases/:id` | NIP-98 / Enterprise | Get a single case |
-| GET | `/api/broker/cases/:id/history` | NIP-98 / Enterprise | Decision history for a case |
-| POST | `/api/broker/cases` | NIP-98 / Enterprise | Submit a new case |
-| POST | `/api/broker/cases/:id/decide` | NIP-98 / Enterprise (Broker role) | Record a decision |
-| GET | `/api/broker/subscribe` | WebSocket upgrade | Real-time broker inbox events |
+| GET | `/api/broker/inbox` | `power_user` (agentbox `X-Agent-Key`) | List broker cases (WS-12 read projection of the enrichment store) |
+| GET | `/api/broker/cases/:id` | `power_user` (agentbox `X-Agent-Key`) | Get a single case |
+| POST | `/api/enrichment-proposals/:id/decide` | `X-Agent-Key` | Record a broker decision (WS-9 decide; the durable + KG-writeback path) |
 
-### Nostr Event Integration
+### Nostr / WebSocket event integration
 
-The `BrokerActor` publishes governance events alongside the REST API:
+Governance events travel two ways alongside the REST API. Cases are queued to the
+forum over ACSP by the `ElevationActor` producer (gap-close REC-2 / ADR-130
+Decision 2 defaults it ON in dev/staging, opt-in in production); the decide
+handler emits two JSON text frames over the multiplexed `/wss` graph socket
+(`services::broker_events`) so a control-centre queue can subscribe without a
+second transport:
 
-| Event Kind | Direction | Trigger |
-|------------|-----------|---------|
-| 31400 (PanelDefinition) | Outbound | `BrokerActor::started()` — registers the panel on boot |
-| 31402 (ActionRequest) | Outbound | `POST /api/broker/cases` — every new case |
-| 31403 (ActionResponse) | Inbound | Human approves/rejects via forum governance UI |
-| 30300 (BrokerDecision) | Outbound | `POST /api/broker/cases/:id/decide` — every decision |
+| Event | Transport | Trigger |
+|-------|-----------|---------|
+| 31400 (PanelDefinition) | ACSP → forum relay | `ElevationActor::started()` — registers the panel on boot |
+| 31402 (ActionRequest) | ACSP → forum relay | A case is queued (frontier candidate or voice intent) |
+| 31403 (ActionResponse) | ACSP ← forum relay | Human approves/rejects via forum governance UI |
+| `broker:new_case` | `/wss` graph socket | A case enters the queue this decide call |
+| `broker:case_decided` | `/wss` graph socket | `POST /api/enrichment-proposals/:id/decide` records a decision |
 
 The forum relay at `wss://dreamlab-nostr-relay...workers.dev` is the
-bidirectional transport. The agentbox relay-consumer bridges events between the
-embedded relay and the forum relay via `external_fanout = "bidirectional"`.
+bidirectional ACSP transport. The agentbox relay-consumer bridges events between
+the embedded relay and the forum relay via `external_fanout = "bidirectional"`.
 
 ---
 

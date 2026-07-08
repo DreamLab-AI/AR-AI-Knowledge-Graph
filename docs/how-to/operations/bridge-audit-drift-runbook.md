@@ -19,10 +19,16 @@ Grafana dashboard: `bridge_kind30100_errors_total` counter > 0.
 - Verify env: `NOSTR_RELAY_URLS` is set and URLs are valid
 - Test connectivity: `curl -I $NOSTR_RELAY_URL`
 
-**2. `ServerNostrActor` mailbox closed?**
-- Check logs for `actor stopped` or `PANIC`
-- Search tracing logs for actor termination
-- If found, restart the server-nostr sidecar
+**2. Nostr publish path erroring? (no actor / sidecar on `main`)**
+- On `main` the kind-30100 fan-out is a **synchronous** call inside
+  `BridgeEdgeService::promote` (`src/services/bridge_edge.rs`) through the server
+  Nostr signing path (`src/services/nostr_service.rs`). There is **no**
+  `ServerNostrActor` and **no** server-nostr sidecar to restart — that actor
+  design exists only on the unmerged `crashbug` branch.
+- Grep logs for `bridge_edge` / `nostr_service` publish errors and for
+  `bridge_kind30100_errors_total` increments
+- A `PANIC`/error on the signing call fails the promotion inline; there is no
+  mailbox to drain. Fix the signing input (step 3) and re-run the promotion.
 
 **3. HS256 signing failure?**
 - Validate env: `SERVER_NOSTR_PRIVKEY` must be set and non-empty

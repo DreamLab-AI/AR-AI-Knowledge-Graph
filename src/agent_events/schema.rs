@@ -78,6 +78,70 @@ pub struct AgentActionEnvelope {
     #[serde(default)]
     pub pubkey: Option<String>,
 
+    /// REC-3 (PRD-023 WP-7) — contextual transaction cost, first-class typed.
+    ///
+    /// **Canonical wire names come from agentbox** — the schema source of record
+    /// (ADR-059 §2, restated at the top of this module). Its emitter
+    /// `management-api/utils/agent-event-publisher.js::createMcpNotification`
+    /// puts `token_count` / `handoff_id` / `verification` on the wire, and the
+    /// agentbox contract test `tests/sovereign/voice-intent.test.js` pins their
+    /// runtime types: `token_count` is a **number**, `handoff_id` is a
+    /// correlation **URN string** (`urn:agentbox:activity:chain-…`), and
+    /// `verification` is an outcome **string** (`"pass"`). These Rust fields
+    /// mirror that shape byte-for-field so a real agentbox frame actually
+    /// populates them.
+    ///
+    /// REC-3 gap-close fix (this file's own doc-comment names agentbox canonical):
+    /// the earlier draft declared `handoff_count: Option<u32>` /
+    /// `token_burden` / `verification_outcome` with NO serde alias, so every real
+    /// frame deserialised to `None` forever — a `u32` cannot even accept the
+    /// string `handoff_id` (it errored the whole frame) — and
+    /// `CANARY-VC-REC3-CTC` could never fire. The fields are now aligned to the
+    /// canonical spellings/types; the PRD-023/ADR-130 draft names are retained as
+    /// `#[serde(alias)]` so a producer using the draft spelling still
+    /// deserialises. **Both spellings parse.**
+    ///
+    /// Additive + versioned: each field is `#[serde(default)]`, so a pre-REC-3
+    /// emitter that omits every field still deserialises to `None`, and a
+    /// consumer that never reads them is unaffected. CTC is a first-class member,
+    /// NOT a free-form `metadata` key, so `has_ctc()` reads it without parsing
+    /// the untyped blob (WP-7 falsification trigger).
+    ///
+    ///   * `token_count`  — cumulative model tokens spent to reach this action
+    ///                      (full width; a DAG can burn > u32).
+    ///   * `handoff_id`   — the handoff-chain correlation id (an activity URN)
+    ///                      the action closes.
+    ///   * `verification` — the DAG verification verdict for this action
+    ///                      (e.g. `"pass"` / `"fail"` / `"skipped"`).
+    #[serde(default, alias = "token_burden")]
+    pub token_count: Option<u64>,
+    #[serde(default, alias = "handoff_count")]
+    pub handoff_id: Option<String>,
+    #[serde(default, alias = "verification_outcome")]
+    pub verification: Option<String>,
+
+    /// D7 (PRD-023 / ADR-130 register position — *pre-action intent
+    /// legibility*). The **declared intent** an agent states BEFORE it acts, so
+    /// the steering surface can render "about to: <declared action>" rather than
+    /// only past actions (the D7 finding: "embodiment shows only past").
+    ///
+    /// D7 is a **canon-position** item: the canon owns the intent-legibility
+    /// position (`VisionFlow/docs/PRD-gap-close-sprint.md:60`, "theory→canon"),
+    /// and VisionClaw carries the affordance that cites it. PRD-023 does not
+    /// carve D7 into a work package; this field is the minimal additive
+    /// envelope-side affordance (mirrored by the desktop `AgentDetailPanel`
+    /// display). agentbox MAY populate `intent` at emit time; until it does the
+    /// field is `None` and the panel simply shows no "about to" line — honest,
+    /// never fabricated.
+    ///
+    /// Additive + versioned like the CTC fields: `#[serde(default)]`, so a
+    /// producer that never declares an intent still deserialises to `None`, and
+    /// the identity-blind binary `0x23` projection is unaffected (intent is
+    /// legibility metadata, not a GPU field). Both the register spelling
+    /// `intent` and the fuller `declared_intent` deserialise.
+    #[serde(default, alias = "declared_intent")]
+    pub intent: Option<String>,
+
     #[serde(default)]
     pub metadata: Value,
 }
@@ -85,6 +149,23 @@ pub struct AgentActionEnvelope {
 impl AgentActionEnvelope {
     pub fn action_type(&self) -> AgentActionType {
         AgentActionType::from(self.action_type)
+    }
+
+    /// True when at least one typed contextual-transaction-cost field is
+    /// populated (REC-3, PRD-023 WP-7). The `CANARY-VC-REC3-CTC` fire predicate:
+    /// an envelope carrying a populated typed CTC field proves CTC data rides the
+    /// wire as a first-class member, not the untyped `metadata` blob.
+    pub fn has_ctc(&self) -> bool {
+        self.handoff_id.is_some()
+            || self.token_count.is_some()
+            || self.verification.is_some()
+    }
+
+    /// D7 (PRD-023 / ADR-130 register position): the agent's declared pre-action
+    /// intent, if it stated one. `Some` means the steering surface can render
+    /// "about to: <declared action>"; `None` means only past actions are known.
+    pub fn declared_intent(&self) -> Option<&str> {
+        self.intent.as_deref()
     }
 
     /// Project the identity-bearing JSON envelope onto the identity-blind binary
@@ -184,6 +265,122 @@ mod tests {
         assert!(n.params.event.metadata.is_null());
     }
 
+    // REC-3 (WP-7): a VERBATIM agentbox `createMcpNotification` frame — the
+    // canonical wire shape (agentbox is the schema source of record). Field
+    // names AND runtime types are copied straight from the emitter
+    // (`agentbox/management-api/utils/agent-event-publisher.js`) and its contract
+    // test (`agentbox/tests/sovereign/voice-intent.test.js`): `token_count` is a
+    // NUMBER, `handoff_id` a correlation-URN STRING, `verification` an outcome
+    // STRING. It carries every field the emitter renders, including the null
+    // `source_urn`/`target_urn`/`pubkey`/`failure_mode` an existing caller emits.
+    fn agentbox_canonical_json_with_ctc() -> &'static str {
+        r#"{
+          "jsonrpc": "2.0",
+          "method": "notifications/agent_action",
+          "params": {
+            "type": "agent_action",
+            "event": {
+              "version": 3, "id": 9, "source_agent_id": 3, "target_node_id": 88,
+              "action_type": 2, "action_type_name": "create",
+              "timestamp": 1748500000000, "duration_ms": 900,
+              "source_urn": null, "target_urn": null, "pubkey": null,
+              "failure_mode": null,
+              "token_count": 1234,
+              "handoff_id": "urn:agentbox:activity:chain-7",
+              "verification": "pass",
+              "metadata": { "dag": "d-1" }
+            },
+            "message_type": 35, "protocol_version": 2,
+            "timestamp": "2026-05-29T00:00:00.000Z"
+          }
+        }"#
+    }
+
+    // The PRD-023/ADR-130 DRAFT spelling (`token_burden` / `handoff_count` /
+    // `verification_outcome`). Retained ONLY via `#[serde(alias)]` so a producer
+    // using the draft name still deserialises. `handoff_count` carries a STRING
+    // here too — the field is a correlation id, never a bare count — so the alias
+    // path exercises the same `Option<String>` type the canonical name does.
+    fn draft_named_json_with_ctc() -> &'static str {
+        r#"{
+          "jsonrpc": "2.0",
+          "method": "notifications/agent_action",
+          "params": {
+            "type": "agent_action",
+            "event": {
+              "version": 3, "id": 9, "source_agent_id": 3, "target_node_id": 88,
+              "action_type": 2, "action_type_name": "create",
+              "timestamp": 1748500000000, "duration_ms": 900,
+              "token_burden": 5000000000,
+              "handoff_count": "urn:agentbox:activity:chain-9",
+              "verification_outcome": "passed",
+              "metadata": { "dag": "d-1" }
+            },
+            "message_type": 35, "protocol_version": 2,
+            "timestamp": "2026-05-29T00:00:00.000Z"
+          }
+        }"#
+    }
+
+    #[test]
+    fn ctc_deserialises_from_canonical_agentbox_names() {
+        // Falsification-closer (REC-3 gap-close): a REAL agentbox frame populates
+        // the typed CTC fields ⇒ `has_ctc()`. Before the fix the canonical wire
+        // names (`token_count`/`handoff_id`/`verification`) matched no Rust field,
+        // so every frame deserialised to None and CANARY-VC-REC3-CTC could never
+        // fire — and the string `handoff_id` would have errored a `u32` field.
+        let n: AgentActionNotification =
+            serde_json::from_str(agentbox_canonical_json_with_ctc()).expect("parse");
+        let e = &n.params.event;
+        // Full-width: 1234 fits, but the field is u64 so a DAG can burn > u32.
+        assert_eq!(e.token_count, Some(1234));
+        // handoff_id is a correlation URN STRING — an Option<u32> could not hold it.
+        assert_eq!(e.handoff_id.as_deref(), Some("urn:agentbox:activity:chain-7"));
+        assert_eq!(e.verification.as_deref(), Some("pass"));
+        assert!(e.has_ctc(), "a canonical agentbox CTC frame ⇒ has_ctc()");
+    }
+
+    #[test]
+    fn ctc_deserialises_from_draft_prd_alias_names() {
+        // BOTH spellings parse: the PRD-023/ADR-130 draft names deserialise via
+        // `#[serde(alias)]` into the same canonical fields.
+        let n: AgentActionNotification =
+            serde_json::from_str(draft_named_json_with_ctc()).expect("parse");
+        let e = &n.params.event;
+        // 5_000_000_000 does not fit u32 — proves the aliased field is u64.
+        assert_eq!(e.token_count, Some(5_000_000_000));
+        assert_eq!(e.handoff_id.as_deref(), Some("urn:agentbox:activity:chain-9"));
+        assert_eq!(e.verification.as_deref(), Some("passed"));
+        assert!(e.has_ctc(), "draft-named CTC frame ⇒ has_ctc() (alias path)");
+    }
+
+    #[test]
+    fn ctc_absent_deserialises_as_none_and_has_ctc_false() {
+        // Backward compatibility: a pre-REC-3 producer omits every CTC field
+        // and must still parse, with has_ctc() false (the canary does not fire).
+        let n: AgentActionNotification =
+            serde_json::from_str(canonical_json_with_identity()).expect("parse");
+        let e = &n.params.event;
+        assert!(e.token_count.is_none());
+        assert!(e.handoff_id.is_none());
+        assert!(e.verification.is_none());
+        assert!(!e.has_ctc(), "no CTC field ⇒ has_ctc() false");
+    }
+
+    #[test]
+    fn ctc_round_trips_through_serde() {
+        let n: AgentActionNotification =
+            serde_json::from_str(agentbox_canonical_json_with_ctc()).expect("parse");
+        let s = serde_json::to_string(&n).expect("serialise");
+        // Serialisation emits the CANONICAL agentbox names (field name == wire
+        // name; the alias is deserialise-only) so the frame round-trips onward.
+        assert!(s.contains(r#""token_count":1234"#));
+        assert!(s.contains(r#""handoff_id":"urn:agentbox:activity:chain-7""#));
+        assert!(s.contains(r#""verification":"pass""#));
+        let n2: AgentActionNotification = serde_json::from_str(&s).expect("reparse");
+        assert_eq!(n, n2);
+    }
+
     #[test]
     fn round_trips_through_serde() {
         let n: AgentActionNotification =
@@ -191,6 +388,47 @@ mod tests {
         let s = serde_json::to_string(&n).expect("serialise");
         let n2: AgentActionNotification = serde_json::from_str(&s).expect("reparse");
         assert_eq!(n, n2);
+    }
+
+    // D7 (PRD-023 / ADR-130 register position): pre-action intent legibility.
+    #[test]
+    fn declared_intent_deserialises_and_is_optional() {
+        // A producer that declares an intent BEFORE acting: the field parses and
+        // the accessor surfaces it for the "about to: <declared action>" display.
+        let with_intent = r#"{
+          "jsonrpc": "2.0",
+          "method": "notifications/agent_action",
+          "params": {
+            "type": "agent_action",
+            "event": {
+              "version": 3, "id": 1, "source_agent_id": 1, "target_node_id": 2,
+              "action_type": 1, "action_type_name": "update",
+              "timestamp": 1748500000000, "duration_ms": 100,
+              "intent": "rewrite the budget node with Q3 figures"
+            },
+            "message_type": 35, "protocol_version": 2,
+            "timestamp": "2026-05-29T00:00:00.000Z"
+          }
+        }"#;
+        let n: AgentActionNotification = serde_json::from_str(with_intent).expect("parse");
+        assert_eq!(
+            n.params.event.declared_intent(),
+            Some("rewrite the budget node with Q3 figures")
+        );
+
+        // The fuller `declared_intent` spelling also deserialises (alias).
+        let aliased = with_intent.replace("\"intent\":", "\"declared_intent\":");
+        let n2: AgentActionNotification = serde_json::from_str(&aliased).expect("parse alias");
+        assert_eq!(
+            n2.params.event.declared_intent(),
+            Some("rewrite the budget node with Q3 figures")
+        );
+
+        // A producer that declares no intent still parses; the field is None, so
+        // the panel shows no "about to" line (honest, never fabricated).
+        let n3: AgentActionNotification =
+            serde_json::from_str(canonical_json_with_identity()).expect("parse");
+        assert!(n3.params.event.declared_intent().is_none());
     }
 
     #[test]

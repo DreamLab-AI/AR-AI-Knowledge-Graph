@@ -190,6 +190,10 @@ mod tests {
             source_urn: None,
             target_urn: None,
             pubkey: None,
+            token_count: None,
+            handoff_id: None,
+            verification: None,
+            intent: None,
             metadata: serde_json::json!({ "note": "x" }),
         }
     }

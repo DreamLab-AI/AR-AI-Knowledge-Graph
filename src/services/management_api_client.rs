@@ -56,6 +56,13 @@ pub struct TaskStatus {
     pub task_dir: String,
     pub log_file: String,
     pub log_tail: Option<String>,
+    /// D2 (PRD-023 WP-3): the claude-flow swarm `agent_id` this task was created
+    /// for, when the creator knew one — echoed back by the Management API. `agent`
+    /// carries a role label ("coder"/"researcher"/…) and can NEVER be a claude-flow
+    /// id; this field is the ONLY carrier of a claude-flow agent id. `None` when the
+    /// task had no registry-provenance claude-flow agent.
+    #[serde(default)]
+    pub claude_flow_agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -76,6 +83,14 @@ pub struct TaskInfo {
     pub status: TaskState,
     pub start_time: u64,
     pub duration: u64,
+    /// D2 (PRD-023 WP-3): the claude-flow swarm `agent_id` this task was created
+    /// for, when the creator knew one — echoed back by the Management API's
+    /// `GET /v1/tasks`. This is the ONLY field the interrupt resolver joins on: the
+    /// `agent` field carries a role label ("coder"/"researcher"/…) and can never
+    /// equal a claude-flow agent id, so matching `agent` was a false-positive
+    /// hazard. `None` for role-only spawns (no interruptible-by-agent-id join).
+    #[serde(default)]
+    pub claude_flow_agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,8 +217,9 @@ impl ManagementApiClient {
         agent: &str,
         task: &str,
         provider: &str,
+        claude_flow_agent_id: Option<&str>,
     ) -> Result<TaskResponse, ManagementApiError> {
-        self.create_task_with_context(agent, task, provider, None, false, None)
+        self.create_task_with_context(agent, task, provider, None, false, None, claude_flow_agent_id)
             .await
     }
 
@@ -213,6 +229,14 @@ impl ManagementApiClient {
     /// - Create a user-scoped workspace directory
     /// - Inject VISIONCLAW_USER_* env vars into the agent process
     /// - Optionally create a Beads epic for task tracking (if `with_beads` is true)
+    ///
+    /// D2 (PRD-023 WP-3): `claude_flow_agent_id` is the OPTIONAL, additive
+    /// claude-flow swarm `agent_id` this task is created for. The Management API
+    /// persists it on the task record and echoes it in `GET /v1/tasks` / task
+    /// status, so the interrupt resolver can join a swarm agent_id → task_id. Pass
+    /// `None` where no genuine claude-flow id exists — a role label or a
+    /// Management-API task_id is NOT a claude-flow agent id, and fabricating one
+    /// would re-introduce the false-positive the join exists to close.
     pub async fn create_task_with_context(
         &self,
         agent: &str,
@@ -221,6 +245,7 @@ impl ManagementApiClient {
         user_context: Option<&UserContext>,
         with_beads: bool,
         parent_bead_id: Option<&str>,
+        claude_flow_agent_id: Option<&str>,
     ) -> Result<TaskResponse, ManagementApiError> {
         let url = format!("{}/v1/tasks", self.base_url);
 
@@ -229,6 +254,12 @@ impl ManagementApiClient {
             "task": task,
             "provider": provider,
         });
+
+        // D2: additive snake_case join key, matching the agentbox create-task
+        // schema. Only present when the creator genuinely knew a claude-flow id.
+        if let Some(cfa) = claude_flow_agent_id {
+            request_body["claude_flow_agent_id"] = serde_json::json!(cfa);
+        }
 
         if let Some(ctx) = user_context {
             request_body["user_context"] = serde_json::json!({

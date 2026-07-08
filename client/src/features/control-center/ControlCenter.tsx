@@ -17,6 +17,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { SpaceDriver } from '../../services/SpaceDriverService';
+import { webSocketService } from '../../store/websocketStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { ControlPanelProps } from '../visualisation/components/ControlPanel/types';
 import { CommandInput } from '../visualisation/components/CommandInput';
@@ -78,6 +79,25 @@ export const ControlCenter: React.FC<ControlPanelProps> = ({
   useControlCenterHotkeys();
   useRevealSetting();
 
+  // D5: the WS status dot must track the real socket lifecycle, not a literal.
+  // Mirror the webSocketService.onConnectionStatusChange subscription already
+  // used across the app (ConnectionWarning, BotsWebSocketIntegration) and thread
+  // the live state into StatusCluster so the dot flips to disconnected when the
+  // socket actually drops (CANARY-VC-D5-WS).
+  const [websocketStatus, setWebsocketStatus] = useState<
+    'connected' | 'connecting' | 'disconnected'
+  >(webSocketService.isReady() ? 'connected' : 'connecting');
+
+  useEffect(() => {
+    const unsubscribe = webSocketService.onConnectionStatusChange((connected) => {
+      setWebsocketStatus(connected ? 'connected' : 'disconnected');
+    });
+    // Seed from the current lifecycle state in case a transition fired before
+    // this effect subscribed.
+    setWebsocketStatus(webSocketService.isReady() ? 'connected' : 'connecting');
+    return unsubscribe;
+  }, []);
+
   // --- SpaceDriver / SpacePilot wiring (ported verbatim from IntegratedControlPanel) ---
   const [webHidAvailable, setWebHidAvailable] = useState(false);
   const [spacePilotConnected, setSpacePilotConnected] = useState(false);
@@ -136,7 +156,7 @@ export const ControlCenter: React.FC<ControlPanelProps> = ({
           graphData={graphData}
           botsData={botsData}
           mcpConnected={botsData?.mcpConnected ?? false}
-          websocketStatus="connected"
+          websocketStatus={websocketStatus}
           metadataStatus={(graphData?.nodes?.length ?? 0) > 0 ? 'loaded' : 'loading'}
           webHidAvailable={webHidAvailable}
           spacePilotConnected={spacePilotConnected}

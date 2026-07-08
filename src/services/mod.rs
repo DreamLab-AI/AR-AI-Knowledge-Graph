@@ -22,6 +22,14 @@ pub mod schema_service;
 pub mod semantic_analyzer;
 pub mod semantic_pathfinding_service;
 pub mod audio_router;
+// COM-15 / V1 / D6 / M5 (PRD-023 WP-5): the governed voice loop's consumer —
+// signs a kind-31402 targeted at the selected agent's did:nostr and POSTs it to
+// the agentbox `/v1/voice-intent` producer (ADR-037 D7).
+pub mod voice_intent_client;
+// V3 (PRD-023 WP-10): the conversational-grounding confidence gate that holds a
+// low-confidence / under-specified spoken command for a clarification turn
+// instead of dispatching it.
+pub mod voice_clarification;
 pub mod speech_service;
 pub mod speech_voice_integration;
 pub mod voice_context_manager;
@@ -44,6 +52,31 @@ pub mod nostr_bead_publisher;
 pub mod nostr_bridge;
 // PRD-008 §5.3 — Schnorr identity verifier for the XR presence handshake
 pub mod nostr_identity_verifier;
+
+// RES-a: sprint-wide live-traffic observer + KG-backend watchdog (ADR-130 D3)
+pub mod liveness_harness;
+
+// REC-4: four-KPI compute engine (Augmentation Ratio, Trust Variance) with
+// SQLite snapshots + lineage; ADR-043 resurrected per ADR-130 Decision 5.
+pub mod kpi_compute;
+
+// RES-a / WP-11 AC3: Nostr-relay tap so Nostr-only repositories (nostr-rust-forum,
+// solid-pod-rs) can fire canaries they cannot POST over HTTP (ADR-130 D3).
+pub mod canary_nostr_tap;
+
+// REC-2 / D3: broker case-queue WebSocket events (broker:new_case /
+// broker:case_decided) over the multiplexed graph socket (ADR-130 D2).
+pub mod broker_events;
+
+// REC-10 (PRD-023 WP-12): Insight Ingestion Loop v1 — the five-stage loop trace
+// (propose → queue → decide → merge → amplification[planned]) with per-stage
+// timestamps so Mesh Velocity is computable.
+pub mod insight_loop;
+
+// REC-11 (PRD-023 WP-12): the data-moat unified provenance trace — a query layer
+// joining agent-events/hook-trajectory + broker decisions (+ pod git-marks when a
+// --features git pod supplies them) on the did:nostr attribution (ADR-130).
+pub mod provenance_trace;
 
 // JSON-LD validator (Data Sprint Phase D-2). Pure markdown + JSON-LD
 // validation; does NOT depend on the persistence-oxigraph feature.

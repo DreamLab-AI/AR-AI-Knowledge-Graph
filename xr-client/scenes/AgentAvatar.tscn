@@ -1,0 +1,61 @@
+[gd_scene load_steps=8 format=3 uid="uid://b3xragent01vc"]
+
+; Geometric agent embodiment (PRD-023 WP-9 M3, ADR-130 Decision 4, copresence
+; brief §1). Minimal legible form — a crystal orb core, an explicit gaze cone,
+; and a screen-facing DID badge — NOT a humanoid skeleton. State is shown by
+; colour/emission and motion, driven from the Rust AgentAvatarNode via
+; agent_avatar.gd. Body/face tracking are out of scope (Quest 3 lacks the
+; hardware) and never appear here.
+
+[ext_resource type="Script" path="res://scripts/agent_avatar.gd" id="1_agent"]
+[ext_resource type="Material" uid="uid://b3xrmatorb01" path="res://materials/crystal_orb.tres" id="2_orb"]
+[ext_resource type="Material" uid="uid://b3xrmatcone01" path="res://materials/gaze_cone.tres" id="3_cone"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_core"]
+radius = 0.15
+height = 0.3
+radial_segments = 24
+rings = 12
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_cone"]
+top_radius = 0.28
+bottom_radius = 0.04
+height = 0.6
+radial_segments = 20
+rings = 1
+cap_top = false
+cap_bottom = false
+
+[sub_resource type="QuadMesh" id="QuadMesh_billboard"]
+size = Vector2(0.3, 0.3)
+
+[sub_resource type="LabelSettings" id="LabelSettings_badge"]
+font_size = 22
+outline_size = 4
+outline_color = Color(0, 0, 0, 0.8)
+
+[node name="AgentAvatar" type="Node3D"]
+script = ExtResource("1_agent")
+
+[node name="Core" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_core")
+material_override = ExtResource("2_orb")
+
+[node name="CoreBillboard" type="MeshInstance3D" parent="."]
+visible = false
+mesh = SubResource("QuadMesh_billboard")
+material_override = ExtResource("2_orb")
+
+[node name="GazeCone" type="MeshInstance3D" parent="."]
+mesh = SubResource("CylinderMesh_cone")
+material_override = ExtResource("3_cone")
+
+[node name="Badge" type="Label3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+billboard = 1
+double_sided = true
+no_depth_test = false
+fixed_size = true
+pixel_size = 0.0006
+text = ""
+label_settings = SubResource("LabelSettings_badge")

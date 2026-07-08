@@ -51,6 +51,21 @@ func test_avatar_scene_loads():
 	assert_not_null(root.get_node_or_null("Head"), "Head child")
 	assert_not_null(root.get_node_or_null("LeftHand"), "LeftHand child")
 	assert_not_null(root.get_node_or_null("RightHand"), "RightHand child")
+	# M1 (PRD-023 WP-9): the peer avatar carries a DID badge below the nameplate.
+	assert_not_null(root.get_node_or_null("Head/DidBadge"), "DidBadge child")
+	root.queue_free()
+
+func test_agent_avatar_scene_loads():
+	var packed := load("res://scenes/AgentAvatar.tscn")
+	assert_not_null(packed, "AgentAvatar.tscn must be loadable")
+	var root := packed.instantiate()
+	assert_not_null(root, "AgentAvatar.tscn must instantiate")
+	assert_eq(root.name, "AgentAvatar", "root node name")
+	# M3 geometric embodiment: core + billboard + gaze cone + DID badge.
+	assert_not_null(root.get_node_or_null("Core"), "Core child")
+	assert_not_null(root.get_node_or_null("CoreBillboard"), "CoreBillboard child")
+	assert_not_null(root.get_node_or_null("GazeCone"), "GazeCone child")
+	assert_not_null(root.get_node_or_null("Badge"), "Badge child")
 	root.queue_free()
 
 func test_all_scenes_have_attached_scripts():

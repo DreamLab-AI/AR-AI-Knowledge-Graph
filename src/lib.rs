@@ -7,6 +7,8 @@ pub mod application;
 pub mod client;
 pub mod config;
 pub mod constraints;
+// Storage-agnostic domain kernels (ADR-130 Decision 2 broker kernel lives here).
+pub mod domain;
 pub mod errors;
 pub mod events;
 pub mod gpu;

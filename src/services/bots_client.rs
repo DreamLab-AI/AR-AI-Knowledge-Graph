@@ -33,9 +33,34 @@ pub struct Agent {
     #[serde(default = "default_memory_usage")]
     pub memory_usage: f32,
     #[serde(rename = "createdAt", skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<String>, 
+    pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub age: Option<u64>, 
+    pub age: Option<u64>,
+    /// Sovereign identity (`did:nostr:<hex>`), minted by agentbox at spawn and
+    /// carried here to every client surface (COM-14, ADR-125). `None` until
+    /// agentbox attaches it. Populated only after a `uri::did_nostr()` round-trip
+    /// (see [`validate_did_nostr`]); the trust key that supersedes `id`
+    /// (`task_id`) once verified (WP-1, DDD invariant 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub did_nostr: Option<String>,
+}
+
+/// Accept a claimed `did:nostr` only if it round-trips through the canonical
+/// `uri::did_nostr()` primitive (ADR-125 I1): a `ParsedUri::DidNostr` whose
+/// re-minted form equals the claim. A malformed or non-DID claim is dropped to
+/// `None` rather than carried onto a trusted surface (WP-1, invariant 2). This
+/// is the well-formedness gate at carry time; control of the key is proven
+/// separately by the Schnorr challenge in `nostr_identity_verifier`.
+fn validate_did_nostr(claimed: &str) -> Option<String> {
+    match crate::uri::parse(claimed) {
+        Ok(crate::uri::ParsedUri::DidNostr { pubkey }) => crate::uri::did_nostr(&pubkey)
+            .ok()
+            .filter(|minted| minted == claimed),
+        _ => {
+            warn!("dropping malformed did:nostr claim on agent record: {claimed}");
+            None
+        }
+    }
 }
 
 fn default_cpu_usage() -> f32 {
@@ -71,6 +96,9 @@ impl From<MultiMcpAgentStatus> for Agent {
                     .unwrap_or_default(),
             ),
             age: Some((time::timestamp_seconds() - mcp_agent.created_at) as u64 * 1000),
+            // Carry the agentbox-minted DID onto the trusted Agent form, gated on
+            // a uri::did_nostr() round-trip (WP-1). Absent/malformed → None.
+            did_nostr: mcp_agent.did_nostr.as_deref().and_then(validate_did_nostr),
         }
     }
 }

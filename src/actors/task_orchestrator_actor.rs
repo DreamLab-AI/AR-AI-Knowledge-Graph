@@ -93,13 +93,14 @@ async fn create_task_with_retry(
     agent: &str,
     task: &str,
     provider: &str,
+    claude_flow_agent_id: Option<&str>,
     max_retries: u32,
     retry_delay: Duration,
 ) -> Result<(TaskResponse, u32), ManagementApiError> {
     let mut attempts = 0u32;
 
     loop {
-        match client.create_task(agent, task, provider).await {
+        match client.create_task(agent, task, provider, claude_flow_agent_id).await {
             Ok(response) => {
                 info!(
                     "[TaskOrchestratorActor] Task created successfully: {}",
@@ -188,6 +189,12 @@ pub struct CreateTask {
     pub agent: String,
     pub task: String,
     pub provider: String,
+    /// D2 (PRD-023 WP-3): the claude-flow swarm `agent_id` this task is created
+    /// for, when the caller genuinely knows one. Carried to the Management API so a
+    /// later interrupt can join a swarm agent_id → task_id. `None` where no real
+    /// claude-flow id exists — do NOT fabricate (a role label / task_id is not a
+    /// claude-flow agent id, and a fabricated join re-opens the closed bug).
+    pub claude_flow_agent_id: Option<String>,
 }
 
 #[derive(Message)]
@@ -201,6 +208,54 @@ pub struct GetTaskStatus {
 pub struct StopTask {
     pub task_id: String,
 }
+
+/// D2 (PRD-023 WP-3): interrupt a steerable agent by an id that may be in
+/// EITHER namespace — a Management-API `task_id` OR a claude-flow swarm
+/// `agent_id` (the two are disjoint minted namespaces). The orchestrator
+/// resolves the id to a concrete Management-API `task_id` before issuing the
+/// stop, so a bare swarm `agent_id` from `AgentDetailPanel` no longer 404s the
+/// Management API on every interrupt. Returns the resolved `task_id` on success
+/// (so the caller can report exactly what was stopped), and a typed
+/// [`InterruptError`] — never a blind stop of an unrelated task — otherwise.
+#[derive(Message)]
+#[rtype(result = "Result<String, InterruptError>")]
+pub struct InterruptAgentTask {
+    /// A `task_id` or a swarm `agent_id`; resolved server-side.
+    pub id: String,
+}
+
+/// Typed failure modes for [`InterruptAgentTask`], so the HTTP layer can disclose
+/// the honest capability boundary instead of collapsing every miss into a 500.
+///
+/// The load-bearing distinction is `Unresolved`: an id that maps to no task in
+/// the registry and to no task's `claude_flow_agent_id` belongs to an agent with
+/// no task-registry provenance — e.g. an MCP-native claude-flow agent surfaced by
+/// `agent_list`. Such an agent is **not interruptible from here**: the MCP TCP
+/// surface (`crate::utils::mcp_tcp_client`) exposes only `agent_list` /
+/// `swarm_status` / `server_info` / `initialize` — there is NO terminate/stop
+/// verb — so the client discloses a disabled explanatory state rather than
+/// retrying a stop that can never land. `Transport`/`Stop` are operational faults.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InterruptError {
+    /// The id matched neither a `task_id` nor any task's `claude_flow_agent_id`.
+    Unresolved(String),
+    /// The Management-API task list could not be fetched (resolve step failed).
+    Transport(String),
+    /// The id resolved to a `task_id` but the stop call itself failed.
+    Stop(String),
+}
+
+impl std::fmt::Display for InterruptError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InterruptError::Unresolved(m) | InterruptError::Transport(m) | InterruptError::Stop(m) => {
+                write!(f, "{m}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for InterruptError {}
 
 #[derive(Message)]
 #[rtype(result = "Result<Vec<TaskInfo>, String>")]
@@ -285,6 +340,7 @@ impl Handler<CreateTask> for TaskOrchestratorActor {
         let agent = msg.agent;
         let task = msg.task;
         let provider = msg.provider;
+        let claude_flow_agent_id = msg.claude_flow_agent_id;
 
         Box::pin(
             async move {
@@ -293,6 +349,7 @@ impl Handler<CreateTask> for TaskOrchestratorActor {
                     &agent,
                     &task,
                     &provider,
+                    claude_flow_agent_id.as_deref(),
                     max_retries,
                     retry_delay,
                 )
@@ -378,6 +435,63 @@ impl Handler<StopTask> for TaskOrchestratorActor {
         let task_id = msg.task_id.clone();
 
         Box::pin(async move { client.stop_task(&task_id).await.map_err(|e| e.to_string()) })
+    }
+}
+
+impl Handler<InterruptAgentTask> for TaskOrchestratorActor {
+    type Result = ResponseFuture<Result<String, InterruptError>>;
+
+    fn handle(&mut self, msg: InterruptAgentTask, _ctx: &mut Self::Context) -> Self::Result {
+        let id = msg.id.clone();
+        info!("[TaskOrchestratorActor] Received InterruptAgentTask: {}", id);
+
+        // Fast path: the id is already a known Management-API task_id held in the
+        // local registry (e.g. a task this orchestrator itself created). No
+        // round-trip needed to resolve it.
+        let local_hit = self.active_tasks.contains_key(&id);
+        let client = self.api_client.clone();
+
+        Box::pin(async move {
+            let resolved = if local_hit {
+                id.clone()
+            } else {
+                // The id is (most often) a claude-flow swarm agent_id — a DISJOINT
+                // namespace from the Management-API task_id. Resolve it against the
+                // live task list. Fail honestly when nothing maps — the caller
+                // surfaces a typed error instead of the wrong stop.
+                let list = client.list_tasks().await.map_err(|e| {
+                    InterruptError::Transport(format!("interrupt resolve: task list unavailable: {e}"))
+                })?;
+                // Resolution order:
+                //   1. the id IS a Management-API `task_id`;
+                //   2. the id is the task's `claude_flow_agent_id` — the ONLY field
+                //      that can carry a claude-flow swarm agent id (the genuine
+                //      end-to-end join).
+                // The role-label `agent` field is deliberately NEVER matched: it
+                // carries "coder"/"researcher"/… and can never equal a claude-flow
+                // agent id, so the old `t.agent == id` fallback was a false-positive
+                // hazard (a role label colliding with an agent id would stop an
+                // unrelated task). D2 re-verification removed it.
+                list.active_tasks
+                    .iter()
+                    .find(|t| t.task_id == id)
+                    .or_else(|| {
+                        list.active_tasks
+                            .iter()
+                            .find(|t| t.claude_flow_agent_id.as_deref() == Some(id.as_str()))
+                    })
+                    .map(|t| t.task_id.clone())
+                    .ok_or_else(|| {
+                        InterruptError::Unresolved(format!("no active task resolves id '{id}'"))
+                    })?
+            };
+
+            client
+                .stop_task(&resolved)
+                .await
+                .map(|()| resolved)
+                .map_err(|e| InterruptError::Stop(e.to_string()))
+        })
     }
 }
 

@@ -732,6 +732,12 @@ async fn main() -> std::io::Result<()> {
     };
 
     info!("main: All services and actors initialized. Configuring HTTP server.");
+    // RES-a: capture the harness handle before `app_state_data` moves into the
+    // server factory closure, so the KG watchdog spawned below can reach it.
+    let watchdog_harness = app_state_data.liveness_harness.clone();
+    // REC-4: likewise capture the KPI store handle for the agent-event volume
+    // tap spawned below, before `app_state_data` moves into the closure.
+    let tap_kpi_repo = app_state_data.sqlite_kpi_repository.clone();
     let server =
         HttpServer::new(move || {
             // CORS configuration with security-aware origin handling
@@ -822,6 +828,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(github_client.clone()))
             .app_data(web::Data::new(content_api.clone()))
             .app_data(app_state_data.clone())
+            // RES-a: the LivenessHarness backs /api/canary/* and the KG watchdog.
+            .app_data(web::Data::from(app_state_data.liveness_harness.clone()))
+            // REC-4: the KpiComputeService backs /api/kpi/{summary,lineage}.
+            .app_data(web::Data::from(app_state_data.kpi_compute_service.clone()))
             .app_data(pre_read_ws_settings_data.clone())
             .app_data(web::Data::new(metrics_handler::ProcessStartTime(process_start_time)))
 
@@ -894,6 +904,15 @@ async fn main() -> std::io::Result<()> {
                     // scope first lets /api/ontology/derived match correctly while
                     // /api/ontology/* still falls through to the /ontology scope.
                     .configure(visionclaw_server::handlers::configure_ontology_derived_routes)
+                    // RES-d fix: /ontology/class-count MUST also be registered BEFORE
+                    // api_handler::config for the SAME reason — the broad /ontology
+                    // scope inside api_handler::ontology::config matches the
+                    // /ontology/class-count prefix and, finding no inner route, 404s
+                    // without falling through (actix does not fall through a matched
+                    // scope prefix). Registered here as the more-specific scope, the
+                    // canon DriftCounter's GET /api/ontology/class-count is reachable.
+                    // (Guarded by tests/resd_class_count_route.rs.)
+                    .configure(visionclaw_server::handlers::configure_ontology_class_count_routes)
                     .configure(api_handler::config)
                     .configure(workspace_handler::config)
                     .configure(admin_sync_handler::configure_routes)
@@ -948,6 +967,25 @@ async fn main() -> std::io::Result<()> {
                     // Broker inbox read surface (WS-12) — agentbox broker-bridge
                     .configure(visionclaw_server::handlers::configure_broker_inbox_routes)
 
+                    // RES-a: LivenessHarness — /api/canary/{register,observe,status}
+                    .configure(visionclaw_server::handlers::configure_liveness_routes)
+
+                    // REC-4 (ADR-043 resurrection): four-KPI dashboard —
+                    // /api/kpi/{summary,lineage}
+                    .configure(visionclaw_server::handlers::configure_kpi_routes)
+
+                    // REC-10 (PRD-023 WP-12): Insight Ingestion Loop v1 —
+                    // /api/insight-loop/trace[/{case_id}] (Mesh Velocity source)
+                    .configure(visionclaw_server::handlers::configure_insight_loop_routes)
+
+                    // REC-11 (PRD-023 WP-12): data-moat unified provenance trace —
+                    // /api/trace (joins agent-events + broker decisions on did:nostr)
+                    .configure(visionclaw_server::handlers::configure_trace_routes)
+
+                    // (RES-d /ontology/class-count registered EARLIER — before
+                    // api_handler::config — so the broad /ontology scope does not
+                    // shadow it to a 404. See the WS-9/RES-d note above.)
+
                     // Layout mode system (ADR-031)
                     .configure(visionclaw_server::handlers::configure_layout_routes)
 
@@ -961,7 +999,51 @@ async fn main() -> std::io::Result<()> {
 
     let server_handle = server.handle();
 
-    
+    // RES-a: spawn the KG-backend watchdog once the HTTP server is live. It
+    // self-polls /api/health (this server IS the KG backend) and drives the
+    // kg_backend_up gauge, firing CANARY-VC-RESA-KG on every transition.
+    {
+        let harness = watchdog_harness.clone();
+        let self_url = std::env::var("VISIONCLAW_SELF_URL")
+            .unwrap_or_else(|_| format!("http://127.0.0.1:{}", port));
+        let watchdog_secs = std::env::var("VISIONCLAW_KG_WATCHDOG_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30);
+        tokio::spawn(visionclaw_server::services::liveness_harness::run_kg_watchdog(
+            harness,
+            self_url,
+            std::time::Duration::from_secs(watchdog_secs),
+        ));
+    }
+
+    // REC-4 (ADR-130 D5): the agent-event volume tap. Subscribes to the
+    // process-global /wss/agent-events hub (the same seam the render actor uses)
+    // and records one volume row per envelope into the KPI store — the
+    // Augmentation Ratio numerator source, read without new emit-site
+    // instrumentation. Detached; fail-open on a lagged/closed channel.
+    {
+        let kpi_repo = tap_kpi_repo.clone();
+        tokio::spawn(visionclaw_server::services::kpi_compute::run_agent_event_tap(
+            kpi_repo,
+        ));
+        info!("[main] KPI agent-event volume tap spawned");
+    }
+
+    // RES-a / WP-11 AC3 / ADR-130 D3: the Nostr-relay tap lets Nostr-only
+    // repositories (nostr-rust-forum, solid-pod-rs) fire canaries they cannot
+    // POST over HTTP. Feeds the SAME LivenessHarness.observe path. Disabled
+    // unless CANARY_TAP_RELAY_URL is set; fail-open (its own detached task).
+    if let Some(tap) = visionclaw_server::services::canary_nostr_tap::CanaryNostrTap::from_env(
+        watchdog_harness.clone(),
+    ) {
+        tokio::spawn(tap.run());
+        info!("[main] canary Nostr tap spawned");
+    } else {
+        info!("[main] canary Nostr tap not started (CANARY_TAP_RELAY_URL not set)");
+    }
+
+
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;
 

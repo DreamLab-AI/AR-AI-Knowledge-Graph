@@ -9,7 +9,17 @@
 | Supersedes | GitHub REST API ingest (`src/services/github/`) |
 | Companion PRD | `docs/PRD-013-solid-git-ingest-surface.md` |
 | Companion ADRs | ADR-041, ADR-049, ADR-051, ADR-074, ADR-075 |
-| DDD Contexts | BC2 (Graph Data), BC11 (Judgment Broker), BC13 (Discovery), BC20 (Agentbox Integration) |
+| DDD Contexts | BC2 (Graph Data), BC13 (Discovery), BC20 (Agentbox Integration), BC11 (Judgment Broker) |
+
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** This
+> ADR states "VisionClaw `BrokerActor` emits `broker:new_case` / `broker:case_decided`"
+> and "BrokerActor WebSocket events unchanged". That actor never merged to `main`
+> (unmerged `crashbug` branch, Neo4j-backed). Per ADR-130 Decision 2, on `main`
+> those events are emitted from the enrichment-decide handler
+> (`services::broker_events`) over the ported `src/domain/broker/` kernel, and
+> case queueing runs through the ADR-110 ACSP producer (`ElevationActor`). The
+> events themselves are unchanged and do ship; only the `BrokerActor` transport
+> is superseded.
 
 ## Context
 
@@ -295,11 +305,12 @@ the existing S05 provenance surface and S01 pods surface produce. No new
 linked-data surface is needed --- the pane composes existing surfaces into a
 review workflow.
 
-Data flow: VisionClaw `BrokerActor` emits `broker:new_case` /
-`broker:case_decided` WebSocket events -> agentbox management API (proxied WS
-subscription) -> `enrichment-review-pane.js` renders diff + provenance trailers
-+ action buttons -> `POST /api/broker/cases/:id/decide` (VisionClaw REST) ->
-`DecisionOrchestrator` -> `WriteBackSaga` (G4).
+Data flow: VisionClaw's enrichment-decide handler (`services::broker_events`)
+emits `broker:new_case` / `broker:case_decided` WebSocket events -> agentbox
+management API (proxied WS subscription) -> `enrichment-review-pane.js` renders
+diff + provenance trailers + action buttons ->
+`POST /api/enrichment-proposals/:id/decide` (VisionClaw REST) ->
+`DecisionOrchestrator` (`src/domain/broker/`) -> `WriteBackSaga` (G4).
 
 The reviewer sees: source content (left pane), proposed enrichment (right pane),
 provenance trailer block (below), and Approve / Reject / Amend / Delegate /
@@ -309,14 +320,14 @@ syntax-highlighted Turtle for `.ttl` OWL fragments, tabular display for
 
 ### G7: Nostr Control Plane
 
-**Location:** agentbox relay (`nostr-rs-relay`) + VisionClaw `ServerNostrActor`
+**Location:** agentbox relay (`nostr-rs-relay`) + VisionClaw ACSP producer (`src/services/acsp/`)
 
 Three event kinds serve the cross-system coordination plane:
 
 | Kind | Purpose | Producer | Consumer |
 |------|---------|----------|----------|
-| 30300 | Audit event (broker decision recorded) | VisionClaw `ServerNostrActor` | Agentbox agents, external subscribers |
-| 30301 | Enrichment proposal (agent submits for review) | Agentbox agent | VisionClaw `BrokerActor` |
+| 30300 | Audit event (broker decision recorded) | VisionClaw enrichment-decide handler (durable record + WS audit frame; no kind-30300 Nostr emitter on `main`) | Agentbox agents, external subscribers |
+| 30301 | Enrichment proposal (agent submits for review) | Agentbox agent | VisionClaw broker publisher (ADR-110 ACSP path) |
 | 4 (NIP-17) | Human <-> agent text coordination | Any Nostr client | Agentbox agent, nostr-rust-forum |
 
 IS-Envelope v1 mapping (per ADR-075):
@@ -329,8 +340,9 @@ IS-Envelope v1 mapping (per ADR-075):
 | `knowledge_link` | 30078 | Cross-pod knowledge graph link announcement |
 
 Relay topology: agentbox embedded relay (NIP-42 AUTH gate, `did:nostr` pubkey
-allowlist) <-> VisionClaw `ServerNostrActor` <-> nostr-rust-forum relay
-(optional, human-facing). All events NIP-59 gift-wrapped when crossing relay
+allowlist) <-> VisionClaw's server-side Nostr publisher
+(`src/services/nostr_service.rs`; no `ServerNostrActor` on `main` — that actor is
+`crashbug`-only) <-> nostr-rust-forum relay (optional, human-facing). All events NIP-59 gift-wrapped when crossing relay
 boundaries; plain signed events within the agentbox <-> VisionClaw trust
 boundary.
 
@@ -436,9 +448,11 @@ agent identities without the pod owner needing to ACL each agent individually.
   from ADR-051 is reused. G4 extends it with a reverse flow (Neo4j-to-pod
   write-back) but does not alter the forward flow.
 
-- **BrokerActor WebSocket events unchanged.** The existing `broker:new_case`,
-  `broker:case_decided`, and `broker:case_claimed` events (ADR-041
-  implementation) are reused by G6. No new WebSocket event types required.
+- **Broker WebSocket events unchanged.** The existing `broker:new_case` and
+  `broker:case_decided` events — emitted on `main` from the enrichment-decide
+  handler (`services::broker_events`) over the ported `src/domain/broker/`
+  kernel; the `crashbug` `broker:case_claimed` event is not on `main` — are
+  reused by G6. No new WebSocket event types required.
 
 - **URN minting infrastructure reused.** G3 uses the existing `src/uri/mint.rs`
   and `src/uri/parse.rs` infrastructure for `urn:visionclaw:concept:` URIs in

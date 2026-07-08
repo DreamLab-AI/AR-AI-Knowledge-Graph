@@ -10,6 +10,30 @@ import { unifiedApiClient } from '../../../services/api/UnifiedApiClient';
 
 const logger = createLogger('AgentDetailPanel');
 
+// D2 (PRD-023 WP-3) final close — honest capability boundary. The panel sends
+// `selectedAgent.id` (a claude-flow swarm agent_id). When the server cannot
+// resolve that id to a Management-API task, the agent was spawned OUTSIDE the
+// task registry (e.g. an MCP-native claude-flow agent) — and the MCP surface has
+// NO terminate verb, so it is genuinely not interruptible from here. The server
+// signals this distinctly (HTTP 422, `resolution: "unresolved"`,
+// `interruptible: false`); the panel discloses a disabled explanatory state
+// instead of spinning a dead retrying button.
+const NOT_INTERRUPTIBLE_MESSAGE = 'Externally spawned — not interruptible from here';
+
+/** The server's distinct "no resolvable task" signal, from a 2xx body. */
+const bodyIsNotInterruptible = (body: unknown): boolean => {
+  if (!body || typeof body !== 'object') return false;
+  const b = body as Record<string, unknown>;
+  return b.resolution === 'unresolved' || b.interruptible === false;
+};
+
+/** The same signal carried on a thrown ApiError (the 422 the client does not retry). */
+const errorIsNotInterruptible = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { status?: number; data?: unknown };
+  return e.status === 422 || bodyIsNotInterruptible(e.data);
+};
+
 interface AgentDetailPanelProps {
   className?: string;
   selectedAgentId?: string;
@@ -31,8 +55,12 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     progress?: number;
   }>({ status: 'idle' });
   const [taskPriority, setTaskPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const [interruptStatus, setInterruptStatus] = useState<{
+    status: 'idle' | 'interrupting' | 'done' | 'error' | 'not-interruptible';
+    message?: string;
+  }>({ status: 'idle' });
 
-  
+
   useEffect(() => {
     if (!botsData || !botsData.agents) {
       setSelectedAgent(null);
@@ -48,11 +76,56 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     }
   }, [botsData, selectedAgentId, selectedAgent]);
 
+  // A newly-selected agent may have a different interruptibility, so clear any
+  // disclosed "not interruptible" state when the selection changes.
+  useEffect(() => {
+    setInterruptStatus({ status: 'idle' });
+  }, [selectedAgent?.id]);
+
   const handleAgentChange = (value: string) => {
     const agent = botsData?.agents.find(a => a.id === value);
     setSelectedAgent(agent || null);
     if (onAgentSelect && agent) {
       onAgentSelect(agent.id);
+    }
+  };
+
+  // D2 steering: interrupt/stop the selected agent's current task. `selectedAgent.id`
+  // is a claude-flow swarm agent_id — a disjoint namespace from the Management-API
+  // task_id the backend stops. It is sent as-is; the server (`interrupt_task` →
+  // `InterruptAgentTask`) resolves the id (task_id OR swarm agent_id) to a concrete
+  // task_id before issuing the stop, so the interrupt no longer 404s.
+  const handleInterrupt = async () => {
+    if (!selectedAgent) return;
+    // Once disclosed as externally-spawned the control is terminal — do not retry.
+    if (interruptStatus.status === 'not-interruptible') return;
+    try {
+      setInterruptStatus({ status: 'interrupting', message: 'Interrupting agent…' });
+      const apiResponse = await unifiedApiClient.post('/bots/interrupt', {
+        taskId: selectedAgent.id,
+        agentId: selectedAgent.id,
+        swarmId: selectedAgent.swarmId || 'default',
+      });
+      const response = apiResponse.data;
+      if (response?.success) {
+        setInterruptStatus({ status: 'done', message: response.message || 'Agent interrupted' });
+        setTimeout(() => setInterruptStatus({ status: 'idle' }), 3000);
+      } else if (bodyIsNotInterruptible(response)) {
+        setInterruptStatus({ status: 'not-interruptible', message: NOT_INTERRUPTIBLE_MESSAGE });
+      } else {
+        setInterruptStatus({ status: 'error', message: response?.error || 'Interrupt failed' });
+      }
+    } catch (error) {
+      // The server returns a DISTINCT 422 for an id with no resolvable task — an
+      // externally-spawned / MCP-native agent with no terminate verb on the MCP
+      // surface. Disclose the disabled explanatory state on this first failure
+      // rather than leaving a dead retrying button (4xx is not retried).
+      if (errorIsNotInterruptible(error)) {
+        setInterruptStatus({ status: 'not-interruptible', message: NOT_INTERRUPTIBLE_MESSAGE });
+        return;
+      }
+      logger.error('Failed to interrupt agent:', error);
+      setInterruptStatus({ status: 'error', message: 'Failed to interrupt agent' });
     }
   };
 
@@ -161,6 +234,17 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                   <span className="text-gray-600">Completed Tasks:</span>
                   <span className="font-medium">{selectedAgent.tasksCompleted || 0}</span>
                 </div>
+                {/* D7 (PRD-023 / ADR-130 register position — pre-action intent
+                    legibility): the DECLARED intent, shown before the agent acts,
+                    so the operator sees "about to: <declared action>" and not only
+                    past activity. Rendered only when the producer declared an
+                    intent; absent otherwise (never fabricated). */}
+                {selectedAgent.declaredIntent && (
+                  <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                    <div className="text-xs text-amber-700 font-semibold">Declared Intent</div>
+                    <div className="text-sm mt-1">About to: {selectedAgent.declaredIntent}</div>
+                  </div>
+                )}
                 {selectedAgent.currentTask && (
                   <div className="mt-2 p-2 bg-blue-50 rounded">
                     <div className="text-xs text-blue-600 font-semibold">Current Task</div>
@@ -346,6 +430,32 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                    taskStatus.status === 'error' ? 'Retry Task' :
                    'Submit Task'}
                 </Button>
+
+                {/* D2 interrupt/stop control. Disabled while interrupting, and
+                    terminally disabled once the server discloses the agent is
+                    externally spawned (not interruptible from here). */}
+                <Button
+                  className="w-full"
+                  variant="destructive"
+                  disabled={interruptStatus.status === 'interrupting' || interruptStatus.status === 'not-interruptible'}
+                  onClick={handleInterrupt}
+                >
+                  {interruptStatus.status === 'interrupting' ? 'Interrupting…' :
+                   interruptStatus.status === 'done' ? 'Interrupted' :
+                   interruptStatus.status === 'not-interruptible' ? 'Not interruptible' :
+                   'Interrupt / Stop Agent'}
+                </Button>
+
+                {interruptStatus.message && (
+                  <div className={`p-2 rounded text-xs ${
+                    interruptStatus.status === 'error' ? 'bg-red-50 text-red-600' :
+                    interruptStatus.status === 'not-interruptible' ? 'bg-amber-50 text-amber-700' :
+                    interruptStatus.status === 'done' ? 'bg-green-50 text-green-600' :
+                    'bg-blue-50 text-blue-600'
+                  }`}>
+                    {interruptStatus.message}
+                  </div>
+                )}
 
                 {}
                 {taskStatus.message && (

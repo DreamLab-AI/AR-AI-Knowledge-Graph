@@ -441,6 +441,8 @@ impl Handler<ProcessAgentStatuses> for AgentMonitorActor {
                     age: Some(
                         (time::timestamp_seconds() - status.timestamp.timestamp()) as u64 * 1000,
                     ),
+                    // Local monitor snapshot carries no agentbox DID (COM-14).
+                    did_nostr: None,
                 }
             })
             .collect();

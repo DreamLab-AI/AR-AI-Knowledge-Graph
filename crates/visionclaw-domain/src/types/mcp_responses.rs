@@ -99,6 +99,12 @@ pub struct Agent {
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub age: Option<u64>,
+    /// Sovereign identity (`did:nostr:<hex>`), minted by agentbox at spawn and
+    /// carried — never minted — here (COM-14, ADR-125). `None` until agentbox
+    /// attaches it to the agent record; the trust key that supersedes `id`
+    /// (`task_id`) once a Schnorr challenge verifies (WP-1, DDD invariant 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub did_nostr: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,5 +258,29 @@ use crate::utils::json::{from_json, to_json};
             let agent_list: AgentListResponse = success.result.extract_data().unwrap();
             assert!(agent_list.agents.is_empty());
         }
+    }
+
+    #[test]
+    fn agent_carries_optional_did_nostr() {
+        // Present: a did:nostr survives the serde round-trip on the domain mirror
+        // under its canonical wire key.
+        let did = "did:nostr:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let with_did = json!({
+            "id": "1", "name": "planner", "type": "coordinator", "status": "active",
+            "did_nostr": did,
+        });
+        let a: Agent = serde_json::from_value(with_did).unwrap();
+        assert_eq!(a.did_nostr.as_deref(), Some(did));
+        let round = serde_json::to_value(&a).unwrap();
+        assert_eq!(round.get("did_nostr").and_then(|v| v.as_str()), Some(did));
+
+        // Absent: an agentbox record without the field stays backward-compatible —
+        // it deserialises to `None` and does not re-emit the key.
+        let without = json!({
+            "id": "2", "name": "coder", "type": "coder", "status": "idle",
+        });
+        let b: Agent = serde_json::from_value(without).unwrap();
+        assert!(b.did_nostr.is_none());
+        assert!(serde_json::to_value(&b).unwrap().get("did_nostr").is_none());
     }
 }
