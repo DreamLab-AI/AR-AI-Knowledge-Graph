@@ -5,11 +5,19 @@ const DEFAULT_HAND_OFFSET_Y: float = -0.4
 const DEFAULT_HAND_OFFSET_X: float = 0.25
 const INTERPOLATION_SPEED: float = 12.0
 
+const COLOR_VERIFIED: Color = Color(0.75, 1.0, 0.82)
+const COLOR_UNVERIFIED: Color = Color(1.0, 0.72, 0.28)
+
 @onready var head: MeshInstance3D = $Head
 @onready var left_hand: MeshInstance3D = $LeftHand
 @onready var right_hand: MeshInstance3D = $RightHand
 @onready var nameplate: Label3D = $Head/Nameplate
+@onready var did_badge: Label3D = $Head/DidBadge
 @onready var voice_indicator: MeshInstance3D = $Head/VoiceIndicator
+
+## Identity carried from the presence join (graph_scene.gd:431 sets `did` meta).
+var _did: String = ""
+var _verified: bool = false
 
 ## Current LOD level (0=High, 1=Med, 2=Low, 3=Culled).
 var _lod_level: int = 0
@@ -29,6 +37,44 @@ var _has_received_pose: bool = false
 func set_display_name(display_name: String) -> void:
 	if nameplate != null:
 		nameplate.text = display_name
+
+
+## Render the actor's did:nostr identity (M1, PRD-023 WP-9). The badge shows the
+## display name on the nameplate and a short-DID (…last8) here; `verified`
+## reflects the Schnorr-challenge check (ADR-130 Decision 6). An unverified claim
+## renders visually distinct (amber + "?") and is never mistaken for a trusted
+## identity — the invariant-2 counter to a self-reported nameplate.
+func set_identity(display_name: String, did: String, verified: bool) -> void:
+	_did = did
+	_verified = verified
+	set_display_name(display_name)
+	_refresh_did_badge()
+
+
+func set_verified(verified: bool) -> void:
+	_verified = verified
+	_refresh_did_badge()
+
+
+func _refresh_did_badge() -> void:
+	if did_badge == null:
+		return
+	var mark: String = "✓" if _verified else "?"
+	did_badge.text = "%s %s" % [mark, _short_did(_did)]
+	did_badge.modulate = COLOR_VERIFIED if _verified else COLOR_UNVERIFIED
+
+
+# "…<last8>" of the did:nostr pubkey hex; empty DID reads "unverified".
+static func _short_did(did: String) -> String:
+	if did.strip_edges().is_empty():
+		return "unverified"
+	var pk: String = did
+	var idx: int = did.rfind(":")
+	if idx != -1:
+		pk = did.substr(idx + 1)
+	if pk.length() <= 8:
+		return "…" + pk
+	return "…" + pk.substr(pk.length() - 8)
 
 
 func apply_pose(
@@ -91,30 +137,34 @@ func set_lod_level(level: int) -> void:
 	match level:
 		0:  # High -- everything visible
 			visible = true
-			if nameplate != null:
-				nameplate.visible = true
+			_set_label_visibility(true)
 			if left_hand != null:
 				left_hand.visible = _has_left
 			if right_hand != null:
 				right_hand.visible = _has_right
-		1:  # Medium -- hide nameplate
+		1:  # Medium -- hide nameplate + DID badge (labels drop first)
 			visible = true
-			if nameplate != null:
-				nameplate.visible = false
+			_set_label_visibility(false)
 			if left_hand != null:
 				left_hand.visible = _has_left
 			if right_hand != null:
 				right_hand.visible = _has_right
-		2:  # Low -- hide nameplate and hands
+		2:  # Low -- hide labels and hands
 			visible = true
-			if nameplate != null:
-				nameplate.visible = false
+			_set_label_visibility(false)
 			if left_hand != null:
 				left_hand.visible = false
 			if right_hand != null:
 				right_hand.visible = false
 		3:  # Culled -- hide entirely
 			visible = false
+
+
+func _set_label_visibility(shown: bool) -> void:
+	if nameplate != null:
+		nameplate.visible = shown
+	if did_badge != null:
+		did_badge.visible = shown
 
 
 func set_speaking(active: bool) -> void:

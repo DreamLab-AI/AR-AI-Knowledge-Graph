@@ -142,6 +142,18 @@ pub const CANARY_REC10_LOOP: &str = "CANARY-VC-REC10-LOOP";
 /// them). One-shot (P2): the join is proven once it spans two live sources.
 pub const CANARY_REC11_TRACE: &str = "CANARY-VC-REC11-TRACE";
 
+/// The MR-targeting canary (M4, PRD-023 WP-9). Fires when a controller or
+/// head-gaze ray resolves a non-origin agent-node selection in the
+/// agentbox/xr-runtime Monado sidecar — observed over `POST
+/// /api/canary/observe/{id}` from the on-device session. One-shot (P2).
+pub const CANARY_M4_RAY: &str = "CANARY-VC-M4-RAY";
+
+/// The MR-intervention canary (COM-18 / M2, PRD-023 WP-9). Fires when the
+/// in-headset intervention panel emits a signed NIP-98 decide (kind
+/// 31402/31403) accepted by the shared `POST /api/broker/cases/{id}/decide`
+/// route — the server observes it as live traffic. Standing (P2).
+pub const CANARY_COM18_INTERV: &str = "CANARY-VC-COM18-INTERV";
+
 /// The P1-wave canaries this repository seeds at start-up (PRD-023 canary
 /// table). Idempotent, so re-seeding on every boot is safe. Kept separate from
 /// [`P0_CANARIES`] so each wave's rows stay legible; more P1 rows land as their
@@ -200,7 +212,28 @@ pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[
 /// The P2-wave canaries this repository seeds at start-up (PRD-023 canary
 /// table). Idempotent. Kept separate from the earlier waves so each wave's rows
 /// stay legible; more P2 rows land as their items close.
+///
+/// The third M-item canary, `CANARY-VC-M1-HUD` (the in-headset verified-DID
+/// badge render), is intentionally **not** listed here: the PRD-023 canary
+/// table assigns it to wave **P0**, so it is seeded by [`P0_CANARIES`]. Wave
+/// assignment is a canon-register property (ADR-130 "What This ADR Does Not
+/// Decide"); duplicating M1-HUD into P2 would contradict it. The full M-item
+/// set is therefore M1-HUD (P0) + M4-RAY + COM18-INTERV (P2), all seeded.
 pub const P2_CANARIES: &[(&str, &str, &str, &str)] = &[
+    (
+        CANARY_M4_RAY,
+        "Controller or head-gaze ray resolves a non-origin agent-node selection \
+         in the xr-runtime Monado sidecar",
+        "one-shot",
+        "P2",
+    ),
+    (
+        CANARY_COM18_INTERV,
+        "In-headset intervention panel emits a signed NIP-98 decide \
+         (31402/31403) accepted by /api/broker/cases/{id}/decide",
+        "standing",
+        "P2",
+    ),
     (
         CANARY_V3_REPAIR,
         "Confidence gate holds a low-confidence / under-specified spoken command \
@@ -342,9 +375,13 @@ impl LivenessHarness {
         Ok(())
     }
 
-    /// Idempotently seed the P2-wave canaries (V3 voice repair, and any later P2
-    /// rows). Registration is idempotent; a live fire is recorded separately via
-    /// [`Self::observe`] on the standing wire.
+    /// Idempotently seed the P2-wave canaries (MR copresence: M4 targeting ray,
+    /// COM-18/M2 in-headset intervention; V3 voice repair; REC-10 insight loop;
+    /// REC-11 unified trace). Registration is idempotent; a live fire is
+    /// recorded separately via [`Self::observe`] when the live wire crosses —
+    /// for the MR rows that is the on-device xr-runtime session. The M1-HUD
+    /// canary rides [`P0_CANARIES`] per the register's wave assignment (see
+    /// [`P2_CANARIES`]).
     pub async fn seed_p2_canaries(&self) -> CanaryResult<()> {
         let sha = current_sha();
         let at = now_ms();

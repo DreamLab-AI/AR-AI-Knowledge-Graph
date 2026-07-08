@@ -1,0 +1,18 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://b3xrmatcone01"]
+
+; Translucent cone-of-vision material for the agent gaze cue (copresence brief
+; §1/§2: the cone is a validated behavioural cue for VR collaboration). Additive
+; so it reads as a light shaft rather than a solid volume, unshaded so it never
+; competes with the core for lighting attention, and culled front-face-off so
+; the viewer sees through the near wall into the cone.
+
+[resource]
+transparency = 1
+blend_mode = 1
+cull_mode = 2
+shading_mode = 0
+albedo_color = Color(0.45, 0.75, 1, 0.22)
+emission_enabled = true
+emission = Color(0.4, 0.7, 1, 1)
+emission_energy_multiplier = 0.35
+disable_receive_shadows = true

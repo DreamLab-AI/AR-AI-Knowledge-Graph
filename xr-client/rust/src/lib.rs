@@ -4,21 +4,31 @@
 //! - 0x03 V3 graph position frame decode (`binary_protocol`)
 //! - 0x43 avatar pose presence client (`presence`) — wire format from
 //!   `visionclaw_xr_presence::wire`
+//! - 0x44 agent co-presence {state, gaze, attention} — codec in
+//!   `visionclaw_xr_presence::agent_presence`, driven by `avatar_state`
 //! - BIP-340 Schnorr challenge signing (`signer`)
 //! - tokio-tungstenite sockets + main-thread inbox pumps (`transport`, `runtime`)
 //! - hand-tracking ray cast + pinch detection (`interaction`)
+//! - unified head/eye gaze ray with one-euro smoothing (`gaze`)
+//! - three-resolver selection arbiter (`selection`)
+//! - Hall's-zones proxemics arc solver (`proxemics`)
+//! - per-agent activity + gaze-attention model (`avatar_state`)
 //! - distance-bucket LOD policy (`lod`)
 //! - spatial voice routing surface (`webrtc_audio`)
 //!
 //! GDScript drives scene composition only; this crate owns every byte that
 //! crosses the wire and every threshold that gates a pose / hit / level.
 
+pub mod avatar_state;
 pub mod binary_protocol;
+pub mod gaze;
 pub mod interaction;
 pub mod lod;
 pub mod ports;
 pub mod presence;
+pub mod proxemics;
 pub mod runtime;
+pub mod selection;
 pub mod signer;
 pub mod transport;
 pub mod webrtc_audio;

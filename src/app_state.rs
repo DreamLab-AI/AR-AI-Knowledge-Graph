@@ -463,8 +463,11 @@ impl AppState {
         if let Err(e) = liveness_harness.seed_p1_canaries().await {
             warn!("[AppState::new] failed to seed P1 liveness canaries: {}", e);
         }
-        // V3 (PRD-023 WP-10): register the one-shot voice-repair canary so
-        // `GET /api/canary/status` carries CANARY-VC-V3-REPAIR from boot.
+        // P2 rows (PRD-023 WP-9/WP-10/WP-12): the MR copresence canaries
+        // (CANARY-VC-M4-RAY, CANARY-VC-COM18-INTERV — fired by the xr-runtime
+        // sidecar session over the shared observe path; M1-HUD rides P0), the
+        // one-shot voice-repair canary (CANARY-VC-V3-REPAIR), and the loop/trace
+        // canaries (CANARY-VC-REC10-LOOP, CANARY-VC-REC11-TRACE).
         if let Err(e) = liveness_harness.seed_p2_canaries().await {
             warn!("[AppState::new] failed to seed P2 liveness canaries: {}", e);
         }

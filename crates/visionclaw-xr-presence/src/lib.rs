@@ -9,6 +9,7 @@
 //! No transport (Actix, tokio-tungstenite, godot signal) is assumed — see
 //! [`ports`] for the trait abstractions injected by each consumer.
 
+pub mod agent_presence;
 pub mod delta;
 pub mod error;
 pub mod ports;
@@ -17,6 +18,11 @@ pub mod types;
 pub mod validate;
 pub mod wire;
 
+pub use agent_presence::{
+    decode_agent_presence, dequantise_dir, encode_agent_presence, quantise_dir, AgentActivity,
+    AgentPresence, AgentPresenceBatch, AgentPresenceDelta, AttentionTarget, PresenceChannel,
+    OPCODE_AGENT_PRESENCE,
+};
 pub use delta::{PoseDelta, TransformMask};
 pub use error::{RoomError, ValidationError, WireError};
 pub use ports::{Broadcaster, IdentityVerifier, SignedChallenge};

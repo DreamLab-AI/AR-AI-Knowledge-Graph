@@ -37,6 +37,18 @@ func _probe_capabilities(xr_interface: XRInterface) -> void:
 	if not hand_tracking_available:
 		_warnings.append("Hand tracking not available -- falling back to controller input.")
 
+	# Eye-gaze policy (copresence brief; godot #113717 hazard). We only QUERY
+	# support here, after OpenXR init -- we never enable the
+	# XR_EXT_eye_gaze_interaction action-map binding blindly, which is the bug
+	# that trips the action-map error. Head-gaze stays primary; GraphScene feeds
+	# this same capability to the Rust gaze resolver, which degrades eye-gaze to
+	# head when unsupported. Quest 3 (the floor device) returns false here.
+	var eye_gaze_supported: bool = false
+	if xr_interface.has_method("is_eye_gaze_interaction_supported"):
+		eye_gaze_supported = xr_interface.is_eye_gaze_interaction_supported()
+	if not eye_gaze_supported:
+		_warnings.append("Eye-gaze interaction unsupported -- head-gaze primary (extension left disabled).")
+
 
 func _transition_to_graph_scene() -> void:
 	var graph_scene := load("res://scenes/GraphScene.tscn")
