@@ -31,10 +31,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added — Agent Control Surface Protocol Integration
 
-- **Governance panel publishing** (`src/actors/server_nostr_actor.rs`): `PublishGovernancePanel` message (kind 31400) — BrokerActor sends NIP-33 parameterized replaceable events to register/update control panels on the Nostr relay. Panel definitions include schema type (ActionInbox, Dashboard, ConfigForm, StatusBoard, ChatBridge), field definitions, action buttons, layout hints, and capabilities. Wire-compatible with `nostr-bbs-core::PanelDefinition`.
-- **Action request publishing** (`src/actors/server_nostr_actor.rs`): `PublishActionRequest` message (kind 31402) — BrokerActor sends when cases need human review. Carries case ID, title, category, priority, structured fields, and agent reasoning. Wire-compatible with `nostr-bbs-core::ActionRequest`.
-- **BrokerActor startup panel** (`src/actors/broker_actor.rs`): On `Actor::started()`, publishes a PanelDefinition (kind 31400, d-tag `visionclaw-broker`) to the forum relay with 5 fields (case_id, title, category, priority, state), 3 actions (approve, reject, escalate), table layout, and 30-second refresh interval. The forum governance UI discovers this panel via its relay subscription.
-- **BrokerActor → forum ActionRequest** (`src/actors/broker_actor.rs`): Every `SubmitBrokerCase` now publishes a kind-31402 ActionRequest to the forum relay (all case categories, not just KnowledgeEnrichment). Priority mapping: u8 90+ → Critical, 70+ → High, 40+ → Medium, else → Low.
+> **Superseded design (ADR-130 Decision 2).** The entries in this section
+> record the `crashbug`-branch ACSP integration built around a `BrokerActor`
+> (`src/actors/broker_actor.rs`) and a `ServerNostrActor`
+> (`src/actors/server_nostr_actor.rs`). **Neither file merged to `main`.** What
+> actually ships on `main` is the ADR-110 stateless ACSP producer: kinds 31400
+> and 31402 are built by `src/services/acsp/events.rs` (`build_panel_definition`
+> / `build_action_request`) over the ported `src/domain/broker/` kernel, and the
+> `broker:new_case` / `broker:case_decided` WebSocket events are emitted from the
+> enrichment-decide handler (`services::broker_events`). Read every `BrokerActor`
+> / `ServerNostrActor` reference below as that superseded transport, not shipped
+> `main` code.
+
+- **Governance panel publishing** (kind 31400): registers/updates NIP-33
+  parameterized replaceable control panels on the Nostr relay. Panel definitions
+  include schema type (ActionInbox, Dashboard, ConfigForm, StatusBoard,
+  ChatBridge), field definitions, action buttons, layout hints, and
+  capabilities. Wire-compatible with `nostr-bbs-core::PanelDefinition`. On `main`
+  this ships as `src/services/acsp/events.rs::build_panel_definition` (ADR-110
+  ACSP producer); the `crashbug` `src/actors/server_nostr_actor.rs`
+  `PublishGovernancePanel` message named in earlier drafts never merged.
+- **Action request publishing** (kind 31402): emits a case for human review with
+  case ID, title, category, priority, structured fields, and agent reasoning.
+  Wire-compatible with `nostr-bbs-core::ActionRequest`. On `main` this ships as
+  `src/services/acsp/events.rs::build_action_request` (ADR-110 ACSP producer);
+  the `crashbug` `src/actors/server_nostr_actor.rs` `PublishActionRequest`
+  message never merged.
+- **Broker startup panel** (superseded `crashbug` `src/actors/broker_actor.rs`,
+  never merged): the design published a PanelDefinition (kind 31400, d-tag
+  `visionclaw-broker`) from `Actor::started()` with 5 fields (case_id, title,
+  category, priority, state), 3 actions (approve, reject, escalate), table
+  layout, and a 30-second refresh interval, discoverable via relay subscription.
+  On `main` the panel is registered by the ADR-110 ACSP producer, not an actor
+  `started()` hook.
+- **Broker → forum ActionRequest** (superseded `crashbug`
+  `src/actors/broker_actor.rs`, never merged): the design published a kind-31402
+  ActionRequest to the forum relay on every `SubmitBrokerCase` (all case
+  categories, not just KnowledgeEnrichment), with priority mapping u8 90+ →
+  Critical, 70+ → High, 40+ → Medium, else → Low. On `main` the equivalent
+  kind-31402 case event is produced by the ACSP producer over the
+  enrichment-decide path.
 - **Broadened Nostr decision events**: `SignBrokerDecision` (kind 30300) is now emitted for all case categories on `DecideBrokerCase`, not just `KnowledgeEnrichment`.
 - **NIP-98 enterprise RBAC** (`src/middleware/enterprise_auth.rs`): `nip98-auth` feature gate adds a Nostr NIP-98 authentication path to the `RequireRole` middleware. When enabled, reads `Authorization: Nostr <base64>`, verifies the Schnorr signature, and resolves the signer's pubkey to an `EnterpriseRole` via the `Nip98RoleResolver` trait. `InMemoryRoleMap` provided for dev/test; `Nip98IdentityExt` request extension carries verified pubkey and role. The `X-Enterprise-Role` header path remains as the default when the feature is disabled.
 - **Prometheus counters**: `NostrKind::K31400` and `K31402` variants added to `src/services/metrics.rs` for governance event observability.
@@ -45,7 +81,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `RequireRole` middleware now supports dual-path auth: NIP-98 Schnorr verification (when `nip98-auth` feature enabled and resolver attached) or `X-Enterprise-Role` header extraction (default).
 - `ServerNostrActor` module doc updated to list 9 message variants across 7 event kinds (was 7 variants across 5 kinds).
-- `BrokerActor` imports consolidated: all governance types (`PublishGovernancePanel`, `PublishActionRequest`, `ActionPriority`, `PanelDefinitionPayload`, etc.) imported at module level.
+- `crashbug` `BrokerActor` imports consolidated (superseded design, not on
+  `main`): all governance types (`PublishGovernancePanel`, `PublishActionRequest`,
+  `ActionPriority`, `PanelDefinitionPayload`, etc.) imported at module level.
 
 ---
 

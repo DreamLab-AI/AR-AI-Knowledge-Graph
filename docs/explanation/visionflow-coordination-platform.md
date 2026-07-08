@@ -126,8 +126,8 @@ flowchart LR
     end
 
     subgraph VC_HOST["VisionClaw (GPU Host)"]
-        BA["BrokerActor\n(case triage)"]
-        SNA["ServerNostrActor\n(signs 31400/31402)"]
+        BA["Broker kernel + REST\n(src/domain/broker/, case triage)"]
+        SNA["ACSP producer / ElevationActor\n(builds + signs 31400-31405)"]
         PHYSICS["ForceComputeActor\n(60Hz CUDA)"]
     end
 

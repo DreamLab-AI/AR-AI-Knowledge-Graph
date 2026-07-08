@@ -121,7 +121,7 @@ Replace the GitHub REST API ingest with a **git-over-HTTP ingest surface** that 
 - The diff is human-readable: markdown rendering for `.md` changes, syntax-highlighted Turtle for `.ttl` OWL fragments, tabular display for `.embeddings.json` vectors
 - Approve/reject/delegate actions are available inline — no navigation to a separate system
 - The provenance trailer block (G3) is shown below the diff so the reviewer sees who proposed it, which agent reasoned over it, and the commit that will land
-- WebSocket push from VisionClaw's BrokerActor (`broker:new_case`) delivers new cases to the reviewer in real time
+- WebSocket push from VisionClaw's enrichment-decide handler (`broker:new_case`, via `services::broker_events`) delivers new cases to the reviewer in real time
 
 ### US-7: Agent-mediated data conformance
 
@@ -371,7 +371,7 @@ The primary human interface for this PRD. A new agentbox viewer pane (`enrichmen
 **Data flow:**
 
 ```
-VisionClaw BrokerActor
+VisionClaw enrichment-decide handler (services::broker_events)
     │ WebSocket: broker:new_case / broker:case_decided
     ▼
 Agentbox management API (proxied or direct WS subscription)
@@ -382,10 +382,10 @@ enrichment-review-pane.js (linked objects viewer at /lo/)
     │ Shows: provenance trailers, agent identity, reasoning summary
     │ Actions: Approve / Reject / Amend / Delegate / Promote / Precedent
     ▼
-POST /api/broker/cases/:id/decide (VisionClaw REST)
+POST /api/enrichment-proposals/:id/decide (VisionClaw REST)
     │
     ▼
-DecisionOrchestrator → WriteBackSaga (G4)
+DecisionOrchestrator (src/domain/broker/) → WriteBackSaga (G4)
 ```
 
 **Pane contract** (per agentbox's existing pane system):
@@ -416,8 +416,8 @@ The Nostr messaging layer connects the system's coordination events across trust
 
 | Kind | Purpose | Producer | Consumer |
 |------|---------|----------|----------|
-| 30300 | Audit event (broker decision recorded) | VisionClaw ServerNostrActor | Agentbox agents, external subscribers |
-| 30301 | Enrichment proposal (agent submits for review) | Agentbox agent | VisionClaw BrokerActor |
+| 30300 | Audit event (broker decision recorded) | VisionClaw enrichment-decide handler (durable record + WS audit frame; no kind-30300 Nostr emitter on `main`) | Agentbox agents, external subscribers |
+| 30301 | Enrichment proposal (agent submits for review) | Agentbox agent | VisionClaw broker publisher (ADR-110 ACSP path) |
 | 4 (NIP-17) | Human ↔ agent text coordination | Any Nostr client | Agentbox agent, nostr-rust-forum |
 
 **Relay topology:**
@@ -530,7 +530,7 @@ All events are NIP-59 gift-wrapped on the wire when crossing relay boundaries. W
 ### Phase 5: Broker Review Surface (G6) — Implemented
 
 - `enrichment-review-pane.js` in agentbox viewer panes
-- `agentbox/management-api/routes/broker-bridge.js`: SSE bridge from VisionClaw BrokerActor
+- `agentbox/management-api/routes/broker-bridge.js`: SSE bridge from VisionClaw's enrichment-decide handler / ACSP case queue
 - Decide endpoint calls `POST /api/enrichment-proposals/{id}/decide`
 - SSE connection cap (MAX_SSE_CONNECTIONS), event type sanitisation
 - .git/ path blocking, 5xx error scrubbing, CORS origin allowlist
@@ -538,8 +538,8 @@ All events are NIP-59 gift-wrapped on the wire when crossing relay boundaries. W
 
 ### Phase 6: Nostr Control Plane (G7) — Implemented
 
-- Kind 30300 event emission from VisionClaw `ServerNostrActor` (`SignBrokerDecision`)
-- BrokerActor emits Nostr events for all KnowledgeEnrichment decisions
+- Broker-decision audit recorded on every decide as a durable record plus a WebSocket audit frame from the enrichment-decide handler. The kind-30300 Nostr emission via `ServerNostrActor` (`SignBrokerDecision`) was the superseded `crashbug` design (ADR-130 Decision 2) and is not on `main`.
+- The broker governance publisher records a decision for every KnowledgeEnrichment case; the `crashbug` `BrokerActor` Nostr-emit path it describes was superseded and never merged.
 - Agent subscription to approval events via agentbox embedded relay
 - NIP-42 AUTH gate on agentbox relay (did:nostr pubkey allowlist)
 - IS-Envelope v1 mapping for cross-relay event federation

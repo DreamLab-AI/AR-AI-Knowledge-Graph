@@ -10,12 +10,19 @@
   (`feat(gap-close): REC-2 broker kernel + ACSP case-queue events…`; SHA recorded
   in the sprint receipt — a literal SHA cannot be embedded in the commit that
   carries this file without self-reference).
-- **Verified:** 2026-07-08T11:25:52Z
+- **Verified:** 2026-07-08T11:25:52Z; docs body-text fixup 2026-07-08T11:53:30Z
 - **Maturity:** `scaffolded` → `integrated` for the kernel + WS-event + docs
   slice. The standing canary's live-traffic fire is `pending-live-session`
   (wired + fired-in-test; it fires for real only when a running server processes
   a live `POST /api/enrichment-proposals/:id/decide`). The control-centre queue
   UI is `planned` (P1, out of this scope).
+- **Item status — `partial-by-design at P0`.** The **P0 slice is the domain
+  kernel + the `broker:*` WebSocket events + the `ELEVATION_ACTOR_ENABLED` gate
+  flip** — that slice is `integrated` (compiles, unit-tested, docs corrected).
+  The **control-centre case-queue UI is P1 scope (REC-2/D3)** and is `planned`,
+  not delivered on this branch. REC-2 is therefore **deliberately partial at P0
+  and closes at P1**; the item-level status is not "done" at P0 and is not
+  claimed as such.
 
 ## What was implemented
 
@@ -94,8 +101,8 @@ ported — no Neo4j runs in this stack).
 
 A whole-repo grep surfaced four further docs asserting `BrokerActor` (and the
 non-existent `src/actors/broker_actor.rs`) as shipped `main` code — the same
-defect the WP-4 falsification statement forbids ("*any* document"). Each now
-carries a dated ADR-130 D2 correction banner:
+defect the WP-4 falsification statement forbids ("*any* document"). In the first
+pass each received a dated ADR-130 D2 correction banner:
 
 - `docs/CHANGELOG.md` (distinct from the root `CHANGELOG.md`) — asserted a
   `BrokerActor` startup panel from `src/actors/broker_actor.rs`.
@@ -106,14 +113,76 @@ carries a dated ADR-130 D2 correction banner:
 - `docs/adr/ADR-086-git-over-http-ingest-unification.md` — "BrokerActor emits
   `broker:new_case`/`broker:case_decided`" / "WebSocket events unchanged".
 
-**Residual (low-risk, not corrected):** three files retain a conceptual/diagram
-mention of `BrokerActor` that does not assert a shipped `src/actors/broker_actor.rs`
-— `docs/explanation/visionflow-coordination-platform.md` (a mermaid node label),
-`docs/adr/ADR-111-ecosystem-infographic-modernisation.md` (an infographic flow
-node, publisher already attributed to `agentbox/lib/elevation-publisher.js`), and
-`docs/adr/ADR-040-enterprise-identity-strategy.md` (a passing "on behalf of the
-BrokerActor" clause). These are diagram/conceptual references, not live-`main`
-code claims; flagged here for a later doc-sweep rather than folded into closure.
+## Gap-close fixup (2026-07-08, adversarial-verifier finding)
+
+The adversarial verifier found the first pass had corrected **only the banner**
+in four of the nine documents while their **body text still asserted the
+`crashbug` `BrokerActor` as live `main` infrastructure** — which by itself trips
+the WP-4 falsification statement ("*any* document"). This pass fixed the body
+text **in place** so the body no longer contradicts the banner. Every corrected
+assertion now describes what actually ships on this branch: the ADR-110 stateless
+ACSP producer, the forum-hosted case queue, and the ported domain kernel
+(`src/domain/broker/`) with the enrichment REST fallback handlers; `BrokerActor`
+appears only as the superseded `crashbug`-branch design.
+
+- `docs/adr/ADR-033-git-bead-provenance.md` — body lines ~87/165/209/221: the
+  `BrokerDecisionMade` writer, the write-transaction mitigation, the
+  `publish_governance_decision()` commit-step, and the ADR-041 cross-reference
+  now name the broker governance publisher (ACSP producer + enrichment-decide
+  handler over `src/domain/broker/`), with `BrokerActor` marked superseded.
+- `docs/prd/PRD-013-solid-git-ingest-surface.md` — body lines ~124/373-375/
+  419-421/532-543: the US-6 push, the G6 data-flow box, the G7 producer/consumer
+  table, and the Phase-5/6 bullets now attribute the `broker:*` events to the
+  enrichment-decide handler (`services::broker_events`), reattribute kinds
+  30300/30301 honestly (no kind-30300 Nostr emitter on `main`; 30301 ingest not
+  wired), and correct the decide route to `POST /api/enrichment-proposals/:id/
+  decide`.
+- `docs/ddd/ddd-mesh-federation-context.md` — body lines ~336-345/822-845/862:
+  both event tables re-attributed; the **"(implemented)" tags** on the kind-30300
+  and kind-30301 rows are corrected to "(superseded design; not on `main`)" while
+  kinds 31400/31402 keep "(implemented)" reattributed to the ACSP producer
+  (`src/services/acsp/events.rs::build_panel_definition` / `build_action_request`);
+  the TR-Enrichment-Proposal-Ingest rule now names the ACSP consumer
+  (`ElevationActor`).
+- `docs/CHANGELOG.md` — body lines ~33-48: the `[Unreleased] - 2026-05-12` ACSP
+  section now carries a per-section "superseded design" note and its bullets
+  reattribute kinds 31400/31402 to the ADR-110 ACSP producer, marking the
+  `crashbug` `BrokerActor` / `ServerNostrActor` (`src/actors/broker_actor.rs`,
+  `src/actors/server_nostr_actor.rs` — both absent on `main`) as the superseded
+  transport.
+
+The sweep also caught two files outside the verifier's four that carried the
+identical defect and were brought into line here:
+
+- `docs/adr/ADR-086-git-over-http-ingest-unification.md` — its banner even quoted
+  the still-lying body ("BrokerActor emits…" / "WebSocket events unchanged").
+  Body lines ~308/322/328-329/449 corrected: the G6 data-flow, the G7 location +
+  producer table, and the "events unchanged" note now name the enrichment-decide
+  handler / ACSP producer.
+- `docs/explanation/visionflow-coordination-platform.md` — the coordination-
+  topology mermaid showed live `BrokerActor` + `ServerNostrActor` host nodes;
+  relabelled to "Broker kernel + REST (`src/domain/broker/`)" and "ACSP producer
+  / ElevationActor".
+- `docs/diagrams/triptych-src/2-engine.md` — the engine label "ACSP /
+  BrokerActor" narrowed to "ACSP producer".
+
+**Grep receipt (this fixup pass):** `grep -rn BrokerActor docs/ --include=*.md`
+excluding the evidence dir, `/archive/` and `/superseded/` went from **66 hits →
+46 hits**. A targeted live-voice hunt
+(`BrokerActor('?s)? (emits|owns|publishes|sends|receives|manages|handles|broadcasts|is (the )?(live|canonical|current))`)
+over the same scope returns **0 hits**.
+
+**Residual (judged legitimate, left in place):** the 46 remaining hits are all
+(a) dated correction banners; (b) explicit superseded/never-merged framing;
+(c) the gap-close problem/decision records that must name the defect
+(`docs/prd/PRD-023-gap-close-visionclaw.md`, `docs/adr/ADR-130-*`); (d) the
+bannered superseded-design ADR itself (`docs/adr/ADR-041-judgment-broker-workbench.md`,
+Status *Superseded-in-part*, whose body is the historical design record the banner
+points to); or (e) attributed/conceptual diagram nodes that do **not** assert a
+shipped `src/actors/broker_actor.rs` — `docs/adr/ADR-111-ecosystem-infographic-modernisation.md`
+(infographic flow nodes; publisher attributed to `agentbox/lib/elevation-publisher.js`)
+and `docs/adr/ADR-040-enterprise-identity-strategy.md` (a passing "on behalf of the
+BrokerActor" clause). None is an unqualified live-`main` code claim.
 
 ## Falsification (PRD-023 WP-4) → how it is met
 
@@ -121,9 +190,16 @@ code claims; flagged here for a later doc-sweep rather than folded into closure.
   handler runs the kernel `DecisionOrchestrator` and persists a terminal
   decision; `broker:case_decided` is emitted every decide call.
 - *"any document still names crashbug's `BrokerActor` as live `main`
-  infrastructure"* — the five documents above are corrected; a repo grep for
-  `BrokerActor` now returns only historical/corrected references
-  (ADR-041/ADR-033 correction banners, the crashbug branch itself).
+  infrastructure"* — corrected in two passes. The first pass corrected the five
+  primary docs and bannered four more; the adversarial verifier then found those
+  four were **banner-only with the body still asserting `BrokerActor` as live** —
+  fixed in the gap-close fixup above (body text corrected in place in ADR-033,
+  PRD-013, ddd-mesh, `docs/CHANGELOG.md`, plus ADR-086 and two diagram sources).
+  A repo grep for `BrokerActor` (excluding the evidence dir, `/archive/`,
+  `/superseded/`) now returns **46 hits, all judged legitimate** (banners,
+  superseded-framing, the gap-close problem/decision records, the bannered
+  superseded-design ADR-041, and attributed diagram nodes); a live-voice
+  assertion hunt over that scope returns **0 hits**.
 - *"REC-2 closes with `ElevationActor` still gated off in every profile"* — the
   gate defaults ON in dev/staging (`production_gate_defaults_dev_on_prod_off`
   test); production stays opt-in.

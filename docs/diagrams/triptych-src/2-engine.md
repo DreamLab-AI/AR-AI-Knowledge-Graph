@@ -23,7 +23,7 @@ that ontology. Agents act, humans govern, the GPU renders it all in immersive XR
 - Read pervasive, **write governed** — only `propose → Whelk gate → human merge` asserts truth.
 
 ## Governance + agentic mesh
-- **ACSP / BrokerActor** — agents publish decision panels (Nostr kinds 31400–31405);
+- **ACSP producer** — agents publish decision panels (Nostr kinds 31400–31405);
   humans approve/reject with signed events. Judgment Broker for the 10% that need a human.
 - **Embodied agent loop** — agent actions render as coloured beams + gluon forces in the graph.
 

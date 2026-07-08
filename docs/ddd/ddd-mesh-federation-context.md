@@ -334,10 +334,10 @@ These are the events that flow across context boundaries. Each is an instance of
 | `MemberMuted` | 30911 | BC-MESH-FORUM admin | all | same | with TTL |
 | `MemberWarned` | 30912 | BC-MESH-FORUM admin | BC-MESH-FORUM | local | not federated by default |
 | `MemberReported` | 1984 / 30913 | BC-MESH-FORUM member | BC-MESH-FORUM admin | local | NIP-56 std |
-| `EnrichmentProposed` | 30301 (NEW, PRD-013 G7) | BC-MESH-AGENTBOX (agent) | BC-MESH-VC (BrokerActor) | ACL-VC↔AGENTBOX | IS-Envelope kind=`tool_invoke`; agent submits enrichment for broker review |
-| `BrokerDecisionRecorded` | 30300 (NEW, PRD-013 G7) | BC-MESH-VC (ServerNostrActor) | BC-MESH-AGENTBOX (agent), external subscribers | ACL-VC↔AGENTBOX | IS-Envelope kind=`tool_result`; broker decision audit event |
+| `EnrichmentProposed` | 30301 (NEW, PRD-013 G7) | BC-MESH-AGENTBOX (agent) | BC-MESH-VC (ACSP producer / enrichment-decide handler) | ACL-VC↔AGENTBOX | IS-Envelope kind=`tool_invoke`; agent submits enrichment for broker review |
+| `BrokerDecisionRecorded` | 30300 (NEW, PRD-013 G7) | BC-MESH-VC (enrichment-decide handler; durable audit record + WS frame — no kind-30300 Nostr emitter on `main`) | BC-MESH-AGENTBOX (agent), external subscribers | ACL-VC↔AGENTBOX | IS-Envelope kind=`tool_result`; broker decision audit event |
 | `WriteBackPushed` | internal | BC-MESH-VC (WriteBackSaga) | source GitRemote pod/repo | ACL-VC↔SOLID-POD-RS | NIP-98-signed git push with provenance trailers; triggered only after BC11 approval |
-| `KnowledgeEnrichmentCaseCreated` | internal + WS `broker:new_case` | BC-MESH-VC (BrokerActor) | BC-MESH-VC (Decision Canvas), BC-MESH-AGENTBOX (G6 pane) | local + ACL-VC↔AGENTBOX | New `CaseCategory::KnowledgeEnrichment` case for human review |
+| `KnowledgeEnrichmentCaseCreated` | internal + WS `broker:new_case` | BC-MESH-VC (enrichment-decide handler, `services::broker_events`) | BC-MESH-VC (Decision Canvas), BC-MESH-AGENTBOX (G6 pane) | local + ACL-VC↔AGENTBOX | New `CaseCategory::KnowledgeEnrichment` case for human review |
 | `GitRemoteSynced` | internal | BC-MESH-VC (GitIngestService) | BC-MESH-VC (IngestSaga) | local | Incremental fetch completed; changed files forwarded to parser pipeline |
 
 ---
@@ -820,8 +820,8 @@ This is a **customer-supplier** relationship: BC2 defines the enrichment shape a
 The Broker Review Surface (PRD-013 G6) is a **presentation-layer concern**, not a bounded context. It is an agentbox viewer pane (`enrichment-review-pane.js`) that composes data from BC11 (broker cases, decision outcomes) and BC2 (enrichment payloads, source content) into a two-pane diff view with inline approval actions.
 
 **Data sources:**
-- VisionClaw BrokerActor: WebSocket events `broker:new_case`, `broker:case_decided`, `broker:case_claimed`
-- VisionClaw REST: `GET /api/broker/inbox`, `POST /api/broker/cases/:id/decide`
+- VisionClaw enrichment-decide handler (`services::broker_events`): WebSocket events `broker:new_case`, `broker:case_decided` (the `crashbug` `broker:case_claimed` event is not on `main`)
+- VisionClaw REST: `GET /api/broker/inbox`, `POST /api/enrichment-proposals/:id/decide`
 - BC2 enrichment payload: `from_state` (source content) and `to_state` (proposed enrichment)
 
 **Rendering:**
@@ -838,10 +838,10 @@ PRD-013 G7 extends the existing relay topology (ADR-073) with two new event kind
 
 | Kind | Name | Purpose | Producer | Consumer |
 |------|------|---------|----------|----------|
-| 30300 | `AuditEvent` (implemented) | Broker decision recorded (approve/reject/amend/delegate/promote/precedent) | VisionClaw ServerNostrActor | Agentbox agents, external subscribers |
-| 30301 | `EnrichmentProposal` (implemented) | Agent submits enrichment for broker review | Agentbox agent (via Pod Bridge) | VisionClaw BrokerActor |
-| 31400 | `PanelDefinition` (implemented) | Register/update governance control panel (NIP-33 replaceable, keyed by `d` tag) | VisionClaw ServerNostrActor via BrokerActor | Forum Kit UI, any Nostr client |
-| 31402 | `ActionRequest` (implemented) | Case submitted for human review with priority, category, fields, reasoning | VisionClaw ServerNostrActor via BrokerActor | Forum Kit UI, broker clients |
+| 30300 | `AuditEvent` (superseded design; not on `main`) | Broker decision recorded (approve/reject/amend/delegate/promote/precedent) — on `main` this is a durable audit record + WS audit frame from the enrichment-decide handler, not a kind-30300 Nostr event | VisionClaw enrichment-decide handler | Agentbox agents, external subscribers |
+| 30301 | `EnrichmentProposal` (superseded ingest design; not wired on `main`) | Agent submits enrichment for broker review | Agentbox agent (via Pod Bridge) | VisionClaw broker publisher (ADR-110 ACSP path) |
+| 31400 | `PanelDefinition` (implemented) | Register/update governance control panel (NIP-33 replaceable, keyed by `d` tag) | VisionClaw ACSP producer (`src/services/acsp/events.rs::build_panel_definition`) | Forum Kit UI, any Nostr client |
+| 31402 | `ActionRequest` (implemented) | Case submitted for human review with priority, category, fields, reasoning | VisionClaw ACSP producer (`src/services/acsp/events.rs::build_action_request`) | Forum Kit UI, broker clients |
 
 Kinds 31400 and 31402 are Agent Control Surface Protocol events (compatible with `nostr-bbs-core` from the Forum Kit). They extend the control plane with structured governance UI primitives, enabling the Forum Kit relay to render broker inboxes and action panels directly from Nostr events.
 
@@ -859,7 +859,7 @@ The Nostr Control Plane is **optional**. The broker REST API + WebSocket is the 
 
 #### TR-Enrichment-Proposal-Ingest
 
-When VisionClaw's BrokerActor receives a kind-30301 event via relay subscription:
+When VisionClaw's broker publisher (the ADR-110 ACSP consumer, `ElevationActor`) receives a kind-30301 event via relay subscription:
 
 1. Verify Schnorr signature (V-Inv-04).
 2. Extract IS-Envelope payload; validate kind = `tool_invoke` (TR-IS-Envelope-Validation).
