@@ -202,7 +202,44 @@ export class VoiceWebSocketService {
     this.emit('ttsSent', request);
   }
 
-  
+  /**
+   * COM-15 / D6: the PTT-start binding message. Threads the selected agent's
+   * `did:nostr` onto the server session so a following spoken command has a
+   * verifiable target (`AudioRouter.set_ptt_with_target`). Fire-and-forget: a
+   * dropped socket is a no-op (the binding re-sends on the next PTT edge).
+   */
+  setPtt(active: boolean, actorDid?: string | null): void {
+    if (!this.isConnected()) return;
+    this.send(
+      JSON.stringify({
+        type: 'set_ptt',
+        active,
+        actorDid: actorDid ?? null,
+      }),
+    );
+  }
+
+  /**
+   * COM-15 / V1: dispatch a spoken command. When `actorDid` is a bound agent's
+   * `did:nostr`, the server takes the GOVERNED path (signed 31402 →
+   * `/v1/voice-intent` → Kokoro ack); otherwise it reaches the settings
+   * assistant. The `actorDid` is carried per-command so a mid-utterance
+   * re-selection cannot mis-address it.
+   */
+  sendVoiceCommand(text: string, actorDid?: string | null): void {
+    if (!this.isConnected()) {
+      throw new Error('Not connected to voice service');
+    }
+    this.send(
+      JSON.stringify({
+        type: 'voice_command',
+        text,
+        actorDid: actorDid ?? null,
+      }),
+    );
+  }
+
+
   async startAudioStreaming(options?: { language?: string; model?: string }): Promise<void> {
     if (!this.isConnected()) {
       throw new Error('Not connected to voice service');

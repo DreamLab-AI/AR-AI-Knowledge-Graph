@@ -29,6 +29,13 @@ pub struct UserVoiceSession {
     pub owned_agents: Vec<String>,
     /// Whether the user is currently in PTT (push-to-talk) mode
     pub ptt_active: bool,
+    /// COM-15 / D6: the selected agent this PTT session is bound to. When
+    /// `Some(did:nostr)`, a spoken command dispatches a signed 31402 targeted at
+    /// that agent (`VoiceIntentClient`); when `None`, PTT is unbound and a
+    /// command falls back to the global settings-assistant path. This is the
+    /// selected-agent binding the register found missing — PTT is no longer
+    /// globally scoped (PRD-023 WP-5 AC1, DDD `VoicePttSession` boundary).
+    pub selected_agent_did: Option<String>,
     /// LiveKit participant ID for spatial audio
     pub livekit_participant_id: Option<String>,
     /// User's 3D position in the Vircadia world (for spatial audio)
@@ -113,6 +120,7 @@ impl AudioRouter {
             transcription_tx,
             owned_agents: Vec::new(),
             ptt_active: false,
+            selected_agent_did: None,
             livekit_participant_id: None,
             spatial_position: [0.0, 0.0, 0.0],
         };
@@ -135,13 +143,63 @@ impl AudioRouter {
         agents.retain(|_, v| v.owner_user_id != user_id);
     }
 
-    /// Set PTT (push-to-talk) state for a user
+    /// Set PTT (push-to-talk) state for a user, leaving the selected-agent
+    /// binding untouched.
     pub async fn set_ptt(&self, user_id: &str, active: bool) {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(user_id) {
             session.ptt_active = active;
             debug!("User {} PTT: {}", user_id, if active { "ACTIVE" } else { "RELEASED" });
         }
+    }
+
+    /// COM-15 / D6: set PTT state AND the selected-agent binding in one message,
+    /// the way the PTT-start message threads a graph selection into the session.
+    /// A `selected_agent_did` of `Some(x)` is stored only if `x` is a canonical
+    /// `did:nostr` (verify before trust, DDD invariant 2); a non-DID clears the
+    /// binding and warns rather than binding to a spoofable label. `None` leaves
+    /// the existing binding in place (a bare PTT toggle keeps the target).
+    pub async fn set_ptt_with_target(
+        &self,
+        user_id: &str,
+        active: bool,
+        selected_agent_did: Option<String>,
+    ) {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(user_id) {
+            session.ptt_active = active;
+            if let Some(claim) = selected_agent_did {
+                session.selected_agent_did = validate_target_did(&claim, user_id);
+            }
+            debug!(
+                "User {} PTT: {} (bound → {:?})",
+                user_id,
+                if active { "ACTIVE" } else { "RELEASED" },
+                session.selected_agent_did
+            );
+        }
+    }
+
+    /// COM-15 / D6: bind (or clear) the selected agent for a user's PTT session
+    /// without changing the PTT toggle. `None` clears the binding; a non-DID
+    /// claim is refused (binding cleared) — a hashed label is never a governed
+    /// target (ADR-037 D7).
+    pub async fn bind_selected_agent(&self, user_id: &str, selected_agent_did: Option<String>) {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(user_id) {
+            session.selected_agent_did = match selected_agent_did {
+                Some(claim) => validate_target_did(&claim, user_id),
+                None => None,
+            };
+        }
+    }
+
+    /// The `did:nostr` the user's PTT session is currently bound to, if any.
+    pub async fn selected_agent_did(&self, user_id: &str) -> Option<String> {
+        let sessions = self.sessions.read().await;
+        sessions
+            .get(user_id)
+            .and_then(|s| s.selected_agent_did.clone())
     }
 
     /// Check if a user's PTT is active
@@ -313,7 +371,27 @@ impl AudioRouter {
             active_agents: agents.len(),
             users_with_ptt: sessions.values().filter(|s| s.ptt_active).count(),
             spatial_agents: agents.values().filter(|a| a.public_voice).count(),
+            ptt_bound_to_agent: sessions
+                .values()
+                .filter(|s| s.selected_agent_did.is_some())
+                .count(),
         }
+    }
+}
+
+/// Accept `claim` as a PTT target only if it is a canonical `did:nostr`
+/// (ADR-125 I1). A non-DID is refused (returns `None`, warn-logged) so a
+/// spoofable label never becomes the target of a governed voice command
+/// (verify before trust, DDD invariant 2).
+fn validate_target_did(claim: &str, user_id: &str) -> Option<String> {
+    if matches!(
+        crate::uri::parse(claim),
+        Ok(crate::uri::ParsedUri::DidNostr { .. })
+    ) {
+        Some(claim.to_string())
+    } else {
+        warn!("User {user_id} PTT target '{claim}' is not a did:nostr — binding refused");
+        None
     }
 }
 
@@ -323,4 +401,86 @@ pub struct AudioRouterStatus {
     pub active_agents: usize,
     pub users_with_ptt: usize,
     pub spatial_agents: usize,
+    /// COM-15 / D6: sessions whose PTT is bound to a selected agent's
+    /// `did:nostr` (proof PTT is no longer globally scoped).
+    pub ptt_bound_to_agent: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DID_A: &str = "did:nostr:1111111111111111111111111111111111111111111111111111111111111111";
+    const DID_B: &str = "did:nostr:2222222222222222222222222222222222222222222222222222222222222222";
+
+    /// COM-15 / D6 AC1: the PTT-start message binds the selected agent's
+    /// did:nostr onto the session; a spoken command now has a verifiable target.
+    #[tokio::test]
+    async fn ptt_binds_the_selected_agent_did() {
+        let router = AudioRouter::new();
+        let _ = router.register_user("alice").await;
+
+        router
+            .set_ptt_with_target("alice", true, Some(DID_A.to_string()))
+            .await;
+
+        assert!(router.is_ptt_active("alice").await);
+        assert_eq!(router.selected_agent_did("alice").await.as_deref(), Some(DID_A));
+    }
+
+    /// The register's open finding — PTT globally scoped — is refuted: two users
+    /// carry two distinct bindings with no crosstalk. Alice's target is Alice's,
+    /// not a process-global toggle.
+    #[tokio::test]
+    async fn ptt_is_not_globally_scoped() {
+        let router = AudioRouter::new();
+        let _ = router.register_user("alice").await;
+        let _ = router.register_user("bob").await;
+
+        router.bind_selected_agent("alice", Some(DID_A.to_string())).await;
+        router.bind_selected_agent("bob", Some(DID_B.to_string())).await;
+
+        assert_eq!(router.selected_agent_did("alice").await.as_deref(), Some(DID_A));
+        assert_eq!(router.selected_agent_did("bob").await.as_deref(), Some(DID_B));
+
+        let status = router.get_status().await;
+        assert_eq!(status.ptt_bound_to_agent, 2, "both sessions bound to an agent");
+    }
+
+    /// Verify before trust: a hashed nickname / free-text label is refused as a
+    /// PTT target, so a governed command can never be addressed at a spoofable
+    /// label (ADR-037 D7, DDD invariant 2).
+    #[tokio::test]
+    async fn non_did_target_is_refused() {
+        let router = AudioRouter::new();
+        let _ = router.register_user("alice").await;
+
+        router
+            .set_ptt_with_target("alice", true, Some("researcher-7".to_string()))
+            .await;
+
+        assert!(router.is_ptt_active("alice").await, "PTT toggles regardless");
+        assert_eq!(
+            router.selected_agent_did("alice").await,
+            None,
+            "a non-did target must not bind"
+        );
+    }
+
+    /// Clearing the binding (deselect) unbinds the target while leaving PTT
+    /// alone; a bare toggle with `None` target keeps an existing binding.
+    #[tokio::test]
+    async fn binding_clears_on_deselect_and_survives_bare_toggle() {
+        let router = AudioRouter::new();
+        let _ = router.register_user("alice").await;
+
+        router.bind_selected_agent("alice", Some(DID_A.to_string())).await;
+        // Bare toggle (None target) preserves the binding.
+        router.set_ptt_with_target("alice", false, None).await;
+        assert_eq!(router.selected_agent_did("alice").await.as_deref(), Some(DID_A));
+
+        // Deselect clears it.
+        router.bind_selected_agent("alice", None).await;
+        assert_eq!(router.selected_agent_did("alice").await, None);
+    }
 }

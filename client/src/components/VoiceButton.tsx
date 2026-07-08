@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useVoiceInteraction } from '../hooks/useVoiceInteraction';
 import { VoiceWebSocketService } from '../services/VoiceWebSocketService';
 import { AudioInputService } from '../services/AudioInputService';
+import { usePushToTalkAgentBinding } from '../features/voice/usePushToTalkAgentBinding';
 import { createLogger } from '../utils/loggerConfig';
 
 const logger = createLogger('VoiceButton');
@@ -50,11 +51,18 @@ export const VoiceButton: React.FC<VoiceButtonProps> = ({
   const [isSupported, setIsSupported] = useState(true);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
+  // COM-15 / D6 / M5: own the PushToTalkService lifecycle and bind PTT to the
+  // selected agent (graph selection → did:nostr). A final transcript for a bound
+  // agent is dispatched down the governed voice path (signed 31402 →
+  // /v1/voice-intent → Kokoro ack) via handleTranscription.
+  const { handleTranscription } = usePushToTalkAgentBinding();
+
   const {
     isListening,
     isSpeaking,
     toggleListening
   } = useVoiceInteraction({
+    onTranscription: handleTranscription,
     onError: (error) => {
       logger.error('Voice interaction error:', error);
       setHasError(true);

@@ -82,6 +82,24 @@ pub const P0_CANARIES: &[(&str, &str, &str, &str)] = &[
     ),
 ];
 
+/// The governed-voice-loop canary (COM-15 / V1 / D6 / M5, PRD-023 WP-5). Fires
+/// on the live end-to-end: a spoken command bound to the selected agent's
+/// `did:nostr` → a signed 31402 accepted by agentbox `/v1/voice-intent` → a
+/// Kokoro TTS acknowledgement. Standing (P1).
+pub const CANARY_COM15_PTT: &str = "CANARY-VC-COM15-PTT";
+
+/// The P1-wave canaries this repository seeds at start-up (PRD-023 canary
+/// table). Idempotent, so re-seeding on every boot is safe. Kept separate from
+/// [`P0_CANARIES`] so each wave's rows stay legible; more P1 rows land as their
+/// items close.
+pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[(
+    CANARY_COM15_PTT,
+    "Spoken command bound to the selected agent → signed 31402 accepted by \
+     /v1/voice-intent → Kokoro TTS acknowledgement",
+    "standing",
+    "P1",
+)];
+
 // KG gauge tri-state (an atomic 3-valued gauge, mirroring the AtomicUsize
 // counter idiom used for `active_connections`).
 const KG_UNKNOWN: u8 = 0;
@@ -168,6 +186,32 @@ impl LivenessHarness {
         info!(
             "[liveness] seeded {} P0 canaries at sha={}",
             P0_CANARIES.len(),
+            sha
+        );
+        Ok(())
+    }
+
+    /// Idempotently seed the P1-wave canaries (COM-15 governed voice loop, and
+    /// any later P1 rows). Registration is idempotent; a live fire is recorded
+    /// separately via [`Self::observe`] on the standing wire.
+    pub async fn seed_p1_canaries(&self) -> CanaryResult<()> {
+        let sha = current_sha();
+        let at = now_ms();
+        for (id, description, kind, wave) in P1_CANARIES {
+            self.register(&CanaryRegistration {
+                canary_id: (*id).to_string(),
+                description: (*description).to_string(),
+                kind: (*kind).to_string(),
+                owner_repo: "visionclaw".to_string(),
+                wave: Some((*wave).to_string()),
+                sha_at_registration: sha.clone(),
+                registered_at_ms: at,
+            })
+            .await?;
+        }
+        info!(
+            "[liveness] seeded {} P1 canaries at sha={}",
+            P1_CANARIES.len(),
             sha
         );
         Ok(())

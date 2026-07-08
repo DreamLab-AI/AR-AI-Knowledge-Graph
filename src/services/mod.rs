@@ -22,6 +22,10 @@ pub mod schema_service;
 pub mod semantic_analyzer;
 pub mod semantic_pathfinding_service;
 pub mod audio_router;
+// COM-15 / V1 / D6 / M5 (PRD-023 WP-5): the governed voice loop's consumer —
+// signs a kind-31402 targeted at the selected agent's did:nostr and POSTs it to
+// the agentbox `/v1/voice-intent` producer (ADR-037 D7).
+pub mod voice_intent_client;
 pub mod speech_service;
 pub mod speech_voice_integration;
 pub mod voice_context_manager;

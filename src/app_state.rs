@@ -342,6 +342,14 @@ pub struct AppState {
     pub perplexity_service: Option<Arc<PerplexityService>>,
     pub ragflow_service: Option<Arc<RAGFlowService>>,
     pub speech_service: Option<Arc<SpeechService>>,
+    /// COM-15 / D6: per-user PTT sessions with the selected-agent `did:nostr`
+    /// binding (was defined but consumerless; now the governed voice loop's
+    /// binding store).
+    pub audio_router: Arc<crate::services::audio_router::AudioRouter>,
+    /// COM-15 / V1: the governed-voice-loop consumer (signs a 31402 targeted at
+    /// the bound agent and POSTs to agentbox `/v1/voice-intent`). `None` when the
+    /// loop is unconfigured for this profile.
+    pub voice_intent_client: Option<Arc<crate::services::voice_intent_client::VoiceIntentClient>>,
     pub nostr_service: Option<web::Data<NostrService>>,
     pub feature_access: web::Data<FeatureAccess>,
     pub ragflow_session_id: String,
@@ -435,6 +443,25 @@ impl AppState {
         );
         if let Err(e) = liveness_harness.seed_p0_canaries().await {
             warn!("[AppState::new] failed to seed P0 liveness canaries: {}", e);
+        }
+        // COM-15 (PRD-023 WP-5): register the standing governed-voice-loop canary
+        // so `GET /api/canary/status` carries CANARY-VC-COM15-PTT from boot.
+        if let Err(e) = liveness_harness.seed_p1_canaries().await {
+            warn!("[AppState::new] failed to seed P1 liveness canaries: {}", e);
+        }
+
+        // COM-15 / D6 / M5: the previously consumerless AudioRouter now gets a
+        // consumer — it holds the per-user selected-agent PTT binding the
+        // governed voice loop reads (superseding the global-toggle-only path).
+        let audio_router = Arc::new(crate::services::audio_router::AudioRouter::new());
+        // COM-15 / V1: the governed-voice-loop consumer. `None` when unconfigured
+        // (no AGENTBOX_VOICE_INTENT_URL/ACSP_PANEL_NOSTR_PRIVKEY) — the loop stays
+        // off and a spoken command falls back to the settings assistant, honestly.
+        let voice_intent_client = crate::services::voice_intent_client::VoiceIntentClient::from_env();
+        if voice_intent_client.is_some() {
+            info!("[AppState::new] governed voice loop enabled (VoiceIntentClient configured)");
+        } else {
+            info!("[AppState::new] governed voice loop off (VoiceIntentClient unconfigured) — spoken commands use the settings assistant");
         }
 
         info!("[AppState::new] Oxigraph + SQLite repositories initialized successfully");
@@ -1206,6 +1233,8 @@ impl AppState {
             perplexity_service,
             ragflow_service,
             speech_service,
+            audio_router,
+            voice_intent_client,
             nostr_service: None,
             feature_access: web::Data::new(FeatureAccess::from_env()),
             ragflow_session_id,

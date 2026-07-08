@@ -48,6 +48,22 @@ struct VoiceCommandRequest {
     text: String,
     session_id: Option<String>,
     respond_via_voice: Option<bool>,
+    /// COM-15 / D6: the selected agent's `did:nostr` this command is addressed
+    /// to. When present (and canonical), the command takes the governed voice
+    /// path (signed 31402 → `/v1/voice-intent` → Kokoro ack) instead of the
+    /// global settings assistant. Threaded from the client graph selection
+    /// through the PTT-start binding.
+    actor_did: Option<String>,
+}
+
+/// COM-15 / D6: the PTT-start binding message. Threads the selected agent's
+/// `did:nostr` (from graph selection) onto this socket's `AudioRouter` session
+/// so a following spoken command has a verifiable target.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetPttRequest {
+    active: bool,
+    actor_did: Option<String>,
 }
 
 pub struct SpeechSocket {
@@ -135,7 +151,62 @@ impl SpeechSocket {
         }
     }
 
-    
+    /// COM-15 / V1 / D6 (PRD-023 WP-5): the governed voice path. A spoken
+    /// command addressed to a selected agent's `did:nostr` is signed into a
+    /// kind-31402 and POSTed to agentbox `/v1/voice-intent`; on accepted
+    /// dispatch a Kokoro TTS acknowledgement plays and the standing
+    /// `CANARY-VC-COM15-PTT` records a live fire. Returns the spoken ack text for
+    /// the WS `voice_response`. `Err` lets the caller fall back to the settings
+    /// assistant (never the settings assistant when the governed loop succeeds —
+    /// the falsification statement's second clause).
+    async fn process_voice_intent(
+        app_state: Arc<AppState>,
+        transcript: String,
+        actor_did: String,
+    ) -> Result<String, String> {
+        let client = app_state
+            .voice_intent_client
+            .as_ref()
+            .ok_or_else(|| "governed voice loop unconfigured".to_string())?;
+
+        let accepted = client
+            .dispatch(&transcript, &actor_did, 200)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let ack = crate::services::voice_intent_client::ack_sentence(&accepted, &actor_did);
+
+        // COM-15 AC3: speak the acknowledgement over the Kokoro TTS path.
+        if let Some(speech_service) = &app_state.speech_service {
+            if let Err(e) = speech_service
+                .text_to_speech(ack.clone(), SpeechOptions::default())
+                .await
+            {
+                error!("[SpeechSocket] governed-voice ack TTS failed: {}", e);
+            }
+        }
+
+        // The full loop carried one utterance end to end → record a live fire on
+        // the standing canary (observed traffic, never a synthetic probe).
+        let evidence = format!(
+            "voice→31402→/v1/voice-intent accepted (event {:?}, verb '{}') → Kokoro ack",
+            accepted.event_id, accepted.intent.verb
+        );
+        if let Err(e) = app_state
+            .liveness_harness
+            .observe(
+                crate::services::liveness_harness::CANARY_COM15_PTT,
+                &evidence,
+            )
+            .await
+        {
+            error!("[SpeechSocket] failed to record CANARY-VC-COM15-PTT fire: {}", e);
+        }
+
+        Ok(ack)
+    }
+
+
     fn is_swarm_command(&self, text: &str) -> bool {
         let text_lower = text.to_lowercase();
         text_lower.contains("swarm")
@@ -412,13 +483,91 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SpeechSocket {
                                     ctx.text(json!({"type": "error", "message": "Invalid STT request format"}).to_string());
                                 }
                             }
+                            Some("set_ptt") => {
+                                // COM-15 / D6: the PTT-start binding message threads
+                                // the selected agent's did:nostr onto this socket's
+                                // AudioRouter session (keyed by the socket id).
+                                if let Ok(ptt_req) =
+                                    serde_json::from_value::<SetPttRequest>(msg)
+                                {
+                                    let app_state = self.app_state.clone();
+                                    let user_id = self.id.clone();
+                                    let fut = async move {
+                                        let _ = app_state.audio_router.register_user(&user_id).await;
+                                        app_state
+                                            .audio_router
+                                            .set_ptt_with_target(
+                                                &user_id,
+                                                ptt_req.active,
+                                                ptt_req.actor_did,
+                                            )
+                                            .await;
+                                    };
+                                    ctx.spawn(fut.into_actor(self));
+                                } else {
+                                    ctx.text(json!({"type": "error", "message": "Invalid set_ptt request format"}).to_string());
+                                }
+                            }
                             Some("voice_command") => {
-                                
+
                                 if let Ok(voice_req) =
                                     serde_json::from_value::<VoiceCommandRequest>(msg)
                                 {
-                                    
-                                    if self.is_swarm_command(&voice_req.text) {
+                                    // COM-15: a command addressed to a selected
+                                    // agent's did:nostr takes the GOVERNED voice
+                                    // path (signed 31402 → /v1/voice-intent → Kokoro
+                                    // ack). Only an UNBOUND command reaches the
+                                    // settings assistant — a bound command never
+                                    // does (falsification clause 2). A malformed DID
+                                    // is dropped here, not silently misrouted.
+                                    let bound_did = voice_req.actor_did.clone().filter(|d| {
+                                        crate::services::voice_intent_client::is_canonical_did(d)
+                                    });
+                                    if let Some(actor_did) = bound_did {
+                                        let app_state = self.app_state.clone();
+                                        let addr = ctx.address();
+                                        let text = voice_req.text.clone();
+                                        let fut = async move {
+                                            match SpeechSocket::process_voice_intent(
+                                                app_state.clone(),
+                                                text.clone(),
+                                                actor_did.clone(),
+                                            )
+                                            .await
+                                            {
+                                                Ok(ack) => {
+                                                    let msg = json!({
+                                                        "type": "voice_response",
+                                                        "data": {
+                                                            "text": ack,
+                                                            "isFinal": true,
+                                                            "governed": true,
+                                                            "actorDid": actor_did,
+                                                            "timestamp": std::time::SystemTime::now()
+                                                                .duration_since(std::time::UNIX_EPOCH)
+                                                                .unwrap_or_default()
+                                                                .as_millis()
+                                                        }
+                                                    }).to_string();
+                                                    let _ = addr.try_send(ErrorMessage(msg));
+                                                }
+                                                Err(e) => {
+                                                    // Honest failure: a bound command
+                                                    // is NEVER re-routed to the
+                                                    // settings assistant. The client
+                                                    // is told the governed loop is
+                                                    // unreachable/unconfigured.
+                                                    let msg = json!({
+                                                        "type": "voice_intent_error",
+                                                        "message": format!("governed voice dispatch failed: {}", e),
+                                                        "actorDid": actor_did
+                                                    }).to_string();
+                                                    let _ = addr.try_send(ErrorMessage(msg));
+                                                }
+                                            }
+                                        };
+                                        ctx.spawn(fut.into_actor(self));
+                                    } else if self.is_swarm_command(&voice_req.text) {
                                         self.handle_swarm_voice_command(&voice_req.text, ctx);
                                     } else if let Some(speech_service) =
                                         &self.app_state.speech_service
