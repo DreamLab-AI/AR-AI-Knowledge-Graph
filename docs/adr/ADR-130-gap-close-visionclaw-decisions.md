@@ -123,3 +123,15 @@ The COM-14 cross-repo boundary is fixed by the queen: agentbox mints and attache
 
 - The register's standing risk applies here first: an accepted design that sits unbuilt. Decision 3's live-traffic gate is the structural answer — a work package whose canary never fires registers as `Open`, visibly, exactly as ADR-043 should have for three months.
 - The MR half of every finding is verified only through the Monado sidecar; no `godot` binary exists in the container. A closure that claims a live MR session must carry a sidecar receipt, not a static read.
+
+## ADR-trail (implementation notes)
+
+### 2026-07-08 — M2 intervention decide transport (Decision 4 / WP-9 stage 2)
+
+PRD-023 WP-9 M2 directs the in-headset decision to POST "via the existing enrichment/broker decide route through `transport.rs` — add the thin client call if absent". The Godot stage-2 implementation carries the decision over Godot's built-in `HTTPRequest` node with a Rust-signed NIP-98 `Authorization` header (`NostrAuth` in `xr-client/rust/src/signer.rs`, `nip98_http_authorization`), rather than adding a `reqwest`/TLS HTTP client to `transport.rs`. Reasons, per the deviation discipline:
+
+1. `xr-client/rust` carries no HTTP-client dependency (only `tokio-tungstenite` for the two WebSocket streams). Adding `reqwest` + a TLS stack inflates the Quest APK for a single cold, event-driven action.
+2. The decide is a one-shot operator action, not hot per-frame data; the brief's "batch across the boundary; don't cross it every frame for hot data" argues against making it a Rust socket call, while it says nothing against a cold GDScript HTTP call.
+3. The security-critical half — the signature — stays in Rust: the secret key never crosses the GDExtension boundary; only a single-use signed header does. `NostrAuth.nip98_header(url, "POST")` reuses the same event-builder as the WS `authenticate` envelope, so it interops byte-for-byte with the server's `verify_nip98_auth`.
+
+The route and auth are unchanged from the desktop path: `POST /api/broker/cases/{id}/decide` (`enrichment_proposals_handler::decide_as_operator`) under the `power_user()` gate, which accepts NIP-98 as its primary scheme (`src/settings/auth_extractor.rs:109`). The decision funnels through the same kernel + persistence + `broker:case_decided` core as the desktop operator and the agentbox bridge. This is a transport choice within Decision 4, not a new architectural fork.

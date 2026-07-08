@@ -15,6 +15,9 @@ use visionclaw_xr_presence::Did;
 
 use crate::ports::{Signer, SignerError};
 
+#[cfg(not(test))]
+use godot::prelude::*;
+
 pub struct NostrSigner {
     secp: Secp256k1<secp256k1::All>,
     keypair: Keypair,
@@ -64,10 +67,11 @@ impl NostrSigner {
     }
 
     /// Build a NIP-98 HTTP-auth event (kind 27235) for `url`/`method`, signed
-    /// with this identity, and wrap it in the server's WebSocket
-    /// `{"type":"authenticate","event":"<base64(event)>"}` envelope. Unlocks
-    /// mutating `/wss` messages (node drag/pin) for this session.
-    pub fn nip98_authenticate_json(&self, url: &str, method: &str) -> String {
+    /// with this identity, and return its standard-alphabet base64 encoding.
+    /// Both the WebSocket envelope and the HTTP `Authorization` header wrap this
+    /// same signed event, so the two auth paths interop byte-for-byte with the
+    /// server's `verify_nip98_auth` decoder.
+    fn nip98_event_b64(&self, url: &str, method: &str) -> String {
         let created_at = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -99,8 +103,26 @@ impl NostrSigner {
             "content": content,
             "sig": hex::encode(sig.as_ref()),
         });
-        let event_b64 = base64_encode(event.to_string().as_bytes());
+        base64_encode(event.to_string().as_bytes())
+    }
+
+    /// Build a NIP-98 HTTP-auth event and wrap it in the server's WebSocket
+    /// `{"type":"authenticate","event":"<base64(event)>"}` envelope. Unlocks
+    /// mutating `/wss` messages (node drag/pin) for this session.
+    pub fn nip98_authenticate_json(&self, url: &str, method: &str) -> String {
+        let event_b64 = self.nip98_event_b64(url, method);
         serde_json::json!({ "type": "authenticate", "event": event_b64 }).to_string()
+    }
+
+    /// Build the `Authorization` header value for a NIP-98-authenticated HTTP
+    /// request to `url` with `method`. The `Nostr ` scheme prefix is exactly
+    /// what the server's `auth_extractor` matches (`auth_extractor.rs:109`), so
+    /// the Godot intervention POST authenticates against the same power-user
+    /// gate the desktop control centre uses. `method` must be upper-case
+    /// (`POST`) and `url` the fully-qualified request URL the server will
+    /// reconstruct, or the NIP-98 `u`/`method` tag check fails.
+    pub fn nip98_http_authorization(&self, url: &str, method: &str) -> String {
+        format!("Nostr {}", self.nip98_event_b64(url, method))
     }
 }
 
@@ -155,6 +177,62 @@ impl Signer for NostrSigner {
 
     fn did(&self) -> Result<Did, SignerError> {
         Ok(self.did.clone())
+    }
+}
+
+// --- Godot node --------------------------------------------------------------
+
+/// GDScript-facing Nostr HTTP authenticator. Holds the session identity and
+/// mints per-request NIP-98 `Authorization` headers so the in-headset
+/// intervention panel can POST a signed broker decision to the same
+/// power-user-gated `/api/broker/cases/{id}/decide` route the desktop control
+/// centre uses (PRD-023 WP-9 M2 / COM-18). The secret key never crosses the
+/// GDExtension boundary — only signed, single-use headers do.
+#[cfg(not(test))]
+#[derive(GodotClass)]
+#[class(no_init, base = RefCounted)]
+pub struct NostrAuth {
+    signer: NostrSigner,
+    base: Base<RefCounted>,
+}
+
+#[cfg(not(test))]
+#[godot_api]
+impl NostrAuth {
+    /// Build from a 32-byte secret in lowercase hex. An empty or malformed hex
+    /// yields a fresh ephemeral identity rather than failing — the panel always
+    /// has a signing key, and an ephemeral operator simply is not a power user
+    /// server-side (the decide POST 401s), which is the honest outcome, not a
+    /// crash. Reuse the same secret the graph socket authenticates with so the
+    /// decision is attributed to one identity.
+    #[func]
+    fn create(secret_hex: GString) -> Gd<Self> {
+        let s = secret_hex.to_string();
+        let signer = if s.trim().is_empty() {
+            NostrSigner::generate()
+        } else {
+            NostrSigner::from_secret_hex(&s).unwrap_or_else(|_| NostrSigner::generate())
+        };
+        Gd::from_init_fn(|base| Self { signer, base })
+    }
+
+    /// The `Authorization` header value (`Nostr <base64(event)>`) for a NIP-98
+    /// request to `url` with `method` (upper-case). `url` must be the
+    /// fully-qualified request URL the server reconstructs, or the tag check
+    /// fails server-side.
+    #[func]
+    fn nip98_header(&self, url: GString, method: GString) -> GString {
+        GString::from(
+            self.signer
+                .nip98_http_authorization(&url.to_string(), &method.to_string()),
+        )
+    }
+
+    /// This identity's x-only pubkey hex — the `broker_pubkey` attribution field
+    /// on the decide body (HITL provenance, `enrichment_proposals_handler.rs`).
+    #[func]
+    fn pubkey_hex(&self) -> GString {
+        GString::from(self.signer.pubkey_hex())
     }
 }
 
@@ -270,6 +348,45 @@ mod tests {
         let id_bytes: [u8; 32] = Sha256::digest(preimage.to_string().as_bytes()).into();
         assert_eq!(hex::encode(id_bytes), event["id"].as_str().unwrap());
 
+        let message = Message::from_digest(id_bytes);
+        let xonly =
+            XOnlyPublicKey::from_slice(&hex::decode(event["pubkey"].as_str().unwrap()).unwrap())
+                .unwrap();
+        let sig =
+            Signature::from_slice(&hex::decode(event["sig"].as_str().unwrap()).unwrap()).unwrap();
+        assert!(SECP256K1.verify_schnorr(&sig, &message, &xonly).is_ok());
+    }
+
+    #[test]
+    fn http_authorization_carries_a_verifiable_nip98_event() {
+        let s = NostrSigner::generate();
+        let url = "http://localhost:4000/api/broker/cases/case-7/decide";
+        let header = s.nip98_http_authorization(url, "POST");
+
+        // The scheme prefix is exactly what auth_extractor.rs:109 matches.
+        let b64 = header
+            .strip_prefix("Nostr ")
+            .expect("HTTP NIP-98 header must use the `Nostr ` scheme");
+
+        let event_json = String::from_utf8(base64_decode(b64)).unwrap();
+        let event: serde_json::Value = serde_json::from_str(&event_json).unwrap();
+        assert_eq!(event["kind"], 27235);
+        assert_eq!(event["pubkey"].as_str().unwrap(), s.pubkey_hex());
+        assert_eq!(event["tags"][0][0], "u");
+        assert_eq!(event["tags"][0][1], url);
+        assert_eq!(event["tags"][1][1], "POST");
+
+        // Same id + signature integrity the server enforces.
+        let preimage = serde_json::json!([
+            0,
+            event["pubkey"],
+            event["created_at"],
+            event["kind"],
+            event["tags"],
+            event["content"]
+        ]);
+        let id_bytes: [u8; 32] = Sha256::digest(preimage.to_string().as_bytes()).into();
+        assert_eq!(hex::encode(id_bytes), event["id"].as_str().unwrap());
         let message = Message::from_digest(id_bytes);
         let xonly =
             XOnlyPublicKey::from_slice(&hex::decode(event["pubkey"].as_str().unwrap()).unwrap())
