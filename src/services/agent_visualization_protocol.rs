@@ -315,6 +315,13 @@ pub struct MultiMcpAgentStatus {
     pub neural_info: Option<NeuralAgentData>,
     pub created_at: i64,
     pub last_active: i64,
+    /// Raw `did:nostr` claim as received on the agentbox agent record (spawn
+    /// response or the agent-list snapshot — same record shape). Carried
+    /// unvalidated here; the `uri::did_nostr()` gate runs at the
+    /// `Agent::from(MultiMcpAgentStatus)` carry boundary (COM-14, WP-1). `None`
+    /// when agentbox emits no DID for the agent.
+    #[serde(default)]
+    pub did_nostr: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -430,6 +430,7 @@ pub async fn inject_mock_agents(
             workload,
             created_at: Some(chrono::Utc::now().to_rfc3339()),
             age: Some(i as u64 * 12_000),
+            did_nostr: None,
         });
 
         // Pick 3-5 random knowledge node targets for cross-edges

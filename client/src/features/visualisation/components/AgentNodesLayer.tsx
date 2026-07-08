@@ -7,11 +7,20 @@ import { createLogger } from '../../../utils/loggerConfig';
 
 const logger = createLogger('AgentNodesLayer');
 import { isWebGPURenderer } from '../../../rendering/rendererFactory';
+import { agentTrustKey, shortDid } from './agentIdentity';
 
 
 
 interface AgentNode {
   id: string;
+  /**
+   * Sovereign identity minted by agentbox at spawn (COM-14, ADR-125). When
+   * present it is the trust key that supersedes `id` (the task_id); undefined
+   * until agentbox attaches it and the server carries it through
+   * `/api/bots/agents`. Wire key is snake_case `did_nostr`, matching the Rust
+   * `Agent` serialisation.
+   */
+  did_nostr?: string;
   type: string;
   status: 'active' | 'idle' | 'error' | 'warning';
   health: number;
@@ -77,7 +86,7 @@ export const AgentNodesLayer: React.FC<AgentNodesLayerProps> = ({
       {}
       {agents.map((agent) => (
         <AgentNode
-          key={agent.id}
+          key={agentTrustKey(agent)}
           agent={agent}
           nodeSize={nodeSize}
           baseColor={baseColor}
@@ -255,6 +264,11 @@ const AgentNode: React.FC<{
           <div style={{ color: '#fff', fontSize: '10px', textShadow: '0 0 3px black' }}>
             {agent.status} | {agent.health}%
           </div>
+          {agent.did_nostr && (
+            <div style={{ color: '#7dd3fc', fontSize: '9px', fontFamily: 'monospace', textShadow: '0 0 3px black' }}>
+              {shortDid(agent.did_nostr)}
+            </div>
+          )}
           {agent.currentTask && (
             <div style={{ color: '#aaa', fontSize: '9px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {agent.currentTask}
@@ -285,6 +299,19 @@ const AgentNode: React.FC<{
           >
             {agent.status} | {agent.health}%
           </Text>
+          {agent.did_nostr && (
+            <Text
+              position={[0, scaledSize + 2.0, 0]}
+              fontSize={0.22}
+              color="#7dd3fc"
+              anchorX="center"
+              anchorY="bottom"
+              outlineWidth={0.015}
+              outlineColor="black"
+            >
+              {shortDid(agent.did_nostr)}
+            </Text>
+          )}
           {agent.currentTask && (
             <Text
               position={[0, -(scaledSize + 1), 0]}

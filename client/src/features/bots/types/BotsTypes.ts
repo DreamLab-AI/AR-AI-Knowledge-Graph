@@ -3,6 +3,13 @@
 // UPDATED: Enhanced agent types to match claude-flow hive-mind system (15+ types including Maestro specs-driven agents)
 export interface BotsAgent {
   id: string;
+  /**
+   * Sovereign identity minted by agentbox at spawn (COM-14, ADR-125). When
+   * present it is the trust key that supersedes `id` (the task_id). Undefined
+   * until agentbox attaches it; wire key is snake_case `did_nostr` per the Rust
+   * Agent serialisation.
+   */
+  did_nostr?: string;
   type: 'coordinator' | 'researcher' | 'coder' | 'analyst' | 'architect' | 'tester' | 'reviewer' | 'optimizer' | 'documenter' | 'monitor' | 'specialist' |
         'requirements_analyst' | 'design_architect' | 'task_planner' | 'implementation_coder' | 'quality_reviewer' | 'steering_documenter' | 'queen';
   status: 'idle' | 'busy' | 'active' | 'error' | 'initializing' | 'terminating' | 'offline';
