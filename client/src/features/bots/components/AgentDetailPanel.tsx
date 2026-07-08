@@ -234,6 +234,17 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
                   <span className="text-gray-600">Completed Tasks:</span>
                   <span className="font-medium">{selectedAgent.tasksCompleted || 0}</span>
                 </div>
+                {/* D7 (PRD-023 / ADR-130 register position — pre-action intent
+                    legibility): the DECLARED intent, shown before the agent acts,
+                    so the operator sees "about to: <declared action>" and not only
+                    past activity. Rendered only when the producer declared an
+                    intent; absent otherwise (never fabricated). */}
+                {selectedAgent.declaredIntent && (
+                  <div className="mt-2 p-2 bg-amber-50 rounded border border-amber-200">
+                    <div className="text-xs text-amber-700 font-semibold">Declared Intent</div>
+                    <div className="text-sm mt-1">About to: {selectedAgent.declaredIntent}</div>
+                  </div>
+                )}
                 {selectedAgent.currentTask && (
                   <div className="mt-2 p-2 bg-blue-50 rounded">
                     <div className="text-xs text-blue-600 font-semibold">Current Task</div>

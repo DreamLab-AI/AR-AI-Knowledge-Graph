@@ -22,8 +22,18 @@ export interface BotsAgent {
   name?: string;
 
   
-  capabilities?: string[]; 
-  currentTask?: string; 
+  capabilities?: string[];
+  currentTask?: string;
+  /**
+   * D7 (PRD-023 / ADR-130 register position — pre-action intent legibility):
+   * the action the agent has DECLARED it is about to take, before it acts. When
+   * present the steering surface renders "about to: <declared action>" so the
+   * operator sees intent, not only past activity. Sourced from the additive
+   * `intent` field on the agent-events envelope (Rust `AgentActionEnvelope`),
+   * carried on node metadata as `declared_intent`. Undefined when the producer
+   * declares no intent (the panel then shows no "about to" line).
+   */
+  declaredIntent?: string;
   tasksActive?: number; 
   tasksCompleted?: number; 
   successRate?: number; 

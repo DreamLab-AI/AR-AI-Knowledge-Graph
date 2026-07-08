@@ -356,6 +356,14 @@ pub struct AppState {
     /// the bound agent and POSTs to agentbox `/v1/voice-intent`). `None` when the
     /// loop is unconfigured for this profile.
     pub voice_intent_client: Option<Arc<crate::services::voice_intent_client::VoiceIntentClient>>,
+    /// V3 (PRD-023 WP-10): per-session voice conversation state — the store that
+    /// carries a pending clarification across turns (the governed-voice repair
+    /// merge reads/writes `ConversationContext.pending_clarification` here).
+    pub voice_context_manager: Arc<crate::services::voice_context_manager::VoiceContextManager>,
+    /// V3 (PRD-023 WP-10): the configurable STT/intent confidence gate. Below
+    /// threshold (`VISIONCLAW_VOICE_CONFIDENCE_THRESHOLD`, default 0.55) a spoken
+    /// command is held for a clarification turn instead of dispatched.
+    pub clarification_gate: crate::services::voice_clarification::ClarificationGate,
     pub nostr_service: Option<web::Data<NostrService>>,
     pub feature_access: web::Data<FeatureAccess>,
     pub ragflow_session_id: String,
@@ -455,6 +463,11 @@ impl AppState {
         if let Err(e) = liveness_harness.seed_p1_canaries().await {
             warn!("[AppState::new] failed to seed P1 liveness canaries: {}", e);
         }
+        // V3 (PRD-023 WP-10): register the one-shot voice-repair canary so
+        // `GET /api/canary/status` carries CANARY-VC-V3-REPAIR from boot.
+        if let Err(e) = liveness_harness.seed_p2_canaries().await {
+            warn!("[AppState::new] failed to seed P2 liveness canaries: {}", e);
+        }
 
         // REC-4 (ADR-130 Decision 5): durable KPI snapshot + lineage store —
         // SEPARATE db file so its single-writer posture stays isolated. The
@@ -487,6 +500,15 @@ impl AppState {
         } else {
             info!("[AppState::new] governed voice loop off (VoiceIntentClient unconfigured) — spoken commands use the settings assistant");
         }
+        // V3 (PRD-023 WP-10): the conversational-repair store + confidence gate.
+        let voice_context_manager =
+            Arc::new(crate::services::voice_context_manager::VoiceContextManager::new());
+        let clarification_gate =
+            crate::services::voice_clarification::ClarificationGate::from_env();
+        info!(
+            "[AppState::new] voice confidence gate threshold = {:.2}",
+            clarification_gate.threshold()
+        );
 
         info!("[AppState::new] Oxigraph + SQLite repositories initialized successfully");
         info!("[AppState::new] Database and settings service initialized successfully");
@@ -1261,6 +1283,8 @@ impl AppState {
             speech_service,
             audio_router,
             voice_intent_client,
+            voice_context_manager,
+            clarification_gate,
             nostr_service: None,
             feature_access: web::Data::new(FeatureAccess::from_env()),
             ragflow_session_id,

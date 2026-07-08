@@ -151,7 +151,11 @@ export const BotsDataProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         tokens: parseInt(node.metadata?.tokens || '0'),
         createdAt: node.metadata?.created_at || new Date().toISOString(),
         age: parseInt(node.metadata?.age || '0'),
-        
+        // D7 (PRD-023 / ADR-130 register position): the agent's declared
+        // pre-action intent, carried on node metadata from the agent-events
+        // envelope `intent` field. Undefined when the producer declares none.
+        declaredIntent: node.metadata?.declared_intent || node.metadata?.intent || undefined,
+
         swarmId: node.metadata?.swarm_id,
         parentQueenId: node.metadata?.parent_queen_id,
         capabilities: node.metadata?.capabilities ?

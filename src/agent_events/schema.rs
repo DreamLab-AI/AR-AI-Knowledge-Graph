@@ -120,6 +120,28 @@ pub struct AgentActionEnvelope {
     #[serde(default, alias = "verification_outcome")]
     pub verification: Option<String>,
 
+    /// D7 (PRD-023 / ADR-130 register position — *pre-action intent
+    /// legibility*). The **declared intent** an agent states BEFORE it acts, so
+    /// the steering surface can render "about to: <declared action>" rather than
+    /// only past actions (the D7 finding: "embodiment shows only past").
+    ///
+    /// D7 is a **canon-position** item: the canon owns the intent-legibility
+    /// position (`VisionFlow/docs/PRD-gap-close-sprint.md:60`, "theory→canon"),
+    /// and VisionClaw carries the affordance that cites it. PRD-023 does not
+    /// carve D7 into a work package; this field is the minimal additive
+    /// envelope-side affordance (mirrored by the desktop `AgentDetailPanel`
+    /// display). agentbox MAY populate `intent` at emit time; until it does the
+    /// field is `None` and the panel simply shows no "about to" line — honest,
+    /// never fabricated.
+    ///
+    /// Additive + versioned like the CTC fields: `#[serde(default)]`, so a
+    /// producer that never declares an intent still deserialises to `None`, and
+    /// the identity-blind binary `0x23` projection is unaffected (intent is
+    /// legibility metadata, not a GPU field). Both the register spelling
+    /// `intent` and the fuller `declared_intent` deserialise.
+    #[serde(default, alias = "declared_intent")]
+    pub intent: Option<String>,
+
     #[serde(default)]
     pub metadata: Value,
 }
@@ -137,6 +159,13 @@ impl AgentActionEnvelope {
         self.handoff_id.is_some()
             || self.token_count.is_some()
             || self.verification.is_some()
+    }
+
+    /// D7 (PRD-023 / ADR-130 register position): the agent's declared pre-action
+    /// intent, if it stated one. `Some` means the steering surface can render
+    /// "about to: <declared action>"; `None` means only past actions are known.
+    pub fn declared_intent(&self) -> Option<&str> {
+        self.intent.as_deref()
     }
 
     /// Project the identity-bearing JSON envelope onto the identity-blind binary
@@ -359,6 +388,47 @@ mod tests {
         let s = serde_json::to_string(&n).expect("serialise");
         let n2: AgentActionNotification = serde_json::from_str(&s).expect("reparse");
         assert_eq!(n, n2);
+    }
+
+    // D7 (PRD-023 / ADR-130 register position): pre-action intent legibility.
+    #[test]
+    fn declared_intent_deserialises_and_is_optional() {
+        // A producer that declares an intent BEFORE acting: the field parses and
+        // the accessor surfaces it for the "about to: <declared action>" display.
+        let with_intent = r#"{
+          "jsonrpc": "2.0",
+          "method": "notifications/agent_action",
+          "params": {
+            "type": "agent_action",
+            "event": {
+              "version": 3, "id": 1, "source_agent_id": 1, "target_node_id": 2,
+              "action_type": 1, "action_type_name": "update",
+              "timestamp": 1748500000000, "duration_ms": 100,
+              "intent": "rewrite the budget node with Q3 figures"
+            },
+            "message_type": 35, "protocol_version": 2,
+            "timestamp": "2026-05-29T00:00:00.000Z"
+          }
+        }"#;
+        let n: AgentActionNotification = serde_json::from_str(with_intent).expect("parse");
+        assert_eq!(
+            n.params.event.declared_intent(),
+            Some("rewrite the budget node with Q3 figures")
+        );
+
+        // The fuller `declared_intent` spelling also deserialises (alias).
+        let aliased = with_intent.replace("\"intent\":", "\"declared_intent\":");
+        let n2: AgentActionNotification = serde_json::from_str(&aliased).expect("parse alias");
+        assert_eq!(
+            n2.params.event.declared_intent(),
+            Some("rewrite the budget node with Q3 figures")
+        );
+
+        // A producer that declares no intent still parses; the field is None, so
+        // the panel shows no "about to" line (honest, never fabricated).
+        let n3: AgentActionNotification =
+            serde_json::from_str(canonical_json_with_identity()).expect("parse");
+        assert!(n3.params.event.declared_intent().is_none());
     }
 
     #[test]

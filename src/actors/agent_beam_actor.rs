@@ -193,6 +193,7 @@ mod tests {
             token_count: None,
             handoff_id: None,
             verification: None,
+            intent: None,
             metadata: serde_json::json!({ "note": "x" }),
         }
     }

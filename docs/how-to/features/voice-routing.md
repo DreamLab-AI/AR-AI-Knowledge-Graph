@@ -13,11 +13,24 @@ difficulty-level: intermediate
 
 # Voice Routing
 
+> **Status (2026-07, PRD-023 WP-10 / V4).** This guide describes the AudioRouter
+> four-plane model, shared by the Godot XR native client and the desktop React
+> client. In the **React client**, Plane 1 ("Private Agent Commands") is the
+> shipped **governed push-to-talk-to-selected-actor** loop: PTT-held STT is bound
+> to the selected agent's `did:nostr` and dispatched as a signed kind-31402 to
+> the agentbox `/v1/voice-intent` producer, acknowledged over Kokoro TTS (COM-15
+> / V1), with a V3 confidence gate holding low-confidence input for a
+> clarification turn. The legacy "Agent Command Parser" that drove **swarm
+> orchestration** directly from a spoken command is **deprecated in the React
+> client** — the swarm-command route returns a deprecation notice. The "Agent
+> Command Parser" box in the diagrams below denotes that legacy / Godot-native
+> design.
+
 ## Overview
 
 VisionClaw's AudioRouter provides multi-user voice routing across four audio planes, enabling both private agent interaction and public spatial voice chat within the 3D collaborative space (Godot XR native APK or desktop browser client).
 
-Each user gets an isolated voice session with per-user broadcast channels. Push-to-talk (PTT) controls audio routing between agent commands and spatial voice chat.
+Each user gets an isolated voice session with per-user broadcast channels. Push-to-talk (PTT) controls audio routing between agent commands and spatial voice chat. In the React client, "agent commands" means the governed push-to-talk-to-selected-actor loop (see the status banner above), not direct swarm orchestration.
 
 ## Audio Planes
 

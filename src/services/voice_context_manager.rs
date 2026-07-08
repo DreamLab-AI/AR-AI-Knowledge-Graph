@@ -126,7 +126,42 @@ impl VoiceContextManager {
         session_id
     }
 
-    
+    /// V3 (PRD-023 WP-10): assign this session's pending clarification — the
+    /// previously-dead `ConversationContext.pending_clarification` field, now
+    /// populated when the confidence gate holds an utterance for a repair turn
+    /// (the WP-10 falsification trigger: "falsified if `pending_clarification`
+    /// is still never assigned"). `Some(token)` holds a clarification; `None`
+    /// clears it. Creates the session if absent so a clarification can be held
+    /// before any completed turn.
+    pub async fn set_pending_clarification(&self, session_id: &str, token: Option<String>) {
+        // Ensure the session exists (own lock scope), then assign.
+        self.get_or_create_session(Some(session_id.to_string()), None)
+            .await;
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.get_mut(session_id) {
+            session.context.pending_clarification = token;
+            session.last_activity = time::now();
+            debug!(
+                "[voice-clarification] pending_clarification set for session {}",
+                session_id
+            );
+        }
+    }
+
+    /// V3 (PRD-023 WP-10): read **and clear** this session's pending
+    /// clarification. `Some(token)` means the next utterance is a repair turn
+    /// (merge it); `None` means the utterance takes the normal dispatch path.
+    pub async fn take_pending_clarification(&self, session_id: &str) -> Option<String> {
+        let mut sessions = self.sessions.write().await;
+        let session = sessions.get_mut(session_id)?;
+        let token = session.context.pending_clarification.take();
+        if token.is_some() {
+            session.last_activity = time::now();
+        }
+        token
+    }
+
+
     pub async fn add_conversation_turn(
         &self,
         session_id: &str,
@@ -422,6 +457,35 @@ mod tests {
         let context = manager.get_context(&session_id).await.unwrap();
         assert_eq!(context.turn_count, 1);
         assert_eq!(context.history.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_pending_clarification_is_assigned_and_taken() {
+        // V3 (PRD-023 WP-10): proves ConversationContext.pending_clarification is
+        // now assigned (the falsification trigger) — set populates the field a
+        // context read observes, and take reads-and-clears it.
+        let manager = VoiceContextManager::new();
+        let session_id = "clar-session".to_string();
+
+        // Nothing pending initially.
+        assert!(manager.take_pending_clarification(&session_id).await.is_none());
+
+        // Set populates the field (creates the session if absent).
+        manager
+            .set_pending_clarification(&session_id, Some("V3\u{1}agent_type\u{1}spawn a".to_string()))
+            .await;
+        let ctx = manager.get_context(&session_id).await.expect("session exists");
+        assert_eq!(
+            ctx.pending_clarification.as_deref(),
+            Some("V3\u{1}agent_type\u{1}spawn a")
+        );
+        // needs_follow_up now observes the pending clarification (line ~321).
+        assert!(manager.needs_follow_up(&session_id).await);
+
+        // Take reads and clears it — the next call sees nothing pending.
+        let taken = manager.take_pending_clarification(&session_id).await;
+        assert_eq!(taken.as_deref(), Some("V3\u{1}agent_type\u{1}spawn a"));
+        assert!(manager.take_pending_clarification(&session_id).await.is_none());
     }
 
     #[tokio::test]

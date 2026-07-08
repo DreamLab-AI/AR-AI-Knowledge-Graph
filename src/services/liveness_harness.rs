@@ -121,6 +121,13 @@ pub const CANARY_REC4_KPI: &str = "CANARY-VC-REC4-KPI";
 /// canon `DriftCounter` consumes. One-shot (P1).
 pub const CANARY_RESD_COUNT: &str = "CANARY-VC-RESD-COUNT";
 
+/// The voice conversational-repair canary (V3, PRD-023 WP-10). Fires when the
+/// confidence gate holds a low-confidence / under-specified spoken command and
+/// speaks a clarification instead of dispatching — a clarification turn observed
+/// on live traffic (`speech_socket_handler::process_governed_voice`). One-shot
+/// (P2): the repair loop is proven once a real utterance is held and clarified.
+pub const CANARY_V3_REPAIR: &str = "CANARY-VC-V3-REPAIR";
+
 /// The P1-wave canaries this repository seeds at start-up (PRD-023 canary
 /// table). Idempotent, so re-seeding on every boot is safe. Kept separate from
 /// [`P0_CANARIES`] so each wave's rows stay legible; more P1 rows land as their
@@ -173,6 +180,19 @@ pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[
          (the canon DriftCounter source)",
         "one-shot",
         "P1",
+    ),
+];
+
+/// The P2-wave canaries this repository seeds at start-up (PRD-023 canary
+/// table). Idempotent. Kept separate from the earlier waves so each wave's rows
+/// stay legible; more P2 rows land as their items close.
+pub const P2_CANARIES: &[(&str, &str, &str, &str)] = &[
+    (
+        CANARY_V3_REPAIR,
+        "Confidence gate holds a low-confidence / under-specified spoken command \
+         and speaks a clarification instead of dispatching (a repair turn)",
+        "one-shot",
+        "P2",
     ),
 ];
 
@@ -288,6 +308,32 @@ impl LivenessHarness {
         info!(
             "[liveness] seeded {} P1 canaries at sha={}",
             P1_CANARIES.len(),
+            sha
+        );
+        Ok(())
+    }
+
+    /// Idempotently seed the P2-wave canaries (V3 voice repair, and any later P2
+    /// rows). Registration is idempotent; a live fire is recorded separately via
+    /// [`Self::observe`] on the standing wire.
+    pub async fn seed_p2_canaries(&self) -> CanaryResult<()> {
+        let sha = current_sha();
+        let at = now_ms();
+        for (id, description, kind, wave) in P2_CANARIES {
+            self.register(&CanaryRegistration {
+                canary_id: (*id).to_string(),
+                description: (*description).to_string(),
+                kind: (*kind).to_string(),
+                owner_repo: "visionclaw".to_string(),
+                wave: Some((*wave).to_string()),
+                sha_at_registration: sha.clone(),
+                registered_at_ms: at,
+            })
+            .await?;
+        }
+        info!(
+            "[liveness] seeded {} P2 canaries at sha={}",
+            P2_CANARIES.len(),
             sha
         );
         Ok(())

@@ -26,6 +26,10 @@ pub mod audio_router;
 // signs a kind-31402 targeted at the selected agent's did:nostr and POSTs it to
 // the agentbox `/v1/voice-intent` producer (ADR-037 D7).
 pub mod voice_intent_client;
+// V3 (PRD-023 WP-10): the conversational-grounding confidence gate that holds a
+// low-confidence / under-specified spoken command for a clarification turn
+// instead of dispatching it.
+pub mod voice_clarification;
 pub mod speech_service;
 pub mod speech_voice_integration;
 pub mod voice_context_manager;
