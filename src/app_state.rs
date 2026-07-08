@@ -312,6 +312,11 @@ pub struct AppState {
     // and keep WS-9 migrations independent.
     pub sqlite_enrichment_repository: Arc<SqliteEnrichmentRepository>,
 
+    // RES-a: sprint-wide live-traffic observer + KG-backend watchdog gauge
+    // (ADR-130 Decision 3). Backs /api/canary/{register,observe,status} and the
+    // tokio watchdog spawned in main.rs. Own SQLite file (data/liveness.sqlite3).
+    pub liveness_harness: Arc<crate::services::liveness_harness::LivenessHarness>,
+
     // Oxigraph graph repository — canonical knowledge graph store (ADR-11)
     pub graph_adapter: Arc<OxigraphGraphRepository>,
 
@@ -415,6 +420,22 @@ impl AppState {
         crate::handlers::enrichment_proposals_handler::store::init(
             sqlite_enrichment_repository.clone(),
         );
+
+        // RES-a: durable LivenessCanary store — SEPARATE db file so its
+        // single-writer posture stays isolated. The harness seeds the P0-wave
+        // canaries at boot (idempotent) so the KG watchdog's target exists.
+        let liveness_db_path = std::path::Path::new(&data_dir).join("liveness.sqlite3");
+        let canary_repository = Arc::new(
+            crate::adapters::SqliteCanaryRepository::open(&liveness_db_path)
+                .await
+                .map_err(|e| format!("Failed to open SQLite liveness store: {}", e))?,
+        );
+        let liveness_harness = Arc::new(
+            crate::services::liveness_harness::LivenessHarness::new(canary_repository),
+        );
+        if let Err(e) = liveness_harness.seed_p0_canaries().await {
+            warn!("[AppState::new] failed to seed P0 liveness canaries: {}", e);
+        }
 
         info!("[AppState::new] Oxigraph + SQLite repositories initialized successfully");
         info!("[AppState::new] Database and settings service initialized successfully");
@@ -1159,6 +1180,7 @@ impl AppState {
             settings_repository,
             sqlite_settings_repository,
             sqlite_enrichment_repository,
+            liveness_harness,
 
             graph_adapter,
 

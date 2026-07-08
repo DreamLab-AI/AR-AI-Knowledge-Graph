@@ -50,12 +50,17 @@ pub mod oxigraph_graph_repository;
 pub mod sqlite_settings_repository;
 // WS-9: durable EnrichmentProposal lifecycle store (data/enrichment.sqlite3)
 pub mod sqlite_enrichment_repository;
+// RES-a: durable LivenessCanary registry + fire log (data/liveness.sqlite3)
+pub mod sqlite_canary_repository;
 
 pub use oxigraph_ontology_repository::OxigraphOntologyRepository;
 pub use oxigraph_graph_repository::OxigraphGraphRepository;
 pub use sqlite_settings_repository::SqliteSettingsRepository;
 pub use sqlite_enrichment_repository::{
     EnrichmentProposal, EnrichmentStoreError, SqliteEnrichmentRepository, StoredDecision,
+};
+pub use sqlite_canary_repository::{
+    CanaryRegistration, CanaryStatus, CanaryStoreError, SqliteCanaryRepository,
 };
 
 pub use whelk_inference_engine::WhelkInferenceEngine;

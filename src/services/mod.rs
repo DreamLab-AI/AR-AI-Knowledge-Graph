@@ -45,6 +45,9 @@ pub mod nostr_bridge;
 // PRD-008 §5.3 — Schnorr identity verifier for the XR presence handshake
 pub mod nostr_identity_verifier;
 
+// RES-a: sprint-wide live-traffic observer + KG-backend watchdog (ADR-130 D3)
+pub mod liveness_harness;
+
 // JSON-LD validator (Data Sprint Phase D-2). Pure markdown + JSON-LD
 // validation; does NOT depend on the persistence-oxigraph feature.
 pub mod jsonld_validator;

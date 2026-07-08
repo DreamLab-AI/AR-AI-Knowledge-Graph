@@ -74,10 +74,18 @@ pub async fn unified_health_check(app_state: web::Data<AppState>) -> Result<Http
     let system_metrics = check_system_metrics(&mut health_status, &mut issues);
 
 
-    let service_metrics = check_service_metrics(&app_state, &mut health_status, &mut issues).await;
-
-
+    // D5: compute the real MCP state ONCE, before building ServiceMetrics, so the
+    // `services.mcp_status` field derives from the same check as the `mcp` block
+    // below. /api/health then reports one MCP truth, not two disagreeing fields.
     let mcp_metrics = check_mcp_metrics().await;
+
+    let service_metrics = check_service_metrics(
+        &app_state,
+        mcp_status_label(&mcp_metrics),
+        &mut health_status,
+        &mut issues,
+    )
+    .await;
 
 
     if health_status == "healthy" && !issues.is_empty() {
@@ -128,8 +136,20 @@ fn check_system_metrics(health_status: &mut String, issues: &mut Vec<String>) ->
 }
 
 
+/// Derive the single-word `services.mcp_status` label from the real MCP check,
+/// so it never disagrees with the `mcp` block on the same /api/health response
+/// (D5). Kept in lockstep with [`check_mcp_metrics`]'s message states.
+fn mcp_status_label(metrics: &McpMetrics) -> &'static str {
+    match (metrics.container_running, metrics.mcp_relay_running) {
+        (false, _) => "not_running",
+        (true, false) => "relay_down",
+        (true, true) => "connected",
+    }
+}
+
 async fn check_service_metrics(
     app_state: &web::Data<AppState>,
+    mcp_status: &str,
     health_status: &mut String,
     issues: &mut Vec<String>,
 ) -> ServiceMetrics {
@@ -187,7 +207,7 @@ async fn check_service_metrics(
         metadata_count,
         nodes_count,
         edges_count,
-        mcp_status: "not_configured".to_string(),
+        mcp_status: mcp_status.to_string(),
     }
 }
 

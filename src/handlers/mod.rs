@@ -67,6 +67,10 @@ pub use ontology_derived_handler::configure_routes as configure_ontology_derived
 pub mod broker_inbox_handler;
 pub use broker_inbox_handler::configure_routes as configure_broker_inbox_routes;
 
+// RES-a: LivenessHarness HTTP surface (register / observe / status) — ADR-130 D3
+pub mod liveness_harness_handler;
+pub use liveness_harness_handler::configure_routes as configure_liveness_routes;
+
 // Layout mode system (ADR-031)
 pub mod layout_handler;
 pub use layout_handler::configure_layout_routes;

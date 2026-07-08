@@ -732,6 +732,9 @@ async fn main() -> std::io::Result<()> {
     };
 
     info!("main: All services and actors initialized. Configuring HTTP server.");
+    // RES-a: capture the harness handle before `app_state_data` moves into the
+    // server factory closure, so the KG watchdog spawned below can reach it.
+    let watchdog_harness = app_state_data.liveness_harness.clone();
     let server =
         HttpServer::new(move || {
             // CORS configuration with security-aware origin handling
@@ -822,6 +825,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(github_client.clone()))
             .app_data(web::Data::new(content_api.clone()))
             .app_data(app_state_data.clone())
+            // RES-a: the LivenessHarness backs /api/canary/* and the KG watchdog.
+            .app_data(web::Data::from(app_state_data.liveness_harness.clone()))
             .app_data(pre_read_ws_settings_data.clone())
             .app_data(web::Data::new(metrics_handler::ProcessStartTime(process_start_time)))
 
@@ -948,6 +953,9 @@ async fn main() -> std::io::Result<()> {
                     // Broker inbox read surface (WS-12) — agentbox broker-bridge
                     .configure(visionclaw_server::handlers::configure_broker_inbox_routes)
 
+                    // RES-a: LivenessHarness — /api/canary/{register,observe,status}
+                    .configure(visionclaw_server::handlers::configure_liveness_routes)
+
                     // Layout mode system (ADR-031)
                     .configure(visionclaw_server::handlers::configure_layout_routes)
 
@@ -961,7 +969,25 @@ async fn main() -> std::io::Result<()> {
 
     let server_handle = server.handle();
 
-    
+    // RES-a: spawn the KG-backend watchdog once the HTTP server is live. It
+    // self-polls /api/health (this server IS the KG backend) and drives the
+    // kg_backend_up gauge, firing CANARY-VC-RESA-KG on every transition.
+    {
+        let harness = watchdog_harness.clone();
+        let self_url = std::env::var("VISIONCLAW_SELF_URL")
+            .unwrap_or_else(|_| format!("http://127.0.0.1:{}", port));
+        let watchdog_secs = std::env::var("VISIONCLAW_KG_WATCHDOG_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30);
+        tokio::spawn(visionclaw_server::services::liveness_harness::run_kg_watchdog(
+            harness,
+            self_url,
+            std::time::Duration::from_secs(watchdog_secs),
+        ));
+    }
+
+
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;
 
