@@ -102,7 +102,7 @@ The broker's decision is emitted as three parallel representations:
 | Nostr bead (kind 30300) | Relay-durable | Relay subscribers across trust boundaries |
 | Graph-store `DecisionHistoryEntry` (Oxigraph) | Application-durable | VisionClaw queries and KPI dashboards |
 
-The Nostr event flows through the relay mesh ([ADR-073](../adr/ADR-073-private-nostr-relay-mesh-topology.md)): agentbox's embedded nostr-rs-relay, VisionClaw's ServerNostrActor, and optionally the nostr-rust-forum relay. Agents subscribed to approval events filtered by their `did:nostr` pubkey receive the notification. Human subscribers using any Nostr client can follow enrichment activity.
+The Nostr event flows through the relay mesh ([ADR-073](../adr/ADR-073-private-nostr-relay-mesh-topology.md)): agentbox's embedded nostr-rs-relay, VisionClaw's server-side Nostr publisher (`src/services/nostr_service.rs`; no `ServerNostrActor` on `main` — that actor is `crashbug`-only, and no kind-30300 Nostr emitter ships), and optionally the nostr-rust-forum relay. Agents subscribed to approval events filtered by their `did:nostr` pubkey receive the notification. Human subscribers using any Nostr client can follow enrichment activity.
 
 The IS-Envelope ([ADR-075](../adr/ADR-075-is-envelope-message-contract.md)) wraps all cross-system messages in a canonical JSON shape with seven kinds: `chat`, `tool_invoke`, `tool_result`, `knowledge_link`, `moderation`, `mesh_ping`, and `unknown`. NIP-59 gift-wrap encrypts the envelope on the wire when crossing relay boundaries.
 

@@ -184,6 +184,64 @@ shipped `src/actors/broker_actor.rs` — `docs/adr/ADR-111-ecosystem-infographic
 and `docs/adr/ADR-040-enterprise-identity-strategy.md` (a passing "on behalf of the
 BrokerActor" clause). None is an unqualified live-`main` code claim.
 
+## Correction — `ServerNostrActor` sweep never run (2026-07-08, second adversarial-verifier finding)
+
+**The "46 hits, all judged legitimate" claim above (and its restatement in the
+Falsification section) was incomplete and is hereby corrected — not deleted, so
+the record of the miss stays visible.** Both the first pass and the gap-close
+fixup swept only `BrokerActor`. Neither ever ran a `ServerNostrActor` sweep. A
+`BrokerActor`-only grep is structurally blind to the sibling phantom actor
+(`src/actors/server_nostr_actor.rs`, equally `crashbug`-only, equally absent on
+`main`), so "all judged legitimate" was a claim about half the surface.
+
+Running `grep -rn "ServerNostrActor" docs/ --include="*.md"` (same exclusions)
+surfaced the loci a `BrokerActor` sweep could never catch — including two the
+"Residual (judged legitimate, left in place)" paragraph above had explicitly
+blessed:
+
+- **`docs/adr/ADR-040-enterprise-identity-strategy.md`** — the residual note
+  above dismissed this as "a passing 'on behalf of the `BrokerActor`' clause."
+  It was in fact a whole `### Agent Control Surface Protocol` subsection asserting
+  in the present tense that "the `ServerNostrActor` **now publishes** governance
+  events (kinds 31400, 31402) **on behalf of the `BrokerActor`**" — an unqualified
+  live-`main` claim naming *both* phantom actors. Now rewritten to the ADR-110
+  ACSP producer (`src/services/acsp/events.rs`) signed via
+  `src/services/nostr_service.rs`, with a dated correction banner.
+- **`docs/how-to/operations/bridge-audit-drift-runbook.md`** — an on-call
+  diagnostic step told responders to check the "`ServerNostrActor` mailbox" and
+  "restart the server-nostr sidecar." Neither exists; the kind-30100 fan-out is a
+  synchronous call in `BridgeEdgeService::promote`. A real operational hazard,
+  now rewritten.
+- `docs/explanation/subsystems.md`, `docs/prd/PRD-013-*` (three refs: G7 row,
+  relay-topology ASCII, component table), `docs/ddd/ddd-mesh-federation-context.md`
+  (TR-WriteBack-Push kind-30300 step), `docs/adr/ADR-086-*` (relay-topology prose),
+  `docs/adr/ADR-041-*` (the second, unbannered `## Implementation Notes (2026-05-12)`
+  section — heading now qualified `— historical crashbug design, superseded` and
+  its present-tense narration past-tensed), plus three more the sweep caught
+  outside the seven named loci: `docs/explanation/ecosystem-convergence.md`
+  (relay-mesh prose), `docs/adr/ADR-055-*` (B2 sprint row), `docs/adr/ADR-032-*`
+  (env-key table row). `docs/adr/ADR-111-*` had its infographic flow/diagram/
+  render-text `BrokerActor` labels relabelled to the conceptual **Broker** role so
+  the phantom actor name cannot land in regenerated hero art.
+
+**Corrected state (2026-07-08, both sweeps, exclusions = evidence-dir / `archive` / `superseded`):**
+
+```
+$ grep -rn "ServerNostrActor" docs/ --include=*.md | grep -v gap-close-evidence | grep -vi archive | grep -vi superseded | wc -l
+18
+$ grep -rn "BrokerActor"      docs/ --include=*.md | grep -v gap-close-evidence | grep -vi archive | grep -vi superseded | wc -l
+38
+```
+
+All 18 + 38 residual hits are (a) dated correction banners, (b) explicit
+negated/never-merged framing ("no `ServerNostrActor` on `main`"), (c) the
+superseded-design ADR-041 body under its now-qualified historical headings, (d)
+the gap-close problem/decision records (PRD-023, ADR-130) that must name the
+defect, or (e) the anomaly register describing the phantom. A live-voice hunt
+over **both** actor names —
+`('?s)? (emits|owns|publishes|sends|receives|manages|handles|broadcasts|now |is (the )?(live|canonical|current))` —
+returns **0 hits** for each.
+
 ## Falsification (PRD-023 WP-4) → how it is met
 
 - *"a case parks in `under_review` forever with no decision path"* — the decide

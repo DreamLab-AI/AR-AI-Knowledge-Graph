@@ -24,7 +24,7 @@ ADR-054 behind the `URN_SOLID_ALIGNMENT` flag.
 | ID | Scope | Files | ADR gap |
 |----|-------|-------|---------|
 | B1 | Publish/unpublish saga with MOVE + `410 Gone` | `src/sovereign/visibility.rs` (NEW) + saga wiring | ADR-051 §transitions |
-| B2 | `BridgeEdgeService::promote` fans out kind-30100 via `ServerNostrActor` | `src/services/bridge_edge.rs`, caller hook | ADR-050 §server-identity + ADR-051 §audit |
+| B2 | `BridgeEdgeService::promote` fans out kind-30100 via the server Nostr signing path (`nostr_service.rs`; no `ServerNostrActor` on `main`) | `src/services/bridge_edge.rs`, caller hook | ADR-050 §server-identity + ADR-051 §audit |
 | B3 | NIP-98 body-hash binding at call sites | `src/utils/auth.rs:197`, `src/handlers/solid_proxy_handler.rs:368` | ADR-028-ext §body-binding |
 | H1 | `visibility_allows` emits opaque stubs instead of dropping cross-user private | `src/services/graph_serialization.rs` (or wherever filter lives) | ADR-050 §bit-29 |
 | H2 | `encode_positions_v3_with_privacy` call sites pass real `private_opaque_ids` | wire-encode call sites | ADR-050 §bit-29 |

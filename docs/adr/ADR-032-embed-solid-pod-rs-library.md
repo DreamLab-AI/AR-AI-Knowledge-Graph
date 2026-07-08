@@ -58,7 +58,7 @@ Three forces converge on this refactor:
 | `docker-compose.yml` | `solidproject/community-server:latest` container exposed at `:3030` |
 | `src/services/nostr_bridge.rs` | Loads signing key from `VISIONCLAW_NOSTR_PRIVKEY` env var |
 | `src/services/nostr_bead_publisher.rs` | Same env-key dependency |
-| `src/actors/broker_actor.rs` | Same env-key dependency (via `ServerNostrActor`) |
+| `src/services/acsp/events.rs` (ADR-110 ACSP producer) | Same env-key dependency via `nostr_service`; the `crashbug` `broker_actor.rs` / `ServerNostrActor` it replaced never merged to `main` |
 
 Failure modes today:
 - Sidecar restart loses in-flight WebSocket subscriptions (Solid

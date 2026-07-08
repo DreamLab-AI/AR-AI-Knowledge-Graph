@@ -16,7 +16,10 @@
 > (`services::broker_events`) over the ported `src/domain/broker/` kernel, and
 > case queueing goes through the ADR-110 ACSP producer (`ElevationActor`). The
 > events named here (`broker:new_case`, `broker:case_decided`) do ship; the
-> `BrokerActor` label is the superseded transport.
+> `BrokerActor` label is the superseded transport. Likewise, the `ServerNostrActor`
+> named below (the G7 relay node and kind 30300/30301 emitter) never merged either;
+> VisionClaw's server-side Nostr publishing is `src/services/nostr_service.rs`, and
+> no kind-30300 Nostr emitter ships on `main`.
 
 ---
 
@@ -56,7 +59,7 @@ Replace the GitHub REST API ingest with a **git-over-HTTP ingest surface** that 
 | G4 | **Write-Back Saga** | `src/services/git_ingest/writeback_saga.rs` | BC11 (DecisionOrchestrator), IngestSaga (ADR-051) |
 | G5 | **Agentbox Pod Bridge** | `agentbox/` adapter surface | BC20 anti-corruption layer, nostr-rs-relay |
 | G6 | **Broker Review Surface** | agentbox panes + VisionClaw WebSocket | BC11 Decision Canvas, linked objects viewer |
-| G7 | **Nostr Control Plane** | agentbox relay + VisionClaw ServerNostrActor | IS-Envelope (ADR-075), nostr-rs-relay, nostr-rust-forum |
+| G7 | **Nostr Control Plane** | agentbox relay + VisionClaw server-side Nostr publisher (`nostr_service.rs`; no `ServerNostrActor` on `main`) | IS-Envelope (ADR-075), nostr-rs-relay, nostr-rust-forum |
 
 ---
 
@@ -425,7 +428,7 @@ The Nostr messaging layer connects the system's coordination events across trust
 ```
 Agentbox embedded relay (nostr-rs-relay)
     ↕ NIP-42 AUTH gate (did:nostr pubkey allowlist)
-VisionClaw ServerNostrActor
+VisionClaw server-side Nostr publisher (nostr_service.rs; no ServerNostrActor on main)
     ↕ Subscription filter: kinds [30300, 30301, 4]
 nostr-rust-forum relay (external, optional)
     ↕ Public-facing; human ↔ human messaging
@@ -594,7 +597,7 @@ All events are NIP-59 gift-wrapped on the wire when crossing relay boundaries. W
 | **Nostr-rust-forum relay** | Optional messaging surface for write-back notifications. Not required for MVP. The embedded relay in agentbox can bridge events. |
 | **Mashlib (solid-pod-rs 0.4.0-alpha.5)** | P2 inspection surface. Enabled in solid-pod-rs-server config when agentbox bumps to alpha.5. Complements the linked objects browser — mashlib serves SolidOS-compatible views, `/lo/` serves agent-centric panes. Operators use it for pod data debugging; users use the Broker Review Pane (G6) for signoff. |
 | **Linked Objects Browser (agentbox /lo/)** | P0 host for the Broker Review Pane (G6). The existing pane system (6 panes: VC, provenance, capability, runtime, DCAT, handoff) gains a 7th pane (`enrichment-review-pane.js`). The LOSOS pane contract is the stable extension API. |
-| **ServerNostrActor (VisionClaw)** | G7 extends with kind 30300/30301 event emission. Currently handles server identity and NIP-98 signing; gains control-plane event publishing. |
+| **Server-side Nostr publisher (VisionClaw, `nostr_service.rs`)** | The G7 design extended it with kind 30300/30301 emission. It handles server identity and NIP-98 signing; on `main` no kind-30300 Nostr emitter ships (the `ServerNostrActor` this row named never merged — `crashbug`-only). |
 | **Nostr-rs-relay (agentbox embedded)** | G7 uses as the coordination relay between agents and VisionClaw. NIP-42 AUTH gate restricts to known `did:nostr` pubkeys. Already provisioned in agentbox Nix config. |
 | **Beads (Nostr-signed audit records)** | Each broker decision is already recorded as a Nostr-signed bead per ADR-049. G3 extends beads into git commit trailers — the commit provenance chain and the bead chain are parallel audit surfaces over the same decision event. |
 | **`urn:visionclaw:*` / `urn:agentbox:*` namespaces** | G3 mints `urn:visionclaw:` URIs in commit trailers. G5 maps between `urn:agentbox:*` (agent-side) and `urn:visionclaw:*` (substrate-side) via the BC20 anti-corruption layer. Both namespaces share `did:nostr:<hex>` as the identity primitive. |

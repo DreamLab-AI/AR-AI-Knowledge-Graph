@@ -221,11 +221,20 @@ verification without the middleware.
 
 ### Agent Control Surface Protocol
 
-The `ServerNostrActor` now publishes governance events (kinds 31400, 31402) on
-behalf of the `BrokerActor`, bridging VisionClaw's broker workflow with the
-Forum Kit's Agent Control Surface Protocol. These events carry the server's
-Nostr identity and are subject to the same role-based access control when
-submitted via the HTTP API.
+> **Correction (gap-close REC-2, branch `gap-close/2026-07`, 2026-07-08).** Earlier
+> drafts of this subsection said "the `ServerNostrActor` now publishes governance
+> events (kinds 31400, 31402) on behalf of the `BrokerActor`." Neither actor merged
+> to `main`: both exist only on the unmerged `crashbug` branch (Neo4j-backed).
+> `src/actors/server_nostr_actor.rs` and `src/actors/broker_actor.rs` are absent
+> here. The corrected description follows.
+
+On `main` (ADR-110 + ADR-130 Decision 2) governance events (kinds 31400, 31402)
+are built by the stateless ACSP producer (`src/services/acsp/events.rs` —
+`build_panel_definition` / `build_action_request`) over the ported
+`src/domain/broker/` kernel, and signed through the server Nostr signing path
+(`src/services/nostr_service.rs`). These events carry the server's Nostr identity
+and are subject to the same role-based access control when submitted via the HTTP
+API.
 
 ## Related Decisions
 

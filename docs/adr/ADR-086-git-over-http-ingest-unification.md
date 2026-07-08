@@ -340,8 +340,9 @@ IS-Envelope v1 mapping (per ADR-075):
 | `knowledge_link` | 30078 | Cross-pod knowledge graph link announcement |
 
 Relay topology: agentbox embedded relay (NIP-42 AUTH gate, `did:nostr` pubkey
-allowlist) <-> VisionClaw `ServerNostrActor` <-> nostr-rust-forum relay
-(optional, human-facing). All events NIP-59 gift-wrapped when crossing relay
+allowlist) <-> VisionClaw's server-side Nostr publisher
+(`src/services/nostr_service.rs`; no `ServerNostrActor` on `main` — that actor is
+`crashbug`-only) <-> nostr-rust-forum relay (optional, human-facing). All events NIP-59 gift-wrapped when crossing relay
 boundaries; plain signed events within the agentbox <-> VisionClaw trust
 boundary.
 

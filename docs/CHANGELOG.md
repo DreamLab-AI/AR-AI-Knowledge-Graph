@@ -80,7 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `RequireRole` middleware now supports dual-path auth: NIP-98 Schnorr verification (when `nip98-auth` feature enabled and resolver attached) or `X-Enterprise-Role` header extraction (default).
-- `ServerNostrActor` module doc updated to list 9 message variants across 7 event kinds (was 7 variants across 5 kinds).
+- `crashbug` `ServerNostrActor` module doc (superseded design, not on `main`) updated to list 9 message variants across 7 event kinds (was 7 variants across 5 kinds).
 - `crashbug` `BrokerActor` imports consolidated (superseded design, not on
   `main`): all governance types (`PublishGovernancePanel`, `PublishActionRequest`,
   `ActionPriority`, `PanelDefinitionPayload`, etc.) imported at module level.

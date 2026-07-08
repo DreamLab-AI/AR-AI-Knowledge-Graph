@@ -19,6 +19,9 @@ This document maps the bounded contexts involved in PRD-010's DID:Nostr Mesh Fed
 > (`services::broker_events`) over the ported storage-agnostic `src/domain/broker/`
 > kernel, and case queueing runs through the ADR-110 ACSP producer
 > (`ElevationActor`). Read "`BrokerActor`" as "the VisionClaw broker publisher".
+> The TR-WriteBack-Push step below naming a `ServerNostrActor` kind-30300 emitter
+> is the same phantom: no `ServerNostrActor` and no kind-30300 Nostr emitter ship
+> on `main` (server-side Nostr publishing is `src/services/nostr_service.rs`).
 
 The mesh's architectural challenge is not the wire protocol (ADR-073) nor the message envelope (ADR-075) but the **relational integrity** at boundaries. The forum's user-pubkey, agentbox's agent-pubkey, and VisionClaw's substrate-pubkey are three different identities that must be reasoned about together; the moment a translation drops one, attribution breaks, ACLs misfire, or duplicate side-effects cascade.
 
@@ -878,7 +881,11 @@ When `WriteBackSaga::execute` runs after broker approval:
 4. Commit with provenance trailers (G3 encoder): `Urn:`, `Proposed-by:`, `Approved-by:`, `Broker-case:`, `Decision:`, `Reasoning-hash:`, `Timestamp:`, `Signed-off-by:`.
 5. `git push` with NIP-98-signed HTTP headers (V-Inv-09 enforced: push blocked if no approval).
 6. Record push result in Neo4j audit trail.
-7. Emit kind-30300 audit event via ServerNostrActor if Nostr Control Plane enabled.
+7. Record the broker-decision audit (durable graph-store `DecisionHistoryEntry` +
+   WS audit frame). On `main` there is no kind-30300 Nostr emitter and no
+   `ServerNostrActor` (both `crashbug`-only); the relay-durable kind-30300 audit
+   event is a designed-but-unshipped Nostr Control Plane path via
+   `src/services/nostr_service.rs`.
 
 ### V15.8 — Open questions (PRD-013)
 

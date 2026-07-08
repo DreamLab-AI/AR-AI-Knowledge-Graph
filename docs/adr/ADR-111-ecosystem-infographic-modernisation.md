@@ -21,7 +21,7 @@ The DreamLab AI ecosystem has shipped a substantially new feature set through 20
 - **Bitcoin-anchored provenance (block-trails).** A `ProvenanceTrail` primitive: JCS-canonicalised, hash-chained, tamper-evident append-only state log, with an **optional BIP-341 taproot anchor** (per-state P2TR address → mempool UTXO) for high-value/disputed records. The MRC20 token (profile `mono.mrc20.v0.1`) is now just **one instance** of this general trail. Code lives in `solid-pod-rs/crates/solid-pod-rs/src/mrc20.rs` (verify/derive side present: `bt_derive_chained_pubkey`, `bt_address`, `verify_mrc20_anchor`, feature `mrc20=k256`). Specified in solid-pod-rs **ADR-059**.
 - **git-marks.** The cheap-tier provenance sibling: **write-as-commit** (git-commit-anchored, auto-init + `receive.denyCurrentBranch=updateInstead`). Every LDP write can leave a commit mark; every agent action/receipt/credential URN (`urn:agentbox:activity|receipt|credential`, minted via `lib/uris.js`) becomes a trail state — git-mark always, Bitcoin anchor optionally.
 - **The 402 / webledger / MRC20 / AMM value-transfer substrate.** HTTP **402 Payment Required** with `PaymentCondition`, a multi-currency **WebLedger** keyed by `did:nostr`, MRC20 token rails, and an **AMM**. Framed ecosystem-wide as a **global trust ledger + value-transfer substrate** — not a "crypto feature." Specified in agentbox **ADR-032 (402 scheme grammar)** and **PRD-015 (consumer broadcast economy)**; settlement derives from the upgraded pod. (`solid-pod-rs/crates/solid-pod-rs/src/trading.rs` provides a **live** order book — `/pay/.offers|.sell|.swap` — and a constant-product **AMM** — `/pay/.pool` — both routed in solid-pod-rs ADR-059 Phase 0; the WebLedger is keyed by `did:nostr`. Nostr is the federation primitive. Value-transfer art should depict the **webledger + 402 spend-receipt** flow alongside the AMM / order-book rails.)
-- **ACSP human-in-the-loop elevation.** Agentic Actors Control Surfaces Project: agents publish governed proposals as **signed Nostr kind-31402 ActionRequests** (control-surface kinds 31400–31405), routed Agent → Relay → BrokerActor → Forum → **Human approval** → write-back. Publisher: `agentbox/lib/elevation-publisher.js`. Specified in project **ADR-110** and the Judgment Broker (ADR-041).
+- **ACSP human-in-the-loop elevation.** Agentic Actors Control Surfaces Project: agents publish governed proposals as **signed Nostr kind-31402 ActionRequests** (control-surface kinds 31400–31405), routed Agent → Relay → Broker → Forum → **Human approval** → write-back. Publisher: `agentbox/lib/elevation-publisher.js`. Specified in project **ADR-110** and the Judgment Broker (ADR-041). (The broker role is the ADR-110 ACSP producer over the `src/domain/broker/` kernel; the `BrokerActor` named in earlier drafts never merged to `main`.)
 - **Native Godot XR client** replacing Babylon.js / Vircadia.
 - **Oxigraph** RDF knowledge graph replacing Neo4j; OWL 2 EL reasoning via **Whelk-rs**.
 - **did:nostr identity** (secp256k1/Schnorr, passkey-derived, never stored) across all surfaces; NIP-98 the universal auth seam; NIP-59 gift-wrapped DMs.
@@ -274,7 +274,7 @@ sequenceDiagram
     participant AG as Agent (agentbox, did:nostr)
     participant EP as elevation-publisher.js
     participant RL as Nostr relay (nostr-rust-forum)
-    participant BR as BrokerActor (VisionClaw)
+    participant BR as Broker (VisionClaw)
     participant FM as Forum control surface
     participant HU as Human reviewer
     participant PT as ProvenanceTrail
@@ -328,7 +328,7 @@ flowchart LR
     IB <-->|signed events / value xfer| RELAY
     IC <-->|signed events / value xfer| RELAY
 
-    RELAY --> BROKER["BrokerActor + Forum\nACSP human-in-the-loop"]
+    RELAY --> BROKER["Broker + Forum\nACSP human-in-the-loop"]
     BROKER --> KG["Oxigraph KG + Whelk-rs (OWL 2 EL)\n-> Godot XR client"]
 
     WA -. "402 / MRC20 / L402 settle" .- WB
@@ -353,7 +353,7 @@ flowchart TB
     FORUM["nostr-rust-forum\n(zones, NIP-52 calendar, ACSP surface)"]
     POD["solid-pod-rs\n(LDP/WAC, did:nostr, 402/webledger,\nblock-trails + git-marks)"]
     BOX["agentbox\n(90+ skills, elevation-publisher,\nMRC20 settlement, sovereign mesh)"]
-    VC["VisionClaw / project\n(Oxigraph KG, Whelk-rs, GPU physics,\nBrokerActor, Godot XR client)"]
+    VC["VisionClaw / project\n(Oxigraph KG, Whelk-rs, GPU physics,\nbroker kernel + ACSP, Godot XR client)"]
     VF["VisionFlow\n(pitch / ecosystem narrative)"]
 
     POD ---|"identity + provenance primitives"| BOX
@@ -455,7 +455,7 @@ Ready-to-run `/art` prompts (Nano Banana 2, `gemini-3.1-flash-image-preview`). E
 
 ### 5.2 `ai-commander-week.webp` — ACSP human-in-the-loop control surface
 > *Subject:* a sketched **control-surface dashboard** (the Forum Judgment Broker workbench) with three stacked **proposal cards**, each showing a diff snippet, a rationale line, and an **Approve / Reject** pair. A human hand (sketch) hovers over the Approve button of the top card. Incoming from the left, an agent glyph emits an envelope labelled **"kind-31402 ActionRequest"** travelling over a relay line. On approval, a teal arrow writes back to the agent and drops a bead onto a **provenance trail** at the bottom.
-> *Text to render:* "ACSP · agents propose, humans approve", "kind 31400–31405", "BrokerActor → Forum → you", "approved → provenance-stamped".
+> *Text to render:* "ACSP · agents propose, humans approve", "kind 31400–31405", "Broker → Forum → you", "approved → provenance-stamped".
 > *Forbid:* robot faces, command-centre war-room screens, generic "AI agent" mascots.
 
 ### 5.3 `visionflow-power-user.webp` (VisionFlow variant) — Oxigraph KG in the XR client
