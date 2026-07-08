@@ -1151,6 +1151,36 @@ impl AppState {
         info!("[AppState::new] Initializing BotsClient with graph service");
         let bots_client = Arc::new(BotsClient::with_graph_service(graph_service_addr.clone()));
 
+        // D1 (PRD-023 WP-2): start the agent-list poll at boot. connect() tests MCP
+        // reachability, initialises the session, and spawns the 2s polling loop that
+        // populates the agents cache behind /api/bots/agents — the beam and avatar
+        // layers starve without it. Fail-open with backoff: an unreachable MCP server
+        // must never block boot; CANARY-VC-D1-BEAM remains the proof that data flows.
+        {
+            let bots_client_boot = bots_client.clone();
+            tokio::spawn(async move {
+                let delays = [5u64, 15, 60, 300];
+                let mut attempt = 0usize;
+                loop {
+                    match bots_client_boot.connect("").await {
+                        Ok(()) => {
+                            info!("[AppState] BotsClient poll started at boot (attempt {})", attempt + 1);
+                            break;
+                        }
+                        Err(e) => {
+                            let delay = delays[attempt.min(delays.len() - 1)];
+                            warn!(
+                                "[AppState] BotsClient connect failed (attempt {}): {}; retrying in {}s",
+                                attempt + 1, e, delay
+                            );
+                            tokio::time::sleep(tokio::time::Duration::from_secs(delay)).await;
+                            attempt += 1;
+                        }
+                    }
+                }
+            });
+        }
+
         info!("[AppState::new] Initializing TaskOrchestratorActor with Management API");
         let mgmt_api_host = std::env::var("MANAGEMENT_API_HOST")
             .unwrap_or_else(|_| "agentic-workstation".to_string());
