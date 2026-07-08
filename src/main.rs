@@ -987,6 +987,19 @@ async fn main() -> std::io::Result<()> {
         ));
     }
 
+    // RES-a / WP-11 AC3 / ADR-130 D3: the Nostr-relay tap lets Nostr-only
+    // repositories (nostr-rust-forum, solid-pod-rs) fire canaries they cannot
+    // POST over HTTP. Feeds the SAME LivenessHarness.observe path. Disabled
+    // unless CANARY_TAP_RELAY_URL is set; fail-open (its own detached task).
+    if let Some(tap) = visionclaw_server::services::canary_nostr_tap::CanaryNostrTap::from_env(
+        watchdog_harness.clone(),
+    ) {
+        tokio::spawn(tap.run());
+        info!("[main] canary Nostr tap spawned");
+    } else {
+        info!("[main] canary Nostr tap not started (CANARY_TAP_RELAY_URL not set)");
+    }
+
 
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;

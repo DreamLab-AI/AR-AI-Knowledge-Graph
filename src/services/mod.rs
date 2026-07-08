@@ -48,6 +48,10 @@ pub mod nostr_identity_verifier;
 // RES-a: sprint-wide live-traffic observer + KG-backend watchdog (ADR-130 D3)
 pub mod liveness_harness;
 
+// RES-a / WP-11 AC3: Nostr-relay tap so Nostr-only repositories (nostr-rust-forum,
+// solid-pod-rs) can fire canaries they cannot POST over HTTP (ADR-130 D3).
+pub mod canary_nostr_tap;
+
 // REC-2 / D3: broker case-queue WebSocket events (broker:new_case /
 // broker:case_decided) over the multiplexed graph socket (ADR-130 D2).
 pub mod broker_events;
