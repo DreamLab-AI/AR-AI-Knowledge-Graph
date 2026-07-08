@@ -202,6 +202,21 @@ pub struct StopTask {
     pub task_id: String,
 }
 
+/// D2 (PRD-023 WP-3): interrupt a steerable agent by an id that may be in
+/// EITHER namespace — a Management-API `task_id` OR a claude-flow swarm
+/// `agent_id` (the two are disjoint minted namespaces). The orchestrator
+/// resolves the id to a concrete Management-API `task_id` before issuing the
+/// stop, so a bare swarm `agent_id` from `AgentDetailPanel` no longer 404s the
+/// Management API on every interrupt. Returns the resolved `task_id` on success
+/// (so the caller can report exactly what was stopped), and errors — never
+/// blind-stops an unrelated task — when nothing resolves.
+#[derive(Message)]
+#[rtype(result = "Result<String, String>")]
+pub struct InterruptAgentTask {
+    /// A `task_id` or a swarm `agent_id`; resolved server-side.
+    pub id: String,
+}
+
 #[derive(Message)]
 #[rtype(result = "Result<Vec<TaskInfo>, String>")]
 pub struct ListActiveTasks;
@@ -378,6 +393,48 @@ impl Handler<StopTask> for TaskOrchestratorActor {
         let task_id = msg.task_id.clone();
 
         Box::pin(async move { client.stop_task(&task_id).await.map_err(|e| e.to_string()) })
+    }
+}
+
+impl Handler<InterruptAgentTask> for TaskOrchestratorActor {
+    type Result = ResponseFuture<Result<String, String>>;
+
+    fn handle(&mut self, msg: InterruptAgentTask, _ctx: &mut Self::Context) -> Self::Result {
+        let id = msg.id.clone();
+        info!("[TaskOrchestratorActor] Received InterruptAgentTask: {}", id);
+
+        // Fast path: the id is already a known Management-API task_id held in the
+        // local registry (e.g. a task this orchestrator itself created). No
+        // round-trip needed to resolve it.
+        let local_hit = self.active_tasks.contains_key(&id);
+        let client = self.api_client.clone();
+
+        Box::pin(async move {
+            let resolved = if local_hit {
+                id.clone()
+            } else {
+                // The id is (most often) a claude-flow swarm agent_id — a DISJOINT
+                // namespace from the Management-API task_id. Resolve it against the
+                // live task list: a direct task_id hit first, then the task whose
+                // `agent` field carries this id. Fail honestly when nothing maps —
+                // the caller surfaces a real error instead of the wrong stop.
+                let list = client.list_tasks().await.map_err(|e| {
+                    format!("interrupt resolve: task list unavailable: {e}")
+                })?;
+                list.active_tasks
+                    .iter()
+                    .find(|t| t.task_id == id)
+                    .or_else(|| list.active_tasks.iter().find(|t| t.agent == id))
+                    .map(|t| t.task_id.clone())
+                    .ok_or_else(|| format!("no active task resolves id '{id}'"))?
+            };
+
+            client
+                .stop_task(&resolved)
+                .await
+                .map(|()| resolved)
+                .map_err(|e| e.to_string())
+        })
     }
 }
 

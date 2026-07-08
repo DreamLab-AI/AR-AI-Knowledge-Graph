@@ -904,6 +904,15 @@ async fn main() -> std::io::Result<()> {
                     // scope first lets /api/ontology/derived match correctly while
                     // /api/ontology/* still falls through to the /ontology scope.
                     .configure(visionclaw_server::handlers::configure_ontology_derived_routes)
+                    // RES-d fix: /ontology/class-count MUST also be registered BEFORE
+                    // api_handler::config for the SAME reason — the broad /ontology
+                    // scope inside api_handler::ontology::config matches the
+                    // /ontology/class-count prefix and, finding no inner route, 404s
+                    // without falling through (actix does not fall through a matched
+                    // scope prefix). Registered here as the more-specific scope, the
+                    // canon DriftCounter's GET /api/ontology/class-count is reachable.
+                    // (Guarded by tests/resd_class_count_route.rs.)
+                    .configure(visionclaw_server::handlers::configure_ontology_class_count_routes)
                     .configure(api_handler::config)
                     .configure(workspace_handler::config)
                     .configure(admin_sync_handler::configure_routes)
@@ -965,9 +974,9 @@ async fn main() -> std::io::Result<()> {
                     // /api/kpi/{summary,lineage}
                     .configure(visionclaw_server::handlers::configure_kpi_routes)
 
-                    // RES-d: script-queryable ontology class-count source for the
-                    // canon DriftCounter — /api/ontology/class-count
-                    .configure(visionclaw_server::handlers::configure_ontology_class_count_routes)
+                    // (RES-d /ontology/class-count registered EARLIER — before
+                    // api_handler::config — so the broad /ontology scope does not
+                    // shadow it to a 404. See the WS-9/RES-d note above.)
 
                     // Layout mode system (ADR-031)
                     .configure(visionclaw_server::handlers::configure_layout_routes)

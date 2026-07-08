@@ -1,5 +1,5 @@
 use crate::actors::messages::GetBotsGraphData;
-use crate::actors::{CreateTask, GetTaskStatus, StopTask};
+use crate::actors::{CreateTask, GetTaskStatus, InterruptAgentTask, StopTask};
 use crate::services::liveness_harness::CANARY_D2_STEER;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
@@ -650,11 +650,20 @@ pub async fn remove_task(
 // (line 269) and — once mounted behind a node selection — of the new
 // `/bots/interrupt` route. Both reach the swarm through the SAME
 // `TaskOrchestratorActor` transport the sibling swarm routes already use
-// (`CreateTask` / `StopTask`), and both observe `CANARY-VC-D2-STEER` as live
-// traffic (DDD invariant 5 — the route was genuinely invoked, never a synthetic
-// probe). The responses are deliberately BARE JSON (not the `StandardResponse`
-// envelope) so the panel reads `response.taskId` / `statusRes.status` at the
-// top level, matching its existing contract.
+// (`CreateTask` for submit; `InterruptAgentTask` for interrupt), and both
+// observe `CANARY-VC-D2-STEER` as live traffic (DDD invariant 5 — the route was
+// genuinely invoked, never a synthetic probe). The responses are deliberately
+// BARE JSON (not the `StandardResponse` envelope) so the panel reads
+// `response.taskId` / `statusRes.status` at the top level, matching its
+// existing contract.
+//
+// D2 id-namespace fix: the panel sends `selectedAgent.id`, which is a
+// claude-flow swarm agent_id — a DISJOINT namespace from the Management-API
+// task_id `StopTask` needs. Passing it straight through 404'd every interrupt
+// (the Management API has no such task), so the canary — which only observes on
+// success — could never fire. `interrupt_task` now routes through
+// `InterruptAgentTask`, which resolves the id (task_id OR swarm agent_id) to a
+// concrete task_id server-side before the stop.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
@@ -679,9 +688,11 @@ pub struct SubmitTaskRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InterruptRequest {
-    /// The task/agent id to interrupt. Agents are keyed by their MCP task id;
-    /// the field renames to `agentId` (camelCase), and `taskId`/`task_id` are
-    /// accepted as aliases for the same value.
+    /// The id to interrupt — EITHER a Management-API `task_id` OR a claude-flow
+    /// swarm `agent_id` (the panel sends `selectedAgent.id`, a swarm agent_id).
+    /// The two are disjoint namespaces; `interrupt_task` resolves whichever it
+    /// is to a concrete task_id server-side. The field renames to `agentId`
+    /// (camelCase); `taskId`/`task_id` are accepted as aliases for the same value.
     #[serde(alias = "taskId", alias = "task_id")]
     pub agent_id: String,
     /// Swarm the interrupted agent belongs to (advisory; recorded in evidence).
@@ -768,36 +779,43 @@ pub async fn submit_task(
     }
 }
 
-/// `POST /api/bots/interrupt` — stop the selected agent's task. Mirrors
-/// `remove_task`'s `StopTask` transport but takes the id in the body (the
-/// interrupt control lives inside the per-agent panel); fires
-/// `CANARY-VC-D2-STEER` on a live invocation.
+/// `POST /api/bots/interrupt` — stop the selected agent's task. The panel sends
+/// `selectedAgent.id` (a claude-flow swarm agent_id), which is a DISJOINT
+/// namespace from the Management-API task_id: `InterruptAgentTask` resolves it
+/// to a concrete task_id server-side before the stop (a bare swarm agent_id sent
+/// straight to `StopTask` 404'd every interrupt). Fires `CANARY-VC-D2-STEER` on
+/// a live, resolved interrupt.
 pub async fn interrupt_task(
     _auth: crate::settings::auth_extractor::AuthenticatedUser,
     state: web::Data<AppState>,
     req: web::Json<InterruptRequest>,
 ) -> Result<impl Responder> {
-    let task_id = req.agent_id.trim().to_string();
-    if task_id.is_empty() {
+    let requested_id = req.agent_id.trim().to_string();
+    if requested_id.is_empty() {
         return Ok(HttpResponse::BadRequest().json(json!({
             "success": false,
             "error": "agent/task id is empty",
         })));
     }
 
-    info!("Interrupting agent/task via Management API: {}", task_id);
+    info!("Interrupting agent/task via Management API: {}", requested_id);
 
-    let stop_task_msg = StopTask {
-        task_id: task_id.clone(),
+    // Resolve the id (task_id OR swarm agent_id) to a concrete task_id, then stop.
+    let interrupt_msg = InterruptAgentTask {
+        id: requested_id.clone(),
     };
 
-    match state.get_task_orchestrator_addr().send(stop_task_msg).await {
-        Ok(Ok(())) => {
-            info!("Successfully interrupted task: {}", task_id);
+    match state.get_task_orchestrator_addr().send(interrupt_msg).await {
+        Ok(Ok(resolved_task_id)) => {
+            info!(
+                "Successfully interrupted task: {} (from id {})",
+                resolved_task_id, requested_id
+            );
 
-            // D2 canary: an interrupt steer action reached the server.
+            // D2 canary: an interrupt steer action reached the server AND resolved
+            // to a real task that was stopped — the success the canary observes.
             let evidence = format!(
-                "interrupt agent/task={task_id} swarm={:?}",
+                "interrupt id={requested_id} resolved_task_id={resolved_task_id} swarm={:?}",
                 req.swarm_id
             );
             if let Err(e) = state.liveness_harness.observe(CANARY_D2_STEER, &evidence).await {
@@ -806,15 +824,16 @@ pub async fn interrupt_task(
 
             Ok(HttpResponse::Ok().json(json!({
                 "success": true,
-                "taskId": task_id,
-                "message": format!("Agent task {} interrupted", task_id),
+                "taskId": resolved_task_id,
+                "requestedId": requested_id,
+                "message": format!("Agent task {} interrupted", resolved_task_id),
             })))
         }
         Ok(Err(e)) => {
-            error!("Failed to interrupt task {}: {}", task_id, e);
+            error!("Failed to interrupt id {}: {}", requested_id, e);
             Ok(HttpResponse::InternalServerError().json(json!({
                 "success": false,
-                "taskId": task_id,
+                "taskId": requested_id,
                 "error": format!("Failed to interrupt task: {}", e),
             })))
         }
@@ -822,7 +841,7 @@ pub async fn interrupt_task(
             error!("Interrupt actor communication error: {}", e);
             Ok(HttpResponse::InternalServerError().json(json!({
                 "success": false,
-                "taskId": task_id,
+                "taskId": requested_id,
                 "error": format!("Actor communication error: {}", e),
             })))
         }

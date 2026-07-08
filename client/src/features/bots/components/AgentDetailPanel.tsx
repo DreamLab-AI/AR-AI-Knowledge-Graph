@@ -60,8 +60,11 @@ export const AgentDetailPanel: React.FC<AgentDetailPanelProps> = ({
     }
   };
 
-  // D2 steering: interrupt/stop the selected agent's current task. Agents are
-  // keyed by their MCP task id, so the agent id is the interrupt target.
+  // D2 steering: interrupt/stop the selected agent's current task. `selectedAgent.id`
+  // is a claude-flow swarm agent_id — a disjoint namespace from the Management-API
+  // task_id the backend stops. It is sent as-is; the server (`interrupt_task` →
+  // `InterruptAgentTask`) resolves the id (task_id OR swarm agent_id) to a concrete
+  // task_id before issuing the stop, so the interrupt no longer 404s.
   const handleInterrupt = async () => {
     if (!selectedAgent) return;
     try {

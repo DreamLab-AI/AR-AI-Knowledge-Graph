@@ -48,7 +48,7 @@ export function isAgentNodeDetail(detail: NodeSelectedDetail | null | undefined)
  * Match order, most specific first:
  *  1. a `did:nostr` on the node metadata matches an agent's `did_nostr`;
  *  2. the node's own metadata/agent id matches an agent's `id`;
- *  3. the selected `nodeId` is itself an agent id;
+ *  3. the selected `nodeId` is itself an agent id — only for an agent node;
  *  4. an agent node whose display `name` matches an agent's `name`.
  */
 export function resolveSelectedAgentId(
@@ -72,8 +72,12 @@ export function resolveSelectedAgentId(
     if (byMetaId) return byMetaId.id;
   }
 
-  // 3) the selected node id is itself an agent id.
-  if (detail.nodeId) {
+  // 3) the selected node id is itself an agent id — but ONLY when the selection
+  //    is actually an agent node. Without the isAgentNodeDetail guard a bare
+  //    nodeId===agent.id match could open the steering surface on an unrelated
+  //    knowledge-graph document/topic whose node id happens to collide with an
+  //    agent id (agent ids and KG node ids are separate namespaces).
+  if (detail.nodeId && isAgentNodeDetail(detail)) {
     const byNodeId = agents.find((a) => a.id === detail.nodeId);
     if (byNodeId) return byNodeId.id;
   }

@@ -38,8 +38,23 @@ describe('resolveSelectedAgentId', () => {
     expect(resolveSelectedAgentId({ nodeId: '1000', metadata: { metadata_id: 'task-2' } }, agents)).toBe('task-2');
   });
 
-  it('resolves when the node id is itself an agent id', () => {
-    expect(resolveSelectedAgentId({ nodeId: 'task-1' }, agents)).toBe('task-1');
+  it('resolves when the node id is itself an agent id (agent node)', () => {
+    // Rule 3 now requires an agent node: the selection carries agent metadata,
+    // so a nodeId===agent.id match opens the steering surface.
+    expect(
+      resolveSelectedAgentId({ nodeId: 'task-1', metadata: { node_type: 'agent' } }, agents),
+    ).toBe('task-1');
+  });
+
+  it('does NOT resolve a bare nodeId collision on a non-agent node', () => {
+    // Rule-3 guard (D2 gap-close): a knowledge-graph node whose id coincidentally
+    // equals an agent id, but carrying no agent_type/node_type=agent, must not
+    // open the steering surface. Before the isAgentNodeDetail guard this returned
+    // 'task-1' and steered a document node.
+    expect(resolveSelectedAgentId({ nodeId: 'task-1' }, agents)).toBeNull();
+    expect(
+      resolveSelectedAgentId({ nodeId: 'task-1', metadata: { node_type: 'document' } }, agents),
+    ).toBeNull();
   });
 
   it('resolves an agent node by name', () => {

@@ -437,10 +437,10 @@ mod tests {
                 "type": "agent_action",
                 "event": {{
                   "version": 3, "id": {id}, "source_agent_id": 7, "target_node_id": 4242,
-                  "action_type": 2, "action_type_name": "handoff",
+                  "action_type": 2, "action_type_name": "create",
                   "timestamp": 1748500000000, "duration_ms": 250,
-                  "handoff_count": 3, "token_burden": 4200000000,
-                  "verification_outcome": "passed",
+                  "token_count": 4200000000, "handoff_id": "urn:agentbox:activity:chain-3",
+                  "verification": "passed",
                   "metadata": {{ "note": "x" }}
                 }},
                 "message_type": 35, "protocol_version": 2,

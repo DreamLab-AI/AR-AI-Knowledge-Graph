@@ -3,8 +3,46 @@
 **Item:** RES-d source (PRD-023 WP-12) · **Wave:** P1 · **Canary:** `CANARY-VC-RESD-COUNT` (one-shot)
 **Base SHA at verification:** `e0f582403` (working tree; committed under the gap-close/2026-07 commit that lands this file)
 **Verified:** 2026-07-08T14:00Z
+**Gap-close correction:** 2026-07-08T14:47Z (base `4aca6f729`)
 
-## What was built
+## Gap-close correction (adversarial-verification defect closed)
+
+> **Superseded claim (kept visible):** the original evidence below said
+> `GET /api/ontology/class-count` was "mounted at `/api` in `main.rs`" and
+> "`curl`-queryable". **It was mounted, but unreachable.** The route was
+> registered at `main.rs:970`, AFTER `api_handler::config` (`main.rs:907`), whose
+> `api_handler::ontology::config` owns the broad `web::scope("/ontology")`. actix
+> matches scopes by registration order and does NOT fall through a matched scope
+> prefix, so every `GET /api/ontology/class-count` was claimed by the `/ontology`
+> scope, found no inner `/class-count` route, and returned **404** — the canon
+> `DriftCounter` would have received a 404, not a count. This is the identical
+> shadowing the WS-9 comment already documents for `/ontology/derived`.
+
+**Fix (`src/main.rs`):** the more-specific `/ontology/class-count` scope is now
+registered **before** `api_handler::config`, immediately after the
+`/ontology/derived` registration and for the same reason (the WS-9 idiom). The
+handler itself is unchanged. A reachability guard
+(`tests/resd_class_count_route.rs`) pins BOTH halves of the mechanism so a future
+reorder cannot silently re-bury it:
+
+```
+$ cargo test --test resd_class_count_route
+running 3 tests
+test class_count_route_alone_reaches_its_handler ... ok
+test class_count_is_shadowed_when_registered_after_broad_scope ... ok
+test class_count_is_reachable_when_registered_before_broad_ontology_scope ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+- `..._reachable_when_registered_before_broad_ontology_scope` — the FIXED order:
+  GET reaches the handler (500 only because AppState is intentionally absent in
+  the test App), i.e. **not 404**.
+- `..._shadowed_when_registered_after_broad_scope` — the ORIGINAL buggy order:
+  GET is **404**, pinning the exact shadowing failure the fix removes.
+
+---
+
+## What was built (original — route was registered but shadowed; see correction above)
 
 `src/handlers/ontology_class_count_handler.rs` — `GET /api/ontology/class-count`, a
 script-queryable source the canon `DriftCounter` consumes to detect ontology drift.
@@ -84,5 +122,6 @@ loaded for a non-zero count).
 
 - `src/handlers/ontology_class_count_handler.rs` — the route + documented method + canary fire
 - `src/handlers/mod.rs` — `configure_ontology_class_count_routes` export
-- `src/main.rs` — route mounted under `/api`
+- `src/main.rs` — route mounted under `/api` **before** `api_handler::config` (gap-close reorder; was shadowed after it)
 - `src/services/liveness_harness.rs` — `CANARY_RESD_COUNT` const + `P1_CANARIES` seed row
+- `tests/resd_class_count_route.rs` — **gap-close** reachability guard (reachable-before / shadowed-after / isolated-route)

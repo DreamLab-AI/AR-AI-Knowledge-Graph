@@ -3,8 +3,63 @@
 **Item:** REC-3 (PRD-023 WP-7) · **Wave:** P1 · **Canary:** `CANARY-VC-REC3-CTC` (one-shot)
 **Base SHA at verification:** `e0f582403` (working tree; committed under the gap-close/2026-07 commit that lands this file)
 **Verified:** 2026-07-08T14:00Z
+**Gap-close correction:** 2026-07-08T14:47Z (base `4aca6f729`)
 
-## What was built
+## Gap-close correction (adversarial-verification defect closed)
+
+> **Superseded claim (kept visible):** the original build below declared the CTC
+> fields as `handoff_count: Option<u32>` / `token_burden: Option<u64>` /
+> `verification_outcome: Option<String>` and asserted "kept aligned with what
+> agentbox emits". **That alignment was false.** agentbox — the canonical schema
+> source per this module's own doc-comment (ADR-059 §2) — puts
+> `token_count` / `handoff_id` / `verification` on the wire
+> (`agentbox/management-api/utils/agent-event-publisher.js::createMcpNotification`),
+> and its contract test `agentbox/tests/sovereign/voice-intent.test.js` pins the
+> runtime types: `token_count` a **number**, `handoff_id` a correlation-URN
+> **string** (`urn:agentbox:activity:chain-7`), `verification` a **string**.
+> With NO serde alias, every real agentbox frame deserialised to `None` forever —
+> and worse, the string `handoff_id` could not even parse into a `u32` field, so
+> it would have errored the whole frame. `has_ctc()` was therefore always
+> `false` on a real frame and `CANARY-VC-REC3-CTC` could never fire (WP-7's exact
+> falsification trigger).
+
+**Fix (`src/agent_events/schema.rs`):** the three typed CTC members are aligned
+to agentbox's canonical names and types, with the PRD-023/ADR-130 draft names
+kept as `#[serde(alias)]` so **both spellings deserialise**:
+
+```rust
+#[serde(default, alias = "token_burden")]        pub token_count: Option<u64>,
+#[serde(default, alias = "handoff_count")]       pub handoff_id: Option<String>,   // was Option<u32> — could not hold a URN
+#[serde(default, alias = "verification_outcome")] pub verification: Option<String>,
+```
+
+`has_ctc()` reads the renamed fields; the struct-literal call sites
+(`agent_beam_actor.rs`, `provenance.rs`), the ingest fixture (`ingest.rs`), and
+the `liveness_harness` canary description are updated to the canonical names.
+A new schema test parses a **verbatim agentbox-shaped** frame and proves
+`has_ctc()` true on it (the falsification-closer); a second proves the draft
+alias path; the round-trip test proves serialisation emits the canonical names.
+
+Receipt:
+
+```
+$ cargo test --lib -- agent_events::schema::tests::ctc
+test agent_events::schema::tests::ctc_deserialises_from_canonical_agentbox_names ... ok
+test agent_events::schema::tests::ctc_absent_deserialises_as_none_and_has_ctc_false ... ok
+test agent_events::schema::tests::ctc_deserialises_from_draft_prd_alias_names ... ok
+test agent_events::schema::tests::ctc_round_trips_through_serde ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 775 filtered out
+```
+
+**Maturity impact:** the schema half now genuinely matches agentbox, so a real
+CTC-bearing frame populates the typed fields and CAN fire the canary. The live
+end-to-end fire remains `pending-live-session` (agentbox must emit a populated
+CTC frame against the running ingest) — the closure stays at the honest
+`instrumented`/`integrated`-pending tier stated in AC2 below, not `federation-verified`.
+
+---
+
+## What was built (original — schema names since corrected above)
 
 The `/wss/agent-events` envelope (`src/agent_events/schema.rs`, `AgentActionEnvelope`)
 gains three first-class **typed optional** CTC members — the contract PRD-023/ADR-130

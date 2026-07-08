@@ -190,9 +190,9 @@ mod tests {
             source_urn: None,
             target_urn: None,
             pubkey: None,
-            handoff_count: None,
-            token_burden: None,
-            verification_outcome: None,
+            token_count: None,
+            handoff_id: None,
+            verification: None,
             metadata: serde_json::json!({ "note": "x" }),
         }
     }

@@ -156,7 +156,7 @@ pub const P1_CANARIES: &[(&str, &str, &str, &str)] = &[
     (
         CANARY_REC3_CTC,
         "Agent-events envelope carrying a populated typed CTC field \
-         (handoff_count / token_burden / verification_outcome)",
+         (token_count / handoff_id / verification — agentbox canonical names)",
         "one-shot",
         "P1",
     ),
