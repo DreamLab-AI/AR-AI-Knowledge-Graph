@@ -67,6 +67,11 @@ pub use ontology_derived_handler::configure_routes as configure_ontology_derived
 pub mod broker_inbox_handler;
 pub use broker_inbox_handler::configure_routes as configure_broker_inbox_routes;
 
+// GOV-4: git-ingest write-back (`/api/ingest/writeback`) — adapts the agentbox
+// git-bridge WriteBackSaga POST onto the shared enrichment-decide core.
+pub mod ingest_writeback_handler;
+pub use ingest_writeback_handler::configure_routes as configure_ingest_writeback_routes;
+
 // RES-a: LivenessHarness HTTP surface (register / observe / status) — ADR-130 D3
 pub mod liveness_harness_handler;
 pub use liveness_harness_handler::configure_routes as configure_liveness_routes;

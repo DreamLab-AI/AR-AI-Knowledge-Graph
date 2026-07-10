@@ -967,6 +967,11 @@ async fn main() -> std::io::Result<()> {
                     // Broker inbox read surface (WS-12) — agentbox broker-bridge
                     .configure(visionclaw_server::handlers::configure_broker_inbox_routes)
 
+                    // GOV-4: git-ingest write-back (`/api/ingest/writeback`) —
+                    // adapts the agentbox git-bridge WriteBackSaga POST onto the
+                    // shared enrichment-decide core (was unregistered → 404).
+                    .configure(visionclaw_server::handlers::configure_ingest_writeback_routes)
+
                     // RES-a: LivenessHarness — /api/canary/{register,observe,status}
                     .configure(visionclaw_server::handlers::configure_liveness_routes)
 
