@@ -40,6 +40,33 @@ pub struct WhelkInferenceEngine {
 use visionclaw_domain::utils::time;
 use whelk;
 
+/// Outcome of a self-contained EL++ consistency check over an explicit
+/// class + axiom set (GOV-7 / ADR-130 Decision 2). `consistent == false` means
+/// whelk subsumed one or more named classes under `owl:Nothing` — the
+/// unsatisfiable set is carried so the caller can explain *why* the check
+/// blocked (e.g. the elevation gate's reject reason).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsistencyOutcome {
+    pub consistent: bool,
+    /// IRIs of the classes whelk subsumed under `owl:Nothing`, sorted+deduped.
+    pub unsatisfiable_classes: Vec<String>,
+}
+
+impl ConsistencyOutcome {
+    /// One-line human-legible explanation (reject reason / decision record).
+    pub fn explanation(&self) -> String {
+        if self.consistent {
+            "EL++ consistency check passed: no class subsumed under owl:Nothing.".to_string()
+        } else {
+            format!(
+                "EL++ inconsistency: {} class(es) became unsatisfiable (owl:Nothing): {}",
+                self.unsatisfiable_classes.len(),
+                self.unsatisfiable_classes.join(", ")
+            )
+        }
+    }
+}
+
 impl WhelkInferenceEngine {
     pub fn new() -> Self {
         info!("Initializing WhelkInferenceEngine");
@@ -262,6 +289,51 @@ impl WhelkInferenceEngine {
             }
         }
         out
+    }
+
+    /// Self-contained EL++ consistency check over an explicit class + axiom set.
+    ///
+    /// The trait's [`InferenceEngine::check_consistency`] reads the *cached*
+    /// subsumptions of an engine already advanced through `load_ontology` +
+    /// `infer` (both `&mut self`), which an `Arc<_>`-shared, immutably-held
+    /// engine cannot reach and which `SetOntology` (not `Clone`) cannot snapshot
+    /// non-destructively. This associated method instead builds a FRESH whelk
+    /// reasoner over the supplied classes+axioms and inspects the named
+    /// subsumptions directly — no `self`, no cached state — so it is the public,
+    /// re-entrant entry point the GOV-7 elevation gate uses to check
+    /// `base-ontology ∪ draft` before a PR is opened. A class whelk subsumes
+    /// under `owl:Nothing` marks the combined set inconsistent.
+    pub fn check_axiom_set(classes: &[OwlClass], axioms: &[OwlAxiom]) -> ConsistencyOutcome {
+        const BOTTOM: &str = "http://www.w3.org/2002/07/owl#Nothing";
+
+        let mut ontology = SetOntology::new();
+        for class in classes {
+            if let Some(c) = Self::convert_class_to_horned(class) {
+                ontology.insert(c);
+            }
+        }
+        for axiom in axioms {
+            if let Some(a) = Self::convert_axiom_to_horned(axiom) {
+                ontology.insert(a);
+            }
+        }
+
+        let whelk_axioms = whelk::whelk::owl::translate_ontology(&ontology);
+        let reasoner_state = whelk::whelk::reasoner::assert(&whelk_axioms);
+        let subsumptions = reasoner_state.named_subsumptions();
+
+        let mut unsatisfiable_classes: Vec<String> = subsumptions
+            .iter()
+            .filter(|(sub, sup)| sup.id == BOTTOM && sub.id != BOTTOM)
+            .map(|(sub, _)| sub.id.clone())
+            .collect();
+        unsatisfiable_classes.sort();
+        unsatisfiable_classes.dedup();
+
+        ConsistencyOutcome {
+            consistent: unsatisfiable_classes.is_empty(),
+            unsatisfiable_classes,
+        }
     }
 }
 
@@ -554,6 +626,45 @@ mod tests {
             object: b.to_string(),
             annotations: std::collections::HashMap::new(),
         }
+    }
+
+    fn disjoint_axiom(a: &str, b: &str) -> OwlAxiom {
+        OwlAxiom {
+            id: None,
+            axiom_type: AxiomType::DisjointWith,
+            subject: a.to_string(),
+            object: b.to_string(),
+            annotations: std::collections::HashMap::new(),
+        }
+    }
+
+    /// GOV-7: a satisfiable class + axiom set passes the self-contained gate.
+    #[test]
+    fn check_axiom_set_passes_for_consistent_ontology() {
+        let classes = vec![cls("urn:test:A"), cls("urn:test:B"), cls("urn:test:D")];
+        let axioms = vec![sub_axiom("urn:test:D", "urn:test:A")];
+        let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
+        assert!(outcome.consistent, "no contradiction ⇒ consistent: {outcome:?}");
+        assert!(outcome.unsatisfiable_classes.is_empty());
+    }
+
+    /// GOV-7: a minimal contradictory pair — `D ⊑ A`, `D ⊑ B`, `A disjoint B` —
+    /// collapses `D` to owl:Nothing and the gate BLOCKS (consistent == false).
+    #[test]
+    fn check_axiom_set_blocks_inconsistent_draft() {
+        let classes = vec![cls("urn:test:A"), cls("urn:test:B"), cls("urn:test:D")];
+        let axioms = vec![
+            sub_axiom("urn:test:D", "urn:test:A"),
+            sub_axiom("urn:test:D", "urn:test:B"),
+            disjoint_axiom("urn:test:A", "urn:test:B"),
+        ];
+        let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
+        assert!(!outcome.consistent, "disjoint parents ⇒ inconsistent: {outcome:?}");
+        assert!(
+            outcome.unsatisfiable_classes.contains(&"urn:test:D".to_string()),
+            "D must be unsatisfiable: {outcome:?}"
+        );
+        assert!(outcome.explanation().contains("inconsistency"));
     }
 
     /// ADR-099 D2: an asserted `EquivalentClass(A, B)` must NOT be downgraded.

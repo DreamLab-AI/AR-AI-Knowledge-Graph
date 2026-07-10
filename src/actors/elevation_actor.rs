@@ -34,15 +34,17 @@ use crate::actors::elevation_voice::{
 use crate::adapters::sqlite_enrichment_repository::{
     EnrichmentProposal as StoredProposal, SqliteEnrichmentRepository, StoredDecision,
 };
+use crate::adapters::WhelkInferenceEngine;
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
+use crate::ports::ontology_repository::{AxiomType, OntologyRepository, OwlAxiom, OwlClass};
 use crate::services::acsp::{
-    build_action_request, build_panel_definition, build_panel_state, AcspClient, ActionPriority,
-    ActionRequest, CaseCategory, CaseDecision, CaseSpec, SubjectKind,
+    build_action_request, build_case_status_update, build_panel_definition, build_panel_state,
+    AcspClient, ActionPriority, ActionRequest, CaseCategory, CaseDecision, CaseSpec, SubjectKind,
 };
 use crate::services::acsp::events::{
     ActionDef, ActionStyle, FieldDef, FieldType, LayoutHint, PanelDefinition, PanelSchema,
 };
-use crate::services::github_pr_service::GitHubPRService;
+use crate::services::github_pr_service::{GitHubPRService, PrState};
 use crate::services::speech_service::SpeechService;
 use crate::types::ontology_tools::AgentContext;
 use crate::types::speech::SpeechOptions;
@@ -55,6 +57,9 @@ const CASE_PREFIX: &str = "vc-elev-";
 const MAX_OPEN_CASES: usize = 5;
 /// Candidate scan cadence.
 const CYCLE_INTERVAL: Duration = Duration::from_secs(600);
+/// GOV-2 merge-poll cadence: how often opened elevation PRs are checked for a
+/// terminal git state (merged → `concept_elevated`, closed → abandoned).
+const PR_POLL_INTERVAL: Duration = Duration::from_secs(120);
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -63,6 +68,20 @@ struct RunCycle;
 #[derive(Message)]
 #[rtype(result = "()")]
 struct Decision(CaseDecision);
+
+/// Poll tracked elevation PRs for a terminal git state (GOV-2).
+#[derive(Message)]
+#[rtype(result = "()")]
+struct PollPrs;
+
+/// An opened elevation PR being tracked to its terminal state (GOV-2). Keyed by
+/// case id in [`ElevationActor::elevating`] so the merge poll can fire the
+/// terminal `concept_elevated` event and mark the store row `elevated`.
+#[derive(Debug, Clone)]
+struct TrackedPr {
+    pr_url: String,
+    label: String,
+}
 
 /// One transcription line from the local Whisper STT stream.
 #[derive(Message)]
@@ -85,6 +104,14 @@ pub struct ElevationActor {
     /// REST and actor views agree. The in-memory `pending` map stays the working
     /// set; this store is the durable projection (ADR-130 Decision 2 / gap-close).
     enrichment_repo: Arc<SqliteEnrichmentRepository>,
+    /// GOV-7 (ADR-130): the base ontology source for the EL++ consistency gate.
+    /// On `approve`, base-ontology ∪ draft is checked for consistency BEFORE the
+    /// PR is opened. `None` means the gate is UNAVAILABLE for this profile — and
+    /// canon (no advisory write path) requires the gate to then FAIL CLOSED:
+    /// approvals are blocked, not waved through. The whelk reasoner itself is
+    /// stateless ([`WhelkInferenceEngine::check_axiom_set`]); only this base
+    /// source is threaded state.
+    consistency_base: Option<Arc<dyn OntologyRepository>>,
     acsp: Option<Arc<AcspClient>>,
     /// Local Kokoro TTS / Whisper STT bridge: transcripts guide candidate
     /// selection; the actor speaks confirmations back into the session.
@@ -93,6 +120,11 @@ pub struct ElevationActor {
     forum_relay_url: String,
     /// Open broker cases awaiting a human decision, keyed by case id.
     pending: HashMap<String, PendingCase>,
+    /// GOV-2: elevation PRs opened on approve, tracked to their terminal git
+    /// state. The merge poll fires `concept_elevated` (kind-31404) + marks the
+    /// store row `elevated` on merge, or `elevation_abandoned` + `abandoned` on
+    /// close-without-merge, then removes the entry.
+    elevating: HashMap<String, TrackedPr>,
     /// Frontier labels already cased/decided this session (skip list).
     seen: HashSet<String>,
     /// Conversational demand (decaying) — the PRIMARY elevation signal.
@@ -133,6 +165,7 @@ impl ElevationActor {
         kg_repo: Arc<dyn KnowledgeGraphRepository>,
         enrichment_repo: Arc<SqliteEnrichmentRepository>,
         speech: Option<Arc<SpeechService>>,
+        consistency_base: Option<Arc<dyn OntologyRepository>>,
     ) -> Option<Self> {
         // REC-2 / ADR-130 Decision 2: the case queue only carries real cases if
         // this consumer runs, so default the gate ON in dev/staging while
@@ -151,11 +184,13 @@ impl ElevationActor {
         Some(Self {
             kg_repo,
             enrichment_repo,
+            consistency_base,
             acsp: None,
             speech,
             panel_secret,
             forum_relay_url,
             pending: HashMap::new(),
+            elevating: HashMap::new(),
             seen: HashSet::new(),
             voice: VoiceDemandLedger::new(),
             concept_index: Arc::new(ConceptIndex::build(std::iter::empty())),
@@ -240,6 +275,10 @@ impl ElevationActor {
             "voice_cases": self.voice_case_count,
             "voice_guided": self.speech.is_some(),
             "last_pr_url": self.last_pr_url,
+            // GOV-2/GOV-7 visibility: PRs awaiting merge, and whether the EL++
+            // consistency gate is armed (false ⇒ approvals fail closed).
+            "awaiting_merge": self.elevating.len(),
+            "consistency_gate": self.consistency_base.is_some(),
         })
     }
 
@@ -480,6 +519,137 @@ pub fn draft_class_page(c: &FrontierCandidate) -> (String, String) {
     (format!("mainKnowledgeGraph/pages/{name}.md"), content)
 }
 
+/// A minimal `owl_class` declaration for the EL++ gate (IRI only — the reasoner
+/// needs the term to exist; the rest of `OwlClass` is irrelevant to consistency).
+fn declare_class(iri: &str) -> OwlClass {
+    OwlClass {
+        iri: iri.to_string(),
+        ..Default::default()
+    }
+}
+
+/// Pull the IRIs out of a JSON-LD relation value that may be a bare IRI string,
+/// a `{"@id": iri}` object, or an array of either (`subClassOf` / `disjointWith`).
+fn jsonld_iri_list(value: &serde_json::Value) -> Vec<String> {
+    fn one(v: &serde_json::Value, out: &mut Vec<String>) {
+        if let Some(s) = v.as_str() {
+            if !s.trim().is_empty() {
+                out.push(s.to_string());
+            }
+        } else if let Some(s) = v.get("@id").and_then(|x| x.as_str()) {
+            if !s.trim().is_empty() {
+                out.push(s.to_string());
+            }
+        }
+    }
+    let mut out = Vec::new();
+    match value {
+        serde_json::Value::Array(arr) => arr.iter().for_each(|v| one(v, &mut out)),
+        v => one(v, &mut out),
+    }
+    out
+}
+
+/// Parse a drafted Class page's ```json-ld``` block into the class + the OWL
+/// axioms the EL++ engine checks (GOV-7). Reuses the exact JSON-LD shape
+/// [`draft_class_page`] emits and the corpus ingest reads: `@id` is the class
+/// IRI, and `subClassOf` / `disjointWith` (bare IRIs or `{"@id": …}`, scalar or
+/// array) become `SubClassOf` / `DisjointWith` axioms whose targets are also
+/// declared so the reasoner can resolve them. An unparseable or block-less draft
+/// yields empty vecs — the caller treats "nothing drafted to check" honestly (a
+/// draft with no relations is trivially consistent against the base).
+pub fn parse_draft_axioms(draft: &str) -> (Vec<OwlClass>, Vec<OwlAxiom>) {
+    let block = draft
+        .split("```json-ld")
+        .nth(1)
+        .and_then(|s| s.split("```").next());
+    let Some(block) = block else {
+        return (Vec::new(), Vec::new());
+    };
+    let value: serde_json::Value = match serde_json::from_str(block.trim()) {
+        Ok(v) => v,
+        Err(_) => return (Vec::new(), Vec::new()),
+    };
+    let Some(id) = value.get("@id").and_then(|v| v.as_str()) else {
+        return (Vec::new(), Vec::new());
+    };
+
+    let mut class = OwlClass {
+        iri: id.to_string(),
+        ..Default::default()
+    };
+    class.label = value.get("label").and_then(|v| v.as_str()).map(String::from);
+    class.maturity = value.get("maturity").and_then(|v| v.as_str()).map(String::from);
+    class.source_domain = value.get("domain").and_then(|v| v.as_str()).map(String::from);
+
+    let mut classes = vec![class];
+    let mut axioms = Vec::new();
+
+    let mk = |axiom_type: AxiomType, object: &str| OwlAxiom {
+        id: None,
+        axiom_type,
+        subject: id.to_string(),
+        object: object.to_string(),
+        annotations: HashMap::new(),
+    };
+
+    for parent in value.get("subClassOf").map(jsonld_iri_list).unwrap_or_default() {
+        axioms.push(mk(AxiomType::SubClassOf, &parent));
+        classes.push(declare_class(&parent));
+    }
+    for other in value.get("disjointWith").map(jsonld_iri_list).unwrap_or_default() {
+        axioms.push(mk(AxiomType::DisjointWith, &other));
+        classes.push(declare_class(&other));
+    }
+    (classes, axioms)
+}
+
+/// The GOV-7 EL++ consistency gate: `Ok(())` to proceed to the PR, `Err(reason)`
+/// to BLOCK the approval. Canon (no advisory write path): a `None` base source
+/// means the gate is UNAVAILABLE and fails CLOSED. Otherwise the base ontology
+/// (classes + axioms) is loaded and combined with the drafted class + axioms,
+/// and whelk checks the union — an inconsistency (a class subsumed under
+/// owl:Nothing) blocks with the explanation as the reason.
+async fn run_consistency_gate(
+    base_src: Option<Arc<dyn OntologyRepository>>,
+    draft_classes: &[OwlClass],
+    draft_axioms: &[OwlAxiom],
+) -> Result<(), String> {
+    let Some(repo) = base_src else {
+        return Err("consistency gate unavailable (no ontology source configured for this profile)".to_string());
+    };
+    let base_classes = repo.get_classes().await.unwrap_or_else(|e| {
+        warn!("[Elevation] consistency gate: base classes load failed ({e:?}); checking draft in isolation");
+        Vec::new()
+    });
+    let base_axioms = repo.get_axioms().await.unwrap_or_else(|e| {
+        warn!("[Elevation] consistency gate: base axioms load failed ({e:?}); checking draft in isolation");
+        Vec::new()
+    });
+
+    let mut classes = base_classes;
+    classes.extend_from_slice(draft_classes);
+    let mut axioms = base_axioms;
+    axioms.extend_from_slice(draft_axioms);
+
+    let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
+    if outcome.consistent {
+        Ok(())
+    } else {
+        Err(outcome.explanation())
+    }
+}
+
+/// GOV-2: map a terminal PR git state to `(31404 status, store status)`.
+/// `Open` yields `None` (keep polling).
+fn terminal_for_pr_state(state: PrState) -> Option<(&'static str, &'static str)> {
+    match state {
+        PrState::Merged => Some(("concept_elevated", "elevated")),
+        PrState::ClosedUnmerged => Some(("elevation_abandoned", "abandoned")),
+        PrState::Open => None,
+    }
+}
+
 impl Actor for ElevationActor {
     type Context = Context<Self>;
 
@@ -531,6 +701,19 @@ impl Actor for ElevationActor {
 
         ctx.run_interval(CYCLE_INTERVAL, |_act, ctx| {
             ctx.address().do_send(RunCycle);
+        });
+
+        // GOV-2: poll opened elevation PRs for a terminal git state so a merge
+        // fires `concept_elevated` (not "claimed at PR-creation"). Degraded-
+        // visible: without a GitHub token no PR can open OR resolve, so say so
+        // loudly at boot rather than silently never firing the terminal event.
+        if GitHubPRService::has_github_token() {
+            info!("[Elevation] GOV-2 merge poll armed (every {}s) — merged PRs fire concept_elevated", PR_POLL_INTERVAL.as_secs());
+        } else {
+            warn!("[Elevation] GOV-2 DEGRADED: no GitHub token (LOGSEQ_PRIVATE_REPO_GITHUB) — elevation PRs cannot be opened and merge polling cannot resolve; concept_elevated will never fire until a token is configured");
+        }
+        ctx.run_interval(PR_POLL_INTERVAL, |_act, ctx| {
+            ctx.address().do_send(PollPrs);
         });
 
         // Voice guidance: forward every local-Whisper transcription line into
@@ -765,31 +948,95 @@ impl Handler<Decision> for ElevationActor {
             d.case_id, d.action, d.responder_pubkey, d.reasoning
         );
 
-        // Reconcile the durable projection: record the human decision so the REST
-        // inbox/history and the actor's working set agree (the pending row opened
-        // at case-open transitions to its decided status atomically here). The PR
-        // side-effect below is separate — the elevation "commit" is the merged PR,
-        // not the Oxigraph :summary write, so `writeback_committed` stays false.
-        {
-            let repo = self.enrichment_repo.clone();
-            let stored = decision_record(&d);
-            let case_id = d.case_id.clone();
-            ctx.spawn(
-                actix::fut::wrap_future::<_, Self>(async move {
-                    if let Err(e) = repo.record_decision(&stored).await {
-                        warn!("[Elevation] decision reconcile persist failed for {case_id}: {e}");
-                    }
-                })
-                .map(|_, _, _| ()),
-            );
-        }
-
+        // The durable decision record is written PER BRANCH so it reflects the
+        // true terminal outcome: a `reject` records the human decision here; an
+        // `approve` defers its record into the gate future — the human `approve`
+        // iff the EL++ consistency gate passes, or a gate-reject (carrying the
+        // inconsistency/unavailability reason) iff it blocks. No advisory pass.
         match d.action.as_str() {
             "approve" => {
-                let pr = GitHubPRService::new();
-                let label = case.label.clone();
+                // GOV-7: consistency gate then (GOV-2) PR tracking.
+                self.approve_with_gate(ctx, d, case);
+            }
+            _ => {
+                // reject / amend / delegate — record the human decision now (the
+                // pending row transitions to its decided status atomically) and
+                // skip. `writeback_committed` stays false (no PR, no write).
+                let repo = self.enrichment_repo.clone();
+                let stored = decision_record(&d);
+                let case_id = d.case_id.clone();
                 ctx.spawn(
                     actix::fut::wrap_future::<_, Self>(async move {
+                        if let Err(e) = repo.record_decision(&stored).await {
+                            warn!("[Elevation] decision reconcile persist failed for {case_id}: {e}");
+                        }
+                    })
+                    .map(|_, _, _| ()),
+                );
+                self.rejected_count += 1;
+                self.publish_state(ctx, 0);
+                ctx.address().do_send(RunCycle);
+            }
+        }
+    }
+}
+
+/// Result of the gated approve future, carried to the actor-context `.map`.
+enum ApproveOutcome {
+    /// Gate passed, PR opened — carries the PR url for tracking (GOV-2).
+    Elevated(String),
+    /// Gate passed but the GitHub PR call failed (already logged).
+    PrFailed,
+    /// Gate BLOCKED the approval (inconsistent draft or gate unavailable).
+    Blocked,
+}
+
+impl ElevationActor {
+    /// The GOV-7-gated approve path. Runs the EL++ consistency gate over
+    /// base-ontology ∪ draft BEFORE opening the PR; on a consistent draft it
+    /// records the human approve and opens the PR, then (GOV-2) tracks that PR to
+    /// its terminal state; on an inconsistent draft OR an unavailable gate it
+    /// records a gate-reject with the reason, blocks the PR, and counts the case
+    /// rejected. Canon: no advisory write path — the gate fails closed.
+    fn approve_with_gate(&mut self, ctx: &mut Context<Self>, d: CaseDecision, case: PendingCase) {
+        let base_src = self.consistency_base.clone();
+        let repo = self.enrichment_repo.clone();
+        let (draft_classes, draft_axioms) = parse_draft_axioms(&case.draft);
+        let approve_record = decision_record(&d);
+        let responder = d.responder_pubkey.clone();
+        let case_id = d.case_id.clone();
+        let case_id_map = case_id.clone();
+        let label = case.label.clone();
+        let label_map = label.clone();
+        let file_path = case.file_path.clone();
+        let draft = case.draft.clone();
+
+        ctx.spawn(
+            actix::fut::wrap_future::<_, Self>(async move {
+                match run_consistency_gate(base_src, &draft_classes, &draft_axioms).await {
+                    Err(reason) => {
+                        warn!(
+                            "[Elevation] GOV-7 consistency gate BLOCKED approval of {case_id}: {reason}"
+                        );
+                        // Record a gate-reject (with the reason) instead of the approve,
+                        // so the store shows the case was NOT elevated and why.
+                        let synthetic = CaseDecision {
+                            case_id: case_id.clone(),
+                            action: "reject".to_string(),
+                            reasoning: format!("GOV-7 consistency gate blocked elevation: {reason}"),
+                            responder_pubkey: responder,
+                        };
+                        if let Err(e) = repo.record_decision(&decision_record(&synthetic)).await {
+                            warn!("[Elevation] gate-reject persist failed for {case_id}: {e}");
+                        }
+                        ApproveOutcome::Blocked
+                    }
+                    Ok(()) => {
+                        // Gate passed: record the human approve, then open the PR.
+                        if let Err(e) = repo.record_decision(&approve_record).await {
+                            warn!("[Elevation] approve reconcile persist failed for {case_id}: {e}");
+                        }
+                        let pr = GitHubPRService::new();
                         let agent_ctx = AgentContext {
                             agent_id: format!("elevation-{}", slugify(&label)),
                             agent_type: "elevation".into(),
@@ -800,40 +1047,133 @@ impl Handler<Decision> for ElevationActor {
                             confidence: 0.5,
                             user_id: "acsp-governance".into(),
                         };
-                        pr.create_ontology_pr(
-                            &case.file_path,
-                            &case.draft,
-                            &format!("feat(ontology): elevate '{label}' (draft)"),
-                            &format!(
-                                "Draft Class page for frontier concept **{label}**, approved \
-                                 via the forum governance panel (ACSP case). Definition is a \
-                                 draft — refine during PR review.\n\n🤖 Generated by Claude Code"
-                            ),
-                            &agent_ctx,
-                        )
-                        .await
-                    })
-                    .map(|result, act, ctx| {
-                        match result {
-                            Ok(url) => {
-                                act.elevated_count += 1;
-                                act.last_pr_url = Some(url.clone());
-                                info!("[Elevation] PR created: {url}");
+                        match pr
+                            .create_ontology_pr(
+                                &file_path,
+                                &draft,
+                                &format!("feat(ontology): elevate '{label}' (draft)"),
+                                &format!(
+                                    "Draft Class page for frontier concept **{label}**, approved \
+                                     via the forum governance panel (ACSP case) and cleared by the \
+                                     EL++ consistency gate. Definition is a draft — refine during \
+                                     PR review.\n\n🤖 Generated by Claude Code"
+                                ),
+                                &agent_ctx,
+                            )
+                            .await
+                        {
+                            Ok(url) => ApproveOutcome::Elevated(url),
+                            Err(e) => {
+                                error!("[Elevation] PR creation failed: {e}");
+                                ApproveOutcome::PrFailed
                             }
-                            Err(e) => error!("[Elevation] PR creation failed: {e}"),
                         }
-                        act.publish_state(ctx, 0);
-                        // Refill the case window.
-                        ctx.address().do_send(RunCycle);
-                    }),
-                );
-            }
-            _ => {
-                self.rejected_count += 1;
-                self.publish_state(ctx, 0);
+                    }
+                }
+            })
+            .map(move |outcome, act, ctx| {
+                match outcome {
+                    ApproveOutcome::Elevated(url) => {
+                        act.elevated_count += 1;
+                        act.last_pr_url = Some(url.clone());
+                        // GOV-2: track the opened PR — the merge poll fires the
+                        // terminal `concept_elevated`, not this PR-creation moment.
+                        act.elevating.insert(
+                            case_id_map.clone(),
+                            TrackedPr {
+                                pr_url: url.clone(),
+                                label: label_map,
+                            },
+                        );
+                        info!("[Elevation] PR created: {url} (tracking case {case_id_map} for merge → concept_elevated)");
+                    }
+                    ApproveOutcome::PrFailed => {}
+                    ApproveOutcome::Blocked => {
+                        // GOV-7: a blocked approval is a rejection, not a silent pass.
+                        act.rejected_count += 1;
+                    }
+                }
+                act.publish_state(ctx, 0);
+                // Refill the case window.
                 ctx.address().do_send(RunCycle);
-            }
+            }),
+        );
+    }
+}
+
+impl Handler<PollPrs> for ElevationActor {
+    type Result = ();
+
+    fn handle(&mut self, _msg: PollPrs, ctx: &mut Self::Context) {
+        if self.elevating.is_empty() {
+            return;
         }
+        // Degraded-visible each cycle while PRs are stuck untrackable.
+        if !GitHubPRService::has_github_token() {
+            warn!(
+                "[Elevation] GOV-2 merge poll DEGRADED: {} PR(s) tracked but no GitHub token; concept_elevated cannot fire until LOGSEQ_PRIVATE_REPO_GITHUB is configured",
+                self.elevating.len()
+            );
+            return;
+        }
+        let Some(acsp) = self.acsp.clone() else {
+            return;
+        };
+        let repo = self.enrichment_repo.clone();
+        let tracked: Vec<(String, TrackedPr)> = self
+            .elevating
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let pr = GitHubPRService::new();
+
+        ctx.spawn(
+            actix::fut::wrap_future::<_, Self>(async move {
+                let mut resolved: Vec<String> = Vec::new();
+                for (case_id, tracked) in tracked {
+                    match pr.pr_state(&tracked.pr_url).await {
+                        Ok(state) => {
+                            let Some((event_status, store_status)) = terminal_for_pr_state(state)
+                            else {
+                                continue; // still open — keep tracking
+                            };
+                            // Publish the terminal 31404 CaseStatusUpdate.
+                            if let Err(e) = acsp
+                                .publish(&build_case_status_update(
+                                    PANEL_ID,
+                                    &case_id,
+                                    event_status,
+                                    &tracked.pr_url,
+                                ))
+                                .await
+                            {
+                                warn!("[Elevation] GOV-2 31404 publish failed for {case_id}: {e}");
+                            }
+                            // Mark the store row terminal.
+                            if let Err(e) = repo.set_status(&case_id, store_status).await {
+                                warn!(
+                                    "[Elevation] GOV-2 terminal store status persist failed for {case_id}: {e}"
+                                );
+                            }
+                            info!(
+                                "[Elevation] case {case_id} terminal: {event_status} for '{}' ({})",
+                                tracked.label, tracked.pr_url
+                            );
+                            resolved.push(case_id);
+                        }
+                        Err(e) => {
+                            warn!("[Elevation] GOV-2 PR state poll failed for {case_id}: {e}");
+                        }
+                    }
+                }
+                resolved
+            })
+            .map(|resolved, act, _ctx| {
+                for case_id in resolved {
+                    act.elevating.remove(&case_id);
+                }
+            }),
+        );
     }
 }
 
@@ -1023,5 +1363,102 @@ mod tests {
     fn slugify_matches_corpus_convention() {
         assert_eq!(slugify("Finality Mechanism"), "finality-mechanism");
         assert_eq!(slugify("3D and 4D"), "3d-and-4d");
+    }
+
+    // ── GOV-7 consistency gate ──────────────────────────────────────────────
+
+    fn draft_with(sub_class_of: &[&str], disjoint_with: &[&str]) -> String {
+        let arr = |v: &[&str]| {
+            v.iter()
+                .map(|s| format!("\"{s}\""))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        format!(
+            "# Test\n```json-ld\n{{\n  \"@id\": \"urn:ngm:class:test\",\n  \"@type\": \"Class\",\n  \"label\": \"Test\",\n  \"maturity\": \"draft\",\n  \"subClassOf\": [{}],\n  \"disjointWith\": [{}]\n}}\n```\n",
+            arr(sub_class_of),
+            arr(disjoint_with)
+        )
+    }
+
+    #[test]
+    fn parse_draft_axioms_reads_class_and_subclass() {
+        // A real elevation draft (subClassOf: []) parses to its class, no axioms.
+        let c = FrontierCandidate {
+            label: "finality mechanism".into(),
+            degree: 3,
+            domain: "blockchain".into(),
+            referenced_by: vec!["Consensus Layer".into()],
+        };
+        let (_, draft) = draft_class_page(&c);
+        let (classes, axioms) = parse_draft_axioms(&draft);
+        assert_eq!(classes.len(), 1, "the drafted class is declared");
+        assert_eq!(classes[0].iri, "urn:ngm:class:finality-mechanism");
+        assert!(axioms.is_empty(), "template draft has no subclass/disjoint relations");
+
+        // A draft with a subClassOf yields a SubClassOf axiom.
+        let (_, axioms) = parse_draft_axioms(&draft_with(&["urn:test:A"], &[]));
+        assert_eq!(axioms.len(), 1);
+        assert_eq!(axioms[0].axiom_type, AxiomType::SubClassOf);
+        assert_eq!(axioms[0].subject, "urn:ngm:class:test");
+        assert_eq!(axioms[0].object, "urn:test:A");
+    }
+
+    /// GOV-7: a drafted class that is a subclass of two base-ontology classes
+    /// declared disjoint is INCONSISTENT — the gate must surface it (blocks).
+    #[test]
+    fn gate_blocks_draft_inconsistent_with_base() {
+        // Base ontology: A and B are disjoint.
+        let base_classes = vec![
+            OwlClass { iri: "urn:test:A".into(), ..Default::default() },
+            OwlClass { iri: "urn:test:B".into(), ..Default::default() },
+        ];
+        let base_axioms = vec![OwlAxiom {
+            id: None,
+            axiom_type: AxiomType::DisjointWith,
+            subject: "urn:test:A".into(),
+            object: "urn:test:B".into(),
+            annotations: HashMap::new(),
+        }];
+        // Draft: test ⊑ A and test ⊑ B → test collapses to owl:Nothing.
+        let (draft_classes, draft_axioms) = parse_draft_axioms(&draft_with(&["urn:test:A", "urn:test:B"], &[]));
+
+        let mut classes = base_classes.clone();
+        classes.extend(draft_classes.clone());
+        let mut axioms = base_axioms.clone();
+        axioms.extend(draft_axioms.clone());
+        let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
+        assert!(!outcome.consistent, "disjoint parents ⇒ inconsistent: {outcome:?}");
+
+        // The SAME draft against a base WITHOUT the disjointness is consistent.
+        let mut classes2 = base_classes;
+        classes2.extend(draft_classes);
+        let outcome2 = WhelkInferenceEngine::check_axiom_set(&classes2, &draft_axioms);
+        assert!(outcome2.consistent, "no disjointness ⇒ consistent: {outcome2:?}");
+    }
+
+    /// GOV-7 fail-closed: no base source ⇒ the gate is UNAVAILABLE and blocks
+    /// the approval (returns Err) rather than passing it through advisorily.
+    #[tokio::test]
+    async fn gate_unavailable_fails_closed() {
+        let (dc, da) = parse_draft_axioms(&draft_with(&[], &[]));
+        let res = run_consistency_gate(None, &dc, &da).await;
+        assert!(res.is_err(), "None source must fail closed");
+        assert!(res.unwrap_err().contains("unavailable"));
+    }
+
+    // ── GOV-2 terminal PR-state mapping ─────────────────────────────────────
+
+    #[test]
+    fn terminal_for_pr_state_maps_merge_and_abandon() {
+        assert_eq!(
+            terminal_for_pr_state(PrState::Merged),
+            Some(("concept_elevated", "elevated"))
+        );
+        assert_eq!(
+            terminal_for_pr_state(PrState::ClosedUnmerged),
+            Some(("elevation_abandoned", "abandoned"))
+        );
+        assert_eq!(terminal_for_pr_state(PrState::Open), None, "open ⇒ keep polling");
     }
 }

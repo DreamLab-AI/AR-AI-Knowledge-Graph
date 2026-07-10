@@ -1213,6 +1213,11 @@ impl AppState {
                 as Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
             sqlite_enrichment_repository.clone(),
             speech_service.clone(),
+            // GOV-7 (ADR-130): base ontology source for the EL++ consistency gate.
+            // Always available here, so approvals are gated; a None here would
+            // fail the gate closed (block approvals) rather than wave them through.
+            Some(ontology_repository.clone()
+                as Arc<dyn crate::ports::ontology_repository::OntologyRepository>),
         ) {
             Some(actor) => {
                 let _ = actor.start();
