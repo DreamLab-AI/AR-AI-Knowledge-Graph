@@ -228,6 +228,34 @@ pub fn build_panel_update(panel_id: &str, diff: &serde_json::Value) -> UnsignedA
     }
 }
 
+/// Build a kind-31404 **CaseStatusUpdate** — a terminal broker-case lifecycle
+/// transition (GOV-2 / ADR-130 Decision 2). Emitted when an elevation PR reaches
+/// a terminal git state: `status = "concept_elevated"` on merge, or
+/// `"elevation_abandoned"` on close-without-merge. The content is the shallow-
+/// merge object the consumer folds into the panel's last 31401 snapshot (the
+/// 31404 PanelUpdate contract: top-level object, `["d", panel_id]`), carrying
+/// `{case_id, status, pr_url}` so the governance panel shows which case reached
+/// which terminal state and links its PR. The `d` tag is the **panel id** (not
+/// the case id) because the consumer keys 31404 merges by panel, per the schema
+/// doc; the case is identified inside the content.
+pub fn build_case_status_update(
+    panel_id: &str,
+    case_id: &str,
+    status: &str,
+    pr_url: &str,
+) -> UnsignedAcspEvent {
+    let content = serde_json::json!({
+        "case_id": case_id,
+        "status": status,
+        "pr_url": pr_url,
+    });
+    UnsignedAcspEvent {
+        kind: KIND_PANEL_UPDATE,
+        tags: vec![vec!["d".into(), panel_id.into()]],
+        content: content.to_string(),
+    }
+}
+
 /// Build a kind-31405 panel retirement.
 pub fn build_panel_retired(panel_id: &str) -> UnsignedAcspEvent {
     UnsignedAcspEvent {
@@ -374,6 +402,25 @@ mod tests {
         let raw = r#"{"action":"approve","reasoning":"Human approve via governance UI"}"#;
         let resp: ActionResponse = serde_json::from_str(raw).unwrap();
         assert_eq!(resp.action, "approve");
+    }
+
+    /// GOV-2: the 31404 CaseStatusUpdate is a valid PanelUpdate — top-level
+    /// object content, `["d", panel_id]` — carrying the terminal case status.
+    #[test]
+    fn case_status_update_wire_shape() {
+        let ev = build_case_status_update(
+            "vc-elevation",
+            "vc-elev-finality-mechanism",
+            "concept_elevated",
+            "https://github.com/o/r/pull/42",
+        );
+        assert_eq!(ev.kind, KIND_PANEL_UPDATE);
+        assert_eq!(ev.tags[0], vec!["d".to_string(), "vc-elevation".to_string()]);
+        let content: serde_json::Value = serde_json::from_str(&ev.content).unwrap();
+        assert!(content.is_object(), "31404 content must be a shallow-merge object");
+        assert_eq!(content["case_id"], "vc-elev-finality-mechanism");
+        assert_eq!(content["status"], "concept_elevated");
+        assert_eq!(content["pr_url"], "https://github.com/o/r/pull/42");
     }
 
     #[test]

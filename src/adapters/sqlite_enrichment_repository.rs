@@ -323,6 +323,29 @@ impl SqliteEnrichmentRepository {
             .map_err(map_db_err)
     }
 
+    /// Force a proposal's fine-grained status to a terminal lifecycle value
+    /// (GOV-2 / ADR-130 Decision 2). Distinct from [`record_decision`], which
+    /// derives status from a *governance* outcome (approve/reject): this is the
+    /// post-decision, post-PR terminal set the elevation actor's merge poll
+    /// writes — `elevated` when the elevation PR merges, `abandoned` when it
+    /// closes unmerged. A no-op if the case id is unknown (0 rows updated).
+    pub async fn set_status(&self, case_id: &str, status: &str) -> Result<()> {
+        let case_id = case_id.to_string();
+        let status = status.to_string();
+        self.conn
+            .call(move |c| {
+                let mut stmt = c.prepare_cached(
+                    "UPDATE enrichment_proposals
+                     SET status = ?2, updated_at = unixepoch()
+                     WHERE case_id = ?1",
+                )?;
+                stmt.execute(rusqlite::params![&case_id, &status])?;
+                Ok(())
+            })
+            .await
+            .map_err(map_db_err)
+    }
+
     /// Fetch one proposal by `case_id`.
     pub async fn get(&self, case_id: &str) -> Result<Option<EnrichmentProposal>> {
         let case_id_owned = case_id.to_string();
@@ -959,6 +982,26 @@ mod tests {
         assert_eq!(windowed[0].0, "reject");
         assert_eq!(windowed[0].2, 3_000);
         assert!(windowed.iter().all(|(_, _, ts)| *ts >= 1_000));
+    }
+
+    #[tokio::test]
+    async fn set_status_marks_terminal_elevated_and_abandoned() {
+        // GOV-2: after a decision, the merge poll flips the row to its terminal
+        // lifecycle status directly (bypassing the outcome→status derivation).
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("term-1")).await.unwrap();
+        repo.record_decision(&decision("term-1", false)).await.unwrap();
+        assert_eq!(repo.get("term-1").await.unwrap().unwrap().status, "approved");
+
+        repo.set_status("term-1", "elevated").await.unwrap();
+        assert_eq!(repo.get("term-1").await.unwrap().unwrap().status, "elevated");
+
+        repo.create_or_update(&proposal("term-2")).await.unwrap();
+        repo.set_status("term-2", "abandoned").await.unwrap();
+        assert_eq!(repo.get("term-2").await.unwrap().unwrap().status, "abandoned");
+
+        // Unknown case id ⇒ no-op, not an error.
+        repo.set_status("no-such-case", "elevated").await.unwrap();
     }
 
     #[test]

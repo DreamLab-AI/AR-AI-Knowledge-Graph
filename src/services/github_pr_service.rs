@@ -102,6 +102,27 @@ struct RefObject {
     sha: String,
 }
 
+/// Terminal-or-open git state of an opened PR (GOV-2 merge detection).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrState {
+    /// Still open — keep polling.
+    Open,
+    /// Merged — the elevation committed to the corpus (the terminal success).
+    Merged,
+    /// Closed without merging — the elevation was abandoned.
+    ClosedUnmerged,
+}
+
+/// GitHub `GET /pulls/{n}` projection: enough to classify [`PrState`].
+#[derive(Debug, Deserialize)]
+struct PrStateResponse {
+    state: String,
+    #[serde(default)]
+    merged_at: Option<String>,
+    #[serde(default)]
+    merged: Option<bool>,
+}
+
 impl GitHubPRService {
     pub fn new() -> Self {
         let token = env::var("LOGSEQ_PRIVATE_REPO_GITHUB").unwrap_or_default();
@@ -138,6 +159,83 @@ impl GitHubPRService {
             base_branch,
             client: reqwest::Client::new(),
         }
+    }
+
+    /// Whether a GitHub write token is configured. GOV-2: the elevation actor
+    /// logs loudly (degraded-visible) when this is false, because without it the
+    /// merge poll can never resolve a PR to `concept_elevated`.
+    pub fn has_github_token() -> bool {
+        !env::var("LOGSEQ_PRIVATE_REPO_GITHUB")
+            .unwrap_or_default()
+            .is_empty()
+    }
+
+    /// Extract a PR number from a full html URL (`…/pull/123`) or a bare number
+    /// string. Pure — unit-testable without the network.
+    pub fn pr_number_from_ref(pr_ref: &str) -> Option<u64> {
+        let t = pr_ref.trim();
+        if let Ok(n) = t.parse::<u64>() {
+            return Some(n);
+        }
+        if let Some(idx) = t.rfind("/pull/") {
+            let tail = &t[idx + "/pull/".len()..];
+            let digits: String = tail.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(n) = digits.parse::<u64>() {
+                return Some(n);
+            }
+        }
+        // Fallback: last path segment that parses as a number.
+        t.rsplit('/').find_map(|seg| seg.parse::<u64>().ok())
+    }
+
+    /// Pure classifier from the GitHub PR fields to [`PrState`]. `merged_at`
+    /// present (or the `merged` bool true) ⇒ Merged; otherwise a `closed` state
+    /// with no merge ⇒ ClosedUnmerged; anything else ⇒ Open. Factored out so the
+    /// GOV-2 state transitions are testable without a live GitHub call.
+    fn classify_pr_state(state: &str, merged_at: Option<&str>, merged: Option<bool>) -> PrState {
+        if merged.unwrap_or(false) || merged_at.is_some() {
+            PrState::Merged
+        } else if state.eq_ignore_ascii_case("closed") {
+            PrState::ClosedUnmerged
+        } else {
+            PrState::Open
+        }
+    }
+
+    /// Poll the terminal-or-open git state of a previously opened PR (GOV-2).
+    /// Accepts a full html URL (`…/pull/123`) or a bare PR number.
+    pub async fn pr_state(&self, pr_ref: &str) -> Result<PrState, String> {
+        if self.token.is_empty() {
+            return Err("LOGSEQ_PRIVATE_REPO_GITHUB not configured — cannot poll PR state".to_string());
+        }
+        let number = Self::pr_number_from_ref(pr_ref)
+            .ok_or_else(|| format!("cannot extract a PR number from '{}'", pr_ref))?;
+        let url = self.api_url(&format!("pulls/{}", number));
+
+        let resp = self
+            .client
+            .get(&url)
+            .headers(self.headers())
+            .send()
+            .await
+            .map_err(|e| format!("Failed to get PR state: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get PR state failed ({}): {}", status, body));
+        }
+
+        let pr: PrStateResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse PR state response: {}", e))?;
+
+        Ok(Self::classify_pr_state(
+            &pr.state,
+            pr.merged_at.as_deref(),
+            pr.merged,
+        ))
     }
 
     fn api_url(&self, path: &str) -> String {
@@ -493,5 +591,54 @@ impl GitHubPRService {
                     head_branch
                 )
             })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pr_number_parses_url_and_bare_number() {
+        assert_eq!(
+            GitHubPRService::pr_number_from_ref("https://github.com/o/r/pull/42"),
+            Some(42)
+        );
+        assert_eq!(GitHubPRService::pr_number_from_ref("42"), Some(42));
+        assert_eq!(
+            GitHubPRService::pr_number_from_ref("https://github.com/o/r/pull/123#issuecomment-9"),
+            Some(123)
+        );
+        assert_eq!(GitHubPRService::pr_number_from_ref("not-a-url"), None);
+    }
+
+    /// GOV-2 state transitions from the GitHub PR fields — the "fake PR-state
+    /// source" the merge poll classifies.
+    #[test]
+    fn classify_pr_state_covers_merged_closed_open() {
+        // merged_at present ⇒ Merged (the terminal success).
+        assert_eq!(
+            GitHubPRService::classify_pr_state("closed", Some("2026-07-10T00:00:00Z"), None),
+            PrState::Merged
+        );
+        // merged bool true ⇒ Merged even without merged_at.
+        assert_eq!(
+            GitHubPRService::classify_pr_state("closed", None, Some(true)),
+            PrState::Merged
+        );
+        // closed, never merged ⇒ ClosedUnmerged (abandoned).
+        assert_eq!(
+            GitHubPRService::classify_pr_state("closed", None, Some(false)),
+            PrState::ClosedUnmerged
+        );
+        assert_eq!(
+            GitHubPRService::classify_pr_state("closed", None, None),
+            PrState::ClosedUnmerged
+        );
+        // still open ⇒ Open (keep polling).
+        assert_eq!(
+            GitHubPRService::classify_pr_state("open", None, Some(false)),
+            PrState::Open
+        );
     }
 }
