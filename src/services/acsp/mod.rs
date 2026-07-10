@@ -14,7 +14,7 @@ pub mod events;
 
 pub use client::{AcspClient, CaseDecision};
 pub use events::{
-    build_action_request, build_panel_definition, build_panel_retired, build_panel_state,
-    build_panel_update, ActionPriority, ActionRequest, CaseCategory, CaseSpec, PanelDefinition,
-    SubjectKind,
+    build_action_request, build_action_response, build_panel_definition, build_panel_retired,
+    build_panel_state, build_panel_update, ActionPriority, ActionRequest, CaseCategory, CaseSpec,
+    PanelDefinition, SubjectKind,
 };

@@ -31,6 +31,9 @@ use serde_json::json;
 use crate::actors::elevation_voice::{
     harvest_mentions, parse_elevation_intent, ConceptIndex, VoiceDemandLedger,
 };
+use crate::adapters::sqlite_enrichment_repository::{
+    EnrichmentProposal as StoredProposal, SqliteEnrichmentRepository, StoredDecision,
+};
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use crate::services::acsp::{
     build_action_request, build_panel_definition, build_panel_state, AcspClient, ActionPriority,
@@ -75,6 +78,13 @@ struct PendingCase {
 
 pub struct ElevationActor {
     kg_repo: Arc<dyn KnowledgeGraphRepository>,
+    /// Durable projection of the actor's working set. Opened cases are persisted
+    /// here as `state=pending` at case-open so `/api/broker/inbox` shows a
+    /// pending proposal BEFORE any decision (previously the inbox was empty until
+    /// the decide-time stub), and the Decision handler reconciles the row so the
+    /// REST and actor views agree. The in-memory `pending` map stays the working
+    /// set; this store is the durable projection (ADR-130 Decision 2 / gap-close).
+    enrichment_repo: Arc<SqliteEnrichmentRepository>,
     acsp: Option<Arc<AcspClient>>,
     /// Local Kokoro TTS / Whisper STT bridge: transcripts guide candidate
     /// selection; the actor speaks confirmations back into the session.
@@ -121,6 +131,7 @@ fn is_production_from(app_env: Option<String>, node_env: Option<String>) -> bool
 impl ElevationActor {
     pub fn new(
         kg_repo: Arc<dyn KnowledgeGraphRepository>,
+        enrichment_repo: Arc<SqliteEnrichmentRepository>,
         speech: Option<Arc<SpeechService>>,
     ) -> Option<Self> {
         // REC-2 / ADR-130 Decision 2: the case queue only carries real cases if
@@ -139,6 +150,7 @@ impl ElevationActor {
             .ok()?;
         Some(Self {
             kg_repo,
+            enrichment_repo,
             acsp: None,
             speech,
             panel_secret,
@@ -288,6 +300,31 @@ impl ElevationActor {
             draft,
         };
         (spec, pending)
+    }
+
+    /// Build the durable `state=pending` projection row for a freshly opened
+    /// case. The `proposal_json` carries the fields the WS-12 broker-inbox
+    /// projection reads (`target_path`, `content`, `enrichment_type`,
+    /// `reasoning_summary`, `proposed_by`) so the pending proposal renders in the
+    /// inbox before any decision. `created_at`/`updated_at` are `0` here — the
+    /// store stamps `unixepoch()` on write.
+    fn pending_proposal(spec: &CaseSpec, pending: &PendingCase) -> StoredProposal {
+        StoredProposal {
+            case_id: spec.case_id.clone(),
+            category: Some(spec.category.as_tag_value().to_string()),
+            source_iri: Some(spec.subject_id.clone()),
+            proposal_json: json!({
+                "target_path": pending.file_path,
+                "content": pending.draft,
+                "enrichment_type": "class_elevation",
+                "reasoning_summary": spec.request.reasoning,
+                "proposed_by": format!("elevation-{}", slugify(&pending.label)),
+                "title": spec.title,
+            }),
+            status: "pending".to_string(),
+            created_at: 0,
+            updated_at: 0,
+        }
     }
 }
 
@@ -549,9 +586,19 @@ impl Handler<VoiceTranscript> for ElevationActor {
             let (spec, pending) =
                 Self::case_for(&candidate, demand.as_ref(), ActionPriority::High);
             let case_id = spec.case_id.clone();
+            let proposal = Self::pending_proposal(&spec, &pending);
+            let repo = self.enrichment_repo.clone();
             ctx.spawn(
                 actix::fut::wrap_future::<_, Self>(async move {
-                    acsp.publish(&build_action_request(&spec)).await.map(|_| ())
+                    let published =
+                        acsp.publish(&build_action_request(&spec)).await.map(|_| ());
+                    // Durable projection of the voice-commanded open case.
+                    if published.is_ok() {
+                        if let Err(e) = repo.create_or_update(&proposal).await {
+                            warn!("[Elevation] voice pending-case persist failed: {e}");
+                        }
+                    }
+                    published
                 })
                 .map(move |result, act, _ctx| match result {
                     Ok(()) => {
@@ -590,6 +637,7 @@ impl Handler<RunCycle> for ElevationActor {
             return;
         }
         let kg = self.kg_repo.clone();
+        let repo = self.enrichment_repo.clone();
         let skip: HashSet<String> = self
             .seen
             .iter()
@@ -667,6 +715,16 @@ impl Handler<RunCycle> for ElevationActor {
                     let case_id = spec.case_id.clone();
                     match acsp.publish(&build_action_request(&spec)).await {
                         Ok(_) => {
+                            // Durable projection: persist the open case as
+                            // state=pending so /api/broker/inbox shows it BEFORE
+                            // any decision. Failure is logged loudly, never fatal
+                            // to the working set.
+                            let proposal = ElevationActor::pending_proposal(&spec, &pending);
+                            if let Err(e) = repo.create_or_update(&proposal).await {
+                                warn!(
+                                    "[Elevation] pending-case persist failed for {case_id}: {e}"
+                                );
+                            }
                             info!(
                                 "[Elevation] opened case {case_id} for '{}' (voice={})",
                                 c.label,
@@ -706,6 +764,26 @@ impl Handler<Decision> for ElevationActor {
             "[Elevation] case {} decided '{}' by {} — {}",
             d.case_id, d.action, d.responder_pubkey, d.reasoning
         );
+
+        // Reconcile the durable projection: record the human decision so the REST
+        // inbox/history and the actor's working set agree (the pending row opened
+        // at case-open transitions to its decided status atomically here). The PR
+        // side-effect below is separate — the elevation "commit" is the merged PR,
+        // not the Oxigraph :summary write, so `writeback_committed` stays false.
+        {
+            let repo = self.enrichment_repo.clone();
+            let stored = decision_record(&d);
+            let case_id = d.case_id.clone();
+            ctx.spawn(
+                actix::fut::wrap_future::<_, Self>(async move {
+                    if let Err(e) = repo.record_decision(&stored).await {
+                        warn!("[Elevation] decision reconcile persist failed for {case_id}: {e}");
+                    }
+                })
+                .map(|_, _, _| ()),
+            );
+        }
+
         match d.action.as_str() {
             "approve" => {
                 let pr = GitHubPRService::new();
@@ -773,6 +851,53 @@ impl ElevationActor {
             })
             .map(|_, _, _| ()),
         );
+    }
+}
+
+/// Build the durable [`StoredDecision`] reconciliation record from a forum
+/// [`CaseDecision`] (kind-31403). The responding admin's pubkey attributes the
+/// decision when it is a canonical x-only hex key; a non-hex key downgrades to
+/// unattributed (never an error). `writeback_committed` stays `false`: the
+/// elevation "commit" is the merged ontology PR (tracked separately), not the
+/// enrichment-decide Oxigraph `:summary` write.
+fn decision_record(d: &CaseDecision) -> StoredDecision {
+    let attributed = crate::uri::is_pubkey_hex(&d.responder_pubkey);
+    let owner_did = if attributed {
+        crate::uri::did_nostr(&d.responder_pubkey).ok()
+    } else {
+        None
+    };
+    let proposal_urn = if attributed {
+        crate::uri::kg(
+            &d.responder_pubkey,
+            format!("enrichment-proposal:{}", d.case_id),
+        )
+        .ok()
+    } else {
+        None
+    };
+    let activity_urn = crate::uri::execution(format!(
+        "elevation-decide:{}:{}:{}",
+        d.case_id, d.action, d.responder_pubkey
+    ));
+    let writeback_triggered =
+        crate::adapters::sqlite_enrichment_repository::status_for_outcome(&d.action) == "approved";
+    let decided_at_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    StoredDecision {
+        case_id: d.case_id.clone(),
+        outcome: d.action.clone(),
+        attributed,
+        broker_pubkey: Some(d.responder_pubkey.clone()),
+        reasoning: Some(d.reasoning.clone()),
+        writeback_triggered,
+        writeback_committed: false,
+        activity_urn,
+        proposal_urn,
+        owner_did,
+        decided_at_ms,
     }
 }
 

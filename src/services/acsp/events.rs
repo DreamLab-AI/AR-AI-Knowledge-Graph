@@ -251,6 +251,25 @@ pub struct CaseSpec {
     pub request: ActionRequest,
 }
 
+/// Build a kind-31403 ActionResponse (decision) event for `case_id`.
+///
+/// Normally a human admin publishes 31403 from the forum UI; VisionClaw uses
+/// this to **project** an operator/bridge REST decision back to the forum so the
+/// decision is visible in the forum's `broker_decisions` (ADR-130 Decision 2 /
+/// gap-close item 2). The d-tag is the case id (the 31402 it answers); content
+/// is the `{action, reasoning}` shape the consumer and [`ActionResponse`] parse.
+pub fn build_action_response(case_id: &str, action: &str, reasoning: &str) -> UnsignedAcspEvent {
+    let content = ActionResponse {
+        action: action.to_string(),
+        reasoning: reasoning.to_string(),
+    };
+    UnsignedAcspEvent {
+        kind: KIND_ACTION_RESPONSE,
+        tags: vec![vec!["d".into(), case_id.into()]],
+        content: serde_json::to_string(&content).expect("ActionResponse serialises"),
+    }
+}
+
 /// Build a kind-31402 ActionRequest (broker case) event.
 pub fn build_action_request(spec: &CaseSpec) -> UnsignedAcspEvent {
     UnsignedAcspEvent {

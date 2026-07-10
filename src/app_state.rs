@@ -312,6 +312,14 @@ pub struct AppState {
     // and keep WS-9 migrations independent.
     pub sqlite_enrichment_repository: Arc<SqliteEnrichmentRepository>,
 
+    // gap-close item 2 (ADR-130 Decision 2): optional shared ACSP client that
+    // projects operator/bridge REST decisions back to the forum as kind-31403
+    // ActionResponse events, so `apply_decision` is visible in the forum's
+    // `broker_decisions`. `None` when FORUM_RELAY_URL + a panel secret are
+    // unconfigured (or the connect failed) — the decide path then records
+    // `forum_projection=skipped` and logs loudly (degraded must be visible).
+    pub acsp_client: Option<Arc<crate::services::acsp::AcspClient>>,
+
     // RES-a: sprint-wide live-traffic observer + KG-backend watchdog gauge
     // (ADR-130 Decision 3). Backs /api/canary/{register,observe,status} and the
     // tokio watchdog spawned in main.rs. Own SQLite file (data/liveness.sqlite3).
@@ -1203,6 +1211,7 @@ impl AppState {
         match crate::actors::elevation_actor::ElevationActor::new(
             graph_adapter.clone()
                 as Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
+            sqlite_enrichment_repository.clone(),
             speech_service.clone(),
         ) {
             Some(actor) => {
@@ -1271,6 +1280,36 @@ impl AppState {
         info!("[AppState::new] GPU subsystems initialized (physics={}, analytics={}, graph_ops={})",
             physics.active_count(), analytics.active_count(), graph_ops.active_count());
 
+        // gap-close item 2 (ADR-130 Decision 2): connect the shared ACSP client
+        // that projects REST/bridge decisions back to the forum as kind-31403.
+        // Same identity + relay as ElevationActor (ACSP_PANEL_NOSTR_PRIVKEY /
+        // VISIONCLAW_NOSTR_PRIVKEY + FORUM_RELAY_URL). Unconfigured or failed
+        // connect ⇒ None, and the decide path records forum_projection=skipped.
+        let acsp_client = {
+            let relay = std::env::var("FORUM_RELAY_URL").ok();
+            let secret = std::env::var("ACSP_PANEL_NOSTR_PRIVKEY")
+                .or_else(|_| std::env::var("VISIONCLAW_NOSTR_PRIVKEY"))
+                .ok();
+            match (relay, secret) {
+                (Some(relay), Some(secret)) => {
+                    match crate::services::acsp::AcspClient::connect(&secret, &relay).await {
+                        Ok(c) => {
+                            info!("[AppState] ACSP decision-projection client connected to {} — REST/bridge decisions project to the forum as kind-31403", relay);
+                            Some(Arc::new(c))
+                        }
+                        Err(e) => {
+                            warn!("[AppState] ACSP decision-projection client FAILED to connect ({}) — operator/bridge decisions will record forum_projection=skipped (degraded, visible)", e);
+                            None
+                        }
+                    }
+                }
+                _ => {
+                    info!("[AppState] ACSP decision-projection client OFF (FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY/VISIONCLAW_NOSTR_PRIVKEY unset) — REST/bridge decisions record forum_projection=skipped");
+                    None
+                }
+            }
+        };
+
         let state = Self {
             graph_service_addr,
             gpu_manager_addr,
@@ -1288,6 +1327,7 @@ impl AppState {
             settings_repository,
             sqlite_settings_repository,
             sqlite_enrichment_repository,
+            acsp_client,
             liveness_harness,
             sqlite_kpi_repository,
             kpi_compute_service,

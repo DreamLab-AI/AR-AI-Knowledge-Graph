@@ -106,6 +106,12 @@ struct DecideResponse {
     activity_urn: String,
     proposal_urn: Option<String>,
     owner_did: Option<String>,
+    /// gap-close item 2 (ADR-130 Decision 2): whether this decision was projected
+    /// back to the forum as a kind-31403 ActionResponse. `published` — the ACSP
+    /// event was accepted; `failed` — an AcspClient is configured but the publish
+    /// was rejected/errored; `skipped` — no AcspClient is configured (the loop is
+    /// degraded and this bit makes it visible rather than silent).
+    forum_projection: &'static str,
 }
 
 /// WS broadcast envelope for the audit surface.
@@ -460,6 +466,42 @@ pub(crate) async fn apply_decision(
         share_plan,
     );
 
+    // gap-close item 2 (ADR-130 Decision 2): project the decision back to the
+    // forum as a kind-31403 ActionResponse so an operator/bridge decision is
+    // visible in the forum's `broker_decisions` (previously REST decisions were
+    // invisible to the forum). When no AcspClient is configured this is a LOUD
+    // skip recorded as `forum_projection=skipped` — degraded, not silent.
+    let forum_projection: &'static str = match &state.acsp_client {
+        Some(client) => {
+            let reasoning = record.reasoning.clone().unwrap_or_default();
+            let ev = crate::services::acsp::build_action_response(
+                &case_id,
+                &kernel_action,
+                &reasoning,
+            );
+            match client.publish(&ev).await {
+                Ok(id) => {
+                    info!(
+                        "[enrichment-decide] forum projection published case={case_id} kind=31403 event={id}"
+                    );
+                    "published"
+                }
+                Err(e) => {
+                    warn!(
+                        "[enrichment-decide] DEGRADED: forum projection FAILED case={case_id}: {e} — decision recorded locally but NOT visible in the forum broker_decisions"
+                    );
+                    "failed"
+                }
+            }
+        }
+        None => {
+            warn!(
+                "[enrichment-decide] DEGRADED: forum projection SKIPPED for case={case_id} — no AcspClient configured (set FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY). The decision is recorded + written locally but is INVISIBLE to the forum broker_decisions."
+            );
+            "skipped"
+        }
+    };
+
     // REC-2 canary: a real decision over live traffic round-tripped the case
     // queue. Observed traffic only — never a synthetic probe (DDD invariant 5).
     let evidence = format!(
@@ -475,11 +517,12 @@ pub(crate) async fn apply_decision(
     }
 
     info!(
-        "[enrichment-decide] case={case_id} outcome={} attributed={} triggered={} committed={} activity={}",
+        "[enrichment-decide] case={case_id} outcome={} attributed={} triggered={} committed={} forum_projection={} activity={}",
         record.outcome,
         record.attributed,
         record.writeback_triggered,
         writeback_committed,
+        forum_projection,
         record.activity_urn
     );
     debug!("[enrichment-decide] full record: {record:?}");
@@ -493,6 +536,7 @@ pub(crate) async fn apply_decision(
         activity_urn: record.activity_urn.clone(),
         proposal_urn: record.proposal_urn.clone(),
         owner_did: record.owner_did.clone(),
+        forum_projection,
     })
 }
 
