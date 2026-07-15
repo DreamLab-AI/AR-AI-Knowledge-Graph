@@ -75,6 +75,8 @@ docs/*.png
 *.mp4
 *.webm
 *.mov
+# Demo media shipped with the README is the exception to the blanket video ignore
+!docs/assets/bots.mp4
 *.wav
 *.mp3
 *.glb

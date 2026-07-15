@@ -14,6 +14,12 @@
 
 <br/>
 
+*A live agent swarm embodied in the knowledge graph — status-driven capsules, per-swarm tinting, and real-time action beams from agents to the concepts they touch.*
+
+https://github.com/DreamLab-AI/VisionClaw/raw/main/docs/assets/bots.mp4
+
+<br/>
+
 https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
 <br/>
