@@ -202,9 +202,11 @@ export class AgentPollingService {
 
     try {
       const startTime = Date.now();
-      
-      
-      const data = await unifiedApiClient.getData<AgentSwarmData>('/graph/data');
+
+      // Request the agent population only. The server filters `?graph_type=agent`
+      // (api_handler/graph/mod.rs) so the poll fetches swarm nodes rather than
+      // the entire knowledge+ontology graph every 2-15s.
+      const data = await unifiedApiClient.getData<AgentSwarmData>('/graph/data?graph_type=agent');
       
       const pollDuration = Date.now() - startTime;
       this.lastPollTime = Date.now();

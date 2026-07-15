@@ -143,9 +143,11 @@ export class BotsWebSocketIntegration {
     this.emit('bots-update', data);
   }
 
+  // MCP connectivity is not tracked by this service (it only owns the Logseq
+  // websocket). The real MCP status is polled from `/bots/status` in
+  // BotsDataContext, so no `mcp` field is exposed here rather than a stub value.
   getConnectionStatus() {
     return {
-      mcp: false, 
       logseq: this.logseqConnected,
       overall: this.logseqConnected
     };

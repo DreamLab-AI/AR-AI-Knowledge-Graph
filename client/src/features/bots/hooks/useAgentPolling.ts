@@ -6,6 +6,85 @@ import { agentTelemetry } from '../../../telemetry/AgentTelemetry';
 
 const logger = createLogger('useAgentPolling');
 
+/**
+ * A node is a genuine swarm agent when it carries an `agent_type` in its
+ * metadata (the marker `graph_state_actor` writes on the agent→node path) or
+ * its node type is `agent`/`bot` (the server population classifier's markers).
+ * The poll requests `?graph_type=agent`, but this guard is defensive: an older
+ * server that ignores the param returns the whole knowledge+ontology graph, and
+ * without it every document node would be mapped to a fake `specialist`/`active`
+ * agent.
+ */
+export function isGenuineAgentNode(node: AgentSwarmData['nodes'][number]): boolean {
+  if (node.metadata?.agent_type) return true;
+  return node.type === 'agent' || node.type === 'bot';
+}
+
+/** Transform the agent-population poll response into BotsAgents and edges. */
+export function transformAgentData(data: AgentSwarmData): {
+  agents: BotsAgent[];
+  edges: BotsEdge[];
+} {
+  const agentNodes = (data.nodes || []).filter(isGenuineAgentNode);
+
+  const nodeIdToAgentId = new Map<number, string>();
+  agentNodes.forEach(node => {
+    nodeIdToAgentId.set(node.id, node.metadataId || String(node.id));
+  });
+
+  const agents = agentNodes.map(node => {
+    const agentType = node.metadata?.agent_type || node.type || 'specialist';
+
+    const position = node.data?.position || {
+      x: node.data?.x || 0,
+      y: node.data?.y || 0,
+      z: node.data?.z || 0
+    };
+
+    const velocity = node.data?.velocity || {
+      x: node.data?.vx || 0,
+      y: node.data?.vy || 0,
+      z: node.data?.vz || 0
+    };
+
+    return {
+      id: node.metadataId || String(node.id),
+      name: node.label || `Agent-${node.id}`,
+      type: agentType as BotsAgent['type'],
+      status: (node.metadata?.status || 'active') as BotsAgent['status'],
+      position,
+      velocity,
+      cpuUsage: parseFloat(node.metadata?.cpu_usage || '0'),
+      memoryUsage: parseFloat(node.metadata?.memory_usage || '0'),
+      health: parseFloat(node.metadata?.health || '100'),
+      workload: parseFloat(node.metadata?.workload || '0'),
+      tokens: parseInt(node.metadata?.tokens || '0'),
+      createdAt: node.metadata?.created_at || new Date().toISOString(),
+      age: parseInt(node.metadata?.age || '0'),
+      swarmId: node.metadata?.swarm_id,
+      parentQueenId: node.metadata?.parent_queen_id,
+      capabilities: node.metadata?.capabilities ?
+        node.metadata.capabilities.split(',').map(cap => cap.trim()).filter(cap => cap) :
+        undefined,
+    } as BotsAgent;
+  });
+
+  // Only edges whose endpoints are both agents survive, mirroring the node
+  // filter so a stray non-agent edge never fabricates a phantom connection.
+  const edges = (data.edges || [])
+    .filter(edge => nodeIdToAgentId.has(edge.source) && nodeIdToAgentId.has(edge.target))
+    .map(edge => ({
+      id: edge.id,
+      source: nodeIdToAgentId.get(edge.source) || String(edge.source),
+      target: nodeIdToAgentId.get(edge.target) || String(edge.target),
+      dataVolume: edge.weight * 1000,
+      messageCount: Math.floor(edge.weight * 10),
+      lastMessageTime: Date.now()
+    } as BotsEdge));
+
+  return { agents, edges };
+}
+
 export interface UseAgentPollingOptions {
   enabled?: boolean;
   config?: Partial<PollingConfig>;
@@ -48,70 +127,7 @@ export function useAgentPolling(options: UseAgentPollingOptions = {}) {
     error: null
   });
 
-  
-  const transformAgentData = useCallback((data: AgentSwarmData): {
-    agents: BotsAgent[],
-    edges: BotsEdge[]
-  } => {
-    
-    const nodeIdToAgentId = new Map<number, string>();
-    data.nodes?.forEach(node => {
-      nodeIdToAgentId.set(node.id, node.metadataId || String(node.id));
-    });
 
-    
-    const agents = data.nodes?.map(node => {
-      const agentType = node.metadata?.agent_type || node.type || 'specialist';
-
-      
-      const position = node.data?.position || {
-        x: node.data?.x || 0,
-        y: node.data?.y || 0,
-        z: node.data?.z || 0
-      };
-
-      const velocity = node.data?.velocity || {
-        x: node.data?.vx || 0,
-        y: node.data?.vy || 0,
-        z: node.data?.vz || 0
-      };
-
-      return {
-        id: node.metadataId || String(node.id),
-        name: node.label || `Agent-${node.id}`,
-        type: agentType as BotsAgent['type'],
-        status: (node.metadata?.status || 'active') as BotsAgent['status'],
-        position,
-        velocity,
-        cpuUsage: parseFloat(node.metadata?.cpu_usage || '0'),
-        memoryUsage: parseFloat(node.metadata?.memory_usage || '0'),
-        health: parseFloat(node.metadata?.health || '100'),
-        workload: parseFloat(node.metadata?.workload || '0'),
-        tokens: parseInt(node.metadata?.tokens || '0'),
-        createdAt: node.metadata?.created_at || new Date().toISOString(),
-        age: parseInt(node.metadata?.age || '0'),
-        swarmId: node.metadata?.swarm_id,
-        parentQueenId: node.metadata?.parent_queen_id,
-        capabilities: node.metadata?.capabilities ?
-          node.metadata.capabilities.split(',').map(cap => cap.trim()).filter(cap => cap) :
-          undefined,
-      } as BotsAgent;
-    }) || [];
-
-    
-    const edges = data.edges?.map(edge => ({
-      id: edge.id,
-      source: nodeIdToAgentId.get(edge.source) || String(edge.source),
-      target: nodeIdToAgentId.get(edge.target) || String(edge.target),
-      dataVolume: edge.weight * 1000,
-      messageCount: Math.floor(edge.weight * 10),
-      lastMessageTime: Date.now()
-    } as BotsEdge)) || [];
-
-    return { agents, edges };
-  }, []);
-
-  
   const updateStateRef = useRef<(data: AgentSwarmData) => void>(undefined);
   updateStateRef.current = (data: AgentSwarmData) => {
     const { agents, edges } = transformAgentData(data);
