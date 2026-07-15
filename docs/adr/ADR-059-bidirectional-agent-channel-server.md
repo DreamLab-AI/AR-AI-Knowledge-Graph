@@ -1,6 +1,6 @@
 # ADR-059: Bi-directional URI-keyed agent activity channel (VisionClaw side)
 
-**Status:** Accepted — Phase 1 + Phase 2a (authenticated ingest) implemented & verified (2026-05-29); Phase 2b (beam+gluon render) and the `:9500` state-poll cutover scoped as follow-ons
+**Status:** Accepted — Phase 1 + Phase 2a (authenticated ingest) implemented & verified (2026-05-29); Phase 2b **beam render landed** (`agent_beam_actor.rs`, `0x23` frames live end-to-end, 2026-07-15) with the **gluon attractive force deferred** (needs a dedicated transient-edge GPU buffer — see Addendum 2026-07-15); the `:9500` state-poll cutover remains a follow-on
 **Date:** 2026-04-28 (Phase 1 design log appended 2026-05-29)
 **Author:** VisionClaw platform team
 **Supersedes:** — (initial bi-directional design; agent_monitor_actor REST polling remains until Phase 2)
@@ -177,6 +177,81 @@ Phase 1 + Phase 2 land within one sprint. Later phases are independently schedul
 3. Phase-2 backpressure: if the WS client falls behind and the server queue exceeds N frames, drop oldest or coalesce by `target_node_id`? (Recommend coalesce-by-target — the visual is duration-based, last-write-wins is correct.)
 
 ## Design log (real-time)
+
+### 2026-07-15 — Addendum: Phase 2b beam render LANDED; gluon deferred (shipped-code correction to Finding 5)
+
+Finding 5 (below) concluded the gluon was "free" — that appending the transient
+`(agent)-[:ACTION]->(target)` edge *is* the attractive force, with zero GPU-buffer
+changes. Shipping Phase 2b proved that even this reduced claim is **not implementable
+on the current GPU substrate**. This addendum records the correction and the render
+subsystem as actually built; it annotates, and does not rewrite, the entries below.
+
+**(a) The "gluon is free / no new buffer" claim is wrong — the gluon is DEFERRED.**
+§4, §4.2, the TL;DR, and Finding 5 all assert the transient beam edge delivers the
+attractive pull with no new buffer. The shipped `src/actors/agent_beam_actor.rs:97-173`
+(see the `gluon_deferral_note` anchor) defers the gluon because there is **no
+incremental edge-insert path on the GPU**:
+
+- GPU edges live in a **packed CSR layout** (`row_offsets` / `col_indices` /
+  `edge_weights`), uploaded wholesale by `unified_gpu_compute::memory::initialize_graph`
+  / `upload_edges_csr`. Injecting one transient edge forces a `resize_buffers`
+  reallocation and a full re-upload of all three CSR arrays.
+- `AddEdge` / `RemoveEdge` (`graph_state_actor.rs`) mutate only the in-memory
+  `node_map`; they do not propagate to the GPU until a full `BuildGraphFromMetadata`
+  rebuild. No per-edge GPU mutation message exists.
+- The SSSP and Louvain/community kernels read the same CSR buffers; a mid-flight
+  resize/re-upload would race concurrent kernels and destabilise the simulation.
+- (The `class_charge` buffer Finding 5 already retracted still does not exist — only
+  `class_ids:i32` + `class_masses:f32` under the `physics-v2` gate, neither a per-edge
+  force handle.)
+
+Correct future fix: a new incremental **`UpsertTransientEdge { src, tgt, weight,
+ttl_ms }` GPU message** that appends into a **dedicated, separate transient-edge
+buffer** the spring kernel sums alongside the static CSR, plus a TTL sweep that zeroes
+expired entries — with no reallocation of the static CSR. Until that lands **the beam
+ships alone**: it embodies the action visually but exerts no attractive force.
+Everywhere this ADR (and README / websocket-protocol / subsystems / triptych) says
+"beam + gluon delivered", read "beam delivered; gluon deferred".
+
+**(b) Status / Phasing update — Phase 2b beam render LANDED; `0x23` is LIVE, not dead code.**
+Finding 4 (below) recorded the `0x23` agent-action frame as having no live broadcaster.
+That is no longer true:
+
+- `AgentBeamActor` (`src/actors/agent_beam_actor.rs`) subscribes to
+  `agent_events::hub::subscribe()`, projects each envelope onto the identity-blind
+  `0x23` frame via `AgentActionEnvelope::to_binary_event` → `AgentActionEvent::encode`,
+  and fans it out through `ClientCoordinatorActor`.
+- It is **started once at boot** — `src/app_state.rs:681-682`
+  (`AgentBeamActor::new(client_manager_addr.clone()).start()`).
+- Broadcast is handled by `ClientCoordinatorActor`'s `BroadcastAgentActionFrame`
+  handler (`src/actors/client_coordinator_actor.rs:1437-1453`), reusing the exact
+  `BroadcastNodePositions` binary dispatch loop.
+- So the `0x23 AGENT_ACTION` frame is **live end-to-end** (ingest → hub → beam actor →
+  client). Phasing row 2b's "beam" half is DONE; only its "gluon" half is deferred per (a).
+- `MultiMcpVisualizationActor` is **still never `.start()`ed** and is absent from
+  `AppState` (only referenced in `src/actors/mod.rs` and its own module) — Finding 4's
+  note on that actor stands.
+
+**(c) Client render subsystem (as built).** The browser half of the embodiment loop:
+
+- `client/src/features/visualisation/components/TransientBeamsLayer.tsx` — renders the
+  transient beams from decoded `0x23` frames.
+- `client/src/features/visualisation/semanticEncoding.ts` — **single source of truth**
+  for beam colour and shape per action verb (query / update / create / delete / link /
+  transform), shared with the memory-burst encoding.
+- `client/src/features/visualisation/hooks/useTransientBeams.ts` — the subscription hook.
+- `client/src/store/transientBeamStore.ts` — beam state store fed by the `0x23` decode
+  path (`store/websocket/binaryProtocol.ts` → `decodeAgentActions`).
+- **Legacy renderer removed (2026-07-15):** the parallel bézier/particle renderer chain —
+  `AgentActionVisualization.tsx`, `ActionConnectionsLayer.tsx`,
+  `useAgentActionVisualization.ts`, `useActionConnections.ts`, and the VR variants
+  `VRAgentActionScene.tsx`, `VRActionConnectionsLayer.tsx`, `useVRHandTracking.ts`,
+  `useVRConnectionsLOD.ts` — was **deleted** by operator decision for maintainability
+  (recoverable from git history). `TransientBeamsLayer` + `semanticEncoding` is now the
+  **sole** action renderer on both desktop and VR; the VR path receives it automatically
+  because `VRGraphCanvas` mounts `GraphManager`, which mounts `TransientBeamsLayer`. The
+  interim opt-in `visualisation.graphTypeVisuals.agent.legacyActionBeams` toggle (Control
+  Centre → Agents → Behaviour), added briefly the same day, was removed with the renderer.
 
 ### 2026-05-29 — Finding 5: gluon is a transient edge, not a `class_charge` modulation (keystone)
 

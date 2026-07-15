@@ -165,19 +165,20 @@ Telemetry automatically uploads to `/api/telemetry/upload` every 30 seconds:
 
 ## Files Created
 
-- `/ext/client/src/telemetry/AgentTelemetry.ts` - Main telemetry service
-- `/ext/client/src/telemetry/useTelemetry.ts` - React hooks
-- `/ext/client/src/telemetry/DebugOverlay.tsx` - Debug overlay component
-- `/ext/client/src/telemetry/index.ts` - Exports and utilities
-- `/ext/client/src/utils/logger.ts` - Enhanced logger (updated)
+- `client/src/telemetry/AgentTelemetry.ts` - Main telemetry service
+- `client/src/telemetry/useTelemetry.ts` - React hooks
+- `client/src/telemetry/DebugOverlay.tsx` - Debug overlay component
+- `client/src/utils/loggerConfig.ts` - Agent logger factory (`createAgentLogger`)
+
+(There is no `index.ts` barrel in this directory; import the modules directly.)
 
 ## Integration Points
 
 The telemetry system is integrated into:
 
-- `BotsVisualizationFixed.tsx` - Three.js position and rendering telemetry
-- `BotsWebSocketIntegration.ts` - WebSocket message flow logging
-- `useBotsWebSocketIntegration.ts` - Connection status and data flow
+- `client/src/features/bots/components/BotsVisualization.tsx` - Three.js position and rendering telemetry
+- `client/src/features/bots/services/BotsWebSocketIntegration.ts` - WebSocket message flow logging
+- `client/src/features/bots/hooks/useBotsWebSocketIntegration.ts` - Connection status and data flow
 
 ## Debugging Position Issues
 

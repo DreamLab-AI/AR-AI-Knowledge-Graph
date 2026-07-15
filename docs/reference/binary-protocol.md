@@ -50,8 +50,6 @@ related message families. Values are the canonical client/server constants.
 | `0x10` | `POSITION_UPDATE` | Position | S→C | Node position records |
 | `0x11` | `AGENT_POSITIONS` | Position | S→C | Agent position updates (21 B each) |
 | `0x12` | `VELOCITY_UPDATE` | Position | S→C | Velocity-only records |
-| `0x20` | `AGENT_STATE_FULL` | Agent | S→C | Full agent telemetry (49 B each) |
-| `0x21` | `AGENT_STATE_DELTA` | Agent | S→C | Changed-field agent telemetry |
 | `0x22` | `AGENT_HEALTH` | Agent | S→C | Health/resource snapshot |
 | `0x23` | `AGENT_ACTION` | Agent | S→C | Ephemeral agent-to-node action (15-byte header) |
 | `0x30` | `CONTROL_BITS` | Control | C→S | `ControlFlags` bitfield |
@@ -68,6 +66,15 @@ related message families. Values are the canonical client/server constants.
 | `0x53` | `USER_POSITION` | Multi-user | both | Cursor / avatar position |
 | `0x54` | `VR_PRESENCE` | Multi-user | both | VR head + hand tracking |
 | `0xFF` | `ERROR` | — | S→C | Error notification |
+
+> **No binary agent-state frame exists.** The `MessageType` enum
+> (`src/utils/binary_protocol.rs:1365-1386`) defines only `BinaryPositions` (`0x00`),
+> `VoiceData` (`0x02`), `ControlFrame` (`0x03`), `PositionDelta` (`0x04`),
+> `AgentAction` (`0x23`), and `BroadcastAck` (`0x34`). There is **no** `0x20`
+> `AGENT_STATE_FULL` or `0x21` `AGENT_STATE_DELTA` frame. Agent *state* (which agents
+> exist, health, status) currently travels via the deprecated `:9500`-fed REST poll
+> (`services/bots_client.rs`), not over any binary WebSocket frame; only agent
+> *actions* ride the wire, as the identity-blind `0x23` beam frame.
 
 ### Envelope header
 
@@ -250,22 +257,6 @@ fields little-endian.
 
 `AGENT_POSITION_SIZE = 21`.
 
-### AGENT_STATE_FULL (0x20) — 49 bytes/record
-
-| Offset | Field | Type |
-|--------|-------|------|
-| `0` | Agent ID | `u32` |
-| `4` | Position X/Y/Z | `f32 × 3` |
-| `16` | Velocity X/Y/Z | `f32 × 3` |
-| `28` | Health | `f32` |
-| `32` | CPU usage | `f32` |
-| `36` | Memory usage | `f32` |
-| `40` | Workload | `f32` |
-| `44` | Tokens | `u32` |
-| `48` | Flags | `u8` |
-
-`AGENT_STATE_SIZE = 49`.
-
 ### SSSP_DATA (0x31) — 14 bytes/record
 
 | Offset | Field | Type |
@@ -286,10 +277,6 @@ fields little-endian.
 | Timestamp | `u64` | Client receive time, ms |
 
 ### Bitfields
-
-`AgentStateFlags` (one byte, `AGENT_STATE_FULL`): `ACTIVE 1<<0`, `IDLE 1<<1`,
-`ERROR 1<<2`, `VOICE_ACTIVE 1<<3`, `HIGH_PRIORITY 1<<4`, `POSITION_CHANGED
-1<<5`, `METADATA_CHANGED 1<<6`, `RESERVED 1<<7`.
 
 `ControlFlags` (`CONTROL_BITS`): `PAUSE_UPDATES 1<<0`, `HIGH_FREQUENCY 1<<1`,
 `LOW_BANDWIDTH 1<<2`, `VOICE_ENABLED 1<<3`, `DEBUG_MODE 1<<4`,

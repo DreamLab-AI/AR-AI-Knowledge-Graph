@@ -25,7 +25,7 @@ that ontology. Agents act, humans govern, the GPU renders it all in immersive XR
 ## Governance + agentic mesh
 - **ACSP producer** — agents publish decision panels (Nostr kinds 31400–31405);
   humans approve/reject with signed events. Judgment Broker for the 10% that need a human.
-- **Embodied agent loop** — agent actions render as coloured beams + gluon forces in the graph.
+- **Embodied agent loop** — agent actions render as coloured beams in the graph (gluon attractive force deferred; see ADR-059 addendum).
 
 ## EXACT LABELS TO RENDER
 - Panel title: **THE ENGINE**

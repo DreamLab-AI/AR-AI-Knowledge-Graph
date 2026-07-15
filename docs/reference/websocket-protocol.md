@@ -160,8 +160,10 @@ sequenceDiagram
 `/wss/agent-events` is a **server-to-server** ingest socket (ADR-059 Phase 2):
 agentbox pushes `notifications/agent_action` JSON-RPC frames into VisionClaw,
 which validates them against the canonical `AgentActionNotification` mirror and
-publishes them to the process-global agent-events hub. The GPU beam/gluon render
-actor subscribes to that hub.
+publishes them to the process-global agent-events hub. The GPU beam render actor
+(`AgentBeamActor`) subscribes to that hub and broadcasts `0x23` frames; the gluon
+attractive force is deferred (needs a transient-edge GPU buffer, see the ADR-059
+addendum).
 
 - **Subprotocol** — the upgrade negotiates `vc-agent-events.v1`. Clients should
   offer it in `Sec-WebSocket-Protocol`.

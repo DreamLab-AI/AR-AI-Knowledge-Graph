@@ -122,7 +122,10 @@ Each agent node renders a floating label via `@react-three/drei Text` (or `Html`
 
 - Line 1: `agent.type.toUpperCase()` in the status colour
 - Line 2: `status | health%` in white
-- Line 3 (optional): `agent.currentTask` in grey, truncated at `maxWidth: 10` (world units)
+- Line 3 (optional): the **`did:nostr` identity nameplate** — `shortDid(agent.did_nostr)` in cyan (`#7dd3fc`) monospace, rendered only when `agent.did_nostr` is present (COM-14 / ADR-125). This surfaces the agent's sovereign identity on the node itself.
+- Line 4 (optional): `agent.currentTask` in grey, truncated at `maxWidth: 10` (world units)
+
+`AgentNodesLayer` keys each node by `agentTrustKey(agent)` (from `./agentIdentity`), so a node's React identity follows its trust key rather than a transient array index. The nameplate is emitted in both the WebGPU `Html` branch (`AgentNodesLayer.tsx:267-269`) and the WebGL `Text` branch (`AgentNodesLayer.tsx:302-312`).
 
 ---
 

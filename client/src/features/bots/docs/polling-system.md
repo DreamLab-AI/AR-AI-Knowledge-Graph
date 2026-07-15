@@ -19,7 +19,7 @@ The client polling system provides real-time updates of agent swarm metadata and
 REST API (/api/bots/data) → AgentPollingService → useAgentPolling → BotsDataContext
                                                                             ↓
 WebSocket Binary Updates → BotsWebSocketIntegration → Binary Protocol → Position Data
-        (34-byte format)                                                     ↓
+       (52-byte V3 format)                                                   ↓
                                                               3D Visualization (Three.js)
                                                                           ↓
                                                               GPU Force-Directed Graph
@@ -27,7 +27,7 @@ WebSocket Binary Updates → BotsWebSocketIntegration → Binary Protocol → Po
 
 **Key Points:**
 - **REST**: Fetches agent metadata (health, status, tokens, etc.) via polling
-- **WebSocket Binary**: Real-time position updates (34-byte binary format, V2 protocol)
+- **WebSocket Binary**: Real-time position updates (52-byte binary format, V3 protocol, ADR-031)
 - **BotsWebSocketIntegration**: Handles ONLY binary position updates (no longer does polling)
 - **BotsDataContext**: Coordinates both REST and WebSocket data sources
 
@@ -182,13 +182,13 @@ Returns complete agent swarm state:
 
 ### ✅ Implemented
 - REST polling for agent metadata via `/api/bots/data`
-- WebSocket binary position updates (V2 protocol, 36 bytes/node)
+- WebSocket binary position updates (V3 protocol, 52 bytes/node, ADR-031)
 - Hybrid data coordination through BotsDataContext
 - Smart polling with activity-based interval adjustment
 - Change detection to prevent unnecessary re-renders
 
 ### 🚧 Deprecated/Legacy
-- **REMOVED**: `PROTOCOL_V1` support (34-byte format) - now V2 only
+- **REMOVED**: `PROTOCOL_V1` (34-byte) and `PROTOCOL_V2` (36-byte) support — both removed server-side; live protocol is V3 only (52 bytes/node, ADR-031)
 - **DEPRECATED**: WebSocket polling methods in BotsWebSocketIntegration
   - `startBotsGraphPolling()` - use REST via BotsDataContext
   - `stopBotsGraphPolling()` - no longer needed
