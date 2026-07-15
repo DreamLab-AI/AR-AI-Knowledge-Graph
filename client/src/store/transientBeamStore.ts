@@ -9,9 +9,11 @@
  * expired` once a beam's lifetime elapses.
  *
  * This store is deliberately small and parallel to the existing
- * `emit('agent-action', ...)` event used by the legacy ActionConnections
- * renderer — pushing here never interferes with the newest-wins position
- * frame path.
+ * `emit('agent-action', ...)` event, which now feeds only the live agent
+ * transcript (features/bots/hooks/useAgentActionFeed.ts) — the legacy
+ * ActionConnections renderer that also consumed it was removed 2026-07-15,
+ * leaving TransientBeamsLayer as the sole action renderer. Pushing here never
+ * interferes with the newest-wins position frame path.
  */
 
 import { create } from 'zustand';

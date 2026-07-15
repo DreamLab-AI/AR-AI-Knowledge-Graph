@@ -18,7 +18,6 @@ import { GemPostProcessing } from '../../../rendering/GemPostProcessing';
 // Bots visualization for agent graph
 import { BotsVisualization } from '../../bots/components';
 // Agent action connections visualization
-import { AgentActionVisualization } from '../../visualisation/components/AgentActionVisualization';
 // SpacePilot Integration - using simpler version that works with useFrame
 import SpacePilotSimpleIntegration from '../../visualisation/components/SpacePilotSimpleIntegration';
 // Head Tracking for Parallax
@@ -390,9 +389,8 @@ const GraphCanvas: React.FC = () => {
                 {}
                 <BotsVisualization />
 
-                {/* Agent Action Connections - ephemeral animated connections */}
-                <AgentActionVisualization showStats={showStats} />
-
+                {/* Agent action beams are rendered by TransientBeamsLayer (mounted
+                    inside GraphManager) — the sole action renderer since 2026-07-15. */}
                 {}
                 <OrbitControls
                     ref={(c: any) => { orbitControlsRef.current = c; (window as any).__orbit = c; }}

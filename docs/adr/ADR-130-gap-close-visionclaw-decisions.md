@@ -20,6 +20,12 @@ M1–M4 and M6 implement in the Godot client (`xr-client/`) per ADR-071 and the 
 
 The register consequence is explicit. M6 ("`enterVR()` never sets `isXRMode`; XR renders as desktop") is a WebXR-only defect (`platformManager.ts`, `VRGraphCanvas.tsx:66`). The Godot client has no such defect: `xr_boot.gd:18` sets `get_viewport().use_xr = true` synchronously in `_ready()`. So M6 closes at `integrated` against the Godot client (verified via the xr-runtime sidecar), and the WebXR `isXRMode` bug is retired by deprecation, its locus recorded as `planned` for deletion under ADR-071 Phase 3. M4's "targeting ray at world-origin" bug is likewise a WebXR defect (`useVRHandTracking.ts:93` defaults hand refs to `(0,0,0)`); the Godot equivalent sources the ray correctly from `XRController3D.global_position` (`graph_scene.gd:303`), so M4 in Godot is a gaze-fallback addition plus a live-session verification, not a bug fix.
 
+> **Update 2026-07-15:** `useVRHandTracking.ts` (the M4 defect locus) was deleted ahead of
+> ADR-071 Phase 3, together with the rest of the legacy agent-action renderer chain
+> (`VRAgentActionScene`, `VRActionConnectionsLayer`, `useVRConnectionsLOD`; see the
+> ADR-059 addendum). The M4 WebXR defect is therefore retired by removal, not merely
+> deprecation; the Godot-side gaze-fallback work is unaffected.
+
 ### Alternatives considered (Decision 1)
 
 | Alternative | Verdict | Rationale |

@@ -114,7 +114,6 @@ export const ImmersiveApp: React.FC<ImmersiveAppProps> = ({ onExit, initialData 
         </div>
       ) : graphData ? (
         <VRGraphCanvas
-          graphData={graphData}
           onDragStateChange={handleDragStateChange}
         />
       ) : null}

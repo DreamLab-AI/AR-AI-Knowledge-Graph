@@ -19,10 +19,9 @@
  * false when the id has no known world position — that beam is skipped
  * silently (never throws), exactly as the brief requires.
  *
- * Rendering follows the repo idioms: a stable per-beam cylinder mesh (cf.
- * ActionConnectionsLayer's per-connection line), geometry/material built once
- * and updated in-place inside useFrame with zero per-frame allocations (cf.
- * GlassEdges' matrix composition).
+ * Rendering follows the repo idioms: a stable per-beam cylinder mesh,
+ * geometry/material built once and updated in-place inside useFrame with zero
+ * per-frame allocations (cf. GlassEdges' matrix composition).
  */
 
 import React, { useMemo, useRef, useEffect, useCallback } from 'react';

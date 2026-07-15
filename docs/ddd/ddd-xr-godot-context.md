@@ -95,6 +95,14 @@ graph TB
 
 ### 1.1 Replacement table — new contexts and what they replace
 
+> **Partial early deletion (2026-07-15):** several WebXR files this table schedules
+> for deletion were removed ahead of ADR-071 Phase 3, when the legacy agent-action
+> renderer chain was retired (ADR-059 addendum): `VRAgentActionScene.tsx`,
+> `VRActionConnectionsLayer.tsx`, `useVRHandTracking.ts`, `useVRConnectionsLOD.ts`
+> (plus the desktop `AgentActionVisualization`/`ActionConnectionsLayer` chain).
+> The comparative analysis below is preserved as written — treat references to those
+> files as historical (recoverable from git).
+
 | New aggregate / context | Replaces | Files deleted by this BC |
 |---|---|---|
 | `XR Immersive Rendering` (Godot) | Three.js `WebXRScene.tsx`, `VRGraphCanvas.tsx`, `VRAgentActionScene.tsx`, R3F XR provider tree, `WebXRController`, `XRRenderingPipeline` | `client/src/immersive/threejs/*`, `client/src/components/xr/*`, `client/src/hooks/useXR*` |
