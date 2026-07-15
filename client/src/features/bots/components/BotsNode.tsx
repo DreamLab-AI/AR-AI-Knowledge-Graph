@@ -23,9 +23,11 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import {
   lerpVector3,
   formatProcessingLogs,
+  applySwarmTint,
   ADDITIVE_BLENDING,
   BACK_SIDE,
 } from './BotsShared';
+import { healthGlowColor, agentStatusColor } from '../agentVisualConstants';
 import { AgentStatusBadges } from './AgentStatusBadges';
 
 export interface BotsNodeProps {
@@ -33,14 +35,23 @@ export interface BotsNodeProps {
   position: THREE.Vector3;
   index: number;
   color: string;
+  /**
+   * When true (default) the body colour is hue-rotated by a stable per-swarmId
+   * offset so multi-swarm scenes read as families. Pass false to render every
+   * swarm on the flat type colour.
+   */
+  swarmTint?: boolean;
 }
 
-export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, color }) => {
+export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, color, swarmTint = true }) => {
   const groupRef   = useRef<THREE.Group>(null);
   const meshRef    = useRef<THREE.Mesh>(null);
   const glowRef    = useRef<THREE.Mesh>(null);
   const nucleusRef = useRef<THREE.Mesh>(null);
   const coronaRef  = useRef<THREE.Mesh>(null);
+  // declaredIntent pre-action flash: clock time the current flash began (-1 idle).
+  const flashStartRef = useRef(-1);
+  const prevIntentRef = useRef<string | undefined>(agent.declaredIntent);
   const [hover, setHover] = useState(false);
   const [displayMode, setDisplayMode] = useState<
     'overview' | 'performance' | 'tasks' | 'network' | 'resources'
@@ -53,29 +64,22 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
   const elapsedTimeRef     = useRef(0);
   const settings = useSettingsStore(state => state.settings);
 
-  const glowColor = useMemo(() => {
-    const health = agent.health || 0;
-    if (health >= 95) return '#00FF00';
-    if (health >= 80) return '#2ECC71';
-    if (health >= 65) return '#F1C40F';
-    if (health >= 50) return '#F39C12';
-    if (health >= 25) return '#E67E22';
-    return '#E74C3C';
-  }, [agent.health]);
+  const healthColors = settings?.visualisation?.graphTypeVisuals?.agent?.healthColors;
+  const glowColor = useMemo(
+    () => healthGlowColor(agent.health || 0, healthColors),
+    [agent.health, healthColors],
+  );
 
   const isQueen = agent.type === 'queen';
 
-  const statusColor = useMemo(() => {
-    switch (agent.status) {
-      case 'active':       return '#2ECC71';
-      case 'busy':         return '#F39C12';
-      case 'error':        return '#E74C3C';
-      case 'idle':         return '#95A5A6';
-      case 'initializing': return '#3498DB';
-      case 'terminating':  return '#9B59B6';
-      default:             return '#95A5A6';
-    }
-  }, [agent.status]);
+  const statusColor = useMemo(() => agentStatusColor(agent.status), [agent.status]);
+
+  // Swarm partition tint: stable per-swarmId hue rotation of the base body colour
+  // so agents from the same swarm read as a family (default ON via swarmTint).
+  const bodyColor = useMemo(
+    () => (swarmTint ? applySwarmTint(color, agent.swarmId) : color),
+    [swarmTint, color, agent.swarmId],
+  );
 
   const baseSize      = 1.0;
   const cpuScale      = agent.cpuUsage    ? (agent.cpuUsage / 100) * 0.8 : 0;
@@ -135,6 +139,21 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
 
     const elapsedTime = state.clock.elapsedTime;
     elapsedTimeRef.current = elapsedTime;
+
+    // declaredIntent pre-action flash: a new non-empty declared intent starts a
+    // brief (~600ms) aura spike — the "about to act" cue before the agent moves.
+    const intent = agent.declaredIntent;
+    if (intent && intent !== prevIntentRef.current) {
+      flashStartRef.current = elapsedTime;
+    }
+    prevIntentRef.current = intent;
+    let flashEnv = 0;
+    if (flashStartRef.current >= 0) {
+      const t = (elapsedTime - flashStartRef.current) / 0.6;
+      if (t >= 1) flashStartRef.current = -1;
+      else flashEnv = 1 - t; // linear decay from the intent instant
+    }
+
     const activity   = agent.activity ?? 0;
     const healthPulse = agent.health ? (agent.health / 100) : 0.5;
     const tokenGlow  = agent.tokenRate ? Math.min(agent.tokenRate / 20, 2) : 0;
@@ -232,6 +251,16 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
       meshRef.current.scale.multiplyScalar(Math.sin(elapsedTime * 12) * 0.5 + 1);
     }
 
+    // declaredIntent flash: brief whole-node swell + core brighten. Group scale is
+    // set absolutely (identity when idle) so the spike never accumulates; the
+    // nucleus opacity was set absolutely in the status branch above, so adding the
+    // spike here is safe and resets next frame.
+    groupRef.current.scale.setScalar(1 + flashEnv * 0.18);
+    if (flashEnv > 0 && nucleusRef.current) {
+      const flashMat = nucleusRef.current.material as THREE.MeshBasicMaterial;
+      if (flashMat) flashMat.opacity = Math.min(1, flashMat.opacity + flashEnv * 0.6);
+    }
+
     telemetry.endRender();
   });
 
@@ -310,7 +339,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
         }}
       >
         <meshStandardMaterial
-          color={color}
+          color={bodyColor}
           emissive={glowColor}
           emissiveIntensity={(() => {
             const glowSettings = settings?.visualisation?.glow;

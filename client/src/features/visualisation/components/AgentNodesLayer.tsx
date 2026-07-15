@@ -8,6 +8,7 @@ import { createLogger } from '../../../utils/loggerConfig';
 const logger = createLogger('AgentNodesLayer');
 import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { agentTrustKey, shortDid } from './agentIdentity';
+import { AGENT_STATUS_COLORS, healthGlowColor, type AgentStatus, type HealthColorBands } from '../../bots/agentVisualConstants';
 
 
 
@@ -22,7 +23,7 @@ interface AgentNode {
    */
   did_nostr?: string;
   type: string;
-  status: 'active' | 'idle' | 'error' | 'warning';
+  status: AgentStatus;
   health: number;
   cpuUsage: number;
   memoryUsage: number;
@@ -44,40 +45,35 @@ interface AgentNodesLayerProps {
   connections?: AgentConnection[];
 }
 
-const STATUS_COLORS = {
-  active: '#10b981',
-  idle: '#fbbf24',
-  error: '#ef4444',
-  warning: '#f97316'
-};
-
-// Health-based glow color (aligned with BotsVisualization palette)
-const getGlowColor = (health: number): string => {
-  if (health >= 95) return '#00FF00';
-  if (health >= 80) return '#2ECC71';
-  if (health >= 65) return '#F1C40F';
-  if (health >= 50) return '#F39C12';
-  if (health >= 25) return '#E67E22';
-  return '#E74C3C';
-};
-
 export const AgentNodesLayer: React.FC<AgentNodesLayerProps> = ({
   agents,
   connections = []
 }) => {
-  const { settings } = useSettingsStore();
   const groupRef = useRef<THREE.Group>(null);
 
-  // Type assertion for extended settings that may include agents
-  const agentViz = (settings as unknown as Record<string, Record<string, Record<string, unknown>>>)?.agents?.visualization;
-  const showAgents = (agentViz?.show_in_graph as boolean | undefined) ?? true;
-  const nodeSize = (agentViz?.node_size as number | undefined) ?? 1.5;
-  const baseColor = (agentViz?.node_color as string | undefined) ?? '#ff8800';
-  const showConnections = (agentViz?.show_connections as boolean | undefined) ?? true;
-  const connectionColor = (agentViz?.connection_color as string | undefined) ?? '#fbbf24';
-  const animateActivity = (agentViz?.animate_activity as boolean | undefined) ?? true;
+  // Agent look-and-feel lives in the real persisted namespace
+  // `visualisation.graphs.visionclaw.*` — the server resolves
+  // "visionclaw"|"agent"|"bots" → graphs.visionclaw. These typed store reads
+  // replace the former phantom `settings.agents.visualization.*` keys, which
+  // existed neither in the client typed tree nor in Rust AppFullSettings and so
+  // always resolved undefined. Now they are a control-centre Agents group.
+  const nodeSize = useSettingsStore(s => s.get<number>('visualisation.graphs.visionclaw.nodes.nodeSize')) ?? 1.5;
+  const baseColor = useSettingsStore(s => s.get<string>('visualisation.graphs.visionclaw.nodes.baseColor')) ?? '#ff8800';
+  const connectionColor = useSettingsStore(s => s.get<string>('visualisation.graphs.visionclaw.edges.color')) ?? '#fbbf24';
+  const connectionOpacity = useSettingsStore(s => s.get<number>('visualisation.graphs.visionclaw.edges.opacity')) ?? 0.4;
+  // Activity breathing follows the global node-animation switch (typed).
+  const animateActivity = useSettingsStore(s => s.get<boolean>('visualisation.animations.enableNodeAnimations')) ?? true;
+  // Same multiplier semantics as GemNodes: defaults reproduce the layer's
+  // historical rate (delta*2) and inhale depth (0.08) exactly.
+  const breathingSpeed = useSettingsStore(s => s.get<number>('visualisation.graphTypeVisuals.agent.breathingSpeed')) ?? 1.5;
+  const breathingAmplitude = useSettingsStore(s => s.get<number>('visualisation.graphTypeVisuals.agent.breathingAmplitude')) ?? 0.4;
+  // Four configurable health→glow stops (control-centre Agents → Health). Absent
+  // fields fall back to the canonical ramp inside healthGlowColor.
+  const healthColors = useSettingsStore(s => s.get<HealthColorBands>('visualisation.graphTypeVisuals.agent.healthColors'));
 
-  if (!showAgents || agents.length === 0) {
+  // Visibility authority is GraphManager's `nodeTypeVisibility.agent` gate (it
+  // conditionally mounts this layer); here we only decide whether we have data.
+  if (agents.length === 0) {
     return null;
   }
 
@@ -91,16 +87,20 @@ export const AgentNodesLayer: React.FC<AgentNodesLayerProps> = ({
           nodeSize={nodeSize}
           baseColor={baseColor}
           animateActivity={animateActivity}
+          breathingSpeed={breathingSpeed}
+          breathingAmplitude={breathingAmplitude}
+          healthColors={healthColors}
         />
       ))}
 
       {}
-      {showConnections && connections.map((connection, index) => (
+      {connections.map((connection, index) => (
         <AgentConnection
           key={`${connection.source}-${connection.target}-${index}`}
           connection={connection}
           agents={agents}
           color={connectionColor}
+          baseOpacity={connectionOpacity}
         />
       ))}
     </group>
@@ -113,11 +113,18 @@ const AgentNode: React.FC<{
   nodeSize: number;
   baseColor: string;
   animateActivity: boolean;
-}> = ({ agent, nodeSize, baseColor, animateActivity }) => {
+  breathingSpeed: number;
+  breathingAmplitude: number;
+  healthColors?: HealthColorBands;
+}> = ({ agent, nodeSize, baseColor, animateActivity, breathingSpeed, breathingAmplitude, healthColors }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const nucleusRef = useRef<THREE.Mesh>(null);
   const pulseRef = useRef({ phase: 0 });
+  // Independent lifecycle progress (0-1) so a materialise-in never contaminates a
+  // later fade-out on the same node (and vice versa).
+  const initProgressRef = useRef(0);
+  const termProgressRef = useRef(0);
 
   const position: [number, number, number] = useMemo(() => {
     if (agent.position && (agent.position.x !== 0 || agent.position.y !== 0 || agent.position.z !== 0)) {
@@ -140,54 +147,74 @@ const AgentNode: React.FC<{
     ];
   }, [agent.id, agent.position?.x, agent.position?.y, agent.position?.z]);
 
-  const statusColor = STATUS_COLORS[agent.status] || baseColor;
-  const glowColor = useMemo(() => getGlowColor(agent.health), [agent.health]);
+  const statusColor = AGENT_STATUS_COLORS[agent.status] ?? baseColor;
+  const glowColor = useMemo(() => healthGlowColor(agent.health, healthColors), [agent.health, healthColors]);
 
   const scaledSize = nodeSize * (1 + agent.workload / 100);
 
+  // Lifecycle transitions run over ~1.2s of frame time regardless of frame rate.
+  const LIFECYCLE_DURATION = 1.2;
+
   useFrame((state, delta) => {
     if (!meshRef.current || !glowRef.current) return;
+    const nucleusMat = nucleusRef.current?.material as THREE.MeshBasicMaterial | undefined;
+    const status = agent.status;
 
-    if (animateActivity && (agent.status === 'active' || agent.status === 'warning')) {
-      // Organic breathing: asymmetric inhale/exhale
-      pulseRef.current.phase += delta * 2;
+    if (animateActivity && (status === 'active' || status === 'busy')) {
+      // Active / busy — organic breathing: asymmetric inhale/exhale. Rate and
+      // depth follow graphTypeVisuals.agent (defaults 1.5/0.4 ≡ old delta*2/0.08).
+      pulseRef.current.phase += delta * breathingSpeed * (4 / 3);
       const breathCycle = Math.sin(pulseRef.current.phase);
       const breathScale = breathCycle > 0
-        ? 1 + breathCycle * 0.08
-        : 1 + breathCycle * 0.04;
+        ? 1 + breathCycle * breathingAmplitude * 0.2
+        : 1 + breathCycle * breathingAmplitude * 0.1;
 
       meshRef.current.scale.setScalar(scaledSize * breathScale);
 
       // Membrane breathes with slight delay
-      const membraneBreath = 1.3 + Math.sin(pulseRef.current.phase - 0.3) * 0.06;
+      const membraneBreath = 1.3 + Math.sin(pulseRef.current.phase - 0.3) * breathingAmplitude * 0.15;
       glowRef.current.scale.setScalar(membraneBreath);
 
       // Gentle rotation
       meshRef.current.rotation.y += delta * 0.5;
 
       // Nucleus glow pulse
-      if (nucleusRef.current) {
-        const nucleusMat = nucleusRef.current.material as THREE.MeshBasicMaterial;
-        if (nucleusMat) {
-          const nucleusPulse = Math.pow(Math.sin(pulseRef.current.phase * 0.6 + 0.5) * 0.5 + 0.5, 2);
-          nucleusMat.opacity = 0.2 + nucleusPulse * 0.3;
-        }
+      if (nucleusMat) {
+        const nucleusPulse = Math.pow(Math.sin(pulseRef.current.phase * 0.6 + 0.5) * 0.5 + 0.5, 2);
+        nucleusMat.opacity = 0.2 + nucleusPulse * 0.3;
       }
-    } else if (agent.status === 'error') {
+    } else if (status === 'error') {
       // Distress flicker
       pulseRef.current.phase += delta * 8;
       const distress = Math.sin(pulseRef.current.phase) * Math.sin(pulseRef.current.phase * 0.66) * 0.15;
       meshRef.current.scale.setScalar(scaledSize * (1 + Math.abs(distress)));
       glowRef.current.scale.setScalar(1.3 + Math.abs(distress) * 0.5);
-    } else {
-      // Idle: apply base scale and very subtle life sign
+    } else if (status === 'initializing') {
+      // Opacity ramp-in: the node materialises from a point, membrane glowing up.
+      initProgressRef.current = Math.min(1, initProgressRef.current + delta / LIFECYCLE_DURATION);
+      const p = initProgressRef.current * initProgressRef.current; // ease-in
+      meshRef.current.scale.setScalar(scaledSize * p);
+      glowRef.current.scale.setScalar(1.3 * (0.4 + p * 0.6));
+      if (nucleusMat) nucleusMat.opacity = 0.05 + p * 0.25;
+    } else if (status === 'terminating') {
+      // Fade-out: the node dematerialises toward a point.
+      termProgressRef.current = Math.min(1, termProgressRef.current + delta / LIFECYCLE_DURATION);
+      const fade = 1 - termProgressRef.current;
+      meshRef.current.scale.setScalar(scaledSize * fade);
+      glowRef.current.scale.setScalar(1.3 * fade);
+      if (nucleusMat) nucleusMat.opacity = 0.2 * fade;
+    } else if (status === 'offline') {
+      // Desaturated static: no pulse, dim core, membrane pulled in.
       meshRef.current.scale.setScalar(scaledSize);
-      if (nucleusRef.current) {
+      glowRef.current.scale.setScalar(1.05);
+      if (nucleusMat) nucleusMat.opacity = 0.05;
+    } else {
+      // Idle: base scale and a very subtle life sign.
+      meshRef.current.scale.setScalar(scaledSize);
+      glowRef.current.scale.setScalar(1.3);
+      if (nucleusMat) {
         pulseRef.current.phase += delta * 0.5;
-        const idleMat = nucleusRef.current.material as THREE.MeshBasicMaterial;
-        if (idleMat) {
-          idleMat.opacity = 0.1 + Math.sin(pulseRef.current.phase) * 0.05;
-        }
+        nucleusMat.opacity = 0.1 + Math.sin(pulseRef.current.phase) * 0.05;
       }
     }
   });
@@ -249,7 +276,7 @@ const AgentNode: React.FC<{
         <meshStandardMaterial
           color={statusColor}
           emissive={glowColor}
-          emissiveIntensity={agent.status === 'active' ? 0.5 : 0.2}
+          emissiveIntensity={agent.status === 'active' || agent.status === 'busy' ? 0.5 : 0.2}
           metalness={0.3}
           roughness={0.7}
         />
@@ -359,7 +386,7 @@ const AgentNode: React.FC<{
       </group>
 
       {/* Workload ring */}
-      {agent.status === 'active' && agent.workload > 0 && (
+      {(agent.status === 'active' || agent.status === 'busy') && agent.workload > 0 && (
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[scaledSize * 1.8, 0.05, 8, 32, (agent.workload / 100) * Math.PI * 2]} />
           <meshBasicMaterial
@@ -378,7 +405,8 @@ const AgentConnection: React.FC<{
   connection: AgentConnection;
   agents: AgentNode[];
   color: string;
-}> = ({ connection, agents, color }) => {
+  baseOpacity: number;
+}> = ({ connection, agents, color, baseOpacity }) => {
   const lineRef = useRef<THREE.Line>(null);
 
   
@@ -425,13 +453,16 @@ const AgentConnection: React.FC<{
   useFrame((state) => {
     if (lineRef.current) {
       const material = lineRef.current.material as THREE.LineBasicMaterial;
-      material.opacity = 0.3 + Math.sin(state.clock.elapsedTime * 2) * 0.2;
+      // Pulse around the configured base opacity (visionclaw edges.opacity).
+      material.opacity = Math.max(0, baseOpacity * (0.75 + Math.sin(state.clock.elapsedTime * 2) * 0.25));
     }
   });
 
 
   const lineWidth = connection.weight ? connection.weight * 2 : 2;
-  const opacity = connection.type === 'communication' ? 0.5 : 0.3;
+  // Communication links read slightly brighter than coordination/dependency ones,
+  // scaled off the user-configured base opacity.
+  const opacity = baseOpacity * (connection.type === 'communication' ? 1.0 : 0.7);
 
   const lineMaterial = useMemo(() => new THREE.LineBasicMaterial({
     color,
@@ -459,14 +490,16 @@ const AgentConnection: React.FC<{
 };
 
 
+// Secondary telemetry poll cadence (seconds) for this standalone agent layer.
+// The typed settings tree exposes no polling-interval field — AgentPollingService
+// owns the primary `/graph/data?graph_type=agent` poll — so this module constant
+// is the single source for the legacy `/api/bots/*` fallback poll below. Replaces
+// the phantom `settings.agents.monitoring.telemetry_poll_interval` read.
+const AGENT_TELEMETRY_POLL_SECONDS = 5;
+
 export const useAgentNodes = () => {
   const [agents, setAgents] = React.useState<AgentNode[]>([]);
   const [connections, setConnections] = React.useState<AgentConnection[]>([]);
-  const { settings } = useSettingsStore();
-
-  // Type assertion for extended settings with agents
-  const agentMonitoring = (settings as unknown as Record<string, Record<string, Record<string, unknown>>>)?.agents?.monitoring;
-  const pollInterval = (agentMonitoring?.telemetry_poll_interval as number | undefined) || 5;
 
   useEffect(() => {
     const pollAgents = async () => {
@@ -493,8 +526,8 @@ export const useAgentNodes = () => {
       }
     };
 
-    // Poll at the configured interval
-    const interval = pollInterval * 1000;
+    // Poll at the fixed fallback cadence
+    const interval = AGENT_TELEMETRY_POLL_SECONDS * 1000;
 
     const timer = setInterval(() => {
       pollAgents();
@@ -505,7 +538,7 @@ export const useAgentNodes = () => {
     pollConnections();
 
     return () => clearInterval(timer);
-  }, [pollInterval]);
+  }, []);
 
   return { agents, connections };
 };

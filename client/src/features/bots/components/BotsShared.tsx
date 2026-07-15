@@ -107,6 +107,33 @@ export function lerpVector3(
   current.z += (target.z - current.z) * alpha;
 }
 
+// Pre-allocated scratch for swarm-tint HSL maths (module scope — no per-call alloc).
+const _tintColor = new THREE.Color();
+const _tintHsl = { h: 0, s: 0, l: 0 };
+
+/**
+ * Stable hue offset (in 0-1 hue units) derived from a swarmId. Deterministic hash
+ * → ±0.05 rotation (~±18°) so distinct swarms read as related-but-separate families
+ * without drifting far from the base type colour. Empty/undefined swarmId → 0.
+ */
+export const swarmHueOffset = (swarmId: string | undefined): number => {
+  if (!swarmId) return 0;
+  let hash = 0;
+  for (let i = 0; i < swarmId.length; i++) {
+    hash = ((hash << 5) - hash + swarmId.charCodeAt(i)) | 0;
+  }
+  return (((hash >>> 0) % 101) - 50) / 1000; // -0.05 .. +0.05
+};
+
+/** Hue-rotate a base colour by the swarm's stable offset. */
+export const applySwarmTint = (baseColor: string, swarmId: string | undefined): string => {
+  const offset = swarmHueOffset(swarmId);
+  if (offset === 0) return baseColor;
+  _tintColor.set(baseColor).getHSL(_tintHsl);
+  _tintColor.setHSL((_tintHsl.h + offset + 1) % 1, _tintHsl.s, _tintHsl.l);
+  return `#${_tintColor.getHexString()}`;
+};
+
 /** Hash-based colour from agent type string. */
 export const generateAgentTypeColor = (agentType: string): string => {
   let hash = 0;

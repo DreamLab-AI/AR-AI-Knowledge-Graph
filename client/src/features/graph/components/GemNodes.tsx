@@ -29,6 +29,7 @@ const logger = createLogger('GemNodes');
 import { computeNodeScale } from '../utils/nodeScaling';
 import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { getTypeColor, getDomainColor } from '../hooks/useGraphNodeColors';
+import { agentStatusActivity } from '../../bots/agentVisualConstants';
 
 /** Minimal hierarchy node shape compatible with HierarchyNode from hierarchyDetector */
 interface HierarchyNodeLike {
@@ -885,8 +886,15 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
       const sampleHash = currentNodes.length > 0
         ? `${currentNodes[0]?.metadata?.authorityScore ?? 0}-${currentNodes[Math.floor(currentNodes.length / 2)]?.metadata?.quality ?? 0}-${currentNodes[currentNodes.length - 1]?.metadata?.authorityScore ?? 0}`
         : '';
-      const metaHash = `${currentNodes.length}-${connectionCountMap.size}-${selectedNodeId}-${sampleHash}`;
+      // Agent status feeds meta.w, but never touches authority/quality — fold a
+      // per-agent status signature into the dirty key so a status change re-uploads
+      // (agent populations are small, so the join is cheap).
+      const statusSig = dominant === 'agent'
+        ? currentNodes.map(n => (n.metadata?.status as string | undefined) ?? '').join('')
+        : '';
+      const metaHash = `${currentNodes.length}-${connectionCountMap.size}-${selectedNodeId}-${sampleHash}-${statusSig}`;
       if (metaHash !== prevMetaHashRef.current) {
+        const isAgent = dominant === 'agent';
         for (let i = 0; i < currentNodes.length; i++) {
           const node = currentNodes[i];
           const i4 = i * 4;
@@ -895,7 +903,13 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
           texBuf[i4 + 1] = node.metadata?.authority ?? node.metadata?.authorityScore ?? 0;
           const cc = connectionCountMap.get(nid) || 0;
           texBuf[i4 + 2] = Math.min(cc / 20, 1.0);
-          texBuf[i4 + 3] = computeRecency(node.metadata?.lastModified ?? node.metadata?.updatedAt);
+          // meta.w: recency for gem/ontology; status-derived activity for agents so
+          // the capsule shader (and the WebGL GLSL glow) rests idle swarms and
+          // brightens/pulses active ones. Reinterpreting the channel is safe here
+          // because this mesh renders a single population.
+          texBuf[i4 + 3] = isAgent
+            ? agentStatusActivity(node.metadata?.status as string | undefined)
+            : computeRecency(node.metadata?.lastModified ?? node.metadata?.updatedAt);
         }
         if (metaTexRef.current) metaTexRef.current.needsUpdate = true;
         // WebGL parity: aGlowMeta wraps the SAME texBuf — re-upload it too so the

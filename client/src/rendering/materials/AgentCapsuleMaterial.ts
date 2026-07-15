@@ -88,7 +88,7 @@ export async function createTslAgentCapsuleMaterial(
     const tslMod = await import('three/tsl') as any;
     const {
       float, vec2, vec3,
-      mix, pow, sin, add, sub,
+      mix, pow, sin, add, sub, max, step,
       dot, normalize, oneMinus, saturate, fract,
       mod, floor,
       time, instanceIndex,
@@ -108,7 +108,13 @@ export async function createTslAgentCapsuleMaterial(
     const quality = meta.x;
     const authority = meta.y;
     const connections = meta.z;
-    const recency = meta.w;
+    // meta.w is REINTERPRETED for the agent capsule population: GemNodes packs a
+    // status-derived activity scalar here (idle 0.15 … active/busy 1.0, error ~0.9)
+    // instead of the recency value it carries for the gem/ontology populations.
+    // Safe because GemNodes renders one population per mesh, so this texture is
+    // exclusively agent metadata. NearestFilter float texels preserve the exact
+    // packed value, letting the error band isolate cleanly below.
+    const activity = meta.w;
 
     // --- Per-instance unique phase ---
     const phase = fract(sin(idx.mul(43758.5453))).mul(6.2831);
@@ -118,13 +124,14 @@ export async function createTslAgentCapsuleMaterial(
     const nDotV = saturate(dot(normalView, viewDir));
     const fresnel = pow(oneMinus(nDotV), float(3.0));
 
-    // --- Authority-driven pulse ---
-    const pulseSpeed = mix(float(1.0), float(3.5), authority);
+    // --- Pulse driven by whichever is stronger: KG authority or live activity ---
+    // so an idle swarm rests (slow pulse) and an active one works (fast pulse).
+    const pulseSpeed = mix(float(1.0), float(3.5), max(authority, activity));
     const pulse = sin(time.mul(pulseSpeed).add(phase)).mul(0.5).add(0.5);
 
     // --- Quality drives emissive brightness; connections warm the green base ---
     const qualityBrightness = mix(float(0.3), float(0.8), quality);
-    const recencyBoost = mix(float(0.5), float(1.0), recency);
+    const activityBoost = mix(float(0.5), float(1.0), activity);
     const warmShift = connections.mul(0.25);
 
     // Agent base hue (bioluminescent green) — matches the static emissive above.
@@ -138,8 +145,17 @@ export async function createTslAgentCapsuleMaterial(
     const metaEmissive = baseEmissive
       .mul(qualityBrightness)
       .mul(mix(float(0.4), float(1.0), pulse))
-      .mul(recencyBoost);
-    const emissiveNode = fresnelEmissive.add(metaEmissive);
+      .mul(activityBoost);
+
+    // Error tint: the packed error activity (~0.9) sits in a tight band below
+    // active/busy (1.0). Gate on low authority so a genuine high-authority agent
+    // never trips the distress red (avoids false positives).
+    const errorBand = step(float(0.85), activity).mul(oneMinus(step(float(0.95), activity)));
+    const notAuthoritative = oneMinus(step(float(0.05), authority));
+    const errorFlag = errorBand.mul(notAuthoritative);
+    const errorTint = vec3(float(0.7), float(0.0), float(0.0)).mul(errorFlag);
+
+    const emissiveNode = fresnelEmissive.add(metaEmissive).add(errorTint);
 
     // --- Opacity: Fresnel rim + authority-based solidity ---
     const baseAlpha = mix(float(0.5), float(0.9), authority);
