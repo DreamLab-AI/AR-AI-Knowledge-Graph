@@ -203,10 +203,19 @@ export class AgentPollingService {
     try {
       const startTime = Date.now();
 
-      // Request the agent population only. The server filters `?graph_type=agent`
-      // (api_handler/graph/mod.rs) so the poll fetches swarm nodes rather than
-      // the entire knowledge+ontology graph every 2-15s.
-      const data = await unifiedApiClient.getData<AgentSwarmData>('/graph/data?graph_type=agent');
+      // Request the agent population only. Agents live in GraphStateActor's
+      // SEPARATE bots_graph_data store (UpdateBotsGraph), served by
+      // /api/bots/data — they are never merged into the main graph, so
+      // /graph/data?graph_type=agent always returns empty (its PopulationFilter
+      // can only match main-graph nodes).
+      const raw = await unifiedApiClient.getData<Record<string, unknown>>('/bots/data');
+      // The server wraps responses in the accepted! envelope
+      // ({success, data:{nodes, edges}, ...}); older builds returned the body
+      // bare. Unwrap defensively (envelope.data ?? envelope) — without this the
+      // callbacks receive the envelope and read `.nodes` off the wrong level,
+      // so the pipeline reports zero agents forever.
+      const envelope = raw as unknown as { data?: AgentSwarmData } & AgentSwarmData;
+      const data: AgentSwarmData = envelope.data?.nodes ? envelope.data : envelope;
       
       const pollDuration = Date.now() - startTime;
       this.lastPollTime = Date.now();

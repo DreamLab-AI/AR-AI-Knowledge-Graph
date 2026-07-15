@@ -1,3 +1,4 @@
+import '../rendering/troikaConfig';
 import { extend } from '@react-three/fiber';
 import { GeodesicPolyhedronGeometry } from '../utils/three-geometries';
 

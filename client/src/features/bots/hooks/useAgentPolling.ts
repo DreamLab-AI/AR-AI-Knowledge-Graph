@@ -10,10 +10,9 @@ const logger = createLogger('useAgentPolling');
  * A node is a genuine swarm agent when it carries an `agent_type` in its
  * metadata (the marker `graph_state_actor` writes on the agent→node path) or
  * its node type is `agent`/`bot` (the server population classifier's markers).
- * The poll requests `?graph_type=agent`, but this guard is defensive: an older
- * server that ignores the param returns the whole knowledge+ontology graph, and
- * without it every document node would be mapped to a fake `specialist`/`active`
- * agent.
+ * The poll requests `/bots/data` (the dedicated agent store), but this guard is
+ * defensive: pointed at a mixed endpoint, without it every document node would
+ * be mapped to a fake `specialist`/`active` agent.
  */
 export function isGenuineAgentNode(node: AgentSwarmData['nodes'][number]): boolean {
   if (node.metadata?.agent_type) return true;

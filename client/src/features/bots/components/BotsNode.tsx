@@ -28,6 +28,7 @@ import {
   BACK_SIDE,
 } from './BotsShared';
 import { healthGlowColor, agentStatusColor } from '../agentVisualConstants';
+import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { AgentStatusBadges } from './AgentStatusBadges';
 
 export interface BotsNodeProps {
@@ -403,7 +404,24 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
         </group>
       )}
 
-      {/* Billboard labels */}
+      {/* Billboard labels — Html on WebGPU (troika Text Line2 geometry triggers
+          drawIndexed(Infinity) and kills the render pass; same limitation and
+          same remedy as AgentNodesLayer). The compact nameplate replaces the
+          display-mode Text cluster there; WebGL keeps the full modes. */}
+      {isWebGPURenderer ? (
+        <Html position={[0, clampedSize + 0.9, 0]} center style={{ pointerEvents: 'none', whiteSpace: 'nowrap', textAlign: 'center' }}>
+          <div style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textShadow: '0 0 4px black' }}>
+            {agent.name || String(agent.id).slice(0, 8)}
+          </div>
+          <div style={{ color, fontSize: '10px', textShadow: '0 0 3px black' }}>
+            {agent.type.toUpperCase()}
+          </div>
+          <div style={{ color: glowColor, fontSize: '9px', textShadow: '0 0 3px black' }}>
+            {agent.status} | {agent.health ? `${agent.health.toFixed(0)}%` : 'N/A'}
+            {(agent.tokenRate ?? 0) > 0 ? ` | ${agent.tokenRate!.toFixed(0)} tok/min` : ''}
+          </div>
+        </Html>
+      ) : (
       <Billboard follow lockX={false} lockY={false} lockZ={false}>
         <Text position={[0, clampedSize + 0.8, 0]} fontSize={0.18} color="#3498DB"
           anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
@@ -514,6 +532,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           </Text>
         </>)}
       </Billboard>
+      )}
     </group>
   );
 };
