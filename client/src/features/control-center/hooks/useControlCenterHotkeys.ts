@@ -66,8 +66,8 @@ export function useControlCenterHotkeys(): void {
       // Everything below is suppressed while typing.
       if (isTextEntry(e.target)) return;
 
-      // 1–8 → open the matching semantic group (realises the old dead buttonKey badges).
-      if (e.key >= '1' && e.key <= '8') {
+      // 1–9 → open the matching semantic group (realises the old dead buttonKey badges).
+      if (e.key >= '1' && e.key <= '9') {
         const group = REGISTRY[Number(e.key) - 1];
         if (group) {
           e.preventDefault();

@@ -193,6 +193,27 @@ export interface RenderingSettings {
    * still frame; only the glyph re-layout pass is throttled. Default 3.
    */
   labelLayoutEvery?: number;
+  /**
+   * Per-agent-type palette, server-typed as AgentColorsDTO
+   * (handlers/settings_handler/types.rs:215-227, camelCase wire) and sourced
+   * from DevConfig.rendering.agent_colors. Consumed by BotsShared
+   * getVisionClawColors(); absent unless the server provides it.
+   */
+  agentColors?: AgentColorsSettings;
+}
+
+export interface AgentColorsSettings {
+  coordinator?: string;
+  coder?: string;
+  architect?: string;
+  analyst?: string;
+  tester?: string;
+  researcher?: string;
+  reviewer?: string;
+  optimizer?: string;
+  documenter?: string;
+  queen?: string;
+  default?: string;
 }
 
 // Animation settings
@@ -451,6 +472,24 @@ export interface AgentVisualSettings {
   showTokenRate?: boolean;
   showTaskCount?: boolean;
   bioluminescentIntensity?: number;
+  /** Client-only: hue-rotate each agent's base colour by a stable per-swarm
+   *  offset so swarms read as related-but-distinct families (BotsNode swarmTint).
+   *  No Rust field — persisted via localStorage like the other graphTypeVisuals. */
+  swarmTint?: boolean;
+  /** Client-only: four configurable health→glow stops (excellent/good/warning/
+   *  critical) consumed by agentVisualConstants.healthGlowColor. Defaults preserve
+   *  the historical six-tier ramp; ported from the legacy BotsControlPanel. */
+  healthColors?: {
+    excellent?: string;
+    good?: string;
+    warning?: string;
+    critical?: string;
+  };
+  /** Client-only: action-beam (0x23 AGENT_ACTION) cylinder radius in world units,
+   *  read by GraphManager → TransientBeamsLayer. Default 0.35. */
+  beamRadius?: number;
+  /** Client-only: peak opacity of an action beam during its hold phase. Default 0.85. */
+  beamOpacity?: number;
 }
 
 export interface GraphTypeVisualsSettings {

@@ -17,7 +17,59 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   xr: 5,
   ai: 6,
   system: 16,
+  agents: 37,
 };
+
+/** Total registry field count: the 168 frozen legacy fields + the new Agents group. */
+const TOTAL_FIELDS = 168 + EXPECTED_GROUP_COUNTS.agents;
+
+/**
+ * Frozen backend paths introduced by the Agents group (hotkey 9). They post-date
+ * the WP5 legacy baseline, so the zero-drift test (c) compares only the migrated
+ * groups against the fixture and asserts these separately in (c2). Every path
+ * exists in the client typed settings tree; visionclaw.* also exist on Rust
+ * GraphSettings and rendering.agentColors.* on the server AgentColorsDTO, while
+ * graphTypeVisuals.agent.* are client-typed (localStorage).
+ */
+const AGENT_GROUP_PATHS: string[] = [
+  'visualisation.graphs.visionclaw.nodes.baseColor',
+  'visualisation.graphs.visionclaw.nodes.nodeSize',
+  'visualisation.graphs.visionclaw.nodes.opacity',
+  'visualisation.graphs.visionclaw.nodes.metalness',
+  'visualisation.graphs.visionclaw.nodes.roughness',
+  'visualisation.graphs.visionclaw.edges.color',
+  'visualisation.graphs.visionclaw.edges.opacity',
+  'visualisation.graphs.visionclaw.edges.baseWidth',
+  'visualisation.graphs.visionclaw.edges.enableArrows',
+  'visualisation.graphs.visionclaw.edges.colorByType',
+  'visualisation.graphs.visionclaw.labels.enableLabels',
+  'visualisation.graphs.visionclaw.labels.desktopFontSize',
+  'visualisation.graphs.visionclaw.labels.textColor',
+  'visualisation.rendering.agentColors.coordinator',
+  'visualisation.rendering.agentColors.coder',
+  'visualisation.rendering.agentColors.architect',
+  'visualisation.rendering.agentColors.analyst',
+  'visualisation.rendering.agentColors.tester',
+  'visualisation.rendering.agentColors.researcher',
+  'visualisation.rendering.agentColors.reviewer',
+  'visualisation.rendering.agentColors.optimizer',
+  'visualisation.rendering.agentColors.documenter',
+  'visualisation.rendering.agentColors.queen',
+  'visualisation.rendering.agentColors.default',
+  'visualisation.graphTypeVisuals.agent.swarmTint',
+  'visualisation.graphTypeVisuals.agent.bioluminescentIntensity',
+  'visualisation.graphTypeVisuals.agent.nucleusGlowIntensity',
+  'visualisation.graphTypeVisuals.agent.breathingSpeed',
+  'visualisation.graphTypeVisuals.agent.breathingAmplitude',
+  'visualisation.graphTypeVisuals.agent.membraneOpacity',
+  'visualisation.graphTypeVisuals.agent.showHealthBar',
+  'visualisation.graphTypeVisuals.agent.healthColors.excellent',
+  'visualisation.graphTypeVisuals.agent.healthColors.good',
+  'visualisation.graphTypeVisuals.agent.healthColors.warning',
+  'visualisation.graphTypeVisuals.agent.healthColors.critical',
+  'visualisation.graphTypeVisuals.agent.beamRadius',
+  'visualisation.graphTypeVisuals.agent.beamOpacity',
+];
 
 /** The frozen `path` strings captured from the legacy unifiedSettingsConfig. */
 function legacyPaths(): string[] {
@@ -30,9 +82,9 @@ function legacyFieldCount(): number {
 }
 
 describe('control-center settings registry', () => {
-  it('(a) enumerates exactly 168 fields', () => {
-    expect(ALL_FIELDS.length).toBe(168);
-    // and the legacy config it mirrors is also 168 (sanity on the frozen fixture)
+  it('(a) enumerates exactly the legacy 168 fields plus the Agents group', () => {
+    expect(ALL_FIELDS.length).toBe(TOTAL_FIELDS);
+    // the frozen legacy fixture it extends is still 168 (sanity on the baseline)
     expect(legacyFieldCount()).toBe(168);
   });
 
@@ -40,40 +92,57 @@ describe('control-center settings registry', () => {
     const actual: Record<string, number> = {};
     for (const g of REGISTRY) actual[g.id] = g.fields.length;
     expect(actual).toEqual(EXPECTED_GROUP_COUNTS);
-    // group order realises hotkeys 1..8
+    // group order realises hotkeys 1..9 (agents is the new hotkey-9 group)
     expect(REGISTRY.map((g) => g.id)).toEqual([
-      'motion', 'look', 'labels', 'quality', 'atmosphere', 'xr', 'ai', 'system',
+      'motion', 'look', 'labels', 'quality', 'atmosphere', 'xr', 'ai', 'system', 'agents',
     ]);
-    expect(REGISTRY.map((g) => g.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8']);
+    expect(REGISTRY.map((g) => g.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
   });
 
-  it('(c) has ZERO path drift vs legacy unifiedSettingsConfig (both directions)', () => {
-    const registrySet = new Set(ALL_PATHS);
+  it('(c) has ZERO path drift vs legacy unifiedSettingsConfig for the migrated groups', () => {
     const legacySet = new Set(legacyPaths());
+    const agentSet = new Set(AGENT_GROUP_PATHS);
+    // Compare only the pre-existing (migrated) groups against the frozen baseline;
+    // the Agents group post-dates WP5 and is asserted independently in (c2).
+    const migratedPaths = ALL_PATHS.filter((p) => !agentSet.has(p));
+    const migratedSet = new Set(migratedPaths);
 
-    // No path exists in the registry that is absent from the frozen legacy set.
-    const addedByRegistry = [...registrySet].filter((p) => !legacySet.has(p));
+    // No migrated path exists that is absent from the frozen legacy set.
+    const addedByRegistry = [...migratedSet].filter((p) => !legacySet.has(p));
     // No frozen legacy path was dropped by the registry.
-    const droppedFromLegacy = [...legacySet].filter((p) => !registrySet.has(p));
+    const droppedFromLegacy = [...legacySet].filter((p) => !migratedSet.has(p));
 
     expect(addedByRegistry).toEqual([]);
     expect(droppedFromLegacy).toEqual([]);
     // identical size ⇒ identical sets given the two empty diffs above
-    expect(registrySet.size).toBe(legacySet.size);
-    // no duplicate paths within the registry
-    expect(ALL_PATHS.length).toBe(registrySet.size);
+    expect(migratedSet.size).toBe(legacySet.size);
+    // no duplicate paths within the whole registry
+    expect(ALL_PATHS.length).toBe(new Set(ALL_PATHS).size);
+  });
+
+  it('(c2) the Agents group exposes exactly its declared new paths, disjoint from legacy', () => {
+    const legacySet = new Set(legacyPaths());
+    const agentsGroup = REGISTRY.find((g) => g.id === 'agents')!;
+    const agentsPaths = agentsGroup.fields.map((f) => f.path).filter((p): p is string => Boolean(p));
+    // the group's paths are exactly the declared set (no accidental additions/drops)
+    expect(new Set(agentsPaths)).toEqual(new Set(AGENT_GROUP_PATHS));
+    // every field in the group carries a frozen path (no transient/action fields here)
+    expect(agentsPaths.length).toBe(agentsGroup.fields.length);
+    // and none of them collide with the frozen legacy baseline
+    const collisions = agentsPaths.filter((p) => legacySet.has(p));
+    expect(collisions).toEqual([]);
   });
 
   it('(d) every testid is unique', () => {
     const ids = REGISTRY.flatMap((g) => g.fields.map((f) => testIdFor(f, g.id)));
-    expect(ids.length).toBe(168);
-    expect(new Set(ids).size).toBe(168);
+    expect(ids.length).toBe(TOTAL_FIELDS);
+    expect(new Set(ids).size).toBe(TOTAL_FIELDS);
   });
 
   it('(e) manifest count matches the registry count', () => {
     const fresh = buildManifest();
     expect(fresh.count).toBe(ALL_FIELDS.length);
-    expect(fresh.settings.length).toBe(168);
+    expect(fresh.settings.length).toBe(TOTAL_FIELDS);
     // the committed JSON is in sync with the live registry (CI freshness)
     expect(manifestJson.count).toBe(fresh.count);
     expect(manifestJson.settings.length).toBe(fresh.settings.length);

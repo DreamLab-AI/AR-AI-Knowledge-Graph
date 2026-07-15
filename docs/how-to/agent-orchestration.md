@@ -655,34 +655,44 @@ Six pre-configured agent type buttons: Researcher, Coder, Analyzer, Tester, Opti
 
 Real-time view with status indicators: green (active), orange pulse (busy), red (error), gray (idle). Displays agent ID, type, health percentage, task count, uptime.
 
-### Settings (20+ options) — currently unreachable via the UI
+### Agent look-and-feel settings — now a Control Center group
 
-The `settings.agents.*` configuration surface below still exists server-side and
-in `AgentControlPanel`/`SkillsTab` (`client/src/features/settings/components/panels/`),
-but neither component is mounted anywhere in the Control Center's eight-group
-registry or any other surface — there is no "Agents" settings group. They are
-dead-code candidates pending a decision to wire them in or remove them; treat
-the table below as a record of what the settings key space supports, not as a
-path you can currently reach by clicking through the app.
+The old `settings.agents.*` key space was a **phantom**: keys like
+`settings.agents.visualization.node_size` and `settings.agents.monitoring.poll_interval`
+existed in **neither** the client typed settings tree **nor** the Rust
+`AppFullSettings`, so every read resolved `undefined` and `AgentNodesLayer` fell
+back to hardcoded defaults. The components that once *claimed* to expose them —
+`AgentControlPanel` and `SkillsTab` — were removed as dead code in commit
+`7ae0393df` (2026-07-04).
 
-| Category | Setting | Range | Default |
-|----------|---------|-------|---------|
-| Spawning | Max Concurrent Agents | 1–50 | 10 |
-| Spawning | Auto-Scale | on/off | off |
-| Spawning | AI Provider | gemini/openai/claude | claude |
-| Spawning | Default Priority | low/medium/high/critical | medium |
-| Spawning | Default Strategy | parallel/sequential/adaptive | adaptive |
-| Lifecycle | Idle Timeout | 60–600s | 300s |
-| Lifecycle | Auto-Restart Failed | on/off | on |
-| Lifecycle | Health Check Interval | 10–120s | 30s |
-| Monitoring | Enable Telemetry | on/off | on |
-| Monitoring | Poll Interval | 1–30s | 5s |
-| Monitoring | Log Level | debug/info/warn/error | info |
-| Visualisation | Show in Main Graph | on/off | on |
-| Visualisation | Agent Node Size | 0.5–3.0 | 1.0 |
-| Visualisation | Agent Node Color | hex | configurable |
+The agent **look-and-feel** subset is now genuinely settings-manageable at its
+real home. The server resolves the graph keys `"visionclaw" | "agent" | "bots"`
+to `visualisation.graphs.visionclaw` (`app_settings.rs`), so agent nodes/edges/
+labels persist under `visualisation.graphs.visionclaw.{nodes,edges,labels}.*` —
+real fields on both Rust `GraphSettings` and the client typed mirror. These are
+edited through the **Agents** group (hotkey `9`) in the
+[Control Center](../explanation/control-center.md); `AgentNodesLayer` reads the
+same typed paths (the phantom reads are gone).
 
-Where these settings are still writable (directly against the REST API), they persist to `settings.agents.*` and survive page refreshes.
+| Look-and-feel control | Real settings path | Notes |
+|----------|---------|-------|
+| Show agents in graph | `visualisation.graphs.logseq.nodes.nodeTypeVisibility.agent` | GraphManager's gate (Filtering & Quality group); the sole visibility authority |
+| Agent node colour | `visualisation.graphs.visionclaw.nodes.baseColor` | Agents group → Agent Nodes |
+| Agent node size | `visualisation.graphs.visionclaw.nodes.nodeSize` | Agents group → Agent Nodes |
+| Agent node opacity / metalness / roughness | `visualisation.graphs.visionclaw.nodes.{opacity,metalness,roughness}` | Agents group → Agent Nodes |
+| Agent edge colour / opacity / width | `visualisation.graphs.visionclaw.edges.{color,opacity,baseWidth}` | Agents group → Agent Edges |
+| Agent labels (show / size / colour) | `visualisation.graphs.visionclaw.labels.{enableLabels,desktopFontSize,textColor}` | Agents group → Agent Labels |
+| Per-agent-type colour palette | `visualisation.rendering.agentColors.{coordinator,coder,architect,analyst,tester,researcher,reviewer,optimizer,documenter,queen,default}` | Agents group → Agent Type Colours; typed both sides (`AgentColorsDTO` ← `DevConfig.agent_colors`), read by `getVisionClawColors` |
+| Behaviour (glow, breathing, membrane, health bar) | `visualisation.graphTypeVisuals.agent.*` | Agents group → Behaviour (client-typed, localStorage) |
+| Swarm hue tint | `visualisation.graphTypeVisuals.agent.swarmTint` | Client-only; read by `BotsVisualization → BotsNode` |
+| Activity animation | `visualisation.animations.enableNodeAnimations` | Shared global node-animation switch |
+
+**Telemetry poll interval** has no typed settings field: `AgentPollingService`
+owns the primary `/graph/data?graph_type=agent` poll, and `AgentNodesLayer`'s
+legacy `/api/bots/*` fallback uses a fixed `AGENT_TELEMETRY_POLL_SECONDS = 5`
+constant. **Orchestration config** (spawn concurrency, provider, lifecycle
+timeouts, log level) is a server-side concern and was never a wired client
+settings surface; it is not part of the Agents visual group.
 
 ### Telemetry Stream
 

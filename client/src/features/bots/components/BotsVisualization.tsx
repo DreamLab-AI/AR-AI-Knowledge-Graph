@@ -33,6 +33,8 @@ const logger = createLogger('BotsVisualization');
 // ---------------------------------------------------------------------------
 export const BotsVisualization: React.FC = () => {
   const settings = useSettingsStore(state => state.settings);
+  // Per-swarm hue tint (control-centre Agents → Behaviour). Client-only, default on.
+  const swarmTint = useSettingsStore(s => s.get<boolean>('visualisation.graphTypeVisuals.agent.swarmTint')) ?? true;
   const { botsData: contextBotsData } = useBotsData();
   const telemetry = useTelemetry('BotsVisualization');
 
@@ -201,6 +203,7 @@ export const BotsVisualization: React.FC = () => {
             position={position}
             index={index}
             color={nodeColor}
+            swarmTint={swarmTint}
           />
         );
       })}

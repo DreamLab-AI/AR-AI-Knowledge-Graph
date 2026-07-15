@@ -304,5 +304,16 @@ export const DEFAULT_GRAPH_TYPE_VISUALS = {
     showTokenRate: true,
     showTaskCount: false,
     bioluminescentIntensity: 0.6,
+    // Four configurable health→glow stops; defaults reproduce the historical
+    // six-tier ramp exactly (see agentVisualConstants.DEFAULT_HEALTH_COLORS).
+    healthColors: {
+      excellent: '#00FF00',
+      good: '#2ECC71',
+      warning: '#F39C12',
+      critical: '#E74C3C',
+    },
+    // Action-beam (0x23) styling consumed by TransientBeamsLayer via GraphManager.
+    beamRadius: 0.35,
+    beamOpacity: 0.85,
   },
 };

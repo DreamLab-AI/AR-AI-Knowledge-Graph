@@ -15,8 +15,9 @@ import { atmosphere } from './groups/atmosphere';
 import { immersion } from './groups/immersion';
 import { intelligence } from './groups/intelligence';
 import { system } from './groups/system';
+import { agents } from './groups/agents';
 
-/** The eight semantic groups, in rail order (hotkeys 1..8). */
+/** The nine semantic groups, in rail order (hotkeys 1..9). */
 export const GROUP_DATA: GroupData[] = [
   motion,
   look,
@@ -26,6 +27,7 @@ export const GROUP_DATA: GroupData[] = [
   immersion,
   intelligence,
   system,
+  agents,
 ];
 
 /** The two bespoke panels below the eight groups in the left rail. */

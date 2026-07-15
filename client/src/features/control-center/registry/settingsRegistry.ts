@@ -8,7 +8,7 @@
 import type { LucideIcon } from 'lucide-react';
 // @ts-ignore - Atom/Glasses exist in lucide-react but their type exports lag the runtime.
 import { Atom, Glasses } from 'lucide-react';
-import { Palette, Type, SlidersHorizontal, Sparkles, Bot, Settings2 } from 'lucide-react';
+import { Palette, Type, SlidersHorizontal, Sparkles, Bot, Settings2, Network } from 'lucide-react';
 import type { RegistryGroup, RegistryField } from './types';
 import { GROUP_DATA, testIdFor } from './manifest';
 
@@ -21,6 +21,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   xr: Glasses,
   ai: Bot,
   system: Settings2,
+  agents: Network,
 };
 
 /** The eight semantic groups (icons attached), in rail order. */

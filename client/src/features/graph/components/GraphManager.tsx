@@ -590,10 +590,13 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
       )}
 
       {/* Embodied agent-action beams (0x23): agent node → KG node, coloured
-          by action type, opacity fades in → holds → out over duration_ms. */}
+          by action type, opacity fades in → holds → out over duration_ms.
+          Radius/opacity are control-centre Agents → Behaviour knobs. */}
       <TransientBeamsLayer
         resolveAgentPosition={resolveAgentPosition}
         resolveNodePosition={resolveNodePosition}
+        beamRadius={graphTypeVisuals?.agent?.beamRadius ?? 0.35}
+        maxOpacity={graphTypeVisuals?.agent?.beamOpacity ?? 0.85}
       />
 
       <InstancedLabels
