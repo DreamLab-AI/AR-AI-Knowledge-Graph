@@ -322,5 +322,9 @@ export const DEFAULT_GRAPH_TYPE_VISUALS = {
     // Motion-trail ribbons behind each agent (BotsNode → AgentTrail). Client-only.
     showTrails: true,
     trailLength: 24,
+    // Nameplate LOD (W3D): declutter dense swarms — full nameplate only close in
+    // or hovered/selected/queen, name-only mid-range, hidden far, with hysteresis.
+    nameplateLod: true,
+    nameplateFullDistance: 40,
   },
 };

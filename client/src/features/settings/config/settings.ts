@@ -508,6 +508,17 @@ export interface AgentVisualSettings {
   /** Client-only: number of sampled positions retained in each agent's trail ring
    *  buffer (8-48). Longer = further history at higher vertex cost. Default 24. */
   trailLength?: number;
+  /** Client-only: distance+priority LOD for the per-agent HTML nameplate. When on
+   *  (default), the full 3-line nameplate only renders within nameplateFullDistance
+   *  (or when the agent is hovered/selected/queen); it collapses to a single name
+   *  line mid-range and hides beyond ~2.25× that distance, with ±10% hysteresis and
+   *  a near-field density guard so clustered swarms stay legible (BotsNode). No Rust
+   *  field — persisted via localStorage like the other graphTypeVisuals. Default true. */
+  nameplateLod?: boolean;
+  /** Client-only: camera distance (world units, 10-120) under which an agent shows
+   *  its full 3-line nameplate; the name-only band runs out to ~2.25× this value.
+   *  Default 40. */
+  nameplateFullDistance?: number;
 }
 
 export interface GraphTypeVisualsSettings {

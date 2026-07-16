@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "generatedFrom": "settingsRegistry.ts",
-  "count": 209,
+  "count": 211,
   "groups": [
     {
       "id": "motion",
@@ -64,7 +64,7 @@
       "label": "Agents",
       "testid": "group-agents",
       "hotkey": "9",
-      "fieldCount": 41
+      "fieldCount": 43
     }
   ],
   "panels": [
@@ -2670,6 +2670,31 @@
       "min": 0,
       "max": 1,
       "step": 0.05
+    },
+    {
+      "key": "agentNameplateLod",
+      "path": "visualisation.graphTypeVisuals.agent.nameplateLod",
+      "testid": "setting-visualisation.graphTypeVisuals.agent.nameplateLod",
+      "control": "toggle",
+      "group": "agents",
+      "label": "Nameplate LOD",
+      "clientOnly": false,
+      "server": "visual",
+      "subgroup": "Behaviour"
+    },
+    {
+      "key": "agentNameplateFullDistance",
+      "path": "visualisation.graphTypeVisuals.agent.nameplateFullDistance",
+      "testid": "setting-visualisation.graphTypeVisuals.agent.nameplateFullDistance",
+      "control": "slider",
+      "group": "agents",
+      "label": "Nameplate Full Distance",
+      "clientOnly": false,
+      "server": "visual",
+      "subgroup": "Behaviour",
+      "min": 10,
+      "max": 120,
+      "step": 5
     },
     {
       "key": "kgAttentionHeat",

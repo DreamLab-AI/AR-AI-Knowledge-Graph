@@ -33,6 +33,100 @@ import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { AgentStatusBadges } from './AgentStatusBadges';
 import { AgentTrail, TRAIL_DEFAULT_LENGTH } from './AgentTrail';
 
+/**
+ * Nameplate level-of-detail tiers (W3D). A 3-line HTML nameplate per agent
+ * overlaps illegibly once ~19 agents cluster, so each agent's label is gated to
+ * one of three tiers by camera distance:
+ *   - 'full'   3-line nameplate (name / type / status|health)
+ *   - 'name'   single name line
+ *   - 'hidden' no nameplate
+ */
+export type NameplateTier = 'full' | 'name' | 'hidden';
+
+export interface NameplateTierOpts {
+  /** D1 — camera distance under which the full nameplate shows. */
+  fullDistance: number;
+  /** D2 — camera distance under which the name-only line shows; hidden beyond it. */
+  nameDistance: number;
+  /** Fractional dead-band applied to BOTH boundaries (0.1 = ±10%). */
+  hysteresis: number;
+  /** Pin to 'full' regardless of distance (hovered / selected / queen). */
+  forceFull?: boolean;
+  /** Screen-density guard: cap a would-be 'full' tier at 'name' (never overrides
+   *  forceFull). Set when too many agents crowd the near field. */
+  capName?: boolean;
+}
+
+/**
+ * Pure distance→tier classifier with directional hysteresis. A label only
+ * *promotes* (richer tier) once distance drops below boundary·(1−h) and only
+ * *demotes* once it rises above boundary·(1+h); inside a dead-band it holds
+ * prevTier, so an agent sitting on a boundary never flickers frame-to-frame.
+ * Assumes fullDistance < nameDistance with non-overlapping bands (guaranteed by
+ * the 2.25× spacing the caller uses against the ±10% band).
+ */
+export function computeNameplateTier(
+  distance: number,
+  prevTier: NameplateTier,
+  opts: NameplateTierOpts,
+): NameplateTier {
+  if (opts.forceFull) return 'full';
+
+  const { fullDistance: d1, nameDistance: d2, hysteresis: h } = opts;
+  const d1Lo = d1 * (1 - h);
+  const d1Hi = d1 * (1 + h);
+  const d2Lo = d2 * (1 - h);
+  const d2Hi = d2 * (1 + h);
+
+  let tier: NameplateTier;
+  if (distance < d1Lo) {
+    tier = 'full';
+  } else if (distance >= d2Hi) {
+    tier = 'hidden';
+  } else if (distance >= d1Hi && distance < d2Lo) {
+    tier = 'name';
+  } else if (distance < d1Hi) {
+    // Dead-band around D1: hold full↔name.
+    tier = prevTier === 'full' ? 'full' : 'name';
+  } else {
+    // Dead-band around D2 (d2Lo ≤ distance < d2Hi): hold name↔hidden.
+    tier = prevTier === 'hidden' ? 'hidden' : 'name';
+  }
+
+  if (opts.capName && tier === 'full') tier = 'name';
+  return tier;
+}
+
+/** Spacing of the name-only band relative to the full-nameplate distance (D1):
+ *  D2 = D1 × this. 2.25× turns the default 40u full radius into a ~90u name band. */
+const NAMEPLATE_NAME_DISTANCE_FACTOR = 2.25;
+/** ±10% hysteresis dead-band on each LOD boundary. */
+const NAMEPLATE_HYSTERESIS = 0.1;
+/** More than this many agents inside D1 → non-queen/non-hovered agents drop to
+ *  name-only (near-field declutter). */
+const NAMEPLATE_DENSITY_LIMIT = 8;
+
+/**
+ * Frame-shared near-field agent tally. Every BotsNode increments `accum` when it
+ * sits within D1 of the camera; all nodes read `published`, which holds LAST
+ * frame's total. This is intentionally ONE FRAME STALE — R3F runs each node's
+ * useFrame sequentially with no barrier, so a live count would depend on render
+ * order and could itself induce flicker. The ±1-frame lag is imperceptible at
+ * 60fps and the crowded state is stable while a swarm stays clustered.
+ */
+const nameplateDensity = { frameTime: -1, accum: 0, published: 0 };
+
+function tickNameplateDensity(frameTime: number, withinFull: boolean): number {
+  if (frameTime !== nameplateDensity.frameTime) {
+    // First node of a new frame: publish the previous tally, reset the accumulator.
+    nameplateDensity.published = nameplateDensity.accum;
+    nameplateDensity.accum = 0;
+    nameplateDensity.frameTime = frameTime;
+  }
+  if (withinFull) nameplateDensity.accum += 1;
+  return nameplateDensity.published;
+}
+
 export interface BotsNodeProps {
   agent: BotsAgent;
   position: THREE.Vector3;
@@ -59,6 +153,11 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
   const [displayMode, setDisplayMode] = useState<
     'overview' | 'performance' | 'tasks' | 'network' | 'resources'
   >('overview');
+  // Nameplate LOD tier (W3D). Ref is the per-frame source of truth (no re-render);
+  // state mirrors it only on an actual tier change so the render churn stays zero
+  // while the camera holds still.
+  const [nameplateTier, setNameplateTier] = useState<NameplateTier>('full');
+  const nameplateTierRef = useRef<NameplateTier>('full');
   const telemetry      = useTelemetry(`BotsNode-${agent.id}`);
   const threeJSTelemetry = useThreeJSTelemetry(agent.id);
   const lastPositionRef    = useRef<THREE.Vector3 | undefined>(undefined);
@@ -91,6 +190,8 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
   const agentVisuals = settings?.visualisation?.graphTypeVisuals?.agent;
   const showTrails = agentVisuals?.showTrails ?? true;
   const trailLength = agentVisuals?.trailLength ?? TRAIL_DEFAULT_LENGTH;
+  const nameplateLod = agentVisuals?.nameplateLod ?? true;
+  const nameplateFullDistance = agentVisuals?.nameplateFullDistance ?? 40;
   const trailColor = useMemo(
     () => (swarmTint ? applySwarmTint(statusColor, agent.swarmId) : statusColor),
     [swarmTint, statusColor, agent.swarmId],
@@ -154,6 +255,31 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
 
     const elapsedTime = state.clock.elapsedTime;
     elapsedTimeRef.current = elapsedTime;
+
+    // Nameplate LOD (W3D): pick this agent's label tier from camera distance with
+    // hysteresis, plus a one-frame-stale near-field density guard so a clustered
+    // swarm doesn't stack 19 overlapping 3-line HTML nameplates. Queen/hovered
+    // agents are pinned to the full nameplate. setState fires only on an actual
+    // tier change, so the per-frame path stays render-churn-free.
+    if (nameplateLod) {
+      const camDist = state.camera.position.distanceTo(currentPositionRef.current);
+      const crowd = tickNameplateDensity(elapsedTime, camDist < nameplateFullDistance);
+      const nextTier = computeNameplateTier(camDist, nameplateTierRef.current, {
+        fullDistance: nameplateFullDistance,
+        nameDistance: nameplateFullDistance * NAMEPLATE_NAME_DISTANCE_FACTOR,
+        hysteresis: NAMEPLATE_HYSTERESIS,
+        forceFull: hover || isQueen,
+        capName: crowd > NAMEPLATE_DENSITY_LIMIT,
+      });
+      if (nextTier !== nameplateTierRef.current) {
+        nameplateTierRef.current = nextTier;
+        setNameplateTier(nextTier);
+      }
+    } else if (nameplateTierRef.current !== 'full') {
+      // LOD disabled: everything reverts to the always-on full nameplate.
+      nameplateTierRef.current = 'full';
+      setNameplateTier('full');
+    }
 
     // declaredIntent pre-action flash: a new non-empty declared intent starts a
     // brief (~600ms) aura spike — the "about to act" cue before the agent moves.
@@ -280,6 +406,11 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
   });
 
   const processingLogs = formatProcessingLogs(agent.processingLogs);
+  // Nameplate LOD gates: hidden → render nothing; name → single name line;
+  // full → the complete 3-line (+did) nameplate. Driven off the tier state so a
+  // change re-renders exactly once. LOD off leaves nameplateTier pinned at 'full'.
+  const showNameplate = nameplateTier !== 'hidden';
+  const showNameplateFull = nameplateTier === 'full';
 
   return (
     <>
@@ -431,47 +562,54 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           blob-worker bootstrap (crbug.com/1084951) — including the copy inlined
           in drei's bundle, which configureTextBuilder cannot reach. The full
           display-mode Text cluster remains for non-isolated WebGL contexts. */}
-      {isWebGPURenderer || (typeof self !== 'undefined' && self.crossOriginIsolated) ? (
+      {showNameplate && (isWebGPURenderer || (typeof self !== 'undefined' && self.crossOriginIsolated) ? (
         <Html position={[0, clampedSize + 0.9, 0]} center style={{ pointerEvents: 'none', whiteSpace: 'nowrap', textAlign: 'center' }}>
           <div style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textShadow: '0 0 4px black' }}>
             {agent.name || String(agent.id).slice(0, 8)}
           </div>
-          <div style={{ color, fontSize: '10px', textShadow: '0 0 3px black' }}>
-            {agent.type.toUpperCase()}
-          </div>
-          <div style={{ color: glowColor, fontSize: '9px', textShadow: '0 0 3px black' }}>
-            {agent.status} | {agent.health ? `${agent.health.toFixed(0)}%` : 'N/A'}
-            {(agent.tokenRate ?? 0) > 0 ? ` | ${agent.tokenRate!.toFixed(0)} tok/min` : ''}
-          </div>
-          {/* Sovereign identity nameplate (COM-14 / ADR-125) — sole did:nostr
-              renderer since AgentNodesLayer was retired. */}
-          {agent.did_nostr && (
-            <div style={{ color: '#7dd3fc', fontSize: '9px', fontFamily: 'monospace', textShadow: '0 0 3px black' }}>
-              {shortDid(agent.did_nostr)}
+          {/* type / status|health / did collapse away below the full-LOD distance
+              (W3D) — the name line above is the sole survivor at range. */}
+          {showNameplateFull && (<>
+            <div style={{ color, fontSize: '10px', textShadow: '0 0 3px black' }}>
+              {agent.type.toUpperCase()}
             </div>
-          )}
+            <div style={{ color: glowColor, fontSize: '9px', textShadow: '0 0 3px black' }}>
+              {agent.status} | {agent.health ? `${agent.health.toFixed(0)}%` : 'N/A'}
+              {(agent.tokenRate ?? 0) > 0 ? ` | ${agent.tokenRate!.toFixed(0)} tok/min` : ''}
+            </div>
+            {/* Sovereign identity nameplate (COM-14 / ADR-125) — sole did:nostr
+                renderer since AgentNodesLayer was retired. */}
+            {agent.did_nostr && (
+              <div style={{ color: '#7dd3fc', fontSize: '9px', fontFamily: 'monospace', textShadow: '0 0 3px black' }}>
+                {shortDid(agent.did_nostr)}
+              </div>
+            )}
+          </>)}
         </Html>
       ) : (
       <Billboard follow lockX={false} lockY={false} lockZ={false}>
         {/* Sovereign identity nameplate (COM-14 / ADR-125) — sole did:nostr
             renderer since AgentNodesLayer was retired. Sits above the mode
-            indicator so it never collides with the display-mode cluster below. */}
-        {agent.did_nostr && (
+            indicator so it never collides with the display-mode cluster below.
+            Part of the full-LOD cluster (W3D). */}
+        {showNameplateFull && agent.did_nostr && (
           <Text position={[0, clampedSize + 1.15, 0]} fontSize={0.16} color="#7dd3fc"
             anchorX="center" anchorY="middle" outlineWidth={0.015} outlineColor="black">
             {shortDid(agent.did_nostr)}
           </Text>
         )}
-        <Text position={[0, clampedSize + 0.8, 0]} fontSize={0.18} color="#3498DB"
-          anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
-          [{displayMode.toUpperCase()}]
-        </Text>
+        {showNameplateFull && (
+          <Text position={[0, clampedSize + 0.8, 0]} fontSize={0.18} color="#3498DB"
+            anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
+            [{displayMode.toUpperCase()}]
+          </Text>
+        )}
         <Text position={[0, -clampedSize - 0.7, 0]} fontSize={0.4} color="white"
           anchorX="center" anchorY="middle" outlineWidth={0.05} outlineColor="black">
           {agent.name || String(agent.id).slice(0, 8)}
         </Text>
 
-        {displayMode === 'overview' && (<>
+        {showNameplateFull && displayMode === 'overview' && (<>
           <Text position={[0, -clampedSize - 1.1, 0]} fontSize={0.25} color={color}
             anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor="black">
             {agent.type.toUpperCase()}
@@ -486,7 +624,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           </Text>
         </>)}
 
-        {displayMode === 'performance' && (<>
+        {showNameplateFull && displayMode === 'performance' && (<>
           <Text position={[0, -clampedSize - 1.1, 0]} fontSize={0.2}
             color={agent.cpuUsage > 80 ? '#E74C3C' : agent.cpuUsage > 50 ? '#F39C12' : '#2ECC71'}
             anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
@@ -507,7 +645,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           </Text>
         </>)}
 
-        {displayMode === 'tasks' && (<>
+        {showNameplateFull && displayMode === 'tasks' && (<>
           <Text position={[0, -clampedSize - 1.1, 0]} fontSize={0.2} color="#2ECC71"
             anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
             Active: {agent.tasksActive || 0}
@@ -529,7 +667,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           )}
         </>)}
 
-        {displayMode === 'network' && (<>
+        {showNameplateFull && displayMode === 'network' && (<>
           <Text position={[0, -clampedSize - 1.1, 0]} fontSize={0.18} color="#E67E22"
             anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
             Swarm: {agent.swarmId?.substring(0, 8) || 'None'}
@@ -550,7 +688,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           </Text>
         </>)}
 
-        {displayMode === 'resources' && (<>
+        {showNameplateFull && displayMode === 'resources' && (<>
           <Text position={[0, -clampedSize - 1.1, 0]} fontSize={0.18} color="#3498DB"
             anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
             Workload: {((agent.workload ?? 0) * 100).toFixed(0)}%
@@ -571,7 +709,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
           </Text>
         </>)}
       </Billboard>
-      )}
+      ))}
       </group>
     </>
   );
