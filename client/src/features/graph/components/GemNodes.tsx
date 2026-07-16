@@ -30,6 +30,7 @@ import { computeNodeScale } from '../utils/nodeScaling';
 import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { getTypeColor, getDomainColor } from '../hooks/useGraphNodeColors';
 import { agentStatusActivity } from '../../bots/agentVisualConstants';
+import { attentionHeat } from '../../visualisation/attentionHeat';
 
 /** Minimal hierarchy node shape compatible with HierarchyNode from hierarchyDetector */
 interface HierarchyNodeLike {
@@ -96,6 +97,11 @@ const nextPowerOf2 = (n: number): number => Math.pow(2, Math.ceil(Math.log2(Math
 // silently fail to render on the WebGPU backend (WebGL's higher cap masked it).
 // Keep the width a power of 2 well under the cap and grow in the height axis.
 const METADATA_TEX_WIDTH = 2048;
+
+// Attention-heat (task V1) re-uploads the metadata texture's w channel at most
+// ~2Hz. The DataTexture upload is the real cost; heat decays continuously but
+// the eye cannot resolve a faster emissive fade, so we sample it on this cadence.
+const HEAT_UPLOAD_INTERVAL_MS = 500;
 
 // Node scaling delegated to shared computeNodeScale (../utils/nodeScaling.ts)
 
@@ -171,6 +177,13 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
   const visibleCountRef = useRef(0);
   const geomRadiusRef = useRef(0.5);
   const prevMetaHashRef = useRef('');
+  // Attention-heat re-upload throttle (task V1). The bucket advances at ~2Hz
+  // while heat is live (driving the fade) and once more on settle; folding it
+  // into metaHash makes a decaying-heat frame re-upload meta.w without a full
+  // structural change. Off for the agent population (meta.w is status activity).
+  const lastHeatUploadRef = useRef(0);
+  const heatBucketRef = useRef(0);
+  const heatWasActiveRef = useRef(false);
   // Track meshes manually added to the scene so we can remove them synchronously
   const sceneMeshesRef = useRef<Set<THREE.InstancedMesh>>(new Set());
   // forceMode pins the geometry/material to one population (multi-mesh path);
@@ -883,18 +896,50 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
 
     // Dirty-flag metadata texture: only upload when inputs structurally change
     if (texBuf) {
+      const isAgent = dominant === 'agent';
+
+      // Attention-heat (task V1): knowledge + ontology nodes heat up as agents
+      // touch them (0x23 AGENT_ACTION → attentionHeat accumulator). The heat is
+      // blended into meta.w below so it glows through the EXISTING recency
+      // emissive path — no new shader code. The agent population keeps meta.w =
+      // status activity untouched (do NOT disturb that path). Governed by the
+      // knowledgeGraph.attentionHeat* knobs; both KG and ontology meshes are
+      // non-agent, so both keep the shared accumulator's decay in step.
+      const kgVisuals = graphTypeVisuals?.knowledgeGraph;
+      const heatEnabled = !isAgent && (kgVisuals?.attentionHeatEnabled ?? true);
+      if (!isAgent) {
+        attentionHeat.configure({
+          enabled: (kgVisuals?.attentionHeatEnabled ?? true),
+          halfLifeMs: (kgVisuals?.attentionHeatHalfLife ?? 20) * 1000,
+        });
+      }
+      // Throttle heat-driven re-uploads to ~2Hz: advance the bucket while heat is
+      // live (each tick re-samples the fade) plus ONE settle tick after the last
+      // heat decays away (writes meta.w back to pure recency). Structural changes
+      // still upload immediately via the rest of metaHash.
+      const heatLive = heatEnabled && attentionHeat.hasHeat();
+      if (heatLive || (heatEnabled && heatWasActiveRef.current)) {
+        const tNow = performance.now();
+        if (tNow - lastHeatUploadRef.current >= HEAT_UPLOAD_INTERVAL_MS) {
+          heatBucketRef.current++;
+          lastHeatUploadRef.current = tNow;
+          heatWasActiveRef.current = heatLive; // false once the settle tick runs
+        }
+      }
+
       const sampleHash = currentNodes.length > 0
         ? `${currentNodes[0]?.metadata?.authorityScore ?? 0}-${currentNodes[Math.floor(currentNodes.length / 2)]?.metadata?.quality ?? 0}-${currentNodes[currentNodes.length - 1]?.metadata?.authorityScore ?? 0}`
         : '';
       // Agent status feeds meta.w, but never touches authority/quality — fold a
       // per-agent status signature into the dirty key so a status change re-uploads
       // (agent populations are small, so the join is cheap).
-      const statusSig = dominant === 'agent'
+      const statusSig = isAgent
         ? currentNodes.map(n => (n.metadata?.status as string | undefined) ?? '').join('')
         : '';
-      const metaHash = `${currentNodes.length}-${connectionCountMap.size}-${selectedNodeId}-${sampleHash}-${statusSig}`;
+      // Fold the throttled heat bucket in so a decaying-heat frame re-uploads.
+      const heatSig = heatEnabled ? `-h${heatBucketRef.current}` : '';
+      const metaHash = `${currentNodes.length}-${connectionCountMap.size}-${selectedNodeId}-${sampleHash}-${statusSig}${heatSig}`;
       if (metaHash !== prevMetaHashRef.current) {
-        const isAgent = dominant === 'agent';
         for (let i = 0; i < currentNodes.length; i++) {
           const node = currentNodes[i];
           const i4 = i * 4;
@@ -903,13 +948,17 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
           texBuf[i4 + 1] = node.metadata?.authority ?? node.metadata?.authorityScore ?? 0;
           const cc = connectionCountMap.get(nid) || 0;
           texBuf[i4 + 2] = Math.min(cc / 20, 1.0);
-          // meta.w: recency for gem/ontology; status-derived activity for agents so
-          // the capsule shader (and the WebGL GLSL glow) rests idle swarms and
-          // brightens/pulses active ones. Reinterpreting the channel is safe here
-          // because this mesh renders a single population.
+          // meta.w: recency for gem/ontology (heated up by live attention when
+          // enabled); status-derived activity for agents so the capsule shader
+          // (and the WebGL GLSL glow) rests idle swarms and brightens/pulses
+          // active ones. Reinterpreting the channel is safe here because this
+          // mesh renders a single population.
+          const recency = computeRecency(node.metadata?.lastModified ?? node.metadata?.updatedAt);
           texBuf[i4 + 3] = isAgent
             ? agentStatusActivity(node.metadata?.status as string | undefined)
-            : computeRecency(node.metadata?.lastModified ?? node.metadata?.updatedAt);
+            : heatEnabled
+              ? Math.max(recency, attentionHeat.getHeat(nid))
+              : recency;
         }
         if (metaTexRef.current) metaTexRef.current.needsUpdate = true;
         // WebGL parity: aGlowMeta wraps the SAME texBuf — re-upload it too so the

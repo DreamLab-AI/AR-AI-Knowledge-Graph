@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "generatedFrom": "settingsRegistry.ts",
-  "count": 205,
+  "count": 207,
   "groups": [
     {
       "id": "motion",
@@ -64,7 +64,7 @@
       "label": "Agents",
       "testid": "group-agents",
       "hotkey": "9",
-      "fieldCount": 37
+      "fieldCount": 39
     }
   ],
   "panels": [
@@ -2645,6 +2645,31 @@
       "min": 0,
       "max": 1,
       "step": 0.05
+    },
+    {
+      "key": "kgAttentionHeat",
+      "path": "visualisation.graphTypeVisuals.knowledgeGraph.attentionHeatEnabled",
+      "testid": "setting-visualisation.graphTypeVisuals.knowledgeGraph.attentionHeatEnabled",
+      "control": "toggle",
+      "group": "agents",
+      "label": "File-Attention Heat",
+      "clientOnly": false,
+      "server": "visual",
+      "subgroup": "Behaviour"
+    },
+    {
+      "key": "kgAttentionHeatHalfLife",
+      "path": "visualisation.graphTypeVisuals.knowledgeGraph.attentionHeatHalfLife",
+      "testid": "setting-visualisation.graphTypeVisuals.knowledgeGraph.attentionHeatHalfLife",
+      "control": "slider",
+      "group": "agents",
+      "label": "Attention Heat Half-Life",
+      "clientOnly": false,
+      "server": "visual",
+      "subgroup": "Behaviour",
+      "min": 5,
+      "max": 60,
+      "step": 1
     }
   ]
 }

@@ -175,8 +175,11 @@ export interface RenderingSettings {
   context: 'desktop' | 'ar';
   /**
    * Phase 6 (ADR-04 D1): hard ceiling on dynamically-grown edge instance
-   * capacity in GlassEdges. Drawn edges beyond this count are skipped with a
-   * single structured warning — never silent truncation.
+   * capacity in GlassEdges. A capacity ceiling, not a per-frame draw commitment.
+   * Default 65_536 (raised from 32_768 — at 25k-node scale the old default hid
+   * ~83% of edges). Edges beyond the ceiling are skipped, never silently: a
+   * single structured info line when this setting is configured, or a warning
+   * when GlassEdges is on its hardcoded default fallback.
    */
   maxEdgesCeiling?: number;
   /**
@@ -442,6 +445,14 @@ export interface KnowledgeGraphVisualSettings {
   showQualityStars?: boolean;
   showRecencyIndicator?: boolean;
   showConnectionDensity?: boolean;
+  /** Client-only: knowledge (and ontology) nodes heat up as agents touch them via
+   *  0x23 AGENT_ACTION; the heat decays and glows through the recency emissive
+   *  path (GemNodes → metadata texture w channel). No Rust field — persisted via
+   *  localStorage like the other graphTypeVisuals. Default true. */
+  attentionHeatEnabled?: boolean;
+  /** Client-only: half-life in seconds for a node's attention heat to fade by
+   *  half. Feeds attentionHeat's exponential decay. Default 20. */
+  attentionHeatHalfLife?: number;
 }
 
 export interface OntologyVisualSettings {

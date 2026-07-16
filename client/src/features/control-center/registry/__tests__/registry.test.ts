@@ -17,7 +17,7 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   xr: 5,
   ai: 6,
   system: 16,
-  agents: 37,
+  agents: 39,
 };
 
 /** Total registry field count: the 168 frozen legacy fields + the new Agents group. */
@@ -69,6 +69,11 @@ const AGENT_GROUP_PATHS: string[] = [
   'visualisation.graphTypeVisuals.agent.healthColors.critical',
   'visualisation.graphTypeVisuals.agent.beamRadius',
   'visualisation.graphTypeVisuals.agent.beamOpacity',
+  // Attention-heat knobs (task V1): grouped under Agents > Behaviour with the
+  // beam controls; they target graphTypeVisuals.knowledgeGraph.* and, like the
+  // rest of this group, post-date the frozen WP5 baseline.
+  'visualisation.graphTypeVisuals.knowledgeGraph.attentionHeatEnabled',
+  'visualisation.graphTypeVisuals.knowledgeGraph.attentionHeatHalfLife',
 ];
 
 /** The frozen `path` strings captured from the legacy unifiedSettingsConfig. */

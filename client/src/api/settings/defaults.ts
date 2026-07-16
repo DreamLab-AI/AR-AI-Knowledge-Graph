@@ -277,6 +277,10 @@ export const DEFAULT_GRAPH_TYPE_VISUALS = {
     showQualityStars: true,
     showRecencyIndicator: true,
     showConnectionDensity: false,
+    // File-attention heat: knowledge/ontology nodes glow as agents touch them
+    // (0x23), decaying with this half-life (seconds). Consumed by GemNodes.
+    attentionHeatEnabled: true,
+    attentionHeatHalfLife: 20,
   },
   ontology: {
     ringTintByClass: true,

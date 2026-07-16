@@ -1,5 +1,5 @@
 /**
- * Group 9 — Agents (id `agents`, hotkey 9, 37 fields).
+ * Group 9 — Agents (id `agents`, hotkey 9, 39 fields).
  *
  * Genuinely settings-manageable look-and-feel for the agent/swarm population.
  * The server resolves "visionclaw"|"agent"|"bots" → graphs.visionclaw
@@ -9,7 +9,7 @@
  * `visualisation.rendering.agentColors.*` — typed both sides (client
  * AgentColorsSettings ↔ server AgentColorsDTO) and consumed by
  * BotsShared.getVisionClawColors. `graphTypeVisuals.agent.*` are client-typed
- * behaviour knobs (consumed by GemNodes / AgentNodesLayer), mirroring the existing
+ * behaviour knobs (consumed by GemNodes / BotsNode), mirroring the existing
  * `look` group's graphTypeVisuals.{knowledgeGraph,ontology} precedent; `swarmTint`
  * is a client-only toggle read by BotsVisualization → BotsNode.
  *
@@ -22,6 +22,10 @@ const N = 'visualisation.graphs.visionclaw.nodes.';
 const E = 'visualisation.graphs.visionclaw.edges.';
 const L = 'visualisation.graphs.visionclaw.labels.';
 const A = 'visualisation.graphTypeVisuals.agent.';
+// Knowledge-graph attention-heat knobs (client-typed graphTypeVisuals.knowledgeGraph.*).
+// Grouped with the agent-action beam controls because they share the same 0x23
+// source — agents touching KG nodes — just projected as node heat rather than a beam.
+const K = 'visualisation.graphTypeVisuals.knowledgeGraph.';
 // Per-agent-type palette — routes to the `rendering` server bucket and round-trips
 // via AgentColorsDTO (types.rs) ← DevConfig.agent_colors; consumed by
 // BotsShared.getVisionClawColors. Typed both sides (client AgentColorsSettings).
@@ -36,7 +40,7 @@ const fields: RegistryField[] = [
   { key: 'agentRoughness', subgroup: 'Agent Nodes', label: 'Roughness', type: 'slider', min: 0, max: 1, step: 0.05, path: `${N}roughness`, description: 'PBR roughness of agent node material' },
   // Agent Edges — visionclaw edge appearance (Rust GraphSettings.edges + client-only colorByType)
   { key: 'agentEdgeColor', subgroup: 'Agent Edges', label: 'Edge Color', type: 'color', path: `${E}color`, description: 'Base colour for agent connection lines' },
-  { key: 'agentEdgeOpacity', subgroup: 'Agent Edges', label: 'Edge Opacity', type: 'slider', min: 0, max: 1, step: 0.05, path: `${E}opacity`, description: 'Agent connection line opacity (AgentNodesLayer pulses around this value)' },
+  { key: 'agentEdgeOpacity', subgroup: 'Agent Edges', label: 'Edge Opacity', type: 'slider', min: 0, max: 1, step: 0.05, path: `${E}opacity`, description: 'Agent connection line opacity' },
   { key: 'agentEdgeWidth', subgroup: 'Agent Edges', label: 'Edge Thickness', type: 'slider', min: 0.02, max: 0.5, step: 0.01, path: `${E}baseWidth`, description: 'Base width of agent connection lines' },
   { key: 'agentEdgeArrows', subgroup: 'Agent Edges', label: 'Show Arrows', type: 'toggle', path: `${E}enableArrows`, description: 'Draw directional arrowheads on agent edges' },
   { key: 'agentEdgeColorByType', subgroup: 'Agent Edges', label: 'Colour edges by type', type: 'toggle', path: `${E}colorByType`, description: 'Colour each agent edge by its relationship type instead of the single base colour' },
@@ -72,6 +76,11 @@ const fields: RegistryField[] = [
   { key: 'agentShowHealthBar', subgroup: 'Behaviour', label: 'Show Health Bar', type: 'toggle', path: `${A}showHealthBar`, description: 'Draw the per-agent health bar beneath each node' },
   { key: 'agentBeamRadius', subgroup: 'Behaviour', label: 'Action Beam Radius', type: 'slider', min: 0.05, max: 1.5, step: 0.05, path: `${A}beamRadius`, description: 'Cylinder radius of embodied agent-action beams (0x23)' },
   { key: 'agentBeamOpacity', subgroup: 'Behaviour', label: 'Action Beam Opacity', type: 'slider', min: 0, max: 1, step: 0.05, path: `${A}beamOpacity`, description: 'Peak opacity of agent-action beams during their hold phase' },
+  // Attention heat — agent 0x23 actions heat knowledge/ontology nodes (client-typed
+  // graphTypeVisuals.knowledgeGraph.*; consumed by GemNodes → metadata texture w).
+  // Sibling to the beam controls: same agent-action source, projected onto the KG.
+  { key: 'kgAttentionHeat', subgroup: 'Behaviour', label: 'File-Attention Heat', type: 'toggle', path: `${K}attentionHeatEnabled`, description: 'Knowledge/ontology nodes heat up (glow) as agents touch them via 0x23 actions, then cool as the heat decays' },
+  { key: 'kgAttentionHeatHalfLife', subgroup: 'Behaviour', label: 'Attention Heat Half-Life', type: 'slider', min: 5, max: 60, step: 1, path: `${K}attentionHeatHalfLife`, description: 'Seconds for a node\'s attention heat to fade by half' },
 ];
 
 export const agents: GroupData = {
