@@ -31,6 +31,7 @@ import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { getTypeColor, getDomainColor } from '../hooks/useGraphNodeColors';
 import { agentStatusActivity } from '../../bots/agentVisualConstants';
 import { attentionHeat } from '../../visualisation/attentionHeat';
+import { heatBrightenFactor } from '../../visualisation/heatColor';
 
 /** Minimal hierarchy node shape compatible with HierarchyNode from hierarchyDetector */
 interface HierarchyNodeLike {
@@ -184,6 +185,13 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
   const lastHeatUploadRef = useRef(0);
   const heatBucketRef = useRef(0);
   const heatWasActiveRef = useRef(false);
+  // Attention-heat → instanceColor (WebGL-visible per-instance heat). The base
+  // (unheated) RGB is cached on each colour repaint so the 2Hz heat pass can
+  // rescale it in place — brightening touched gems and letting them fade — without
+  // re-running computeColor (HSL/hash) every tick. Keyed on the same heat bucket
+  // as the metadata upload so both stay in lock-step.
+  const baseColorCacheRef = useRef<Float32Array | null>(null);
+  const prevHeatColorBucketRef = useRef(-1);
   // Track meshes manually added to the scene so we can remove them synchronously
   const sceneMeshesRef = useRef<Set<THREE.InstancedMesh>>(new Set());
   // forceMode pins the geometry/material to one population (multi-mesh path);
@@ -800,6 +808,13 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
     const posIdxCache = posIdxCacheRef.current;
     const propsVis = props.settings?.visualisation as Record<string, unknown> | undefined;
     const graphTypeVisuals = propsVis?.graphTypeVisuals as GraphTypeVisualsSettings | undefined;
+    // Attention-heat gate, hoisted so BOTH the colour repaint below and the
+    // metadata upload later read the same value. KG + ontology gems brighten with
+    // heat; the agent population keeps meta.w = status activity, so heat never
+    // touches its colour.
+    const isAgent = dominant === 'agent';
+    const kgVisuals = graphTypeVisuals?.knowledgeGraph;
+    const heatEnabled = !isAgent && (kgVisuals?.attentionHeatEnabled ?? true);
     const scaleHash = `${nodeCount}-${connectionCountMap.size}-${baseScale}-${hierarchyMap?.size ?? 0}`;
     if (scaleHash !== prevScaleHashRef.current) {
       prevScaleHashRef.current = scaleHash;
@@ -814,14 +829,30 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
     }
 
     // --- Colour cache: recompute + upload only when colour inputs change -----
-    const colorHash = `${nodeCount}-${connectionCountMap.size}-${colorScheme}-${baseNodeColor ?? ''}-${selectedNodeId ?? ''}-${ssspResult ? 's' : ''}-${qualityGates?.showClusters ? 1 : 0}${qualityGates?.showAnomalies ? 1 : 0}${qualityGates?.showCommunities ? 1 : 0}${qualityGates?.showCentrality ? 1 : 0}${qualityGates?.showSSSP ? 1 : 0}-${analyticsVersionRef.current}`;
+    const colorHash = `${nodeCount}-${connectionCountMap.size}-${colorScheme}-${baseNodeColor ?? ''}-${selectedNodeId ?? ''}-${ssspResult ? 's' : ''}-${qualityGates?.showClusters ? 1 : 0}${qualityGates?.showAnomalies ? 1 : 0}${qualityGates?.showCommunities ? 1 : 0}${qualityGates?.showCentrality ? 1 : 0}${qualityGates?.showSSSP ? 1 : 0}-${analyticsVersionRef.current}-${heatEnabled ? 1 : 0}`;
     if (colorHash !== prevColorHashRef.current) {
       prevColorHashRef.current = colorHash;
+      // Cache the UNHEATED base RGB so the 2Hz heat pass can rescale without
+      // recomputing computeColor. Sized to the colour capacity (stride 3).
+      let baseCache = baseColorCacheRef.current;
+      if (!baseCache || baseCache.length < nodeCount * 3) {
+        baseCache = new Float32Array(cacheLen * 3);
+        baseColorCacheRef.current = baseCache;
+      }
       for (let i = 0; i < nodeCount; i++) {
         const node = currentNodes[i];
         const mode = perNodeVisualModeMap.get(String(node.id)) || graphMode;
         const srcIdx = props.nodeIdToIndexMap.get(String(node.id));
-        inst.setColorAt(i, computeColor(node, mode, srcIdx !== undefined ? srcIdx : i));
+        const c = computeColor(node, mode, srcIdx !== undefined ? srcIdx : i);
+        const b3 = i * 3;
+        baseCache[b3] = c.r; baseCache[b3 + 1] = c.g; baseCache[b3 + 2] = c.b;
+        // Bake current heat into the first paint so a colour-scheme change mid-
+        // stream never flashes an unheated frame before the heat pass catches up.
+        if (heatEnabled) {
+          const f = heatBrightenFactor(c.r, c.g, c.b, attentionHeat.getHeat(String(node.id)));
+          c.setRGB(c.r * f, c.g * f, c.b * f);
+        }
+        inst.setColorAt(i, c);
       }
       if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
     }
@@ -896,8 +927,6 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
 
     // Dirty-flag metadata texture: only upload when inputs structurally change
     if (texBuf) {
-      const isAgent = dominant === 'agent';
-
       // Attention-heat (task V1): knowledge + ontology nodes heat up as agents
       // touch them (0x23 AGENT_ACTION → attentionHeat accumulator). The heat is
       // blended into meta.w below so it glows through the EXISTING recency
@@ -905,8 +934,6 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
       // status activity untouched (do NOT disturb that path). Governed by the
       // knowledgeGraph.attentionHeat* knobs; both KG and ontology meshes are
       // non-agent, so both keep the shared accumulator's decay in step.
-      const kgVisuals = graphTypeVisuals?.knowledgeGraph;
-      const heatEnabled = !isAgent && (kgVisuals?.attentionHeatEnabled ?? true);
       if (!isAgent) {
         attentionHeat.configure({
           enabled: (kgVisuals?.attentionHeatEnabled ?? true),
@@ -966,6 +993,29 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
         const glowAttr = inst.geometry.getAttribute('aGlowMeta');
         if (glowAttr) glowAttr.needsUpdate = true;
         prevMetaHashRef.current = metaHash;
+      }
+    }
+
+    // --- Attention-heat → instanceColor (WebGL-visible per-instance heat) ------
+    // instanceColor multiplies the built-in diffuse, so scaling the cached base
+    // RGB by a per-node heat gain literally brightens a touched gem in place —
+    // the signal the metadata/aGlowMeta emissive path is too subtle to surface on
+    // WebGL. Runs on every 2Hz heat-bucket advance (the SAME throttle the metadata
+    // upload uses), plus the one settle tick that writes colours back to base as
+    // heat cools. Ratio-preserving gain keeps community/sssp hue (a hot red gem
+    // brightens red, never white). Agents are excluded (heatEnabled is false).
+    if (heatEnabled && heatBucketRef.current !== prevHeatColorBucketRef.current) {
+      prevHeatColorBucketRef.current = heatBucketRef.current;
+      const baseCache = baseColorCacheRef.current;
+      if (baseCache && inst.instanceColor) {
+        for (let i = 0; i < nodeCount; i++) {
+          const b3 = i * 3;
+          const br = baseCache[b3], bg = baseCache[b3 + 1], bb = baseCache[b3 + 2];
+          const f = heatBrightenFactor(br, bg, bb, attentionHeat.getHeat(String(currentNodes[i].id)));
+          _col.setRGB(br * f, bg * f, bb * f);
+          inst.setColorAt(i, _col);
+        }
+        inst.instanceColor.needsUpdate = true;
       }
     }
   }, -1);
