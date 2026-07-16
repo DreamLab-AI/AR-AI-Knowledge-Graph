@@ -1,10 +1,24 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import { useSettingsStore } from '../store/settingsStore';
 import * as THREE from 'three';
 import { createLogger } from '../utils/loggerConfig';
+import {
+  initRenderGuard,
+  recordRenderFailure,
+  recordRenderSuccess,
+} from './postProcessingGuard';
 
 const logger = createLogger('GemPostProcessing');
+
+/**
+ * Consecutive failed render frames tolerated before post-processing is
+ * permanently disabled for the session and rendering is handed back to the
+ * default R3F renderer. Small enough that a genuinely broken backend gives up
+ * within a few frames; large enough that a transient GPU context-loss/restore
+ * blip recovers without disabling the effect.
+ */
+const MAX_CONSECUTIVE_RENDER_FAILURES = 8;
 
 interface GemPostProcessingProps {
   enabled?: boolean;
@@ -59,12 +73,24 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
   const disposeRef = useRef<(() => void) | null>(null);
   const isWebGPU = (gl as unknown as RendererWithWebGPUFlag).__isWebGPURenderer === true;
 
+  // Terminal state: once a backend proves it cannot render the post-processing
+  // pipeline (repeated throws), we disable the subsystem for the session and
+  // let R3F's default renderer own every frame — no further retries.
+  const [ppDisabled, setPpDisabled] = useState(false);
+  // True only while an actual pipeline (WebGPU RenderPipeline or WebGL
+  // EffectComposer) is constructed and owns the frame. Gates the render
+  // priority so that during async init — or if init never completes — R3F
+  // renders directly instead of us calling a throwing fallback.
+  const [pipelineReady, setPipelineReady] = useState(false);
+  const guardRef = useRef(initRenderGuard());
+
   const glowSettings = settings?.visualisation?.glow;
   const bloomSettings = settings?.visualisation?.bloom;
 
   const effectEnabled = glowSettings?.enabled || bloomSettings?.enabled;
-  const isEnabledWebGL = enabled && !isWebGPU && effectEnabled;
-  const isEnabledWebGPU = enabled && isWebGPU && effectEnabled;
+  const ppAvailable = !ppDisabled;
+  const isEnabledWebGL = enabled && !isWebGPU && effectEnabled && ppAvailable;
+  const isEnabledWebGPU = enabled && isWebGPU && effectEnabled && ppAvailable;
 
   // Extract primitive values to avoid stale closures and unnecessary effect deps.
   // Object references (glowSettings, bloomSettings) change on every settings update
@@ -97,6 +123,7 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
       }
       postProcessingRef.current = null;
       bloomNodeRef.current = null;
+      setPipelineReady(false);
       return;
     }
 
@@ -139,6 +166,9 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
 
         postProcessingRef.current = postProcessing;
         bloomNodeRef.current = bloomPass;
+        // Fresh pipeline — reset the failure streak and take render ownership.
+        guardRef.current = initRenderGuard();
+        setPipelineReady(true);
 
         disposeRef.current = () => {
           postProcessing.dispose();
@@ -158,6 +188,7 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
       }
       postProcessingRef.current = null;
       bloomNodeRef.current = null;
+      setPipelineReady(false);
     };
   // bloomParamsRef is intentionally NOT a dep — initial values are read from the ref,
   // and live updates are handled by the bloom uniform updater useEffect below.
@@ -177,6 +208,7 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
   useEffect(() => {
     if (!isEnabledWebGL) {
       composerRef.current = null;
+      setPipelineReady(false);
       return;
     }
 
@@ -218,6 +250,9 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
 
         composerRef.current = composer;
         rtRef.current = rt;
+        // Fresh pipeline — reset the failure streak and take render ownership.
+        guardRef.current = initRenderGuard();
+        setPipelineReady(true);
       } catch (err) {
         logger.warn('[GemPostProcessing] Failed to init WebGL bloom:', err);
       }
@@ -235,6 +270,7 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
         rtRef.current.dispose();
         rtRef.current = null;
       }
+      setPipelineReady(false);
     };
   }, [isEnabledWebGL, gl, scene, camera, effectParamsWebGL]);
 
@@ -251,44 +287,66 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
     }
   }, [size.width, size.height]);
 
-  // Render loop: delegate to whichever pipeline is active.
+  // Render loop: only runs while an actual pipeline owns the frame (priority 1).
   //
   // Priority 1 tells R3F to skip its default gl.render() call (R3F v9 increments
   // internal.priority for any subscriber with priority > 0, and only calls
   // gl.render when internal.priority === 0). This prevents double-rendering.
   //
-  // During async initialization, the post-processing refs are null while the
-  // dynamic imports resolve. We fall back to gl.render() in that window to
-  // avoid black frames.
-  const isActive = isEnabledWebGPU || isEnabledWebGL;
-  const ppErrorCountRef = useRef(0);
-  useFrame(({ gl: renderer, scene: s, camera: cam }) => {
-    if (postProcessingRef.current) {
-      try {
+  // We take priority ONLY once a pipeline ref is actually built (pipelineReady).
+  // While the dynamic imports resolve, if init fails, or once terminally
+  // disabled, priority is undefined and R3F renders the scene directly via its
+  // own working WebGPU/WebGL path. We therefore never issue a bare
+  // renderer.render() fallback from here: on the WebGPU backend that throws
+  // "Cannot read properties of null (reading 'configure')" during GPU
+  // context loss/restore windows, and with priority 1 (R3F suppressed) it spins
+  // into an unbounded stream of identical uncaught errors.
+  const renderActive = pipelineReady && !ppDisabled;
+  useFrame(() => {
+    if (!renderActive) return;
+
+    try {
+      if (postProcessingRef.current) {
         postProcessingRef.current.render();
-      } catch (err: unknown) {
-        // RenderPipeline can throw on WebGPU due to texture synchronization
-        // constraints (read+write same texture in one pass). After 3 consecutive
-        // failures, fall back to direct rendering for the rest of the session.
-        ppErrorCountRef.current++;
-        if (ppErrorCountRef.current <= 3) {
-          logger.warn('[GemPostProcessing] PostProcessing.render() failed:', err instanceof Error ? err.message : err);
-        }
-        if (ppErrorCountRef.current >= 3) {
-          logger.warn('[GemPostProcessing] Too many failures, disabling WebGPU bloom');
-          postProcessingRef.current = null;
-        }
-        renderer.render(s, cam);
+      } else if (composerRef.current) {
+        composerRef.current.render();
+      } else {
+        // pipelineReady is true but the ref was cleared mid-frame (teardown
+        // race). Nothing to draw; R3F resumes next frame once priority drops.
+        return;
       }
-    } else if (composerRef.current) {
-      composerRef.current.render();
-    } else if (isActive) {
-      // Fallback: post-processing enabled but not yet initialized (async import in flight).
-      // Render the scene directly so there are no black frames during init.
-      renderer.render(s, cam);
+      recordRenderSuccess(guardRef.current);
+    } catch (err: unknown) {
+      const { logFirstFailure, disableNow } = recordRenderFailure(guardRef.current, {
+        maxConsecutiveFailures: MAX_CONSECUTIVE_RENDER_FAILURES,
+      });
+      if (logFirstFailure) {
+        // One structured line per failure streak. Transient context-loss blips
+        // recover on the next good frame (recordRenderSuccess resets the streak).
+        logger.warn(
+          '[GemPostProcessing] render failed (backing off):',
+          err instanceof Error ? err.message : err,
+        );
+      }
+      if (disableNow) {
+        logger.warn(
+          `[GemPostProcessing] disabling post-processing after ${MAX_CONSECUTIVE_RENDER_FAILURES} consecutive render failures — default renderer resumes`,
+        );
+        // Terminal state: tear down the pipeline and relinquish the frame to
+        // R3F. Dropping pipelineReady/ppAvailable also stops the init effects
+        // from rebuilding, so there is no retry loop.
+        if (disposeRef.current) {
+          try { disposeRef.current(); } catch { /* already torn down */ }
+          disposeRef.current = null;
+        }
+        postProcessingRef.current = null;
+        composerRef.current = null;
+        bloomNodeRef.current = null;
+        setPipelineReady(false);
+        setPpDisabled(true);
+      }
     }
-    // When !isActive, priority is undefined so R3F renders normally — no fallback needed.
-  }, isActive ? 1 : undefined);
+  }, renderActive ? 1 : undefined);
 
   return null;
 };
