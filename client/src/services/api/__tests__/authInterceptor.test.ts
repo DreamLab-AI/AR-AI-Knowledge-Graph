@@ -30,7 +30,7 @@ vi.mock('uuid', () => ({
   v4: vi.fn(() => 'test-uuid-1234'),
 }));
 
-import { authRequestInterceptor, generateRequestId, initializeAuthInterceptor, setupAuthStateListener } from '../authInterceptor';
+import { authRequestInterceptor, authResponseInterceptor, generateRequestId, initializeAuthInterceptor, setupAuthStateListener } from '../authInterceptor';
 import type { RequestConfig } from '../UnifiedApiClient';
 
 describe('authInterceptor', () => {
@@ -147,8 +147,11 @@ describe('authInterceptor', () => {
     it('should call setInterceptors on the api client', () => {
       const mockClient = { setInterceptors: vi.fn() };
       initializeAuthInterceptor(mockClient);
+      // ADR-06 §D1: both request signing and the release-mode 401 response
+      // detector are registered.
       expect(mockClient.setInterceptors).toHaveBeenCalledWith({
         onRequest: authRequestInterceptor,
+        onResponse: authResponseInterceptor,
       });
     });
   });

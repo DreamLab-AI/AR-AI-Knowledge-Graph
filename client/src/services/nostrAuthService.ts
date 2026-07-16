@@ -542,6 +542,13 @@ class NostrAuthService {
       isPowerUser: false,
     };
 
+    // Persist the (non-sensitive) pubkey so an in-session restorePasskeySession()
+    // can verify the in-memory key derives to the same identity. The private key
+    // is NEVER written to sessionStorage.
+    try {
+      sessionStorage.setItem('nostr_passkey_pubkey', pubkey);
+    } catch { /* sessionStorage may be unavailable */ }
+
     // Persist user in localStorage for cross-reload
     this.storeCurrentUser();
 
@@ -551,9 +558,20 @@ class NostrAuthService {
     return newState;
   }
 
-  /** Check if a passkey session exists (in-memory only) */
+  /**
+   * Check if a passkey session exists. Prefers the in-memory key, but also
+   * recognises a legacy sessionStorage key written by older code paths so a
+   * restorePasskeySession() call can migrate it.
+   */
   public hasPasskeySession(): boolean {
-    return !!_localKeyHex || this.localPrivateKey !== null;
+    if (!!_localKeyHex || this.localPrivateKey !== null) {
+      return true;
+    }
+    try {
+      return sessionStorage.getItem('nostr_passkey_key') !== null;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -562,11 +580,25 @@ class NostrAuthService {
    */
   public restorePasskeySession(): void {
     try {
-      const hexKey = _localKeyHex;
+      // Prefer the in-memory key; fall back to a legacy sessionStorage copy
+      // written by older, less secure code paths.
+      let hexKey = _localKeyHex;
+      let fromLegacyStorage = false;
       if (!hexKey) {
-        // No in-memory key — cannot restore session
+        try {
+          const legacyKey = sessionStorage.getItem('nostr_passkey_key');
+          if (legacyKey) {
+            hexKey = legacyKey;
+            fromLegacyStorage = true;
+          }
+        } catch { /* sessionStorage may be unavailable */ }
+      }
+
+      if (!hexKey) {
+        // No key material anywhere — cannot restore session
         return;
       }
+
       const pubkey = sessionStorage.getItem('nostr_passkey_pubkey');
       // Clean nostr_privkey if present (older legacy path)
       sessionStorage.removeItem('nostr_privkey');
@@ -582,7 +614,13 @@ class NostrAuthService {
           this.localPrivateKey = null;
           _localKeyHex = null;
           sessionStorage.removeItem('nostr_passkey_pubkey');
+          sessionStorage.removeItem('nostr_passkey_key');
           return;
+        }
+        // Migrate the key into memory and drop the insecure sessionStorage copy
+        _localKeyHex = hexKey;
+        if (fromLegacyStorage) {
+          sessionStorage.removeItem('nostr_passkey_key');
         }
         // Set current user if not already set from localStorage
         if (!this.currentUser) {

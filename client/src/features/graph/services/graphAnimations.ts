@@ -1,6 +1,6 @@
 
 
-import { Vector3, Color, Camera, Quaternion, AnimationMixer, Clock } from 'three';
+import { Vector3, Color, Camera, Quaternion, AnimationMixer, Timer } from 'three';
 import { createLogger } from '../../../utils/loggerConfig';
 import type { GraphData } from '../managers/graphDataManager';
 
@@ -64,7 +64,10 @@ export class GraphAnimations {
   private nodeAnimations: Map<string, NodeAnimationState> = new Map();
   private morphingTransitions: Map<string, MorphingTransition> = new Map();
   private animationMixer: AnimationMixer | null = null;
-  private clock = new Clock();
+  // THREE.Timer replaces the deprecated THREE.Clock (r183). update() is called
+  // once per frame in animate(); getDelta()/getElapsed() then return stable,
+  // repeatable values for that frame.
+  private timer = new Timer();
   private isRunning = false;
   private animationFrameId: number | null = null;
   private activeTimers: Set<ReturnType<typeof setTimeout>> = new Set();
@@ -83,7 +86,9 @@ export class GraphAnimations {
     if (this.isRunning) return;
 
     this.isRunning = true;
-    this.clock.start();
+    // Rebase the timing baseline to now so the first frame's delta is one
+    // frame, not the gap since construction (matches Clock.start() behaviour).
+    this.timer.reset();
     this.animationFrameId = requestAnimationFrame(this.animate);
     logger.info('Animation system started');
   }
@@ -473,8 +478,10 @@ export class GraphAnimations {
   private animate = (): void => {
     if (!this.isRunning) return;
 
-    const deltaTime = this.clock.getDelta();
-    const elapsedTime = this.clock.getElapsedTime();
+    // Advance the timer once per frame, then read stable delta/elapsed.
+    this.timer.update();
+    const deltaTime = this.timer.getDelta();
+    const elapsedTime = this.timer.getElapsed();
 
 
     this.updateTransitionAnimations(deltaTime);

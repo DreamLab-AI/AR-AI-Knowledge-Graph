@@ -8,7 +8,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   BinaryWebSocketProtocol,
-  PROTOCOL_V2,
   MESSAGE_HEADER_SIZE,
   AGENT_POSITION_SIZE_V2,
   AGENT_STATE_SIZE_V2,
@@ -21,13 +20,17 @@ import {
 } from '../BinaryWebSocketProtocol';
 
 /**
- * Helper to create a versioned payload (version byte + data)
+ * Helper to create a decode payload (raw node records, no version prefix).
+ *
+ * Post-ADR-090 the protocol version travels in the 6-byte message header, not in
+ * the payload — production strips the header via extractPayload() before calling
+ * decode*(). The decoders therefore receive a header-less payload whose bytes are
+ * the raw node records, so dataOffset is 0.
  */
-function createVersionedPayload(version: number, dataSize: number): { buffer: ArrayBuffer; dataView: DataView; dataOffset: number } {
-  const buffer = new ArrayBuffer(1 + dataSize);
+function createPayload(dataSize: number): { buffer: ArrayBuffer; dataView: DataView; dataOffset: number } {
+  const buffer = new ArrayBuffer(dataSize);
   const view = new DataView(buffer);
-  view.setUint8(0, version);
-  return { buffer, dataView: view, dataOffset: 1 };
+  return { buffer, dataView: view, dataOffset: 0 };
 }
 
 describe('BinaryWebSocketProtocol - V2 Protocol', () => {
@@ -58,7 +61,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
     });
 
     it('should decode V2 format with large IDs', () => {
-      const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_POSITION_SIZE_V2);
+      const { buffer, dataView, dataOffset } = createPayload(AGENT_POSITION_SIZE_V2);
 
       dataView.setUint32(dataOffset + 0, 50000, true);
       dataView.setFloat32(dataOffset + 4, 1.0, true);
@@ -78,7 +81,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
       const largeIds = [16384, 20000, 50000, 100000, 1000000];
 
       for (const nodeId of largeIds) {
-        const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_POSITION_SIZE_V2);
+        const { buffer, dataView, dataOffset } = createPayload(AGENT_POSITION_SIZE_V2);
 
         dataView.setUint32(dataOffset + 0, nodeId, true);
         dataView.setFloat32(dataOffset + 4, 1.0, true);
@@ -96,7 +99,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
 
     it('should decode multiple V2 updates correctly', () => {
       const nodeIds = [100, 20000, 50000];
-      const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_POSITION_SIZE_V2 * nodeIds.length);
+      const { buffer, dataView, dataOffset } = createPayload(AGENT_POSITION_SIZE_V2 * nodeIds.length);
 
       nodeIds.forEach((nodeId, i) => {
         const offset = dataOffset + i * AGENT_POSITION_SIZE_V2;
@@ -118,7 +121,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
 
     it('should support maximum 30-bit node ID', () => {
       const maxId = 0x3FFFFFFF;
-      const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_POSITION_SIZE_V2);
+      const { buffer, dataView, dataOffset } = createPayload(AGENT_POSITION_SIZE_V2);
 
       dataView.setUint32(dataOffset + 0, maxId, true);
       dataView.setFloat32(dataOffset + 4, 1.0, true);
@@ -157,7 +160,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
     });
 
     it('should decode V2 agent state with large IDs', () => {
-      const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_STATE_SIZE_V2);
+      const { buffer, dataView, dataOffset } = createPayload(AGENT_STATE_SIZE_V2);
 
       dataView.setUint32(dataOffset + 0, 100000, true);
       dataView.setFloat32(dataOffset + 4, 1.0, true);
@@ -185,7 +188,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
   describe('No ID Collision Tests', () => {
     it('should have no collisions for different large IDs', () => {
       const nodeIds = [16384, 20000, 50000, 100000, 500000];
-      const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_POSITION_SIZE_V2 * nodeIds.length);
+      const { buffer, dataView, dataOffset } = createPayload(AGENT_POSITION_SIZE_V2 * nodeIds.length);
 
       nodeIds.forEach((nodeId, i) => {
         const offset = dataOffset + i * AGENT_POSITION_SIZE_V2;
@@ -214,7 +217,7 @@ describe('BinaryWebSocketProtocol - V2 Protocol', () => {
       const id1 = 100;
       const id2 = 16384 + 100; // Would truncate to same value in u16
 
-      const { buffer, dataView, dataOffset } = createVersionedPayload(PROTOCOL_V2, AGENT_POSITION_SIZE_V2 * 2);
+      const { buffer, dataView, dataOffset } = createPayload(AGENT_POSITION_SIZE_V2 * 2);
 
       dataView.setUint32(dataOffset + 0, id1, true);
       dataView.setFloat32(dataOffset + 4, 1.0, true);

@@ -14,9 +14,14 @@ import type { GemMaterialSettings, GlowSettings } from '../../settings/config/se
  * symptom-level `16_000` bump in main commit d1f7f2548) are replaced by:
  *   - EDGE_INITIAL = 1024 — first allocation when points first arrive
  *   - grow x2 on overflow up to settings.rendering.maxEdgesCeiling
- *   - default ceiling DEFAULT_EDGE_CEILING = 32_768
- *   - edges above ceiling: draw `ceiling`, emit one structured warn naming
- *     the unrendered count. Never silent truncation.
+ *   - default ceiling DEFAULT_EDGE_CEILING = 65_536 (a CAPACITY ceiling, not a
+ *     per-frame draw commitment — `mesh.count` is still the live edge count;
+ *     the buffer just reserves ~5 MB of matrix+colour headroom so dense graphs
+ *     at 25k-node scale render far more of their edges before truncating)
+ *   - edges above ceiling: draw `ceiling`, never silent truncation. When the
+ *     ceiling is a configured value (settings present) the cap is by design →
+ *     one structured `console.info` line. When we're on the hardcoded default
+ *     fallback (setting absent) → one `console.warn` nudging configuration.
  *
  * Phase 6 (ADR-04 D2 / T2): surface-to-surface offset for edge endpoints
  * is applied by the caller (GraphManager.tsx) which has per-node access
@@ -32,7 +37,7 @@ import type { GemMaterialSettings, GlowSettings } from '../../settings/config/se
  * (overlapping nodes) case by scaling to zero.
  */
 const EDGE_INITIAL = 1024;
-const DEFAULT_EDGE_CEILING = 32768;
+const DEFAULT_EDGE_CEILING = 65536;
 
 interface GlassEdgesProps {
   points: number[];
@@ -210,6 +215,13 @@ export const GlassEdges = forwardRef<GlassEdgesHandle, GlassEdgesProps>(
     // only consulted at allocation time, so live-edit will affect the *next*
     // growth event rather than retroactively shrinking the buffer
     ceilingRef.current = renderingCeiling ?? DEFAULT_EDGE_CEILING;
+    // Whether the ceiling is a configured value vs the hardcoded default
+    // fallback. When configured, truncation at that ceiling is the user's
+    // deliberate choice, so overflow is reported as a calm info line rather
+    // than a warning. Held in a ref so ensureCapacity's callback reads the
+    // current value without re-creating on every settings tick.
+    const userSetCeilingRef = useRef<boolean>(renderingCeiling !== undefined);
+    userSetCeilingRef.current = renderingCeiling !== undefined;
 
     const capacityRef = useRef<number>(0);
     // Track reallocation frequency for telemetry — flag if >2 in 60s.
@@ -371,12 +383,25 @@ export const GlassEdges = forwardRef<GlassEdgesHandle, GlassEdgesProps>(
         }
         if (overflowWarnedRef.current !== edgeCount) {
           overflowWarnedRef.current = edgeCount;
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[GlassEdges] edge count ${edgeCount} exceeds ceiling ${ceiling}. ` +
-            `${edgeCount - ceiling} edges will not be rendered. ` +
-            `Raise rendering.maxEdgesCeiling to render all edges.`
-          );
+          const hidden = edgeCount - ceiling;
+          if (userSetCeilingRef.current) {
+            // Configured ceiling — truncation is by design. One structured info
+            // line (not a warning) so it reads as telemetry, not a fault.
+            // eslint-disable-next-line no-console
+            console.info(
+              `[GlassEdges] edges=${edgeCount} ceiling=${ceiling} rendered=${ceiling} ` +
+              `hidden=${hidden} (by-design cap; raise visualisation.rendering.maxEdgesCeiling to show more)`
+            );
+          } else {
+            // Hardcoded-default fallback (setting absent) — nudge the operator
+            // to configure a ceiling that fits their graph.
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[GlassEdges] edge count ${edgeCount} exceeds ceiling ${ceiling}. ` +
+              `${hidden} edges will not be rendered. ` +
+              `Raise rendering.maxEdgesCeiling to render all edges.`
+            );
+          }
         }
         return meshRef.current!;
       }

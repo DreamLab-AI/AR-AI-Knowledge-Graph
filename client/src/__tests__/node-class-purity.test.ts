@@ -4,9 +4,14 @@
  * Validates that the three standalone pure-renderer components honour the
  * geometry/material contract:
  *
- *   - CrystalOrb    → SphereGeometry(r=0.5), CrystalOrbMaterial
+ *   - CrystalOrb    → IcosahedronGeometry(r=0.5, detail=1), CrystalOrbMaterial
  *   - AgentCapsule  → CapsuleGeometry(r=0.3, h=0.6), AgentCapsuleMaterial
- *   - Gem geometry  → IcosahedronGeometry(r=0.5), GemNodeMaterial
+ *   - Gem geometry  → IcosahedronGeometry(r=0.5, detail=1), GemNodeMaterial
+ *
+ * CrystalOrb and Gem deliberately share the faceted-icosahedron mesh — a
+ * triangle-budget optimisation over the original smooth sphere (~27M→4M tris
+ * at 50k instances). The node-class distinction is carried by the MATERIAL,
+ * not the geometry type; only AgentCapsule stands apart as its own geometry.
  *
  * These are factory tests — we exercise the geometry/material factory
  * functions directly. The full rendering integration is covered by visual
@@ -20,11 +25,14 @@ import { createAgentCapsuleGeometry, createAgentCapsuleMaterial } from '../rende
 import { createGemGeometry, createGemNodeMaterial } from '../rendering/materials/GemNodeMaterial';
 
 describe('Phase 6 (ADR-04 D9/T8) — node class geometry & material contract', () => {
-  it('CrystalOrb geometry is SphereGeometry with radius 0.5', () => {
+  it('CrystalOrb geometry is IcosahedronGeometry with radius 0.5', () => {
     const geo = createCrystalOrbGeometry();
-    expect(geo).toBeInstanceOf(THREE.SphereGeometry);
-    // SphereGeometry exposes the constructor params via `parameters`.
-    expect((geo as THREE.SphereGeometry).parameters.radius).toBe(0.5);
+    expect(geo).toBeInstanceOf(THREE.IcosahedronGeometry);
+    // IcosahedronGeometry exposes the constructor params via `parameters`.
+    // Faceted (detail=1) rather than a smooth sphere — a deliberate
+    // triangle-budget optimisation that reads as crystalline at node scale.
+    expect((geo as THREE.IcosahedronGeometry).parameters.radius).toBe(0.5);
+    expect((geo as THREE.IcosahedronGeometry).parameters.detail).toBe(1);
     geo.dispose();
   });
 
@@ -66,13 +74,20 @@ describe('Phase 6 (ADR-04 D9/T8) — node class geometry & material contract', (
     result.material.dispose();
   });
 
-  it('Geometry classes are distinct — no shared identity', () => {
+  it('Geometry factories return independent instances; capsule stands apart', () => {
     const g1 = createCrystalOrbGeometry();
     const g2 = createGemGeometry();
     const g3 = createAgentCapsuleGeometry();
-    expect(g1.type).not.toBe(g2.type);
-    expect(g2.type).not.toBe(g3.type);
-    expect(g1.type).not.toBe(g3.type);
+    // No shared singleton: each factory hands back a fresh geometry, so
+    // disposing one node class never frees another's GPU buffers.
+    expect(g1).not.toBe(g2);
+    expect(g2).not.toBe(g3);
+    expect(g1).not.toBe(g3);
+    // Orb and gem share the faceted-icosahedron mesh by design (the class
+    // distinction is by material); the agent capsule is a geometry type apart.
+    expect(g1.type).toBe('IcosahedronGeometry');
+    expect(g2.type).toBe('IcosahedronGeometry');
+    expect(g3.type).not.toBe(g1.type);
     g1.dispose();
     g2.dispose();
     g3.dispose();

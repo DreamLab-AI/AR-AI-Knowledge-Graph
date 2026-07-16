@@ -87,7 +87,8 @@ export interface RenderingSettings {
   shadowMapSize?: string;
   shadowBias?: number;
   context?: string;
-  /** Phase 6 (ADR-04 D1): hard ceiling on dynamic edge capacity. Default 32_768. */
+  /** Phase 6 (ADR-04 D1): hard ceiling on dynamic edge capacity (a capacity
+   *  ceiling, not a per-frame draw commitment). Default 65_536. */
   maxEdgesCeiling?: number;
   /** Phase 6 (ADR-04 D5): software-WebGL fallback policy. Default 'auto'. */
   softwareFallback?: 'auto' | 'force-on' | 'force-off';

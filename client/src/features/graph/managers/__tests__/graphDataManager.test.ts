@@ -44,10 +44,17 @@ const mockProcessBinaryData = vi.fn().mockResolvedValue(undefined);
 const mockHasUnknownNodes = vi.fn().mockResolvedValue(false);
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined);
 const mockSetTweeningSettings = vi.fn().mockResolvedValue(undefined);
+// ADR-03 D7 / ADR-090: the worker surface the manager actually drives now.
+// Topology (incl. all add/remove mutations) flows through setGraphTopology;
+// binary position frames flow through processBinaryFrame(Uint8Array).
+const mockSetGraphTopology = vi.fn().mockResolvedValue(undefined);
+const mockProcessBinaryFrame = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../graphWorkerProxy', () => ({
   graphWorkerProxy: {
     isReady: () => mockIsReady(),
+    setGraphTopology: (...args: unknown[]) => mockSetGraphTopology(...args),
+    processBinaryFrame: (...args: unknown[]) => mockProcessBinaryFrame(...args),
     setGraphData: (...args: unknown[]) => mockSetGraphData(...args),
     getGraphData: (...args: unknown[]) => mockGetGraphData(...args),
     onGraphDataChange: (...args: unknown[]) => mockOnGraphDataChange(...args),
@@ -202,9 +209,9 @@ describe('GraphDataManager', () => {
 
       await graphDataManager.fetchInitialData();
 
-      // Verify setGraphData was called with string-coerced edges
-      expect(mockSetGraphData).toHaveBeenCalled();
-      const calledData = mockSetGraphData.mock.calls[0][0] as GraphData;
+      // Verify the topology delivered to the worker carries string-coerced edges
+      expect(mockSetGraphTopology).toHaveBeenCalled();
+      const calledData = mockSetGraphTopology.mock.calls[0][0] as GraphData;
       expect(calledData.edges[0].source).toBe('1');
       expect(calledData.edges[0].target).toBe('2');
       expect(typeof calledData.edges[0].source).toBe('string');
@@ -235,7 +242,7 @@ describe('GraphDataManager', () => {
 
       await graphDataManager.fetchInitialData();
 
-      const calledData = mockSetGraphData.mock.calls[0][0] as GraphData;
+      const calledData = mockSetGraphTopology.mock.calls[0][0] as GraphData;
       // The edge source/target are "undefined" strings, which are guarded against
       // and set to undefined, then the id "noformat" has no '-' so parts.length < 2.
       // Final String(undefined) = "undefined" which is filtered by the .filter() call.
@@ -262,8 +269,8 @@ describe('GraphDataManager', () => {
 
       const data = await graphDataManager.fetchInitialData();
 
-      // setGraphData should have been called with string IDs
-      const calledData = mockSetGraphData.mock.calls[0][0] as GraphData;
+      // Worker topology should have been delivered with string IDs
+      const calledData = mockSetGraphTopology.mock.calls[0][0] as GraphData;
       expect(calledData.nodes[0].id).toBe('123');
       expect(typeof calledData.nodes[0].id).toBe('string');
     });
@@ -315,7 +322,7 @@ describe('GraphDataManager', () => {
       await graphDataManager.setGraphData({ nodes: [], edges: [] });
 
       expect(graphDataManager.nodeIdMap.size).toBe(0);
-      expect(mockSetGraphData).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockSetGraphTopology).toHaveBeenCalledWith(expect.objectContaining({
         nodes: [],
         edges: [],
       }));
@@ -390,14 +397,19 @@ describe('GraphDataManager', () => {
   describe('updateNodePositions', () => {
     it('should skip empty ArrayBuffer', async () => {
       await graphDataManager.updateNodePositions(new ArrayBuffer(0));
-      expect(mockProcessBinaryData).not.toHaveBeenCalled();
+      expect(mockProcessBinaryFrame).not.toHaveBeenCalled();
     });
 
     it('should process non-empty ArrayBuffer', async () => {
       // Create a minimal buffer that represents position data
       const buffer = new ArrayBuffer(28); // BINARY_NODE_SIZE
       await graphDataManager.updateNodePositions(buffer);
-      expect(mockProcessBinaryData).toHaveBeenCalledWith(buffer);
+      // ADR-03 D7: the frame is handed to the worker zero-copy as a Uint8Array
+      // view over the same buffer via processBinaryFrame.
+      expect(mockProcessBinaryFrame).toHaveBeenCalled();
+      const frame = mockProcessBinaryFrame.mock.calls[0][0] as Uint8Array;
+      expect(frame).toBeInstanceOf(Uint8Array);
+      expect(frame.buffer).toBe(buffer);
     });
   });
 
@@ -428,7 +440,11 @@ describe('GraphDataManager', () => {
 
       expect(graphDataManager.nodeIdMap.has('77')).toBe(true);
       expect(graphDataManager.nodeIdMap.get('77')).toBe(77);
-      expect(mockUpdateNode).toHaveBeenCalled();
+      // ADR-03 D7: mutations are forwarded to the worker as a full topology
+      // update (setGraphTopology), not a per-node updateNode call.
+      expect(mockSetGraphTopology).toHaveBeenCalled();
+      const forwarded = mockSetGraphTopology.mock.calls.at(-1)![0] as GraphData;
+      expect(forwarded.nodes.some(n => n.id === '77')).toBe(true);
     });
   });
 
@@ -445,7 +461,11 @@ describe('GraphDataManager', () => {
       // Now remove
       await graphDataManager.removeNode('88');
       expect(graphDataManager.nodeIdMap.has('88')).toBe(false);
-      expect(mockRemoveNode).toHaveBeenCalledWith('88');
+      // ADR-03 D7: removal is forwarded as a topology update with the node gone,
+      // not a per-node removeNode call.
+      expect(mockSetGraphTopology).toHaveBeenCalled();
+      const forwarded = mockSetGraphTopology.mock.calls.at(-1)![0] as GraphData;
+      expect(forwarded.nodes.some(n => n.id === '88')).toBe(false);
     });
   });
 
