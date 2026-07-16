@@ -12,7 +12,7 @@
  * agent (displacement < epsilon) grows no trail, and a moving one decays its tail by
  * ring-buffer rotation (the fixed-length buffer overwrites the oldest sample).
  *
- * Rendering follows the repo idioms (cf. TransientBeamsLayer, SimpleLine): a single
+ * Rendering follows the repo idioms (cf. TransientBeamsLayer, BotsEdges): a single
  * THREE.Line whose position + colour attributes are pre-allocated once and mutated in
  * place — zero per-frame allocation. The oldest→newest fade is baked into the vertex
  * colours under additive blending (the bioluminescent idiom shared with BotsNode's

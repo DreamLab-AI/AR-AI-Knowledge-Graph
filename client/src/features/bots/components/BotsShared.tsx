@@ -2,12 +2,9 @@
  * BotsShared.tsx
  * Shared primitives for the Bots visualization:
  *   - CSS keyframe injection (runs once at module load)
- *   - SimpleLine – a standard BufferGeometry line (avoids Line2/InstancedBufferGeometry
- *     which crashes WebGPU's drawIndexed via drei's <Line>)
  *   - Pure helpers: lerpVector3, generateAgentTypeColor, getVisionClawColors
  *   - Pre-allocated module-scope Three.js objects (zero-alloc pattern)
  */
-import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------------------
@@ -20,9 +17,6 @@ export const _tempVec3Perp = new THREE.Vector3();
 export const QUEEN_GOLD = new THREE.Color('#FFD700');
 export const ADDITIVE_BLENDING = THREE.AdditiveBlending;
 export const BACK_SIDE = THREE.BackSide;
-
-/** Pre-allocated particle base-T values (module scope — avoids per-render allocation). */
-export const PARTICLE_BASE_T = [0.15, 0.4, 0.65, 0.9] as const;
 
 // ---------------------------------------------------------------------------
 // CSS injection (runs once at module import time)
@@ -48,49 +42,6 @@ if (typeof document !== 'undefined' && !document.querySelector('#bots-visualizat
   style.textContent = pulseKeyframes;
   document.head.appendChild(style);
 }
-
-// ---------------------------------------------------------------------------
-// SimpleLine — WebGPU-safe line primitive
-// ---------------------------------------------------------------------------
-interface SimpleLineProps {
-  points: THREE.Vector3[];
-  color: string;
-  opacity?: number;
-  transparent?: boolean;
-}
-
-export const SimpleLine: React.FC<SimpleLineProps> = ({
-  points,
-  color,
-  opacity = 1,
-  transparent = false,
-}) => {
-  const geomRef = useRef<THREE.BufferGeometry>(null);
-  const positions = useMemo(() => {
-    const arr = new Float32Array(points.length * 3);
-    for (let i = 0; i < points.length; i++) {
-      arr[i * 3]     = points[i].x;
-      arr[i * 3 + 1] = points[i].y;
-      arr[i * 3 + 2] = points[i].z;
-    }
-    return arr;
-  }, [points]);
-
-  useEffect(() => {
-    if (geomRef.current) {
-      geomRef.current.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    }
-  }, [positions]);
-
-  return (
-    <line>
-      <bufferGeometry ref={geomRef}>
-        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-      </bufferGeometry>
-      <lineBasicMaterial color={color} opacity={opacity} transparent={transparent} />
-    </line>
-  );
-};
 
 // ---------------------------------------------------------------------------
 // Helpers

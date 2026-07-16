@@ -1,14 +1,14 @@
 /**
  * BotsVisualization.tsx
  * Thin orchestrator: wires BotsDataContext → per-agent positions →
- * BotsNode + BotsEdgeComponent renderers.
+ * BotsNode + BotsEdges renderers.
  *
  * Responsibilities:
  *   - Consume `useBotsData()` context (no WS/polling logic here)
  *   - Maintain `positionsRef` (server positions or initial circle layout)
  *   - Resolve colour palette from settings
  *   - Render loading / error / empty states
- *   - Delegate all 3-D rendering to BotsNode / BotsEdgeComponent
+ *   - Delegate all 3-D rendering to BotsNode / BotsEdges
  */
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -23,7 +23,7 @@ import { useBotsData } from '../contexts/BotsDataContext';
 import { getVisionClawColors } from './BotsShared';
 import { agentTrustKey } from '../agentIdentity';
 import { BotsNode } from './BotsNode';
-import { BotsEdgeComponent } from './BotsEdgeComponent';
+import { BotsEdges } from './BotsEdges';
 
 const logger = createLogger('BotsVisualization');
 
@@ -169,24 +169,15 @@ export const BotsVisualization: React.FC = () => {
   // -------------------------------------------------------------------------
   return (
     <group>
-      {/* Edges */}
-      {Array.from(botsData.edges.values()).map(edge => {
-        const sourcePos = positionsRef.current.get(edge.source);
-        const targetPos = positionsRef.current.get(edge.target);
-        if (!sourcePos || !targetPos) return null;
-
-        return (
-          <BotsEdgeComponent
-            key={edge.id}
-            edge={edge}
-            sourcePos={sourcePos}
-            targetPos={targetPos}
-            color={colors.edge}
-            sourceAgent={botsData.agents.get(edge.source)}
-            targetAgent={botsData.agents.get(edge.target)}
-          />
-        );
-      })}
+      {/* Inter-agent collaboration edges — one THREE.LineSegments draw for the
+          whole layer (see BotsEdges). Endpoints track live agent positions;
+          per-edge colour/opacity/pulse ride the vertex colours. */}
+      <BotsEdges
+        edges={botsData.edges}
+        agents={botsData.agents}
+        positionsRef={positionsRef}
+        color={colors.edge}
+      />
 
       {/* Nodes */}
       {Array.from(botsData.agents.values()).map((node, index) => {
