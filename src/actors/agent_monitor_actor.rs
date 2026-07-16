@@ -95,6 +95,77 @@ fn task_to_agent_status(task: TaskInfo, telemetry: &ContainerTelemetry) -> Agent
     }
 }
 
+/// Debounce threshold for a confirmed-empty roster (defect: agent roster clobber).
+/// An empty management-API task list is treated as *no information* on the first
+/// poll; only after this many CONSECUTIVE empty polls following a non-empty roster
+/// does the monitor emit the empty `UpdateBotsGraph` that clears the bots graph.
+const EMPTY_CONFIRM_THRESHOLD: u32 = 2;
+
+/// Outcome of the roster-emit guard: whether to send `UpdateBotsGraph` this poll,
+/// plus the next debounce state the actor must persist.
+#[derive(Debug, PartialEq, Eq)]
+struct BotsEmitDecision {
+    send: bool,
+    next_last_emit_nonempty: bool,
+    next_consecutive_empty: u32,
+}
+
+/// Pure guard deciding whether a poll should emit `UpdateBotsGraph`.
+///
+/// An empty agentbox task list means "this poll learned nothing", NOT "every
+/// agent died" — the live MCP population (`BotsClient`) can still be non-zero.
+/// Emitting an empty graph on every such poll clobbers `bots_graph_data` to 0 and
+/// blinks the client roster (19→0→19). So emit iff:
+///   * the poll has ≥1 agent (a populated roster is always authoritative), OR
+///   * the previous emit was non-empty AND emptiness is confirmed on
+///     [`EMPTY_CONFIRM_THRESHOLD`] consecutive polls (debounce a transient blip).
+///
+/// After a confirmed-empty clear is emitted, later empty polls are suppressed (no
+/// repeated clobber) until a populated roster returns. `BotsClient`'s own
+/// MCP-empty clear stays authoritative and independent of this guard.
+fn decide_bots_graph_emit(
+    current_count: usize,
+    last_emit_nonempty: bool,
+    consecutive_empty_polls: u32,
+) -> BotsEmitDecision {
+    if current_count >= 1 {
+        // Populated roster is always authoritative; reset the debounce.
+        return BotsEmitDecision {
+            send: true,
+            next_last_emit_nonempty: true,
+            next_consecutive_empty: 0,
+        };
+    }
+
+    if !last_emit_nonempty {
+        // Roster already known-empty (or never populated): an empty poll carries
+        // no new information — suppress it.
+        return BotsEmitDecision {
+            send: false,
+            next_last_emit_nonempty: false,
+            next_consecutive_empty: consecutive_empty_polls.saturating_add(1),
+        };
+    }
+
+    // Was non-empty; this is an empty poll. Debounce a transient management-API blip.
+    let confirmed = consecutive_empty_polls.saturating_add(1);
+    if confirmed >= EMPTY_CONFIRM_THRESHOLD {
+        // Confirmed empty on N consecutive polls — emit the clear once.
+        BotsEmitDecision {
+            send: true,
+            next_last_emit_nonempty: false,
+            next_consecutive_empty: 0,
+        }
+    } else {
+        // First empty after a populated roster — suppress and await confirmation.
+        BotsEmitDecision {
+            send: false,
+            next_last_emit_nonempty: true,
+            next_consecutive_empty: confirmed,
+        }
+    }
+}
+
 pub struct AgentMonitorActor {
     _client: ClaudeFlowClient,
     graph_service_addr: Addr<crate::actors::GraphServiceSupervisor>,
@@ -119,6 +190,13 @@ pub struct AgentMonitorActor {
     /// rotates, preventing the same agent from always occupying the apex 3-D
     /// position. Adapted from Multica's `pollOffset` daemon fairness pattern.
     poll_offset: usize,
+
+    /// Roster-clobber debounce (defect: agent roster clobber). Whether the last
+    /// emitted `UpdateBotsGraph` was non-empty, and how many consecutive empty
+    /// polls have followed it — so a transient empty management-API task list does
+    /// not clobber the bots graph to zero. See `decide_bots_graph_emit`.
+    last_bots_emit_nonempty: bool,
+    consecutive_empty_polls: u32,
 }
 
 impl AgentMonitorActor {
@@ -159,6 +237,8 @@ impl AgentMonitorActor {
             last_successful_poll: None,
             container_telemetry: ContainerTelemetry::default(),
             poll_offset: 0,
+            last_bots_emit_nonempty: false,
+            consecutive_empty_polls: 0,
         }
     }
 
@@ -447,12 +527,32 @@ impl Handler<ProcessAgentStatuses> for AgentMonitorActor {
             })
             .collect();
 
-        let message = UpdateBotsGraph { agents: agents_list };
-        info!(
-            "[AgentMonitorActor] Sending graph update with {} agents",
-            agents.len()
+        // Roster-clobber guard: an empty poll is "no information", not "all agents
+        // died" — the live MCP population (BotsClient) can still be non-zero. Emit
+        // UpdateBotsGraph only for a populated roster, or a debounce-confirmed
+        // empty after a non-empty one. See `decide_bots_graph_emit`.
+        let decision = decide_bots_graph_emit(
+            agents_list.len(),
+            self.last_bots_emit_nonempty,
+            self.consecutive_empty_polls,
         );
-        self.graph_service_addr.do_send(message);
+        self.last_bots_emit_nonempty = decision.next_last_emit_nonempty;
+        self.consecutive_empty_polls = decision.next_consecutive_empty;
+
+        if decision.send {
+            info!(
+                "[AgentMonitorActor] Sending graph update with {} agents",
+                agents_list.len()
+            );
+            self.graph_service_addr
+                .do_send(UpdateBotsGraph { agents: agents_list });
+        } else {
+            debug!(
+                "[AgentMonitorActor] Suppressing empty UpdateBotsGraph (no information; \
+                 consecutive_empty={}) — avoids roster clobber",
+                self.consecutive_empty_polls
+            );
+        }
 
         if !agents.is_empty() {
             self.agent_cache.clear();
@@ -517,5 +617,77 @@ impl Handler<TaskStatusChanged> for AgentMonitorActor {
             msg.agent_type, msg.running_task_count
         );
         self.poll_agent_statuses(ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A populated poll always emits and resets the debounce, regardless of prior
+    /// state — a non-empty roster is authoritative.
+    #[test]
+    fn populated_poll_always_emits_and_resets() {
+        for (last_nonempty, empties) in [(false, 0), (true, 0), (true, 1), (false, 5)] {
+            let d = decide_bots_graph_emit(3, last_nonempty, empties);
+            assert!(d.send, "≥1 agent must emit");
+            assert!(d.next_last_emit_nonempty);
+            assert_eq!(d.next_consecutive_empty, 0, "debounce resets on a populated roster");
+        }
+    }
+
+    /// The core clobber fix: a single empty poll after a populated roster is
+    /// suppressed (treated as a transient blip), NOT sent as an empty clear.
+    #[test]
+    fn first_empty_after_nonempty_is_suppressed() {
+        let d = decide_bots_graph_emit(0, true, 0);
+        assert!(!d.send, "first empty poll must NOT clobber the roster");
+        assert!(d.next_last_emit_nonempty, "still treated as populated pending confirmation");
+        assert_eq!(d.next_consecutive_empty, 1);
+    }
+
+    /// Emptiness confirmed twice consecutively IS a real clear — emit it once.
+    #[test]
+    fn second_consecutive_empty_confirms_and_emits_clear() {
+        // Poll 1: 5 agents.
+        let d1 = decide_bots_graph_emit(5, false, 0);
+        assert!(d1.send);
+        // Poll 2: empty (blip) — suppressed.
+        let d2 = decide_bots_graph_emit(0, d1.next_last_emit_nonempty, d1.next_consecutive_empty);
+        assert!(!d2.send);
+        // Poll 3: empty again — confirmed, emit the clear once.
+        let d3 = decide_bots_graph_emit(0, d2.next_last_emit_nonempty, d2.next_consecutive_empty);
+        assert!(d3.send, "confirmed-empty roster clears exactly once");
+        assert!(!d3.next_last_emit_nonempty);
+        assert_eq!(d3.next_consecutive_empty, 0);
+    }
+
+    /// After a confirmed clear, further empty polls are suppressed — no repeated
+    /// empty-graph spam / re-clobber.
+    #[test]
+    fn empties_after_confirmed_clear_are_suppressed() {
+        // Already-empty steady state (last emit was empty).
+        let d = decide_bots_graph_emit(0, false, 0);
+        assert!(!d.send, "empty poll with a known-empty roster carries no new info");
+        assert!(!d.next_last_emit_nonempty);
+        assert_eq!(d.next_consecutive_empty, 1);
+
+        // And it keeps counting without ever re-emitting.
+        let d2 = decide_bots_graph_emit(0, d.next_last_emit_nonempty, d.next_consecutive_empty);
+        assert!(!d2.send);
+        assert_eq!(d2.next_consecutive_empty, 2);
+    }
+
+    /// A transient single-empty blip between populated polls never clobbers:
+    /// non-empty → empty(suppressed) → non-empty restores without a 0-emit.
+    #[test]
+    fn transient_blip_between_populated_polls_never_clobbers() {
+        let d1 = decide_bots_graph_emit(19, false, 0);
+        assert!(d1.send);
+        let d2 = decide_bots_graph_emit(0, d1.next_last_emit_nonempty, d1.next_consecutive_empty);
+        assert!(!d2.send, "the 19→0 blip is suppressed");
+        let d3 = decide_bots_graph_emit(19, d2.next_last_emit_nonempty, d2.next_consecutive_empty);
+        assert!(d3.send, "roster restored with no intervening empty clear");
+        assert_eq!(d3.next_consecutive_empty, 0);
     }
 }
