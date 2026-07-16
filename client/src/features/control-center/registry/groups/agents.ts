@@ -1,5 +1,5 @@
 /**
- * Group 9 — Agents (id `agents`, hotkey 9, 39 fields).
+ * Group 9 — Agents (id `agents`, hotkey 9, 41 fields).
  *
  * Genuinely settings-manageable look-and-feel for the agent/swarm population.
  * The server resolves "visionclaw"|"agent"|"bots" → graphs.visionclaw
@@ -68,6 +68,8 @@ const fields: RegistryField[] = [
   { key: 'agentHealthCritical', subgroup: 'Health', label: 'Critical (<25%)', type: 'color', path: `${A}healthColors.critical`, description: 'Glow colour for agents below 25% health' },
   // Behaviour — per-type agent visuals (client-typed graphTypeVisuals.agent + swarmTint)
   { key: 'agentSwarmTint', subgroup: 'Behaviour', label: 'Swarm hue tint', type: 'toggle', path: `${A}swarmTint`, description: 'Hue-rotate each agent by a stable per-swarm offset so swarms read as related-but-distinct families' },
+  { key: 'agentShowTrails', subgroup: 'Behaviour', label: 'Motion Trails', type: 'toggle', path: `${A}showTrails`, description: 'Draw a fading motion-trail ribbon behind each moving agent so the swarm reads as in motion' },
+  { key: 'agentTrailLength', subgroup: 'Behaviour', label: 'Trail Length', type: 'slider', min: 8, max: 48, step: 1, path: `${A}trailLength`, description: 'Number of sampled positions retained in each agent trail (longer = more history)' },
   { key: 'agentBioluminescence', subgroup: 'Behaviour', label: 'Bioluminescent Intensity', type: 'slider', min: 0, max: 3, step: 0.05, path: `${A}bioluminescentIntensity`, description: 'Membrane bioluminescence of agent capsules' },
   { key: 'agentNucleusGlow', subgroup: 'Behaviour', label: 'Nucleus Glow', type: 'slider', min: 0, max: 2, step: 0.05, path: `${A}nucleusGlowIntensity`, description: 'Base emissive of the agent capsule core' },
   { key: 'agentBreathingSpeed', subgroup: 'Behaviour', label: 'Breathing Speed', type: 'slider', min: 0, max: 3, step: 0.05, path: `${A}breathingSpeed`, description: 'Rate of the idle/active breathing pulse' },

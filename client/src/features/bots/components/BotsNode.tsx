@@ -31,6 +31,7 @@ import { healthGlowColor, agentStatusColor } from '../agentVisualConstants';
 import { shortDid } from '../agentIdentity';
 import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { AgentStatusBadges } from './AgentStatusBadges';
+import { AgentTrail, TRAIL_DEFAULT_LENGTH } from './AgentTrail';
 
 export interface BotsNodeProps {
   agent: BotsAgent;
@@ -81,6 +82,18 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
   const bodyColor = useMemo(
     () => (swarmTint ? applySwarmTint(color, agent.swarmId) : color),
     [swarmTint, color, agent.swarmId],
+  );
+
+  // Agent trail ribbons (control-centre Agents → Behaviour). Client-only, default on.
+  // Trail colour tracks the *status* colour (not the type body colour) so the fading
+  // ribbon reads the agent's live activity, tinted per-swarm to match the body when
+  // swarmTint is on.
+  const agentVisuals = settings?.visualisation?.graphTypeVisuals?.agent;
+  const showTrails = agentVisuals?.showTrails ?? true;
+  const trailLength = agentVisuals?.trailLength ?? TRAIL_DEFAULT_LENGTH;
+  const trailColor = useMemo(
+    () => (swarmTint ? applySwarmTint(statusColor, agent.swarmId) : statusColor),
+    [swarmTint, statusColor, agent.swarmId],
   );
 
   const baseSize      = 1.0;
@@ -269,7 +282,13 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
   const processingLogs = formatProcessingLogs(agent.processingLogs);
 
   return (
-    <group ref={groupRef}>
+    <>
+      {/* Motion-trail ribbon — a SIBLING of the moving group so its sampled world
+          positions stay put while the agent flies on (see AgentTrail). */}
+      {showTrails && (
+        <AgentTrail positionRef={currentPositionRef} color={trailColor} length={trailLength} />
+      )}
+      <group ref={groupRef}>
       {/* Outer membrane */}
       <mesh ref={glowRef} scale={[isQueen ? 1.5 : 1.3, isQueen ? 1.5 : 1.3, isQueen ? 1.5 : 1.3]}>
         <sphereGeometry args={[clampedSize * 0.75, 10, 8]} />
@@ -553,6 +572,7 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
         </>)}
       </Billboard>
       )}
-    </group>
+      </group>
+    </>
   );
 };

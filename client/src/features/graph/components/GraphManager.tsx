@@ -15,6 +15,7 @@ import { useGraphEventHandlers } from '../hooks/useGraphEventHandlers'
 import { EdgeSettings } from '../../settings/config/settings'
 import { useAnalyticsStore, useCurrentSSSPResult } from '../../analytics/store/analyticsStore'
 import { TransientBeamsLayer, type BeamPositionResolver } from '../../visualisation/components/TransientBeamsLayer'
+import { resolveNodeWorldPosition } from '../../visualisation/cameraFocus'
 import { useBotsData } from '../../bots/contexts/BotsDataContext'
 import { useGraphVisualState, type GraphVisualMode } from '../hooks/useGraphVisualState'
 import { useGraphFiltering } from '../hooks/useGraphFiltering'
@@ -165,18 +166,15 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   }, [])
 
   // Resolve target_node_id → KG node world position from the LIVE position
-  // buffer (SAB), via the same nodeIdToIndexMap the edge renderer uses. Try the
-  // raw id first, then the masked id (KG nodes may carry KNOWLEDGE/ontology
-  // flag bits). Returns false when unresolvable so the beam is skipped.
+  // buffer (SAB), via the same nodeIdToIndexMap the edge renderer uses. Tries
+  // the raw id first, then the masked id (KG nodes may carry KNOWLEDGE/ontology
+  // flag bits). Shared with the transcript click-to-fly path via cameraFocus's
+  // resolveNodeWorldPosition so both agree on id-space + bounds. Returns false
+  // when unresolvable so the beam is skipped.
   const resolveNodePosition = useCallback<BeamPositionResolver>((id, out) => {
-    const positions = nodePositionsRef.current
-    if (!positions) return false
-    let index = nodeIdToIndexMap.get(String(id))
-    if (index === undefined) index = nodeIdToIndexMap.get(String(getActualNodeId(id)))
-    if (index === undefined) return false
-    const i3 = index * 3
-    if (i3 + 2 >= positions.length) return false
-    out.set(positions[i3], positions[i3 + 1], positions[i3 + 2])
+    const pos = resolveNodeWorldPosition(id, nodeIdToIndexMap, nodePositionsRef.current)
+    if (!pos) return false
+    out.set(pos.x, pos.y, pos.z)
     return true
   }, [nodeIdToIndexMap])
 

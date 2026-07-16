@@ -501,6 +501,13 @@ export interface AgentVisualSettings {
   beamRadius?: number;
   /** Client-only: peak opacity of an action beam during its hold phase. Default 0.85. */
   beamOpacity?: number;
+  /** Client-only: fading motion-trail ribbons behind each moving agent (BotsNode →
+   *  AgentTrail). No Rust field — persisted via localStorage like the other
+   *  graphTypeVisuals. Default true. */
+  showTrails?: boolean;
+  /** Client-only: number of sampled positions retained in each agent's trail ring
+   *  buffer (8-48). Longer = further history at higher vertex cost. Default 24. */
+  trailLength?: number;
 }
 
 export interface GraphTypeVisualsSettings {

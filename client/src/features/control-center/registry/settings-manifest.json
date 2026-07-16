@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "generatedFrom": "settingsRegistry.ts",
-  "count": 207,
+  "count": 209,
   "groups": [
     {
       "id": "motion",
@@ -64,7 +64,7 @@
       "label": "Agents",
       "testid": "group-agents",
       "hotkey": "9",
-      "fieldCount": 39
+      "fieldCount": 41
     }
   ],
   "panels": [
@@ -2536,6 +2536,31 @@
       "clientOnly": false,
       "server": "visual",
       "subgroup": "Behaviour"
+    },
+    {
+      "key": "agentShowTrails",
+      "path": "visualisation.graphTypeVisuals.agent.showTrails",
+      "testid": "setting-visualisation.graphTypeVisuals.agent.showTrails",
+      "control": "toggle",
+      "group": "agents",
+      "label": "Motion Trails",
+      "clientOnly": false,
+      "server": "visual",
+      "subgroup": "Behaviour"
+    },
+    {
+      "key": "agentTrailLength",
+      "path": "visualisation.graphTypeVisuals.agent.trailLength",
+      "testid": "setting-visualisation.graphTypeVisuals.agent.trailLength",
+      "control": "slider",
+      "group": "agents",
+      "label": "Trail Length",
+      "clientOnly": false,
+      "server": "visual",
+      "subgroup": "Behaviour",
+      "min": 8,
+      "max": 48,
+      "step": 1
     },
     {
       "key": "agentBioluminescence",

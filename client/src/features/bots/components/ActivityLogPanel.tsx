@@ -4,6 +4,7 @@ import { useAgentActionFeed, agentActionVerb } from '../hooks/useAgentActionFeed
 import { AgentActionType } from '@/services/BinaryWebSocketProtocol';
 import type { BotsAgent } from '../types/BotsTypes';
 import { Card } from '../../design-system/components/Card';
+import { focusNodeById } from '@/features/visualisation/cameraFocus';
 
 type LogLevel = 'info' | 'warning' | 'error' | 'success';
 
@@ -167,6 +168,18 @@ export const ActivityLogPanel: React.FC<ActivityLogPanelProps> = ({
     feed.clear();
   };
 
+  // Click / Enter / Space on a live action row flies the camera to its target
+  // node and pulse-highlights it (reuses the graph's established focus utility).
+  const focusTarget = (targetNodeId: number) => {
+    focusNodeById(targetNodeId);
+  };
+  const onRowKeyDown = (e: React.KeyboardEvent, targetNodeId: number) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      focusTarget(targetNodeId);
+    }
+  };
+
   const displayCount = showFeed ? feed.entries.length : logEntries.length;
 
   return (
@@ -201,10 +214,17 @@ export const ActivityLogPanel: React.FC<ActivityLogPanelProps> = ({
           {showFeed ? (
             feed.entries.map(entry => {
               const level = actionLevel(entry.actionType);
+              const targetLabel = resolveLabel(entry.targetNodeId);
               return (
                 <div
                   key={entry.id}
-                  className={`p-2 rounded flex items-start gap-2 ${getLevelColor(level)}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => focusTarget(entry.targetNodeId)}
+                  onKeyDown={(e) => onRowKeyDown(e, entry.targetNodeId)}
+                  title={`Fly to ${targetLabel}`}
+                  aria-label={`${agentActionVerb(entry.actionType)} ${targetLabel} — fly camera to node`}
+                  className={`p-2 rounded flex items-start gap-2 cursor-pointer transition-all hover:brightness-95 hover:ring-1 hover:ring-current/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${getLevelColor(level)}`}
                 >
                   <span className="flex-shrink-0">{getLevelIcon(level)}</span>
                   <div className="flex-1 min-w-0">
@@ -218,7 +238,7 @@ export const ActivityLogPanel: React.FC<ActivityLogPanelProps> = ({
                     </div>
                     <div className="mt-1 break-words">
                       {agentActionVerb(entry.actionType)}{' '}
-                      <span className="font-semibold">{shorten(resolveLabel(entry.targetNodeId))}</span>
+                      <span className="font-semibold underline decoration-dotted underline-offset-2">{shorten(targetLabel)}</span>
                       {entry.intent ? <span className="text-gray-600"> — {entry.intent}</span> : null}
                       {entry.verification ? (
                         <span className="ml-1 rounded bg-green-100 px-1 text-green-700">

@@ -17,7 +17,7 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   xr: 5,
   ai: 6,
   system: 16,
-  agents: 39,
+  agents: 41,
 };
 
 /** Total registry field count: the 168 frozen legacy fields + the new Agents group. */
@@ -57,6 +57,8 @@ const AGENT_GROUP_PATHS: string[] = [
   'visualisation.rendering.agentColors.queen',
   'visualisation.rendering.agentColors.default',
   'visualisation.graphTypeVisuals.agent.swarmTint',
+  'visualisation.graphTypeVisuals.agent.showTrails',
+  'visualisation.graphTypeVisuals.agent.trailLength',
   'visualisation.graphTypeVisuals.agent.bioluminescentIntensity',
   'visualisation.graphTypeVisuals.agent.nucleusGlowIntensity',
   'visualisation.graphTypeVisuals.agent.breathingSpeed',
