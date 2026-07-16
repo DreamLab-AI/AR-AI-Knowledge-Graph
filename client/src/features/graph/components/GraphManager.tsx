@@ -14,8 +14,8 @@ import { ClusterHulls } from './ClusterHulls'
 import { useGraphEventHandlers } from '../hooks/useGraphEventHandlers'
 import { EdgeSettings } from '../../settings/config/settings'
 import { useAnalyticsStore, useCurrentSSSPResult } from '../../analytics/store/analyticsStore'
-import { AgentNodesLayer, useAgentNodes } from '../../visualisation/components/AgentNodesLayer'
 import { TransientBeamsLayer, type BeamPositionResolver } from '../../visualisation/components/TransientBeamsLayer'
+import { useBotsData } from '../../bots/contexts/BotsDataContext'
 import { useGraphVisualState, type GraphVisualMode } from '../hooks/useGraphVisualState'
 import { useGraphFiltering } from '../hooks/useGraphFiltering'
 import { useFpsMonitor } from '../hooks/useFpsMonitor'
@@ -122,25 +122,32 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   // clusters actually live. Reuse `typeFilteredNodes` so hulls cover exactly the
   // node set the meshes and edges render (one source of truth via renderedNodeIds).
 
-  const { agents: agentLayerNodes, connections: agentLayerConnections } = useAgentNodes()
+  // BotsDataContext is the single agent state source (its useAgentPolling owns the
+  // `/api/bots/agents` poll and reconciles binary SAB positions). GraphManager reads
+  // it only for the beam anchor map below — the agent bodies are rendered by the
+  // instanced capsules (agentGemRef) plus the BotsNode overlay (BotsVisualization).
+  const { botsData } = useBotsData()
   useFpsMonitor()
 
   const nodePositionsRef = useRef<Float32Array | null>(null)
 
   // === Transient agent-action beams (0x23) — id-space resolution ===
   //
-  // Agent registry (/api/bots/agents) keys agents by the MASKED numeric node
-  // id as a string (`String(getActualNodeId(nodeId))`), matching the
-  // reconciliation in BotsDataContext. We build a lookup from that key to the
-  // agent's world position so source_agent_id (which may arrive with the high
-  // AGENT_NODE_FLAG bit set) resolves consistently.
+  // BotsDataContext keys each agent by the MASKED numeric node id as a string
+  // (`String(getActualNodeId(nodeId))`) — that is how its binary-position
+  // reconciliation attaches SAB positions to agents. We build a lookup from that
+  // key to the agent's live world position so source_agent_id (which may arrive
+  // with the high AGENT_NODE_FLAG bit set) resolves consistently via
+  // getActualNodeId below. Sourcing from the context (rather than a second poll)
+  // makes the anchor track live physics instead of a ≤5s telemetry snapshot.
+  const botsAgents = botsData?.agents
   const agentPositionByMaskedId = useMemo(() => {
     const map = new Map<string, { x: number; y: number; z: number }>()
-    for (const agent of agentLayerNodes) {
+    for (const agent of botsAgents ?? []) {
       if (agent.position) map.set(String(agent.id), agent.position)
     }
     return map
-  }, [agentLayerNodes])
+  }, [botsAgents])
   const agentPositionMapRef = useRef(agentPositionByMaskedId)
   agentPositionMapRef.current = agentPositionByMaskedId
 
@@ -584,10 +591,6 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
         nodeIdToIndexMap={nodeIdToIndexMap}
         settings={settings}
       />
-
-      {agentLayerNodes.length > 0 && nodeTypeVisibility?.agent !== false && (
-        <AgentNodesLayer agents={agentLayerNodes} connections={agentLayerConnections} />
-      )}
 
       {/* Embodied agent-action beams (0x23): agent node → KG node, coloured
           by action type, opacity fades in → holds → out over duration_ms.

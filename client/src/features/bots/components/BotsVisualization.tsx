@@ -21,6 +21,7 @@ import { agentTelemetry } from '../../../telemetry/AgentTelemetry';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { useBotsData } from '../contexts/BotsDataContext';
 import { getVisionClawColors } from './BotsShared';
+import { agentTrustKey } from '../agentIdentity';
 import { BotsNode } from './BotsNode';
 import { BotsEdgeComponent } from './BotsEdgeComponent';
 
@@ -198,7 +199,10 @@ export const BotsVisualization: React.FC = () => {
 
         return (
           <BotsNode
-            key={node.id}
+            // COM-14 / WP-1: React identity follows the agent's trust key
+            // (did:nostr when carried, else the task_id fallback), not a
+            // transient array index.
+            key={agentTrustKey(node)}
             agent={node}
             position={position}
             index={index}

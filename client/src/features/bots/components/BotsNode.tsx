@@ -28,6 +28,7 @@ import {
   BACK_SIDE,
 } from './BotsShared';
 import { healthGlowColor, agentStatusColor } from '../agentVisualConstants';
+import { shortDid } from '../agentIdentity';
 import { isWebGPURenderer } from '../../../rendering/rendererFactory';
 import { AgentStatusBadges } from './AgentStatusBadges';
 
@@ -404,11 +405,14 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
         </group>
       )}
 
-      {/* Billboard labels — Html on WebGPU (troika Text Line2 geometry triggers
-          drawIndexed(Infinity) and kills the render pass; same limitation and
-          same remedy as AgentNodesLayer). The compact nameplate replaces the
-          display-mode Text cluster there; WebGL keeps the full modes. */}
-      {isWebGPURenderer ? (
+      {/* Billboard labels — Html whenever troika Text cannot run: on WebGPU its
+          Line2 geometry triggers drawIndexed(Infinity) and kills the render
+          pass, and under COOP/COEP cross-origin isolation (always on in this
+          deployment, for the SAB physics pipeline) Chromium blocks troika's
+          blob-worker bootstrap (crbug.com/1084951) — including the copy inlined
+          in drei's bundle, which configureTextBuilder cannot reach. The full
+          display-mode Text cluster remains for non-isolated WebGL contexts. */}
+      {isWebGPURenderer || (typeof self !== 'undefined' && self.crossOriginIsolated) ? (
         <Html position={[0, clampedSize + 0.9, 0]} center style={{ pointerEvents: 'none', whiteSpace: 'nowrap', textAlign: 'center' }}>
           <div style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', textShadow: '0 0 4px black' }}>
             {agent.name || String(agent.id).slice(0, 8)}
@@ -420,9 +424,25 @@ export const BotsNode: React.FC<BotsNodeProps> = ({ agent, position, index, colo
             {agent.status} | {agent.health ? `${agent.health.toFixed(0)}%` : 'N/A'}
             {(agent.tokenRate ?? 0) > 0 ? ` | ${agent.tokenRate!.toFixed(0)} tok/min` : ''}
           </div>
+          {/* Sovereign identity nameplate (COM-14 / ADR-125) — sole did:nostr
+              renderer since AgentNodesLayer was retired. */}
+          {agent.did_nostr && (
+            <div style={{ color: '#7dd3fc', fontSize: '9px', fontFamily: 'monospace', textShadow: '0 0 3px black' }}>
+              {shortDid(agent.did_nostr)}
+            </div>
+          )}
         </Html>
       ) : (
       <Billboard follow lockX={false} lockY={false} lockZ={false}>
+        {/* Sovereign identity nameplate (COM-14 / ADR-125) — sole did:nostr
+            renderer since AgentNodesLayer was retired. Sits above the mode
+            indicator so it never collides with the display-mode cluster below. */}
+        {agent.did_nostr && (
+          <Text position={[0, clampedSize + 1.15, 0]} fontSize={0.16} color="#7dd3fc"
+            anchorX="center" anchorY="middle" outlineWidth={0.015} outlineColor="black">
+            {shortDid(agent.did_nostr)}
+          </Text>
+        )}
         <Text position={[0, clampedSize + 0.8, 0]} fontSize={0.18} color="#3498DB"
           anchorX="center" anchorY="middle" outlineWidth={0.02} outlineColor="black">
           [{displayMode.toUpperCase()}]

@@ -1,13 +1,13 @@
 /**
  * agentVisualConstants.ts
  * Single source of truth for the state→visual mappings shared across every agent
- * renderer: AgentNodesLayer (own poll), BotsNode (BotsDataContext) and the
- * instanced agent capsules (GemNodes metadata pack + AgentCapsuleMaterial shader).
+ * renderer: the instanced agent capsules (GemNodes metadata pack +
+ * AgentCapsuleMaterial shader) and the BotsNode overlay (BotsDataContext). These
+ * are the two consolidated agent layers since AgentNodesLayer was retired.
  *
- * Centralising these here removes the byte-identical health→glow ramps that
- * AgentNodesLayer and BotsNode each carried, and gives the capsule shader a
- * canonical status→activity scalar so an idle swarm visibly rests while an active
- * one visibly works.
+ * Centralising these here removes the byte-identical health→glow ramps the agent
+ * renderers each carried, and gives the capsule shader a canonical status→activity
+ * scalar so an idle swarm visibly rests while an active one visibly works.
  *
  * Identifiers keep the codebase's American `color` spelling for consistency with
  * the surrounding Three.js API and helpers; prose stays UK English.
@@ -70,7 +70,7 @@ export const DEFAULT_HEALTH_COLORS: Required<HealthColorBands> = {
  * Six-tier health→glow colour (bioluminescent membrane hue). Four of the tiers are
  * user-configurable via `colors` (control-centre Agents → Health); the two
  * intermediate tiers stay fixed. Omitting `colors` (or any field) preserves the
- * exact ramp AgentNodesLayer and BotsNode previously duplicated.
+ * exact ramp the agent renderers previously duplicated.
  */
 export const healthGlowColor = (health: number, colors?: HealthColorBands): string => {
   const excellent = colors?.excellent ?? DEFAULT_HEALTH_COLORS.excellent;
