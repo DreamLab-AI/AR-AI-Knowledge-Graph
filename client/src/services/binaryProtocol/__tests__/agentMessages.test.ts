@@ -6,6 +6,7 @@ import {
   decodeAgentState,
   encodeAgentActionPayload,
   decodeAgentAction,
+  decodeAgentActions,
 } from '../agentMessages';
 import { AGENT_POSITION_SIZE_V2, AGENT_STATE_SIZE_V2, AGENT_ACTION_HEADER_SIZE } from '../frameTypes';
 import type { AgentPositionUpdate, AgentStateData, AgentActionEvent } from '../frameTypes';
@@ -135,5 +136,54 @@ describe('agentAction encode/decode round-trip', () => {
 
   it('returns null for undersized payload', () => {
     expect(decodeAgentAction(new ArrayBuffer(AGENT_ACTION_HEADER_SIZE - 1))).toBeNull();
+  });
+});
+
+
+// ---- Shipping 0x23 wire frame (bare type tag + batch) ----
+//
+// Mirrors the server's encode_agent_actions (src/utils/binary_protocol.rs:1233):
+// `[0x23][count:u16 le][(len:u16 le)(event 15B+payload)]…` — no 6-byte V4
+// header. The store's tagged-frame branch decodes with data.slice(1); this
+// round-trip pins that contract so the gate/offset can never silently drift
+// again (beams went dark when a 6-byte strip misaligned the batch count).
+
+function buildServerBatchFrame(actions: AgentActionEvent[]): ArrayBuffer {
+  const encoded = actions.map(a => new Uint8Array(encodeAgentActionPayload(a)));
+  const total = 3 + encoded.reduce((n, e) => n + 2 + e.byteLength, 0);
+  const out = new Uint8Array(total);
+  const view = new DataView(out.buffer);
+  out[0] = 0x23;
+  view.setUint16(1, actions.length, true);
+  let offset = 3;
+  for (const e of encoded) {
+    view.setUint16(offset, e.byteLength, true);
+    offset += 2;
+    out.set(e, offset);
+    offset += e.byteLength;
+  }
+  return out.buffer;
+}
+
+describe('shipping 0x23 batch frame decodes after a 1-byte tag strip', () => {
+  it('round-trips a coalesced batch of three actions', () => {
+    const actions: AgentActionEvent[] = [0, 1, 2].map(i => ({
+      ...sampleAction,
+      sourceAgentId: 10000 + i,
+      targetNodeId: 400 + i,
+    }));
+    const frame = buildServerBatchFrame(actions);
+    const decoded = decodeAgentActions(frame.slice(1));
+    expect(decoded).toHaveLength(3);
+    decoded.forEach((d, i) => {
+      expect(d.sourceAgentId).toBe(10000 + i);
+      expect(d.targetNodeId).toBe(400 + i);
+      expect(d.durationMs).toBe(sampleAction.durationMs);
+    });
+  });
+
+  it('a 6-byte strip misaligns the batch (the regression this guards)', () => {
+    const frame = buildServerBatchFrame([sampleAction]);
+    expect(decodeAgentActions(frame.slice(6))).not.toHaveLength(1);
   });
 });

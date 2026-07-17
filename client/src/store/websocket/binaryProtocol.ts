@@ -194,9 +194,12 @@ export function validateBinaryData(data: ArrayBuffer): boolean {
     return false;
   }
 
-  const version = new DataView(data).getUint8(0);
-  if (version !== 3 && version !== 5) {
-    console.warn(`[WS] Unexpected binary protocol version: ${version}`);
+  const firstByte = new DataView(data).getUint8(0);
+  // Legacy frames lead with the protocol version (3/5); agent-action frames
+  // lead with the 0x23 MessageType tag (the server never wraps them in the
+  // V4 header). Anything else is unknown and rejected.
+  if (firstByte !== 3 && firstByte !== 5 && firstByte !== MessageType.AGENT_ACTION) {
+    console.warn(`[WS] Unexpected binary frame lead byte: ${firstByte}`);
     return false;
   }
 
@@ -426,16 +429,33 @@ async function handleAgentAction(data: ArrayBuffer, header: ReturnType<typeof bi
     ? binaryProtocol.decodeAgentActions(payload)
     : [];
 
-  if (actions.length > 0) {
-    // Legacy ActionConnections renderer (bezier-particle) consumes this event.
-    emit('agent-action', actions);
-    // Embodied transient beams (0x23 → TransientBeamsLayer). Distinct sink,
-    // pushed in parallel so neither path can starve the other.
-    pushTransientBeams(actions);
+  dispatchAgentActions(actions);
+}
 
-    if (debugState.isDataDebugEnabled()) {
-      logger.debug(`Processed ${actions.length} agent action(s)`);
-    }
+/**
+ * The SHIPPING 0x23 wire frame is a bare type tag, not a 6-byte V4 header:
+ * `[0x23][count:u16][(len:u16)(event 15B+payload)]…` (encode_agent_actions,
+ * src/utils/binary_protocol.rs:1233). Stripping the V4 MESSAGE_HEADER_SIZE
+ * here misaligns the batch count, so the tagged frame is decoded with a
+ * 1-byte offset instead of routing through parseHeader/extractPayload.
+ */
+function handleAgentActionTagged(data: ArrayBuffer) {
+  const actions = data.byteLength >= 18
+    ? binaryProtocol.decodeAgentActions(data.slice(1))
+    : [];
+  dispatchAgentActions(actions);
+}
+
+function dispatchAgentActions(actions: ReturnType<typeof binaryProtocol.decodeAgentActions>) {
+  if (actions.length === 0) return;
+  // Live transcript + attention heat consume this event.
+  emit('agent-action', actions);
+  // Embodied transient beams (0x23 → TransientBeamsLayer). Distinct sink,
+  // pushed in parallel so neither path can starve the other.
+  pushTransientBeams(actions);
+
+  if (debugState.isDataDebugEnabled()) {
+    logger.debug(`Processed ${actions.length} agent action(s)`);
   }
 }
 
@@ -456,6 +476,10 @@ export async function processBinaryData(
       if (firstByte === PROTOCOL_V2 || firstByte === PROTOCOL_V3 || firstByte === PROTOCOL_V5) {
         await handleLegacyBinaryData(data, get, set);
         notifyBinaryMessageHandlers(data);
+        return;
+      }
+      if (firstByte === MessageType.AGENT_ACTION) {
+        handleAgentActionTagged(data);
         return;
       }
     }
