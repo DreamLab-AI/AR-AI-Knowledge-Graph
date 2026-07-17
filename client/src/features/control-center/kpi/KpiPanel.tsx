@@ -55,6 +55,7 @@ export const KpiPanel: React.FC = () => {
     <div className="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-2" style={{ pointerEvents: 'auto' }}>
       {expanded && (
         <GlassPanel
+          elevation="overlay"
           data-testid="kpi-panel"
           role="region"
           aria-label="Organisational KPI dashboard"

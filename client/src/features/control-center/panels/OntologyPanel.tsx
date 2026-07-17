@@ -11,6 +11,7 @@ import { OntologyTabContent } from '../../ontology/components/OntologyTabContent
 
 export const OntologyPanel: React.FC = () => (
   <GlassPanel
+    elevation="inset"
     role="region"
     aria-label="Ontology"
     data-testid="panel-ontology-body"

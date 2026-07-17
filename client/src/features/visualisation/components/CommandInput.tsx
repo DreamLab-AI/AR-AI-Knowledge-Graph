@@ -734,7 +734,7 @@ export const CommandInput: React.FC<CommandInputProps> = ({ isCollapsed }) => {
     // dock / SettingsPanel / StatusCluster overlays; pointer-events restored
     // because the cc-root wrapper is pointer-events:none.
     <div
-      className="cc-glass cc-panel-transition fixed bottom-28 left-1/2 z-40 -translate-x-1/2 p-3 pointer-events-auto"
+      className="cc-glass cc-glass--overlay cc-panel-transition fixed bottom-28 left-1/2 z-40 -translate-x-1/2 p-3 pointer-events-auto"
       style={{ width: 'min(92vw, 560px)' }}
     >
       <form onSubmit={handleSubmit} className="flex items-center gap-2">

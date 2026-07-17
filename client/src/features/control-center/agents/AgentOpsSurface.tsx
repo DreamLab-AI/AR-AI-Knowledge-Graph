@@ -57,6 +57,7 @@ export const AgentOpsSurface: React.FC = () => {
     <div className="fixed bottom-6 left-4 z-40 flex flex-col items-start gap-2" style={{ pointerEvents: 'auto' }}>
       {open && (
         <GlassPanel
+          elevation="overlay"
           data-testid="agent-ops-panel"
           role="region"
           aria-label="Agent operations"

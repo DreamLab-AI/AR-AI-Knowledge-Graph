@@ -33,6 +33,7 @@ export const AcspCaseQueue: React.FC = () => {
     <div className="fixed bottom-20 left-4 z-40 flex flex-col items-start gap-2" style={{ pointerEvents: 'auto' }}>
       {expanded && (
         <GlassPanel
+          elevation="overlay"
           data-testid="acsp-case-queue"
           role="region"
           aria-label="Broker case queue"

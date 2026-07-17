@@ -68,7 +68,8 @@ describe('ControlCenter shell', () => {
     render(<ControlCenter showStats={false} enableBloom={false} />);
     expect(screen.getByTestId('control-center-dock')).toBeInTheDocument();
     expect(screen.getByTestId('macro-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('status-cluster')).toBeInTheDocument();
+    // The status surface is no longer part of ControlCenter's composition — it
+    // mounts as a sibling badge in MainLayout (see StatusSurface).
     // At rest the panel body is not rendered → zero setting controls in the DOM.
     expect(countSettings()).toBe(0);
   });

@@ -10,6 +10,7 @@ import { SolidTabContent } from '../../solid/components/SolidTabContent';
 
 export const SolidPanel: React.FC = () => (
   <GlassPanel
+    elevation="inset"
     role="region"
     aria-label="Solid Pod"
     data-testid="panel-solid-body"

@@ -48,6 +48,30 @@ existing subscription/trie paths — see [Client Architecture](client-architectu
 and [Physics & GPU Engine](physics-gpu-engine.md) for that machinery, which is
 unchanged.
 
+### Glass elevation discipline
+
+Because the canvas is hero and everything is summoned, glass surfaces routinely
+stack — a status flyout over its own badge chip, the settings panel over the busy
+graph, the Solid/Ontology pods nested *inside* that panel. A single translucent
+recipe for all of them let the lower layer bleed through the upper one, which read
+as clutter. `GlassPanel` therefore carries an `elevation` prop (`styles/control-center.css`,
+§5.1) with three tiers, so the blur treatment is driven from one primitive rather
+than per-surface hacks:
+
+| Tier | `cc-glass` class | Treatment | Applied to |
+|---|---|---|---|
+| `base` (default) | `.cc-glass` | `blur(14px)`, `card/0.62` tint — lightest, the graph reads clearly around it | The dock shell, the badge chips (Status/Agents/KPIs/ACSP/Ask), the dock collapse toggle |
+| `overlay` | `.cc-glass--overlay` | `blur(28px)` + `card/0.9` tint — partially obscures whatever sits beneath while saturate/brightness keep enough colour bleeding through to still read as depth | Every summoned panel that stacks over another glass surface or floats over the dense graph: `SettingsPanel`, `StatusFlyout`, the Agents/KPI/ACSP flyouts, the Ask `CommandInput` |
+| `inset` | `.cc-glass--inset` | drops the backdrop-filter entirely for a flat, faintly lifted card — re-blurring an already-blurred parent only muddies it | Glass cards nested inside another glass panel: `SolidPanel`, `OntologyPanel` inside `SettingsPanel` |
+
+`overlay` overrides only background/backdrop-filter/border, so it composes with the
+`accent` ring (the `SettingsPanel` gets both). A `@supports not (backdrop-filter)`
+block raises every tier's tint toward opaque so occlusion still holds where the
+filter is unsupported or defeated by a filtered/transformed ancestor — only the
+frosted-depth cue is lost, never the legibility. Surfaces outside the `cc-glass`
+system are left alone: `CommandPalette` already draws a full-screen `backdrop-blur`
+scrim, and `NodeDetailPanel` is near-opaque (`rgba(10,10,30,0.92)`) by construction.
+
 ## The frozen registry — single source of truth
 
 The previous panel's `unifiedSettingsConfig.ts` is gone, but every dot-path string

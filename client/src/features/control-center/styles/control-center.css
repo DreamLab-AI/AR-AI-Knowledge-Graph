@@ -7,6 +7,24 @@
 /* 5.1 Glass recipe                                                       */
 /* ---------------------------------------------------------------------- */
 
+/*
+ * Elevation discipline. Glass surfaces come in three tiers so a layer never
+ * reads as clutter through the layer above it:
+ *
+ *   base    — a single glass layer resting on the hero canvas (the dock, the
+ *             badge chips). The lightest treatment: the graph reads clearly
+ *             around it.
+ *   overlay — a summoned panel/flyout that STACKS above another glass surface,
+ *             or floats as a reading surface over the dense graph (SettingsPanel,
+ *             StatusFlyout, the Agents/KPI/ACSP flyouts, the Ask box). A stronger
+ *             backdrop blur plus a heavier tint partially obscures whatever sits
+ *             beneath — legible content, soft depth, no double-glass muddle.
+ *   inset   — a glass card nested INSIDE another glass panel (Solid/Ontology
+ *             inside SettingsPanel). Re-blurring an already-blurred parent buys
+ *             nothing but a muddy second pane, so this tier drops the
+ *             backdrop-filter entirely for a flat inset surface.
+ */
+
 .cc-glass {
   background: linear-gradient(135deg, hsl(var(--card) / 0.62), hsl(var(--background) / 0.42));
   backdrop-filter: blur(14px) saturate(160%) brightness(1.06);
@@ -18,6 +36,28 @@
     0 8px 32px hsl(var(--background) / 0.6);
 }
 
+/* Overlay tier — the fix for glass-on-glass clutter. A near-double blur and a
+ * heavier tint let the surface partially obscure the busy layer beneath while
+ * saturate/brightness keep enough colour bleeding through to still read as
+ * depth. Overrides only background/backdrop-filter/border so cc-glass--accent's
+ * ring (box-shadow) still composes on top of it. */
+.cc-glass--overlay {
+  background: linear-gradient(135deg, hsl(var(--card) / 0.9), hsl(var(--background) / 0.8));
+  backdrop-filter: blur(28px) saturate(150%) brightness(1.03);
+  -webkit-backdrop-filter: blur(28px) saturate(150%) brightness(1.03);
+  border-color: hsl(var(--border) / 0.7);
+}
+
+/* Inset tier — a card sitting on an already-glassed parent. No second
+ * backdrop-filter, no drop shadow: a flat, faintly lifted surface. */
+.cc-glass--inset {
+  background: hsl(var(--foreground) / 0.04);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: hsl(var(--border) / 0.4);
+  box-shadow: none;
+}
+
 .cc-glass--accent {
   box-shadow:
     inset 0 1px 0 hsl(0 0% 100% / 0.08),
@@ -27,6 +67,26 @@
 
 .cc-glass--dock {
   border-radius: 1rem;
+}
+
+/*
+ * Fallback for engines without backdrop-filter (or where a filtered/transformed
+ * ancestor defeats it): there is no blur to obscure the layer beneath, so lean
+ * on near-opaque tints instead. Occlusion is preserved; only the frosted depth
+ * cue is lost.
+ */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .cc-glass {
+    background: linear-gradient(135deg, hsl(var(--card) / 0.9), hsl(var(--background) / 0.82));
+  }
+
+  .cc-glass--overlay {
+    background: linear-gradient(135deg, hsl(var(--card) / 0.97), hsl(var(--background) / 0.92));
+  }
+
+  .cc-glass--inset {
+    background: hsl(var(--card) / 0.6);
+  }
 }
 
 /* ---------------------------------------------------------------------- */

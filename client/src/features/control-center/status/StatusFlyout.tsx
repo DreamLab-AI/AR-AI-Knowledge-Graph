@@ -154,6 +154,7 @@ export const StatusFlyout: React.FC<StatusFlyoutProps> = ({ websocketStatus, spa
 
   return (
     <GlassPanel
+      elevation="overlay"
       data-testid="status-flyout"
       role="region"
       aria-label="System status detail"

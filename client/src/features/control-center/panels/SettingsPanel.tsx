@@ -127,6 +127,7 @@ export const SettingsPanel: React.FC = () => {
 
   return (
     <GlassPanel
+      elevation="overlay"
       accent
       animated
       role="region"

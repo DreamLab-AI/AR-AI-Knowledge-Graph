@@ -23,6 +23,18 @@ import '../styles/control-center.css';
 const DOCK_PANEL_TESTID = 'settings-panel';
 
 export interface GlassPanelProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * Elevation tier in the glass stack (design-spec.md §5.1):
+   *  - `'base'` (default) — a single glass layer over the hero canvas (the dock,
+   *    the badge chips). Lightest treatment; the graph reads clearly around it.
+   *  - `'overlay'` — a summoned panel/flyout that stacks above another glass
+   *    surface, or floats as a reading surface over the dense graph. Stronger
+   *    backdrop blur + heavier tint partially obscures the layer beneath so the
+   *    stack never reads as clutter.
+   *  - `'inset'` — a glass card nested inside another glass panel. Drops the
+   *    redundant second backdrop-filter for a flat inset surface.
+   */
+  elevation?: 'base' | 'overlay' | 'inset';
   /** Renders the accented ring variant (cc-glass--accent). */
   accent?: boolean;
   /** Applies the larger dock border radius instead of the default panel radius. */
@@ -43,6 +55,7 @@ export const GlassPanel = React.forwardRef<HTMLDivElement, GlassPanelProps>(
   (
     {
       className,
+      elevation = 'base',
       accent = false,
       dockRadius = false,
       animated = false,
@@ -83,6 +96,8 @@ export const GlassPanel = React.forwardRef<HTMLDivElement, GlassPanelProps>(
         ref={ref}
         className={cn(
           'cc-glass',
+          elevation === 'overlay' && 'cc-glass--overlay',
+          elevation === 'inset' && 'cc-glass--inset',
           accent && 'cc-glass--accent',
           dockRadius && 'cc-glass--dock',
           animated && 'cc-panel-transition',
