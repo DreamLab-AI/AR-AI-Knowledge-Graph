@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 // GraphService direct import is no longer needed as we use actors
 // use crate::services::graph_service::GraphService;
-use crate::actors::messages::{AddNodesFromMetadata, GetSettings};
+use crate::actors::messages::{AddNodesFromMetadata, GetSettings, GetSettlementState, SettlementSnapshot};
 use crate::application::graph::queries::{
     GetAutoBalanceNotifications, GetGraphData, GetNodeMap, GetPhysicsState,
 };
@@ -145,6 +145,45 @@ impl PopulationFilter {
     }
 }
 
+/// Fetch the honest, live physics settlement telemetry from the GPU force-compute
+/// actor. Returns `None` when the actor is not yet available or no physics tick
+/// has produced positions, so callers fall back to run-state-derived defaults.
+async fn fetch_settlement(state: &web::Data<AppState>) -> Option<SettlementSnapshot> {
+    let gpu_addr = state.get_gpu_compute_addr().await?;
+    match gpu_addr.send(GetSettlementState).await {
+        Ok(Ok(snapshot)) => Some(snapshot),
+        Ok(Err(e)) => {
+            debug!("GetSettlementState returned no telemetry yet: {}", e);
+            None
+        }
+        Err(e) => {
+            warn!("Mailbox error querying settlement state: {}", e);
+            None
+        }
+    }
+}
+
+/// Build the client-facing `SettlementState` from live telemetry when present,
+/// else from run-state truth (`is_settled = !running`, zeroed counters). Honest:
+/// never claims settled/KE=0 while the GPU actor reports motion.
+fn build_settlement_state(
+    settlement: Option<&SettlementSnapshot>,
+    physics_running: bool,
+) -> SettlementState {
+    match settlement {
+        Some(s) => SettlementState {
+            is_settled: s.is_settled,
+            stable_frame_count: s.stable_frame_count,
+            kinetic_energy: s.kinetic_energy as f32,
+        },
+        None => SettlementState {
+            is_settled: !physics_running,
+            stable_frame_count: 0,
+            kinetic_energy: 0.0,
+        },
+    }
+}
+
 pub async fn get_graph_data(
     state: web::Data<AppState>,
     query: web::Query<GraphQuery>,
@@ -162,11 +201,16 @@ pub async fn get_graph_data(
     let node_map_future = execute_in_thread(move || node_map_handler.handle(GetNodeMap));
     let physics_future = execute_in_thread(move || physics_handler.handle(GetPhysicsState));
 
-    let (graph_result, node_map_result, physics_result): (
+    // Live physics settlement telemetry, fetched concurrently with the CQRS
+    // queries. `None` ⇒ GPU actor not up / no tick yet ⇒ run-state fallback.
+    let settlement_future = fetch_settlement(&state);
+
+    let (graph_result, node_map_result, physics_result, settlement): (
         Result<Result<Arc<GraphData>, Hexserror>, String>,
         Result<Result<Arc<HashMap<u32, Node>>, Hexserror>, String>,
         Result<Result<PhysicsState, Hexserror>, String>,
-    ) = tokio::join!(graph_future, node_map_future, physics_future);
+        Option<SettlementSnapshot>,
+    ) = tokio::join!(graph_future, node_map_future, physics_future, settlement_future);
 
     match (graph_result, node_map_result, physics_result) {
         (Ok(Ok(graph_data)), Ok(Ok(_node_map)), Ok(Ok(physics_state))) => {
@@ -249,13 +293,12 @@ pub async fn get_graph_data(
                 nodes: filtered_nodes,
                 edges: filtered_edges,
                 metadata: graph_data.metadata.clone(),
-                settlement_state: SettlementState {
-                    // PhysicsState only has is_running and params fields
-                    // Use sensible defaults for settlement state
-                    is_settled: !physics_state.is_running,
-                    stable_frame_count: 0,
-                    kinetic_energy: 0.0,
-                },
+                // Honest settlement telemetry from the GPU force-compute actor;
+                // falls back to run-state truth only when no telemetry exists.
+                settlement_state: build_settlement_state(
+                    settlement.as_ref(),
+                    physics_state.is_running,
+                ),
             };
 
             info!(
@@ -588,6 +631,7 @@ pub async fn get_graph_positions(
                     "metadata": {
                         "numNodes": snapshot.num_nodes,
                         "settled": snapshot.settled,
+                        "stableFrameCount": snapshot.stable_frame_count,
                         "kineticEnergy": snapshot.kinetic_energy,
                         "boundingBox": {
                             "min": {

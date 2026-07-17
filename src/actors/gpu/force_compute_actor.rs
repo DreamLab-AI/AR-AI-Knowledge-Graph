@@ -308,6 +308,25 @@ pub struct ForceComputeActor {
     /// broadcast payload when the current frame is bad, so clients never see
     /// infinity. Stored as (node_id, position, velocity-zeroed-on-recovery).
     last_good_positions: Vec<(u32, Vec3, Vec3)>,
+
+    /// Consecutive physics ticks whose mean per-node kinetic energy stayed below
+    /// `SETTLE_KE_EPSILON`. Reset to 0 the instant KE rises above epsilon (e.g. a
+    /// springK reheat). Settlement is declared when this reaches
+    /// `SETTLE_FRAME_THRESHOLD`. This is the honest settlement truth the REST
+    /// `/api/graph/data` telemetry reports — not the hardcoded `!is_running`.
+    settle_stable_frames: u32,
+
+    /// Most recent mean per-node kinetic energy (`0.5·|v|²` averaged over nodes)
+    /// from the physics tick loop. The live aggregate surfaced by settlement
+    /// telemetry; 0.0 before the first tick.
+    last_mean_kinetic_energy: f64,
+
+    /// Set when the orchestrator signals the physics loop paused at convergence
+    /// (energy plateau / auto-pause). While latched, telemetry reports settled
+    /// with the measured-final KE — the loop has stopped calling
+    /// `update_settlement`, so this is the only truthful "at rest" signal.
+    /// Cleared by any real compute tick (motion resumed) or a resume signal.
+    settle_paused: bool,
 }
 
 impl ForceComputeActor {
@@ -380,6 +399,86 @@ impl ForceComputeActor {
             consecutive_bad_frames: 0,
             simulation_halted: false,
             last_good_positions: Vec::new(),
+            settle_stable_frames: 0,
+            last_mean_kinetic_energy: 0.0,
+            settle_paused: false,
+        }
+    }
+
+    /// Mean per-node kinetic energy below which a tick counts toward settlement.
+    /// Matches the physics `stability_threshold` default (1e-4) — a node barely
+    /// drifting. Units: energy per node (`0.5·|v|²`).
+    const SETTLE_KE_EPSILON: f64 = 1e-4;
+
+    /// Consecutive sub-epsilon ticks required before the graph is declared
+    /// settled. Mirrors the auto-balance `stabilityFrameCount` config (180
+    /// frames ≈ 3 s at 60 fps) so REST and auto-balance agree on "settled".
+    const SETTLE_FRAME_THRESHOLD: u32 = 180;
+
+    /// Pure settlement-counter transition: the new stable-frame count given the
+    /// previous count and this tick's mean per-node KE. A finite sub-epsilon KE
+    /// increments the run; anything else (KE at/above epsilon, or a non-finite
+    /// skip sentinel like `f64::MAX`) resets it to 0. Actor-free for testing.
+    fn next_stable_frames(prev: u32, mean_ke: f64, epsilon: f64) -> u32 {
+        if mean_ke.is_finite() && mean_ke < epsilon {
+            prev.saturating_add(1)
+        } else {
+            0
+        }
+    }
+
+    /// Pure settlement decision. Returns `(is_settled, reported_frame_count)`.
+    ///
+    /// Two truthful paths to "settled":
+    /// - **Paused latch** — the orchestrator declared an energy plateau and
+    ///   stopped the loop. Authoritative for this no-cooling FA2 layout, whose
+    ///   residual energy never crosses an absolute floor. Reported frame count is
+    ///   pinned to the threshold so the readout is self-consistent (settled ⇒
+    ///   full rest count).
+    /// - **Counter** — enough consecutive sub-epsilon ticks accumulated while the
+    ///   loop was still running (covers cooled/quiescent layouts).
+    ///
+    /// Actor-free for testing.
+    fn settled_state(paused: bool, frames: u32, threshold: u32) -> (bool, u32) {
+        if paused {
+            (true, threshold.max(frames))
+        } else {
+            (frames >= threshold, frames)
+        }
+    }
+
+    /// Fold one tick's mean per-node KE into the settlement tracker. Called from
+    /// the physics loop after `step_kinetic_energy` is computed. A real compute
+    /// tick means the loop is running, so it clears any stale pause latch.
+    fn update_settlement(&mut self, mean_ke: f64) {
+        self.last_mean_kinetic_energy = mean_ke;
+        self.settle_stable_frames =
+            Self::next_stable_frames(self.settle_stable_frames, mean_ke, Self::SETTLE_KE_EPSILON);
+        self.settle_paused = false;
+    }
+
+    /// Latch/unlatch settlement when the orchestrator pauses at convergence or
+    /// resumes. On resume a fresh settle cycle begins, so the stale rest count is
+    /// dropped; the mean KE is left intact for continuity until the first new
+    /// tick overwrites it.
+    fn set_settlement_paused(&mut self, paused: bool) {
+        self.settle_paused = paused;
+        if !paused {
+            self.settle_stable_frames = 0;
+        }
+    }
+
+    /// Build the live settlement telemetry snapshot from tracked state.
+    fn settlement_snapshot(&self) -> crate::actors::messages::SettlementSnapshot {
+        let (is_settled, stable_frame_count) = Self::settled_state(
+            self.settle_paused,
+            self.settle_stable_frames,
+            Self::SETTLE_FRAME_THRESHOLD,
+        );
+        crate::actors::messages::SettlementSnapshot {
+            is_settled,
+            stable_frame_count,
+            kinetic_energy: self.last_mean_kinetic_energy,
         }
     }
 
@@ -2014,6 +2113,11 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                 total_ke / actor.position_velocity_buffer.len() as f64
                             };
 
+                            // Fold this tick's mean KE into the honest settlement
+                            // tracker (consecutive sub-epsilon frames). Surfaced by
+                            // GetSettlementState / GetCurrentPositions.
+                            actor.update_settlement(step_kinetic_energy);
+
                             // Sequential pipeline: notify orchestrator that this step is done
                             // so it can trigger broadcast and schedule the next step.
                             if let Some(ref orch_addr) = actor.physics_orchestrator_addr {
@@ -2676,14 +2780,21 @@ impl Handler<GetCurrentPositions> for ForceComputeActor {
         }
 
         let avg_ke = if num > 0 { total_ke / num as f64 } else { 0.0 };
-        // Settled heuristic: same as stability check — avg KE below threshold
-        let settled = avg_ke < 0.001;
+        // Honest settlement: the pause latch (energy plateau) or a sub-epsilon
+        // frame run — not the instantaneous single-frame KE. `avg_ke` (this
+        // frame's mean per-node KE) is still reported as the live energy.
+        let (settled, stable_frame_count) = Self::settled_state(
+            self.settle_paused,
+            self.settle_stable_frames,
+            Self::SETTLE_FRAME_THRESHOLD,
+        );
 
         Ok(CurrentPositionsSnapshot {
             positions,
             num_nodes: num as u32,
             settled,
             kinetic_energy: avg_ke,
+            stable_frame_count,
             bounding_box: BoundingBox {
                 min_x,
                 min_y,
@@ -2693,6 +2804,34 @@ impl Handler<GetCurrentPositions> for ForceComputeActor {
                 max_z,
             },
         })
+    }
+}
+
+/// Cheap settlement telemetry query — no position payload, just the honest
+/// convergence readout for the REST `/api/graph/data` status panel.
+impl Handler<crate::actors::messages::GetSettlementState> for ForceComputeActor {
+    type Result = Result<crate::actors::messages::SettlementSnapshot, String>;
+
+    fn handle(
+        &mut self,
+        _msg: crate::actors::messages::GetSettlementState,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
+        Ok(self.settlement_snapshot())
+    }
+}
+
+/// Settlement pause/resume latch driven by the PhysicsOrchestratorActor. Keeps
+/// the telemetry truthful once the physics loop stops ticking at convergence.
+impl Handler<crate::actors::messages::SetPhysicsSettled> for ForceComputeActor {
+    type Result = ();
+
+    fn handle(
+        &mut self,
+        msg: crate::actors::messages::SetPhysicsSettled,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
+        self.set_settlement_paused(msg.settled);
     }
 }
 
@@ -3400,5 +3539,140 @@ impl Handler<crate::actors::messages::PositionBroadcastAck> for ForceComputeActo
                    metrics.available_tokens, metrics.max_tokens,
                    metrics.total_congestion_duration.as_secs_f32() * 1000.0);
         }
+    }
+}
+
+#[cfg(test)]
+mod settlement_tests {
+    //! Pure, actor-free tests for the settlement decision logic (epsilon /
+    //! threshold / counter-reset semantics), following the `ingest::process_frame`
+    //! precedent of testing the transition function without a live actor.
+    use super::ForceComputeActor as FCA;
+
+    const EPS: f64 = FCA::SETTLE_KE_EPSILON;
+    const THRESH: u32 = FCA::SETTLE_FRAME_THRESHOLD;
+
+    #[test]
+    fn sub_epsilon_ke_increments_the_run() {
+        // A tick below epsilon advances the consecutive-stable counter by one.
+        assert_eq!(FCA::next_stable_frames(0, EPS / 2.0, EPS), 1);
+        assert_eq!(FCA::next_stable_frames(41, 0.0, EPS), 42);
+    }
+
+    #[test]
+    fn ke_at_or_above_epsilon_resets_the_run() {
+        // Epsilon is a strict floor: exactly-epsilon does NOT count as settled.
+        assert_eq!(FCA::next_stable_frames(100, EPS, EPS), 0);
+        // A reheat (KE spikes well above epsilon) zeroes the counter.
+        assert_eq!(FCA::next_stable_frames(179, 5.0, EPS), 0);
+    }
+
+    #[test]
+    fn non_finite_ke_resets_the_run() {
+        // Skip/failure sentinels (`f64::MAX`, NaN, inf) must never be read as
+        // "settled" — they reset the run so a stalled pipeline can't fake rest.
+        assert_eq!(FCA::next_stable_frames(150, f64::MAX, EPS), 0);
+        assert_eq!(FCA::next_stable_frames(150, f64::NAN, EPS), 0);
+        assert_eq!(FCA::next_stable_frames(150, f64::INFINITY, EPS), 0);
+    }
+
+    #[test]
+    fn settled_only_at_or_past_threshold_when_running() {
+        // Not paused: settlement is driven purely by the sub-epsilon counter.
+        assert_eq!(FCA::settled_state(false, THRESH - 1, THRESH), (false, THRESH - 1));
+        assert_eq!(FCA::settled_state(false, THRESH, THRESH), (true, THRESH));
+        assert_eq!(FCA::settled_state(false, THRESH + 50, THRESH), (true, THRESH + 50));
+    }
+
+    #[test]
+    fn pause_latch_reports_settled_with_full_count() {
+        // The plateau-pause path: the loop stopped at a residual KE far above
+        // epsilon (counter == 0), yet the graph IS at rest. Must report settled
+        // with the count pinned to the threshold for a self-consistent readout.
+        assert_eq!(FCA::settled_state(true, 0, THRESH), (true, THRESH));
+        // A larger live count is preserved rather than clamped down.
+        assert_eq!(FCA::settled_state(true, THRESH + 5, THRESH), (true, THRESH + 5));
+    }
+
+    #[test]
+    fn reheat_flips_settled_false_and_resets_counter() {
+        // Drive the counter to settled, then perturb (springK reheat): KE rises,
+        // the counter resets, and the graph is no longer settled — the exact
+        // live semantics the telemetry must show during a perturbation.
+        let mut frames = 0u32;
+        for _ in 0..THRESH {
+            frames = FCA::next_stable_frames(frames, 0.0, EPS);
+        }
+        assert_eq!(frames, THRESH);
+        assert_eq!(FCA::settled_state(false, frames, THRESH), (true, THRESH));
+
+        // Reheat.
+        frames = FCA::next_stable_frames(frames, 12.5, EPS);
+        assert_eq!(frames, 0);
+        assert_eq!(FCA::settled_state(false, frames, THRESH), (false, 0));
+
+        // Re-settling then re-accumulates from zero.
+        frames = FCA::next_stable_frames(frames, EPS / 10.0, EPS);
+        assert_eq!(frames, 1);
+        assert_eq!(FCA::settled_state(false, frames, THRESH), (false, 1));
+    }
+
+    #[test]
+    fn pause_then_resume_end_to_end() {
+        // Mirrors the live defect the queen caught: plateau at KE≈2.9 (counter 0),
+        // loop pauses → must read settled; then a springK reheat resumes ticks →
+        // must read unsettled with the counter reset.
+        let mut ctor = FcaSettlement::default();
+
+        // Converging ticks keep KE above epsilon → counter stays 0, not settled.
+        ctor.tick(2.9039521);
+        assert_eq!(ctor.snapshot(), (false, 0, 2.9039521));
+
+        // Orchestrator declares the energy plateau and pauses the loop.
+        ctor.pause(true);
+        assert_eq!(ctor.snapshot(), (true, THRESH, 2.9039521));
+
+        // 60s later, still paused, no ticks: readout stays honestly settled
+        // (was previously frozen at false).
+        assert_eq!(ctor.snapshot(), (true, THRESH, 2.9039521));
+
+        // springK perturbation → resume. First live tick clears the latch and
+        // reports the rising energy as unsettled.
+        ctor.pause(false);
+        assert_eq!(ctor.snapshot(), (false, 0, 2.9039521));
+        ctor.tick(26.1);
+        assert_eq!(ctor.snapshot(), (false, 0, 26.1));
+    }
+
+    /// Actor-free replica of the settlement fields + transitions, so the
+    /// pause/tick interplay is exercised without a live GPU actor.
+    #[derive(Default)]
+    struct FcaSettlement {
+        frames: u32,
+        ke: f64,
+        paused: bool,
+    }
+    impl FcaSettlement {
+        fn tick(&mut self, mean_ke: f64) {
+            self.ke = mean_ke;
+            self.frames = FCA::next_stable_frames(self.frames, mean_ke, EPS);
+            self.paused = false;
+        }
+        fn pause(&mut self, paused: bool) {
+            self.paused = paused;
+            if !paused {
+                self.frames = 0;
+            }
+        }
+        fn snapshot(&self) -> (bool, u32, f64) {
+            let (s, f) = FCA::settled_state(self.paused, self.frames, THRESH);
+            (s, f, self.ke)
+        }
+    }
+
+    #[test]
+    fn counter_saturates_without_overflow() {
+        // A graph parked at rest indefinitely must not panic on counter overflow.
+        assert_eq!(FCA::next_stable_frames(u32::MAX, 0.0, EPS), u32::MAX);
     }
 }

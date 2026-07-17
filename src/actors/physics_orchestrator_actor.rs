@@ -774,6 +774,13 @@ impl PhysicsOrchestratorActor {
                     info!("Auto-pause: System reached equilibrium, pausing physics");
                     self.simulation_params.is_physics_paused = true;
 
+                    // Genuine equilibrium rest: latch settlement telemetry so it
+                    // reports settled once ticks stop (Continuous-mode analogue of
+                    // the FastSettle convergence latch).
+                    if let Some(ref gpu_addr) = self.gpu_compute_addr {
+                        gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: true });
+                    }
+
                     self.broadcast_physics_paused();
                 }
             }
@@ -799,6 +806,13 @@ impl PhysicsOrchestratorActor {
             self.fast_settle_iteration_count = 0;
             self.fast_settle_complete = false;
             self.settle_rest_run = 0;
+
+            // Clear the settlement latch immediately on resume so telemetry reads
+            // unsettled the instant a reheat/param-change is applied, without
+            // waiting for the first compute tick.
+            if let Some(ref gpu_addr) = self.gpu_compute_addr {
+                gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: false });
+            }
 
             self.broadcast_physics_resumed();
 
@@ -1282,6 +1296,11 @@ impl Handler<PhysicsPauseMessage> for PhysicsOrchestratorActor {
 
         if msg.pause {
             self.simulation_params.is_physics_paused = true;
+            // A paused loop stops ticking; latch settlement so telemetry reports
+            // at-rest rather than freezing at the last tick's unsettled value.
+            if let Some(ref gpu_addr) = self.gpu_compute_addr {
+                gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: true });
+            }
         } else {
             self.resume_physics(ctx);
         }
@@ -1889,6 +1908,11 @@ impl Handler<crate::actors::messages::PhysicsStepCompleted> for PhysicsOrchestra
                     use crate::actors::gpu::force_compute_actor::ForceFullBroadcast;
                     info!("PhysicsOrchestratorActor: Sending ForceFullBroadcast after settle convergence (pure snapshot)");
                     gpu_addr.do_send(ForceFullBroadcast);
+                    // Latch settlement telemetry: the loop is about to stop
+                    // ticking, so the honest "at rest" signal must come from
+                    // here — otherwise the snapshot freezes at this mid-decay KE
+                    // with isSettled=false forever.
+                    gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: true });
                 }
 
                 self.broadcast_physics_paused();

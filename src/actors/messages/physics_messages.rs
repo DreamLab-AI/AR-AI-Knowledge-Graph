@@ -554,7 +554,50 @@ pub struct CurrentPositionsSnapshot {
     pub num_nodes: u32,
     pub settled: bool,
     pub kinetic_energy: f64,
+    /// Consecutive physics ticks whose mean per-node kinetic energy has stayed
+    /// below the settle epsilon. `settled` is derived from this crossing the
+    /// settle-frame threshold (not the instantaneous KE).
+    pub stable_frame_count: u32,
     pub bounding_box: BoundingBox,
+}
+
+/// Query the live physics settlement telemetry. Cheap: unlike
+/// `GetCurrentPositions` it carries no position payload, just the honest
+/// convergence readout surfaced by the REST `/api/graph/data` status panel.
+#[derive(Message)]
+#[rtype(result = "Result<SettlementSnapshot, String>")]
+pub struct GetSettlementState;
+
+/// Live physics settlement telemetry.
+///
+/// - `kinetic_energy` — mean per-node kinetic energy `0.5·|v|²` (energy units,
+///   averaged over node count) from the most recent physics tick.
+/// - `stable_frame_count` — consecutive ticks whose mean KE stayed below the
+///   settle epsilon; resets to 0 the moment KE rises (e.g. a springK reheat).
+/// - `is_settled` — true iff `stable_frame_count` has reached the settle
+///   threshold. During a reheat KE rises, the counter resets, and this flips
+///   false.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettlementSnapshot {
+    pub is_settled: bool,
+    pub stable_frame_count: u32,
+    pub kinetic_energy: f64,
+}
+
+/// Latch/unlatch the settlement telemetry when the physics loop pauses at
+/// convergence or resumes. Essential because the loop stops calling
+/// `update_settlement` once paused (FastSettle plateau → `is_physics_paused`),
+/// so without an explicit signal the snapshot would freeze at the last compute
+/// tick's mid-decay value and never report `settled`. The plateau latch — not an
+/// absolute KE floor — is the authoritative "at rest" signal for this
+/// no-global-cooling FA2 layout, which floors at a non-zero residual energy.
+#[derive(Message, Debug, Clone)]
+#[rtype(result = "()")]
+pub struct SetPhysicsSettled {
+    /// True: the loop paused at rest (energy plateau / auto-pause). The current
+    /// mean KE is retained as the honest measured-final energy. False: the loop
+    /// resumed (reheat / param change); a fresh settle cycle begins.
+    pub settled: bool,
 }
 
 /// Axis-aligned bounding box.

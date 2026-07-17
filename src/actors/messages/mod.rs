@@ -58,6 +58,8 @@ pub use physics_messages::{
     PhysicsStepCompleted, SetPhysicsOrchestratorAddr,
     // GPU position snapshot (REST API)
     BoundingBox, CurrentPositionsSnapshot, GetCurrentPositions,
+    // Settlement telemetry (honest convergence readout)
+    GetSettlementState, SettlementSnapshot, SetPhysicsSettled,
     // Layout reset
     ResetPositions,
     // Phase 5 (ADR-01 D9): event emission only
