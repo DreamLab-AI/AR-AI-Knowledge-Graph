@@ -179,7 +179,10 @@ export const DEFAULT_QUALITY_GATES: QualityGateSettings = {
 };
 
 export const DEFAULT_EMBEDDING_CLOUD = {
-  enabled: true,
+  // Off by default: the RuVector memory cloud fills the scene with a second
+  // 50k-point field that obscures the graph itself at rest (operator call,
+  // 2026-07-17 — 'to get a clear view'). Opt in via Atmosphere → Embedding Cloud.
+  enabled: false,
   pointSize: 7.5,
   opacity: 0.6,
   colorBy: 'namespace' as const,
