@@ -6,6 +6,6 @@
 export { ControlCenter, default } from './ControlCenter';
 export { useControlCenterUI } from './state/useControlCenterUI';
 export type { ControlCenterUIState } from './state/useControlCenterUI';
-export type { StatusClusterProps } from './status/StatusCluster';
+export { StatusSurface } from './status/StatusSurface';
 export type { RevealDetail } from './hooks/useRevealSetting';
 export { REVEAL_EVENT } from './hooks/useRevealSetting';

@@ -6,25 +6,24 @@
  * so the MainLayout swap (WP5) is a one-line change. Responsibilities:
  *  - pointer-events routing: the wrapper is transparent to the pointer; each
  *    surface re-enables pointer events (canvas stays the hero at rest).
- *  - mounts the dock (MacroBar + Ask affordance), the slide-out SettingsPanel,
- *    and the top-right StatusCluster.
+ *  - mounts the dock (MacroBar + Ask affordance) and the slide-out SettingsPanel.
  *  - wires the keyboard map (useControlCenterHotkeys) and reveal flow
  *    (useRevealSetting).
- *  - ports the SpaceDriver wiring verbatim from the legacy panel: connect /
- *    disconnect toggle the orbit controls, buttons stream into status.
+ *  - owns the camera-control handoff: a SpacePilot connect/disconnect toggles
+ *    the orbit controls. The status/telemetry + the SpacePilot connect UI now
+ *    live in the unified StatusSurface (mounted by MainLayout), which reads
+ *    SpaceDriver/websocket state directly — no status props are threaded here.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { SpaceDriver } from '../../services/SpaceDriverService';
-import { webSocketService } from '../../store/websocketStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { ControlPanelProps } from '../visualisation/components/ControlPanel/types';
 import { CommandInput } from '../visualisation/components/CommandInput';
 import { GlassDock } from './primitives/GlassDock';
 import { MacroBar } from './macros/MacroBar';
 import { SettingsPanel } from './panels/SettingsPanel';
-import { StatusCluster } from './status/StatusCluster';
 import { useControlCenterUI } from './state/useControlCenterUI';
 import { useControlCenterHotkeys } from './hooks/useControlCenterHotkeys';
 import { useRevealSetting } from './hooks/useRevealSetting';
@@ -32,8 +31,6 @@ import './styles/control-center.css';
 
 export const ControlCenter: React.FC<ControlPanelProps> = ({
   onOrbitControlsToggle,
-  botsData,
-  graphData,
 }) => {
   const dockCollapsed = useControlCenterUI((s) => s.dockCollapsed);
   const toggleDock = useControlCenterUI((s) => s.toggleDock);
@@ -79,67 +76,20 @@ export const ControlCenter: React.FC<ControlPanelProps> = ({
   useControlCenterHotkeys();
   useRevealSetting();
 
-  // D5: the WS status dot must track the real socket lifecycle, not a literal.
-  // Mirror the webSocketService.onConnectionStatusChange subscription already
-  // used across the app (ConnectionWarning, BotsWebSocketIntegration) and thread
-  // the live state into StatusCluster so the dot flips to disconnected when the
-  // socket actually drops (CANARY-VC-D5-WS).
-  const [websocketStatus, setWebsocketStatus] = useState<
-    'connected' | 'connecting' | 'disconnected'
-  >(webSocketService.isReady() ? 'connected' : 'connecting');
-
+  // Camera-control handoff: connecting a SpacePilot hands the camera to the
+  // device (orbit controls off); disconnecting hands it back. The SpacePilot
+  // display + connect button live in the unified StatusSurface, which reads
+  // SpaceDriver directly; this effect owns only the orbit-controls side effect.
   useEffect(() => {
-    const unsubscribe = webSocketService.onConnectionStatusChange((connected) => {
-      setWebsocketStatus(connected ? 'connected' : 'disconnected');
-    });
-    // Seed from the current lifecycle state in case a transition fired before
-    // this effect subscribed.
-    setWebsocketStatus(webSocketService.isReady() ? 'connected' : 'connecting');
-    return unsubscribe;
-  }, []);
-
-  // --- SpaceDriver / SpacePilot wiring (ported verbatim from IntegratedControlPanel) ---
-  const [webHidAvailable, setWebHidAvailable] = useState(false);
-  const [spacePilotConnected, setSpacePilotConnected] = useState(false);
-  const [spacePilotButtons, setSpacePilotButtons] = useState<string[]>([]);
-
-  useEffect(() => {
-    setWebHidAvailable('hid' in navigator);
-  }, []);
-
-  useEffect(() => {
-    const handleConnect = () => {
-      setSpacePilotConnected(true);
-      onOrbitControlsToggle?.(false);
-    };
-    const handleDisconnect = () => {
-      setSpacePilotConnected(false);
-      setSpacePilotButtons([]);
-      onOrbitControlsToggle?.(true);
-    };
-    const handleButtons = (event: Event) => {
-      const buttons = (event as CustomEvent<{ buttons?: string[] }>).detail?.buttons ?? [];
-      setSpacePilotButtons(buttons);
-    };
-
+    const handleConnect = () => onOrbitControlsToggle?.(false);
+    const handleDisconnect = () => onOrbitControlsToggle?.(true);
     SpaceDriver.addEventListener('connect', handleConnect);
     SpaceDriver.addEventListener('disconnect', handleDisconnect);
-    SpaceDriver.addEventListener('buttons', handleButtons);
-
     return () => {
       SpaceDriver.removeEventListener('connect', handleConnect);
       SpaceDriver.removeEventListener('disconnect', handleDisconnect);
-      SpaceDriver.removeEventListener('buttons', handleButtons);
     };
   }, [onOrbitControlsToggle]);
-
-  const handleConnectSpacePilot = async () => {
-    try {
-      await SpaceDriver.scan();
-    } catch {
-      /* device selection cancelled / unavailable — no-op */
-    }
-  };
 
   // Dev-only test handle required by the browser-automation phase.
   useEffect(() => {
@@ -151,20 +101,6 @@ export const ControlCenter: React.FC<ControlPanelProps> = ({
 
   return (
     <div className="cc-root" data-testid="control-center" style={{ pointerEvents: 'none' }}>
-      <div style={{ pointerEvents: 'auto' }}>
-        <StatusCluster
-          graphData={graphData}
-          botsData={botsData}
-          mcpConnected={botsData?.mcpConnected ?? false}
-          websocketStatus={websocketStatus}
-          metadataStatus={(graphData?.nodes?.length ?? 0) > 0 ? 'loaded' : 'loading'}
-          webHidAvailable={webHidAvailable}
-          spacePilotConnected={spacePilotConnected}
-          spacePilotButtons={spacePilotButtons}
-          onConnectSpacePilot={handleConnectSpacePilot}
-        />
-      </div>
-
       <div style={{ pointerEvents: 'auto' }}>
         <SettingsPanel />
       </div>

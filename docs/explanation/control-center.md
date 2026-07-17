@@ -26,8 +26,9 @@ and the registry that keeps it honest against the backend. The governing decisio
 Three commitments shape every part of the rebuild:
 
 - **The canvas is hero.** At rest, nothing but the graph is visible except a
-  bottom-center dock and a top-right status cluster — no permanent side panel
-  claims screen width. Everything else is summoned and dismissed.
+  bottom-center dock and its flanking badge cluster (Agents, KPIs, and the
+  system-status surface) — no permanent side panel claims screen width.
+  Everything else is summoned and dismissed.
 - **Glass DOM, not canvas UI.** Every control is a real HTML element (native
   `<input type="range">`, Radix `Switch`/`Select`) styled with a translucent
   `backdrop-filter` recipe (`.cc-glass`, `styles/control-center.css`), never a
@@ -159,11 +160,11 @@ file list; the load-bearing seams are:
 
 | Path | Role |
 |---|---|
-| `ControlCenter.tsx` | Root overlay. Mounts the dock, the slide-out panel, and the status cluster; wires hotkeys, reveal, and the ported SpacePilot/SpaceDriver connection logic verbatim from the old panel. |
+| `ControlCenter.tsx` | Root overlay. Mounts the dock and the slide-out panel; wires hotkeys and reveal. Owns only the camera-control handoff (a SpacePilot connect/disconnect toggles the orbit controls) — the status/SpacePilot UI moved out to `StatusSurface`. |
 | `primitives/GlassDock.tsx`, `GlassPanel.tsx`, `MacroDial.tsx` | The three genuinely new primitives — a translucent dock shell, a translucent panel shell, and a radial dial control. Every other control composes existing design-system Radix primitives. |
 | `macros/MacroBar.tsx`, `useMacro.ts`, `registry/macros.ts` | The L1 dock row: five macro dials plus a physics toggle, a reset-layout action, and nine group-launcher icon buttons (it maps `REGISTRY`). |
 | `panels/SettingsPanel.tsx` | The L2 slide-out: a left icon rail (nine groups + Solid/Ontology) and a body that renders a `GroupSection` or a bespoke panel, with a label/key/description/path/subgroup search filter. |
-| `status/StatusCluster.tsx` | Top-right compact cluster — health dot + agent-count badge, expanding on hover/focus into the three existing status widgets unchanged. |
+| `status/StatusSurface.tsx` + `StatusFlyout.tsx` | Dock-anchored status badge (bottom-right of the badge cluster). A cheap collapsed chip (health dot + agent count + SpacePilot dot) expands into a glass flyout rebuilt in modern primitives, reading its data sources directly. Hooks: `useConnectionTelemetry.ts` (WS lifecycle + honest layout-motion), `useSpacePilot.ts` (SpaceDriver + WebHID/secure-context). |
 | `echo/*` | Echo Pulse — a single-draw-call R3F ring that pulses from the affected node on a slider/dial *commit* (not per-tick), mounted once in `GraphCanvas.tsx`'s scene root. Feature-flagged and reduced-motion-gated. |
 | `state/useControlCenterUI.ts` | Ephemeral UI state (open panel, active group, dock collapsed, echo-pulse flag, resizable panel width) — deliberately separate from the settings store so none of it can leak into the frozen path contract (168 migrated + 37 Agents = 205 fields). |
 
@@ -189,8 +190,8 @@ caused nodes (and their labels) to pop in and out as `minConnections` quantised.
 
 At rest, only the **GlassDock** (bottom-center: five macro dials, physics
 toggle, reset action, nine group-launcher icons, and an "Ask" button opening the
-ported `CommandInput`) and the **StatusCluster** (top-right compact pill) are
-visible.
+ported `CommandInput`) and its flanking badges (**Agents**, **KPIs**, and the
+**StatusSurface** system-status chip) are visible.
 
 | Key | Action |
 |---|---|
@@ -260,29 +261,55 @@ its default value rather than throwing.
 shape as a drop-in replacement for the deleted `ControlPanel/unifiedSettingsConfig`,
 so the Ask box's behaviour is unchanged — only its import path moved.
 
-## Status cluster and the agents surface
+## Status surface
 
-`StatusCluster` is a top-right pill (health dot + agent-count badge + a
-SpacePilot dot that only appears once a device connects) that expands on
-hover/focus into the three existing widgets, unchanged: `SystemHealthIndicator`,
-`BotsStatusPanel`, `SpacePilotStatus`. The heavy widgets mount only while
-expanded, so the at-rest pill carries no live-subscription cost of its own — its
-health colour is derived from props `ControlCenter` already threads through, not
-a second WebSocket subscription.
+`StatusSurface` is the single, unified system-status surface — a dock-anchored
+badge in the bottom-right of the badge cluster (symmetric with the Agents badge
+bottom-left and below the KPIs badge), so status reads as part of the ONE
+control interface rather than a detached top-right HUD. It replaces the old
+free-floating `StatusCluster` pill **and** the standalone `SpaceMouseStatus`
+banner, both now deleted.
 
-`BotsStatusPanel` and the agent-spawning dialog it hosts
-(`MultiAgentInitializationPrompt`, split under the 500-line cap into
-`AgentTypeGrid`/`AgentTopologyFields`/`AgentSkillsSection`) were restyled to the
-same glass design language — backdrop-blur dialog, `cc-*` typography, CSS-variable
-tokens — while keeping their amber accent as the agents' visual identity and
-leaving all behaviour and API calls unchanged. `AgentTelemetryStream` received
-the same typography/token pass.
+At rest it is a slim glass chip — a health dot driven by the real WebSocket
+lifecycle, the agent count, and a SpacePilot dot that appears once a device
+connects. All three inputs are event-driven store/service reads (no polling), so
+the collapsed chip is cheap. Clicking/focusing it mounts `StatusFlyout`, which
+carries — rebuilt in the modern glass primitives, **not** by importing the old
+widgets — four sections:
+
+- **Connection telemetry** — WebSocket / metadata / MCP state, live inbound
+  frame rate, the graph-type populations, ontology rigour (classes / axioms /
+  inferred edges / active GPU forces), and the settings-sync telltale (all the
+  data sources the deleted `SystemHealthIndicator` surfaced).
+- **Agents summary** — count / links / active / tokens from `useBotsData`, with a
+  *Manage* link to the Agent Ops surface. The multi-agent lifecycle affordances
+  ported out of the deleted `BotsStatusPanel` live here: **Initialize** (the only
+  entry point to `MultiAgentInitializationPrompt`) and **Disconnect**.
+- **SpacePilot** — connection state, device name, the Connect button
+  (`SpaceDriver.scan`), and the WebHID-unsupported / insecure-context guidance
+  that used to live in the standalone `SpaceMouseStatus` banner (folded in here,
+  so that banner is gone).
+- **Layout motion** — an *honest* morphing / settled readout. The server's
+  `settlementState` is unreliable (`kineticEnergy` reports `0.0` and `isSettled`
+  `true` even during visible motion), so the readout is derived from real inbound
+  position-frame throughput sampled from the WebSocket store, not from that field.
+
+The heavy hooks (`useConstraintStats` polling, inferred-edges refresh, the
+motion sampler) live in `StatusFlyout` and mount only on expand, so nothing
+polls while collapsed. Everything is read directly from stores/services, so
+`ControlCenter` no longer threads status or SpacePilot state as props.
+
+**Deleted in this consolidation:** `status/StatusCluster.tsx` (+ its test),
+`components/SpaceMouseStatus.tsx` (+ its MainLayout mount), and the three legacy
+`ControlPanel/` widgets — `SystemHealthIndicator`, `BotsStatusPanel`,
+`SpacePilotStatus`.
 
 ## Test hooks and dev handles
 
 - **`data-testid` convention**: path fields → `setting-{dot.path}` (dots kept);
   transient/action fields → `setting-{groupId}.{key}`; groups → `group-{id}`;
-  panels → `panel-{id}`; macros → `macro-{id}`; status → `status-cluster`.
+  panels → `panel-{id}`; macros → `macro-{id}`; status → `status-surface`
+  (collapsed chip) / `status-flyout` (expanded body).
 - **`registry/settings-manifest.json`** (committed, `pnpm gen:manifest`-generated,
   CI freshness-checked): the machine-readable map of every field's testid,
   control type, group, and server bucket, consumed by the browser-automation

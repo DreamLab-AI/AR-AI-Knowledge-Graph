@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import GraphCanvasWrapper from '../features/graph/components/GraphCanvasWrapper';
-import { ControlCenter } from '../features/control-center';
+import { ControlCenter, StatusSurface } from '../features/control-center';
 import { useSettingsStore } from '../store/settingsStore';
 import { useBotsData } from '../features/bots/contexts/BotsDataContext';
 import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
-import { SpaceMouseStatus } from '../components/SpaceMouseStatus';
 import { AudioInputService } from '../services/AudioInputService';
 import { graphDataManager, type GraphData } from '../features/graph/managers/graphDataManager';
 import { NodeDetailPanel } from '../features/graph/components/NodeDetailPanel';
@@ -102,11 +101,15 @@ const MainLayoutContent: React.FC = () => {
           HITL Precision render "awaiting data source". */}
       <KpiPanel />
 
-      {/* OntologyPanel is accessed via the control panel's ontology tab, not rendered as overlay */}
-
-      <aside aria-label="Device status">
-        <SpaceMouseStatus />
+      {/* Unified system-status surface — dock-anchored badge carrying connection
+          telemetry, agent/bots summary, the SpacePilot connect + support/secure-
+          context guidance, and an honest layout-motion readout. Replaces the old
+          top-right StatusCluster pill and the standalone SpaceMouseStatus banner. */}
+      <aside aria-label="System status">
+        <StatusSurface />
       </aside>
+
+      {/* OntologyPanel is accessed via the control panel's ontology tab, not rendered as overlay */}
 
       {!hasVoiceSupport && (
         <aside
