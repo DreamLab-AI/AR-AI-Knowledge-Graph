@@ -18,6 +18,13 @@ The VisionClaw codebase contains a complete semantic pipeline — parsers, Neo4j
 3. **No dual-path loading** — `load_graph()` loads ONE unified graph (KGNode + OwlClass edges combined)
 4. **Edge type flows to GPU** — CSR carries edge_type buffer alongside col_indices
 5. **Analytics flow back** — ClusteringActor writes results, binary protocol carries them, client reads them
+
+> **Correction (2026-07-22 doc-drift audit).** This ADR's Context ("Neo4j
+> adapters") and Principle 1 ("every relationship in an OntologyBlock becomes
+> a Neo4j edge") describe Neo4j as the existing/target persistence. Neo4j is
+> 100% removed (ADR-132); the sole store is Oxigraph named graphs + SQLite.
+> Read "Neo4j adapters" / "Neo4j edge" above as "Oxigraph adapters" /
+> "Oxigraph triple".
 6. **Edge colour = relationship power** — gradient from source domain colour to target domain colour, weighted by relationship strength
 
 ### What We Delete

@@ -34,6 +34,16 @@ Core backend landed in this sprint (agent E2, Contributor Nexus swarm):
 - Broker UI (E3) and merge-policy enforcement (D5) are deferred; this sprint
   delivers the aggregate, adapter, MCP tool, and REST surface only.
 
+> **Correction (2026-07-22 doc-drift audit).** The Context, Considered Options,
+> Decision, and Persistence sections below describe `BrokerCase` as a Neo4j
+> node with Cypher queries. Neo4j is 100% removed (ADR-132) and the
+> Neo4j-backed `BrokerActor` stack never merged to `main` (unmerged `crashbug`
+> branch — see PRD-013 Correction, PRD-023:82). The `MigrationCandidateAggregate`
+> that actually landed (`src/services/migration_broker.rs`, per the
+> Implementation Notes above) persists via the Oxigraph/SQLite adapters on
+> `main`, not Neo4j. Read "Neo4j" / "Cypher" below as historical design intent
+> from the pre-migration draft, not shipped persistence.
+
 ## Context
 
 The Judgment Broker Workbench (ADR-041) handles escalation Cases: policy exceptions,

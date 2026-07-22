@@ -72,6 +72,10 @@ age-keygen -o ~/.config/sops/age/keys.txt
 #        age: "age1..."
 
 # 3. Extract sensitive values from .env into secrets.env
+# Correction (2026-07-22 doc-drift audit): NEO4J_PASSWORD is no longer read by
+# any code on main (Neo4j removed, ADR-132) and SERVER_NOSTR_PRIVKEY belongs to
+# the never-merged ServerNostrActor (crashbug branch) — neither var needs
+# extraction; this pattern is retained for historical secrets that predate them.
 grep -E '^(OPENAI_|DEEPSEEK_|GITHUB_TOKEN|PERPLEXITY_|GEMINI_|HF_|NEO4J_PASSWORD|SERVER_NOSTR_PRIVKEY)' .env > secrets.env
 
 # 4. Encrypt

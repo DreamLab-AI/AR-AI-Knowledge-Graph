@@ -159,6 +159,11 @@ mcp__claude-flow__memory_search({
 
 ### D5 — Neo4j-compatible node schema for optional visualisation
 
+> **Correction (2026-07-22 doc-drift audit).** "VisionClaw's Neo4j graph
+> model" below is obsolete. Neo4j is 100% removed (ADR-132); the sole store is
+> Oxigraph named graphs + SQLite. Any optional projection would target
+> Oxigraph/SPARQL, not a Cypher `CREATE`.
+
 Graph nodes stored under `qe/nodes` follow a schema compatible with VisionClaw's
 Neo4j graph model, enabling optional projection into the knowledge graph:
 

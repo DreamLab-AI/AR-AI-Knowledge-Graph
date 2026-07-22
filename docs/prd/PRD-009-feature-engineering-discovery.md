@@ -7,6 +7,15 @@
 **ADR:** ADR-072
 **DDD Context:** ddd-feature-engineering-context.md
 
+> **Correction (2026-07-22 doc-drift audit).** This PRD's Technical Architecture
+> (Data Flow diagram, lines 76-89) and Dependencies (line 116, "Neo4j 5.x
+> (existing)") describe Neo4j as the live ontology store. It is not — Neo4j is
+> 100% removed (ADR-132); the sole store is Oxigraph named graphs + SQLite. Any
+> shipped embedding/materialisation properties (`content_embedding_384`,
+> `kge_embedding_128`, `MATERIALIZED_2HOP/3HOP`) that exist on `main` live on
+> Oxigraph nodes/relationships, not Neo4j ones. `Status: Implemented` above
+> refers to the discovery API surface, not this Neo4j-backed data flow.
+
 ## Problem Statement
 
 VisionClaw ingests rich ontology data (OWL classes with definitions, relationships, metadata) but offers no ML-powered discovery. Users can only navigate the graph visually or search by exact label match. There is no way to:

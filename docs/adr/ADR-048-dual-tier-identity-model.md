@@ -8,6 +8,13 @@ Implemented 2026-04-20
 
 2026-04-18 (Proposed) · 2026-04-20 (Implemented)
 
+> **Correction (2026-07-22 doc-drift audit).** The Implementation notes below
+> (the `#[ignore]`-gated "Neo4j integration" test, the `0042_bridge_to.cypher`
+> migration, "distinct Neo4j labels", and "Neo4j schema additions" Cypher) are
+> obsolete. Neo4j is 100% removed (ADR-132); the sole store is Oxigraph named
+> graphs + SQLite. Any shipped `BRIDGE_TO` schema is expressed against
+> Oxigraph, not Neo4j/Cypher.
+
 ## Implementation
 
 - Service: `src/services/bridge_edge.rs` — scoring sigmoid, `surface`, `promote`

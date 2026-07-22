@@ -152,6 +152,13 @@ This is documented for completeness; the change ships as a separate small ADR (*
 
 Phase 1 + Phase 2 land within one sprint. Later phases are independently scheduled.
 
+> **Correction (2026-07-22 doc-drift audit).** The Consequences below cite
+> "real Neo4j lookups" (line 161) as Phase 1+ follow-on work and a
+> `neo4j_graph_repository.rs:431-440` query (line 169). Neo4j is 100% removed
+> (ADR-132) and that file does not exist on `main`. The URI resolver
+> (`src/handlers/uri_resolver_handler.rs`) and `load_all_edges` equivalent
+> resolve against the embedded Oxigraph store, not Neo4j.
+
 ## Consequences
 
 **Positive.**

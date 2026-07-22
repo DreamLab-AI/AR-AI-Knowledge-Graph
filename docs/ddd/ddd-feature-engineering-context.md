@@ -2,6 +2,13 @@
 
 **Context Map Position:** Downstream of BC-Ontology (OntologyClass nodes, SUBCLASS_OF edges), upstream of BC-Visualization (client rendering, discovery UX).
 
+> **Correction (2026-07-22 doc-drift audit).** This context's Entities
+> (EmbeddingService, KGETrainer, NHopMaterializer) and Context Map below
+> describe properties/relationships written onto "Neo4j OntologyClass nodes"
+> and a `Neo4jOntologyRepo`. Neo4j is 100% removed (ADR-132); the sole store is
+> Oxigraph named graphs + SQLite. Read every "Neo4j" reference below as
+> "Oxigraph".
+
 ## Domain Overview
 
 The Feature Engineering bounded context transforms raw ontology data (text properties, graph structure) into ML-ready numeric representations that power discovery, similarity search, and physics-informed layout.

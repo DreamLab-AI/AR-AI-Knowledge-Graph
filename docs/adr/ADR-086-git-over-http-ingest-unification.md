@@ -21,6 +21,12 @@
 > events themselves are unchanged and do ship; only the `BrokerActor` transport
 > is superseded.
 
+> **Correction 2 (2026-07-22 doc-drift audit).** The body below also asserts
+> the GitRemote registry is "stored in Neo4j" and that the WriteBackSaga
+> records push results "in Neo4j (audit trail)". Neo4j is 100% removed
+> (ADR-132); the sole store is Oxigraph named graphs + SQLite. Any shipped
+> registry/audit-trail persistence lives there, not Neo4j.
+
 ## Context
 
 VisionClaw's knowledge graph ingest pipeline is hard-wired to the GitHub REST

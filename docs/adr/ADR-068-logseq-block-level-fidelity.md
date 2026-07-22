@@ -9,6 +9,11 @@
 **Implements:** PRD-005 §6 Epic H
 **Threat-modelled:** PRD-005 §19 (R-15 30× node explosion, R-16 UUID collisions, F-01 cyclic block-ref, F-02 UUID collision attack, F-15 1M-block OOM, T-5 mutation amplification)
 
+> **Correction (2026-07-22 doc-drift audit).** The claims below that block
+> nodes are "already in Neo4j as page-level nodes" and that the parser
+> performs "transactional Neo4j writes of 1,000 blocks" are obsolete. Neo4j is
+> 100% removed (ADR-132); the sole store is Oxigraph named graphs + SQLite.
+
 ## Context
 
 VC's existing `KnowledgeGraphParser` parses Logseq vaults at **page granularity** — one file becomes one node with extracted wikilinks. This loses the block-level structure that gives a Logseq vault its value: parent/child indentation, properties, block-refs `((uuid))`, drawer metadata, scheduled/deadline dates.

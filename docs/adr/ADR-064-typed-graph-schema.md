@@ -11,6 +11,12 @@
 
 ## Context
 
+> **Correction (2026-07-22 doc-drift audit).** "VisionClaw's current graph
+> schema in Neo4j" below is obsolete. Neo4j is 100% removed (ADR-132); the
+> sole store is Oxigraph named graphs + SQLite. The ~6 node kinds / ~10
+> relationship types and flag-bit encoding described are otherwise accurate —
+> read "in Neo4j" as "in the graph store".
+
 VisionClaw's current graph schema in Neo4j has ~6 node kinds (`Page`, `LinkedPage`, `OwlClass`, `OwlProperty`, `Agent`, `Bot`) and ~10 relationship types, encoded with flag bits (bits 26-31 of node ID) for fast GPU dispatch. This is sufficient for Logseq vault visualisation but not for code-cognition or ontology-reasoning workloads.
 
 Understand-Anything (UA) ships a richer taxonomy — 21 node kinds (5 code + 8 infra + 3 domain + 5 knowledge) and 35 edge kinds organised into 8 categories (structural, behavioural, data-flow, dependencies, semantic, infrastructure, domain, knowledge). This taxonomy is well-tested across multi-language codebases and Karpathy-pattern wikis.

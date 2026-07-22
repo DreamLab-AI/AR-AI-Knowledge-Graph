@@ -16,6 +16,15 @@ Accepted — Implemented 2026-04-13
 
 2026-04-13
 
+> **Correction (2026-07-22 doc-drift audit).** The Context, Decision Drivers,
+> and Decision sections below (bead events "persisted to Neo4j", "Beads are
+> created once in Neo4j", the `BeadStore` trait's "Neo4j Implementation",
+> `Neo4jBeadStore` / `neo4rs::Graph`, and the `Neo4jWriteFailed` outcome
+> variant) describe a Neo4j-backed bead store. Neo4j is 100% removed
+> (ADR-132); the sole store is Oxigraph named graphs + SQLite. This widens the
+> scope of the inline note further below (which only covered the
+> `Neo4jPersisted` mermaid state) to the whole document.
+
 ## Context
 
 VisionClaw's bead provenance system records immutable audit trails as Nostr NIP-33 events

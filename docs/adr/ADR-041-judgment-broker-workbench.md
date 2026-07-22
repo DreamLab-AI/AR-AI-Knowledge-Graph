@@ -23,6 +23,13 @@ and [ADR-130](./ADR-130-gap-close-visionclaw-decisions.md) Decision 2.
 > `POST /api/broker/cases*` and `GET /api/broker/subscribe` do not exist on
 > `main` (see `docs/reference/rest-api.md` for the routes that do).
 
+> **Correction 2 (2026-07-22 doc-drift audit).** The above banner scopes the
+> "Implementation Notes" sections; the **Decision** and **Consequences**
+> sections further below (`Ports: BrokerCaseRepository (Neo4j)`, "### Neo4j
+> Schema" Cypher, "Neo4j remains the primary store") are the same historical
+> `crashbug` design and are equally superseded. Neo4j is 100% removed
+> (ADR-132); the graph store on `main` is Oxigraph plus SQLite.
+
 ## Date
 
 2026-04-14 (accepted) / 2026-04-20 (implemented on `crashbug`, unmerged) /

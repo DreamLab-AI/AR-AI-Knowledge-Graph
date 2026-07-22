@@ -11,6 +11,13 @@ This ADR does not extend ADR-028 (SPARQL PATCH for Ontology Mutations) — the
 shared ADR number reflects the NIP-98 auth primitive lineage, not the SPARQL
 topic. The file is intentionally named `-ext-` to disambiguate.
 
+> **Correction (2026-07-22 doc-drift audit).** The Decision Drivers and Option
+> 1 / Decision sections below prescribe caller-side filtering via a
+> parameterised Cypher clause "at the Neo4j boundary" (lines 54, 76-82,
+> 137-147). Neo4j is 100% removed (ADR-132); there is no Neo4j boundary on
+> `main`. The equivalent visibility filter on `main` is expressed as SPARQL
+> against the embedded Oxigraph store, not Cypher against Neo4j.
+
 ## Context
 
 NIP-98 Schnorr auth is already the primary authentication path in the backend

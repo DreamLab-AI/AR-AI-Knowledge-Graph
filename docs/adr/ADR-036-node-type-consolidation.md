@@ -4,6 +4,13 @@
 
 Accepted
 
+> **Correction (2026-07-22 doc-drift audit).** The root-cause description
+> below citing `neo4j_adapter.rs:573` as a live file, and "Ontology nodes
+> ingested from Neo4j", are obsolete. Neo4j is 100% removed (ADR-132) and that
+> adapter file does not exist on `main`; the sole store is Oxigraph named
+> graphs + SQLite. The casing-mismatch defect this ADR fixes, if still
+> present, now lives in the Oxigraph ingest adapter.
+
 ## Context
 
 VisionClaw classifies nodes into three graph populations (Knowledge, Ontology, Agent) to drive dual-graph X-axis separation on the GPU, per-client type filtering over WebSocket, colour assignment, and visual mode detection. This classification is implemented independently in 11 locations across the Rust server and TypeScript client, each with its own string-matching logic and its own subset of recognised type literals.

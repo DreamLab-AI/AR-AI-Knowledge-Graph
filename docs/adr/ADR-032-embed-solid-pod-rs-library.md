@@ -265,6 +265,11 @@ AGPL-derivative). The shared code path means feature parity is free.
 - **Neo4j is untouched.** This ADR is about the Solid layer. Graph
   data continues to live in Neo4j; pod data is the LDP-shaped surface
   on top.
+
+  > **Correction (2026-07-22 doc-drift audit).** Neo4j is 100% removed
+  > (ADR-132) — this bullet is obsolete even by this ADR's own 2026-07-03
+  > update. The graph store is Oxigraph named graphs + SQLite; the Solid
+  > layer sits on top of that, unaffected by this ADR either way.
 - **Docker volume layout unchanged.** Pod data still under
   `/var/lib/visionclaw/pods/` (renamed from `/data/pods/`). One-line
   volume rename in `docker-compose.yml`.

@@ -8,6 +8,12 @@ Implemented 2026-04-20
 
 2026-04-14 (accepted) / 2026-04-20 (implemented)
 
+> **Correction (2026-07-22 doc-drift audit).** The Implementation Notes below
+> cite `Neo4jWorkflowRepository` (`src/adapters/neo4j_workflow_adapter.rs`) as
+> the live persistence backend. Neo4j is 100% removed (ADR-132) and that
+> adapter file does not exist on `main`; the sole store is Oxigraph named
+> graphs + SQLite.
+
 ## Implementation Notes (2026-04-20)
 
 `WorkflowProposal`, `WorkflowVersion`, and `WorkflowPattern` types are live in

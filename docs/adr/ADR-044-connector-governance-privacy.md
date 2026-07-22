@@ -8,6 +8,12 @@ Accepted
 
 2026-04-14
 
+> **Correction (2026-07-22 doc-drift audit).** The claims below that "the
+> existing data ingestion path is Neo4j-native" and (further down) that "Neo4j
+> remains the sole storage for Insights and ConnectorSource nodes" are
+> obsolete. Neo4j is 100% removed (ADR-132); the sole store is Oxigraph named
+> graphs + SQLite.
+
 ## Context
 
 The Insight Ingestion Loop (PRD Workstream 4) requires discovery signals from enterprise collaboration and work systems. The Discovery Engine cannot function on graph data alone; it needs to observe real coordination patterns in the tools where work actually happens -- issue trackers, code review, project boards, messaging.

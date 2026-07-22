@@ -18,6 +18,12 @@ Ratified
 - ADR-053 — solid-pod-rs sidecar (Pod storage backend)
 - Commit `89c8d800e` — `refactor/kg-node-rename` (Concept → KGNode rename landed)
 
+> **Correction (2026-07-22 doc-drift audit).** The claims below that "Neo4j
+> is a derived index", the "Neo4j schema indexes" Cypher, and the
+> "Three Neo4j indexes created" checklist item are obsolete. Neo4j is 100%
+> removed (ADR-132); the sole store is Oxigraph named graphs + SQLite. Any
+> shipped index equivalent is an Oxigraph/SPARQL index, not a Neo4j one.
+
 ## Context
 
 ADR-048 established a two-tier identity model where `:KGNode` is the data-plane

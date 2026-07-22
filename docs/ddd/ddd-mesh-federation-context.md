@@ -23,6 +23,14 @@ This document maps the bounded contexts involved in PRD-010's DID:Nostr Mesh Fed
 > is the same phantom: no `ServerNostrActor` and no kind-30300 Nostr emitter ship
 > on `main` (server-side Nostr publishing is `src/services/nostr_service.rs`).
 
+> **Correction 2 (2026-07-22 doc-drift audit).** The mission statement
+> ("canonical knowledge graph (Neo4j-backed)"), the aggregate definitions
+> ("Persisted in Neo4j"), and the "Implementation status (2026-05-08)" notes
+> below describing the WriteBackSaga's Neo4j audit-trail recording are also
+> stale. Neo4j is 100% removed (ADR-132); the sole store is Oxigraph named
+> graphs + SQLite. Any audit-trail recording that shipped lives in
+> `sqlite_enrichment_repository.rs`, not Neo4j.
+
 The mesh's architectural challenge is not the wire protocol (ADR-073) nor the message envelope (ADR-075) but the **relational integrity** at boundaries. The forum's user-pubkey, agentbox's agent-pubkey, and VisionClaw's substrate-pubkey are three different identities that must be reasoned about together; the moment a translation drops one, attribution breaks, ACLs misfire, or duplicate side-effects cascade.
 
 ---

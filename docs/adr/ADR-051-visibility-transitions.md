@@ -17,6 +17,12 @@ Ratified
 - ADR-052 — WAC default-private container policy
 - ADR-053 — solid-pod-rs sidecar (Pod storage backend)
 
+> **Correction (2026-07-22 doc-drift audit).** The Cypher snippets and the
+> compliance checklist below ("implemented end-to-end (...→ Neo4j flip →...)")
+> describe a Neo4j-backed visibility flip. Neo4j is 100% removed (ADR-132);
+> the sole store is Oxigraph named graphs + SQLite. Any shipped visibility
+> transition is expressed as a SPARQL update against Oxigraph, not Cypher.
+
 ## Context
 
 ADR-050 added a `visibility` field to `:KGNode` and made the owner's Pod the
