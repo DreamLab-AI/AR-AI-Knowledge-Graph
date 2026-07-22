@@ -773,6 +773,84 @@ fn validate_read_only_sparql(query: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// ADR-117 WS-0: server-side SPARQL result clamp for the read-only query paths.
+///
+/// The repository's `sparql_select_json` (crates/visionclaw-adapters) already
+/// fences rows + bytes internally for the `/ontology/sparql` path. The CQRS
+/// `/ontology/query` path returns `Vec<HashMap<String,String>>` straight from
+/// `run_select` with no bound, so the same invariant is enforced here at the
+/// handler boundary: a missing LIMIT is injected, an oversize LIMIT is rewritten
+/// down, and the serialised response is capped by row count and byte size,
+/// surfacing an explicit `truncated` flag rather than a silent cut.
+///
+/// Constants mirror the adapter fences and follow the agentbox client-side
+/// budget governor (`agentbox/mcp/servers/lib/ontology-budget.js`), which
+/// truncates-with-flag rather than cutting silently.
+const MAX_SPARQL_ROWS: usize = 10_000;
+const DEFAULT_SPARQL_LIMIT: usize = 10_000;
+const MAX_SPARQL_RESULT_BYTES: usize = 8 * 1024 * 1024;
+
+/// Inject or clamp a top-level `LIMIT` on a pre-validated read query.
+///
+/// A SELECT without a trailing LIMIT gets `LIMIT DEFAULT_SPARQL_LIMIT`; a SELECT
+/// whose trailing LIMIT exceeds the cap is rewritten down to `MAX_SPARQL_ROWS`.
+/// Non-SELECT forms (ASK/CONSTRUCT/DESCRIBE) are returned unchanged. This is a
+/// best-effort string rewrite; the row/byte fence in [`cap_result_rows`] is the
+/// parse-independent backstop. `validate_read_only_sparql` has already run on
+/// the input, so mutation smuggling is not a concern here.
+pub fn clamp_sparql_limit(query: &str) -> String {
+    if !query.to_uppercase().contains("SELECT") {
+        return query.to_string();
+    }
+    // Scan from the end of the trimmed query for a trailing top-level LIMIT N.
+    let trimmed = query.trim_end();
+    let tail_upper = trimmed.to_uppercase();
+    if let Some(pos) = tail_upper.rfind("LIMIT") {
+        let after = trimmed[pos + 5..].trim_start();
+        // Only treat as a real LIMIT clause if what follows starts with digits.
+        let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() {
+            let n: usize = digits.parse().unwrap_or(usize::MAX);
+            if n > MAX_SPARQL_ROWS {
+                // Rewrite the numeric value down to the cap, preserving any
+                // trailing clause (e.g. OFFSET) after the digits.
+                let head = &trimmed[..pos + 5];
+                let rest = &after[digits.len()..];
+                return format!("{} {}{}", head, MAX_SPARQL_ROWS, rest);
+            }
+            return query.to_string();
+        }
+    }
+    format!("{}\nLIMIT {}", trimmed, DEFAULT_SPARQL_LIMIT)
+}
+
+/// Parse-independent backstop: cap a materialised result set by row count and
+/// cumulative serialised bytes, returning the (possibly shortened) rows and a
+/// `truncated` flag. A sub-SELECT LIMIT that slipped past [`clamp_sparql_limit`]
+/// cannot slip past this — it caps what has actually been materialised.
+pub fn cap_result_rows(
+    mut rows: Vec<std::collections::HashMap<String, String>>,
+) -> (Vec<std::collections::HashMap<String, String>>, bool) {
+    let mut truncated = false;
+    if rows.len() > MAX_SPARQL_ROWS {
+        rows.truncate(MAX_SPARQL_ROWS);
+        truncated = true;
+    }
+    // Running serialised-byte fence, independent of the row cap above.
+    let mut est_bytes = 0usize;
+    let mut keep = rows.len();
+    for (i, row) in rows.iter().enumerate() {
+        est_bytes += serde_json::to_string(row).map(|s| s.len()).unwrap_or(0);
+        if est_bytes > MAX_SPARQL_RESULT_BYTES {
+            keep = i;
+            truncated = true;
+            break;
+        }
+    }
+    rows.truncate(keep);
+    (rows, truncated)
+}
+
 pub async fn query_ontology(
     _auth: crate::settings::auth_extractor::AuthenticatedUser,
     state: web::Data<AppState>,
@@ -786,21 +864,35 @@ pub async fn query_ontology(
         return crate::bad_request!(&reason);
     }
 
+    // ADR-117 WS-0: inject/clamp the LIMIT so Oxigraph never materialises an
+    // unbounded SELECT via the CQRS read path (the `run_select` behind
+    // `QueryOntology` has no internal fence, unlike `sparql_select_json`).
+    let query = clamp_sparql_limit(&query);
+
     info!("Querying ontology via CQRS query");
 
 
     let handler = QueryOntologyHandler::new(state.ontology_repository.clone());
 
-    
+
     let result = execute_in_thread(move || handler.handle(QueryOntology { query })).await;
 
     match result {
         Ok(Ok(results)) => {
+            // ADR-117 WS-0 backstop: cap rows + serialised bytes and surface an
+            // explicit `truncated` flag instead of returning an unbounded array.
+            let (results, truncated) = cap_result_rows(results);
             info!(
-                "Ontology query successful via CQRS: {} results",
-                results.len()
+                "Ontology query successful via CQRS: {} results (truncated={})",
+                results.len(),
+                truncated
             );
-            ok_json!(results)
+            let row_count = results.len();
+            ok_json!(serde_json::json!({
+                "results": results,
+                "rowCount": row_count,
+                "truncated": truncated,
+            }))
         }
         Ok(Err(e)) => {
             error!("CQRS query failed to query ontology: {}", e);
@@ -834,6 +926,11 @@ pub async fn sparql_query(
         info!("Rejected non-read-only SPARQL on /ontology/sparql: {}", reason);
         return crate::bad_request!(&reason);
     }
+
+    // ADR-117 WS-0: inject/clamp the LIMIT at the handler boundary. The
+    // repository re-clamps and row/byte-fences idempotently; this makes the
+    // read-only bound explicit and uniform across both read endpoints.
+    let query = clamp_sparql_limit(&query);
 
     match state.ontology_repository.sparql_select_json(query).await {
         Ok(json) => ok_json!(json),

@@ -1,14 +1,10 @@
-import { useEffect, useCallback, useState, lazy, Suspense } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import AppInitializer from './AppInitializer'
 import { ApplicationModeProvider } from '../contexts/ApplicationModeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { createLogger } from '../utils/loggerConfig';
 import MainLayout from './MainLayout';
 import { useQuest3Integration } from '../hooks/useQuest3Integration';
-// Lazy-load the WebXR/three.js immersive client. It is only rendered on
-// Quest 3 / forced-VR sessions, so the desktop majority never downloads the
-// heavy XR bundle. Code-split out of the initial chunk.
-const ImmersiveApp = lazy(() => import('../immersive/components/ImmersiveApp'));
 import { BotsDataProvider } from '../features/bots/contexts/BotsDataContext';
 import { CommandPalette } from '../features/command-palette/components/CommandPalette';
 import { initializeCommandPalette } from '../features/command-palette/defaultCommands';
@@ -85,32 +81,6 @@ function App() {
   }, [authenticated, user]);
 
   
-  const shouldUseImmersiveClient = () => {
-    // Check for desktop force FIRST - allows overriding VR detection
-    const forceDesktop = window.location.search.includes('force=desktop') ||
-                         window.location.search.includes('vr=false') ||
-                         window.location.search.includes('mode=desktop');
-
-    if (forceDesktop) {
-      logger.info('[App] Desktop mode forced via URL parameter');
-      return false;
-    }
-
-    const userAgent = navigator.userAgent;
-
-    const isQuest3Browser = userAgent.includes('Quest 3') ||
-                            userAgent.includes('Quest3') ||
-                            userAgent.includes('OculusBrowser') ||
-                            (userAgent.includes('VR') && userAgent.includes('Quest')) ||
-                            userAgent.toLowerCase().includes('meta quest');
-
-
-    const forceQuest3 = window.location.search.includes('force=quest3') ||
-                        window.location.search.includes('directar=true') ||
-                        window.location.search.includes('immersive=true');
-
-    return (isQuest3Browser || forceQuest3 || shouldUseQuest3Layout) && initialized;
-  };
 
   useEffect(() => {
     
@@ -180,15 +150,7 @@ function App() {
           </div>
         );
       case 'initialized':
-        return shouldUseImmersiveClient() ? (
-          <BotsDataProvider>
-            <VircadiaBridgesProvider enableBotsBridge={true} enableGraphBridge={true}>
-              <Suspense fallback={<LoadingScreen message="Loading immersive client..." />}>
-                <ImmersiveApp />
-              </Suspense>
-            </VircadiaBridgesProvider>
-          </BotsDataProvider>
-        ) : (
+        return (
           <BotsDataProvider>
             <VircadiaBridgesProvider enableBotsBridge={true} enableGraphBridge={false}>
               <MainLayout />

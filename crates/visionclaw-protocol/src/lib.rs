@@ -4,8 +4,6 @@
 //!
 //! # Modules
 //!
-//! - [`protocol`]  — V3 binary frame (28-byte broadcast format, ADR-02 D1/D4).
-//!   Used by the `/wss` broadcast path and `GET /api/graph/positions`.
 //! - [`protocols`] — Binary settings protocol with delta encoding + zlib compression.
 //! - [`socket_flow_messages`] — Wire message types (`BinaryNodeDataClient`, `Message`,
 //!   `Ping`/`Pong`, initial graph payloads) shared with the webxr crate.
@@ -24,12 +22,10 @@
 //! `socket_flow_messages::BinaryNodeDataClient` (a webxr-local type), which is why it
 //! stays in the webxr crate rather than moving here.
 
-pub mod protocol;
 pub mod protocols;
 pub mod socket_flow_messages;
 
 // Convenience re-exports.
-pub use protocol::v3_frame::{BinaryV3Frame, NodeRow, V3DecodeError, V3_MAGIC, V3_NODE_BYTES};
 pub use protocols::binary_settings_protocol::{
     BinaryMessage, BinarySettingsProtocol, BinaryValue, PathRegistry,
 };

@@ -3,9 +3,16 @@ import type { Vec3 } from '../../types/binaryProtocol';
 
 // Protocol versions
 export const PROTOCOL_V2 = 2;  // Legacy: uint16 payload length, uint16 SSSP IDs
-export const PROTOCOL_V3 = 3;  // Analytics extension (52 bytes/node; ADR-031 D2 added centrality@48)
-export const PROTOCOL_V4 = 4;  // CURRENT: uint32 payload length header (6 bytes), uint32 SSSP IDs (14 bytes/node)
-export const PROTOCOL_VERSION = PROTOCOL_V4;  // Default to V4
+export const PROTOCOL_V3 = 3;  // LIVE: position broadcast (bare 0x03 lead byte, 52 bytes/node; ADR-031 D2 added centrality@48)
+// PROTOCOL_V4 is NOT the position/agent wire format. The live server→client
+// streams carry no version-tagged 6-byte header: positions lead with a bare
+// PROTOCOL_V3 (0x03) byte and agent actions with a bare AGENT_ACTION (0x23) tag
+// (see store/websocket/binaryProtocol.ts and commit 67503fb3). V4 only labels
+// the 6-byte framed-message header ([type][version][uint32 len]) that
+// createMessage/parseHeader/validateMessage use for GRAPH_UPDATE / VOICE /
+// control / sync framing.
+export const PROTOCOL_V4 = 4;  // Framed-message header version (6-byte header); not the position/agent wire format
+export const PROTOCOL_VERSION = PROTOCOL_V3;  // Default to the live V3 position protocol
 export const SUPPORTED_PROTOCOLS = [PROTOCOL_V2, PROTOCOL_V3, PROTOCOL_V4];
 
 // Message types (1 byte header)
@@ -171,12 +178,14 @@ export interface GraphUpdateHeader extends MessageHeader {
 }
 
 // Constants for binary layout
-// V4 header: [1-byte type][1-byte version][4-byte payloadLength] = 6 bytes
+// Framed-message header: [1-byte type][1-byte version][4-byte payloadLength] = 6 bytes
+// (GRAPH_UPDATE / VOICE / control / sync framing; the live position + agent-action
+// streams are unframed — see the PROTOCOL_V4 note above)
 export const MESSAGE_HEADER_SIZE = 6;
 export const GRAPH_UPDATE_HEADER_SIZE = 7;  // MESSAGE_HEADER_SIZE + 1-byte graphTypeFlag
 export const AGENT_POSITION_SIZE_V2 = 21;  // 4 (u32 id) + 12 (pos) + 4 (timestamp) + 1 (flags)
 export const AGENT_STATE_SIZE_V2 = 49;     // Full agent state with u32 IDs
-// V4 SSSP layout: 4 (u32 nodeId) + 4 (f32 distance) + 4 (u32 parentId) + 2 (u16 flags) = 14 bytes
+// SSSP layout: 4 (u32 nodeId) + 4 (f32 distance) + 4 (u32 parentId) + 2 (u16 flags) = 14 bytes
 export const SSSP_DATA_SIZE_V2 = 14;       // SSSP with u32 IDs
 
 // Canonical sizes

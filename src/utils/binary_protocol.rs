@@ -10,7 +10,6 @@ use std::collections::HashMap;
 // Protocol versions for wire format (V1 REMOVED - no backward compatibility)
 // PROTOCOL_V2 (value: 2) removed — server no longer sends or decodes V2 frames
 const PROTOCOL_V3: u8 = 3; // Analytics extension protocol (P0-4) - CURRENT
-const PROTOCOL_V4: u8 = 4; // Delta encoding protocol
 
 // Node type flag constants for u32 (server-side)
 const AGENT_NODE_FLAG: u32 = 0x80000000; 
@@ -57,32 +56,6 @@ pub type WireNodeDataItem = WireNodeDataItemV3;
 // Typed per-node analytics value object (ADR-031 D2). Defined in
 // `visionclaw-domain` so both `visionclaw-actors` and this crate share one type.
 pub use visionclaw_domain::analytics::NodeAnalytics;
-
-// ============================================================================
-// DELTA ENCODING (Protocol V4) - P1-3 Feature
-// ============================================================================
-
-/// Delta-encoded position update (20 bytes per changed node)
-/// Used in frames 1-59 to send only changes from previous frame
-/// Achieves 60-80% bandwidth reduction compared to full state updates
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct DeltaNodeData {
-    pub id: u32,            // 4 bytes - node ID with flags
-    pub change_flags: u8,   // 1 byte - bits indicate which fields changed
-    pub _padding: [u8; 3],  // 3 bytes - alignment padding
-    pub dx: i16,            // 2 bytes - delta position x (scaled)
-    pub dy: i16,            // 2 bytes - delta position y (scaled)
-    pub dz: i16,            // 2 bytes - delta position z (scaled)
-    pub dvx: i16,           // 2 bytes - delta velocity x (scaled)
-    pub dvy: i16,           // 2 bytes - delta velocity y (scaled)
-    pub dvz: i16,           // 2 bytes - delta velocity z (scaled)
-}
-
-// Change flags for delta encoding
-const DELTA_POSITION_CHANGED: u8 = 0x01;
-const DELTA_VELOCITY_CHANGED: u8 = 0x02;
-const DELTA_ALL_CHANGED: u8 = DELTA_POSITION_CHANGED | DELTA_VELOCITY_CHANGED;
 
 // Safety limits for decode functions
 const MAX_PAYLOAD_SIZE: usize = 10 * 1024 * 1024; // 10 MB
@@ -525,7 +498,6 @@ pub fn decode_node_data(data: &[u8]) -> Result<Vec<(u32, BinaryNodeData)>, Strin
         1 => Err("Protocol V1 is no longer supported. Please upgrade client.".to_string()),
         2 => Err("V2 protocol no longer supported. Please upgrade client to V3+.".to_string()),
         PROTOCOL_V3 => decode_node_data_v3(payload),
-        PROTOCOL_V4 => Err("V4 delta frames require decode_node_data_delta() with previous state".to_string()),
         5 => {
             // V5: [version_byte][8-byte broadcast_seq][V3 node data]
             if payload.len() < 8 {
@@ -1372,10 +1344,6 @@ pub enum MessageType {
 
     ControlFrame = 0x03,
 
-    /// Delta-encoded position updates (Protocol V4)
-    /// Frame 0: FULL state, Frames 1-59: DELTA, Frame 60: FULL resync
-    PositionDelta = 0x04,
-
     /// Client acknowledgement of position broadcast (Protocol V3 backpressure)
     /// Enables true end-to-end flow control vs queue-only confirmation
     BroadcastAck = 0x34,
@@ -1536,7 +1504,6 @@ impl MultiplexedMessage {
             0 => MessageType::BinaryPositions,
             0x02 => MessageType::VoiceData,
             0x03 => MessageType::ControlFrame,
-            0x04 => MessageType::PositionDelta,
             0x23 => MessageType::AgentAction,
             0x34 => MessageType::BroadcastAck,
             t => return Err(format!("Unknown message type: {}", t)),
@@ -1748,7 +1715,6 @@ mod control_frame_tests {
         assert_eq!(MessageType::BinaryPositions as u8, 0x00);
         assert_eq!(MessageType::VoiceData as u8, 0x02);
         assert_eq!(MessageType::ControlFrame as u8, 0x03);
-        assert_eq!(MessageType::PositionDelta as u8, 0x04);
         assert_eq!(MessageType::AgentAction as u8, 0x23);
         assert_eq!(MessageType::BroadcastAck as u8, 0x34);
     }
