@@ -23,7 +23,7 @@ The six unblock states:
 | # | Entry | State | Detail |
 |---|---|---|---|
 | K-1 | ~~Bring `visionclaw-server:4000` up~~ **DONE 2026-07-22** | `ops-action` | Operator launched on host; `http://visionclaw-server:4000/api/health` → 200 verified from the dev container (alias resolves). K-2, §3, MCP-4, KG elevation, RES-d now unblocked. |
-| K-2 | **Canary registration sweep** | `ops-action` (post K-1) | Re-run `POST /api/canary/register` for the 8+ pending canaries (COM-14/15, REC-3/5/6/8/9, AB-MAST, AB-CTC, AB-AUTH, AB-DIVERSITY, AB-PROV, AB-ONTO-TELEM). |
+| K-2 | ~~Canary registration sweep~~ **DONE 2026-07-22** | `ops-action` | All nine canaries registered and armed on the live LivenessHarness (200s, `sha_at_registration: c889bdf6`, confirmed via `/api/canary/status`): DID, VOICE, CTC, MAST, AUTH, LEARN, DIVERSITY, PROV, ONTO-TELEM. Evidence files amended with receipts. Live **fires** remain §3 items. |
 
 ## 2. Code gaps (`code-gap` — swarm ticks)
 
@@ -33,12 +33,12 @@ The six unblock states:
 | C-2 | AUTH-001 execution after Tock-2 decision | VisionClaw | Either merge `sprint-3/jss-cut-scaffold`'s `enterprise_auth.rs` (four-tier RBAC) to main, or close AUTH-001 as banner-resolved. Branch preserved at `6520d6f2e`. Blocked-by: T-2. |
 | C-3 | SQLite backup workstream | VisionClaw | Exposed by the PRD-014 correction: the deleted "Neo4j daily backup" checkbox masked that `data/{kpi,enrichment,settings}.sqlite3` have **no backup at all**. Scripts + runbook + restore test. |
 | C-4 | `tree-search-coder` author-or-disarm | agentbox | Gate armed (`ENABLE_TREE_SEARCH_CODER=true`) but skill never authored. Author per ADR-020 §tree-search / PRD-008 §3.3, or flip the gate off for manifest honesty. Decision at Tock-2, execution as tick. |
-| C-5 | SK-2 / MCP-1 / MCP-2 projection rollout | agentbox | Roll the SK-1 fix pattern: collapse four divergent skill roots; make `skills/mcp.json` the projected source of the entrypoint allowlist; register codebase-memory or strike its "USE FIRST" mandate. |
-| C-6 | GATE-1 validator schema fix | agentbox | Add `openmed` to the manifest schema; `agentbox-config-validate.js` is red on HEAD (E016). Trivial. |
-| C-7 | MCP-3 secrets hardening | agentbox | Perplexity key + email Bearer token shell-expanded into world-readable `.mcp.json` (entrypoint:1041). chmod 600 now; proper secret path in entrypoint. Security-priority. |
-| C-8 | Env consolidation execution | agentbox | Plan already written (`docs/reference/env-consolidation-plan.md`): 9 template files, 3 vocabularies, 58 keys missing from `.env.example`, wizard blind to `CERAMIC_API_KEY`. Execute verdict-per-file. |
+| C-5 | ~~SK-2 / MCP-1 / MCP-2 projection rollout~~ **DONE 2026-07-22 (Tick 1)** | agentbox | project-skill-roots.mjs + project-mcp-servers.mjs; skills/mcp.json is now the projected MCP source; codebase-memory registers via projection. Entrypoint blocks are next-rebuild payload. |
+| C-6 | ~~GATE-1 validator schema fix~~ **DONE 2026-07-22 (Tick 1)** | agentbox | openmed schema node added; validator exits 0 on HEAD; skill counts 115→116 (RES-d). |
+| C-7 | ~~MCP-3 secrets hardening~~ **DONE 2026-07-22 (Tick 1)** | agentbox | Runtime chmod 600 applied to all live secret-bearing .mcp.json/.claude.json NOW; entrypoint 0600-enforcement is next-rebuild payload. Follow-up: rotate historically-exposed Perplexity key + email bearer token. |
+| C-8 | ~~Env consolidation execution~~ **DONE 2026-07-22 (Tick 1)** | agentbox | .env.example now 107 keys per the plan; wizard knows CERAMIC_API_KEY; retired templates carry deprecation pointers; plan stamped EXECUTED. |
 | C-9 | GPU-1/GPU-2 nix library-path fix | agentbox | Every nix GPU binary except wrapped Blender silently CPU-falls-back; in-container Vulkan dead. Apply Blender's wrapper pattern. Only if in-container GPU is wanted (confirm at a tock). |
-| C-10 | Minor: Xinference endpoint default in sidecar script; rename `docs/user/browser.md` → `linked-object-viewer.md` with stub | agentbox | From backlog "minor follow-ups". |
+| C-10 | ~~Minor follow-ups~~ **DONE 2026-07-22 (Tick 1)** | agentbox | XINFERENCE_ENDPOINT host-side fallback; browser.md renamed with stub; backlog Done section updated. |
 | C-11 | Branch graveyard triage | VisionClaw | 126 local branches remain post-purge (33 merged ones deleted 2026-07-22; `crashbug` + `docs/neo4j-schema-update` archive-tagged and deleted). Classify remaining unmerged branches: archive-tag + delete, or keep with an owner. |
 
 ## 3. Live-session pending (`live-session` — operator tocks)
