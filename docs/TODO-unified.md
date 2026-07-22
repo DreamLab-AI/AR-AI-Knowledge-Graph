@@ -61,7 +61,7 @@ The six unblock states:
 | T-3 | AUTH-001: merge four-tier RBAC or stay coarse | Decides C-2. KNOWN_ISSUES banner (2026-07-22) documents current truth. |
 | T-4 | Remaining held surfaces | Multi-user DIDs, git pods/host gateway, payments (parked until counterparty), Solid OIDC issuer, pod MCP surface, kernel pip. Re-date if still deferred. |
 | T-5 | Remote `crashbug` deletion | Local branch deleted + `archive/crashbug` tag exists; deleting `dreamlab-github/crashbug` is a push — operator authorises. |
-| T-6 | Agentbox image rebuild window | Activates: `[program:ontology-condense-scheduler]` (C7, staged), durable sweep/distill supervisord scheduling (staged in flake.nix), GPU wrapper fixes if C-9 approved. ~15 min host op. |
+| T-6 | Agentbox image rebuild window (round 2) | Round 1 (2026-07-22) activated: condense scheduler, relay allowlist, sweep/distill scheduling — verified live. Round 2 payload now staged: MCP-registry projection + skill-root collapse (C-5 entrypoint blocks), .mcp.json 0600 enforcement at source (C-7), GPU wrappers if C-9 approved. ~15 min host op. |
 
 ## 5. Data-floor (`data-floor` — the clock)
 
