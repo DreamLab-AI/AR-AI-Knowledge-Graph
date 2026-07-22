@@ -1,5 +1,13 @@
 # ADR-089 — CQRS Dead Bus Removal
 
+> Correction (2026-07-22 doc-drift audit): every bare "PRD-015" in this record
+> (§3 isolated code registry, etc.) is the VisionClaw **ecosystem code-hygiene**
+> PRD, now archived at
+> [`archive/visionclaw-process/PRD-015-ecosystem-code-hygiene.md`](../../archive/visionclaw-process/PRD-015-ecosystem-code-hygiene.md)
+> — not the agentbox PRD-015 (consumer broadcast economy, cited by ADR-124) nor
+> PRD-014's forward-reference to a never-written productionisation PRD. Three-way
+> collision resolved per [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md) §1f.
+
 | Field | Value |
 |-------|-------|
 | Status | Accepted (2026-06-11; proposed 2026-05-09) |

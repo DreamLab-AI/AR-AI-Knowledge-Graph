@@ -1,12 +1,20 @@
 # PRD-007: Binary Protocol Unification
 
-**Status:** Draft
+**Status:** Superseded (was: Draft)
 **Author:** Architecture Audit (codex consult + qe-code-reviewer agent + cadence-reframing pass)
 **Date:** 2026-04-30
 **Priority:** P0 — fixes per-frame waste of ~36 MB/s on a 25k-node graph; client init hangs traced to JSON bloat have a parallel cause on the WS side
 **Related:** ADR-037 (binary position protocol — to be retired), ADR-038 (push-path consolidation), ADR-050 (sovereign ownership / privacy bits), ADR-031 (broadcast backpressure), PRD-005 (v2 ontology pipeline). Supersedes ADR-037's per-node payload schema.
 **Companion ADR:** [ADR-061](../adr/ADR-061-binary-protocol-unification.md)
 **DDD Context:** [Binary Protocol Bounded Context](../ddd/ddd-binary-protocol-context.md)
+
+> **Superseded (2026-07-22 doc-drift audit):** the 28-byte-pure goal (G1) was
+> abandoned in favour of the 52B analytics-inline wire (ADR-031/ADR-102).
+> Dead design intent, not a pending task. Phase A (2026-07-22) deleted the
+> dead 28-byte V3F0 encoder duplicates that shadowed this goal
+> (`src/protocol/v3_frame.rs`, `crates/visionclaw-protocol/src/protocol/v3_frame.rs`)
+> — see ADR-061's 2026-07-22 banner and anomaly-register N3. Body retained
+> for history per append-only culture; not current.
 
 ---
 

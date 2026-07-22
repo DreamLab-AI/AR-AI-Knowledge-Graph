@@ -8,6 +8,12 @@
 **Companion ADRs**: ADR-057 (Contributor Enablement Platform)
 **Supersedes / Extends**: extends PRD-002 (Enterprise Control Plane UI) with a sixth surface family for contributor-facing work
 
+> **Correction (2026-07-22 doc-drift audit).** "Rust + Actix + Neo4j stack"
+> (line 105 below) and the Neo4j references at lines 357, 415-417, 646 are
+> obsolete — there is no Neo4j on `main`. BC18/BC19 write projections target
+> Oxigraph named graphs or a SQLite projection table via
+> `src/ports/knowledge_graph_repository.rs`, not Neo4j.
+
 ---
 
 ## 1. Problem Statement

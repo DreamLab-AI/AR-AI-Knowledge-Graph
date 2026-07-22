@@ -7,6 +7,13 @@
 
 > The operator asked to "land the full ideal" of self-improvement through writeback and to "make the hard choices despite the complexity." This ADR does exactly that: it commits to the ambitious, loop-closing design **and** draws the non-negotiable governance line that keeps it safe. It also **kills a real ghost** — the `writeback_triggered` no-op in `enrichment_proposals_handler.rs` — replacing a flag that lies with a writeback that works.
 
+> **Correction (2026-07):** Tier W0 (derived materialisation) **SHIPPED** and
+> is route-registered (`src/main.rs:906,973`; `ontology_derived_handler.rs`;
+> `oxigraph_ontology_repository.rs:753`), git-dated 2026-07-10 — reconciling
+> with ADR-114:55. The Status header's "the loop is unbuilt" now scopes only
+> to **ADR-122** (two-speed routing) and **ADR-123** (voice sign-off); W0 is
+> no longer part of the unbuilt residue.
+
 ---
 
 ## 1. Context — why close the loop

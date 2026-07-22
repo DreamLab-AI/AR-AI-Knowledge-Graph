@@ -6,6 +6,13 @@
 **Priority:** P0 — blocks federated agent commerce, linked-data viewer, BC20 ACL completion
 **Related:** PRD-004 (agentbox↔VisionClaw integration), PRD-005 (v2 pipeline refactor), agentbox ADR-012 (JSON-LD adoption), agentbox ADR-013 (canonical URI grammar), DDD `ddd-agentbox-integration-context.md` (BC20 anti-corruption), ADR-058 (MAD→agentbox migration), ADR-050 (pod-backed KGNode schema), ADR-054 (URN/Solid alignment)
 
+> **Correction (2026-07-22 doc-drift audit).** The Cypher-SELECT extension
+> instructions at §5.3-§5.4 (lines 175-209, 270-337 below) target
+> `neo4j_graph_repository.rs`, which does not exist on `main`. Live
+> equivalent: `src/adapters/oxigraph_graph_repository.rs` (SPARQL,
+> named-graph routing). Any implementation of this section must retarget to
+> the Oxigraph adapter, not the Cypher/Neo4j path described below.
+
 ---
 
 ## 1. Problem Statement

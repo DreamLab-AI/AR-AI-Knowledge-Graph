@@ -1,6 +1,6 @@
 # ADR-061: Binary Protocol Unification — Single Wire, No Versioning
 
-**Status:** Accepted (2026-04-30)
+**Status:** Accepted (2026-04-30) — **Superseded by ADR-102** (2026-07-22 doc-drift audit)
 **Date:** 2026-04-30
 **Author:** VisionClaw platform team
 **Supersedes:** ADR-037 (binary position protocol consolidation), ADR-038 §wire-format clauses
@@ -9,6 +9,17 @@
 - ADR-031 (broadcast backpressure / `ClientBroadcastAck`)
 - ADR-050 §H2 (sovereign-model privacy — replaces wire bit-29 with per-client filter)
 - DDD `ddd-binary-protocol-context.md` (bounded-context model)
+
+> **Correction (2026-07-22 doc-drift audit).** This ADR is superseded by
+> ADR-102 §2 (52B `WireNodeDataItemV3` wire). Body retained for history per
+> append-only culture — do not treat D1 (§"Per-frame wire, fixed at 28
+> B/node", below) or the telemetry formula (§"Telemetry / observability",
+> below) as current. Phase A (2026-07-22) additionally **deleted** the dead
+> 28-byte V3F0 encoder duplicates that this ADR's design once implied
+> (`src/protocol/v3_frame.rs`, `crates/visionclaw-protocol/src/protocol/v3_frame.rs`,
+> and their re-exports) — there is no longer any 28B encoder on `main`, live
+> or dead. Live wire: 52B `0x03` node-position frames + bare-tag `0x23`
+> agent-action frames (see anomaly-register N3, 2026-07-22 update).
 
 ## TL;DR
 
@@ -49,6 +60,12 @@ problem. **There will be one binary protocol**, and a parallel
 ## Decision
 
 ### D1 — Per-frame wire, fixed at 28 B/node
+
+> **Superseded (2026-07-22):** 28B/node is the pre-centrality design. Live
+> wire is 52B `WireNodeDataItemV3` (ADR-102 §2). The 28-byte V3F0 encoder
+> that once shadowed this design has been **deleted** (both copies, plus
+> re-exports) as of 2026-07-22 — see anomaly-register N3. Body retained for
+> history; not current.
 
 ```
 Frame:
@@ -185,6 +202,11 @@ SSSP gradients all render correctly against the new store-driven path.
   PRD-007, DDD `ddd-binary-protocol-context.md`.
 
 ## Telemetry / observability
+
+> **Superseded (2026-07-22):** `9 + 28 * N` is the pre-centrality formula.
+> Live wire is 52B `WireNodeDataItemV3` (ADR-102 §2) — the equivalent
+> steady-state formula is envelope + 52 * N. Body retained for history; not
+> current.
 
 A new counter `binary_protocol.bytes_per_frame_per_client` exposed via
 `/metrics` allows post-merge verification. Expected steady-state value:

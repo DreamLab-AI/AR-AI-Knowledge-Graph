@@ -4,6 +4,12 @@
 **Date**: 2026-02-14
 **Scope**: Bounded contexts, aggregates, and domain model for RVF integration
 
+> **Correction (2026-07-22 doc-drift audit).** "Neo4j remains the source of
+> truth" is false (see lines 15, 35, 55, 207, 364 below). Ontology/graph
+> source of truth is Oxigraph (`oxigraph_ontology_repository.rs`). RVF
+> supplements Oxigraph, not Neo4j. Status is still Draft, ~5mo stale — see
+> `KNOWN_ISSUES.md` AGENT-001 and ADR-131.
+
 ---
 
 ## 1. Strategic Design: Bounded Context Map

@@ -1,5 +1,15 @@
 # Documentation Archive (retired)
 
+> Correction (2026-07-22 doc-drift audit): the "non-substantive process notes"
+> characterisation of `visionclaw-process/` (below) and the "every internal
+> forward/back link resolves" claim (bottom of file) are **stale**.
+> `PRD-015-ecosystem-code-hygiene.md` and `PRD-021-omb-xr-interface-investigation.md`
+> carry substantive, still-cited findings — PRD-015's O1/PAR-01/02/03 hygiene
+> findings are referenced post-archival by ADR-087/088/089/091/104, and PRD-021's
+> Strategy B underpins [ADR-126](../docs/adr/ADR-126-omb-adoption-posture.md).
+> Both are **substantive-but-archived**, not process ephemera. See
+> [ADR-131](../docs/adr/ADR-131-doc-drift-reconciliation-2026-07.md) §1f.
+
 This directory holds the **previous** VisionClaw and agentbox documentation systems,
 retired in the clean-room documentation rebuild. Nothing here is part of the published
 docs. It is kept only as a recoverable historical record; everything is also in git

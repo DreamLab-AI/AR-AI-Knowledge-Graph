@@ -1,5 +1,12 @@
 # ADR-124 — Smart-Contract Features for the DreamLab / VisionClaw Ecosystem (Web-Contracts on a Single-Use-Seal Through-Line)
 
+> Correction (2026-07-22 doc-drift audit): the bare "PRD-015" in **Feeds** below
+> (`consumer broadcast economy, Lightning-first`) is the **agentbox PRD-015**, a
+> distinct document from the archived VisionClaw `PRD-015-ecosystem-code-hygiene`
+> (cited by ADR-087/088/089/091/104) and from PRD-014's forward-reference to a
+> never-written productionisation PRD. Read it as **`agentbox PRD-015`**. Three-way
+> identifier collision resolved per [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md) §1f.
+
 - **Status**: Implemented — updated 2026-07-03: the 4-layer web-contract substrate decided here (reducer / state / ledger / trail + the `validate → anchor → verify` ritual) ships in `src/web_contract/{reducer,state,ledger,trail,ritual,mod}.rs`. Its build-out / implementation plan is **ADR-128** (formerly a duplicate ADR-124). Originally proposed 2026-06-14.
 - **Date**: 2026-06-14
 - **Deciders**: DreamLab AI / VisionClaw architecture (lead architect synthesis); web-contract pattern lineage from Melvin Carvalho (team).

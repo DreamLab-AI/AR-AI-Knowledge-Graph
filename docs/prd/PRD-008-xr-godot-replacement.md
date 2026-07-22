@@ -21,6 +21,15 @@
 - [ADR-061 — Binary protocol unification](../adr/ADR-061-binary-protocol-unification.md) (authoritative; this PRD adds an opcode under its umbrella, does **not** version it)
 - [PRD-004 — Agentbox/VisionClaw integration](PRD-004-agentbox-visionclaw-integration.md) (template for cross-system PRD shape)
 
+> **Correction (2026-07-22 doc-drift audit).** "Authoritative graph state
+> lives in Neo4j + RuVector + `GraphStateActor`" (lines 37, 78 below) →
+> Oxigraph + RuVector + `GraphStateActor`. No Neo4j component exists.
+> (Separately, Phase A of the 2026-07-22 remediation deleted the
+> `client/src/immersive/` browser-XR tree and its `App.tsx` wiring — see
+> ADR-071 Phase 3 gap-close; `quest3AutoDetector.ts`, the Vircadia services,
+> and XR settings-schema entries referenced above remain live pending the
+> final-mile sprint.)
+
 ---
 
 ## 1. Problem Statement

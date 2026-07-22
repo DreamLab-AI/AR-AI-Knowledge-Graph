@@ -996,6 +996,21 @@ docker-compose build visionclaw 2>&1 | grep -i "ptx\|cuda\|nvcc"
 
 ### WebXR / Quest Browser — SUPERSEDED
 
+> **Correction (2026-07-22 doc-drift audit, superseding the 2026-06-12 banner
+> below).** As of the 2026-07-22 doc-drift audit sweep, the 2026-06-12
+> "removed" claim below was found to be **premature** — `client/src/immersive/`
+> (`VRGraphCanvas.tsx`, `ImmersiveApp`, etc.) and its `App.tsx` wiring were
+> still present and still mounting. **Same day (2026-07-22), Phase A code work
+> landed the deletion**: the `client/src/immersive/` tree has now actually
+> been removed and `App.tsx` wiring stripped (`tsc` clean) per ADR-071 Phase
+> 3 — but only **partially**. Remaining live XR surface not yet deleted:
+> `quest3AutoDetector.ts` (still calls `setXRMode` via a live
+> `navigator.xr`-based `immersive-ar` detector), the Vircadia services, and
+> XR settings-schema entries. Deletion of those is deferred to the
+> final-mile sprint. **Line 33's "WebXR not working / HTTPS required" row
+> below is therefore still live** — `quest3AutoDetector.ts` still depends on
+> `navigator.xr`, which still requires HTTPS — do not remove that row.
+
 > **SUPERSEDED 2026-06-12.** The browser-hosted WebXR client (HTTPS +
 > `navigator.xr`, `?immersive=true` / `?force=quest3` URL parameters) was
 > **removed** per ADR-071/ADR-102. The XR client is now a **native Godot 4

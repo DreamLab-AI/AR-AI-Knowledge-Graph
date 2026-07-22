@@ -1,5 +1,12 @@
 # ADR-087 — Rate Limit Consolidation
 
+> Correction (2026-07-22 doc-drift audit): every bare "PRD-015" in this record is
+> the VisionClaw **ecosystem code-hygiene** PRD, now archived at
+> [`archive/visionclaw-process/PRD-015-ecosystem-code-hygiene.md`](../../archive/visionclaw-process/PRD-015-ecosystem-code-hygiene.md)
+> — not the agentbox PRD-015 (consumer broadcast economy, cited by ADR-124) nor
+> PRD-014's forward-reference to a never-written productionisation PRD. Three-way
+> collision resolved per [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md) §1f.
+
 | Field | Value |
 |-------|-------|
 | Status | Proposed (2026-05-09) |

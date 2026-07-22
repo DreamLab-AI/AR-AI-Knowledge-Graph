@@ -12,6 +12,13 @@ updated-date: 2026-04-09
 > backing store is the **embedded Oxigraph** RDF triple store (in-process, RocksDB-backed;
 > settings in SQLite). The repository **ports** are unchanged — only the adapter
 > implementations differ (`OxigraphGraphRepository`, `SqliteSettingsRepository`).
+>
+> **Correction (2026-07-22 doc-drift audit): scope widened.** The ADR-11
+> update above applies to this **entire document**, not only the literal
+> string "Neo4j" — every bounded-context entry below (BC1-BC10, both Mermaid
+> diagrams, and any persistence/port description) should be read as
+> Oxigraph+SQLite-backed unless a context is explicitly named otherwise. No
+> BC in this map has a live Neo4j dependency on `main`.
 
 ## Context Map
 

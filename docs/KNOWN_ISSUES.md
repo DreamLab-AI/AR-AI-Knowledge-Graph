@@ -21,6 +21,18 @@ None currently active.
 
 ### AUTH-001: Enterprise SSO — Partial (RBAC Implemented, OIDC Pending)
 
+> Correction (2026-07-22 doc-drift audit): the entry below asserts that
+> `src/middleware/enterprise_auth.rs` (the four-tier Admin > Broker > Auditor >
+> Contributor hierarchy, `Nip98RoleResolver`, `X-Enterprise-Role`) is on `main`.
+> **It is not.** That middleware lives on the `jss-cut-scaffold` branch. `main`
+> carries only the NIP-98 primitives (`src/utils/nip98.rs`) and a **coarser
+> `AccessLevel` enum** in `src/middleware/auth.rs` — there is no four-tier
+> enterprise role hierarchy compiled into `main` today. The merge decision (adopt
+> `enterprise_auth.rs` to `main` vs. leave it on the branch) is **deferred to the
+> final-mile sprint tock, pending operator decision**. Read the RBAC-implemented
+> claims below as branch-only. Tracked in
+> [ADR-131](adr/ADR-131-doc-drift-reconciliation-2026-07.md) §3 (AUTH-001).
+
 **Status**: Partially resolved — ADR-040 accepted, RBAC middleware implemented, OIDC integration pending
 **Impact**: VisionClaw's enterprise RBAC middleware (`src/middleware/enterprise_auth.rs`) now supports two authentication paths: (1) NIP-98 Schnorr signature verification with pubkey-to-role resolution via `Nip98RoleResolver` (enabled by the `nip98-auth` compile-time feature), and (2) `X-Enterprise-Role` header extraction for dev/gateway deployments. The four-tier role hierarchy (Admin > Broker > Auditor > Contributor) is enforced on all enterprise-gated routes.
 

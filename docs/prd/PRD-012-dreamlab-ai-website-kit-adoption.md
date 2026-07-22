@@ -10,6 +10,10 @@
 | Affected repos | `dreamlab-ai-website` (primary subject), `nostr-rust-forum` (kit upstream — version pin only) |
 | GitHub URLs | https://github.com/DreamLab-AI/dreamlab-ai-website, https://github.com/DreamLab-AI/nostr-rust-forum |
 
+> **Correction (2026-07-22 doc-drift audit):** cutover is **DEFERRED** per
+> ADR-083 (frozen 2026-07-03, outside standalone-first scope), not merely
+> "pending" as the Status row above states.
+
 ---
 
 ## 1. Executive Summary

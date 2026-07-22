@@ -10,6 +10,11 @@
 **API**: [REST API — Debrief Endpoint](../reference/rest-api.md#post-apibriefsbrief_iddebrief)
 **Config**: [Operations — Nostr Bead Provenance](../how-to/operations/configuration.md#nostr-bead-provenance)
 
+> **Correction (2026-07-22 doc-drift audit).** "Neo4j Schema Reference"
+> (lines 299-301, 362, 385 below) is no longer doc-of-record; `graph-schema.md`
+> is now Oxigraph-scoped. Re-point `:Bead`/`:BeadLearning` schema references
+> accordingly.
+
 ---
 
 ## 1. Problem Statement

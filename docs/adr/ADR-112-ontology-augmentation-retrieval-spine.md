@@ -99,17 +99,27 @@ The operator asked whether a Haiku-mesh condensation tier "might allow us to rec
 
 | ADR | Category | Decision | Status |
 |---|---|---|---|
-| **ADR-113** | Agent Orchestration | Haiku condensation mesh under a Sonnet lead (offline build/refresh + optional opus deep-expand; excluded from PUSH) | proposed |
+| **ADR-113** | Agent Orchestration | Haiku condensation mesh under a Sonnet lead (offline build/refresh + optional opus deep-expand; excluded from PUSH) | written |
 | **ADR-114** | Feature Pipeline | Memory substrate: RuVector (xinference HNSW) for the **seed leg only** — verified as the only live embeddings+ANN (VisionClaw's Qdrant is orphaned, its embeddings fake); binding is 3-store (Oxigraph truth + RuVector seed + in-process PUSH cache). *(written — standalone file)* | proposed |
-| **ADR-115** | Architecture | Terse Turtle over SPARQL-Results JSON (2–9× token reduction) | proposed |
-| **ADR-116** | Architecture | Model-tier budgets (booster≤80/haiku≤500/sonnet≤2,000/opus≤6,000); `full:true` capped+tier-gated; local hook clamp | proposed |
-| **ADR-117** | Architecture | Server-side SPARQL clamp (default LIMIT + row/byte cap) as hard invariant; forbid `SERVICE` | proposed |
-| **ADR-118** | Security | Read-pervasive/write-untouched; harden `/load`; resolve duplicate `/ontology` scope | proposed |
-| **ADR-119** | Operations | Fail-open + per-channel verifiable liveness (anti-PRD-018); cause-split `fail_open_count` | proposed |
-| **ADR-120** | Security (P0) | Authenticate `/api/ontology-agent/propose`; bind `agent_id` to verified did:nostr (NIP-98); rate-limit | proposed |
+| **ADR-115** | Architecture | Terse Turtle over SPARQL-Results JSON (2–9× token reduction) | written |
+| **ADR-116** | Architecture | Model-tier budgets (booster≤80/haiku≤500/sonnet≤2,000/opus≤6,000); `full:true` capped+tier-gated; local hook clamp | written |
+| **ADR-117** | Architecture | Server-side SPARQL clamp (default LIMIT + row/byte cap) as hard invariant; forbid `SERVICE` | written |
+| **ADR-118** | Security | Read-pervasive/write-untouched; harden `/load`; resolve duplicate `/ontology` scope | written |
+| **ADR-119** | Operations | Fail-open + per-channel verifiable liveness (anti-PRD-018); cause-split `fail_open_count` | written |
+| **ADR-120** | Security (P0) | Authenticate `/api/ontology-agent/propose`; bind `agent_id` to verified did:nostr (NIP-98); rate-limit | written |
 | **ADR-121** | Architecture + Orchestration + Security | Self-improving ontology via governed writeback (elevation flywheel): W0 derived materialisation, W1 governed enrichment, W2 autonomous closure; deletes the `writeback_triggered` ghost | **written** |
 | **ADR-122** | Security / Governance | Two-speed writeback — governance routing by epistemic class: L1 structural→forum gate, L2 volatile ABox→fenced `:observed` auto (never auto-promoted), L3 derived→auto | **written** |
 | **ADR-123** | Architecture + Security + UX | Voice-mediated governance sign-off: immersive voice agent as authenticated L1 decision-queue client; closes the `/api/broker/inbox` ghost | **written** |
+
+> **Register update (2026-07-22, doc-drift audit §1e-1):** ADR-113/115/116/117/
+> 118/119/120 flipped `proposed → written` above — each is now backfilled as a
+> standalone dated file citing the shipping code (documentation catch-up, not new
+> engineering). Two rows record post-audit code closures landed the same day:
+> ADR-117's server-side SPARQL clamp (`clamp_sparql_limit`/`cap_result_rows` in
+> `src/handlers/ontology_handler.rs`, `tests/ontology_sparql_clamp.rs` 7/7) and
+> ADR-119's real liveness sink (`agentbox/mcp/servers/lib/ontology-telemetry.js`,
+> observable via `ontology_health._agentbox_ontology_ask_telemetry`), both flagged
+> half-shipped/unwired at audit time and closed under §2 C3/C2.
 
 ---
 

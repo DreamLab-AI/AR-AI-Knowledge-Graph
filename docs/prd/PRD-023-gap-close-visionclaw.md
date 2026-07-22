@@ -78,6 +78,13 @@ Each work package states the owned items, the current maturity tier (cited from 
 
 ### WP-4 Control-Centre Governance (REC-2 / D3)
 
+> **Correction (2026-07-22 doc-drift audit):** `src/domain/broker/*` is **not**
+> crashbug-only — it shipped to `main` via `c9f2e3539` (the storage-agnostic
+> domain kernel this WP describes cherry-picking is already there). Only
+> `src/actors/broker_actor.rs` and `src/adapters/neo4j_broker_adapter.rs`
+> remain crashbug-only (unmerged, Neo4j-backed). `ElevationActor` now
+> defaults **ON** post-REC-2 — the "env-gated off" line below is stale.
+
 - **Owns:** REC-2, D3.
 - **Current tier:** `scaffolded`. `main` ships the ADR-110 ACSP producer (`src/services/acsp/{events,client}.rs`, 393 LOC) publishing kinds 31400–31405 to the forum's D1 `broker_cases` store, plus a REST fallback (`enrichment_proposals_handler.rs`, `broker_inbox_handler.rs` with `GET /api/broker/inbox`). No `BrokerActor` exists on `main` (0 grep hits); it lives only on the unmerged `crashbug` branch (`src/domain/broker/*`, `src/actors/broker_actor.rs`, 625 LOC, Neo4j-backed) which five committed documents still cite as live fact. `ElevationActor` (`src/actors/elevation_actor.rs`), the one ACSP consumer, is env-gated off (`ELEVATION_ACTOR_ENABLED`, `app_state.rs:1072`). The client has zero ACSP case surface (grep for `ACSP`/`31402`/`caseQueue` returns nothing).
 - **Target tier:** `integrated`.

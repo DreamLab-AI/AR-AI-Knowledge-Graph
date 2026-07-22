@@ -15,6 +15,13 @@
 
 > **Scope note.** This PRD adopts the *capabilities* pioneered by Understand-Anything (UA), not its implementation. UA is a Claude-Code-plugin-shaped, Python-script-driven, ReactFlow-2D static-JSON product. VisionClaw is an actor-mesh, Neo4j-backed, GPU-physics-driven, Three.js-3D, binary-streamed, URN-identified, Solid-pod-federated platform. Every UA feature listed below is reframed inside our substrate. The PRD specifies **what** to deliver, **how to verify** it, and **how to gate it for production**. It does not implement anything. Implementation begins after ADR ratification.
 
+> **Correction (2026-07-22 doc-drift audit).** "Neo4j layer" / "Neo4j Cypher" /
+> `migrations/2026-05_typed-schema.cypher` (below, incl. lines 16, 28, 44, 65,
+> 148, 157, 566, 606, 821-823, 1103) are obsolete. Live store is Oxigraph
+> named graphs (`urn:ngm:graph:knowledge`) + SQLite; retarget any
+> merge/migration work to SPARQL per ADR-101. This PRD remains **Draft**
+> (unimplemented) — see ADR-131.
+
 ---
 
 ## 1. Vision

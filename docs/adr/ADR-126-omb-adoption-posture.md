@@ -14,6 +14,14 @@ decision: NO-GO on full client replacement · CONDITIONAL-GO on additive service
 ## Status
 **Proposed.** NO-GO on full client replacement; CONDITIONAL-GO on additive service-ification + ratified-standards adoption via strangler-fig (PRD-021 Strategy B).
 
+> Correction (2026-07-22 doc-drift audit): this ADR's evidence base —
+> **PRD-021 Strategy B** — is a **non-canonical Draft pending operator sign-off**,
+> archived at
+> [`archive/visionclaw-process/PRD-021-omb-xr-interface-investigation.md`](../../archive/visionclaw-process/PRD-021-omb-xr-interface-investigation.md),
+> not a ratified `docs/prd/` record. ADR-126 correctly remains **Proposed** — a
+> genuine open decision with no code owed. Provenance gap tracked in
+> [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md) §1f.
+
 ## Context
 A proposal to **"completely replace VisionClaw's XR/MR interface with the Open Metaverse Browser (OMB) stack"** (omb.wiki) was investigated by a ruflo hierarchical-mesh (`swarm_1781624538033_2505ubb`) of five specialist agents (research / as-built audit / migration architecture / quality engineering / adversarial review), all of which converged independently.
 

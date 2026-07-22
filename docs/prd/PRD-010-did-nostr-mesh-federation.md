@@ -10,6 +10,10 @@
 | Spans repos | `visionclaw` (this repo), `dreamlab-ai-website` (forum + community-forum-rs), `agentbox` (submodule), `solid-pod-rs` (workspace) |
 | Source evidence | `docs/integration-research/01..06-*.md` |
 
+> **Correction (2026-07-22 doc-drift audit).** "Persists to Neo4j" (line 481
+> below, Exemplar 2) is obsolete. The consensus-threshold write persists to
+> Oxigraph/SQLite (`sqlite_enrichment_repository.rs`), not Neo4j.
+
 ---
 
 ## 1. Executive Summary

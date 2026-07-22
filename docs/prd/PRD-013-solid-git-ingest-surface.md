@@ -21,6 +21,12 @@
 > VisionClaw's server-side Nostr publishing is `src/services/nostr_service.rs`, and
 > no kind-30300 Nostr emitter ships on `main`.
 
+> **Correction 2 (2026-07-22 doc-drift audit).** Enrichment data and the
+> `DecisionHistoryEntry` audit trail (referenced at lines 32, 50, 230, 338,
+> 456, 499, 520, 672-674 below) live in SQLite
+> (`sqlite_enrichment_repository.rs`, WS-9/WS-12), **not** "trapped in
+> Neo4j". No Neo4j audit store exists.
+
 ---
 
 ## Problem Statement

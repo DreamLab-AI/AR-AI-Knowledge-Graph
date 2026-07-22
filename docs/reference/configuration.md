@@ -249,7 +249,8 @@ See [URN ↔ Solid mapping](urn-solid-mapping.md) and the
 
 The primary graph store is an **embedded Oxigraph RDF triple store backed by
 SQLite** (ADR-101); it runs in-process with no container, network endpoint, or
-password. **Neo4j is fully removed** — `NEO4J_*` variables are no longer read.
+password. **Neo4j is fully removed** ([ADR-132](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md))
+— `NEO4J_*` variables are no longer read.
 Reset the graph by stopping the server and running `rm -rf ${DATA_DIR}/oxigraph`.
 See [Graph schema](graph-schema.md).
 

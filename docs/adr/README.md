@@ -21,6 +21,12 @@ each record's own `## Status` block, so it reflects the decision's real lifecycl
 state — `Proposed`, `Accepted`, `Ratified`, `Implementing`, `Implemented`, or
 `Superseded`.
 
+> Correction (2026-07-22 doc-drift audit): the range now runs **ADR-011 through
+> ADR-132** — the doc-drift sweep backfilled the seven ontology siblings
+> (ADR-113/115–120) from shipping code, added ADR-131 (this sweep's own record)
+> and ADR-132 (the originating Neo4j-removal decision). See
+> [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md).
+
 ## Numbering collisions and supersession
 
 Two ADR numbers are reused by two distinct records each. These are genuine
@@ -37,6 +43,22 @@ the main set:
 | Record | Superseded by |
 |--------|---------------|
 | [`superseded/ADR-037` — Binary Protocol Consolidation](superseded/ADR-037-binary-protocol-consolidation.md) | [ADR-061 — Binary Protocol Unification](ADR-061-binary-protocol-unification.md) |
+
+## Folded-in early records (ADR-001..010 / ADR-015..026)
+
+> Correction (2026-07-22 doc-drift audit): the early consolidation records were
+> folded into the ADR-011+ corpus during the clean-room rebuild and have no
+> standalone files, yet several are still cited by number. This table maps every
+> still-referenced early number to its surviving disposition so citations resolve
+> rather than dangling (mirrors the ADR-074 collision table above). Recover any
+> original body via `git log --follow -- docs/adr/ADR-0NN-*.md`. See
+> [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md) for the sweep that added
+> this mapping.
+
+| Folded number | Surviving record / disposition |
+|---------------|--------------------------------|
+| ADR-026 (3-Tier Model Routing) | No standalone file. The 3-tier routing doctrine (Agent Booster / Haiku / Sonnet-Opus) is live and canonical — cited 6× by [ADR-057](ADR-057-contributor-enablement-platform.md) and by PRD-020:193; the decision text is carried in `project/CLAUDE.md` under "3-Tier Model Routing (ADR-026)". |
+| ADR-001..010, ADR-015..025 | Consolidated wholesale into the ADR-011+ corpus during the clean-room rebuild; no standalone files and no live citations. Recover an original via `git log --follow`. |
 
 ## Identity & Auth
 
@@ -108,7 +130,15 @@ governed ontology writeback loop. See [Ontology pipeline](../explanation/ontolog
 | [101](ADR-101-triple-store-migration-framework.md) | Triple-Store Migration Framework for Oxigraph | Accepted |
 | [106](ADR-106-sparql-patch-ontology.md) | SPARQL PATCH for Ontology Mutations | Accepted |
 | [112](ADR-112-ontology-augmentation-retrieval-spine.md) | Ontology Augmentation — Shared-Library Retrieval Spine | Implemented |
+| [113](ADR-113-ontology-condensation-mesh.md) | Offline Ontology Condensation Mesh + Staleness-Driven Scheduler | Accepted (retroactive 2026-07-22; scheduler shipped) |
 | [114](ADR-114-ontology-class-index-memory-substrate.md) | Memory Substrate for the Ontology Class-Summary Index | Proposed |
+| [115](ADR-115-turtle-serialisation.md) | Terse Turtle over SPARQL-Results JSON for Ontology Augmentation | Accepted (retroactive 2026-07-22) |
+| [116](ADR-116-tiered-token-budgets.md) | Tiered Token Budgets for Ontology Retrieval | Accepted (retroactive 2026-07-22) |
+| [117](ADR-117-server-side-sparql-clamp.md) | Server-Side SPARQL Clamp (LIMIT / Row / Byte Caps) | Accepted (retroactive 2026-07-22; clamp shipped) |
+| [118](ADR-118-load-endpoint-hardening.md) | Ontology Load-Endpoint Hardening | Accepted (retroactive 2026-07-22) |
+| [119](ADR-119-verifiable-liveness-telemetry.md) | Verifiable Liveness Telemetry for Ontology Retrieval | Accepted (retroactive 2026-07-22; sink shipped) |
+| [120](ADR-120-propose-p0-auth.md) | Propose-Endpoint P0 Route Guard | Accepted (retroactive 2026-07-22; shipped + tested) |
+| [132](ADR-132-neo4j-removal-oxigraph-adoption.md) | Neo4j Removal → Oxigraph Adoption (originating store decision) | Accepted (2026-07-22) |
 | [121](ADR-121-self-improving-ontology-writeback-loop.md) | Self-Improving Ontology via Governed Writeback | Deferred (frozen 2026-07-03) |
 | [122](ADR-122-two-speed-writeback-governance-routing.md) | Two-Speed Writeback — Governance Routing by Epistemic Class | Deferred (frozen 2026-07-03) |
 | [123](ADR-123-voice-mediated-governance-signoff.md) | Voice-Mediated Governance — Conversational Sign-Off | Deferred (frozen 2026-07-03) |
@@ -206,6 +236,7 @@ cutover, QE policy, secrets management, infographics and contracts. See
 | [111](ADR-111-ecosystem-infographic-modernisation.md) | Ecosystem Infographic Modernisation — diagram-as-code | Proposed |
 | [124](ADR-124-smart-contract-features-web-contracts.md) | Smart-Contract Features — Web-Contracts on a Single-Use-Seal Through-Line | Implemented |
 | [128](ADR-128-build-out-canonical-gitmark-blocktrails.md) | Build-Out — Adopt gitmark/blocktrails as the Web-Contract Substrate | Accepted |
+| [131](ADR-131-doc-drift-reconciliation-2026-07.md) | Documentation-Drift Reconciliation Sweep (2026-07-22) | Accepted |
 
 ### RVF integration set
 

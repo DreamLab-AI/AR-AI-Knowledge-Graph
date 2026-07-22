@@ -5,6 +5,12 @@
 **Date**: 2026-02-14
 **Stakeholders**: VisionClaw Core, Agent Platform, DevOps
 
+> **Correction (2026-07-22 doc-drift audit).** "Neo4j remains the source of
+> truth" (line 85 below) is false. Ontology/graph source of truth is Oxigraph
+> (`oxigraph_ontology_repository.rs`). RVF supplements Oxigraph, not Neo4j.
+> Status is still Draft, ~5mo stale — see `KNOWN_ISSUES.md` AGENT-001 and
+> ADR-131.
+
 ---
 
 ## 1. Problem Statement

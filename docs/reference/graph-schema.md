@@ -11,7 +11,7 @@ VisionClaw stores its graph as RDF in an **embedded Oxigraph** triple store: in-
 RocksDB-backed, exposing W3C **SPARQL 1.1 Query and Update** over the dataset at
 `${DATA_DIR}/oxigraph/`. There is no external database server, no Bolt port, and no Cypher
 engine. User settings persist separately in **SQLite** (`SqliteSettingsRepository`); they are
-not triples. Per [ADR-11](../adr/ADR-011-auth-enforcement.md), Oxigraph is the sole primary
+not triples. Per [ADR-132](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md), Oxigraph is the sole primary
 graph store — any reference to Neo4j, Cypher, or a graph database browser describes a
 historical state that has been removed.
 
@@ -482,7 +482,7 @@ draft contributions remain pod-local. See
 - [MCP tools](mcp-tools.md) — ontology read/query/traverse over the same graphs
 - [Ontology pipeline](../explanation/ontology-pipeline.md) — Whelk-rs OWL 2 EL reasoning
 - [System overview](../explanation/system-overview.md) — store role within the architecture
-- Governing ADR: [ADR-11 — embedded Oxigraph + SQLite graph store](../adr/ADR-011-auth-enforcement.md)
+- Governing ADR: [ADR-132 — Neo4j removal; embedded Oxigraph + SQLite graph store](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md)
 - Related: [ADR-050 — pod-backed KGNode schema](../adr/ADR-050-pod-backed-kgnode-schema.md),
   [ADR-051 — visibility transitions](../adr/ADR-051-visibility-transitions.md),
   [ADR-061 — binary protocol unification](../adr/ADR-061-binary-protocol-unification.md),

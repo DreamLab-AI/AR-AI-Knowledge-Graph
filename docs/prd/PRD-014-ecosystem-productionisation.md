@@ -41,6 +41,17 @@ This PRD scopes the work to reach ~80% — the point where the ecosystem can saf
 
 ---
 
+> Correction (2026-07-22 doc-drift audit): the forward-references to "PRD-015" as
+> the destination for the deferred remaining-20% work — here (§3 heading), in §1
+> Context (line ~16, "deferred to PRD-015") and in §9 ("PRD-015 Scope", line ~224)
+> — name a **productionisation PRD-015 that was never written**. This is a genuine
+> dangling forward reference, distinct from the two PRD-015 documents that *do*
+> exist: the archived VisionClaw `PRD-015-ecosystem-code-hygiene`
+> (`archive/visionclaw-process/`) and the agentbox PRD-015 (consumer broadcast
+> economy). The deferred scope (federation mesh / IS-Envelope runtime / distributed
+> tracing / full a11y) has no owning PRD yet. Not renumbered in place — banner only,
+> per [ADR-131](../adr/ADR-131-doc-drift-reconciliation-2026-07.md) §1f.
+
 ## 3. Non-Goals (deferred to PRD-015)
 
 - IS-Envelope v1 runtime implementation (2-3 sprints; currently spec-only)
@@ -240,12 +251,18 @@ The remaining 20% (80% → 100%) requires:
 
 ## 10. Acceptance Criteria
 
+> **Correction (2026-07-22 doc-drift audit):** the "Neo4j daily backup" item
+> below is VOID — no Neo4j ships (ADR-130:83, P1-REC-4.md:51); the `994b200`
+> "Neo4j daily backup" commit never guarded live data. SQLite stores
+> (`data/{kpi,enrichment,settings}.sqlite3`) have no backup workstream yet —
+> see ADR-131. Checkbox corrected to `[ ]` below (2026-07-22).
+
 PRD-014 is complete when:
 
 - [x] Zero CRITICAL security gaps across all 5 substrates — S01 WebAuthn fixed (`188f0ec`), S02 bypass hardened (`994b200`), S03 auth extraction scoped (ADR-088), S04/S09 accepted by design, S05 CSP active (`994b200`)
 - [x] All 5 substrates have CI with tests, fmt, and audit — VisionClaw 6 workflows, forum 2 workflows, solid-pod-rs existing, dreamlab-ai-website new 8-job pipeline
 - [x] VisionClaw: all mutating endpoints require authentication — clustering 4 POST (`6969527`), enrichment/briefing/layout already guarded. AuthenticatedUser on all POST routes.
-- [x] VisionClaw: Neo4j daily backup running in production — scripts + runbook (`994b200`)
+- [ ] VisionClaw: Neo4j daily backup running in production — scripts + runbook (`994b200`)
 - [x] agentbox: task spawner accepted by design (sovereign agentic container)
 - [x] nostr-rust-forum: WebAuthn P-256 ECDSA assertion signature verified + 14 tests (`188f0ec`)
 - [x] client: CSP headers active, error boundaries on 8 features (`994b200`)
@@ -328,6 +345,12 @@ Scoped to this PRD (60%→80%): **~31 working days** addressing all CRITICAL, HI
 - ~~`src/handlers/consolidated_health_handler.rs`~~ — `start_mcp_relay` already guarded (verified)
 
 ### Data Integrity
+
+> **Correction (2026-07-22 doc-drift audit).** `src/adapters/neo4j_adapter.rs`
+> does not exist on `main` (only in `_archive/2026-07-10` worktrees). Live KPI
+> store is `src/adapters/sqlite_kpi_repository.rs`. The citations below are
+> retained for history; do not action against a file that no longer ships.
+
 - `src/adapters/neo4j_adapter.rs:55-59` — insecure default password
 - `src/adapters/neo4j_adapter.rs:720-750` — deprecated execute_cypher
 - Neo4j: no migration scripts, no backup automation

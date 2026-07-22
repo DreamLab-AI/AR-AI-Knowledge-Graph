@@ -19,6 +19,11 @@ relates-to:
 
 # PRD: Insight Migration Loop (MVP)
 
+> **Correction (2026-07-22 doc-drift audit).** The §3 constraint "Not
+> graph-database-agnostic. Neo4j + OWL only" (line 54 below) is obsolete —
+> OWL runs on Oxigraph RDF, not Neo4j. Read that constraint as "Oxigraph RDF +
+> OWL only".
+
 ## 1. Problem statement
 
 Organisations that think for a living accumulate their real intellectual capital in notes, not in systems. The taxonomy that would make that capital reusable almost never gets built — the people who know what the terms mean are too busy using them to formalise them.
