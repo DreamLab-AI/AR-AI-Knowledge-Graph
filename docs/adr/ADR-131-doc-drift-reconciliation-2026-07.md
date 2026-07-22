@@ -119,3 +119,30 @@ claim.
 
 Companion record: **ADR-132** (`ADR-132-neo4j-removal-oxigraph-adoption.md`) — the
 originating Neo4j-removal decision that this sweep re-points the mislinks to.
+
+---
+
+## Amendment — second-tier falsification pass (2026-07-22, same day)
+
+The §Decision-1 banner sweep was itself falsification-tested with an
+exhaustive grep (`neo4j` 86 files; `BrokerActor|ServerNostrActor` 19 files)
+against the rule "every live-claim mention carries a same-file dated
+correction". The first sweep's coverage (sourced from the audit researchers'
+file list) missed a second tier: **25 additional live-claim files**, now
+bannered in commit 769ae88de — five from the original suspect list (PRD-009,
+ddd-feature-engineering, ADR-049, ADR-028, ADR-059) and sixteen more found
+only by the exhaustive grep (ADR-014/032/034/036/041/042/044/048/050/051/
+062/064/068/086/109, ddd-mesh-federation). ~43 further matches classified as
+genuine false positives (historical/negative mentions or already-bannered).
+
+Ecosystem edge: two sibling-repo docs carried the phantom stack as current —
+`nostr-rust-forum docs/sprint/enterprise-lift-value-assessment.md` (bannered,
+4f8d1a3) and the `dreamlab-ai-website` key-split runbook's "the BrokerActor"
+attribution (corrected, 2c33453). Committed in their own repos, push pending
+operator approval (deploy-coupled remotes).
+
+Known residual defect shape, carried to the final-mile sprint: a scoped
+banner (e.g. the REC-2 phantom-actor sweep) sitting in the same file as
+unscoped live-sounding prose it does not cover — ADR-041/ADR-086/
+ddd-mesh-federation were this shape and needed "Correction 2" banners. A
+targeted pass hunting that shape ecosystem-wide is queued as Tick-3 work.
