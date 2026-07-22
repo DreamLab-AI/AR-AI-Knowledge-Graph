@@ -75,7 +75,7 @@ The six unblock states:
 | # | Entry | Blocked on |
 |---|---|---|
 | E-1 | ComfyUI integration | No ComfyUI service on `visionclaw_network` (builtin path needs heavy image rebuild + source hash). |
-| E-2 | GitHub enrichment | `GITHUB_TOKEN` unset (trivially an ops-action the moment a token exists). |
+| E-2 | ~~GitHub enrichment~~ **DONE 2026-07-22** | Token validated live (HTTP 200); present in agentbox runtime env + .env (0600); `github_enrichment = true` (boot apply-class — active at next restart). Follow-up: swap broad-scope classic PAT for a fine-grained read-only one. |
 | E-3 | Ollama sidecar | Confirm host ollama on :11434; sidecar-off is correct while absent. |
 | E-4 | Nagual QE toolchain | Upstream sqlx 0.9 `SqlSafeStr` compile error. Wait or pin. |
 
