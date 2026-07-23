@@ -158,3 +158,7 @@ An adversarial verifier inducing a seed-stage fail-open finds `fail_open_count`
 move in the `ontology_health._agentbox_ontology_ask_telemetry` snapshot; the only
 un-proven arm is the external `CANARY-AB-ONTO-TELEM` harness registration, which
 is honestly tagged `pending-live-session` because port 4000 is unreachable here.
+
+---
+
+> **Amendment (2026-07-22, K-2 registration sweep):** `CANARY-AB-ONTO-TELEM` is now REGISTERED and armed on the LivenessHarness (200, `sha_at_registration: c889bdf6`). Live fire (induced seed-stage failure incrementing `fail_open_count` in `ontology_health`) remains pending-live-session. Note: an unauthenticated bridge SPARQL probe at registration time returned `visionclaw_http_403` — the L-3/L-4 live fires need an authed caller.
