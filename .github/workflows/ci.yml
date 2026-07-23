@@ -13,20 +13,23 @@ name: CI
 #     * rust-cpu   — build + clippy + test the CUDA-free workspace crates
 #     * client     — the client Vitest unit/component suite
 #
-#   NON-BLOCKING (need physical hardware or a live stack — continue-on-error;
+#   NON-BLOCKING (need a live stack — continue-on-error;
 #   do NOT add these to branch-protection required checks):
 #     * client-quality — eslint + tsc --noEmit (advisory until the tree is clean)
-#     * rust-gpu       — full workspace build + GPU kernel tests (self-hosted GPU)
 #     * playwright     — end-to-end suite against a running stack (manual only)
 #
-# Why the CPU/GPU split
-# ---------------------
+# Why the CPU-only gate, and where the GPU crates are validated
+# -------------------------------------------------------------
 #   crates/visionclaw-gpu and the root visionclaw-server crate unconditionally
 #   link the CUDA driver (cust / cudarc) and their kernel tests execute CUDA at
-#   runtime, so they cannot build or run on a GPU-less GitHub-hosted runner. The
-#   other seven workspace crates (contracts, domain, protocol, adapters,
-#   ontology, actors, xr-presence) are CUDA-free and carry the bulk of the
-#   pure-logic test corpus, so they form the blocking gate here.
+#   runtime, so they cannot build or run on a GPU-less GitHub-hosted runner.
+#   Those crates are compiled and run on the developer's CUDA host as part of the
+#   normal build/deploy workflow (./scripts/launch.sh), which is the authoritative
+#   GPU validation — a self-hosted GPU CI runner added nothing at deploy time and
+#   only queued indefinitely when offline, so the rust-gpu job was removed
+#   2026-07-24. The other seven workspace crates (contracts, domain, protocol,
+#   adapters, ontology, actors, xr-presence) are CUDA-free and carry the bulk of
+#   the pure-logic test corpus, so they form the blocking gate here.
 
 on:
   push:
@@ -142,28 +145,12 @@ jobs:
       - name: tsc --noEmit
         run: npx tsc --noEmit
 
-  rust-gpu:
-    name: Rust full workspace + GPU tests (non-blocking, self-hosted GPU)
-    # visionclaw-gpu and the root visionclaw-server crate link libcuda
-    # (cust/cudarc) and the kernel tests execute CUDA at runtime, so this needs
-    # a physical GPU. Runs on the project's self-hosted CUDA runner and on
-    # manual dispatch; skipped on pull_request so PRs never wait on GPU-runner
-    # availability. NON-BLOCKING — do not add to branch-protection required checks.
-    if: github.event_name != 'pull_request'
-    runs-on: [self-hosted, gpu]
-    continue-on-error: true
-    env:
-      # Force the portable sm_75 PTX baseline and skip nvidia-smi arch autodetect
-      # (see crates/visionclaw-gpu/build.rs).
-      DOCKER_ENV: "1"
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-      - name: cargo build (full workspace)
-        run: cargo build --workspace
-      - name: cargo test (full workspace, incl. GPU kernels)
-        run: cargo test --workspace
+  # rust-gpu job removed 2026-07-24: the GPU crates (visionclaw-gpu + the root
+  # visionclaw-server) are compiled and run on the developer's CUDA host during
+  # the normal build/deploy workflow, which is the authoritative validation. A
+  # self-hosted GPU CI runner added nothing at deploy time and queued forever
+  # when offline. Re-add only if a GPU runner is registered and real-hardware CI
+  # is wanted; keep it non-blocking (continue-on-error, skip on pull_request).
 
   playwright:
     name: Client Playwright E2E (optional, manual)
