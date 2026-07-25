@@ -44,7 +44,7 @@ VisionClaw is one of seven repositories in the **Dynamic Agentic Mesh** — the 
 | [agentbox](https://github.com/DreamLab-AI/agentbox) | Sovereign agent runtime — Nix-built container, `did:nostr` identities, 116 skills, RuVector memory *(git submodule of this repo)* |
 | [nostr-rust-forum](https://github.com/DreamLab-AI/nostr-rust-forum) | The one place a human decision gets signed — governance surface, ACSP relay |
 | [solid-pod-rs](https://github.com/DreamLab-AI/solid-pod-rs) | Personal-data-sovereignty layer — Rust Solid pod server |
-| [narrativegoldmine](https://github.com/DreamLab-AI/knowledgeGraph) | The readable front door — published static render of the corpus VisionClaw shows in 3D |
+| [narrativegoldmine](https://github.com/DreamLab-AI/knowledgeGraph) | Corpus source and readable front door — 7,457 public pages as an open dataset, the pipeline that builds them, rendered at [narrativegoldmine.com](https://narrativegoldmine.com) |
 | [dreamlab-ai-website](https://github.com/DreamLab-AI/dreamlab-ai-website) | The commercial face — thin consumer of the forum kit |
 
 **Industry convergence.** In July 2026 Block (Jack Dorsey) launched [Buzz](https://github.com/block/buzz), a self-hosted, Nostr-native team-chat + AI-agent + git platform in Rust. It independently arrives at the same substrate this ecosystem has been building since 2022: Nostr events as source of truth, agents as first-class signed participants, kind-based extensibility. That convergence validates the direction. What VisionClaw adds on top, and Buzz does not have, is exactly this repo's remit: OWL 2 EL / KG ontology grounding, immersive 3D embodiment of agent action, and the closed memory/learning loops feeding [RuVector](#status--remaining-work).
