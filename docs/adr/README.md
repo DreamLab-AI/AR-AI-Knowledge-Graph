@@ -138,6 +138,7 @@ governed ontology writeback loop. See [Ontology pipeline](../explanation/ontolog
 | [118](ADR-118-load-endpoint-hardening.md) | Ontology Load-Endpoint Hardening | Accepted (retroactive 2026-07-22) |
 | [119](ADR-119-verifiable-liveness-telemetry.md) | Verifiable Liveness Telemetry for Ontology Retrieval | Accepted (retroactive 2026-07-22; sink shipped) |
 | [120](ADR-120-propose-p0-auth.md) | Propose-Endpoint P0 Route Guard | Accepted (retroactive 2026-07-22; shipped + tested) |
+| [134](ADR-134-voice-plane-relocated-to-agentbox.md) | Voice meta-controller relocated from `voice-stack/` into the agentbox submodule | Accepted (2026-08-04) |
 | [132](ADR-132-neo4j-removal-oxigraph-adoption.md) | Neo4j Removal → Oxigraph Adoption (originating store decision) | Accepted (2026-07-22) |
 | [121](ADR-121-self-improving-ontology-writeback-loop.md) | Self-Improving Ontology via Governed Writeback | Deferred (frozen 2026-07-03) |
 | [122](ADR-122-two-speed-writeback-governance-routing.md) | Two-Speed Writeback — Governance Routing by Epistemic Class | Deferred (frozen 2026-07-03) |
