@@ -11,7 +11,10 @@
 //!   GET  /ontology-agent/status
 
 use crate::services::ontology_query_service::OntologyQueryService;
-use crate::services::ontology_mutation_service::OntologyMutationService;
+use crate::services::ontology_mutation_service::{
+    OntologyMutationService, CONFLICT_BLOCKED_PREFIX, ENVELOPE_REJECTED_PREFIX,
+    IDEMPOTENCY_CONFLICT_PREFIX,
+};
 use crate::types::ontology_tools::*;
 use crate::settings::auth_extractor::AuthenticatedUser;
 use crate::middleware::{RequireAuth, RateLimit};
@@ -62,6 +65,12 @@ fn default_depth() -> usize { 3 }
 pub struct ProposeRequest {
     pub proposal: ProposeInput,
     pub agent_context: AgentContext,
+    /// W-E transaction spine (ADR-049): client-supplied idempotency key. A replay
+    /// of the same key with an identical payload returns the prior receipt; a
+    /// replay with a different payload is rejected (409). Absent → the spine mints
+    /// a deterministic payload-derived key.
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,14 +198,19 @@ pub async fn propose(
     // discarding whatever agent_id / user_id the body self-asserted.
     req.agent_context.agent_id = auth.pubkey.clone();
     req.agent_context.user_id = auth.pubkey.clone();
+    let idempotency_key = req.idempotency_key.clone();
     info!("ontology-agent/propose: authed agent={}", auth.pubkey);
 
     let result = match req.proposal {
         ProposeInput::Create(proposal) => {
-            mutation_service.propose_create(proposal, req.agent_context).await
+            mutation_service
+                .propose_create(proposal, req.agent_context, idempotency_key)
+                .await
         }
         ProposeInput::Amend { target_iri, amendment } => {
-            mutation_service.propose_amend(&target_iri, amendment, req.agent_context).await
+            mutation_service
+                .propose_amend(&target_iri, amendment, req.agent_context, idempotency_key)
+                .await
         }
     };
 
@@ -206,6 +220,38 @@ pub async fn propose(
                 "success": true,
                 "proposal": proposal_result
             }))
+        }
+        // W-E: a blocking conflict-integrity report → 409 with the serialised report.
+        // Delta-scoped: `blocking` = conflicts THIS proposal introduces/touches,
+        // `preExisting` = advisory corpus conflicts. Both are lifted to the top level
+        // for the client gate-chips consumer alongside the full report.
+        Err(e) if e.starts_with(CONFLICT_BLOCKED_PREFIX) => {
+            let body = &e[CONFLICT_BLOCKED_PREFIX.len()..];
+            let report: serde_json::Value =
+                serde_json::from_str(body).unwrap_or_else(|_| serde_json::json!({ "raw": body }));
+            Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "success": false,
+                "error": "conflict_blocked",
+                "blockingConflicts": report.get("blocking").cloned().unwrap_or(serde_json::json!([])),
+                "preExisting": report.get("preExisting").cloned().unwrap_or(serde_json::json!([])),
+                "conflictReport": report
+            })))
+        }
+        // W-E: idempotency key reused with a divergent payload → 409.
+        Err(e) if e.starts_with(IDEMPOTENCY_CONFLICT_PREFIX) => {
+            Ok(HttpResponse::Conflict().json(serde_json::json!({
+                "success": false,
+                "error": "idempotency_conflict",
+                "message": &e[IDEMPOTENCY_CONFLICT_PREFIX.len()..]
+            })))
+        }
+        // ADR-049: signature-envelope precondition failed (fail-closed) → 403.
+        Err(e) if e.starts_with(ENVELOPE_REJECTED_PREFIX) => {
+            Ok(HttpResponse::Forbidden().json(serde_json::json!({
+                "success": false,
+                "error": "envelope_rejected",
+                "message": &e[ENVELOPE_REJECTED_PREFIX.len()..]
+            })))
         }
         Err(e) => {
             error!("ontology-agent/propose failed: {}", e);

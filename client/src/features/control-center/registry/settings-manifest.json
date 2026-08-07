@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "generatedFrom": "settingsRegistry.ts",
-  "count": 211,
+  "count": 215,
   "groups": [
     {
       "id": "motion",
@@ -65,6 +65,20 @@
       "testid": "group-agents",
       "hotkey": "9",
       "fieldCount": 43
+    },
+    {
+      "id": "decisions",
+      "label": "Decisions",
+      "testid": "group-decisions",
+      "hotkey": "10",
+      "fieldCount": 2
+    },
+    {
+      "id": "provenance",
+      "label": "Provenance",
+      "testid": "group-provenance",
+      "hotkey": "11",
+      "fieldCount": 2
     }
   ],
   "panels": [
@@ -2720,6 +2734,50 @@
       "min": 5,
       "max": 60,
       "step": 1
+    },
+    {
+      "key": "showDecisionChains",
+      "path": "decisions.showDecisionChains",
+      "testid": "setting-decisions.showDecisionChains",
+      "control": "toggle",
+      "group": "decisions",
+      "label": "Show Decision Chains",
+      "clientOnly": true,
+      "server": null,
+      "subgroup": "Decision Records"
+    },
+    {
+      "key": "highlightPrecedents",
+      "path": "decisions.highlightPrecedents",
+      "testid": "setting-decisions.highlightPrecedents",
+      "control": "toggle",
+      "group": "decisions",
+      "label": "Highlight Precedents",
+      "clientOnly": true,
+      "server": null,
+      "subgroup": "Decision Records"
+    },
+    {
+      "key": "showAttribution",
+      "path": "provenance.showAttribution",
+      "testid": "setting-provenance.showAttribution",
+      "control": "toggle",
+      "group": "provenance",
+      "label": "Show Node Attribution",
+      "clientOnly": true,
+      "server": null,
+      "subgroup": "Attribution"
+    },
+    {
+      "key": "showGateChips",
+      "path": "provenance.showGateChips",
+      "testid": "setting-provenance.showGateChips",
+      "control": "toggle",
+      "group": "provenance",
+      "label": "Show Gate Chips",
+      "clientOnly": true,
+      "server": null,
+      "subgroup": "Governance Gates"
     }
   ]
 }

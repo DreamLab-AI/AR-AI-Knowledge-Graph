@@ -506,11 +506,35 @@ async fn main() -> std::io::Result<()> {
         whelk_engine.clone(),
         schema_service.clone(),
     ));
+    // W-E transaction spine (ADR-049): idempotency store + write-ahead intent log.
+    // In-memory by default (real, thread-safe); a durable SQLite-backed impl can
+    // drop in behind the same traits without touching the propose pipeline.
+    let proposal_idempotency = Arc::new(
+        visionclaw_server::services::proposal_spine::InMemoryIdempotencyStore::new(),
+    );
+    let proposal_intents = Arc::new(
+        visionclaw_server::services::proposal_spine::InMemoryIntentLog::new(),
+    );
     let ontology_mutation_service = Arc::new(visionclaw_server::services::ontology_mutation_service::OntologyMutationService::new(
         app_state.ontology_repository.clone(),
         whelk_engine.clone(),
         github_pr_service.clone(),
+        proposal_idempotency,
+        proposal_intents,
     ));
+
+    // W-B (PRD-022 / ADR-048/049): governed decision write door. Shares the same
+    // Oxigraph store as the ontology adapter (single-writer, ADR-11 §D1) and its
+    // own spine idempotency + intent log; decision writes ride the spine's single
+    // transaction (asserted decision quads + T3 PROV-O provenance quads, atomically).
+    let decision_service = Arc::new(
+        visionclaw_server::services::decision_service::DecisionService::new(
+            app_state.ontology_repository.clone(),
+            app_state.ontology_repository.store().clone(),
+            Arc::new(visionclaw_server::services::proposal_spine::InMemoryIdempotencyStore::new()),
+            Arc::new(visionclaw_server::services::proposal_spine::InMemoryIntentLog::new()),
+        ),
+    );
     info!("[main] Ontology Agent Services initialized");
 
     info!("--- Starting Data Orchestration Sequence ---");
@@ -848,6 +872,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(github_sync_service.clone()))
             .app_data(web::Data::new(ontology_query_service.clone()))
             .app_data(web::Data::new(ontology_mutation_service.clone()))
+            .app_data(web::Data::new(decision_service.clone()))
             .app_data(settings_repo_data.clone())
             .app_data(briefing_service.clone())
             .app_data(nostr_publisher.clone())
@@ -945,6 +970,10 @@ async fn main() -> std::io::Result<()> {
 
                     // Ontology agent tools (MCP surface)
                     .configure(visionclaw_server::handlers::configure_ontology_agent_routes)
+
+                    // Governed decision records + bounded trace (PRD-022 W-B /
+                    // ADR-048): /api/decisions/record is authed like /propose.
+                    .configure(visionclaw_server::handlers::configure_decision_routes)
 
                     // Solid Pod (embedded solid-pod-rs)
                     .configure(visionclaw_server::handlers::configure_solid_routes)

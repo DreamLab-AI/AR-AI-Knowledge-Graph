@@ -22,6 +22,32 @@ export interface GraphSelectionReturn {
   flyToProgressRef: React.MutableRefObject<number>
 }
 
+/**
+ * Extract ADR-049 assertion-version attribution from node metadata, tolerating
+ * both camelCase and the backend snake_case. Returns undefined unless the core
+ * identity fields (agent did + activity URN) are present, so provenance-less
+ * nodes dispatch no attribution. The agent identity is the authenticated
+ * principal recorded server-side; the client never synthesises it.
+ */
+function extractAttribution(
+  metadata: Record<string, any> | undefined
+): { didNostr: string; activityUrn: string; generatedAtTime: string; signatureValid: boolean } | undefined {
+  if (!metadata) return undefined
+  const didNostr = metadata.didNostr ?? metadata.did_nostr ?? metadata.agentDid ?? metadata.agent_did
+  const activityUrn = metadata.activityUrn ?? metadata.activity_urn
+  if (typeof didNostr !== 'string' || typeof activityUrn !== 'string') return undefined
+  const generatedAtTime =
+    metadata.generatedAtTime ?? metadata.generated_at_time ?? metadata.generatedAt ?? ''
+  const signatureValid =
+    metadata.signatureValid ?? metadata.signature_valid ?? false
+  return {
+    didNostr,
+    activityUrn,
+    generatedAtTime: String(generatedAtTime),
+    signatureValid: Boolean(signatureValid),
+  }
+}
+
 export function useGraphSelection(opts: GraphSelectionOptions): GraphSelectionReturn {
   const { graphData, nodeIdToIndexMap, nodePositionsRef, connectionCountMap, camera } = opts
 
@@ -57,6 +83,10 @@ export function useGraphSelection(opts: GraphSelectionOptions): GraphSelectionRe
         metadata: node.metadata || {},
         connectionCount: connectionCountMap.get(selectedNodeId) || neighborIds.size,
         neighbors,
+        // ADR-049 attribution, when the node carries assertion-version provenance
+        // metadata. Undefined otherwise — the panel renders the section only when
+        // present AND the provenance.showAttribution flag is on.
+        attribution: extractAttribution(node.metadata),
       },
     }))
   }, [selectedNodeId, graphData.nodes, graphData.edges, connectionCountMap])

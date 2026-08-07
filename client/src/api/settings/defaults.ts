@@ -178,6 +178,19 @@ export const DEFAULT_QUALITY_GATES: QualityGateSettings = {
   typeClusterRadius: 100,
 };
 
+// W-G phase-1 client-only overlay defaults. All fields DEFAULT-OFF: the governed
+// decision/provenance surfaces stay hidden until a user opts in via the Control
+// Center (Decisions / Provenance groups). Client-only — never PUT server-side.
+export const DEFAULT_DECISIONS_SETTINGS = {
+  showDecisionChains: false,
+  highlightPrecedents: false,
+};
+
+export const DEFAULT_PROVENANCE_SETTINGS = {
+  showAttribution: false,
+  showGateChips: false,
+};
+
 export const DEFAULT_EMBEDDING_CLOUD = {
   // Off by default: the RuVector memory cloud fills the scene with a second
   // 50k-point field that obscures the graph itself at rest (operator call,

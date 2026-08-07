@@ -222,6 +222,96 @@ pub struct ProposalResult {
     pub markdown_preview: String,
     pub pr_url: Option<String>,
     pub status: ProposalStatus,
+    /// W-E transaction spine (ADR-049/DDD-020): the idempotent proposal receipt
+    /// — proposal id + idempotency key + content-addressed graph/envelope hashes.
+    /// `None` on legacy/replay-less paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ProposalReceipt>,
+    /// Per-gate outcome summary (conflict / whelk consistency / ACSP governance).
+    /// Orthogonal to `status`. camelCase-serialised wire contract for the client.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gates: Option<GateSummary>,
+}
+
+/// Idempotent proposal receipt (W-E / ADR-049). A single proposal id and
+/// idempotency key span every stage of the propose pipeline; the three hashes
+/// content-address the projected asserted-graph triples, the appended
+/// provenance-graph quads, and the (native) signature envelope respectively.
+///
+/// Replay of the same idempotency key with an identical payload returns the
+/// prior receipt unchanged; replay with a different payload is rejected.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalReceipt {
+    pub proposal_id: String,
+    pub idempotency_key: String,
+    pub assert_graph_hash: String,
+    pub provenance_graph_hash: String,
+    pub envelope_hash: String,
+}
+
+/// Serialisable per-gate summary surfaced on `ProposalResult`. Each gate is
+/// ORTHOGONAL to `ProposalStatus`; a still-pending proposal can already carry a
+/// passing conflict gate and a consistent Whelk gate. The Whelk gate reports
+/// classifier consistency of the asserted projection — never reachability and
+/// never "Whelk-classified" transitive truth.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GateSummary {
+    pub conflict: GateOutcome,
+    pub whelk: WhelkGateOutcome,
+    pub acsp: GateOutcome,
+}
+
+/// Pass/fail/pending outcome for the conflict-integrity and ACSP governance gates.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum GateOutcome {
+    Pass,
+    Fail,
+    Pending,
+}
+
+/// Whelk consistency outcome for the asserted-graph projection.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WhelkGateOutcome {
+    Consistent,
+    Incoherent,
+    Pending,
+}
+
+impl GateSummary {
+    /// A summary with every gate pending (the pre-evaluation baseline).
+    pub fn pending() -> Self {
+        GateSummary {
+            conflict: GateOutcome::Pending,
+            whelk: WhelkGateOutcome::Pending,
+            acsp: GateOutcome::Pending,
+        }
+    }
+
+    /// Set the Whelk consistency outcome from a boolean consistency verdict.
+    pub fn with_whelk(mut self, consistent: bool) -> Self {
+        self.whelk = if consistent {
+            WhelkGateOutcome::Consistent
+        } else {
+            WhelkGateOutcome::Incoherent
+        };
+        self
+    }
+
+    /// Set the conflict-integrity gate outcome.
+    pub fn with_conflict(mut self, outcome: GateOutcome) -> Self {
+        self.conflict = outcome;
+        self
+    }
+
+    /// Set the ACSP governance gate outcome.
+    pub fn with_acsp(mut self, outcome: GateOutcome) -> Self {
+        self.acsp = outcome;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

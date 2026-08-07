@@ -46,6 +46,16 @@ pub mod pathfinding;
 pub mod semantic_type_registry;
 pub mod ontology_query_service;
 pub mod ontology_mutation_service;
+// W-E transaction spine (ADR-049 / DDD-020): idempotency store, write-ahead
+// intent log, deterministic receipt builder. Pure/in-memory, store-agnostic.
+pub mod proposal_spine;
+pub mod ontology_conflict_gate;
+// T3 (W-C/W-D, ADR-049): pure portable-reification provenance quad builders +
+// bi-temporal projection. Executed inside the spine's single commit transaction.
+pub mod provenance_writer;
+// W-B (PRD-022 / ADR-048): decision-layer vocabulary, URN minting, quad + SPARQL
+// builders, bounded traversal, and the governed DecisionService write door.
+pub mod decision_service;
 pub mod github_pr_service;
 pub mod briefing_service;
 pub mod nostr_bead_publisher;

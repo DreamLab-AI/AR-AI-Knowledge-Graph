@@ -1,5 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { graphDataManager, type GraphData, type Node } from '../managers/graphDataManager';
+import { useSettingsStore } from '../../../store/settingsStore';
+
+/**
+ * Assertion-version attribution (ADR-049) threaded into the node-selected event
+ * by GraphManager/useGraphSelection. The panel renders it only — it never
+ * fetches. `signatureValid` reflects native-envelope signature verification;
+ * the agent identity is the authenticated principal (did:nostr), never a
+ * client-chosen field.
+ */
+export interface NodeAttribution {
+  didNostr: string;
+  activityUrn: string;
+  generatedAtTime: string;
+  signatureValid: boolean;
+}
 
 export interface NodeSelectionDetail {
   nodeId: string;
@@ -7,6 +22,7 @@ export interface NodeSelectionDetail {
   metadata?: Record<string, any>;
   connectionCount: number;
   neighbors: Array<{ id: string; label: string }>;
+  attribution?: NodeAttribution;
 }
 
 /**
@@ -16,6 +32,11 @@ export interface NodeSelectionDetail {
 export const NodeDetailPanel: React.FC = () => {
   const [detail, setDetail] = useState<NodeSelectionDetail | null>(null);
   const [visible, setVisible] = useState(false);
+  // W-G phase-1 client-only flag (default-off). When off, the attribution
+  // section renders nothing even if the payload carries attribution.
+  const showAttribution = useSettingsStore(
+    s => s.settings?.provenance?.showAttribution ?? false
+  );
 
   const handleNodeSelected = useCallback((event: Event) => {
     const customEvent = event as CustomEvent<NodeSelectionDetail | null>;
@@ -151,6 +172,45 @@ export const NodeDetailPanel: React.FC = () => {
           )}
         </div>
 
+        {/* Attribution (ADR-049 assertion-version provenance) */}
+        {showAttribution && detail.attribution && (
+          <div style={{ marginBottom: 14 }}>
+            <h3 style={{
+              margin: '0 0 8px',
+              fontSize: 12,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: 0.5,
+              color: '#888',
+            }}>
+              Attribution
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Badge label="Agent" value={truncateMiddle(detail.attribution.didNostr, 28)} />
+              <Badge label="Activity" value={truncateMiddle(detail.attribution.activityUrn, 28)} />
+              <Badge
+                label="Generated"
+                value={formatTimestamp(detail.attribution.generatedAtTime)}
+              />
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                alignSelf: 'flex-start',
+                padding: '3px 10px',
+                borderRadius: 999,
+                fontSize: 11,
+                fontWeight: 600,
+                border: `1px solid ${detail.attribution.signatureValid ? 'rgba(78, 205, 120, 0.5)' : 'rgba(230, 180, 60, 0.5)'}`,
+                backgroundColor: detail.attribution.signatureValid ? 'rgba(78, 205, 120, 0.15)' : 'rgba(230, 180, 60, 0.15)',
+                color: detail.attribution.signatureValid ? '#6fdca0' : '#e6c24a',
+              }}>
+                {detail.attribution.signatureValid ? 'Signature verified' : 'Signature unverified'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Content preview */}
         {contentPreview && (
           <div style={{
@@ -257,6 +317,19 @@ const Badge: React.FC<{ label: string; value: string }> = ({ label, value }) => 
     <span style={{ color: '#ddd' }}>{value}</span>
   </span>
 );
+
+/** Middle-ellipsis a long mono identifier (did / URN) to `max` chars. */
+function truncateMiddle(value: string, max: number): string {
+  if (!value || value.length <= max) return value;
+  const keep = Math.max(4, Math.floor((max - 1) / 2));
+  return `${value.slice(0, keep)}…${value.slice(-keep)}`;
+}
+
+/** Render an ISO prov:generatedAtTime as a locale string; fall back to raw. */
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
 
 function extractContentPreview(metadata?: Record<string, any>): string | null {
   if (!metadata) return null;

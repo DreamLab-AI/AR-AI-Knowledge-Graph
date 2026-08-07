@@ -5,7 +5,7 @@ import { Badge } from '@/features/design-system/components/Badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/features/design-system/components/Select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/features/design-system/components/Collapsible';
 import { useToast } from '@/features/design-system/components/Toast';
-import { FileText, ChevronDown, ChevronRight, Send, Trash2, RotateCcw, CheckCircle, XCircle, Clock, Edit, GitMerge, AlertCircle, FileCode, Plus, Minus } from 'lucide-react';
+import { FileText, ChevronDown, ChevronRight, Send, Trash2, RotateCcw, CheckCircle, XCircle, Clock, Edit, GitMerge, AlertCircle, FileCode, Plus, Minus, ShieldCheck } from 'lucide-react';
 import {
   useOntologyContributionStore,
   OntologyProposal,
@@ -14,6 +14,7 @@ import {
   OntologyProperty,
   OntologyAnnotation
 } from '../hooks/useOntologyStore';
+import { useSettingsStore } from '../../../store/settingsStore';
 
 interface OntologyProposalListProps {
   className?: string;
@@ -27,6 +28,63 @@ const statusConfig: Record<ProposalStatus, { label: string; variant: 'default' |
   rejected: { label: 'Rejected', variant: 'destructive', icon: XCircle },
   withdrawn: { label: 'Withdrawn', variant: 'outline', icon: RotateCcw }
 };
+
+// Governance gate chips (W-E wire contract). ORTHOGONAL to statusConfig — never
+// fold these into ProposalStatus. Each gate value maps to a neutral tone whose
+// icon colour signals pass/fail/pending; only the existing Badge 'outline'
+// variant is used (no new design-system variant). The Whelk chip is labelled as
+// asserted-projection classifier consistency, never reachability.
+type GateTone = 'ok' | 'bad' | 'pending';
+
+const gateToneConfig: Record<GateTone, { icon: React.ElementType; iconClass: string }> = {
+  ok: { icon: CheckCircle, iconClass: 'text-green-600 dark:text-green-400' },
+  bad: { icon: XCircle, iconClass: 'text-destructive' },
+  pending: { icon: Clock, iconClass: 'text-muted-foreground' },
+};
+
+type ProposalGates = NonNullable<OntologyProposal['gates']>;
+
+const gateChipDefs: Array<{
+  key: keyof ProposalGates;
+  label: string;
+  title: string;
+  tone: (v: string) => GateTone;
+  describe: (v: string) => string;
+}> = [
+  {
+    key: 'conflict',
+    label: 'Integrity',
+    title: 'Integrity conflict detectors (duplicate / cycle / contradiction / type)',
+    tone: (v) => (v === 'pass' ? 'ok' : v === 'fail' ? 'bad' : 'pending'),
+    describe: (v) => (v === 'pass' ? 'No blocking conflicts' : v === 'fail' ? 'Blocking conflict detected' : 'Conflict check pending'),
+  },
+  {
+    key: 'whelk',
+    label: 'Whelk',
+    title: 'Whelk consistency (asserted projection)',
+    tone: (v) => (v === 'consistent' ? 'ok' : v === 'incoherent' ? 'bad' : 'pending'),
+    describe: (v) => (v === 'consistent' ? 'Asserted projection consistent' : v === 'incoherent' ? 'Incoherent — unsatisfiable classes' : 'Consistency check pending'),
+  },
+  {
+    key: 'acsp',
+    label: 'ACSP',
+    title: 'Governance / consistency gate (ACSP)',
+    tone: (v) => (v === 'pass' ? 'ok' : v === 'fail' ? 'bad' : 'pending'),
+    describe: (v) => (v === 'pass' ? 'Governance passed' : v === 'fail' ? 'Governance rejected' : 'Governance pending'),
+  },
+];
+
+function GateChip({ tone, label, title }: { tone: GateTone; label: string; title: string }) {
+  const cfg = gateToneConfig[tone];
+  const Icon = cfg.icon;
+  return (
+    <Badge variant="outline" className="flex items-center gap-1 text-xs" title={title}>
+      {/* @ts-ignore - Icon is dynamically assigned from lucide-react */}
+      <Icon className={`h-3 w-3 ${cfg.iconClass}`} />
+      {label}
+    </Badge>
+  );
+}
 
 function ProposalDiff({ diff }: { diff: OntologyProposal['diff'] }) {
   if (!diff) return null;
@@ -89,6 +147,12 @@ function ProposalCard({
   const [isExpanded, setIsExpanded] = useState(false);
   const status = statusConfig[proposal.status];
   const StatusIcon = status.icon;
+  // W-G phase-1 client-only flag (default-off). When off, no gate chips render
+  // even if the proposal carries gate state.
+  const showGateChips = useSettingsStore(
+    s => s.settings?.provenance?.showGateChips ?? false
+  );
+  const gatesVisible = showGateChips && !!proposal.gates;
 
   const getProposalTitle = () => {
     switch (proposal.type) {
@@ -219,11 +283,23 @@ function ProposalCard({
                 </div>
               </div>
             </div>
-            <Badge variant={status.variant as 'default' | 'secondary' | 'destructive' | 'outline'} className="flex items-center gap-1">
-              {/* @ts-ignore - StatusIcon is dynamically assigned from lucide-react */}
-              <StatusIcon className="h-3 w-3" />
-              {status.label}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant={status.variant as 'default' | 'secondary' | 'destructive' | 'outline'} className="flex items-center gap-1">
+                {/* @ts-ignore - StatusIcon is dynamically assigned from lucide-react */}
+                <StatusIcon className="h-3 w-3" />
+                {status.label}
+              </Badge>
+              {gatesVisible && proposal.gates && (
+                <div className="flex items-center gap-1">
+                  {gateChipDefs.map((def) => {
+                    const v = proposal.gates![def.key];
+                    return (
+                      <GateChip key={def.key} tone={def.tone(v)} label={def.label} title={def.title} />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </CollapsibleTrigger>
 
@@ -246,6 +322,31 @@ function ProposalCard({
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <GitMerge className="h-4 w-4" />
                 Merged: <code className="font-mono text-xs">{proposal.mergeCommit}</code>
+              </div>
+            )}
+
+            {gatesVisible && proposal.gates && (
+              <div className="rounded-md border bg-muted/30 p-3">
+                <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  Governance Gates
+                </div>
+                <div className="space-y-1.5">
+                  {gateChipDefs.map((def) => {
+                    const v = proposal.gates![def.key];
+                    const tone = def.tone(v);
+                    const cfg = gateToneConfig[tone];
+                    const Icon = cfg.icon;
+                    return (
+                      <div key={def.key} className="flex items-start gap-2 text-sm">
+                        {/* @ts-ignore - Icon is dynamically assigned from lucide-react */}
+                        <Icon className={`h-3.5 w-3.5 mt-0.5 flex-shrink-0 ${cfg.iconClass}`} />
+                        <span className="text-muted-foreground w-20 flex-shrink-0" title={def.title}>{def.label}:</span>
+                        <span className="break-all">{def.describe(v)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

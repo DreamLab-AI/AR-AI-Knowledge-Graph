@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { REGISTRY, ALL_FIELDS, ALL_PATHS, testIdFor } from '../settingsRegistry';
-import { buildManifest } from '../manifest';
+import { buildManifest, serverBucketFor } from '../manifest';
 import { MACRO_PATHS } from '../macros';
 import manifestJson from '../settings-manifest.json';
 // The SOURCE OF TRUTH for the frozen backend contract. Captured from the legacy
@@ -18,10 +18,30 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   ai: 6,
   system: 16,
   agents: 43,
+  decisions: 2,
+  provenance: 2,
 };
 
-/** Total registry field count: the 168 frozen legacy fields + the new Agents group. */
-const TOTAL_FIELDS = 168 + EXPECTED_GROUP_COUNTS.agents;
+/**
+ * Total registry field count: the 168 frozen legacy fields + the Agents group +
+ * the two W-G phase-1 client-only groups (decisions, provenance).
+ */
+const TOTAL_FIELDS =
+  168 + EXPECTED_GROUP_COUNTS.agents + EXPECTED_GROUP_COUNTS.decisions + EXPECTED_GROUP_COUNTS.provenance;
+
+/**
+ * Frozen client-only paths introduced by the W-G phase-1 Decisions/Provenance
+ * groups (hotkeys 10/11). Like the Agents group they post-date the WP5 baseline,
+ * so the zero-drift test (c) excludes them from the migrated comparison and (c3)
+ * asserts them independently. All are clientOnly (serverBucketFor → null): they
+ * never enter the settings PUT routing, so they add no backend-contract drift.
+ */
+const WG_GROUP_PATHS: string[] = [
+  'decisions.showDecisionChains',
+  'decisions.highlightPrecedents',
+  'provenance.showAttribution',
+  'provenance.showGateChips',
+];
 
 /**
  * Frozen backend paths introduced by the Agents group (hotkey 9). They post-date
@@ -101,19 +121,21 @@ describe('control-center settings registry', () => {
     const actual: Record<string, number> = {};
     for (const g of REGISTRY) actual[g.id] = g.fields.length;
     expect(actual).toEqual(EXPECTED_GROUP_COUNTS);
-    // group order realises hotkeys 1..9 (agents is the new hotkey-9 group)
+    // group order realises hotkeys 1..11 (decisions/provenance are the new W-G groups)
     expect(REGISTRY.map((g) => g.id)).toEqual([
-      'motion', 'look', 'labels', 'quality', 'atmosphere', 'xr', 'ai', 'system', 'agents',
+      'motion', 'look', 'labels', 'quality', 'atmosphere', 'xr', 'ai', 'system', 'agents', 'decisions', 'provenance',
     ]);
-    expect(REGISTRY.map((g) => g.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    expect(REGISTRY.map((g) => g.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']);
   });
 
   it('(c) has ZERO path drift vs legacy unifiedSettingsConfig for the migrated groups', () => {
     const legacySet = new Set(legacyPaths());
     const agentSet = new Set(AGENT_GROUP_PATHS);
+    const wgSet = new Set(WG_GROUP_PATHS);
     // Compare only the pre-existing (migrated) groups against the frozen baseline;
-    // the Agents group post-dates WP5 and is asserted independently in (c2).
-    const migratedPaths = ALL_PATHS.filter((p) => !agentSet.has(p));
+    // the Agents group (c2) and the W-G groups (c3) post-date WP5 and are asserted
+    // independently.
+    const migratedPaths = ALL_PATHS.filter((p) => !agentSet.has(p) && !wgSet.has(p));
     const migratedSet = new Set(migratedPaths);
 
     // No migrated path exists that is absent from the frozen legacy set.
@@ -140,6 +162,23 @@ describe('control-center settings registry', () => {
     // and none of them collide with the frozen legacy baseline
     const collisions = agentsPaths.filter((p) => legacySet.has(p));
     expect(collisions).toEqual([]);
+  });
+
+  it('(c3) the W-G groups expose exactly their client-only paths, disjoint from legacy', () => {
+    const legacySet = new Set(legacyPaths());
+    const decisionsGroup = REGISTRY.find((g) => g.id === 'decisions')!;
+    const provenanceGroup = REGISTRY.find((g) => g.id === 'provenance')!;
+    const wgPaths = [...decisionsGroup.fields, ...provenanceGroup.fields]
+      .map((f) => f.path)
+      .filter((p): p is string => Boolean(p));
+    // exactly the declared set (no accidental additions/drops)
+    expect(new Set(wgPaths)).toEqual(new Set(WG_GROUP_PATHS));
+    // every field carries a frozen path (no transient/action fields here)
+    expect(wgPaths.length).toBe(decisionsGroup.fields.length + provenanceGroup.fields.length);
+    // none collide with the frozen legacy baseline
+    expect(wgPaths.filter((p) => legacySet.has(p))).toEqual([]);
+    // and they are all clientOnly (serverBucketFor → null): no backend routing
+    for (const p of wgPaths) expect(serverBucketFor(p)).toBeNull();
   });
 
   it('(d) every testid is unique', () => {

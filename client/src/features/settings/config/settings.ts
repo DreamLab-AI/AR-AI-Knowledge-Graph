@@ -815,6 +815,27 @@ export interface NodeFilterSettings {
   includeLinkedPages?: boolean;
 }
 
+// Decision-record overlay settings (W-G phase-1, client-only, default-off).
+// Gate whether the graph surfaces governed dl:DecisionRecord overlays and
+// derived, bounded decision-chain reachability. Client-only: no server bucket.
+export interface DecisionsSettings {
+  /** Overlay derived, bounded decision-chain reachability (never asserted truth). */
+  showDecisionChains: boolean;
+  /** Highlight direct dl:precedentFor edges on the selected decision node. */
+  highlightPrecedents: boolean;
+}
+
+// Provenance overlay settings (W-G phase-1, client-only, default-off). Gate the
+// node-panel attribution section and the proposal-list governance-gate chips.
+// The Whelk chip reads as asserted-projection classifier consistency, never
+// reachability. Client-only: no server bucket.
+export interface ProvenanceSettings {
+  /** Show attribution (did:nostr, activity URN, generated-at, signature) on the node panel. */
+  showAttribution: boolean;
+  /** Show per-proposal governance gate chips (conflict / Whelk consistency / ACSP). */
+  showGateChips: boolean;
+}
+
 // Main settings interface - Single source of truth matching server AppFullSettings
 export interface Settings {
   visualisation: VisualisationSettings;
@@ -834,6 +855,10 @@ export interface Settings {
   vircadia?: VircadiaSettings;
   // Node filter settings for graph visualization
   nodeFilter?: NodeFilterSettings;
+  // W-G phase-1 client-only decision-record overlays (default-off)
+  decisions?: DecisionsSettings;
+  // W-G phase-1 client-only provenance/attribution overlays (default-off)
+  provenance?: ProvenanceSettings;
   // Client-side tweening for server-authoritative positions
   clientTweening?: ClientTweeningSettings;
   // Runtime renderer capabilities (populated by rendererFactory, read-only in UI)

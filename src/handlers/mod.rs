@@ -16,6 +16,9 @@ pub mod nostr_handler;
 pub mod ontology_handler;
 pub mod ontology_agent_handler;
 pub use ontology_agent_handler::configure_ontology_agent_routes;
+// W-B (PRD-022 / ADR-048): governed decision record + bounded trace surface.
+pub mod decision_handler;
+pub use decision_handler::configure_decision_routes;
 pub mod pages_handler;
 pub mod ragflow_handler;
 pub mod settings_handler;

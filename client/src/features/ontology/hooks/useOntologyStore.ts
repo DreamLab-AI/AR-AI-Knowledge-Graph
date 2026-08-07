@@ -50,6 +50,18 @@ export interface OntologyProposal {
   };
   reviewNotes?: string;
   mergeCommit?: string;
+  /**
+   * Per-proposal governance gate status (W-E wire contract, camelCase). ORTHOGONAL
+   * to `status`: a pending proposal can be conflict=pass, whelk=pending. `conflict`
+   * is the four integrity detectors; `whelk` is classifier consistency of the
+   * asserted projection (never reachability); `acsp` is the governance/consistency
+   * gate. Undefined until the propose pipeline reports gates.
+   */
+  gates?: {
+    conflict: 'pass' | 'fail' | 'pending';
+    whelk: 'consistent' | 'incoherent' | 'pending';
+    acsp: 'pass' | 'fail' | 'pending';
+  };
 }
 
 export interface OntologyTreeNode {
@@ -568,6 +580,9 @@ export const useOntologyContributionStore = create<OntologyContributionState>()(
                   }
                   if (update.mergeCommit) {
                     draft.proposals[index].mergeCommit = update.mergeCommit;
+                  }
+                  if (update.gates) {
+                    draft.proposals[index].gates = update.gates;
                   }
                 }
                 draft.lastUpdate = Date.now();
