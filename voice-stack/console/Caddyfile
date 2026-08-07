@@ -1,0 +1,61 @@
+{
+	auto_https off
+}
+
+# ── :8444 — THE operator surface (agentbox voice console) ──────────────────
+# Single self-signed TLS origin consolidating every surface:
+#   /            static console page (VisionFlow design system, /srv)
+#   /embed       compact voice strip (forked Unmute frontend, same-origin
+#                iframe → mic permission needs no cross-origin delegation)
+#   /_next/*     Next.js assets + HMR websocket for /embed
+#   /api/*       Unmute backend (health, voices, /v1/realtime websocket)
+#   /feed        tab0-bridge live turn feed (websocket)
+#   /bridge/*    tab0-bridge REST (tabs, tab0/send, nostr/*)
+# Mic needs a secure context; the browser shows a one-time warning for the
+# self-signed cert — proceed.
+https://:8444 {
+	tls /certs/cert.pem /certs/key.pem
+
+	handle /embed* {
+		reverse_proxy frontend:3000
+	}
+	handle /_next/* {
+		reverse_proxy frontend:3000
+	}
+	# Opus worker + audio-worklet assets: the frontend loads these from
+	# root-absolute paths (see useAudioProcessor.ts) out of Next's public/.
+	# Without this route they fall through to the static console site and
+	# 404 — which kills audio setup right after the mic prompt.
+	@voiceassets path /audio-output-processor.js /decoderWorker.min.js /decoderWorker.min.wasm /encoderWorker.min.js
+	handle @voiceassets {
+		reverse_proxy frontend:3000
+	}
+	handle_path /api/* {
+		reverse_proxy backend:80
+	}
+	handle /feed {
+		reverse_proxy agentbox:8971
+	}
+	handle_path /bridge/* {
+		reverse_proxy agentbox:8971
+	}
+	handle {
+		root * /srv
+		file_server
+	}
+}
+
+# ── :8443 — DEBUG ONLY: full stock Unmute demo UI ──────────────────────────
+# Not part of the operator path; keep for diagnosing the voice loop with the
+# upstream interface. Routes directly to the unmute services — traefik is not
+# in this path.
+https://:8443 {
+	tls /certs/cert.pem /certs/key.pem
+
+	handle_path /api/* {
+		reverse_proxy backend:80
+	}
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

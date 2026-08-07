@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agentbox · voice console</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<header id="topbar">
+  <h1><span class="brand">AGENTBOX</span><span class="sep">▸</span>voice console</h1>
+  <div id="chips">
+    <span class="chip" id="chip-bridge" title="tab0-bridge">bridge</span>
+    <span class="chip" id="chip-voice" title="Unmute STT/TTS backend">voice</span>
+    <span class="chip" id="chip-nostr" title="Nostr gateway + mirror">nostr</span>
+  </div>
+</header>
+
+<div id="layout">
+
+  <aside id="rail">
+    <section class="panel" id="voice-panel">
+      <h2>voice</h2>
+      <iframe id="voice-embed" src="/embed" allow="microphone; autoplay"
+              title="voice interface"></iframe>
+    </section>
+
+    <section class="panel" id="nostr-panel">
+      <h2>nostr <span id="nostr-state" class="dim">…</span></h2>
+      <div id="nostr-events" class="scroll"></div>
+      <form id="nostr-send" autocomplete="off">
+        <input id="nostr-text" placeholder="DM the operator thread…">
+        <button>send</button>
+      </form>
+    </section>
+
+    <section class="panel" id="sys-panel">
+      <h2>bridge</h2>
+      <div id="sys-facts" class="mono dim">—</div>
+    </section>
+  </aside>
+
+  <main id="main">
+    <nav id="tabbar"></nav>
+    <div id="content">
+      <div id="feed-view">
+        <div id="log" class="scroll"></div>
+      </div>
+      <div id="pane-view" hidden>
+        <div class="pane-head">
+          <span id="pane-title" class="mono"></span>
+          <span class="ro-badge">read-only</span>
+        </div>
+        <pre id="pane-output" class="scroll mono"></pre>
+      </div>
+    </div>
+    <form id="send" autocomplete="off">
+      <span class="target mono">→ tab 0</span>
+      <input id="text" placeholder="type into tab 0 (Claude Code)…">
+      <button>send</button>
+    </form>
+  </main>
+
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

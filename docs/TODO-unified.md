@@ -80,7 +80,7 @@ The six unblock states:
 | E-2 | ~~GitHub enrichment~~ **DONE 2026-07-22** | Token validated live (HTTP 200); present in agentbox runtime env + .env (0600); `github_enrichment = true` (boot apply-class — active at next restart). Follow-up: swap broad-scope classic PAT for a fine-grained read-only one. |
 | E-3 | Ollama sidecar | Confirm host ollama on :11434; sidecar-off is correct while absent. |
 | E-4 | Nagual QE toolchain | Upstream sqlx 0.9 `SqlSafeStr` compile error. Wait or pin. |
-| E-5 | VisionClaw self-hosted GPU runner offline | The non-blocking "Rust full workspace + GPU tests" CI job queues indefinitely (`[self-hosted, gpu]` runner not registered/online on the host) — caused a 15h zombie run 2026-07-22 and a 3h queue 2026-07-23 (both cancelled). Operator: re-register the host GPU runner, or gate the job behind `if:` until it returns. |
+| E-5 | ~~VisionClaw self-hosted GPU runner offline~~ **RESOLVED 2026-07-24** | The non-blocking GPU CI job queued indefinitely (`[self-hosted, gpu]` runner not registered) — 15h/3h zombie runs. Operator decision: the GPU crates compile+run on the CUDA host during the normal build/deploy flow (authoritative validation), so the CI job added nothing at deploy time. **Job removed** (VisionClaw 5d28071c2). Re-add only if a GPU runner is registered and real-hardware CI is wanted. |
 
 ## 7. Cleanly deferred (frozen — do not reopen without a new ADR)
 
