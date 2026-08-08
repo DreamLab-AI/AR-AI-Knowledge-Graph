@@ -22,7 +22,8 @@ use uuid::Uuid;
 
 use crate::actors::messages::*;
 use crate::services::owl_validator::{
-    OwlValidatorService, PropertyGraph, RdfTriple, ValidationConfig, ValidationReport,
+    ConstraintSummary, OwlValidatorService, PropertyGraph, RdfTriple, Severity, ValidationConfig,
+    ValidationReport, ValidationStatistics, Violation,
 };
 use crate::utils::time;
 
@@ -373,21 +374,15 @@ impl OntologyActor {
             let future = async move {
                 let start_time = Instant::now();
 
+                // All modes validate against the SHARED validator instance so the
+                // ontology loaded via LoadOntologyAxioms is visible in its cache.
+                // The old Quick path built a throwaway OwlValidatorService with an
+                // empty ontology cache, so every Quick validation failed with
+                // "Ontology not found". Mode already drove job priority at enqueue.
                 let result = match mode {
-                    ValidationMode::Quick => {
-                        
-                        let mut config = ValidationConfig::default();
-                        config.enable_reasoning = false;
-                        config.enable_inference = false;
-                        let temp_validator = OwlValidatorService::with_config(config);
-                        temp_validator.validate(&ontology_id, &graph_data).await
-                    }
-                    ValidationMode::Full => {
-                        
-                        validator.validate(&ontology_id, &graph_data).await
-                    }
-                    ValidationMode::Incremental => {
-                        
+                    ValidationMode::Quick
+                    | ValidationMode::Full
+                    | ValidationMode::Incremental => {
                         validator.validate(&ontology_id, &graph_data).await
                     }
                 };
@@ -468,13 +463,40 @@ impl OntologyActor {
                     );
                 }
                 Err(e) => {
+                    let error_message = e.to_string();
                     job.status = JobStatus::Failed {
-                        error: e.to_string(),
+                        error: error_message.clone(),
                         failed_at: time::now(),
                     };
 
+                    // Overwrite the "pending" placeholder with an honest failure
+                    // report under BOTH keys so GET /report resolves to 200 with
+                    // the error instead of returning 202 pending forever. The
+                    // `"failed"` signature marks it terminal (not pending).
+                    let failure_report = ValidationReport {
+                        id: job_id.to_string(),
+                        timestamp: time::now(),
+                        duration_ms: duration.as_millis() as u64,
+                        graph_signature: "failed".to_string(),
+                        total_triples: 0,
+                        violations: vec![Violation {
+                            id: Uuid::new_v4().to_string(),
+                            severity: Severity::Error,
+                            rule: "validation_error".to_string(),
+                            message: error_message.clone(),
+                            subject: None,
+                            predicate: None,
+                            object: None,
+                            timestamp: time::now(),
+                        }],
+                        inferred_triples: vec![],
+                        statistics: ValidationStatistics::default(),
+                        constraint_summary: ConstraintSummary::default(),
+                    };
+                    self.store_report_dual_key(job_id, &job.ontology_id, failure_report);
+
                     self.statistics.failed_validations += 1;
-                    error!("Validation job {} failed: {}", job_id, e);
+                    error!("Validation job {} failed: {}", job_id, error_message);
                 }
             }
 
@@ -1147,6 +1169,81 @@ mod tests {
             .expect("lookup");
         assert!(by_ontology.is_some(), "report resolvable by ontology id");
         assert_eq!(by_ontology.unwrap().id, job_id);
+    }
+
+    /// End-to-end, driving the REAL interval-based queue → execute → completion
+    /// cycle (not a synthetic pre-inserted report): load an ontology, enqueue a
+    /// validation against it, then poll until the report leaves the "pending"
+    /// placeholder state. The finished report must be a real success (not stuck,
+    /// not "failed") and resolvable by both the job id and the ontology id.
+    #[actix::test]
+    async fn validate_transitions_pending_to_complete_over_loaded_ontology() {
+        let addr = OntologyActor::new().start();
+
+        let ofn = "Ontology(<http://example.org/test>\n\
+                   Declaration(Class(<http://example.org/Person>))\n\
+                   )";
+        let ontology_id = addr
+            .send(LoadOntologyAxioms {
+                source: ofn.to_string(),
+                format: Some("functional".to_string()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("load succeeds");
+
+        let job_id = "job-e2e".to_string();
+        let pending = addr
+            .send(ValidateOntology {
+                ontology_id: ontology_id.clone(),
+                graph_data: empty_graph(),
+                mode: ValidationMode::Full,
+                job_id: Some(job_id.clone()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("enqueue");
+        assert_eq!(pending.graph_signature, "pending");
+
+        // The interval processor runs every second; poll for the transition.
+        let mut final_report = None;
+        for _ in 0..50 {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            let maybe = addr
+                .send(GetOntologyReport {
+                    report_id: Some(job_id.clone()),
+                })
+                .await
+                .expect("mailbox")
+                .expect("lookup");
+            if let Some(report) = maybe {
+                if report.graph_signature != "pending" {
+                    final_report = Some(report);
+                    break;
+                }
+            }
+        }
+
+        let report = final_report.expect("report must transition out of pending");
+        assert_ne!(report.graph_signature, "pending", "must not stay pending");
+        assert_ne!(
+            report.graph_signature, "failed",
+            "validation over a loaded ontology should succeed, got violations: {:?}",
+            report.violations
+        );
+        assert_eq!(report.id, job_id, "finished report id realigned to job id");
+
+        // The same finished report is resolvable by the ontology id too.
+        let by_ontology = addr
+            .send(GetOntologyReport {
+                report_id: Some(ontology_id.clone()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("lookup")
+            .expect("resolvable by ontology id");
+        assert_eq!(by_ontology.id, job_id);
+        assert_eq!(by_ontology.graph_signature, report.graph_signature);
     }
 
     /// GetOntologyHealth.loaded_ontologies must increment after a successful load.
