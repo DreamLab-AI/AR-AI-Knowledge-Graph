@@ -644,24 +644,84 @@ impl OwlValidatorService {
         format!("ontology_{}", self.calculate_signature(source))
     }
 
+    /// Expand a graph identifier into an absolute IRI.
+    ///
+    /// Decision rule (in order):
+    ///   1. Any string containing `://` is an absolute IRI (hierarchical scheme) → pass through.
+    ///   2. If the substring before the first `:` is a *registered* short CURIE prefix
+    ///      (rdf, rdfs, owl, xsd, foaf, …) → expand `prefix:local` to `namespace + local`.
+    ///   3. Else if the string looks like an absolute IRI — a well-known non-hierarchical
+    ///      scheme (urn, did, http, https, ftp, ftps, mailto, tag, file, data) OR a generic
+    ///      RFC 3986 scheme followed by a multi-segment remainder (e.g. `scheme:a:b`) →
+    ///      pass through unchanged.
+    ///   4. If there is no `:` at all, treat it as a bare local name under the default namespace.
+    ///   5. Otherwise the prefix is neither a registered CURIE nor a recognised absolute scheme
+    ///      → `Unknown prefix` error.
     fn expand_iri(&self, iri: &str) -> Result<String> {
+        // (1) Hierarchical absolute IRI (scheme://authority/...) — always absolute.
         if iri.contains("://") {
-            
-            Ok(iri.to_string())
-        } else if let Some(colon_pos) = iri.find(':') {
-            
-            let (prefix, local) = iri.split_at(colon_pos);
-            let local = &local[1..]; 
+            return Ok(iri.to_string());
+        }
 
-            if let Some(namespace) = self.default_namespaces.get(prefix) {
-                Ok(format!("{}{}", namespace, local))
-            } else {
+        match iri.find(':') {
+            Some(colon_pos) => {
+                let (prefix, rest) = iri.split_at(colon_pos);
+                let local = &rest[1..];
+
+                // (2) Registered short CURIE prefix → expand.
+                if let Some(namespace) = self.default_namespaces.get(prefix) {
+                    return Ok(format!("{}{}", namespace, local));
+                }
+
+                // (3) Recognised absolute-IRI scheme (urn:, did:, http:, …) → pass through.
+                if Self::is_absolute_iri_scheme(prefix, local) {
+                    return Ok(iri.to_string());
+                }
+
+                // (5) Unknown prefix that is neither a CURIE nor an absolute IRI.
                 Err(ValidationError::InvalidIri(format!("Unknown prefix: {}", prefix)).into())
             }
-        } else {
-            
-            Ok(format!("http://example.org/{}", iri))
+            // (4) Bare local name → default namespace.
+            None => Ok(format!("http://example.org/{}", iri)),
         }
+    }
+
+    /// Decide whether a `prefix:local` pair (already known **not** to use a registered
+    /// CURIE prefix) should be treated as an absolute IRI rather than an error.
+    ///
+    /// Returns `true` when either:
+    ///   * `prefix` is a well-known non-hierarchical absolute-IRI scheme
+    ///     (urn, did, http, https, ftp, ftps, mailto, tag, file, data), or
+    ///   * `prefix` is a syntactically valid RFC 3986 scheme AND the remainder is
+    ///     itself multi-segment (contains a further `:`), which is the shape of
+    ///     `urn`-style absolute IRIs such as `scheme:a:b`.
+    ///
+    /// A bare `unregistered:thing` (single-segment remainder, unknown scheme) returns
+    /// `false` so the caller can raise the existing `Unknown prefix` error.
+    fn is_absolute_iri_scheme(prefix: &str, local: &str) -> bool {
+        const KNOWN_ABSOLUTE_SCHEMES: &[&str] = &[
+            "urn", "did", "http", "https", "ftp", "ftps", "mailto", "tag", "file", "data",
+        ];
+
+        let scheme = prefix.to_ascii_lowercase();
+        if KNOWN_ABSOLUTE_SCHEMES.contains(&scheme.as_str()) {
+            return true;
+        }
+
+        // Generic RFC 3986 scheme grammar: ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ).
+        let valid_scheme = {
+            let mut chars = prefix.chars();
+            match chars.next() {
+                Some(c) if c.is_ascii_alphabetic() => {
+                    chars.all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+                }
+                _ => false,
+            }
+        };
+
+        // Multi-segment remainder distinguishes an absolute IRI (`scheme:a:b`) from a
+        // CURIE-shaped `prefix:local`.
+        valid_scheme && local.contains(':')
     }
 
     fn serialize_property_value(
@@ -1146,14 +1206,72 @@ mod tests {
     fn test_iri_expansion() {
         let validator = OwlValidatorService::new();
 
-        
+        // Registered CURIE prefixes still expand to their full namespace IRI.
         let expanded = validator.expand_iri("foaf:Person").unwrap();
         assert_eq!(expanded, "http://xmlns.com/foaf/0.1/Person");
 
-        
+        let expanded = validator.expand_iri("owl:Class").unwrap();
+        assert_eq!(expanded, "http://www.w3.org/2002/07/owl#Class");
+
+        let expanded = validator.expand_iri("rdfs:subClassOf").unwrap();
+        assert_eq!(expanded, "http://www.w3.org/2000/01/rdf-schema#subClassOf");
+
+        // Hierarchical absolute IRIs pass through unchanged.
         let full_iri = "http://example.org/Person";
-        let expanded = validator.expand_iri(full_iri).unwrap();
-        assert_eq!(expanded, full_iri);
+        assert_eq!(validator.expand_iri(full_iri).unwrap(), full_iri);
+    }
+
+    #[test]
+    fn test_urn_iris_pass_through_as_absolute() {
+        // Regression: real KG/corpus data is full of urn:ngm:* and urn:agentbox:* IRIs.
+        // These are absolute IRIs, NOT CURIEs, and must never trigger "Unknown prefix".
+        let validator = OwlValidatorService::new();
+
+        for iri in [
+            "urn:ngm:class:foo",
+            "urn:ngm:class:x",
+            "urn:agentbox:decision:y",
+            "urn:agentbox:decision:2026-08-08:abc",
+        ] {
+            let expanded = validator.expand_iri(iri).unwrap();
+            assert_eq!(expanded, iri, "urn IRI must pass through unchanged: {iri}");
+        }
+    }
+
+    #[test]
+    fn test_did_and_http_iris_pass_through_as_absolute() {
+        let validator = OwlValidatorService::new();
+
+        for iri in [
+            "did:nostr:abc",
+            "http://example.org/z",
+            "https://example.org/z",
+        ] {
+            let expanded = validator.expand_iri(iri).unwrap();
+            assert_eq!(expanded, iri, "absolute IRI must pass through unchanged: {iri}");
+        }
+    }
+
+    #[test]
+    fn test_unregistered_curie_prefix_still_errors() {
+        // A single-segment, unknown-scheme value like `bogus:thing` is neither a
+        // registered CURIE prefix nor an absolute-IRI shape, so it still errors.
+        let validator = OwlValidatorService::new();
+
+        assert!(
+            validator.expand_iri("bogus:thing").is_err(),
+            "unregistered bare prefix must still error"
+        );
+    }
+
+    #[test]
+    fn test_generic_multi_segment_scheme_is_absolute() {
+        // An unknown but syntactically valid scheme with a multi-segment remainder
+        // (urn-style `scheme:a:b`) is treated as an absolute IRI, not a CURIE.
+        let validator = OwlValidatorService::new();
+
+        let iri = "myscheme:a:b";
+        assert_eq!(validator.expand_iri(iri).unwrap(), iri);
     }
 
     #[test]
