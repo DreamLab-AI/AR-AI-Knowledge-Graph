@@ -537,6 +537,30 @@ impl GitHubSyncService {
             }
         }
 
+        // Rebuild the OWL **assert** graph (`urn:ngm:graph:ontology:assert`)
+        // from the freshly-synced corpus BEFORE reasoning. `run_post_sync_reasoning`
+        // → `onto_repo.get_classes()` (→ `list_owl_classes()`) reads the assert
+        // graph, so the rebuild must land first for Whelk + the conflict gate to
+        // see the clean current classes rather than the stale historical load.
+        // Gated on `force_full_sync`: the CLEAR+INSERT is a full corpus replace,
+        // conservative to run only on an operator-driven full sync. The
+        // CLEAR-vs-decision-provenance tradeoff is documented on
+        // `rebuild_assert_graph`.
+        if force_full_sync {
+            match self.rebuild_assert_graph(&mut stats).await {
+                Ok(n) => info!("Rebuilt assert graph from {} ontology class nodes", n),
+                Err(e) => {
+                    warn!("Assert-graph rebuild failed (non-fatal): {}", e);
+                    stats.errors.push(format!("assert_rebuild: {}", e));
+                }
+            }
+        } else {
+            debug!(
+                "Incremental sync — skipping assert-graph rebuild (force_full only); \
+                 conflict gate + Whelk read the existing assert graph"
+            );
+        }
+
         // Post-sync: run Whelk EL++ reasoning over the full ontology graph.
         match self.run_post_sync_reasoning(&mut stats).await {
             Ok(inferred) => info!("Post-sync reasoning produced {} inferred edges", inferred),
@@ -845,6 +869,106 @@ impl GitHubSyncService {
 
         stats.total_nodes += created;
         Ok(created)
+    }
+
+    /// Rebuild the Oxigraph OWL **assert** graph (`urn:ngm:graph:ontology:assert`)
+    /// from the freshly-synced knowledge-graph nodes.
+    ///
+    /// ROOT-CAUSE FIX: the per-file ingest builds KG nodes WITH `owl_class_iri`
+    /// set (and even classifies ontology nodes via `is_ontology`), but the sync
+    /// only ever *read* the assert graph (`get_classes` → Whelk load) and never
+    /// wrote it back. So the assert graph stayed frozen on a stale historical
+    /// load carrying duplicate concepts, and the conflict gate
+    /// (`onto_repo.list_owl_classes()`) kept flagging conflicts that no longer
+    /// exist in the clean json-ld source. This collects the ontology class nodes
+    /// — those with `owl_class_iri.is_some()` — plus the class↔class edges into a
+    /// `GraphData` and calls `onto_repo.save_ontology_graph`, whose atomic
+    /// `CLEAR GRAPH <assert> ; INSERT DATA {…}` rebuilds the assert graph from
+    /// the current corpus (dropping the stale duplicates).
+    ///
+    /// Reuses the already-synced state via `kg_repo.load_graph()` — it does NOT
+    /// re-fetch from GitHub. The node set is filtered to ontology classes only,
+    /// never the whole KG (which includes plain page / agent / linked_page nodes).
+    ///
+    /// GATING: the caller invokes this on `force_full_sync` only. The CLEAR is a
+    /// full corpus replace — correct as a full rebuild, but deliberately scoped
+    /// to the operator-driven full-sync path.
+    ///
+    /// CLEAR-vs-decision-provenance tradeoff: `save_ontology_graph`'s CLEAR wipes
+    /// the ENTIRE assert graph, including any OWL classes/axioms added at runtime
+    /// via the governed write door (`add_owl_class` / `add_axiom`,
+    /// `application/ontology/directives.rs`). This is acceptable for a corpus
+    /// rebuild because:
+    ///   • Decision *provenance* (the append-only audit trail) lives in a
+    ///     SEPARATE named graph — `urn:ngm:graph:provenance` (GRAPH_PROVENANCE) —
+    ///     which this CLEAR does NOT touch. Decision history is preserved.
+    ///   • Whelk-*inferred* axioms live in `urn:ngm:graph:ontology:inferred`
+    ///     (GRAPH_ONTOLOGY_INFERRED), also untouched by this CLEAR.
+    ///   • A `force_full` is an explicit operator "reload from source of truth";
+    ///     a governed class enrichment meant to persist is expected to be
+    ///     promoted back into the corpus (logseq source), from which this rebuild
+    ///     re-derives it.
+    /// This is purely the corpus-ingestion writer; the governed propose /
+    /// decision write path is a DIFFERENT writer to the same graph and is NOT
+    /// touched here. `save_ontology_graph` itself is left unchanged.
+    async fn rebuild_assert_graph(&self, stats: &mut SyncStatistics) -> Result<usize, String> {
+        let graph = self
+            .kg_repo
+            .load_graph()
+            .await
+            .map_err(|e| format!("load_graph for assert rebuild: {}", e))?;
+
+        // Ontology class nodes only — those carrying an owl_class_iri.
+        let onto_nodes: Vec<visionclaw_domain::models::node::Node> = graph
+            .nodes
+            .iter()
+            .filter(|n| n.owl_class_iri.is_some())
+            .cloned()
+            .collect();
+
+        if onto_nodes.is_empty() {
+            info!("No ontology (owl_class_iri) nodes in KG — skipping assert-graph rebuild");
+            return Ok(0);
+        }
+
+        // Keep only edges whose BOTH endpoints are ontology class nodes, so the
+        // rebuilt assert graph carries the class↔class relations (subClassOf,
+        // hasPart, requires, …) and drops KG-page bridges. save_ontology_graph
+        // already skips edges whose endpoints aren't in the node set; we
+        // pre-filter to keep the INSERT tight.
+        let onto_ids: std::collections::HashSet<u32> =
+            onto_nodes.iter().map(|n| n.id).collect();
+        let onto_edges: Vec<Edge> = graph
+            .edges
+            .iter()
+            .filter(|e| onto_ids.contains(&e.source) && onto_ids.contains(&e.target))
+            .cloned()
+            .collect();
+
+        let count = onto_nodes.len();
+        let ontology_graph = visionclaw_domain::models::graph::GraphData {
+            nodes: onto_nodes,
+            edges: onto_edges,
+            metadata: Default::default(),
+            id_to_metadata: std::collections::HashMap::new(),
+        };
+
+        info!(
+            "Rebuilding assert graph <{}>: {} ontology classes, {} class-relation edges (atomic CLEAR+INSERT)",
+            GRAPH_ONTOLOGY,
+            ontology_graph.nodes.len(),
+            ontology_graph.edges.len()
+        );
+
+        self.onto_repo
+            .save_ontology_graph(&ontology_graph)
+            .await
+            .map_err(|e| format!("save_ontology_graph: {}", e))?;
+
+        // Honest reporting: count of ontology class nodes written to the assert
+        // graph (was initialised 0 and never incremented before this fix).
+        stats.ontology_files_processed += count;
+        Ok(count)
     }
 
     /// Run Whelk EL++ reasoning after all files have been synced.
