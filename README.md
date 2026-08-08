@@ -86,7 +86,7 @@ flowchart TB
         Forum["nostr-rust-forum (signs decisions)"]
     end
 
-    Client <-->|"binary V3/V4 + REST"| Server
+    Client <-->|"binary V3/V5 + REST"| Server
     Server <--> Oxigraph
     Server <--> RuVector
     Server <--> Solid
@@ -167,9 +167,9 @@ Contract: [agent-control-surface.md](docs/explanation/agent-control-surface.md) 
 </details>
 
 <details>
-<summary><strong>Binary WebSocket protocol (V3 full / V4 delta)</strong></summary>
+<summary><strong>Binary WebSocket protocol (full-snapshot V3 / V5)</strong></summary>
 
-High-frequency position updates use a compact binary protocol; V3 is the 52-byte full-snapshot record (with GPU analytics tail), V4 delta — only changed nodes against the last V3 frame — is the production default. Full wire format: [binary-protocol.md](docs/reference/binary-protocol.md). The `0x23 AGENT_ACTION` frame carries the transient agent→data beam.
+High-frequency position updates use a compact binary protocol of **full absolute position+velocity snapshots** — never deltas. V3 is the 52-byte full record (with GPU analytics tail); V5 wraps a V3 body behind an 8-byte broadcast sequence (`[version=5][seq LE][V3 body]`). Delta/diff encoding is **prohibited by design** (BROADCAST-001): the GPU settles the linked-spring system and broadcasts every node's target position at ~10 fps, and each client tweens toward those targets at 60 fps at its own pace (`lerpBase` exponential decay) — so clients need the complete target state, not just the nodes that moved. A delta filter would omit stationary nodes and, after convergence, starve clients of final resting positions. Full wire format: [binary-protocol.md](docs/reference/binary-protocol.md). The `0x23 AGENT_ACTION` frame carries the transient agent→data beam.
 
 </details>
 

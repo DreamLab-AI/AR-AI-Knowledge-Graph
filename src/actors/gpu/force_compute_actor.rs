@@ -334,7 +334,6 @@ impl ForceComputeActor {
         // Initialize broadcast optimizer with default config
         let broadcast_config = BroadcastConfig {
             target_fps: 10, // 10fps full snapshots — client tweens at 60fps
-            delta_threshold: 0.01,
             enable_spatial_culling: false,
             camera_bounds: None,
         };
@@ -990,7 +989,7 @@ impl ForceComputeActor {
                 // reach equilibrium extremely fast; give them extra runway.
                 let warmup = if edge_count == 0 { 1200 } else { 600 };
                 self.stability_warmup_remaining = warmup;
-                self.broadcast_optimizer.reset_delta_state();
+                self.broadcast_optimizer.reset_broadcast_timer();
                 debug!("ForceComputeActor: Stability warmup reset to {} frames after graph upload ({} edges)",
                       warmup, edge_count);
 
@@ -1964,10 +1963,10 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                 // - suppress_intermediate_broadcasts: skip during settle burst
                                 // - force_full_broadcast: send ALL nodes (final converged positions)
                                 if actor.force_full_broadcast {
-                                    // Final broadcast after settle — send ALL nodes, bypass delta filter
+                                    // Final broadcast after settle — send ALL nodes
                                     actor.force_full_broadcast = false;
                                     actor.suppress_intermediate_broadcasts = false;
-                                    actor.broadcast_optimizer.reset_delta_state();
+                                    actor.broadcast_optimizer.reset_broadcast_timer();
 
                                     if let Some(_sequence_id) = actor.backpressure.try_acquire() {
                                         let mut node_updates = Vec::with_capacity(actor.node_id_buffer.len());
@@ -1996,7 +1995,7 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                     }
                                 } else if actor.suppress_intermediate_broadcasts {
                                     // FastSettle burst in progress — skip intermediate broadcasts.
-                                    // Still call process_frame to keep delta state tracking.
+                                    // Still call process_frame to advance the rate-limit timer.
                                     let _ = actor.broadcast_optimizer.process_frame(&actor.position_velocity_buffer, &actor.node_id_buffer);
                                 } else {
                                     // Continuous mode: always send full position snapshots.
@@ -2033,7 +2032,7 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                                 });
                                             }
                                             actor.last_full_broadcast_iteration = actor.gpu_state.iteration_count;
-                                            actor.broadcast_optimizer.reset_delta_state();
+                                            actor.broadcast_optimizer.reset_broadcast_timer();
                                         } else {
                                             actor.backpressure.record_skip();
                                         }
@@ -2068,8 +2067,8 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                             }
 
                                             actor.last_full_broadcast_iteration = actor.gpu_state.iteration_count;
-                                            // Reset delta state so next comparison starts fresh
-                                            actor.broadcast_optimizer.reset_delta_state();
+                                            // Reset the broadcast timer so the next snapshot goes out promptly
+                                            actor.broadcast_optimizer.reset_broadcast_timer();
                                         }
                                     }
                                 } // end normal broadcast else branch
@@ -2303,10 +2302,10 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
         }
         self.clear_divergence_state();
 
-        // Reset broadcast optimizer delta state so the next frame re-broadcasts ALL
-        // positions. Without this, converged positions are delta-suppressed and clients
-        // never see the effect of parameter changes.
-        self.broadcast_optimizer.reset_delta_state();
+        // Reset the broadcast timer so the next frame re-broadcasts a full snapshot
+        // immediately. Without this, clients would wait for the rate-limit interval
+        // before seeing the effect of parameter changes.
+        self.broadcast_optimizer.reset_broadcast_timer();
 
         // Bypass GPU stability-skip for 1800 frames (~30 seconds at 60fps).
         // Previously 600 (~10s) — too short for dense graphs to fully re-layout under
@@ -2386,7 +2385,7 @@ impl Handler<ForceFullBroadcast> for ForceComputeActor {
         // Clear suppression state regardless of whether GPU is available
         self.force_full_broadcast = false;
         self.suppress_intermediate_broadcasts = false;
-        self.broadcast_optimizer.reset_delta_state();
+        self.broadcast_optimizer.reset_broadcast_timer();
 
         let shared_context = match &self.shared_context {
             Some(ctx) => ctx.clone(),
@@ -3246,10 +3245,15 @@ impl Handler<crate::actors::messages::ConfigureBroadcastOptimization> for ForceC
         // Get current stats before update
         let old_stats = self.broadcast_optimizer.get_performance_stats();
 
-        // Build new config from current + updates
+        // Build new config from current + updates.
+        // NOTE: `delta_threshold` is accepted on the wire for backward
+        // compatibility but ignored — the broadcast is full-snapshot only
+        // (BROADCAST-001). There is no delta path to configure.
+        if msg.delta_threshold.is_some() {
+            info!("  delta_threshold ignored — broadcast is full-snapshot only (BROADCAST-001)");
+        }
         let new_config = BroadcastConfig {
             target_fps: msg.target_fps.unwrap_or(old_stats.target_fps),
-            delta_threshold: msg.delta_threshold.unwrap_or(old_stats.delta_threshold),
             enable_spatial_culling: msg.enable_spatial_culling.unwrap_or(false),
             camera_bounds: None, // Updated separately via UpdateCameraFrustum
         };
@@ -3259,12 +3263,7 @@ impl Handler<crate::actors::messages::ConfigureBroadcastOptimization> for ForceC
             return Err(format!("Invalid target_fps: {} (must be 1-60)", new_config.target_fps));
         }
 
-        if new_config.delta_threshold < 0.0 {
-            return Err(format!("Invalid delta_threshold: {} (must be >= 0.0)", new_config.delta_threshold));
-        }
-
         info!("  Target FPS: {} -> {}", old_stats.target_fps, new_config.target_fps);
-        info!("  Delta threshold: {:.4} -> {:.4}", old_stats.delta_threshold, new_config.delta_threshold);
         info!("  Spatial culling: {}", new_config.enable_spatial_culling);
 
         // Apply new configuration
@@ -3304,7 +3303,9 @@ impl Handler<crate::actors::messages::GetBroadcastStats> for ForceComputeActor {
             total_nodes_processed: stats.total_nodes_processed,
             average_bandwidth_reduction: stats.average_bandwidth_reduction,
             target_fps: stats.target_fps,
-            delta_threshold: stats.delta_threshold,
+            // Retained on the wire for compatibility; broadcast is full-snapshot
+            // only, so there is no delta threshold — always reported as 0.0.
+            delta_threshold: 0.0,
         })
     }
 }

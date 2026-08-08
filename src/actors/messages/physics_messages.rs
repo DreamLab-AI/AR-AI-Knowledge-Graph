@@ -504,7 +504,8 @@ pub struct GetEquilibriumStatus;
 pub struct ConfigureBroadcastOptimization {
     /// Target broadcast frequency in Hz (recommended: 20-30)
     pub target_fps: Option<u32>,
-    /// Delta threshold in world units (nodes must move > this to broadcast)
+    /// Deprecated: accepted for compatibility, ignored. The broadcast is
+    /// full-snapshot only, so there is no delta threshold (BROADCAST-001).
     pub delta_threshold: Option<f32>,
     /// Enable spatial visibility culling
     pub enable_spatial_culling: Option<bool>,
@@ -533,6 +534,8 @@ pub struct BroadcastPerformanceStats {
     pub total_nodes_processed: u64,
     pub average_bandwidth_reduction: f32,
     pub target_fps: u32,
+    /// Deprecated: accepted for compatibility, always 0.0. The broadcast is
+    /// full-snapshot only, so there is no delta threshold (BROADCAST-001).
     pub delta_threshold: f32,
 }
 
