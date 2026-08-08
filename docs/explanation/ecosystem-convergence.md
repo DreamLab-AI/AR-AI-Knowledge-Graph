@@ -18,6 +18,8 @@ What is novel is the closed loop that forms when these components share one iden
 
 No step in this loop requires the human to understand RDF, OWL, SPARQL, or git. No step bypasses human governance. Every step is identity-bound to a `did:nostr` keypair. Every step is auditable. The system compounds: each approved enrichment makes the next agent proposal better informed, and the Precedent mechanism progressively reduces broker load for routine enrichment types.
 
+**Update (2026-08): the write door is three explicit gates, and decisions are first-class.** Every governed mutation now passes a distinct **integrity** gate (pre-merge conflict / entity-resolution — consistency is not integrity), then **Whelk EL consistency**, then **ACSP governance** — three separate verdicts on one receipt (`conflict · whelk · acsp`), none substituting for another. The decision itself becomes a queryable, `did:nostr`-signed graph node (`urn:agentbox:decision:*`) with causal links; and by the symmetric inverse of the class-elevation loop above, a governed decision can be *elevated back into the corpus*, so it is re-derived on every sync — durable like any other class, not lost on a rebuild. Point-in-time `state_at(t)` queries expose how the reasoned graph looked at any past moment. Design: PRD-022, ADR-047/048/049/050, DDD-020.
+
 This document walks through the data lifecycle that makes this possible, maps each subsystem to its role, and explains how five independent repositories federate into one coherent platform.
 
 ---
