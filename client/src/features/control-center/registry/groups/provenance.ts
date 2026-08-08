@@ -1,5 +1,5 @@
 /**
- * Group 11 — Provenance (id `provenance`, hotkey 11, 2 fields).
+ * Group 11 — Provenance (id `provenance`, hotkey 11, 4 fields).
  *
  * Phase-1 W-G client surface for the assertion-version provenance subsystem
  * (ADR-049). Both fields are CLIENT-ONLY and DEFAULT-OFF: they gate whether the
@@ -31,6 +31,24 @@ const fields: RegistryField[] = [
     path: 'provenance.showGateChips',
     default: false,
     description: 'Show per-proposal governance gate chips (integrity conflict, Whelk asserted-projection consistency, ACSP) on the proposal list.',
+  },
+  {
+    key: 'enableTimeline',
+    subgroup: 'Timeline',
+    label: 'Enable Timeline Scrubber',
+    type: 'toggle',
+    path: 'provenance.enableTimeline',
+    default: false,
+    description: 'Mount the bottom-docked bi-temporal timeline scrubber (ADR-049 state-at). Fades/highlights nodes by the runtime assertion subjects valid at the scrubbed instant. Overlays the atemporal corpus backdrop; does not replace it.',
+  },
+  {
+    key: 'diffMode',
+    subgroup: 'Timeline',
+    label: 'Timeline Diff Mode',
+    type: 'toggle',
+    path: 'provenance.diffMode',
+    default: false,
+    description: 'Start the timeline scrubber in two-instant diff mode: marks subjects added (green) or retracted (red) between t1 and t2, computed client-side from two state-at calls.',
   },
 ];
 

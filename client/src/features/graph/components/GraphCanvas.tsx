@@ -33,6 +33,10 @@ import EmbeddingCloudLayer from '../../visualisation/components/EmbeddingCloudLa
 // Echo Pulse — commit-time expanding ring wash (control-center signature flourish)
 import EchoPulseLayer from '../../control-center/echo/EchoPulseLayer';
 
+// Bi-temporal provenance timeline scrubber (ADR-049) — bottom-docked HTML
+// overlay, gated on the client-only provenance.enableTimeline flag (default off).
+import TimelineScrubber from './TimelineScrubber';
+
 // Store and utils
 import { useSettingsStore } from '../../../store/settingsStore';
 import { graphDataManager, type GraphData } from '../managers/graphDataManager';
@@ -213,6 +217,7 @@ const GraphCanvas: React.FC = () => {
     const directionalLightIntensity = useSettingsStore(s => s.settings?.visualisation?.rendering?.directionalLightIntensity ?? 0.3);
     const sceneEffects = useSettingsStore(s => s.settings?.visualisation?.sceneEffects);
     const embeddingCloudEnabled = useSettingsStore(s => s.settings?.visualisation?.embeddingCloud?.enabled ?? false);
+    const enableTimeline = useSettingsStore(s => s.settings?.provenance?.enableTimeline ?? false);
     
     // Lightweight subscription: only track counts to avoid storing full graph data in two places
     const [nodeCount, setNodeCount] = useState(0);
@@ -421,6 +426,10 @@ const GraphCanvas: React.FC = () => {
 
             {/* Layout mode indicator — rendered in HTML overlay above the canvas */}
             <LayoutModeIndicator />
+
+            {/* Bi-temporal provenance timeline (ADR-049) — bottom-docked overlay,
+                mounted only when the client-only provenance.enableTimeline flag is on. */}
+            {enableTimeline && <TimelineScrubber />}
         </div>
     );
 };

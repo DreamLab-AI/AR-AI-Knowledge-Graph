@@ -189,6 +189,8 @@ export const DEFAULT_DECISIONS_SETTINGS = {
 export const DEFAULT_PROVENANCE_SETTINGS = {
   showAttribution: false,
   showGateChips: false,
+  enableTimeline: false,
+  diffMode: false,
 };
 
 export const DEFAULT_EMBEDDING_CLOUD = {

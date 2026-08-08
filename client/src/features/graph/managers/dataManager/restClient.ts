@@ -162,6 +162,98 @@ export async function fetchGraphData(
 }
 
 /**
+ * A single assertion-version entity returned by `/ontology/state-at` (ADR-049
+ * bi-temporal provenance). Only runtime governed writes carry these version
+ * entities; corpus-bulk classes in `:assert` are atemporal and never appear
+ * here, so state-at yields the TEMPORAL subset that the client overlays on the
+ * corpus backdrop — it does not replace the whole graph.
+ */
+export interface StateAtAssertion {
+  subject: string;
+  predicate: string;
+  /** IRI or literal. */
+  object: string;
+  validFrom: string;
+  /** null ⇒ still valid (open interval). */
+  validTo: string | null;
+  generatedAt: string;
+  activityUrn: string;
+  /** did:nostr or IRI of the attributing agent. */
+  agentIri: string;
+}
+
+/** Shape returned by the REST `/ontology/state-at` endpoint. */
+interface RawStateAtResponse {
+  t?: string;
+  assertions?: unknown[];
+  count?: number;
+}
+
+/** Coerce an unknown record into a `StateAtAssertion`, string-normalising ids. */
+function normaliseAssertion(raw: Record<string, unknown>): StateAtAssertion {
+  const validTo = raw.validTo;
+  return {
+    subject: String(raw.subject ?? ''),
+    predicate: String(raw.predicate ?? ''),
+    object: String(raw.object ?? ''),
+    validFrom: String(raw.validFrom ?? ''),
+    validTo: validTo == null ? null : String(validTo),
+    generatedAt: String(raw.generatedAt ?? ''),
+    activityUrn: String(raw.activityUrn ?? ''),
+    agentIri: String(raw.agentIri ?? ''),
+  };
+}
+
+/**
+ * Fetch the temporal (runtime-governed) assertion set valid at instant `t`
+ * from `/ontology/state-at` (ADR-049 bi-temporal semantics: validFrom <= t AND
+ * (validTo IS NULL OR t < validTo)). When `recordedAsOf` is given the server
+ * additionally applies point-in-time-of-knowledge (generatedAt <= recordedAsOf).
+ *
+ * Read-authed under the same gate as `/ontology/query` — auth headers are
+ * injected by the shared api-client interceptor (dev bypass:
+ * `Bearer dev-session-token` + `X-Nostr-Pubkey`), so no per-call header setup.
+ *
+ * Fails gracefully: any error (network, non-2xx, malformed body) resolves to an
+ * empty array rather than throwing, so the timeline overlay degrades to "no
+ * runtime assertions at t" instead of breaking the graph view.
+ *
+ * @param t            Valid-time instant as an RFC3339 string.
+ * @param recordedAsOf Optional knowledge-time cutoff (RFC3339).
+ */
+export async function fetchStateAt(
+  t: string,
+  recordedAsOf?: string,
+): Promise<StateAtAssertion[]> {
+  const params = new URLSearchParams();
+  params.set('t', t);
+  if (recordedAsOf) {
+    params.set('recorded_as_of', recordedAsOf);
+  }
+  const requestUrl = `/ontology/state-at?${params.toString()}`;
+
+  try {
+    const response = await unifiedApiClient.get(requestUrl, { timeout: 10000 });
+    const responseData: RawStateAtResponse = response.data?.data ?? response.data ?? {};
+    const rawAssertions = Array.isArray(responseData.assertions) ? responseData.assertions : [];
+
+    const assertions = rawAssertions
+      .filter((a): a is Record<string, unknown> => a != null && typeof a === 'object')
+      .map(normaliseAssertion);
+
+    if (debugState.isEnabled()) {
+      logger.debug(`state-at t=${t}${recordedAsOf ? ` asOf=${recordedAsOf}` : ''}: ${assertions.length} assertions`);
+    }
+
+    return assertions;
+  } catch (error) {
+    // Fail-open: an empty overlay is the correct degraded state (see doc above).
+    logger.warn('fetchStateAt failed; returning empty assertion set:', createErrorMetadata(error));
+    return [];
+  }
+}
+
+/**
  * T6 auto-retry: when the initial REST fetch returns 0 nodes (empty Oxigraph
  * on first-boot / clean restart) schedule periodic re-checks every 15 s for
  * up to 20 attempts (5 minutes total) so the UI recovers without user action.

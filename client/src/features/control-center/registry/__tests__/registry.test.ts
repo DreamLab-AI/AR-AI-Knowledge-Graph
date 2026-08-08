@@ -19,7 +19,7 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
   system: 16,
   agents: 43,
   decisions: 2,
-  provenance: 2,
+  provenance: 4,
 };
 
 /**
@@ -41,6 +41,8 @@ const WG_GROUP_PATHS: string[] = [
   'decisions.highlightPrecedents',
   'provenance.showAttribution',
   'provenance.showGateChips',
+  'provenance.enableTimeline',
+  'provenance.diffMode',
 ];
 
 /**

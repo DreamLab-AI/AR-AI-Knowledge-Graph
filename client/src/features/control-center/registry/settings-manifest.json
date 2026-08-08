@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "generatedFrom": "settingsRegistry.ts",
-  "count": 215,
+  "count": 217,
   "groups": [
     {
       "id": "motion",
@@ -78,7 +78,7 @@
       "label": "Provenance",
       "testid": "group-provenance",
       "hotkey": "11",
-      "fieldCount": 2
+      "fieldCount": 4
     }
   ],
   "panels": [
@@ -2778,6 +2778,28 @@
       "clientOnly": true,
       "server": null,
       "subgroup": "Governance Gates"
+    },
+    {
+      "key": "enableTimeline",
+      "path": "provenance.enableTimeline",
+      "testid": "setting-provenance.enableTimeline",
+      "control": "toggle",
+      "group": "provenance",
+      "label": "Enable Timeline Scrubber",
+      "clientOnly": true,
+      "server": null,
+      "subgroup": "Timeline"
+    },
+    {
+      "key": "diffMode",
+      "path": "provenance.diffMode",
+      "testid": "setting-provenance.diffMode",
+      "control": "toggle",
+      "group": "provenance",
+      "label": "Timeline Diff Mode",
+      "clientOnly": true,
+      "server": null,
+      "subgroup": "Timeline"
     }
   ]
 }

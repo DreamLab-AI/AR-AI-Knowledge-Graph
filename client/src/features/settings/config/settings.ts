@@ -834,6 +834,10 @@ export interface ProvenanceSettings {
   showAttribution: boolean;
   /** Show per-proposal governance gate chips (conflict / Whelk consistency / ACSP). */
   showGateChips: boolean;
+  /** Mount the bottom-docked bi-temporal timeline scrubber (ADR-049 state-at overlay). */
+  enableTimeline: boolean;
+  /** Start the timeline scrubber in two-instant diff mode (added/retracted subjects). */
+  diffMode: boolean;
 }
 
 // Main settings interface - Single source of truth matching server AppFullSettings

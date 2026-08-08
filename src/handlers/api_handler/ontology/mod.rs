@@ -1333,6 +1333,190 @@ pub async fn websocket_handler(
 }
 
 // ============================================================================
+// BI-TEMPORAL STATE-AT (ADR-049)
+// ============================================================================
+
+/// Query parameters for [`state_at`]: `t` (required, RFC3339 valid-time point)
+/// and optional `recorded_as_of` (RFC3339 point-in-time-of-knowledge).
+#[derive(Debug, Clone, Deserialize)]
+pub struct StateAtParams {
+    /// Valid-time point (RFC3339). The projection returns assertion-versions
+    /// whose half-open `[validFrom, validTo)` interval contains this instant.
+    pub t: Option<String>,
+    /// Optional recorded-time bound (RFC3339). When present, only versions
+    /// `generatedAt <= recorded_as_of` are returned (as-of-knowledge view).
+    pub recorded_as_of: Option<String>,
+}
+
+/// Canonical UTC RFC-3339, second precision, `Z` suffix — the timestamp form
+/// `provenance_writer` writes into the `dl:validFrom`/`dl:validTo`/
+/// `prov:generatedAtTime` `xsd:dateTime` literals. Using the same form for the
+/// query literals keeps the comparison boundary aligned with stored values.
+fn state_at_iso_utc(dt: &DateTime<Utc>) -> String {
+    dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+/// Parse an RFC3339 timestamp into a UTC instant, returning the offending value
+/// on failure so the caller can emit a precise 400.
+fn parse_rfc3339_utc(raw: &str) -> Result<DateTime<Utc>, String> {
+    DateTime::parse_from_rfc3339(raw)
+        .map(|dt| dt.with_timezone(&Utc))
+        .map_err(|e| format!("'{raw}' is not a valid RFC3339 timestamp: {e}"))
+}
+
+/// Build the bi-temporal `state_at(t)` SPARQL SELECT over
+/// `urn:agentbox:graph:provenance` (ADR-049 portable reification).
+///
+/// Joins the reified statement (`rdf:subject`/`rdf:predicate`/`rdf:object`), the
+/// valid-time start (`dl:validFrom`), recorded time (`prov:generatedAtTime`), the
+/// generating activity (`prov:wasGeneratedBy`) and the attributed agent
+/// (`prov:wasAttributedTo`), with an OPTIONAL `dl:validTo`.
+///
+/// The valid-time filter is the half-open interval predicate — start inclusive
+/// (`?validFrom <= t`), end exclusive (`!BOUND(?validTo) || t < ?validTo`) —
+/// byte-matching `provenance_writer::state_at` semantics. When `recorded_as_of`
+/// is `Some`, an additional `?generatedAt <= recorded` conjunct restricts the
+/// result to the point-in-time-of-knowledge view. `t`/`recorded` are bound as
+/// `xsd:dateTime` literals in canonical UTC form.
+pub fn build_state_at_sparql(t: DateTime<Utc>, recorded_as_of: Option<DateTime<Utc>>) -> String {
+    let t_lit = state_at_iso_utc(&t);
+    let recorded_clause = match recorded_as_of {
+        Some(r) => format!(
+            "\n             && ?generatedAt <= \"{}\"^^xsd:dateTime",
+            state_at_iso_utc(&r)
+        ),
+        None => String::new(),
+    };
+    format!(
+        r#"PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX dl: <{DL_NS}>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?subject ?predicate ?object ?validFrom ?validTo ?generatedAt ?activity ?agent
+WHERE {{
+  GRAPH <{GRAPH_PROVENANCE}> {{
+    ?entity a prov:Entity ;
+            rdf:subject ?subject ;
+            rdf:predicate ?predicate ;
+            rdf:object ?object ;
+            dl:validFrom ?validFrom ;
+            prov:generatedAtTime ?generatedAt ;
+            prov:wasGeneratedBy ?activity ;
+            prov:wasAttributedTo ?agent .
+    OPTIONAL {{ ?entity dl:validTo ?validTo }}
+    FILTER ( ?validFrom <= "{t_lit}"^^xsd:dateTime
+             && ( !BOUND(?validTo) || "{t_lit}"^^xsd:dateTime < ?validTo ){recorded_clause} )
+  }}
+}}"#,
+        DL_NS = crate::services::provenance_writer::DL_NS,
+        GRAPH_PROVENANCE = crate::services::provenance_writer::GRAPH_PROVENANCE,
+    )
+}
+
+/// Pull the lexical `value` of a SPARQL-JSON binding cell (`{type, value, ...}`).
+fn binding_value<'a>(row: &'a serde_json::Value, var: &str) -> Option<&'a str> {
+    row.get(var).and_then(|cell| cell.get("value")).and_then(|v| v.as_str())
+}
+
+/// Map a `sparql_select_json` result document into the `assertions[]` contract
+/// shape. Rows missing any required binding are skipped (fail-graceful); an
+/// absent `?validTo` becomes JSON `null` (open interval).
+fn map_state_at_rows(sparql_json: &serde_json::Value) -> Vec<serde_json::Value> {
+    let bindings = sparql_json
+        .get("results")
+        .and_then(|r| r.get("bindings"))
+        .and_then(|b| b.as_array());
+    let Some(bindings) = bindings else {
+        return Vec::new();
+    };
+    bindings
+        .iter()
+        .filter_map(|row| {
+            let subject = binding_value(row, "subject")?;
+            let predicate = binding_value(row, "predicate")?;
+            let object = binding_value(row, "object")?;
+            let valid_from = binding_value(row, "validFrom")?;
+            let generated_at = binding_value(row, "generatedAt")?;
+            let activity = binding_value(row, "activity")?;
+            let agent = binding_value(row, "agent")?;
+            let valid_to = match binding_value(row, "validTo") {
+                Some(v) => serde_json::Value::from(v),
+                None => serde_json::Value::Null,
+            };
+            Some(serde_json::json!({
+                "subject": subject,
+                "predicate": predicate,
+                "object": object,
+                "validFrom": valid_from,
+                "validTo": valid_to,
+                "generatedAt": generated_at,
+                "activityUrn": activity,
+                "agentIri": agent,
+            }))
+        })
+        .collect()
+}
+
+/// `GET /api/ontology/state-at?t=<RFC3339>[&recorded_as_of=<RFC3339>]`
+///
+/// Bi-temporal valid-time projection (ADR-049): returns the assertion-version
+/// entities in `urn:agentbox:graph:provenance` whose half-open valid-time
+/// interval contains `t` (start inclusive, end exclusive). With
+/// `recorded_as_of`, additionally restricts to `generatedAt <= recorded_as_of`
+/// (point-in-time-of-knowledge). This is the TEMPORAL subset (runtime governed
+/// writes only) — atemporal corpus-bulk classes have no `dl:validFrom` and are
+/// deliberately excluded; the client overlays this on the corpus backdrop.
+///
+/// Read-auth mirrors `/api/ontology/query` (the `AuthenticatedUser` extractor;
+/// dev bypass = `Bearer dev-session-token` + `X-Nostr-Pubkey`). Fails graceful:
+/// an empty provenance graph yields `assertions: []`, `count: 0`.
+pub async fn state_at(
+    _auth: crate::settings::auth_extractor::AuthenticatedUser,
+    state: web::Data<AppState>,
+    params: web::Query<StateAtParams>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let params = params.into_inner();
+
+    let Some(ref t_raw) = params.t else {
+        return crate::bad_request!("Missing required query parameter 't' (RFC3339)");
+    };
+    let t = match parse_rfc3339_utc(t_raw) {
+        Ok(t) => t,
+        Err(reason) => return crate::bad_request!("Invalid 't' parameter", reason),
+    };
+    let recorded_as_of = match params.recorded_as_of {
+        Some(ref raw) => match parse_rfc3339_utc(raw) {
+            Ok(r) => Some(r),
+            Err(reason) => return crate::bad_request!("Invalid 'recorded_as_of' parameter", reason),
+        },
+        None => None,
+    };
+
+    let query = build_state_at_sparql(t, recorded_as_of);
+    info!(
+        "state_at(t={}, recorded_as_of={:?}) over provenance graph",
+        state_at_iso_utc(&t),
+        recorded_as_of.map(|r| state_at_iso_utc(&r))
+    );
+
+    match state.ontology_repository.sparql_select_json(query).await {
+        Ok(sparql_json) => {
+            let assertions = map_state_at_rows(&sparql_json);
+            let count = assertions.len();
+            ok_json!(serde_json::json!({
+                "t": state_at_iso_utc(&t),
+                "assertions": assertions,
+                "count": count,
+            }))
+        }
+        Err(e) => {
+            error!("state_at SPARQL query failed: {}", e);
+            crate::error_json!("Failed to compute state_at projection", e.to_string())
+        }
+    }
+}
+
+// ============================================================================
 // ROUTE CONFIGURATION
 // ============================================================================
 
@@ -1416,6 +1600,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/axioms", web::get().to(list_axioms))
             .route("/inferences", web::get().to(get_inferences))
             .route("/hierarchy", web::get().to(get_hierarchy))
+            // ADR-049 bi-temporal valid-time projection (read; authed via the
+            // AuthenticatedUser extractor on the handler, like /query).
+            .route("/state-at", web::get().to(state_at))
             .route("/reports/{id}", web::get().to(get_report_by_id))
             .route("/report", web::get().to(get_validation_report))
             .route("/health", web::get().to(get_health_status))
@@ -1503,5 +1690,147 @@ mod tests {
         assert_eq!(dto.is_literal, back_to_dto.is_literal);
         assert_eq!(dto.datatype, back_to_dto.datatype);
         assert_eq!(dto.language, back_to_dto.language);
+    }
+
+    // ── state_at: RFC3339 param parsing ─────────────────────────────────────
+
+    #[::core::prelude::v1::test]
+    fn parse_rfc3339_accepts_z_and_offset_forms() {
+        // `Z` UTC form.
+        let z = parse_rfc3339_utc("2026-08-07T00:00:00Z").expect("Z form parses");
+        assert_eq!(state_at_iso_utc(&z), "2026-08-07T00:00:00Z");
+        // Explicit offset is normalised to UTC.
+        let off = parse_rfc3339_utc("2026-08-07T02:00:00+02:00").expect("offset form parses");
+        assert_eq!(state_at_iso_utc(&off), "2026-08-07T00:00:00Z");
+        // Sub-second precision truncates to canonical second form.
+        let ms = parse_rfc3339_utc("2026-08-07T00:00:00.750Z").expect("ms form parses");
+        assert_eq!(state_at_iso_utc(&ms), "2026-08-07T00:00:00Z");
+    }
+
+    #[::core::prelude::v1::test]
+    fn parse_rfc3339_rejects_malformed() {
+        assert!(parse_rfc3339_utc("not-a-timestamp").is_err());
+        assert!(parse_rfc3339_utc("2026-08-07").is_err(), "date-only is not RFC3339 datetime");
+        assert!(parse_rfc3339_utc("").is_err());
+    }
+
+    // ── state_at: SPARQL builder (interval + recorded_as_of branches) ───────
+
+    fn ts(raw: &str) -> DateTime<Utc> {
+        parse_rfc3339_utc(raw).expect("valid ts")
+    }
+
+    #[::core::prelude::v1::test]
+    fn build_state_at_sparql_is_bounded_half_open_read() {
+        let q = build_state_at_sparql(ts("2026-08-07T00:00:00Z"), None);
+        // Scopes to the ADR-049 provenance graph.
+        assert!(q.contains("GRAPH <urn:agentbox:graph:provenance>"), "provenance graph scope");
+        // Joins the full portable-reification shape the contract requires.
+        for needle in [
+            "rdf:subject ?subject",
+            "rdf:predicate ?predicate",
+            "rdf:object ?object",
+            "dl:validFrom ?validFrom",
+            "prov:generatedAtTime ?generatedAt",
+            "prov:wasGeneratedBy ?activity",
+            "prov:wasAttributedTo ?agent",
+            "OPTIONAL { ?entity dl:validTo ?validTo }",
+        ] {
+            assert!(q.contains(needle), "missing clause: {needle}");
+        }
+        // Half-open interval: start inclusive (<=), end exclusive (<) with unbound tolerance.
+        assert!(q.contains(r#"?validFrom <= "2026-08-07T00:00:00Z"^^xsd:dateTime"#));
+        assert!(q.contains(r#"!BOUND(?validTo) || "2026-08-07T00:00:00Z"^^xsd:dateTime < ?validTo"#));
+        // It is a read — never a mutation of the classified graph.
+        assert!(q.trim_start().contains("SELECT"));
+        assert!(!q.to_uppercase().contains("INSERT"));
+        assert!(!q.to_uppercase().contains("DELETE"));
+    }
+
+    #[::core::prelude::v1::test]
+    fn build_state_at_sparql_omits_recorded_clause_when_none() {
+        let q = build_state_at_sparql(ts("2026-08-07T00:00:00Z"), None);
+        assert!(!q.contains("?generatedAt <="), "no recorded-time conjunct without recorded_as_of");
+    }
+
+    #[::core::prelude::v1::test]
+    fn build_state_at_sparql_adds_recorded_clause_when_some() {
+        let q = build_state_at_sparql(
+            ts("2026-08-07T00:00:00Z"),
+            Some(ts("2026-08-06T12:00:00Z")),
+        );
+        // Recorded-time (point-in-time-of-knowledge) conjunct present and bounded.
+        assert!(q.contains(r#"?generatedAt <= "2026-08-06T12:00:00Z"^^xsd:dateTime"#));
+        // Valid-time predicate is still present and unchanged.
+        assert!(q.contains(r#"?validFrom <= "2026-08-07T00:00:00Z"^^xsd:dateTime"#));
+        assert!(!q.to_uppercase().contains("INSERT"));
+    }
+
+    // ── state_at: row mapping to the assertions[] contract shape ────────────
+
+    #[::core::prelude::v1::test]
+    fn map_state_at_rows_maps_contract_shape_with_open_and_closed_intervals() {
+        let doc = serde_json::json!({
+            "head": { "vars": ["subject","predicate","object","validFrom","validTo","generatedAt","activity","agent"] },
+            "results": { "bindings": [
+                {
+                    "subject":   { "type": "uri", "value": "urn:s:1" },
+                    "predicate": { "type": "uri", "value": "http://www.w3.org/2000/01/rdf-schema#subClassOf" },
+                    "object":    { "type": "uri", "value": "urn:o:1" },
+                    "validFrom": { "type": "literal", "value": "2026-08-01T00:00:00Z", "datatype": "http://www.w3.org/2001/XMLSchema#dateTime" },
+                    "validTo":   { "type": "literal", "value": "2026-09-01T00:00:00Z", "datatype": "http://www.w3.org/2001/XMLSchema#dateTime" },
+                    "generatedAt": { "type": "literal", "value": "2026-08-01T00:00:00Z", "datatype": "http://www.w3.org/2001/XMLSchema#dateTime" },
+                    "activity":  { "type": "uri", "value": "urn:agentbox:activity:aa:sha256-12-deadbeef0011" },
+                    "agent":     { "type": "uri", "value": "did:nostr:aa" }
+                },
+                {
+                    "subject":   { "type": "uri", "value": "urn:s:2" },
+                    "predicate": { "type": "uri", "value": "http://www.w3.org/2000/01/rdf-schema#subClassOf" },
+                    "object":    { "type": "literal", "value": "a literal object" },
+                    "validFrom": { "type": "literal", "value": "2026-08-05T00:00:00Z" },
+                    "generatedAt": { "type": "literal", "value": "2026-08-05T00:00:00Z" },
+                    "activity":  { "type": "uri", "value": "urn:agentbox:activity:bb:sha256-12-cafebabe0022" },
+                    "agent":     { "type": "uri", "value": "did:nostr:bb" }
+                }
+            ] }
+        });
+        let out = map_state_at_rows(&doc);
+        assert_eq!(out.len(), 2);
+        // Closed interval keeps its validTo string.
+        assert_eq!(out[0]["subject"], serde_json::json!("urn:s:1"));
+        assert_eq!(out[0]["validTo"], serde_json::json!("2026-09-01T00:00:00Z"));
+        assert_eq!(out[0]["activityUrn"], serde_json::json!("urn:agentbox:activity:aa:sha256-12-deadbeef0011"));
+        assert_eq!(out[0]["agentIri"], serde_json::json!("did:nostr:aa"));
+        // Open interval (absent validTo) becomes JSON null; literal object preserved.
+        assert_eq!(out[1]["object"], serde_json::json!("a literal object"));
+        assert_eq!(out[1]["validTo"], serde_json::Value::Null);
+    }
+
+    #[::core::prelude::v1::test]
+    fn map_state_at_rows_empty_on_no_data() {
+        let empty = serde_json::json!({ "head": { "vars": [] }, "results": { "bindings": [] } });
+        assert!(map_state_at_rows(&empty).is_empty());
+        // Missing results object → still graceful empty (not a panic).
+        let malformed = serde_json::json!({ "head": {} });
+        assert!(map_state_at_rows(&malformed).is_empty());
+    }
+
+    #[::core::prelude::v1::test]
+    fn map_state_at_rows_skips_rows_missing_required_bindings() {
+        // A row without an agent binding is dropped (fail-graceful, not a panic).
+        let doc = serde_json::json!({
+            "results": { "bindings": [
+                {
+                    "subject":   { "type": "uri", "value": "urn:s:1" },
+                    "predicate": { "type": "uri", "value": "urn:p:1" },
+                    "object":    { "type": "uri", "value": "urn:o:1" },
+                    "validFrom": { "type": "literal", "value": "2026-08-01T00:00:00Z" },
+                    "generatedAt": { "type": "literal", "value": "2026-08-01T00:00:00Z" },
+                    "activity":  { "type": "uri", "value": "urn:a:1" }
+                    // no "agent"
+                }
+            ] }
+        });
+        assert!(map_state_at_rows(&doc).is_empty());
     }
 }
