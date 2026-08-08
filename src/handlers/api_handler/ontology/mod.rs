@@ -552,6 +552,7 @@ pub async fn validate_ontology(
         ontology_id: req.ontology_id.clone(),
         graph_data: property_graph,
         mode: ValidationMode::from(req.mode.clone()),
+        job_id: None,
     };
 
     let Some(ref ontology_addr) = state.ontology_actor_addr else {
@@ -599,7 +600,14 @@ pub async fn get_validation_report(
     state: web::Data<AppState>,
     query: web::Query<HashMap<String, String>>,
 ) -> impl Responder {
-    let report_id = query.get("report_id").cloned();
+    // The report is cached under BOTH the job id and the ontology id, so accept
+    // whichever key the client supplies (`jobId`, `ontologyId`, or the legacy
+    // `report_id`). Absent all three, the actor returns the latest report.
+    let report_id = query
+        .get("jobId")
+        .or_else(|| query.get("ontologyId"))
+        .or_else(|| query.get("report_id"))
+        .cloned();
 
     info!("Retrieving validation report: {:?}", report_id);
 
@@ -618,8 +626,15 @@ pub async fn get_validation_report(
 
     match ontology_addr.send(report_msg).await {
         Ok(Ok(Some(report))) => {
-            info!("Retrieved validation report: {}", report.id);
-            ok_json!(report)
+            // A job that is enqueued but not yet finished has a placeholder
+            // report; surface it as 202 (pending) rather than 200 or 404.
+            if report.graph_signature == "pending" {
+                info!("Validation report {} still pending", report.id);
+                accepted!(report)
+            } else {
+                info!("Retrieved validation report: {}", report.id);
+                ok_json!(report)
+            }
         }
         Ok(Ok(None)) => {
             warn!("Validation report not found");
@@ -902,55 +917,53 @@ pub async fn validate_graph(
         Err(error) => return Ok::<HttpResponse, actix_web::Error>(HttpResponse::InternalServerError().json(error)),
     };
 
-    let validation_msg = ValidateOntology {
-        ontology_id: req.ontology_id.clone(),
-        graph_data: property_graph,
-        mode: ValidationMode::from(req.mode.clone()),
-    };
-
     let Some(ref ontology_addr) = state.ontology_actor_addr else {
         let error_response =
             ErrorResponse::new("Ontology actor not available", "ACTOR_UNAVAILABLE");
         return Ok::<HttpResponse, actix_web::Error>(HttpResponse::ServiceUnavailable().json(error_response));
     };
 
-
+    // Mint the job id here and hand it to the actor so the report it computes is
+    // cached under this exact id (and the ontology id). The actor owns the single
+    // report store: it registers a "pending" report on enqueue and overwrites it
+    // with the finished report on completion — so the report is always
+    // retrievable via GET /report by jobId or ontologyId. This replaces the old
+    // fire-and-forget spawn whose awaited report was dropped on the floor.
     let job_id = Uuid::new_v4().to_string();
-    let job_id_clone = job_id.clone();
-
-
-    let ontology_addr_clone = ontology_addr.clone();
-    actix::spawn(async move {
-        match ontology_addr_clone.send(validation_msg).await {
-            Ok(Ok(report)) => {
-                info!(
-                    "Validation completed for job {}: {} violations found",
-                    job_id_clone,
-                    report.violations.len()
-                );
-            }
-            Ok(Err(e)) => {
-                error!("Validation failed for job {}: {}", job_id_clone, e);
-            }
-            Err(e) => {
-                error!("Actor communication error for job {}: {}", job_id_clone, e);
-            }
-        }
-    });
-
-    let response = ValidationResponse {
-        job_id,
-        status: "queued".to_string(),
-        estimated_completion: Some(Utc::now() + chrono::Duration::seconds(30)),
-        queue_position: Some(1),
-        websocket_url: req
-            .client_id
-            .as_ref()
-            .map(|id| format!("/api/ontology/ws?client_id={}", id)),
+    let validation_msg = ValidateOntology {
+        ontology_id: req.ontology_id.clone(),
+        graph_data: property_graph,
+        mode: ValidationMode::from(req.mode.clone()),
+        job_id: Some(job_id.clone()),
     };
 
-    info!("Validation job queued with ID: {}", response.job_id);
-    accepted!(response)
+    match ontology_addr.send(validation_msg).await {
+        Ok(Ok(_pending_report)) => {
+            let response = ValidationResponse {
+                job_id: job_id.clone(),
+                status: "queued".to_string(),
+                estimated_completion: Some(Utc::now() + chrono::Duration::seconds(30)),
+                queue_position: Some(1),
+                websocket_url: req
+                    .client_id
+                    .as_ref()
+                    .map(|id| format!("/api/ontology/ws?client_id={}", id)),
+            };
+
+            info!("Validation job queued with ID: {}", response.job_id);
+            accepted!(response)
+        }
+        Ok(Err(error)) => {
+            error!("Failed to enqueue validation job {}: {}", job_id, error);
+            let error_response = ErrorResponse::new(&error, "VALIDATION_FAILED");
+            Ok(HttpResponse::BadRequest().json(error_response))
+        }
+        Err(mailbox_error) => {
+            error!("Actor communication error for job {}: {}", job_id, mailbox_error);
+            let error_response = ErrorResponse::new("Internal server error", "ACTOR_ERROR");
+            Ok(HttpResponse::InternalServerError().json(error_response))
+        }
+    }
 }
 
 /// Get Ontology Class Hierarchy
@@ -1203,8 +1216,13 @@ pub async fn get_report_by_id(
 
     match ontology_addr.send(report_msg).await {
         Ok(Ok(Some(report))) => {
-            info!("Retrieved validation report: {}", report.id);
-            ok_json!(report)
+            if report.graph_signature == "pending" {
+                info!("Validation report {} still pending", report.id);
+                accepted!(report)
+            } else {
+                info!("Retrieved validation report: {}", report.id);
+                ok_json!(report)
+            }
         }
         Ok(Ok(None)) => {
             warn!("Validation report not found: {}", report_id);

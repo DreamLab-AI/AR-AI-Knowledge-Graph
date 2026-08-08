@@ -40,6 +40,11 @@ pub struct ValidateOntology {
     pub ontology_id: String,
     pub graph_data: crate::services::owl_validator::PropertyGraph,
     pub mode: ValidationMode,
+    /// Optional caller-supplied job id. When set, the actor adopts it as the
+    /// validation job id and caches the report (pending and completed) under it
+    /// as well as under `ontology_id`, so the caller can retrieve the report by
+    /// the exact id it was handed. When `None` the actor generates one.
+    pub job_id: Option<String>,
 }
 
 /// Apply OWL inference rules to a set of RDF triples.

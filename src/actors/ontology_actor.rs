@@ -14,7 +14,7 @@ use actix::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -127,6 +127,10 @@ pub struct OntologyActor {
     /// Currently executing validation jobs
     active_jobs: HashMap<String, ValidationJob>,
 
+    /// Ids of ontologies successfully loaded via `LoadOntologyAxioms`. Backs the
+    /// `loaded_ontologies` field of `GetOntologyHealth` so health is honest.
+    loaded_ontologies: HashSet<String>,
+
     /// Actor configuration (queue sizes, timeouts, TTL)
     config: OntologyActorConfig,
 
@@ -200,6 +204,7 @@ impl OntologyActor {
             validation_queue: VecDeque::new(),
             report_storage: HashMap::new(),
             active_jobs: HashMap::new(),
+            loaded_ontologies: HashSet::new(),
             config,
             statistics: ActorStatistics::default(),
             last_health_check: time::now(),
@@ -415,20 +420,18 @@ impl OntologyActor {
     ) {
         if let Some(mut job) = self.active_jobs.remove(job_id) {
             match result {
-                Ok(report) => {
+                Ok(mut report) => {
                     job.status = JobStatus::Completed {
                         finished_at: time::now(),
                     };
 
-                    // Cache by both job_id and ontology_id for dual-key lookup
-                    self.cache_report(report.clone());
-                    // Fix: Also store by ontology_id so GetOntologyReport can find it
-                    let ontology_key = job.ontology_id.clone();
-                    self.report_storage.insert(ontology_key, ReportCacheEntry {
-                        report: report.clone(),
-                        accessed_at: time::now(),
-                        access_count: 1,
-                    });
+                    // Single source of truth: overwrite the "pending" placeholder
+                    // with the finished report under BOTH the job id and the
+                    // ontology id (dual-key). Align `report.id` with the job id so
+                    // it matches the id handed to the caller and either key
+                    // resolves the same entry.
+                    report.id = job_id.to_string();
+                    self.store_report_dual_key(job_id, &job.ontology_id, report.clone());
 
                     self.statistics.successful_validations += 1;
                     self.update_avg_validation_time(duration);
@@ -479,21 +482,41 @@ impl OntologyActor {
         }
     }
 
-    
-    fn cache_report(&mut self, report: ValidationReport) {
-        
+    /// Store a validation report in the single report cache under BOTH the job id
+    /// and the ontology id, so a `GetOntologyReport` lookup by either key resolves
+    /// the same entry. Eviction runs once up front so the cache stays bounded.
+    fn store_report_dual_key(
+        &mut self,
+        job_id: &str,
+        ontology_id: &str,
+        report: ValidationReport,
+    ) {
         if self.report_storage.len() >= self.config.max_cached_reports {
             self.evict_oldest_reports();
         }
 
-        let report_id = report.id.clone();
-        let entry = ReportCacheEntry {
-            report,
-            accessed_at: time::now(),
-            access_count: 1,
-        };
+        let now = time::now();
+        self.report_storage.insert(
+            job_id.to_string(),
+            ReportCacheEntry {
+                report: report.clone(),
+                accessed_at: now,
+                access_count: 1,
+            },
+        );
 
-        self.report_storage.insert(report_id, entry);
+        // Avoid a redundant second entry when a caller keys a job by its
+        // ontology id (job_id == ontology_id).
+        if ontology_id != job_id {
+            self.report_storage.insert(
+                ontology_id.to_string(),
+                ReportCacheEntry {
+                    report,
+                    accessed_at: now,
+                    access_count: 1,
+                },
+            );
+        }
     }
 
     
@@ -745,24 +768,34 @@ impl Handler<JobCompleted> for OntologyActor {
 // Message handlers
 
 impl Handler<LoadOntologyAxioms> for OntologyActor {
-    type Result = ResponseFuture<Result<String, String>>;
+    type Result = ResponseActFuture<Self, Result<String, String>>;
 
     fn handle(&mut self, msg: LoadOntologyAxioms, _ctx: &mut Self::Context) -> Self::Result {
         let validator = self.validator_service.clone();
         let source = msg.source;
 
-        Box::pin(async move {
-            match validator.load_ontology(&source).await {
-                Ok(ontology_id) => {
-                    info!("Successfully loaded ontology: {}", ontology_id);
-                    Ok(ontology_id)
-                }
-                Err(e) => {
+        Box::pin(
+            async move {
+                validator.load_ontology(&source).await.map_err(|e| {
                     error!("Failed to load ontology from {}: {}", source, e);
-                    Err(format!("Failed to load ontology: {}", e))
-                }
+                    format!("Failed to load ontology: {}", e)
+                })
             }
-        })
+            .into_actor(self)
+            .map(|result, actor, _ctx| {
+                // Record the loaded ontology in actor state once the async load
+                // resolves, so GetOntologyHealth.loaded_ontologies reflects it.
+                if let Ok(ref ontology_id) = result {
+                    actor.loaded_ontologies.insert(ontology_id.clone());
+                    info!(
+                        "Successfully loaded ontology: {} ({} loaded)",
+                        ontology_id,
+                        actor.loaded_ontologies.len()
+                    );
+                }
+                result
+            }),
+        )
     }
 }
 
@@ -781,7 +814,11 @@ impl Handler<ValidateOntology> for OntologyActor {
     type Result = Result<ValidationReport, String>;
 
     fn handle(&mut self, msg: ValidateOntology, _ctx: &mut Self::Context) -> Self::Result {
-        let job_id = Uuid::new_v4().to_string();
+        // Adopt the caller-supplied job id when present so the report is
+        // retrievable by the exact id handed back to the client; otherwise mint
+        // one. Either way `report.id == job.id` throughout the job's lifecycle.
+        let job_id = msg.job_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        let ontology_id = msg.ontology_id.clone();
         let priority = match msg.mode {
             ValidationMode::Quick => JobPriority::High,
             ValidationMode::Full => JobPriority::Normal,
@@ -801,10 +838,9 @@ impl Handler<ValidateOntology> for OntologyActor {
         match self.enqueue_validation_job(job) {
             Ok(_) => {
                 debug!("Validation job {} enqueued", job_id);
-                
-                
+
                 let report = ValidationReport {
-                    id: job_id,
+                    id: job_id.clone(),
                     timestamp: time::now(),
                     duration_ms: 0,
                     graph_signature: "pending".to_string(),
@@ -818,6 +854,13 @@ impl Handler<ValidateOntology> for OntologyActor {
                         structural_constraints: 0,
                     },
                 };
+
+                // Publish the "pending" report into the single store under both
+                // keys immediately, so GET /report?jobId / ?ontologyId returns a
+                // pending status (202) while the job runs instead of 404.
+                // handle_job_completion overwrites both keys once finished.
+                self.store_report_dual_key(&job_id, &ontology_id, report.clone());
+
                 Ok(report)
             }
             Err(e) => Err(format!("Failed to enqueue validation job: {}", e)),
@@ -901,7 +944,7 @@ impl Handler<GetOntologyHealth> for OntologyActor {
             .max();
 
         let health = OntologyHealth {
-            loaded_ontologies: 0, 
+            loaded_ontologies: self.loaded_ontologies.len() as u32,
             cached_reports: self.report_storage.len() as u32,
             validation_queue_size: self.validation_queue.len() as u32,
             last_validation,
@@ -922,6 +965,9 @@ impl Handler<ClearOntologyCaches> for OntologyActor {
         self.validator_service.clear_caches();
         self.report_storage.clear();
         self.graph_cache.clear();
+        // The validator's ontology cache was just cleared, so reset the honest
+        // loaded-ontologies counter to match.
+        self.loaded_ontologies.clear();
 
         info!("Cleared all ontology caches");
         Ok(())
@@ -971,5 +1017,170 @@ impl Handler<GetCachedOntologies> for OntologyActor {
 impl Default for OntologyActor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actors::messages::{
+        GetOntologyHealth, GetOntologyReport, LoadOntologyAxioms, ValidateOntology, ValidationMode,
+    };
+    use crate::services::owl_validator::{
+        ConstraintSummary, PropertyGraph, ValidationReport, ValidationStatistics,
+    };
+
+    fn empty_graph() -> PropertyGraph {
+        PropertyGraph {
+            nodes: vec![],
+            edges: vec![],
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// A finished (non-pending) report carrying a validator-generated id that is
+    /// deliberately different from the job id, to prove the actor realigns it.
+    fn completed_report(validator_id: &str) -> ValidationReport {
+        ValidationReport {
+            id: validator_id.to_string(),
+            timestamp: time::now(),
+            duration_ms: 12,
+            graph_signature: "sig-completed".to_string(),
+            total_triples: 3,
+            violations: vec![],
+            inferred_triples: vec![],
+            statistics: ValidationStatistics::default(),
+            constraint_summary: ConstraintSummary {
+                total_constraints: 0,
+                semantic_constraints: 0,
+                structural_constraints: 0,
+            },
+        }
+    }
+
+    /// The completed report must land in the single store under BOTH the job id
+    /// and the ontology id, and its id must be realigned to the job id.
+    #[test]
+    fn completed_report_retrievable_by_job_id_and_ontology_id() {
+        let mut actor = OntologyActor::new();
+
+        let job_id = "job-abc";
+        let ontology_id = "ontology_deadbeef";
+
+        // Mimic a running job the way process_next_job would have registered it.
+        actor.active_jobs.insert(
+            job_id.to_string(),
+            ValidationJob {
+                id: job_id.to_string(),
+                ontology_id: ontology_id.to_string(),
+                graph_data: empty_graph(),
+                mode: ValidationMode::Full,
+                status: JobStatus::Running {
+                    started_at: time::now(),
+                },
+                created_at: time::now(),
+                priority: JobPriority::Normal,
+            },
+        );
+
+        actor.handle_job_completion(
+            job_id,
+            Ok(completed_report("validator-generated-id")),
+            Duration::from_millis(12),
+        );
+
+        // Single store, dual key: both keys resolve.
+        let by_job = actor
+            .report_storage
+            .get(job_id)
+            .expect("report retrievable by job id");
+        let by_ontology = actor
+            .report_storage
+            .get(ontology_id)
+            .expect("report retrievable by ontology id");
+
+        // report.id realigned to the job id under both keys.
+        assert_eq!(by_job.report.id, job_id);
+        assert_eq!(by_ontology.report.id, job_id);
+        // The finished report replaced any placeholder.
+        assert_eq!(by_job.report.graph_signature, "sig-completed");
+        assert_eq!(actor.statistics.successful_validations, 1);
+    }
+
+    /// End-to-end through the message interface: a validation enqueued with a
+    /// caller-supplied job id is retrievable by that job id AND the ontology id.
+    #[actix::test]
+    async fn validate_report_retrievable_via_messages() {
+        let addr = OntologyActor::new().start();
+
+        let job_id = "job-message-flow".to_string();
+        let ontology_id = "ontology_message_flow".to_string();
+
+        let pending = addr
+            .send(ValidateOntology {
+                ontology_id: ontology_id.clone(),
+                graph_data: empty_graph(),
+                mode: ValidationMode::Full,
+                job_id: Some(job_id.clone()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("enqueue");
+        assert_eq!(pending.id, job_id);
+
+        let by_job = addr
+            .send(GetOntologyReport {
+                report_id: Some(job_id.clone()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("lookup");
+        assert!(by_job.is_some(), "report resolvable by job id");
+        assert_eq!(by_job.unwrap().id, job_id);
+
+        let by_ontology = addr
+            .send(GetOntologyReport {
+                report_id: Some(ontology_id.clone()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("lookup");
+        assert!(by_ontology.is_some(), "report resolvable by ontology id");
+        assert_eq!(by_ontology.unwrap().id, job_id);
+    }
+
+    /// GetOntologyHealth.loaded_ontologies must increment after a successful load.
+    #[actix::test]
+    async fn health_loaded_ontologies_increments_after_load() {
+        let addr = OntologyActor::new().start();
+
+        let before = addr
+            .send(GetOntologyHealth)
+            .await
+            .expect("mailbox")
+            .expect("health");
+        assert_eq!(before.loaded_ontologies, 0);
+
+        // Minimal, self-contained OWL Functional Syntax document (full IRIs, no
+        // prefix resolution required).
+        let ofn = "Ontology(<http://example.org/test>\n\
+                   Declaration(Class(<http://example.org/Person>))\n\
+                   )";
+        let ontology_id = addr
+            .send(LoadOntologyAxioms {
+                source: ofn.to_string(),
+                format: Some("functional".to_string()),
+            })
+            .await
+            .expect("mailbox")
+            .expect("load succeeds");
+        assert!(!ontology_id.is_empty());
+
+        let after = addr
+            .send(GetOntologyHealth)
+            .await
+            .expect("mailbox")
+            .expect("health");
+        assert_eq!(after.loaded_ontologies, 1);
     }
 }
