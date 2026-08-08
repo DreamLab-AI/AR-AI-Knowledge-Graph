@@ -390,7 +390,8 @@ use crate::services::ontology_mutation_service::{
 };
 use crate::services::provenance_writer::{self, AssertionInput};
 use crate::services::proposal_spine::{
-    self, payload_hash, CommitOutcome, CommitRequest, IdempotencyStore, IntentLog,
+    self, canonicalize, payload_hash, verify_envelope, CommitOutcome, CommitRequest, EnvelopeError,
+    EnvelopeSig, IdempotencyStore, IntentLog,
 };
 use crate::types::ontology_tools::{GateOutcome, GateSummary, ProposalReceipt};
 use visionclaw_domain::ports::ontology_repository::OntologyRepository;
@@ -477,14 +478,28 @@ impl DecisionService {
         pubkey: &str,
         input: DecisionInput,
         idempotency_key: Option<String>,
+        signature: Option<String>,
     ) -> Result<DecisionRecordSuccess, String> {
         let proposal_id = uuid::Uuid::new_v4().to_string();
 
+        // Canonical payload — the SAME full decision body hashed for idempotency
+        // (below) and signed by the envelope, so the signed bytes are well-defined.
+        let full_payload = decision_full_payload(&input);
+
         // Stage 0: fail-closed signature-envelope precondition (shared spine seam).
-        proposal_spine::envelope_precondition_ok().map_err(|_| {
+        // A supplied BIP-340 envelope is verified over `sha256(canonicalize(full
+        // payload))` by the authenticated principal `pubkey`; an invalid-but-present
+        // signature is rejected, and — when `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` is
+        // set — an absent one is too. Default-off preserves the unsigned authed path.
+        let envelope = signature.map(EnvelopeSig::new);
+        verify_envelope(pubkey, &canonicalize(&full_payload), envelope.as_ref()).map_err(|e| {
+            let detail = match e {
+                EnvelopeError::Required => "signed envelope required but none supplied".to_string(),
+                other => format!("envelope verification failed: {other}"),
+            };
             format!(
-                "{}signed envelope required but no verifier is available for decision by {}",
-                ENVELOPE_REJECTED_PREFIX, pubkey
+                "{}{} for decision by {}",
+                ENVELOPE_REJECTED_PREFIX, detail, pubkey
             )
         })?;
 
@@ -559,7 +574,7 @@ impl DecisionService {
         // key WINS and is forwarded verbatim to the spine (so the receipt echoes it);
         // only an absent/blank key falls back to the deterministic payload-derived
         // `auto:<hash>` (current default behaviour).
-        let phash = payload_hash(&decision_full_payload(&input));
+        let phash = payload_hash(&full_payload);
         let idem_key = idempotency_key
             .filter(|k| !k.trim().is_empty())
             .unwrap_or_else(|| format!("auto:{phash}"));
@@ -573,6 +588,9 @@ impl DecisionService {
         let pid = proposal_id.clone();
         let key = idem_key.clone();
         let ph = phash.clone();
+        // Move the verified envelope hex into the blocking task so the receipt's
+        // envelope hash reflects the real signature when one was supplied.
+        let envelope_hex: Option<String> = envelope.as_ref().map(|e| e.as_hex().to_string());
         let outcome = tokio::task::spawn_blocking(move || -> Result<CommitOutcome, String> {
             let req = CommitRequest {
                 proposal_id: &pid,
@@ -580,7 +598,7 @@ impl DecisionService {
                 payload_hash: &ph,
                 asserted_quads: &asserted_quads,
                 provenance_quads: &provenance_quads,
-                envelope: None,
+                envelope: envelope_hex.as_deref(),
             };
             proposal_spine::governed_commit(&store, idempotency.as_ref(), intents.as_ref(), &req)
         })
@@ -787,7 +805,7 @@ mod tests {
 
         // Supplied key + payload P → commits; the receipt echoes the SUPPLIED key.
         let committed = svc
-            .record_decision(PK, payload_p.clone(), Some(supplied.clone()))
+            .record_decision(PK, payload_p.clone(), Some(supplied.clone()), None)
             .await
             .expect("clean decision commits");
         assert!(!committed.replayed);
@@ -802,7 +820,7 @@ mod tests {
 
         // Same key + identical payload P → idempotent replay, same key still echoed.
         let replay = svc
-            .record_decision(PK, payload_p.clone(), Some(supplied.clone()))
+            .record_decision(PK, payload_p.clone(), Some(supplied.clone()), None)
             .await
             .expect("identical replay is a no-op");
         assert!(replay.replayed, "same key + same payload replays");
@@ -811,7 +829,7 @@ mod tests {
         // Same key + a DIVERGENT payload P' → Conflict (→ HTTP 409 via the spine).
         let payload_pp = record_input("a wholly different decision under the same key");
         let err = svc
-            .record_decision(PK, payload_pp, Some(supplied.clone()))
+            .record_decision(PK, payload_pp, Some(supplied.clone()), None)
             .await
             .expect_err("divergent payload under a reused key is rejected");
         assert!(

@@ -75,6 +75,13 @@ pub struct RecordDecisionRequest {
     /// "receipt always shows auto:" defect).
     #[serde(default, alias = "idempotency_key")]
     pub idempotency_key: Option<String>,
+    /// PRD-022 W-D: OPTIONAL native signature envelope — a BIP-340 (secp256k1
+    /// Schnorr) signature, 64-byte / 128-char hex, by the authenticated principal's
+    /// x-only pubkey over `sha256(canonicalize(full decision payload))`. Absent →
+    /// unchanged behaviour (verified only when present, or when
+    /// `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` demands it).
+    #[serde(default)]
+    pub signature: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,6 +151,7 @@ pub async fn record_decision(
     info!("decisions/record: authed principal={}", auth.pubkey);
 
     let idempotency_key = req.idempotency_key.clone();
+    let signature = req.signature.clone();
     let input = DecisionInput {
         summary: req.summary,
         rationale: req.rationale,
@@ -156,7 +164,7 @@ pub async fn record_decision(
     };
 
     match decision_service
-        .record_decision(&auth.pubkey, input, idempotency_key)
+        .record_decision(&auth.pubkey, input, idempotency_key, signature)
         .await
     {
         Ok(success) => {

@@ -29,6 +29,8 @@
 use crate::types::ontology_tools::ProposalReceipt;
 use oxigraph::model::Quad;
 use oxigraph::store::{StorageError, Store};
+use secp256k1::schnorr::Signature;
+use secp256k1::{Message, XOnlyPublicKey, SECP256K1};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -335,27 +337,144 @@ pub fn recover(log: &dyn IntentLog) -> Vec<WriteAheadIntent> {
 }
 
 // ---------------------------------------------------------------------------
-// Signature-envelope precondition (fail-closed seam — ADR-049)
+// Signature-envelope verification (fail-closed seam — ADR-049 / PRD-022 W-D)
 // ---------------------------------------------------------------------------
 
-/// The ONE fail-closed signature-envelope precondition seam shared by every
-/// governed write door (ontology propose + decision record). Native BIP-340
-/// envelope verification is the documented next-mesh W-D item; until a verifier
-/// is wired, when `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` is set we reject by default
-/// (never silently pass an unverifiable envelope). Default-off preserves the
-/// current authenticated-route behaviour until the verifier lands. Callers wrap
-/// the `Err(())` in their own domain error string; keeping the policy in one
-/// place means the two write doors can never drift apart (reuse, not clone).
-pub fn envelope_precondition_ok() -> Result<(), ()> {
-    let required = std::env::var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE")
-        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
-        .unwrap_or(false);
-    if required {
-        // No native envelope verifier is wired yet → fail closed.
-        Err(())
-    } else {
-        Ok(())
+/// A native signature envelope: a BIP-340 (secp256k1 Schnorr) signature produced
+/// by the acting principal over the canonical request payload.
+///
+/// The wire form is a **64-byte / 128-char lowercase hex** string — the raw
+/// BIP-340 signature, no `0x` prefix, no DER wrapping. It is verified against the
+/// principal's x-only public key ([`verify_envelope`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnvelopeSig {
+    /// 128-char hex of the 64-byte BIP-340 signature.
+    signature_hex: String,
+}
+
+impl EnvelopeSig {
+    /// Wrap a hex signature string. Well-formedness (length/parse/verify) is
+    /// checked by [`verify_envelope`], not here, so an ill-formed sig still
+    /// fails closed rather than being dropped silently at construction.
+    pub fn new(signature_hex: impl Into<String>) -> Self {
+        Self {
+            signature_hex: signature_hex.into(),
+        }
     }
+
+    /// The raw hex signature, as it will be recorded in the receipt envelope hash.
+    pub fn as_hex(&self) -> &str {
+        &self.signature_hex
+    }
+}
+
+/// Why a signature envelope was rejected. Every variant is fail-closed — the
+/// governed write MUST NOT proceed on any of them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EnvelopeError {
+    /// A signed envelope is required by policy but none was supplied.
+    Required,
+    /// The principal's public key was not a valid 32-byte x-only hex key.
+    BadPubkey,
+    /// The envelope signature was not a valid 64-byte BIP-340 hex signature.
+    BadSignature,
+    /// A well-formed signature that did NOT verify against
+    /// `(pubkey, sha256(canonical_payload))`.
+    VerifyFailed,
+}
+
+impl std::fmt::Display for EnvelopeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            EnvelopeError::Required => "signed envelope required but none supplied",
+            EnvelopeError::BadPubkey => "malformed principal public key (expect 32-byte x-only hex)",
+            EnvelopeError::BadSignature => "malformed envelope signature (expect 64-byte BIP-340 hex)",
+            EnvelopeError::VerifyFailed => "envelope signature failed BIP-340 verification",
+        };
+        f.write_str(s)
+    }
+}
+
+impl std::error::Error for EnvelopeError {}
+
+/// Is a signed envelope mandatory? Driven by `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE`
+/// (`1`/`true`/`TRUE`/`yes` truthy). Default-off preserves the authenticated-route
+/// behaviour of the fail-closed stub this replaces.
+fn envelope_required() -> bool {
+    std::env::var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
+        .unwrap_or(false)
+}
+
+/// **Signed-bytes definition (the exact bytes a client must sign).**
+///
+/// ```text
+///   message  = sha256( canonical_payload_utf8_bytes )        // 32-byte digest
+///   envelope = BIP-340_Schnorr_sign( principal_x_only_seckey, message )
+/// ```
+///
+/// where `canonical_payload` is the SAME deterministic, recursively key-sorted
+/// JSON string produced by [`canonicalize`] and already hashed for the proposal
+/// id / idempotency key — so the signed bytes are well-defined, stable, and
+/// independent of JSON field order. The 32-byte SHA-256 digest is the BIP-340
+/// `message`; the x-only pubkey is `pubkey_hex` (the authenticated principal,
+/// 32-byte / 64-char hex); the envelope is the 64-byte Schnorr signature.
+///
+/// This is the ONE fail-closed signature-envelope seam shared by every governed
+/// write door (ontology propose + decision record). Policy:
+///
+/// | `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` | envelope | outcome                          |
+/// |------------------------------------|----------|----------------------------------|
+/// | required                           | present  | verify → `Ok` iff valid, else `Err` |
+/// | required                           | absent   | `Err(Required)` (fail-closed)    |
+/// | not required                       | present  | verify → `Ok` iff valid, else `Err` |
+/// | not required                       | absent   | `Ok` (default-off, unsigned authed write) |
+///
+/// A *present* signature is ALWAYS verified regardless of the requirement flag —
+/// an invalid-but-present envelope is never silently accepted. Keeping the policy
+/// here means the two write doors can never drift apart (reuse, not clone).
+pub fn verify_envelope(
+    pubkey_hex: &str,
+    canonical_payload: &str,
+    envelope: Option<&EnvelopeSig>,
+) -> Result<(), EnvelopeError> {
+    match envelope {
+        // Present → verify unconditionally (never accept an invalid-but-present sig).
+        Some(sig) => verify_schnorr_envelope(pubkey_hex, canonical_payload, sig),
+        // Absent + required → fail closed.
+        None if envelope_required() => Err(EnvelopeError::Required),
+        // Absent + not required → preserves the default-off authenticated-route path.
+        None => Ok(()),
+    }
+}
+
+/// BIP-340 verify of `sig` by `pubkey_hex` over `sha256(canonical_payload)`.
+/// Uses the same `secp256k1` global context and primitive as the NIP-98 /
+/// XR-presence Schnorr paths (`nostr_identity_verifier`) — no new crypto dep.
+fn verify_schnorr_envelope(
+    pubkey_hex: &str,
+    canonical_payload: &str,
+    sig: &EnvelopeSig,
+) -> Result<(), EnvelopeError> {
+    let pk_bytes = hex::decode(pubkey_hex).map_err(|_| EnvelopeError::BadPubkey)?;
+    if pk_bytes.len() != 32 {
+        return Err(EnvelopeError::BadPubkey);
+    }
+    let xonly = XOnlyPublicKey::from_slice(&pk_bytes).map_err(|_| EnvelopeError::BadPubkey)?;
+
+    let sig_bytes = hex::decode(sig.as_hex()).map_err(|_| EnvelopeError::BadSignature)?;
+    if sig_bytes.len() != 64 {
+        return Err(EnvelopeError::BadSignature);
+    }
+    let signature = Signature::from_slice(&sig_bytes).map_err(|_| EnvelopeError::BadSignature)?;
+
+    // Signed bytes = sha256(canonical_payload) — the 32-byte BIP-340 message.
+    let digest: [u8; 32] = Sha256::digest(canonical_payload.as_bytes()).into();
+    let message = Message::from_digest(digest);
+
+    SECP256K1
+        .verify_schnorr(&signature, &message, &xonly)
+        .map_err(|_| EnvelopeError::VerifyFailed)
 }
 
 // ---------------------------------------------------------------------------
@@ -808,11 +927,133 @@ mod tests {
         assert_eq!(store.len().unwrap(), len_after_first, "conflict mutates nothing");
     }
 
+    // --- Signature-envelope verification (BIP-340 seam) ---
+
+    use secp256k1::{Keypair, Secp256k1, SecretKey};
+
+    /// Serialised env guard: the envelope tests toggle a process-global env var,
+    /// so they must not run concurrently with one another.
+    static ENVELOPE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Sign `canonical` with `sk` and return `(x-only pubkey hex, EnvelopeSig)`
+    /// exactly as a client would: BIP-340 Schnorr over `sha256(canonical)`. Uses
+    /// the same `secp256k1` crate the production verifier uses.
+    fn sign_envelope(sk: &SecretKey, canonical: &str) -> (String, EnvelopeSig) {
+        let secp = Secp256k1::new();
+        let keypair = Keypair::from_secret_key(&secp, sk);
+        let (xonly, _parity) = keypair.x_only_public_key();
+        let pk_hex = hex::encode(xonly.serialize());
+        let digest: [u8; 32] = Sha256::digest(canonical.as_bytes()).into();
+        let message = Message::from_digest(digest);
+        let sig = secp.sign_schnorr_no_aux_rand(&message, &keypair);
+        (pk_hex, EnvelopeSig::new(hex::encode(sig.as_ref())))
+    }
+
     #[test]
-    fn envelope_precondition_defaults_open_and_fails_closed_when_required() {
-        // Default-off (no env var) → Ok. This is the shared fail-closed seam.
+    fn envelope_absent_and_not_required_is_ok() {
+        // Default-off (no env var) + no envelope → Ok. Preserves the current
+        // unsigned authenticated-route behaviour.
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
         std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
-        assert!(envelope_precondition_ok().is_ok());
+        assert!(verify_envelope("", "{\"a\":1}", None).is_ok());
+    }
+
+    #[test]
+    fn envelope_absent_and_required_fails_closed() {
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
+        std::env::set_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE", "1");
+        let out = verify_envelope("", "{\"a\":1}", None);
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        assert_eq!(out, Err(EnvelopeError::Required));
+    }
+
+    #[test]
+    fn envelope_valid_signature_passes() {
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
+        let sk = SecretKey::from_slice(&[0x11; 32]).unwrap();
+        let canonical = canonicalize(&json!({ "action": "create", "term": "Foo" }));
+        let (pk_hex, sig) = sign_envelope(&sk, &canonical);
+        // Valid whether or not it is required.
+        std::env::set_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE", "1");
+        assert!(verify_envelope(&pk_hex, &canonical, Some(&sig)).is_ok());
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        assert!(verify_envelope(&pk_hex, &canonical, Some(&sig)).is_ok());
+    }
+
+    #[test]
+    fn envelope_tampered_payload_fails() {
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        let sk = SecretKey::from_slice(&[0x11; 32]).unwrap();
+        let canonical = canonicalize(&json!({ "term": "Foo" }));
+        let (pk_hex, sig) = sign_envelope(&sk, &canonical);
+        // Same signature, but the canonical payload changed by one field.
+        let tampered = canonicalize(&json!({ "term": "Bar" }));
+        assert_eq!(
+            verify_envelope(&pk_hex, &tampered, Some(&sig)),
+            Err(EnvelopeError::VerifyFailed)
+        );
+    }
+
+    #[test]
+    fn envelope_wrong_pubkey_fails() {
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        let sk_a = SecretKey::from_slice(&[0x11; 32]).unwrap();
+        let sk_b = SecretKey::from_slice(&[0x22; 32]).unwrap();
+        let canonical = canonicalize(&json!({ "term": "Foo" }));
+        let (_pk_a, sig) = sign_envelope(&sk_a, &canonical);
+        let (pk_b, _sig_b) = sign_envelope(&sk_b, &canonical);
+        // Sig by A verified against B's key → fail closed.
+        assert_eq!(
+            verify_envelope(&pk_b, &canonical, Some(&sig)),
+            Err(EnvelopeError::VerifyFailed)
+        );
+    }
+
+    #[test]
+    fn envelope_malformed_hex_fails_closed() {
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        let sk = SecretKey::from_slice(&[0x11; 32]).unwrap();
+        let canonical = canonicalize(&json!({ "term": "Foo" }));
+        let (pk_hex, _sig) = sign_envelope(&sk, &canonical);
+
+        // Non-hex signature.
+        assert_eq!(
+            verify_envelope(&pk_hex, &canonical, Some(&EnvelopeSig::new("zznothex"))),
+            Err(EnvelopeError::BadSignature)
+        );
+        // Right hex alphabet, wrong length.
+        assert_eq!(
+            verify_envelope(&pk_hex, &canonical, Some(&EnvelopeSig::new("dead"))),
+            Err(EnvelopeError::BadSignature)
+        );
+        // Malformed pubkey with an otherwise well-formed 64-byte sig.
+        let good_len_sig = EnvelopeSig::new("ab".repeat(64));
+        assert_eq!(
+            verify_envelope("nothex", &canonical, Some(&good_len_sig)),
+            Err(EnvelopeError::BadPubkey)
+        );
+    }
+
+    #[test]
+    fn envelope_present_but_invalid_not_required_still_rejects() {
+        // The critical non-bypass: NOT required, but a present signature that does
+        // not verify MUST reject — never silently pass.
+        let _guard = ENVELOPE_ENV_LOCK.lock().unwrap();
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        let sk = SecretKey::from_slice(&[0x11; 32]).unwrap();
+        let canonical = canonicalize(&json!({ "term": "Foo" }));
+        let (pk_hex, sig) = sign_envelope(&sk, &canonical);
+        // Flip a signature byte.
+        let mut bytes = hex::decode(sig.as_hex()).unwrap();
+        bytes[10] ^= 0xff;
+        let tampered_sig = EnvelopeSig::new(hex::encode(bytes));
+        assert_eq!(
+            verify_envelope(&pk_hex, &canonical, Some(&tampered_sig)),
+            Err(EnvelopeError::VerifyFailed)
+        );
     }
 
     #[test]

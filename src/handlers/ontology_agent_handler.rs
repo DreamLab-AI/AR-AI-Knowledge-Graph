@@ -71,6 +71,13 @@ pub struct ProposeRequest {
     /// a deterministic payload-derived key.
     #[serde(default)]
     pub idempotency_key: Option<String>,
+    /// PRD-022 W-D: OPTIONAL native signature envelope — a BIP-340 (secp256k1
+    /// Schnorr) signature, 64-byte / 128-char hex, by the authenticated
+    /// principal's x-only pubkey over `sha256(canonicalize(payload))`. Absent →
+    /// unchanged behaviour (verified only when present, or when
+    /// `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` demands it).
+    #[serde(default)]
+    pub signature: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,17 +206,18 @@ pub async fn propose(
     req.agent_context.agent_id = auth.pubkey.clone();
     req.agent_context.user_id = auth.pubkey.clone();
     let idempotency_key = req.idempotency_key.clone();
+    let signature = req.signature.clone();
     info!("ontology-agent/propose: authed agent={}", auth.pubkey);
 
     let result = match req.proposal {
         ProposeInput::Create(proposal) => {
             mutation_service
-                .propose_create(proposal, req.agent_context, idempotency_key)
+                .propose_create(proposal, req.agent_context, idempotency_key, signature)
                 .await
         }
         ProposeInput::Amend { target_iri, amendment } => {
             mutation_service
-                .propose_amend(&target_iri, amendment, req.agent_context, idempotency_key)
+                .propose_amend(&target_iri, amendment, req.agent_context, idempotency_key, signature)
                 .await
         }
     };

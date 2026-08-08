@@ -25,8 +25,8 @@ use crate::services::file_service::MARKDOWN_DIR;
 use crate::services::github_pr_service::GitHubPRService;
 use crate::services::ontology_conflict_gate::{evaluate as evaluate_conflicts, ProposedCandidate};
 use crate::services::proposal_spine::{
-    build_receipt, payload_hash, IdempotencyDecision, IdempotencyStore, IntentLog, IntentState,
-    ReceiptInputs, WriteAheadIntent,
+    build_receipt, canonicalize, payload_hash, verify_envelope, EnvelopeError, EnvelopeSig,
+    IdempotencyDecision, IdempotencyStore, IntentLog, IntentState, ReceiptInputs, WriteAheadIntent,
 };
 use crate::types::ontology_tools::*;
 use chrono::Utc;
@@ -83,6 +83,7 @@ impl OntologyMutationService {
         proposal: NoteProposal,
         agent_ctx: AgentContext,
         idempotency_key: Option<String>,
+        signature: Option<String>,
     ) -> Result<ProposalResult, String> {
         info!(
             "Ontology propose_create: term='{}', agent={} (user={})",
@@ -92,12 +93,16 @@ impl OntologyMutationService {
         // W-E stage: single proposal id spanning every stage (minted at START).
         let proposal_id = uuid::Uuid::new_v4().to_string();
 
-        // W-E stage 0: signature-envelope precondition (fail-closed, pre-mutation).
-        Self::verify_envelope_precondition(&agent_ctx)?;
-
-        // W-E stage 1: idempotency. Canonical payload hash over the create body.
+        // W-E stage 1: canonical payload — the SAME bytes hashed for idempotency
+        // AND signed by the envelope, so the signed bytes are well-defined/stable.
         let payload = serde_json::json!({ "action": "create", "proposal": proposal });
         let phash = payload_hash(&payload);
+
+        // W-E stage 0: signature-envelope precondition (fail-closed, pre-mutation).
+        // Verified over `sha256(canonicalize(payload))` by the authenticated
+        // principal's x-only pubkey (`agent_ctx.agent_id`, bound to `auth.pubkey`).
+        let envelope = signature.map(EnvelopeSig::new);
+        Self::verify_envelope_precondition(&agent_ctx, &canonicalize(&payload), envelope.as_ref())?;
         let idem_key = idempotency_key.unwrap_or_else(|| format!("auto:{}", phash));
         match self.idempotency.reserve(&idem_key, &phash) {
             IdempotencyDecision::Replay(receipt) => {
@@ -231,7 +236,9 @@ impl OntologyMutationService {
             idempotency_key: &idem_key,
             assert_triples: &assert_triples,
             provenance_quads: &provenance_quads,
-            envelope: None,
+            // The verified envelope signature (if any) is content-addressed into
+            // the receipt's envelope hash; `None` keeps the unsigned marker.
+            envelope: envelope.as_ref().map(|e| e.as_hex()),
         });
         self.idempotency.commit(&idem_key, &phash, receipt.clone());
         self.intents.mark(&proposal_id, IntentState::Committed);
@@ -272,6 +279,7 @@ impl OntologyMutationService {
         amendment: NoteAmendment,
         agent_ctx: AgentContext,
         idempotency_key: Option<String>,
+        signature: Option<String>,
     ) -> Result<ProposalResult, String> {
         info!(
             "Ontology propose_amend: iri='{}', agent={} (user={})",
@@ -280,16 +288,18 @@ impl OntologyMutationService {
 
         let proposal_id = uuid::Uuid::new_v4().to_string();
 
-        // Stage 0: envelope precondition.
-        Self::verify_envelope_precondition(&agent_ctx)?;
-
-        // Stage 1: idempotency.
+        // Stage 1: canonical payload — the same bytes hashed for idempotency and
+        // signed by the envelope.
         let payload = serde_json::json!({
             "action": "amend",
             "targetIri": target_iri,
             "amendment": amendment,
         });
         let phash = payload_hash(&payload);
+
+        // Stage 0: signature-envelope precondition (fail-closed, pre-mutation).
+        let envelope = signature.map(EnvelopeSig::new);
+        Self::verify_envelope_precondition(&agent_ctx, &canonicalize(&payload), envelope.as_ref())?;
         let idem_key = idempotency_key.unwrap_or_else(|| format!("auto:{}", phash));
         match self.idempotency.reserve(&idem_key, &phash) {
             IdempotencyDecision::Replay(receipt) => {
@@ -461,7 +471,7 @@ impl OntologyMutationService {
             idempotency_key: &idem_key,
             assert_triples: &assert_triples,
             provenance_quads: &provenance_quads,
-            envelope: None,
+            envelope: envelope.as_ref().map(|e| e.as_hex()),
         });
         self.idempotency.commit(&idem_key, &phash, receipt.clone());
         self.intents.mark(&proposal_id, IntentState::Committed);
@@ -491,22 +501,28 @@ impl OntologyMutationService {
     }
 
     /// ADR-049 Security: the signature-envelope precondition runs BEFORE any
-    /// mutation and is fail-closed. Native BIP-340 envelope verification is not
-    /// yet landed; when `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` is set we reject by
-    /// default (never silently pass an unverifiable envelope). Default-off keeps
-    /// the current authenticated-route behaviour until the verifier lands.
-    fn verify_envelope_precondition(agent_ctx: &AgentContext) -> Result<(), String> {
-        let required = std::env::var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE")
-            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes"))
-            .unwrap_or(false);
-        if required {
-            // No native envelope verifier is wired yet → fail closed.
-            return Err(format!(
-                "{}signed envelope required but no verifier is available for agent {}",
-                ENVELOPE_REJECTED_PREFIX, agent_ctx.agent_id
-            ));
-        }
-        Ok(())
+    /// mutation and is fail-closed. This delegates to the SINGLE shared spine
+    /// seam [`verify_envelope`] (reuse, not clone) so the ontology door and the
+    /// decision door can never drift apart: it verifies a supplied BIP-340
+    /// envelope over `sha256(canonical_payload)` by the authenticated principal's
+    /// x-only pubkey (`agent_ctx.agent_id`), rejecting an invalid-but-present
+    /// signature and — when `ONTOLOGY_REQUIRE_SIGNED_ENVELOPE` is set — an absent
+    /// one. Default-off keeps the current unsigned authenticated-route behaviour.
+    fn verify_envelope_precondition(
+        agent_ctx: &AgentContext,
+        canonical_payload: &str,
+        envelope: Option<&EnvelopeSig>,
+    ) -> Result<(), String> {
+        verify_envelope(&agent_ctx.agent_id, canonical_payload, envelope).map_err(|e| {
+            let detail = match e {
+                EnvelopeError::Required => "signed envelope required but none supplied".to_string(),
+                other => format!("envelope verification failed: {other}"),
+            };
+            format!(
+                "{}{} for agent {}",
+                ENVELOPE_REJECTED_PREFIX, detail, agent_ctx.agent_id
+            )
+        })
     }
 
     /// Reconstruct a minimal replay result from a stored receipt (no re-mutation).
