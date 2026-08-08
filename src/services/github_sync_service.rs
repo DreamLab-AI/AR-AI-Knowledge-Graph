@@ -18,6 +18,7 @@ use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use visionclaw_domain::ports::ontology_repository::{AxiomType, OntologyRepository, OwlAxiom};
 use crate::services::github::content_enhanced::EnhancedContentAPI;
 use crate::services::github::types::GitHubFileBasicMetadata;
+use crate::services::decision_elevation::{decision_page_quads_logged, DECISIONS_DIR};
 use crate::services::jsonld_ingest::{self, IngestOutcome, PageMetadata};
 use crate::services::parsers::KnowledgeGraphParser;
 use crate::services::semantic_type_registry::SEMANTIC_TYPE_REGISTRY;
@@ -968,7 +969,81 @@ impl GitHubSyncService {
         // Honest reporting: count of ontology class nodes written to the assert
         // graph (was initialised 0 and never incremented before this fix).
         stats.ontology_files_processed += count;
-        Ok(count)
+
+        // ADR-050 read-half: the CLEAR+INSERT above rebuilds the assert graph from
+        // the corpus CLASSES only (`owl_class_iri.is_some()`), which erases any
+        // runtime decision-record instances (`dl:DecisionRecord`, a prov:Activity
+        // individual with no owl_class_iri). Re-derive them from the elevated
+        // decision pages in the corpus so a force_full preserves the decisions the
+        // corpus contains (and only those) — the intended durability-through-resync
+        // semantics. Non-fatal: a decision read-half failure never fails the class
+        // rebuild.
+        let decisions = match self.rematerialise_decisions().await {
+            Ok(n) => n,
+            Err(e) => {
+                warn!("[DecisionElevation] read-half re-materialise failed (non-fatal): {e}");
+                0
+            }
+        };
+        stats.ontology_files_processed += decisions;
+        Ok(count + decisions)
+    }
+
+    /// ADR-050 read-half: re-derive `dl:DecisionRecord` instances from the corpus
+    /// into `urn:ngm:graph:ontology:assert` after the class CLEAR+INSERT.
+    ///
+    /// Lists the elevated decision pages under [`DECISIONS_DIR`] (a fresh corpus
+    /// has none → returns 0), recognises each `dl:DecisionRecord` json-ld block
+    /// via the shared parser node-typing ([`decision_page_quads_logged`]), and
+    /// inserts the asserted decision quads (type memberships + direct causal
+    /// edges) AFTER `save_ontology_graph`'s CLEAR so the rebuild does not wipe
+    /// them. Attribution is deliberately NOT re-materialised here — the signed
+    /// PROV-O attribution stays in the `:provenance` graph (ADR-049); the corpus
+    /// page carries only the summary. Returns the count of decision records
+    /// re-derived (honest reporting).
+    async fn rematerialise_decisions(&self) -> Result<usize, String> {
+        let files = match self.content_api.list_markdown_files(DECISIONS_DIR).await {
+            Ok(f) => f,
+            Err(e) => {
+                // A corpus with no decisions namespace yet is the common case.
+                info!(
+                    "[DecisionElevation] no '{}' namespace to re-materialise ({}); read-half skipped",
+                    DECISIONS_DIR, e
+                );
+                return Ok(0);
+            }
+        };
+        if files.is_empty() {
+            return Ok(0);
+        }
+
+        let mut quads: Vec<Quad> = Vec::new();
+        let mut decisions = 0usize;
+        for f in &files {
+            let content = match self.content_api.fetch_file_content(&f.download_url).await {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("[DecisionElevation] fetch decision page '{}' failed: {}", f.path, e);
+                    continue;
+                }
+            };
+            let page_quads = decision_page_quads_logged(&content, &f.path);
+            if !page_quads.is_empty() {
+                decisions += 1;
+                quads.extend(page_quads);
+            }
+        }
+
+        if quads.is_empty() {
+            return Ok(0);
+        }
+        let quad_count = quads.len();
+        self.insert_quads_to_store(&quads).await?;
+        info!(
+            "[DecisionElevation] re-materialised {} decision record(s) ({} quads) into <{}> (ADR-050 read-half)",
+            decisions, quad_count, GRAPH_ONTOLOGY
+        );
+        Ok(decisions)
     }
 
     /// Run Whelk EL++ reasoning after all files have been synced.

@@ -4,6 +4,9 @@ pub mod agent_beam_actor;
 // ADR-110 — flagship ACSP agentic actor (knowledge elevation via forum cases)
 pub mod elevation_actor;
 pub mod elevation_voice;
+// ADR-050 — decision elevation (inverse corpus path): the write-half actor that
+// mirrors ElevationActor for dl:DecisionRecord instances.
+pub mod decision_elevation_actor;
 // ADR-110 — voice → settings-assistant bridge (Control Center configuration agent)
 pub mod voice_interface_actor;
 pub mod agent_monitor_actor;

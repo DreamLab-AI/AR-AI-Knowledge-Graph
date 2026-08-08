@@ -153,6 +153,11 @@ pub enum CaseCategory {
     TrustAlert,
     ManualSubmission,
     KnowledgeEnrichment,
+    /// ADR-050: elevate a significant decision record into the public corpus so
+    /// the `force_full` assert-graph rebuild re-derives it (the inverse of
+    /// `KnowledgeEnrichment` for `dl:DecisionRecord` instances). Carries no
+    /// share-state ladder, like `KnowledgeEnrichment`.
+    DecisionElevation,
 }
 
 impl CaseCategory {
@@ -164,6 +169,7 @@ impl CaseCategory {
             Self::TrustAlert => "trust_alert",
             Self::ManualSubmission => "manual_submission",
             Self::KnowledgeEnrichment => "knowledge_enrichment",
+            Self::DecisionElevation => "decision_elevation",
         }
     }
 }
@@ -487,6 +493,7 @@ mod broker_kernel_reconciliation {
             (KernelCaseCategory::TrustAlert, CaseCategory::TrustAlert),
             (KernelCaseCategory::ManualSubmission, CaseCategory::ManualSubmission),
             (KernelCaseCategory::KnowledgeEnrichment, CaseCategory::KnowledgeEnrichment),
+            (KernelCaseCategory::DecisionElevation, CaseCategory::DecisionElevation),
         ];
         for (kernel, acsp) in pairs {
             let kernel_wire = serde_json::to_value(&kernel).unwrap();

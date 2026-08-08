@@ -56,6 +56,9 @@ pub mod provenance_writer;
 // W-B (PRD-022 / ADR-048): decision-layer vocabulary, URN minting, quad + SPARQL
 // builders, bounded traversal, and the governed DecisionService write door.
 pub mod decision_service;
+// ADR-050 — decision elevation (the inverse corpus path): pure page draft/parse,
+// significance predicate, and the fire-and-forget sink the write door calls.
+pub mod decision_elevation;
 pub mod github_pr_service;
 pub mod briefing_service;
 pub mod nostr_bead_publisher;

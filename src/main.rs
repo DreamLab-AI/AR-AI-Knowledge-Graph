@@ -527,14 +527,40 @@ async fn main() -> std::io::Result<()> {
     // Oxigraph store as the ontology adapter (single-writer, ADR-11 §D1) and its
     // own spine idempotency + intent log; decision writes ride the spine's single
     // transaction (asserted decision quads + T3 PROV-O provenance quads, atomically).
-    let decision_service = Arc::new(
-        visionclaw_server::services::decision_service::DecisionService::new(
+    // ADR-050 write-half: the decision-elevation actor (env-gated like the
+    // ElevationActor — dev/staging default ON, production opt-in, requires
+    // FORUM_RELAY_URL + a panel secret). When live it receives a SIGNIFICANT
+    // recorded decision via the fire-and-forget sink and opens a broker case for
+    // corpus publication; `None` keeps decisions runtime-only. The sink is
+    // fail-open: it can never fail the governed decision write.
+    let decision_elevation_sink: Option<
+        Arc<dyn visionclaw_server::services::decision_elevation::DecisionElevationSink>,
+    > = match visionclaw_server::actors::decision_elevation_actor::DecisionElevationActor::new() {
+        Some(actor) => {
+            let addr = actix::Actor::start(actor);
+            info!("[main] DecisionElevationActor started (ADR-050 decision-elevation panel live)");
+            Some(Arc::new(
+                visionclaw_server::actors::decision_elevation_actor::ActorElevationSink::new(addr),
+            ))
+        }
+        None => {
+            info!("[main] DecisionElevationActor disabled (set DECISION_ELEVATION_ENABLED=1 + FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY to enable)");
+            None
+        }
+    };
+
+    let decision_service = Arc::new({
+        let svc = visionclaw_server::services::decision_service::DecisionService::new(
             app_state.ontology_repository.clone(),
             app_state.ontology_repository.store().clone(),
             Arc::new(visionclaw_server::services::proposal_spine::InMemoryIdempotencyStore::new()),
             Arc::new(visionclaw_server::services::proposal_spine::InMemoryIntentLog::new()),
-        ),
-    );
+        );
+        match decision_elevation_sink {
+            Some(sink) => svc.with_elevation_sink(sink),
+            None => svc,
+        }
+    });
     info!("[main] Ontology Agent Services initialized");
 
     info!("--- Starting Data Orchestration Sequence ---");

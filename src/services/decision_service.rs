@@ -95,7 +95,7 @@ pub fn p_governed_by() -> String {
 /// decision (its URN) is content-addressed over the *core* payload
 /// (`summary`, `rationale`, `proposal_urn`) via [`decision_payload`]; the edge
 /// sets below decorate the node but do not change its identity.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DecisionInput {
     pub summary: String,
     pub rationale: String,
@@ -380,10 +380,12 @@ pub fn bounded_bfs(
 
 use std::sync::Arc;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use log::warn;
 use oxigraph::store::Store;
 
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine;
+use crate::services::decision_elevation::{self, DecisionElevationSink, ElevatedDecision};
 use crate::services::ontology_conflict_gate::{evaluate as evaluate_conflicts, ProposedCandidate};
 use crate::services::ontology_mutation_service::{
     CONFLICT_BLOCKED_PREFIX, ENVELOPE_REJECTED_PREFIX, IDEMPOTENCY_CONFLICT_PREFIX,
@@ -452,6 +454,11 @@ pub struct DecisionService {
     idempotency: Arc<dyn IdempotencyStore>,
     /// Spine write-ahead intent log for deterministic recovery.
     intents: Arc<dyn IntentLog>,
+    /// ADR-050: fire-and-forget decision-elevation sink. `None` (the default)
+    /// keeps decisions runtime-only; wired to the `DecisionElevationActor` in
+    /// production so a SIGNIFICANT decision opens a broker case for corpus
+    /// publication. NEVER on the fatal path — a sink outage cannot fail the write.
+    elevation_sink: Option<Arc<dyn DecisionElevationSink>>,
 }
 
 impl DecisionService {
@@ -466,6 +473,50 @@ impl DecisionService {
             store,
             idempotency,
             intents,
+            elevation_sink: None,
+        }
+    }
+
+    /// Attach the ADR-050 decision-elevation sink (builder). Wired in `main.rs`
+    /// to a live `DecisionElevationActor` when the write-half is enabled.
+    pub fn with_elevation_sink(mut self, sink: Arc<dyn DecisionElevationSink>) -> Self {
+        self.elevation_sink = Some(sink);
+        self
+    }
+
+    /// ADR-050 elevation trigger — FAIL-OPEN by construction. Fires only for a
+    /// SIGNIFICANT decision ([`decision_elevation::is_significant`]); a broker/PR
+    /// outage, a dead sink mailbox, or a missing token is logged and swallowed so
+    /// it can NEVER block or roll back the governed decision write that already
+    /// committed. Routine/edgeless decisions stay runtime-only (no case opened).
+    ///
+    /// The ACSP verdict is not resolved on this write path (the decision gate
+    /// leaves ACSP `Pending`), so `acsp_approved` is `false` here — significance
+    /// then rests on the mutation/causal-edge signals, exactly as intended.
+    fn maybe_elevate(
+        &self,
+        decision_urn: &str,
+        input: &DecisionInput,
+        agent_did: String,
+        generated_at: DateTime<Utc>,
+    ) {
+        let Some(sink) = &self.elevation_sink else {
+            return;
+        };
+        if !decision_elevation::is_significant(input, false) {
+            return; // routine/edgeless → runtime-only, per ADR-050 policy
+        }
+        let elevated = ElevatedDecision {
+            decision_urn: decision_urn.to_string(),
+            input: input.clone(),
+            agent_did,
+            generated_at: generated_at.to_rfc3339(),
+            acsp_approved: false,
+        };
+        if let Err(e) = sink.elevate(elevated) {
+            warn!(
+                "[DecisionElevation] elevation trigger enqueue failed (non-fatal; decision {decision_urn} stands): {e}"
+            );
         }
     }
 
@@ -606,14 +657,21 @@ impl DecisionService {
         .map_err(|e| format!("Decision commit join error: {e}"))??;
 
         match outcome {
-            CommitOutcome::Committed(receipt) => Ok(DecisionRecordSuccess {
-                decision_urn,
-                quads_written: quad_count,
-                replayed: false,
-                receipt,
-                gates,
-            }),
+            CommitOutcome::Committed(receipt) => {
+                // ADR-050: a freshly-committed decision is the "record" event — run
+                // the elevation trigger (fail-open; never gates the Ok below).
+                self.maybe_elevate(&decision_urn, &input, format!("did:nostr:{hex}"), now);
+                Ok(DecisionRecordSuccess {
+                    decision_urn,
+                    quads_written: quad_count,
+                    replayed: false,
+                    receipt,
+                    gates,
+                })
+            }
             CommitOutcome::Replay(receipt) => Ok(DecisionRecordSuccess {
+                // A replay re-records nothing, so it re-elevates nothing (the actor
+                // also dedups by decision URN + deterministic case id).
                 decision_urn,
                 quads_written: 0,
                 replayed: true,
@@ -836,6 +894,132 @@ mod tests {
             err.starts_with(IDEMPOTENCY_CONFLICT_PREFIX),
             "reused key + divergent payload → 409: {err}"
         );
+    }
+
+    // --- ADR-050 elevation trigger: significance + fail-open ---
+
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    use std::sync::Mutex;
+
+    /// Test sink: counts elevate calls, records the last payload, and can be told
+    /// to FAIL (to prove the trigger is fail-open).
+    struct RecordingSink {
+        count: AtomicUsize,
+        fail: bool,
+        last: Mutex<Option<ElevatedDecision>>,
+    }
+
+    impl RecordingSink {
+        fn new(fail: bool) -> Arc<Self> {
+            Arc::new(Self {
+                count: AtomicUsize::new(0),
+                fail,
+                last: Mutex::new(None),
+            })
+        }
+    }
+
+    impl DecisionElevationSink for RecordingSink {
+        fn elevate(&self, d: ElevatedDecision) -> Result<(), String> {
+            self.count.fetch_add(1, SeqCst);
+            *self.last.lock().unwrap() = Some(d);
+            if self.fail {
+                Err("simulated broker/PR outage".into())
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    async fn service_with_sink(sink: Arc<dyn DecisionElevationSink>) -> DecisionService {
+        use crate::test_helpers::MockOntologyRepository;
+        use proposal_spine::{InMemoryIdempotencyStore, InMemoryIntentLog};
+        std::env::remove_var("ONTOLOGY_REQUIRE_SIGNED_ENVELOPE");
+        let repo: Arc<dyn OntologyRepository> = Arc::new(MockOntologyRepository::new());
+        let store = Arc::new(Store::new().unwrap());
+        let idem: Arc<dyn IdempotencyStore> = Arc::new(InMemoryIdempotencyStore::new());
+        let intents: Arc<dyn IntentLog> = Arc::new(InMemoryIntentLog::new());
+        DecisionService::new(repo, store, idem, intents).with_elevation_sink(sink)
+    }
+
+    fn significant_input(summary: &str) -> DecisionInput {
+        DecisionInput {
+            summary: summary.into(),
+            rationale: "r".into(),
+            // A causal edge makes it significant per ADR-050.
+            caused: vec!["urn:agentbox:decision:AA:sha256-12-def".into()],
+            ..Default::default()
+        }
+    }
+
+    /// (c) The elevation trigger is FAIL-OPEN: a sink that errors (broker/PR
+    /// outage) must NOT fail the governed decision write — it still returns Ok,
+    /// and the sink was in fact invoked once for the significant decision.
+    #[tokio::test]
+    async fn elevation_trigger_is_fail_open_for_significant_decision() {
+        let sink = RecordingSink::new(/* fail = */ true);
+        let svc = service_with_sink(sink.clone()).await;
+
+        let ok = svc
+            .record_decision(PK, significant_input("merge duplicate concepts"), None, None)
+            .await
+            .expect("a broker/PR outage must NOT fail the governed decision write");
+        assert!(!ok.replayed);
+        assert!(ok.quads_written >= 2, "the decision still committed its quads");
+        assert_eq!(
+            sink.count.load(SeqCst),
+            1,
+            "the significant decision fired the elevation trigger exactly once"
+        );
+        // The trigger carried the minted URN + attribution to the sink.
+        let last = sink.last.lock().unwrap().clone().expect("sink saw a payload");
+        assert_eq!(last.decision_urn, ok.decision_urn);
+        assert!(last.agent_did.starts_with("did:nostr:"));
+        assert!(!last.acsp_approved, "ACSP verdict is Pending on this path");
+    }
+
+    /// (b, integration) A routine/edgeless decision does NOT elevate — the sink is
+    /// never called, so it stays runtime-only.
+    #[tokio::test]
+    async fn routine_edgeless_decision_does_not_elevate() {
+        let sink = RecordingSink::new(false);
+        let svc = service_with_sink(sink.clone()).await;
+
+        let routine = DecisionInput {
+            summary: "note a routine observation".into(),
+            rationale: "nothing structural".into(),
+            ..Default::default() // no proposal_urn, no causal edges
+        };
+        let ok = svc
+            .record_decision(PK, routine, None, None)
+            .await
+            .expect("routine decision commits");
+        assert!(!ok.replayed);
+        assert_eq!(
+            sink.count.load(SeqCst),
+            0,
+            "an edgeless routine decision must not open an elevation case"
+        );
+    }
+
+    /// A replay re-records nothing and therefore re-elevates nothing.
+    #[tokio::test]
+    async fn replayed_decision_does_not_re_elevate() {
+        let sink = RecordingSink::new(false);
+        let svc = service_with_sink(sink.clone()).await;
+        let input = significant_input("adopt native decision write door");
+
+        svc.record_decision(PK, input.clone(), Some("k".into()), None)
+            .await
+            .expect("first commit");
+        assert_eq!(sink.count.load(SeqCst), 1);
+
+        let replay = svc
+            .record_decision(PK, input, Some("k".into()), None)
+            .await
+            .expect("identical replay");
+        assert!(replay.replayed);
+        assert_eq!(sink.count.load(SeqCst), 1, "replay must not re-fire the trigger");
     }
 
     // --- Quad builder: asserted graph, exact PROV-O typing ---

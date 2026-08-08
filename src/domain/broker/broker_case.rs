@@ -77,6 +77,11 @@ pub enum CaseCategory {
     /// discovery pipeline, requiring broker approval before committing back
     /// to the source pod/repository via the WriteBackSaga.
     KnowledgeEnrichment,
+    /// ADR-050 decision elevation: a significant `dl:DecisionRecord` proposed
+    /// for publication into the public corpus, gated by the broker so the
+    /// `force_full` assert-graph rebuild re-derives it. Like `KnowledgeEnrichment`
+    /// it carries no share-state ladder (no `from_state`/`to_state`).
+    DecisionElevation,
 }
 
 /// Discriminator for the subject referenced by a `ContributorMeshShare` case.
