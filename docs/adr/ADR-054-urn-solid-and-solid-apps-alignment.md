@@ -2,7 +2,7 @@
 
 ## Status
 
-Ratified 2026-04-19
+Design-stage — unbuilt (originally marked "Ratified 2026-04-19", but `src/urn_solid_mapping.rs` and the `URN_SOLID_ALIGNMENT` feature flag it describes do not exist in the codebase — zero grep hits across `src/`). Corrected 2026-08-09.
 
 ## Context
 

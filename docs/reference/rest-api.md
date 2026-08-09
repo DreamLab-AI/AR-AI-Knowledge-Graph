@@ -23,13 +23,17 @@ All REST API paths are prefixed with `/api/` unless otherwise noted. Solid Pod e
 
 ### Endpoint Taxonomy
 
-> **Status note (2026-06-12):** the `Enterprise` group (`/api/broker/*`,
-> `/api/workflows/*`, `/api/connectors/*`, `/api/policy/evaluate`,
-> `/api/mesh-metrics`) and `/api/discovery/*` are **design-stage — not
-> registered in the backend router** (`src/main.rs` /
-> `src/handlers/api_handler/mod.rs`). Broker governance currently flows over
-> Nostr ACSP events (kinds 31400-31405, `src/services/acsp/`, ADR-110), with
-> the REST write-back limited to `POST /api/enrichment-proposals/{id}/decide`.
+> **Status note (2026-06-12, corrected 2026-08-09):** `/api/broker/*` is
+> **live** — `src/handlers/broker_inbox_handler.rs`, mounted at
+> `src/main.rs:1023`, gated by `RequireAuth::power_user()`. See
+> [Broker / Governance Endpoints](#broker--governance-endpoints) below for the
+> full, grep-verified route table. The remaining `Enterprise` group
+> (`/api/workflows/*`, `/api/connectors/*`, `/api/policy/evaluate`,
+> `/api/mesh-metrics`) and `/api/discovery/*` remain **design-stage — not
+> registered in the backend router** (confirmed by zero grep hits across
+> `src/main.rs` / `src/handlers/**`). Broker governance additionally flows
+> over Nostr ACSP events (kinds 31400-31405, `src/services/acsp/`, ADR-110),
+> with a second REST write-back at `POST /api/enrichment-proposals/{id}/decide`.
 
 ```mermaid
 graph LR
@@ -42,19 +46,19 @@ graph LR
     A --> H["/api/health/*"]
     A --> I["/solid/*"]
     A --> J["/wss"]
-    A --> K["Enterprise"]
-    A --> L["/api/discovery/*"]
-    A --> M["/api/broker/*"]
+    A --> K["Enterprise (design-stage)"]
+    A --> L["/api/discovery/* (design-stage)"]
+    A --> M["/api/broker/* (live)"]
 
     L --> L1["search"]
     L --> L2["related/:iri"]
     L --> L3["gaps"]
     L --> L4["batch, index, train, materialize"]
 
-    B --> B1["data"]
-    B --> B2["node/:id"]
-    B --> B3["stats"]
-    C --> C1[":key"]
+    B --> B1["data, data/paginated"]
+    B --> B2["positions"]
+    B --> B3["update, refresh"]
+    C --> C1["physics, rendering, ..."]
     C --> C2["user/filter"]
     D --> D1["hierarchy"]
     D --> D2["classes"]
@@ -62,7 +66,8 @@ graph LR
     E --> E2["pagerank, clustering, community"]
     I --> I1["pods/*"]
     I --> I2["LDP resources"]
-    K --> K1["/api/broker/*"]
+    M --> M1["inbox"]
+    M --> M2["cases/:id"]
     K --> K2["/api/workflows/*"]
     K --> K3["/api/connectors/*"]
     K --> K4["/api/policy/evaluate"]
@@ -73,40 +78,16 @@ graph LR
 
 ## Enterprise API Endpoints
 
-The enterprise control plane surfaces five API groups, all requiring the `Broker`, `Admin`, or `Auditor` role.
+> **Judgment Broker is live and documented separately** — see
+> [Broker / Governance Endpoints](#broker--governance-endpoints) for the
+> grep-verified route table (`GET /api/broker/inbox`,
+> `GET /api/broker/cases/:id`, `POST /api/broker/cases/:id/decide`). The four
+> groups below are the genuinely **design-stage — not registered** part of
+> the enterprise control plane (zero `.route(`/`web::scope(` hits across
+> `src/main.rs` and `src/handlers/**`). Nothing in this section is reachable
+> today; treat the schemas as forward design, not a current contract.
 
-### Judgment Broker — `/api/broker/*`
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/broker/inbox` | Broker/Admin | List open escalation cases for the authenticated broker |
-| GET | `/api/broker/cases` | Broker/Admin/Auditor | List all cases (filterable by status, priority, date) |
-| POST | `/api/broker/cases` | Broker/Admin | Submit a new escalation case |
-| GET | `/api/broker/cases/:id` | Broker/Admin/Auditor | Get a single case with full provenance chain |
-| POST | `/api/broker/cases/:id/decide` | Broker/Admin | Record a decision (Approve/Reject/Escalate/Defer) on a case |
-
-**Case submit body:**
-```json
-{
-  "title": "string",
-  "description": "string",
-  "priority": "P1 | P2 | P3",
-  "context": { "agentId": "string", "workflowId": "string", "ruleId": "string" }
-}
-```
-
-**Decide body:**
-```json
-{
-  "outcome": "Approved | Rejected | Escalated | Deferred",
-  "justification": "string",
-  "overrideRuleId": "string | null"
-}
-```
-
----
-
-### Workflow Proposals — `/api/workflows/*`
+### Workflow Proposals — `/api/workflows/*` (design-stage — not registered)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -118,7 +99,7 @@ The enterprise control plane surfaces five API groups, all requiring the `Broker
 
 ---
 
-### Connectors — `/api/connectors/*`
+### Connectors — `/api/connectors/*` (design-stage — not registered)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -140,7 +121,7 @@ The enterprise control plane surfaces five API groups, all requiring the `Broker
 
 ---
 
-### Policy Engine — `/api/policy/*`
+### Policy Engine — `/api/policy/*` (design-stage — not registered)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -169,7 +150,7 @@ The enterprise control plane surfaces five API groups, all requiring the `Broker
 
 ---
 
-### Mesh KPIs — `/api/mesh-metrics`
+### Mesh KPIs — `/api/mesh-metrics` (design-stage — not registered)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -394,144 +375,44 @@ When caller requests graph but does not own node 545 (which is private to user X
 
 Node IDs are sequential u32 starting at 1. High bits encode type and visibility flags (see WebSocket binary protocol for flag definitions). Client must use `String()` coercion when comparing IDs.
 
-### GET /api/graph/stats
+### GET /api/graph/data/paginated, GET /api/graph/positions, GET /api/graph/auto-balance-notifications
 
-Return graph statistics without full data payload.
+Additional read routes registered in the same live scope (`src/handlers/api_handler/graph/mod.rs:678-706`):
 
-**Response** (200 OK):
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/graph/data` | Optional | Full graph (see above) |
+| GET | `/api/graph/data/paginated` | Optional | Paginated graph data |
+| GET | `/api/graph/positions` | Optional | Current node positions only |
+| GET | `/api/graph/auto-balance-notifications` | Optional | Auto-balance event notifications |
+| POST | `/api/graph/update` | `power_user` | Full bulk reload — re-fetches and rebuilds the graph from the content source |
+| POST | `/api/graph/refresh` | `authenticated` | Read-back of current graph state (no mutation) |
 
-```json
-{
-  "node_count": 1523,
-  "edge_count": 4200,
-  "knowledge_nodes": 199,
-  "ontology_nodes": 623,
-  "agent_nodes": 12,
-  "graph_types": ["knowledge", "ontology", "agent"]
-}
-```
+There is **no `GET /api/graph/stats`, `GET/POST/DELETE /api/graph/node(s)`, or per-node CRUD endpoint reachable at runtime.**
 
-### GET /api/graph/node/:id
-
-Get a single node by its numeric ID.
-
-**Response** (200 OK):
-
-```json
-{
-  "id": "42",
-  "label": "Design Patterns",
-  "node_type": "page",
-  "metadata": {
-    "classIri": "http://example.org/KnowledgePage",
-    "properties": { "public": true }
-  }
-}
-```
-
-**Error**: 404 if node not found.
-
-### POST /api/graph/node
-
-Add a node to the graph. No authentication required (checked against settings).
-
-**Request body**:
-
-```json
-{
-  "label": "New Concept",
-  "node_type": "page",
-  "metadata": {
-    "classIri": "http://example.org/Concept"
-  }
-}
-```
-
-**Response** (201 Created):
-
-```json
-{ "id": "1524", "label": "New Concept" }
-```
-
-### DELETE /api/graph/node/:id
-
-Remove a node by ID.
-
-**Response** (204 No Content): Empty body on success.
+`src/handlers/graph_state_handler.rs:422-433` does define a second `web::scope("/graph")` with `/statistics`, `/nodes`, `/nodes/{id}` (GET/PUT/DELETE), `/edges`, `/edges/{id}`, `/positions/batch`, and it is wired via `.configure()` in `api_handler/mod.rs:128` — but it registers **after** the `/graph` scope above (`api_handler/mod.rs:124`), and actix-web gives the first-registered scope with a given prefix exclusive ownership of that prefix (a documented gotcha called out inline at `api_handler/graph/mod.rs:673-676`: *"actix-web claims a route prefix for the FIRST registered `web::scope("/graph")` and routes defined in later same-prefix scopes return 404"*). So `graph_state_handler`'s node/edge/statistics routes compile and are registered, but are **shadowed and unreachable in practice** — any request to them 404s inside the first `/graph` scope's router before ever reaching the handler code. Treat them as dead code, not a usable API surface, until the scope conflict is resolved in Rust.
 
 ---
 
 ## Settings Endpoints
 
-Configured in `settings/api/settings_routes.rs`.
-
-All mutation endpoints require authentication. Anonymous users may read global settings.
-
-### GET /api/settings
-
-Get all global settings (or user-specific settings if authenticated).
-
-```http
-GET /api/settings
-Authorization: Bearer <token>
-X-Nostr-Pubkey: <pubkey>
-```
-
-**Response** (200 OK): Full `AppFullSettings` object (JSON-serialized).
+Configured in `settings/api/settings_routes.rs` (`configure_routes`, mounted at
+`src/main.rs:947-949` under `web::scope("/settings")` with a 60 req/min rate
+limit). There is **no generic key-based `GET/PUT/DELETE /api/settings/:key`
+or `POST /api/settings/bulk`** — that surface belonged to the old
+`settings_handler::config` (`src/handlers/settings_handler/routes.rs`, which
+also defined `/settings/path`, `/settings/schema`, `/settings/current`,
+`/settings/reset`, `/settings/save`), which is dead code: its `.configure()`
+call is commented out at `api_handler/mod.rs:138-139` ("OLD settings_handler
+disabled — using new SettingsActor routes"). All endpoints below are the live
+`SettingsActor`-backed replacement. All mutation endpoints require
+authentication; reads are open.
 
 ### GET /api/settings/all
 
-Alias for `GET /api/settings`. Returns user settings if authenticated, falls back to global settings for anonymous access.
+Get the full settings object.
 
-### GET /api/settings/:key
-
-Get a single setting by key.
-
-**Response** (200 OK):
-
-```json
-{ "key": "physics.damping", "value": 0.8 }
-```
-
-### PUT /api/settings/:key
-
-Update a single setting. Authentication required.
-
-```http
-PUT /api/settings/physics.damping
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{ "value": 0.9 }
-```
-
-**Response** (200 OK): Updated value.
-
-### POST /api/settings/bulk
-
-Bulk update multiple settings. Authentication required. Accepts partial JSON patches.
-
-```http
-POST /api/settings/bulk
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "changes": [
-    { "key": "physics.damping", "value": 0.8 },
-    { "key": "physics.spring", "value": 1.0 },
-    { "key": "rendering.maxNodes", "value": 500000 }
-  ]
-}
-```
-
-**Response** (200 OK): Array of updated keys.
-
-### DELETE /api/settings/:key
-
-Reset a setting to its default value. Authentication required.
-
-**Response** (200 OK): Default value for the key.
+**Response** (200 OK): Full settings object (JSON-serialized).
 
 ### GET /api/settings/user/filter
 
@@ -576,15 +457,25 @@ Content-Type: application/json
 
 **Response** (200 OK): Updated filter object.
 
-### Specific Settings Sub-routes (Auth Required)
+### Settings Sub-routes
+
+Full list registered by `settings_routes.rs:1404-1430` (`configure_routes`). GET reads are open; PUT/POST/DELETE require authentication.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| PUT | `/api/settings/physics` | Update physics simulation parameters |
-| PUT | `/api/settings/constraints` | Update ontology constraint weights |
-| PUT | `/api/settings/rendering` | Update rendering quality settings |
-| PUT | `/api/settings/node-filter` | Update global node filter |
-| PUT | `/api/settings/quality-gates` | Update quality gate thresholds |
+| GET / PUT | `/api/settings/physics` | Physics simulation parameters |
+| POST | `/api/settings/physics/reset-layout` | Reset layout to canonical defaults and re-heat physics |
+| GET / PUT | `/api/settings/constraints` | Ontology constraint weights |
+| GET / PUT | `/api/settings/rendering` | Rendering quality settings |
+| GET / PUT | `/api/settings/node-filter` | Global node filter |
+| GET / PUT | `/api/settings/quality-gates` | Quality gate thresholds |
+| GET / PUT | `/api/settings/visual` | Visual settings |
+| GET | `/api/settings/all` | Full settings object |
+| POST | `/api/settings/profiles` | Save a named settings profile |
+| GET | `/api/settings/profiles` | List saved profiles |
+| GET | `/api/settings/profiles/{id}` | Load a saved profile |
+| DELETE | `/api/settings/profiles/{id}` | Delete a saved profile |
+| GET / PUT | `/api/settings/user/filter` | Authenticated user's personal graph filter (see above) |
 
 ---
 
@@ -705,14 +596,17 @@ Run OWL classification (Whelk EL++ reasoner).
 
 ## Ontology Physics Endpoints
 
-Configured in `api_handler/ontology_physics/mod.rs`.
+Configured in `api_handler/ontology_physics/mod.rs:477-484` (`configure_routes`). All five routes do real GPU-actor work via `state.gpu_manager_addr` — **none return 501.**
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
+| POST | `/api/ontology-physics/enable` | Yes | Enable ontology-derived physics constraints |
+| POST | `/api/ontology-physics/disable` | Yes | Disable ontology forces (clears constraints via `ApplyOntologyConstraints`) |
 | GET | `/api/ontology-physics/constraints` | No | Get active physics constraints |
-| POST | `/api/ontology-physics/constraints` | Yes | Add constraint |
-| PUT | `/api/ontology-physics/weights` | Yes | Adjust constraint weights (returns 501) |
-| POST | `/api/ontology-physics/reset` | Yes | Reset physics config |
+| PUT | `/api/ontology-physics/weights` | Yes | Adjust constraint weights (`AdjustConstraintWeights` GPU actor message) |
+| GET | `/api/ontology-physics/trust-status` | No | Get trust-weighted constraint status |
+
+There is no `POST /api/ontology-physics/constraints` (add-constraint) or `POST /api/ontology-physics/reset` — those are not registered.
 
 ### POST /api/constraints/generate
 
@@ -763,31 +657,47 @@ Content-Type: application/json
 
 ## Analytics and Pathfinding Endpoints
 
-Configured in `api_handler/analytics/mod.rs`. All pathfinding and GPU analytics endpoints require the `gpu` feature flag at compile time and a CUDA-capable GPU. Analytics routes are now re-enabled (previously commented-out for testing; authentication fully restored).
+Configured in `api_handler/analytics/mod.rs:148-267` (`config`, single `web::scope("/analytics")` wrapped with `RequireAuth::authenticated().mutations_only()` — POSTs require auth, the listed GETs are public). All pathfinding and GPU analytics endpoints require the `gpu` feature flag at compile time and a CUDA-capable GPU.
 
 ### Standard Analytics
 
+The endpoints below are the full, grep-verified `/api/analytics/*` surface. Several paths previously documented here (`/metrics`, `/pagerank`, `/clustering`, `/community`, `/anomaly`, `/centrality`, `/clusters`, `/communities`, `/embedding`, `/similarity`, `/filter`, `/summary`, `/layout/force`, `/layout/stress`) are **not registered** — the real routes live one level deeper, e.g. `/pagerank/compute` not `/pagerank`.
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/analytics/metrics` | No | Graph metrics (BFS path length, clustering, centralization, modularity, efficiency) |
-| POST | `/api/analytics/pagerank` | Yes | Run PageRank computation |
-| POST | `/api/analytics/clustering` | Yes | Run K-means clustering |
-| POST | `/api/analytics/community` | Yes | Run Louvain community detection |
-| POST | `/api/analytics/anomaly` | Yes | Run LOF anomaly detection |
-| POST | `/api/analytics/centrality` | Yes | Compute centrality measures |
-| GET | `/api/analytics/clusters` | No | Get current cluster assignments |
-| GET | `/api/analytics/communities` | No | Get community assignments |
-| POST | `/api/analytics/embedding` | Yes | Compute graph embeddings |
-| POST | `/api/analytics/similarity` | Yes | Compute node similarity |
-| POST | `/api/analytics/filter` | Yes | Apply analytics filter |
-| GET | `/api/analytics/summary` | No | Analytics computation summary |
-| POST | `/api/analytics/layout/force` | Yes | Trigger force-directed layout |
-| POST | `/api/analytics/layout/stress` | Yes | Trigger stress majorization layout |
-| GET | `/api/analytics/feature-flags` | No | Check GPU feature availability |
+| POST | `/api/analytics/params` | Yes | Update analytics parameters |
+| POST | `/api/analytics/constraints` | Yes | Update physics constraints |
+| POST | `/api/analytics/focus` | Yes | Set graph focus |
+| POST | `/api/analytics/kernel-mode` | Yes | Set GPU kernel mode |
+| POST | `/api/analytics/clustering/run` | Yes | Run clustering |
+| POST | `/api/analytics/clustering/focus` | Yes | Focus a cluster |
+| POST | `/api/analytics/clustering/cancel` | Yes | Cancel a running clustering job |
+| POST | `/api/analytics/clustering/dbscan` | Yes | Run DBSCAN clustering |
+| POST | `/api/analytics/community/detect` | Yes | Run Louvain community detection |
+| POST | `/api/analytics/anomaly/detect` | Yes | Run GPU LOF/Z-score structural anomaly detection |
+| POST | `/api/analytics/anomaly/toggle` | Yes | Toggle agent-health anomaly heuristic |
+| POST | `/api/analytics/sssp/params` \| `/compute` \| `/toggle` | Yes | SSSP parameter/compute/toggle |
+| POST | `/api/analytics/stress-majorization/trigger` \| `/reset-safety` \| `/params` \| `/configure` | Yes | Stress-majorization layout control |
+| POST | `/api/analytics/feature-flags` | Yes | Update feature flags |
+| POST | `/api/analytics/pagerank/compute` | Yes | Run PageRank |
+| POST | `/api/analytics/pagerank/clear` | Yes | Clear PageRank cache |
+| POST | `/api/analytics/pathfinding/sssp` \| `/apsp` \| `/path` \| `/connected-components` | Yes | Pathfinding computations (see below) |
+| GET | `/api/analytics/pathfinding/stats/sssp` \| `/stats/components` | No | Pathfinding stats |
+| GET | `/api/analytics/params` \| `/constraints` \| `/stats` | No | Read back current params/constraints/performance stats |
+| GET | `/api/analytics/gpu-metrics` \| `/gpu-status` \| `/gpu-features` | No | GPU telemetry |
+| GET | `/api/analytics/clustering/status` | No | Clustering status |
+| GET | `/api/analytics/community/statistics` | No | Community detection statistics |
+| GET | `/api/analytics/anomaly/current` \| `/anomaly/config` | No | Current anomalies / anomaly config |
+| GET | `/api/analytics/insights` \| `/insights/realtime` | No | AI insights |
+| GET | `/api/analytics/sssp/status` | No | SSSP status |
+| GET | `/api/analytics/stress-majorization/stats` \| `/config` | No | Stress-majorization stats/config |
+| GET | `/api/analytics/dashboard-status` \| `/health-check` \| `/feature-flags` | No | Dashboard/health/feature-flag reads |
+| GET | `/api/analytics/pagerank/result` | No | Last PageRank result |
+| GET | `/api/analytics/ws` (upgrade) | Yes | GPU analytics WebSocket |
 
-### GET /api/analytics/pathfinding/:source/:target
+### POST /api/analytics/pathfinding/path
 
-Find the shortest path between two nodes.
+Find the shortest path between two nodes. **Note:** this is a POST with a JSON body — there is no `GET /api/analytics/pathfinding/:source/:target` route.
 
 **Response** (200 OK):
 
@@ -943,15 +853,22 @@ Connected components computation statistics.
 
 ### Semantic Forces — `/api/semantic-forces/*`
 
-| Method | Path | Auth | Status | Description |
-|--------|------|------|--------|-------------|
-| GET | `/api/semantic-forces/config` | No | 501 | Get semantic force config (not yet implemented) |
-| POST | `/api/semantic-forces/config` | Yes | Active | Update semantic force config |
-| POST | `/api/semantic-forces/compute` | Yes | Active | Trigger semantic force computation |
-| GET | `/api/semantic-forces/hierarchy` | No | 501 | Get hierarchy levels (not yet implemented) |
-| POST | `/api/semantic-forces/hierarchy/recalculate` | Yes | 501 | Recalculate hierarchy (not yet implemented) |
-| POST | `/api/semantic-forces/weights` | Yes | Active | Update force weights |
-| POST | `/api/semantic-forces/reset` | Yes | Active | Reset to defaults |
+Configured in `api_handler/semantic_forces.rs:649-663` (`config`). Every route below does real work against the GPU manager actor (`GetHierarchyLevels`, `GetSemanticConfig`, `RecalculateHierarchy` messages) — **none return 501.** The path is `/hierarchy-levels`, not `/hierarchy`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/semantic-forces/dag/configure` | Yes | Configure DAG layout mode/spacing |
+| POST | `/api/semantic-forces/type-clustering/configure` | Yes | Configure type-clustering forces |
+| POST | `/api/semantic-forces/collision/configure` | Yes | Configure collision avoidance |
+| GET | `/api/semantic-forces/hierarchy-levels` | No | Get hierarchy levels (GPU actor: `GetHierarchyLevels`) |
+| GET | `/api/semantic-forces/config` | No | Get current semantic forces config (GPU actor: `GetSemanticConfig`) |
+| POST | `/api/semantic-forces/hierarchy/recalculate` | Yes | Recalculate hierarchy levels (GPU actor: `RecalculateHierarchy`) |
+| GET | `/api/semantic-forces/relationship-types` | No | List relationship types |
+| POST | `/api/semantic-forces/relationship-types` | Yes | Register a new relationship type |
+| POST | `/api/semantic-forces/relationship-types/reload` | Yes | Sync relationship-type registry to GPU |
+| GET / PUT | `/api/semantic-forces/relationship-types/{uri}` | No / Yes | Get / update a relationship type's force parameters |
+
+There is no `/api/semantic-forces/compute`, `/weights`, or `/reset` — those are not registered.
 
 ### Schema Endpoints
 
@@ -1000,9 +917,15 @@ Only files tagged `public:: true` become knowledge graph page nodes. Ontology da
 
 ---
 
-## Discovery & Feature Engineering — `/api/discovery/*`
+## Discovery & Feature Engineering — `/api/discovery/*` (design-stage — not registered)
 
-Configured in `discovery_handler.rs`. Combines content embeddings (MiniLM-L6, 384-dim) with topology embeddings (TransE, 128-dim) for semantic search and ontology gap detection. See [ADR-072](../adr/ADR-072-autordf2gml-feature-engineering.md).
+There is no `discovery_handler.rs` and no `/api/discovery/*` route in the router (zero grep hits across `src/`). Everything in this section is unbuilt design, not a current contract. It combines content embeddings (MiniLM-L6, 384-dim) with topology embeddings (TransE, 128-dim) for semantic search and ontology gap detection. See [ADR-072](../adr/ADR-072-autordf2gml-feature-engineering.md).
+
+> **Don't conflate this with the operational memory stack:** the MiniLM-L6
+> embedding model named here is part of this unbuilt discovery design
+> (ADR-072) and is unrelated to the RuVector memory system's operational
+> embedding model, `bge-small-en-v1.5` (384-dim, served via Xinference) — that
+> stack is live today and backs `mcp__claude-flow__memory_*`, not this API.
 
 ### GET /api/discovery/search
 
@@ -1598,14 +1521,15 @@ GET /api/documentation — OpenAPI 3.0 JSON spec
 
 ## Endpoints Returning 501 (Not Implemented)
 
-These endpoints are registered in the router but their backend actor messages are not yet defined. They return HTTP 501 with a JSON error body.
+**Correction (2026-08-09):** the semantic-forces and ontology-physics endpoints previously listed here (`/api/semantic-forces/hierarchy`, `/api/semantic-forces/config`, `POST /api/semantic-forces/hierarchy/recalculate`, `PUT /api/ontology-physics/weights`) do **not** return 501 — they do real GPU-actor work (`api_handler/semantic_forces.rs:289-401`, `api_handler/ontology_physics/mod.rs:333-420`). See the "Semantic Forces" section under Semantic Forces and Schema Endpoints, and [Ontology Physics Endpoints](#ontology-physics-endpoints) above, for the corrected route tables.
 
-| Endpoint | Reason |
+The genuinely verified 501 stubs in the router are:
+
+| Endpoint | Source |
 |----------|--------|
-| `GET /api/semantic-forces/hierarchy` | Hierarchy retrieval not implemented |
-| `GET /api/semantic-forces/config` (detailed) | Semantic config retrieval not implemented |
-| `POST /api/semantic-forces/hierarchy/recalculate` | Recalculation not implemented |
-| `PUT /api/ontology-physics/weights` | Weight adjustment actor message not defined |
+| `POST /api/graph-export/publish` | `graph_export_handler.rs:284-290` — "Graph publishing not yet implemented" |
+| `GET /api/graph-export/stats` | `graph_export_handler.rs:326-330` — "Export statistics not yet implemented" |
+| `POST /pay/.deposit` (root-mounted, `#[cfg(feature = "solid-pod-embed")]`, not under `/api`) | `pay_handler.rs:479-489` — "Deposit not yet available via API" |
 
 ---
 
@@ -1680,7 +1604,10 @@ the Agent Control Surface Protocol (ACSP, kinds 31400--31405) to the forum's
 |--------|------|------|---------|
 | GET | `/api/broker/inbox` | `power_user` (agentbox `X-Agent-Key`) | List broker cases (WS-12 read projection of the enrichment store) |
 | GET | `/api/broker/cases/:id` | `power_user` (agentbox `X-Agent-Key`) | Get a single case |
+| POST | `/api/broker/cases/:id/decide` | `power_user` (agentbox `X-Agent-Key`) | Control-centre operator decide path (REC-2 / D3, PRD-023 WP-4) — funnels through the same decision core as the row below |
 | POST | `/api/enrichment-proposals/:id/decide` | `X-Agent-Key` | Record a broker decision (WS-9 decide; the durable + KG-writeback path) |
+
+All three routes are registered in `src/handlers/broker_inbox_handler.rs:162-176` (`configure_routes`, `web::scope("/broker")`), mounted at `src/main.rs:1023`. There is no `GET /api/broker/cases` (list-all), `POST /api/broker/cases` (create), or `GET /api/broker/cases/:id/history` — none of those are registered.
 
 ### Nostr / WebSocket event integration
 
