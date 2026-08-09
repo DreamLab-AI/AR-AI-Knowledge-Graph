@@ -328,7 +328,12 @@ impl Default for FeatureFlags {
             stress_majorization: false,
             semantic_constraints: false,
             sssp_integration: true,
-            ontology_validation: false,
+            // Reasoning endpoints (/api/ontology/{validate,inferred,inference,
+            // metrics,hierarchy}) are gated on this flag. The Whelk classifier
+            // runs at boot regardless; default-on EXPOSES the already-materialised
+            // inferred graph via the API so the bridge/agents (and the About page's
+            // "live reasoned graph") reflect it persistently, not just until restart.
+            ontology_validation: true,
         }
     }
 }
