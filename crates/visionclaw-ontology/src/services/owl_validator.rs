@@ -327,14 +327,32 @@ impl OwlValidatorService {
         for node in &graph_data.nodes {
             
             for label in &node.labels {
-                triples.push(RdfTriple {
-                    subject: self.expand_iri(&node.id)?,
-                    predicate: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
-                    object: self.expand_iri(label)?,
-                    is_literal: false,
-                    datatype: None,
-                    language: None,
-                });
+                if self.is_iri_shaped(label) {
+                    // A genuine type reference (registered CURIE, known absolute
+                    // scheme, or a clean bare-local slug) → rdf:type IRI.
+                    triples.push(RdfTriple {
+                        subject: self.expand_iri(&node.id)?,
+                        predicate: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+                        object: self.expand_iri(label)?,
+                        is_literal: false,
+                        datatype: None,
+                        language: None,
+                    });
+                } else {
+                    // A human display name (whitespace, or a colon-bearing title
+                    // like "ETSI Domain: Data Management + AI") is NOT a type —
+                    // emit it as an rdfs:label literal. Never expand_iri it as an
+                    // rd:type object, which raised "Unknown prefix" on such titles
+                    // and mis-asserted display names as classes in the reasoned graph.
+                    triples.push(RdfTriple {
+                        subject: self.expand_iri(&node.id)?,
+                        predicate: "http://www.w3.org/2000/01/rdf-schema#label".to_string(),
+                        object: label.clone(),
+                        is_literal: true,
+                        datatype: None,
+                        language: None,
+                    });
+                }
             }
 
             
@@ -657,6 +675,17 @@ impl OwlValidatorService {
     ///   4. If there is no `:` at all, treat it as a bare local name under the default namespace.
     ///   5. Otherwise the prefix is neither a registered CURIE nor a recognised absolute scheme
     ///      → `Unknown prefix` error.
+    /// Whether a property-graph node "label" is genuinely a type IRI (→ rdf:type)
+    /// rather than a human display name (→ rdfs:label literal). A type is
+    /// IRI-shaped: it contains no whitespace AND `expand_iri` accepts it (a
+    /// registered CURIE, a known absolute scheme, or a clean bare-local slug).
+    /// Display names such as "AI Infrastructure" (whitespace) or
+    /// "ETSI Domain: Data Management + AI" (colon title → expand_iri Err) are not
+    /// types and must not be expanded as rd:type IRIs.
+    fn is_iri_shaped(&self, label: &str) -> bool {
+        !label.chars().any(char::is_whitespace) && self.expand_iri(label).is_ok()
+    }
+
     fn expand_iri(&self, iri: &str) -> Result<String> {
         // (1) Hierarchical absolute IRI (scheme://authority/...) — always absolute.
         if iri.contains("://") {
@@ -1200,6 +1229,48 @@ mod tests {
         
         let inferred = validator.infer(&triples).unwrap();
         
+    }
+
+    #[test]
+    fn colon_and_space_labels_map_to_rdfs_label_literal_not_rdf_type() {
+        let validator = OwlValidatorService::new();
+        let graph = PropertyGraph {
+            nodes: vec![GraphNode {
+                id: "urn:ngm:class:etsi-domain-data-management-ai".to_string(),
+                // A colon-bearing display title (the corpus page title) + a
+                // whitespace label + a genuine IRI-shaped type slug.
+                labels: vec![
+                    "ETSI Domain: Data Management + AI".to_string(),
+                    "AI Infrastructure".to_string(),
+                    "clean-slug-type".to_string(),
+                ],
+                properties: HashMap::new(),
+            }],
+            edges: vec![],
+            metadata: HashMap::new(),
+        };
+        // Must NOT error (previously raised "Unknown prefix: ETSI Domain").
+        let triples = validator.map_graph_to_rdf(&graph).unwrap();
+
+        let rdfs_label = "http://www.w3.org/2000/01/rdf-schema#label";
+        let rdf_type = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
+        // The colon title and the whitespace label → rdfs:label literals.
+        let label_literals: Vec<&RdfTriple> = triples
+            .iter()
+            .filter(|t| t.predicate == rdfs_label && t.is_literal)
+            .collect();
+        assert!(label_literals.iter().any(|t| t.object == "ETSI Domain: Data Management + AI"));
+        assert!(label_literals.iter().any(|t| t.object == "AI Infrastructure"));
+
+        // The clean slug is IRI-shaped → an rd:type IRI object (not a literal).
+        assert!(triples
+            .iter()
+            .any(|t| t.predicate == rdf_type && !t.is_literal && t.object.contains("clean-slug-type")));
+        // And no rd:type triple carries a whitespace/colon display name.
+        assert!(!triples
+            .iter()
+            .any(|t| t.predicate == rdf_type && t.object.contains("ETSI Domain")));
     }
 
     #[test]
