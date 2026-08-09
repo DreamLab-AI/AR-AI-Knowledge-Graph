@@ -26,7 +26,8 @@ fn checked_copy_from<T: cust::memory::DeviceCopy>(
         eprintln!("[GPU SAFE_COPY MISMATCH] {}", msg);
         return Err(anyhow!(msg));
     }
-    dest.copy_from(src).map_err(|e| anyhow!("copy_from CUDA error in {}: {}", label, e))
+    dest.copy_from(src)
+        .map_err(|e| anyhow!("copy_from CUDA error in {}: {}", label, e))
 }
 
 #[inline]
@@ -44,12 +45,12 @@ fn checked_copy_to<T: cust::memory::DeviceCopy>(
         eprintln!("[GPU SAFE_COPY MISMATCH] {}", msg);
         return Err(anyhow!(msg));
     }
-    src.copy_to(dest).map_err(|e| anyhow!("copy_to CUDA error in {}: {}", label, e))
+    src.copy_to(dest)
+        .map_err(|e| anyhow!("copy_to CUDA error in {}: {}", label, e))
 }
 
 impl UnifiedGPUCompute {
     pub fn upload_positions(&mut self, x: &[f32], y: &[f32], z: &[f32]) -> Result<()> {
-
         if x.len() != self.num_nodes || y.len() != self.num_nodes || z.len() != self.num_nodes {
             return Err(anyhow!(
                 "Position array size mismatch: expected {} nodes, got x:{}, y:{}, z:{}",
@@ -59,7 +60,6 @@ impl UnifiedGPUCompute {
                 z.len()
             ));
         }
-
 
         if x.len() < self.allocated_nodes {
             let mut padded_x = x.to_vec();
@@ -149,7 +149,6 @@ impl UnifiedGPUCompute {
         col_indices: &[i32],
         weights: &[f32],
     ) -> Result<()> {
-
         if row_offsets.len() != self.num_nodes + 1 {
             return Err(anyhow!(
                 "Row offsets size mismatch: expected {} (num_nodes + 1), got {}",
@@ -157,7 +156,6 @@ impl UnifiedGPUCompute {
                 row_offsets.len()
             ));
         }
-
 
         if col_indices.len() != weights.len() {
             return Err(anyhow!(
@@ -167,7 +165,6 @@ impl UnifiedGPUCompute {
             ));
         }
 
-
         if col_indices.len() > self.allocated_edges {
             return Err(anyhow!(
                 "Too many edges: trying to upload {}, but only {} allocated",
@@ -176,25 +173,29 @@ impl UnifiedGPUCompute {
             ));
         }
 
-
-
         if row_offsets.len() <= self.allocated_nodes + 1 {
-
             let mut padded_row_offsets = row_offsets.to_vec();
             let last_val = *padded_row_offsets.last().unwrap_or(&0);
             padded_row_offsets.resize(self.allocated_nodes + 1, last_val);
-            checked_copy_from(&mut self.edge_row_offsets, &padded_row_offsets, "edge_row_offsets")?;
+            checked_copy_from(
+                &mut self.edge_row_offsets,
+                &padded_row_offsets,
+                "edge_row_offsets",
+            )?;
         } else {
             checked_copy_from(&mut self.edge_row_offsets, row_offsets, "edge_row_offsets")?;
         }
-
 
         if col_indices.len() < self.allocated_edges {
             let mut padded_col_indices = col_indices.to_vec();
             let mut padded_weights = weights.to_vec();
             padded_col_indices.resize(self.allocated_edges, 0);
             padded_weights.resize(self.allocated_edges, 0.0);
-            checked_copy_from(&mut self.edge_col_indices, &padded_col_indices, "edge_col_indices")?;
+            checked_copy_from(
+                &mut self.edge_col_indices,
+                &padded_col_indices,
+                "edge_col_indices",
+            )?;
             checked_copy_from(&mut self.edge_weights, &padded_weights, "edge_weights")?;
         } else {
             checked_copy_from(&mut self.edge_col_indices, col_indices, "edge_col_indices")?;
@@ -282,7 +283,6 @@ impl UnifiedGPUCompute {
         (current_usage, utilization, self.resize_count)
     }
 
-
     pub fn get_grid_occupancy(&self, num_grid_cells: usize) -> f32 {
         if num_grid_cells == 0 {
             return 0.0;
@@ -293,12 +293,10 @@ impl UnifiedGPUCompute {
         (avg_nodes_per_cell / optimal_occupancy).min(1.0)
     }
 
-
     pub fn resize_cell_buffers(&mut self, required_cells: usize) -> Result<()> {
         if required_cells <= self.max_grid_cells {
             return Ok(());
         }
-
 
         if required_cells > self.max_allowed_grid_cells {
             warn!(
@@ -309,20 +307,17 @@ impl UnifiedGPUCompute {
             return self.resize_cell_buffers_internal(capped_size);
         }
 
-
         let new_size = ((required_cells as f32 * self.cell_buffer_growth_factor) as usize)
             .min(self.max_allowed_grid_cells);
 
         self.resize_cell_buffers_internal(new_size)
     }
 
-
     fn resize_cell_buffers_internal(&mut self, new_size: usize) -> Result<()> {
         info!(
             "Resizing cell buffers from {} to {} cells ({}x growth)",
             self.max_grid_cells, new_size, self.cell_buffer_growth_factor
         );
-
 
         // cell_start/cell_end are per-frame scratch: every physics step zeroes
         // them from zero_buffer and refills them with compute_cell_bounds_kernel,
@@ -354,7 +349,6 @@ impl UnifiedGPUCompute {
         self.cell_start = new_cell_start;
         self.cell_end = new_cell_end;
 
-
         let old_memory = self.total_memory_allocated;
         self.max_grid_cells = new_size;
         self.zero_buffer = vec![0i32; new_size];
@@ -372,7 +366,6 @@ impl UnifiedGPUCompute {
             self.total_memory_allocated / 1024 / 1024
         );
 
-
         if self.resize_count > 10 {
             warn!("High resize frequency detected ({} resizes). Consider increasing initial buffer size.",
                   self.resize_count);
@@ -381,9 +374,7 @@ impl UnifiedGPUCompute {
         Ok(())
     }
 
-
     pub fn resize_buffers(&mut self, new_num_nodes: usize, new_num_edges: usize) -> Result<()> {
-
         if new_num_nodes <= self.num_nodes && new_num_edges <= self.num_edges {
             self.num_nodes = new_num_nodes;
             self.num_edges = new_num_edges;
@@ -395,10 +386,8 @@ impl UnifiedGPUCompute {
             self.num_nodes, self.num_edges, new_num_nodes, new_num_edges
         );
 
-
         let actual_new_nodes = ((new_num_nodes as f32 * 1.5) as usize).max(self.num_nodes);
         let actual_new_edges = ((new_num_edges as f32 * 1.5) as usize).max(self.num_edges);
-
 
         // Use allocated_nodes (not num_nodes) to match actual device buffer size,
         // which may be larger due to 1.5x overallocation from a previous resize.
@@ -410,7 +399,6 @@ impl UnifiedGPUCompute {
         let mut vel_y_data = vec![0.0f32; copy_size];
         let mut vel_z_data = vec![0.0f32; copy_size];
 
-
         checked_copy_to(&self.pos_in_x, &mut pos_x_data, "pos_in_x")?;
         checked_copy_to(&self.pos_in_y, &mut pos_y_data, "pos_in_y")?;
         checked_copy_to(&self.pos_in_z, &mut pos_z_data, "pos_in_z")?;
@@ -418,14 +406,12 @@ impl UnifiedGPUCompute {
         checked_copy_to(&self.vel_in_y, &mut vel_y_data, "vel_in_y")?;
         checked_copy_to(&self.vel_in_z, &mut vel_z_data, "vel_in_z")?;
 
-
         pos_x_data.resize(actual_new_nodes, 0.0);
         pos_y_data.resize(actual_new_nodes, 0.0);
         pos_z_data.resize(actual_new_nodes, 0.0);
         vel_x_data.resize(actual_new_nodes, 0.0);
         vel_y_data.resize(actual_new_nodes, 0.0);
         vel_z_data.resize(actual_new_nodes, 0.0);
-
 
         self.pos_in_x = DeviceBuffer::from_slice(&pos_x_data)?;
         self.pos_in_y = DeviceBuffer::from_slice(&pos_y_data)?;
@@ -441,7 +427,6 @@ impl UnifiedGPUCompute {
         self.vel_out_y = DeviceBuffer::from_slice(&vel_y_data)?;
         self.vel_out_z = DeviceBuffer::from_slice(&vel_z_data)?;
 
-
         self.mass = DeviceBuffer::from_slice(&vec![1.0f32; actual_new_nodes])?;
         self.node_graph_id = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.edge_row_offsets = DeviceBuffer::zeroed(actual_new_nodes + 1)?;
@@ -451,7 +436,6 @@ impl UnifiedGPUCompute {
         self.force_y = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.force_z = DeviceBuffer::zeroed(actual_new_nodes)?;
 
-
         self.cell_keys = DeviceBuffer::zeroed(actual_new_nodes)?;
         let sorted_indices: Vec<i32> = (0..actual_new_nodes as i32).collect();
         self.sorted_node_indices = DeviceBuffer::from_slice(&sorted_indices)?;
@@ -460,13 +444,11 @@ impl UnifiedGPUCompute {
         self.sort_keys_out = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.sort_values_out = DeviceBuffer::zeroed(actual_new_nodes)?;
 
-
         self.total_memory_allocated = Self::calculate_memory_usage(
             self.allocated_nodes,
             self.allocated_edges,
             self.max_grid_cells,
         );
-
 
         // Class metadata buffers must be resized with positions to avoid
         // stale CUDA device pointers after the position buffers are reallocated.
@@ -500,7 +482,6 @@ impl UnifiedGPUCompute {
         self.partial_inertia = DeviceBuffer::zeroed(new_num_blocks)?;
         self.min_distances = DeviceBuffer::zeroed(actual_new_nodes)?;
 
-
         self.lof_scores = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.local_densities = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.zscore_values = DeviceBuffer::zeroed(actual_new_nodes)?;
@@ -526,7 +507,6 @@ impl UnifiedGPUCompute {
     }
 
     pub fn set_params(&mut self, params: SimParams) -> Result<()> {
-
         info!(
             "Setting SimParams - spring_k: {:.4}, repel_k: {:.2}, damping: {:.3}, dt: {:.3}",
             params.spring_k, params.repel_k, params.damping, params.dt
@@ -538,12 +518,9 @@ impl UnifiedGPUCompute {
         Ok(())
     }
 
-    pub fn set_mode(&mut self, _mode: ComputeMode) {
-
-    }
+    pub fn set_mode(&mut self, _mode: ComputeMode) {}
 
     pub fn set_constraints(&mut self, mut constraints: Vec<ConstraintData>) -> Result<()> {
-
         let current_iteration = self.iteration;
         for constraint in &mut constraints {
             if constraint.activation_frame == 0 {
@@ -555,7 +532,6 @@ impl UnifiedGPUCompute {
             }
         }
 
-
         if constraints.len() > self.constraint_data.len() {
             info!(
                 "Resizing constraint buffer from {} to {} with progressive activation",
@@ -566,10 +542,13 @@ impl UnifiedGPUCompute {
             let new_constraint_buffer = DeviceBuffer::from_slice(&constraints)?;
             self.constraint_data = new_constraint_buffer;
         } else if !constraints.is_empty() {
-
             let constraint_len = self.constraint_data.len();
             let copy_len = constraints.len().min(constraint_len);
-            checked_copy_from(&mut self.constraint_data, &constraints[..copy_len], "constraint_data")?;
+            checked_copy_from(
+                &mut self.constraint_data,
+                &constraints[..copy_len],
+                "constraint_data",
+            )?;
         }
 
         self.num_constraints = constraints.len();
@@ -583,9 +562,12 @@ impl UnifiedGPUCompute {
     pub fn clear_constraints(&mut self) -> Result<()> {
         self.num_constraints = 0;
 
-
         let empty_constraints = vec![ConstraintData::default(); self.constraint_data.len()];
-        checked_copy_from(&mut self.constraint_data, &empty_constraints, "constraint_data")?;
+        checked_copy_from(
+            &mut self.constraint_data,
+            &empty_constraints,
+            "constraint_data",
+        )?;
 
         Ok(())
     }
@@ -608,7 +590,6 @@ impl UnifiedGPUCompute {
         }
         self.set_constraints(constraints.to_vec())
     }
-
 
     /// Upload pre-computed degree weights for degree-weighted gravity.
     /// `weights` should contain `log(1 + degree)` for each node.
@@ -653,14 +634,11 @@ impl UnifiedGPUCompute {
         num_nodes: usize,
         num_edges: usize,
     ) -> Result<()> {
-
         if num_nodes != self.num_nodes || num_edges != self.num_edges {
             self.resize_buffers(num_nodes, num_edges)?;
         }
 
-
         self.upload_edges_csr(&row_offsets, &col_indices, &edge_weights)?;
-
 
         self.upload_positions(&positions_x, &positions_y, &positions_z)?;
 
@@ -670,7 +648,6 @@ impl UnifiedGPUCompute {
         );
         Ok(())
     }
-
 
     pub fn update_positions_only(
         &mut self,

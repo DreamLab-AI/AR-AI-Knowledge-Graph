@@ -40,6 +40,4 @@ pub use owl_types::{
     AxiomType, InferenceResults, OwlAxiom, OwlClass, OwlCrossReference, OwlProperty,
     OwlRelationship, PropertyType,
 };
-pub use settings_repository::{
-    SettingValue, SettingsRepository, SettingsRepositoryError,
-};
+pub use settings_repository::{SettingValue, SettingsRepository, SettingsRepositoryError};

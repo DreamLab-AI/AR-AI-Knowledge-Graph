@@ -106,7 +106,11 @@ impl std::fmt::Display for MigrationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MigrationError::Store(e) => write!(f, "migration store error: {e}"),
-            MigrationError::ChecksumDrift { version, recorded, embedded } => write!(
+            MigrationError::ChecksumDrift {
+                version,
+                recorded,
+                embedded,
+            } => write!(
                 f,
                 "migration {version} checksum drift: ledger has {recorded}, binary has {embedded} \
                  (migrations are append-only — fix with a NEW migration)"
@@ -188,11 +192,7 @@ fn recorded_checksum(store: &Store, version: &str) -> Result<Option<String>, Mig
 
 /// Record a migration as applied: version + checksum + applied-at timestamp,
 /// all inserted via typed term builders (ADR-101 D3 — no string SPARQL).
-fn record_applied(
-    store: &Store,
-    version: &str,
-    checksum: &str,
-) -> Result<(), MigrationError> {
+fn record_applied(store: &Store, version: &str, checksum: &str) -> Result<(), MigrationError> {
     let subject = migration_subject(version);
     let graph = NamedNode::new_unchecked(GRAPH_MIGRATIONS);
     let now = chrono::Utc::now().to_rfc3339();
@@ -309,9 +309,7 @@ mod tests {
 
         let assert_graph = NamedNode::new_unchecked("urn:ngm:graph:ontology:assert");
         let legacy = NamedNode::new_unchecked("urn:ngm:class:camera");
-        let p_label = NamedNodeRef::new_unchecked(
-            "http://www.w3.org/2000/01/rdf-schema#label",
-        );
+        let p_label = NamedNodeRef::new_unchecked("http://www.w3.org/2000/01/rdf-schema#label");
         let label = Literal::new_simple_literal("Camera");
         store
             .insert(QuadRef::new(&legacy, p_label, &label, &assert_graph))

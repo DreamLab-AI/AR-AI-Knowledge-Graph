@@ -37,30 +37,78 @@ impl KnowledgeGraphRepository for EmptyKGRepo {
     async fn load_graph(&self) -> KGResult<Arc<GraphData>> {
         Ok(Arc::new(GraphData::default()))
     }
-    async fn save_graph(&self, _g: &GraphData) -> KGResult<()> { Ok(()) }
-    async fn add_node(&self, _n: &Node) -> KGResult<u32> { Ok(0) }
-    async fn batch_add_nodes(&self, _n: Vec<Node>) -> KGResult<Vec<u32>> { Ok(vec![]) }
-    async fn batch_add_nodes_if_absent(&self, _n: Vec<Node>) -> KGResult<Vec<u32>> { Ok(vec![]) }
-    async fn update_node(&self, _n: &Node) -> KGResult<()> { Ok(()) }
-    async fn batch_update_nodes(&self, _n: Vec<Node>) -> KGResult<()> { Ok(()) }
-    async fn remove_node(&self, _id: u32) -> KGResult<()> { Ok(()) }
-    async fn batch_remove_nodes(&self, _ids: Vec<u32>) -> KGResult<()> { Ok(()) }
-    async fn get_node(&self, _id: u32) -> KGResult<Option<Node>> { Ok(None) }
-    async fn get_nodes(&self, _ids: Vec<u32>) -> KGResult<Vec<Node>> { Ok(vec![]) }
-    async fn get_nodes_by_metadata_id(&self, _metadata_id: &str) -> KGResult<Vec<Node>> { Ok(vec![]) }
-    async fn get_nodes_by_owl_class_iri(&self, _iri: &str) -> KGResult<Vec<Node>> { Ok(vec![]) }
-    async fn search_nodes_by_label(&self, _label: &str) -> KGResult<Vec<Node>> { Ok(vec![]) }
-    async fn add_edge(&self, _e: &Edge) -> KGResult<String> { Ok(String::new()) }
-    async fn batch_add_edges(&self, _edges: Vec<Edge>) -> KGResult<Vec<String>> { Ok(vec![]) }
-    async fn update_edge(&self, _e: &Edge) -> KGResult<()> { Ok(()) }
-    async fn remove_edge(&self, _id: &str) -> KGResult<()> { Ok(()) }
-    async fn batch_remove_edges(&self, _ids: Vec<String>) -> KGResult<()> { Ok(()) }
-    async fn get_node_edges(&self, _id: u32) -> KGResult<Vec<Edge>> { Ok(vec![]) }
-    async fn get_edges_between(&self, _source: u32, _target: u32) -> KGResult<Vec<Edge>> { Ok(vec![]) }
-    async fn batch_update_positions(&self, _positions: Vec<(u32, f32, f32, f32)>) -> KGResult<()> { Ok(()) }
-    async fn get_all_positions(&self) -> KGResult<HashMap<u32, (f32, f32, f32)>> { Ok(HashMap::new()) }
-    async fn query_nodes(&self, _query: &str) -> KGResult<Vec<Node>> { Ok(vec![]) }
-    async fn get_neighbors(&self, _id: u32) -> KGResult<Vec<Node>> { Ok(vec![]) }
+    async fn save_graph(&self, _g: &GraphData) -> KGResult<()> {
+        Ok(())
+    }
+    async fn add_node(&self, _n: &Node) -> KGResult<u32> {
+        Ok(0)
+    }
+    async fn batch_add_nodes(&self, _n: Vec<Node>) -> KGResult<Vec<u32>> {
+        Ok(vec![])
+    }
+    async fn batch_add_nodes_if_absent(&self, _n: Vec<Node>) -> KGResult<Vec<u32>> {
+        Ok(vec![])
+    }
+    async fn update_node(&self, _n: &Node) -> KGResult<()> {
+        Ok(())
+    }
+    async fn batch_update_nodes(&self, _n: Vec<Node>) -> KGResult<()> {
+        Ok(())
+    }
+    async fn remove_node(&self, _id: u32) -> KGResult<()> {
+        Ok(())
+    }
+    async fn batch_remove_nodes(&self, _ids: Vec<u32>) -> KGResult<()> {
+        Ok(())
+    }
+    async fn get_node(&self, _id: u32) -> KGResult<Option<Node>> {
+        Ok(None)
+    }
+    async fn get_nodes(&self, _ids: Vec<u32>) -> KGResult<Vec<Node>> {
+        Ok(vec![])
+    }
+    async fn get_nodes_by_metadata_id(&self, _metadata_id: &str) -> KGResult<Vec<Node>> {
+        Ok(vec![])
+    }
+    async fn get_nodes_by_owl_class_iri(&self, _iri: &str) -> KGResult<Vec<Node>> {
+        Ok(vec![])
+    }
+    async fn search_nodes_by_label(&self, _label: &str) -> KGResult<Vec<Node>> {
+        Ok(vec![])
+    }
+    async fn add_edge(&self, _e: &Edge) -> KGResult<String> {
+        Ok(String::new())
+    }
+    async fn batch_add_edges(&self, _edges: Vec<Edge>) -> KGResult<Vec<String>> {
+        Ok(vec![])
+    }
+    async fn update_edge(&self, _e: &Edge) -> KGResult<()> {
+        Ok(())
+    }
+    async fn remove_edge(&self, _id: &str) -> KGResult<()> {
+        Ok(())
+    }
+    async fn batch_remove_edges(&self, _ids: Vec<String>) -> KGResult<()> {
+        Ok(())
+    }
+    async fn get_node_edges(&self, _id: u32) -> KGResult<Vec<Edge>> {
+        Ok(vec![])
+    }
+    async fn get_edges_between(&self, _source: u32, _target: u32) -> KGResult<Vec<Edge>> {
+        Ok(vec![])
+    }
+    async fn batch_update_positions(&self, _positions: Vec<(u32, f32, f32, f32)>) -> KGResult<()> {
+        Ok(())
+    }
+    async fn get_all_positions(&self) -> KGResult<HashMap<u32, (f32, f32, f32)>> {
+        Ok(HashMap::new())
+    }
+    async fn query_nodes(&self, _query: &str) -> KGResult<Vec<Node>> {
+        Ok(vec![])
+    }
+    async fn get_neighbors(&self, _id: u32) -> KGResult<Vec<Node>> {
+        Ok(vec![])
+    }
     async fn get_statistics(&self) -> KGResult<GraphStatistics> {
         Ok(GraphStatistics {
             node_count: 0,
@@ -70,8 +118,12 @@ impl KnowledgeGraphRepository for EmptyKGRepo {
             last_updated: chrono::Utc::now(),
         })
     }
-    async fn clear_graph(&self) -> KGResult<()> { Ok(()) }
-    async fn health_check(&self) -> KGResult<bool> { Ok(true) }
+    async fn clear_graph(&self) -> KGResult<()> {
+        Ok(())
+    }
+    async fn health_check(&self) -> KGResult<bool> {
+        Ok(true)
+    }
 }
 
 // ---------- Test Helpers ----------
@@ -93,7 +145,10 @@ fn build_mutation_service() -> OntologyMutationService {
 fn build_mutation_service_with_markdown() -> OntologyMutationService {
     let repo = create_test_ontology_repo();
     {
-        let mut classes = repo.classes.try_write().expect("lock available in test setup");
+        let mut classes = repo
+            .classes
+            .try_write()
+            .expect("lock available in test setup");
         if let Some(person) = classes.get_mut("mv:Person") {
             person.markdown_content = Some(
                 "- Person\n  - ### OntologyBlock\n    - ontology:: true\n    - definition:: A human being\n"
@@ -125,7 +180,10 @@ fn test_agent_context() -> AgentContext {
 async fn test_discover_finds_matching_classes() {
     let service = build_query_service();
     let results = service.discover("Person", 10, None).await.unwrap();
-    assert!(!results.is_empty(), "Should find at least one result for 'Person'");
+    assert!(
+        !results.is_empty(),
+        "Should find at least one result for 'Person'"
+    );
     assert_eq!(results[0].preferred_term, "Person");
     assert!(results[0].relevance_score > 0.0);
 }
@@ -140,14 +198,23 @@ async fn test_discover_respects_limit() {
 #[tokio::test]
 async fn test_discover_nonexistent_returns_empty() {
     let service = build_query_service();
-    let results = service.discover("zzz_nonexistent_xyzzy", 10, None).await.unwrap();
-    assert!(results.is_empty(), "Nonsense query should return no results");
+    let results = service
+        .discover("zzz_nonexistent_xyzzy", 10, None)
+        .await
+        .unwrap();
+    assert!(
+        results.is_empty(),
+        "Nonsense query should return no results"
+    );
 }
 
 #[tokio::test]
 async fn test_discover_multi_term_query() {
     let service = build_query_service();
-    let results = service.discover("Company Organization", 10, None).await.unwrap();
+    let results = service
+        .discover("Company Organization", 10, None)
+        .await
+        .unwrap();
     assert!(!results.is_empty(), "Multi-term query should match classes");
 }
 
@@ -191,7 +258,10 @@ async fn test_validate_cypher_unknown_label_with_hint() {
     assert!(!result.valid, "Perzon is not a known class — should fail");
     assert!(!result.errors.is_empty());
     assert!(
-        result.hints.iter().any(|h| h.to_lowercase().contains("person")),
+        result
+            .hints
+            .iter()
+            .any(|h| h.to_lowercase().contains("person")),
         "Should hint 'Person' for 'Perzon': {:?}",
         result.hints
     );
@@ -204,7 +274,10 @@ async fn test_validate_cypher_builtin_labels_pass() {
         .validate_and_execute_cypher("MATCH (n:OwlClass) RETURN n LIMIT 10")
         .await
         .unwrap();
-    assert!(result.valid, "OwlClass is a built-in label — should validate");
+    assert!(
+        result.valid,
+        "OwlClass is a built-in label — should validate"
+    );
 }
 
 // ---------- Proposal Tests ----------
@@ -231,14 +304,26 @@ async fn test_propose_create_generates_valid_result() {
         .unwrap();
 
     assert_eq!(result.action, "create");
-    assert!(result.consistency.consistent, "Should pass Whelk consistency");
-    assert!(result.quality_score > 0.5, "Fully-specified proposal should score well");
+    assert!(
+        result.consistency.consistent,
+        "Should pass Whelk consistency"
+    );
+    assert!(
+        result.quality_score > 0.5,
+        "Fully-specified proposal should score well"
+    );
     assert!(!result.proposal_id.is_empty());
     assert!(!result.markdown_preview.is_empty());
-    assert!(result.pr_url.is_none(), "PR should not be created without LOGSEQ_PRIVATE_REPO_GITHUB");
+    assert!(
+        result.pr_url.is_none(),
+        "PR should not be created without LOGSEQ_PRIVATE_REPO_GITHUB"
+    );
     match result.status {
         ProposalStatus::Staged => {}
-        _ => panic!("Expected Staged status without LOGSEQ_PRIVATE_REPO_GITHUB, got: {:?}", result.status),
+        _ => panic!(
+            "Expected Staged status without LOGSEQ_PRIVATE_REPO_GITHUB, got: {:?}",
+            result.status
+        ),
     }
 }
 
@@ -268,11 +353,26 @@ async fn test_propose_create_markdown_contains_ontology_block() {
         .unwrap();
 
     let preview = &result.markdown_preview;
-    assert!(preview.contains("OntologyBlock"), "Should contain OntologyBlock header");
-    assert!(preview.contains("ontology:: true"), "Should have ontology marker");
-    assert!(preview.contains("Neural Network"), "Should contain preferred term");
-    assert!(preview.contains("ai:NeuralNetwork"), "Should contain OWL class");
-    assert!(preview.contains("status:: agent-proposed"), "Should be agent-proposed");
+    assert!(
+        preview.contains("OntologyBlock"),
+        "Should contain OntologyBlock header"
+    );
+    assert!(
+        preview.contains("ontology:: true"),
+        "Should have ontology marker"
+    );
+    assert!(
+        preview.contains("Neural Network"),
+        "Should contain preferred term"
+    );
+    assert!(
+        preview.contains("ai:NeuralNetwork"),
+        "Should contain OWL class"
+    );
+    assert!(
+        preview.contains("status:: agent-proposed"),
+        "Should be agent-proposed"
+    );
 }
 
 #[tokio::test]

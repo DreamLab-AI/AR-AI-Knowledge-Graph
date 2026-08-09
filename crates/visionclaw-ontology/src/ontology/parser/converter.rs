@@ -6,14 +6,11 @@ use crate::ontology::parser::parser::LogseqPage;
 pub fn logseq_properties_to_owl(page: &LogseqPage) -> Result<Vec<String>> {
     let mut axioms = Vec::new();
 
-    
     for (property, values) in &page.properties {
-        
         if property.starts_with("owl:") || property.starts_with("term-") {
             continue;
         }
 
-        
         if matches!(
             property.as_str(),
             "definition" | "maturity" | "source" | "preferred-term" | "synonyms"
@@ -21,16 +18,12 @@ pub fn logseq_properties_to_owl(page: &LogseqPage) -> Result<Vec<String>> {
             continue;
         }
 
-        
         let owl_property = kebab_to_camel(property);
 
         for value in values {
-            
             if let Some(linked_class) = extract_wikilink(value) {
-                
                 let class_iri = wikilink_to_iri(&linked_class);
 
-                
                 let axiom = format!(
                     "SubClassOf(mv:{}\n  ObjectSomeValuesFrom(mv:{} mv:{}))",
                     wikilink_to_iri(&page.title),
@@ -42,7 +35,6 @@ pub fn logseq_properties_to_owl(page: &LogseqPage) -> Result<Vec<String>> {
         }
     }
 
-    
     if let Some(maturity_values) = page.properties.get("maturity") {
         if let Some(maturity) = maturity_values.first() {
             let axiom = format!(
@@ -92,10 +84,8 @@ fn extract_wikilink(s: &str) -> Option<String> {
 }
 
 fn wikilink_to_iri(s: &str) -> String {
-    
     let cleaned = s.replace("[[", "").replace("]]", "");
 
-    
     cleaned
         .split_whitespace()
         .map(|word| {
@@ -104,12 +94,11 @@ fn wikilink_to_iri(s: &str) -> String {
                 None => String::new(),
                 Some(first) => {
                     let mut result = String::new();
-                    
+
                     for ch in first.to_string().chars().chain(chars) {
                         if ch.is_alphanumeric() {
                             result.push(ch);
                         } else if ch == '-' {
-                            
                         } else {
                             result.push('_');
                         }

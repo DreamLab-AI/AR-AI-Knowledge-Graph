@@ -54,10 +54,7 @@ const BARBELL_K3_LABELS: &[i32] = &[0, 0, 0, 1, 1, 1];
 
 /// Build a symmetric (both-direction) unit-weight CSR from undirected edges.
 /// Returns (offsets, indices, weights, degrees, total_weight).
-fn build_csr(
-    n: usize,
-    edges: &[(usize, usize)],
-) -> (Vec<i32>, Vec<i32>, Vec<f32>, Vec<f32>, f32) {
+fn build_csr(n: usize, edges: &[(usize, usize)]) -> (Vec<i32>, Vec<i32>, Vec<f32>, Vec<f32>, f32) {
     let mut adj: Vec<Vec<i32>> = vec![Vec::new(); n];
     for &(u, v) in edges {
         adj[u].push(v as i32);
@@ -186,16 +183,8 @@ fn calculate_modularity_shadow(communities: &[Community]) -> f32 {
 #[test]
 fn qe_t5_modularity_is_canonical_csr_not_shadow() {
     // --- canonical Q via modularity_csr (the single source of truth) ---
-    let (offsets, indices, weights, degrees, m) =
-        build_csr(BARBELL_K3_N, BARBELL_K3_EDGES);
-    let q_canonical = modularity_csr(
-        BARBELL_K3_LABELS,
-        &offsets,
-        &indices,
-        &weights,
-        &degrees,
-        m,
-    );
+    let (offsets, indices, weights, degrees, m) = build_csr(BARBELL_K3_N, BARBELL_K3_EDGES);
+    let q_canonical = modularity_csr(BARBELL_K3_LABELS, &offsets, &indices, &weights, &degrees, m);
 
     // The value the system reports for stats.modularity IS modularity_csr (the
     // detection path returns it directly; stats reuses it). Pin it to 5/14.
@@ -212,8 +201,14 @@ fn qe_t5_modularity_is_canonical_csr_not_shadow() {
     // reported modularity is NOT that value — the divergence that motivated the
     // fix is real, and the system is on the correct side of it.
     let q_shadow = calculate_modularity_shadow(&[
-        Community { internal_edges: 3, external_edges: 1 }, // A = {0,1,2}
-        Community { internal_edges: 3, external_edges: 1 }, // B = {3,4,5}
+        Community {
+            internal_edges: 3,
+            external_edges: 1,
+        }, // A = {0,1,2}
+        Community {
+            internal_edges: 3,
+            external_edges: 1,
+        }, // B = {3,4,5}
     ]);
     assert!(
         (q_shadow - 0.25f32).abs() < 1e-4,
@@ -235,19 +230,17 @@ fn qe_t5_modularity_is_canonical_csr_not_shadow() {
 fn qe_t5_canonical_q_passes_gate_shadow_q_does_not() {
     const MODULARITY_GATE: f32 = 0.3;
 
-    let (offsets, indices, weights, degrees, m) =
-        build_csr(BARBELL_K3_N, BARBELL_K3_EDGES);
-    let q_canonical = modularity_csr(
-        BARBELL_K3_LABELS,
-        &offsets,
-        &indices,
-        &weights,
-        &degrees,
-        m,
-    );
+    let (offsets, indices, weights, degrees, m) = build_csr(BARBELL_K3_N, BARBELL_K3_EDGES);
+    let q_canonical = modularity_csr(BARBELL_K3_LABELS, &offsets, &indices, &weights, &degrees, m);
     let q_shadow = calculate_modularity_shadow(&[
-        Community { internal_edges: 3, external_edges: 1 },
-        Community { internal_edges: 3, external_edges: 1 },
+        Community {
+            internal_edges: 3,
+            external_edges: 1,
+        },
+        Community {
+            internal_edges: 3,
+            external_edges: 1,
+        },
     ]);
 
     // Canonical Q correctly passes the gate.

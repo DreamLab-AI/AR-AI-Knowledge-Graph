@@ -170,9 +170,15 @@ async fn p2_seed_registers_the_mr_copresence_canaries_armed() {
         .iter()
         .find(|c| c.canary_id == CANARY_M4_RAY)
         .expect("CANARY-VC-M4-RAY seeded by seed_p2_canaries");
-    assert_eq!(ray.kind, "one-shot", "M4 ray is a one-shot resolution proof");
+    assert_eq!(
+        ray.kind, "one-shot",
+        "M4 ray is a one-shot resolution proof"
+    );
     assert_eq!(ray.wave.as_deref(), Some("P2"));
-    assert!(ray.armed && !ray.fired, "armed until the sidecar fires it live");
+    assert!(
+        ray.armed && !ray.fired,
+        "armed until the sidecar fires it live"
+    );
     assert_eq!(ray.observation_count, 0);
 
     let interv = status

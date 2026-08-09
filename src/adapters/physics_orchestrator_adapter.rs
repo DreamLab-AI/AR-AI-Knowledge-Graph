@@ -9,14 +9,12 @@ use async_trait::async_trait;
 use tracing::{debug, error, info, instrument};
 
 use crate::actors::messages::{
-    ApplyOntologyConstraints, ConstraintMergeMode, StartSimulation,
-    StopSimulation, UpdateSimulationParams,
+    ApplyOntologyConstraints, ConstraintMergeMode, StartSimulation, StopSimulation,
+    UpdateSimulationParams,
 };
 use crate::actors::physics_orchestrator_actor::{
     GetPhysicsStatus, PhysicsOrchestratorActor, UpdateGraphData,
 };
-use visionclaw_domain::models::constraints::ConstraintSet;
-use visionclaw_domain::models::graph::GraphData;
 use crate::models::simulation_params::SimulationParams as ActorSimulationParams;
 use crate::ports::physics_simulator::{
     BinaryNodeData, Constraint as PortConstraint, ConstraintType, PhysicsSimulator,
@@ -24,6 +22,8 @@ use crate::ports::physics_simulator::{
 };
 use std::sync::Arc;
 use std::time::Duration;
+use visionclaw_domain::models::constraints::ConstraintSet;
+use visionclaw_domain::models::graph::GraphData;
 
 pub struct PhysicsOrchestratorAdapter {
     actor_addr: Addr<PhysicsOrchestratorActor>,
@@ -31,7 +31,6 @@ pub struct PhysicsOrchestratorAdapter {
 }
 
 impl PhysicsOrchestratorAdapter {
-    
     pub fn new(actor_addr: Addr<PhysicsOrchestratorActor>) -> Self {
         info!("Initializing PhysicsOrchestratorAdapter");
         Self {
@@ -40,13 +39,11 @@ impl PhysicsOrchestratorAdapter {
         }
     }
 
-    
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
-    
     fn convert_constraint_to_actor(
         constraint: &PortConstraint,
     ) -> visionclaw_domain::models::constraints::Constraint {
@@ -57,38 +54,30 @@ impl PhysicsOrchestratorAdapter {
                 if let Some((x, y, z)) = constraint.target_position {
                     ActorConstraint::fixed_position(constraint.node_id, x, y, z)
                 } else {
-                    
                     ActorConstraint::fixed_position(constraint.node_id, 0.0, 0.0, 0.0)
                 }
             }
             ConstraintType::Spring => {
-                
                 ActorConstraint::separation(constraint.node_id, constraint.node_id + 1, 100.0)
             }
             ConstraintType::Boundary => {
-                
                 ActorConstraint::fixed_position(constraint.node_id, 0.0, 0.0, 0.0)
             }
         }
     }
 
-    
     fn convert_params_to_actor(params: &SimulationParams) -> ActorSimulationParams {
-        
         let mut actor_params = ActorSimulationParams::default();
 
-        
         actor_params.repel_k = params.settings.repel_k;
         actor_params.spring_k = params.settings.spring_k;
         actor_params.damping = params.settings.damping;
         actor_params.max_velocity = params.settings.max_velocity;
         actor_params.enabled = params.settings.enabled;
-        
 
         actor_params
     }
 
-    
     fn convert_position_to_port(
         pos: &crate::utils::socket_flow_messages::BinaryNodeData,
     ) -> BinaryNodeData {
@@ -102,13 +91,11 @@ impl PhysicsSimulator for PhysicsOrchestratorAdapter {
     async fn run_simulation_step(&self, graph: &GraphData) -> Result<Vec<(u32, BinaryNodeData)>> {
         debug!("Running physics simulation step via adapter");
 
-        
         let graph_arc = Arc::new(graph.clone());
         self.actor_addr.do_send(UpdateGraphData {
             graph_data: graph_arc,
         });
 
-        
         let _status = tokio::time::timeout(self.timeout, self.actor_addr.send(GetPhysicsStatus))
             .await
             .map_err(|_| {
@@ -120,7 +107,6 @@ impl PhysicsSimulator for PhysicsOrchestratorAdapter {
                 PhysicsSimulatorError::SimulationError(format!("Actor communication failed: {}", e))
             })?;
 
-        
         let positions: Vec<(u32, BinaryNodeData)> = graph
             .nodes
             .iter()
@@ -173,25 +159,23 @@ impl PhysicsSimulator for PhysicsOrchestratorAdapter {
     async fn apply_constraints(&self, constraints: Vec<PortConstraint>) -> Result<()> {
         debug!("Applying {} constraints via adapter", constraints.len());
 
-        
-        let actor_constraints: Vec<visionclaw_domain::models::constraints::Constraint> = constraints
-            .iter()
-            .map(|c| Self::convert_constraint_to_actor(c))
-            .collect();
+        let actor_constraints: Vec<visionclaw_domain::models::constraints::Constraint> =
+            constraints
+                .iter()
+                .map(|c| Self::convert_constraint_to_actor(c))
+                .collect();
 
-        
         let mut constraint_set = ConstraintSet::default();
         for constraint in actor_constraints {
             constraint_set.constraints.push(constraint);
         }
 
-        
         let result = tokio::time::timeout(
             self.timeout,
             self.actor_addr.send(ApplyOntologyConstraints {
                 constraint_set,
                 merge_mode: ConstraintMergeMode::Merge,
-                graph_id: 0, 
+                graph_id: 0,
             }),
         )
         .await
@@ -308,7 +292,6 @@ mod tests {
         let actor_constraint =
             PhysicsOrchestratorAdapter::convert_constraint_to_actor(&port_constraint);
 
-        
         assert_eq!(actor_constraint.node_indices.len(), 1);
         assert_eq!(actor_constraint.node_indices[0], 1);
     }

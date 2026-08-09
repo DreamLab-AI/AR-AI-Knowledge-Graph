@@ -5,39 +5,37 @@
 
 use actix::prelude::*;
 use serde::{Deserialize, Serialize};
-// use log::{info, debug, error}; 
+// use log::{info, debug, error};
 use std::collections::HashMap;
 
 #[derive(Message, Debug, Clone, Serialize, Deserialize)]
 #[rtype(result = "Result<SwarmVoiceResponse, String>")]
 pub struct VoiceCommand {
-    
     pub raw_text: String,
-    
+
     pub parsed_intent: SwarmIntent,
-    
+
     pub context: Option<ConversationContext>,
-    
+
     pub respond_via_voice: bool,
-    
+
     pub session_id: String,
-    
+
     pub voice_tag: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwarmVoiceResponse {
-    
     pub text: String,
-    
+
     pub use_voice: bool,
-    
+
     pub metadata: Option<HashMap<String, String>>,
-    
+
     pub follow_up: Option<String>,
-    
+
     pub voice_tag: Option<String>,
-    
+
     pub is_final: Option<bool>,
 }
 
@@ -83,7 +81,7 @@ pub enum GraphAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConversationContext {
     pub session_id: String,
-    pub history: Vec<(String, String)>, 
+    pub history: Vec<(String, String)>,
     pub current_agents: Vec<String>,
     pub pending_clarification: Option<String>,
     pub turn_count: usize,
@@ -92,18 +90,10 @@ pub struct ConversationContext {
 pub struct VoicePreamble;
 
 impl VoicePreamble {
-    
-    
-    
-    
-    
-    
     pub fn generate(intent: &SwarmIntent) -> String {
-        
         let base_preamble =
             "[VOICE_MODE: Reply in 1-2 short sentences. Be conversational. No special chars.]";
 
-        
         let intent_hint = match intent {
             SwarmIntent::SpawnAgent { .. } => " Confirm agent creation.",
             SwarmIntent::QueryStatus { .. } => " Summarize status briefly.",
@@ -117,18 +107,15 @@ impl VoicePreamble {
         format!("{}{}", base_preamble, intent_hint)
     }
 
-    
     pub fn wrap_instruction(instruction: &str, intent: &SwarmIntent) -> String {
         format!("{}\n{}", Self::generate(intent), instruction)
     }
 }
 
 impl VoiceCommand {
-    
     pub fn parse(text: &str, session_id: String) -> Result<Self, String> {
         let lower = text.to_lowercase();
 
-        
         let parsed_intent = if lower.contains("add agent") || lower.contains("spawn") {
             let agent_type = Self::extract_agent_type(&lower)?;
             SwarmIntent::SpawnAgent {
@@ -151,7 +138,6 @@ impl VoiceCommand {
         } else if lower.contains("help") {
             SwarmIntent::Help
         } else {
-            
             SwarmIntent::ExecuteTask {
                 description: text.to_string(),
                 priority: TaskPriority::Medium,
@@ -168,16 +154,13 @@ impl VoiceCommand {
         })
     }
 
-    
     fn extract_agent_type(text: &str) -> Result<String, String> {
-        
         for agent in &["researcher", "coder", "analyst", "coordinator", "optimizer"] {
             if text.contains(agent) {
                 return Ok(agent.to_string());
             }
         }
 
-        
         if let Some(pos) = text.find("agent ") {
             let after = &text[pos + 6..];
             if let Some(word) = after.split_whitespace().next() {
@@ -188,14 +171,11 @@ impl VoiceCommand {
         Err("Could not determine agent type".to_string())
     }
 
-    
     fn extract_target(text: &str) -> Option<String> {
-        
         if text.contains("all") {
             return Some("all".to_string());
         }
 
-        
         for agent in &["researcher", "coder", "analyst", "coordinator"] {
             if text.contains(agent) {
                 return Some(agent.to_string());
@@ -205,15 +185,11 @@ impl VoiceCommand {
         None
     }
 
-    
     fn extract_agent_id(text: &str) -> Result<String, String> {
-        
         Self::extract_agent_type(text)
     }
 
-    
     fn extract_label(text: &str) -> Result<String, String> {
-        
         for keyword in &["called", "named", "label", "with"] {
             if let Some(pos) = text.find(keyword) {
                 let after = &text[pos + keyword.len()..].trim();
@@ -223,12 +199,10 @@ impl VoiceCommand {
             }
         }
 
-        Ok("node".to_string()) 
+        Ok("node".to_string())
     }
 
-    
     pub fn format_response(response: &str) -> SwarmVoiceResponse {
-        
         let cleaned = response
             .replace("```", "")
             .replace("**", "")
@@ -237,7 +211,6 @@ impl VoiceCommand {
             .replace("- ", "")
             .replace("* ", "");
 
-        
         let text = if cleaned.len() > 200 {
             format!("{}...", &cleaned[..197])
         } else {

@@ -37,12 +37,12 @@ use crate::adapters::sqlite_enrichment_repository::{
 use crate::adapters::WhelkInferenceEngine;
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use crate::ports::ontology_repository::{AxiomType, OntologyRepository, OwlAxiom, OwlClass};
+use crate::services::acsp::events::{
+    ActionDef, ActionStyle, FieldDef, FieldType, LayoutHint, PanelDefinition, PanelSchema,
+};
 use crate::services::acsp::{
     build_action_request, build_case_status_update, build_panel_definition, build_panel_state,
     AcspClient, ActionPriority, ActionRequest, CaseCategory, CaseDecision, CaseSpec, SubjectKind,
-};
-use crate::services::acsp::events::{
-    ActionDef, ActionStyle, FieldDef, FieldType, LayoutHint, PanelDefinition, PanelSchema,
 };
 use crate::services::github_pr_service::{GitHubPRService, PrState};
 use crate::services::speech_service::SpeechService;
@@ -578,9 +578,18 @@ pub fn parse_draft_axioms(draft: &str) -> (Vec<OwlClass>, Vec<OwlAxiom>) {
         iri: id.to_string(),
         ..Default::default()
     };
-    class.label = value.get("label").and_then(|v| v.as_str()).map(String::from);
-    class.maturity = value.get("maturity").and_then(|v| v.as_str()).map(String::from);
-    class.source_domain = value.get("domain").and_then(|v| v.as_str()).map(String::from);
+    class.label = value
+        .get("label")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    class.maturity = value
+        .get("maturity")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    class.source_domain = value
+        .get("domain")
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     let mut classes = vec![class];
     let mut axioms = Vec::new();
@@ -593,11 +602,19 @@ pub fn parse_draft_axioms(draft: &str) -> (Vec<OwlClass>, Vec<OwlAxiom>) {
         annotations: HashMap::new(),
     };
 
-    for parent in value.get("subClassOf").map(jsonld_iri_list).unwrap_or_default() {
+    for parent in value
+        .get("subClassOf")
+        .map(jsonld_iri_list)
+        .unwrap_or_default()
+    {
         axioms.push(mk(AxiomType::SubClassOf, &parent));
         classes.push(declare_class(&parent));
     }
-    for other in value.get("disjointWith").map(jsonld_iri_list).unwrap_or_default() {
+    for other in value
+        .get("disjointWith")
+        .map(jsonld_iri_list)
+        .unwrap_or_default()
+    {
         axioms.push(mk(AxiomType::DisjointWith, &other));
         classes.push(declare_class(&other));
     }
@@ -616,7 +633,10 @@ async fn run_consistency_gate(
     draft_axioms: &[OwlAxiom],
 ) -> Result<(), String> {
     let Some(repo) = base_src else {
-        return Err("consistency gate unavailable (no ontology source configured for this profile)".to_string());
+        return Err(
+            "consistency gate unavailable (no ontology source configured for this profile)"
+                .to_string(),
+        );
     };
     let base_classes = repo.get_classes().await.unwrap_or_else(|e| {
         warn!("[Elevation] consistency gate: base classes load failed ({e:?}); checking draft in isolation");
@@ -708,7 +728,10 @@ impl Actor for ElevationActor {
         // visible: without a GitHub token no PR can open OR resolve, so say so
         // loudly at boot rather than silently never firing the terminal event.
         if GitHubPRService::has_github_token() {
-            info!("[Elevation] GOV-2 merge poll armed (every {}s) — merged PRs fire concept_elevated", PR_POLL_INTERVAL.as_secs());
+            info!(
+                "[Elevation] GOV-2 merge poll armed (every {}s) — merged PRs fire concept_elevated",
+                PR_POLL_INTERVAL.as_secs()
+            );
         } else {
             warn!("[Elevation] GOV-2 DEGRADED: no GitHub token (LOGSEQ_PRIVATE_REPO_GITHUB) — elevation PRs cannot be opened and merge polling cannot resolve; concept_elevated will never fire until a token is configured");
         }
@@ -751,14 +774,14 @@ impl Handler<VoiceTranscript> for ElevationActor {
                 .lookup(&phrase)
                 .map(str::to_string)
                 .unwrap_or(phrase);
-            if self.seen.contains(&label)
-                || self.pending.values().any(|p| p.label == label)
-            {
+            if self.seen.contains(&label) || self.pending.values().any(|p| p.label == label) {
                 self.speak(format!("{label} is already in elevation review."));
                 return;
             }
             self.voice.note(&label, &line, "", now);
-            let Some(acsp) = self.acsp.clone() else { return };
+            let Some(acsp) = self.acsp.clone() else {
+                return;
+            };
             let candidate = FrontierCandidate {
                 label: label.clone(),
                 degree: 0,
@@ -766,8 +789,7 @@ impl Handler<VoiceTranscript> for ElevationActor {
                 referenced_by: Vec::new(),
             };
             let demand = self.voice.demand(&label).cloned();
-            let (spec, pending) =
-                Self::case_for(&candidate, demand.as_ref(), ActionPriority::High);
+            let (spec, pending) = Self::case_for(&candidate, demand.as_ref(), ActionPriority::High);
             let case_id = spec.case_id.clone();
             let proposal = Self::pending_proposal(&spec, &pending);
             let repo = self.enrichment_repo.clone();
@@ -880,9 +902,7 @@ impl Handler<RunCycle> for ElevationActor {
                 let index_labels: Vec<String> = graph
                     .nodes
                     .iter()
-                    .filter(|n| {
-                        matches!(n.node_type.as_deref(), Some("owl_class") | Some("page"))
-                    })
+                    .filter(|n| matches!(n.node_type.as_deref(), Some("owl_class") | Some("page")))
                     .map(|n| n.label.clone())
                     .collect();
 
@@ -904,9 +924,7 @@ impl Handler<RunCycle> for ElevationActor {
                             // to the working set.
                             let proposal = ElevationActor::pending_proposal(&spec, &pending);
                             if let Err(e) = repo.create_or_update(&proposal).await {
-                                warn!(
-                                    "[Elevation] pending-case persist failed for {case_id}: {e}"
-                                );
+                                warn!("[Elevation] pending-case persist failed for {case_id}: {e}");
                             }
                             info!(
                                 "[Elevation] opened case {case_id} for '{}' (voice={})",
@@ -922,9 +940,8 @@ impl Handler<RunCycle> for ElevationActor {
             })
             .map(|(opened, frontier_size, index_labels), act, ctx| {
                 if !index_labels.is_empty() {
-                    act.concept_index = Arc::new(ConceptIndex::build(
-                        index_labels.iter().map(String::as_str),
-                    ));
+                    act.concept_index =
+                        Arc::new(ConceptIndex::build(index_labels.iter().map(String::as_str)));
                 }
                 for (case_id, pending) in opened {
                     act.seen.insert(pending.label.clone());
@@ -968,7 +985,9 @@ impl Handler<Decision> for ElevationActor {
                 ctx.spawn(
                     actix::fut::wrap_future::<_, Self>(async move {
                         if let Err(e) = repo.record_decision(&stored).await {
-                            warn!("[Elevation] decision reconcile persist failed for {case_id}: {e}");
+                            warn!(
+                                "[Elevation] decision reconcile persist failed for {case_id}: {e}"
+                            );
                         }
                     })
                     .map(|_, _, _| ()),
@@ -1255,9 +1274,15 @@ mod tests {
         // Either signal at `production` (any case) → production → opt-in only.
         assert!(is_production_from(Some("production".into()), None));
         assert!(is_production_from(None, Some("Production".into())));
-        assert!(is_production_from(Some("PRODUCTION".into()), Some("development".into())));
+        assert!(is_production_from(
+            Some("PRODUCTION".into()),
+            Some("development".into())
+        ));
         // Dev/staging values are not production.
-        assert!(!is_production_from(Some("development".into()), Some("development".into())));
+        assert!(!is_production_from(
+            Some("development".into()),
+            Some("development".into())
+        ));
         assert!(!is_production_from(Some("staging".into()), None));
     }
 
@@ -1295,7 +1320,13 @@ mod tests {
             node(1, "finality mechanism", "owl_class", false, None),
             node(2, "search space definition", "owl_class", false, None),
             node(3, "Authored Class", "owl_class", true, Some("blockchain")),
-            node(4, "Consensus Layer", "ontology_node", true, Some("blockchain")),
+            node(
+                4,
+                "Consensus Layer",
+                "ontology_node",
+                true,
+                Some("blockchain"),
+            ),
             node(5, "Some Page", "page", true, Some("infrastructure")),
         ];
         // 'finality mechanism' degree 3 (hub), 'search space definition' degree 1.
@@ -1332,7 +1363,10 @@ mod tests {
     #[test]
     fn canonical_name_title_cases() {
         assert_eq!(canonical_name("finality mechanism"), "Finality Mechanism");
-        assert_eq!(canonical_name("ar content positioning"), "Ar Content Positioning");
+        assert_eq!(
+            canonical_name("ar content positioning"),
+            "Ar Content Positioning"
+        );
     }
 
     #[test]
@@ -1341,7 +1375,10 @@ mod tests {
             label: "finality mechanism".into(),
             degree: 7,
             domain: "blockchain".into(),
-            referenced_by: vec!["Consensus Layer".into(), "Bitcoin Proof-of-Work Protocol".into()],
+            referenced_by: vec![
+                "Consensus Layer".into(),
+                "Bitcoin Proof-of-Work Protocol".into(),
+            ],
         };
         let (path, content) = draft_class_page(&c);
         assert_eq!(path, "mainKnowledgeGraph/pages/Finality Mechanism.md");
@@ -1394,7 +1431,10 @@ mod tests {
         let (classes, axioms) = parse_draft_axioms(&draft);
         assert_eq!(classes.len(), 1, "the drafted class is declared");
         assert_eq!(classes[0].iri, "urn:ngm:class:finality-mechanism");
-        assert!(axioms.is_empty(), "template draft has no subclass/disjoint relations");
+        assert!(
+            axioms.is_empty(),
+            "template draft has no subclass/disjoint relations"
+        );
 
         // A draft with a subClassOf yields a SubClassOf axiom.
         let (_, axioms) = parse_draft_axioms(&draft_with(&["urn:test:A"], &[]));
@@ -1410,8 +1450,14 @@ mod tests {
     fn gate_blocks_draft_inconsistent_with_base() {
         // Base ontology: A and B are disjoint.
         let base_classes = vec![
-            OwlClass { iri: "urn:test:A".into(), ..Default::default() },
-            OwlClass { iri: "urn:test:B".into(), ..Default::default() },
+            OwlClass {
+                iri: "urn:test:A".into(),
+                ..Default::default()
+            },
+            OwlClass {
+                iri: "urn:test:B".into(),
+                ..Default::default()
+            },
         ];
         let base_axioms = vec![OwlAxiom {
             id: None,
@@ -1421,20 +1467,27 @@ mod tests {
             annotations: HashMap::new(),
         }];
         // Draft: test ⊑ A and test ⊑ B → test collapses to owl:Nothing.
-        let (draft_classes, draft_axioms) = parse_draft_axioms(&draft_with(&["urn:test:A", "urn:test:B"], &[]));
+        let (draft_classes, draft_axioms) =
+            parse_draft_axioms(&draft_with(&["urn:test:A", "urn:test:B"], &[]));
 
         let mut classes = base_classes.clone();
         classes.extend(draft_classes.clone());
         let mut axioms = base_axioms.clone();
         axioms.extend(draft_axioms.clone());
         let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
-        assert!(!outcome.consistent, "disjoint parents ⇒ inconsistent: {outcome:?}");
+        assert!(
+            !outcome.consistent,
+            "disjoint parents ⇒ inconsistent: {outcome:?}"
+        );
 
         // The SAME draft against a base WITHOUT the disjointness is consistent.
         let mut classes2 = base_classes;
         classes2.extend(draft_classes);
         let outcome2 = WhelkInferenceEngine::check_axiom_set(&classes2, &draft_axioms);
-        assert!(outcome2.consistent, "no disjointness ⇒ consistent: {outcome2:?}");
+        assert!(
+            outcome2.consistent,
+            "no disjointness ⇒ consistent: {outcome2:?}"
+        );
     }
 
     /// GOV-7 fail-closed: no base source ⇒ the gate is UNAVAILABLE and blocks
@@ -1459,6 +1512,10 @@ mod tests {
             terminal_for_pr_state(PrState::ClosedUnmerged),
             Some(("elevation_abandoned", "abandoned"))
         );
-        assert_eq!(terminal_for_pr_state(PrState::Open), None, "open ⇒ keep polling");
+        assert_eq!(
+            terminal_for_pr_state(PrState::Open),
+            None,
+            "open ⇒ keep polling"
+        );
     }
 }

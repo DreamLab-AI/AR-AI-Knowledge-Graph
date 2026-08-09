@@ -73,10 +73,7 @@ pub fn verify_nip23_event(
             }
         }
     };
-    let content = map
-        .get("content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let content = map.get("content").and_then(|v| v.as_str()).unwrap_or("");
     let created_at = map.get("created_at").and_then(|v| v.as_u64()).unwrap_or(0);
 
     // Tag scan: `d` must match the expected URN; `vc-content-hash`
@@ -91,7 +88,10 @@ pub fn verify_nip23_event(
     let mut found_hash = false;
     for tag in tags {
         let Some(arr) = tag.as_array() else { continue };
-        match (arr.first().and_then(|v| v.as_str()), arr.get(1).and_then(|v| v.as_str())) {
+        match (
+            arr.first().and_then(|v| v.as_str()),
+            arr.get(1).and_then(|v| v.as_str()),
+        ) {
             (Some("d"), Some(value)) => {
                 if value == expected_page_urn {
                     found_d = true;
@@ -173,18 +173,15 @@ fn hex_encode(bytes: &[u8]) -> String {
 /// cryptographic check itself is performed via nostr-sdk.
 fn verify_schnorr(pubkey_hex: &str, event_id_hex: &str, sig_hex: &str) -> Result<(), String> {
     // Decode hex inputs.
-    let pk_bytes = hex_decode(pubkey_hex)
-        .map_err(|e| format!("invalid pubkey hex: {}", e))?;
+    let pk_bytes = hex_decode(pubkey_hex).map_err(|e| format!("invalid pubkey hex: {}", e))?;
     if pk_bytes.len() != 32 {
         return Err(format!(
             "pubkey must be 32 bytes (64 hex chars), got {}",
             pk_bytes.len()
         ));
     }
-    let _id_bytes = hex_decode(event_id_hex)
-        .map_err(|e| format!("invalid event id hex: {}", e))?;
-    let sig_bytes = hex_decode(sig_hex)
-        .map_err(|e| format!("invalid signature hex: {}", e))?;
+    let _id_bytes = hex_decode(event_id_hex).map_err(|e| format!("invalid event id hex: {}", e))?;
+    let sig_bytes = hex_decode(sig_hex).map_err(|e| format!("invalid signature hex: {}", e))?;
     if sig_bytes.len() != 64 {
         return Err(format!(
             "schnorr signature must be 64 bytes (128 hex chars), got {}",
@@ -200,7 +197,7 @@ fn verify_schnorr(pubkey_hex: &str, event_id_hex: &str, sig_hex: &str) -> Result
     // correct behaviour for production input.
     #[cfg(feature = "nostr-verify")]
     {
-        use nostr_sdk::secp256k1::{schnorr::Signature, Message, XOnlyPublicKey, Secp256k1};
+        use nostr_sdk::secp256k1::{schnorr::Signature, Message, Secp256k1, XOnlyPublicKey};
         let secp = Secp256k1::verification_only();
         let pubkey = XOnlyPublicKey::from_slice(&pk_bytes)
             .map_err(|e| format!("invalid secp256k1 pubkey: {}", e))?;
@@ -226,9 +223,7 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
     }
     (0..s.len())
         .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("bad hex byte: {}", e))
-        })
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| format!("bad hex byte: {}", e)))
         .collect()
 }
 
@@ -252,11 +247,9 @@ pub fn issue_for_failure(check: &SignatureCheck) -> Option<ErrorCategory> {
     // We deliberately do NOT mint a new category since the fixture
     // set does not require one.
     match check {
-        SignatureCheck::Failed { reason } => {
-            Some(ErrorCategory::RequiredFieldMissing {
-                what: format!("nostrSignature ({})", reason),
-            })
-        }
+        SignatureCheck::Failed { reason } => Some(ErrorCategory::RequiredFieldMissing {
+            what: format!("nostrSignature ({})", reason),
+        }),
         SignatureCheck::Verified | SignatureCheck::NotSigned => None,
     }
 }
@@ -268,10 +261,7 @@ mod tests {
 
     #[test]
     fn content_hash_normalises_newlines() {
-        assert_eq!(
-            compute_content_hash("a\nb"),
-            compute_content_hash("a\r\nb")
-        );
+        assert_eq!(compute_content_hash("a\nb"), compute_content_hash("a\r\nb"));
     }
 
     #[test]

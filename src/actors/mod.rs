@@ -8,12 +8,12 @@ pub mod elevation_voice;
 // mirrors ElevationActor for dl:DecisionRecord instances.
 pub mod decision_elevation_actor;
 // ADR-110 — voice → settings-assistant bridge (Control Center configuration agent)
-pub mod voice_interface_actor;
 pub mod agent_monitor_actor;
 pub mod client_coordinator_actor;
 pub mod client_filter;
 pub mod gpu;
 pub mod graph_state_actor;
+pub mod voice_interface_actor;
 pub mod graph_actor {
     // Re-export graph_state_actor types for backward compatibility
     pub use super::graph_state_actor::GraphStateActor;
@@ -42,7 +42,7 @@ pub mod physics_orchestrator_actor;
 pub mod protected_settings_actor;
 pub mod supervisor;
 pub mod voice_commands;
-// pub mod supervisor_voice; 
+// pub mod supervisor_voice;
 // graph_messages module removed - AutoBalanceNotification consolidated into messages.rs
 pub mod graph_service_supervisor;
 pub mod messages;
@@ -61,14 +61,16 @@ pub use client_coordinator_actor::{
     ClientCoordinatorActor, ClientCoordinatorStats, ClientManager, ClientState,
 };
 pub use gpu::GPUManagerActor;
-pub use graph_state_actor::GraphStateActor;
 pub use graph_service_supervisor::{
     ActorHealth, ActorHeartbeat, ActorType, BackoffStrategy, GetSupervisorStatus,
     GraphServiceSupervisor, GraphSupervisionStrategy, RestartActor, RestartAllActors,
     RestartPolicy, SetParentSupervisor, SupervisorMessage, SupervisorStatus,
 };
+pub use graph_state_actor::GraphStateActor;
 pub use messages::*;
-pub use messaging::{AckStatus, MessageAck, MessageId, MessageKind, MessageMetrics, MessageTracker};
+pub use messaging::{
+    AckStatus, MessageAck, MessageId, MessageKind, MessageMetrics, MessageTracker,
+};
 pub use metadata_actor::MetadataActor;
 pub use multi_mcp_visualization_actor::MultiMcpVisualizationActor;
 pub use ontology_actor::{
@@ -76,7 +78,9 @@ pub use ontology_actor::{
     OntologyActorConfig, ValidationJob,
 };
 pub use optimized_settings_actor::OptimizedSettingsActor;
-pub use physics_orchestrator_actor::{PhysicsOrchestratorActor, SetClientCoordinator, UserNodeInteraction};
+pub use physics_orchestrator_actor::{
+    PhysicsOrchestratorActor, SetClientCoordinator, UserNodeInteraction,
+};
 pub use protected_settings_actor::ProtectedSettingsActor;
 pub use semantic_processor_actor::{
     AISemanticFeatures, SemanticProcessorActor, SemanticProcessorConfig, SemanticStats,

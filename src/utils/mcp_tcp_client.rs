@@ -17,8 +17,8 @@ use crate::services::agent_visualization_protocol::{
     AgentExtendedMetadata, AgentPerformanceData, McpServerInfo, McpServerType, MultiMcpAgentStatus,
     SwarmTopologyData, TopologyPosition,
 };
-use crate::utils::time;
 use crate::utils::json::{from_json, to_json};
+use crate::utils::time;
 
 #[derive(Debug, Clone)]
 pub struct McpTcpClient {
@@ -66,7 +66,6 @@ struct McpError {
 }
 
 impl McpTcpClient {
-    
     pub fn new(host: String, port: u16) -> Self {
         Self {
             host,
@@ -77,20 +76,17 @@ impl McpTcpClient {
         }
     }
 
-    
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
-    
     pub fn with_retry_config(mut self, max_retries: u32, retry_delay: Duration) -> Self {
         self.max_retries = max_retries;
         self.retry_delay = retry_delay;
         self
     }
 
-    
     async fn connect(&self) -> Result<TcpStream, Box<dyn std::error::Error + Send + Sync>> {
         let addr_str = format!("{}:{}", self.host, self.port);
         debug!(
@@ -103,7 +99,6 @@ impl McpTcpClient {
         for attempt in 0..=self.max_retries {
             match tokio::time::timeout(self.timeout, TcpStream::connect(&addr_str)).await {
                 Ok(Ok(stream)) => {
-                    
                     if let Err(e) = stream.set_nodelay(true) {
                         warn!("Failed to set TCP_NODELAY: {}", e);
                     }
@@ -150,7 +145,6 @@ impl McpTcpClient {
         .into())
     }
 
-    
     async fn send_request(
         &self,
         method: &str,
@@ -188,13 +182,11 @@ impl McpTcpClient {
         .into())
     }
 
-    
     async fn send_tool_call(
         &self,
         tool_name: &str,
         arguments: Value,
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-        
         let wrapped_params = json!({
             "name": tool_name,
             "arguments": arguments
@@ -205,15 +197,12 @@ impl McpTcpClient {
             tool_name, arguments
         );
 
-        
         let response = self.send_request("tools/call", wrapped_params).await?;
 
-        
         if let Some(content) = response.get("content") {
             if let Some(content_array) = content.as_array() {
                 if let Some(first_content) = content_array.first() {
                     if let Some(text) = first_content.get("text").and_then(|t| t.as_str()) {
-                        
                         match serde_json::from_str::<Value>(text) {
                             Ok(parsed) => {
                                 debug!("Parsed tool response: {}", parsed);
@@ -232,7 +221,6 @@ impl McpTcpClient {
         Err("Invalid tool call response format".into())
     }
 
-    
     async fn try_send_request(
         &self,
         method: &str,
@@ -240,7 +228,6 @@ impl McpTcpClient {
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let mut stream = self.connect().await?;
 
-        
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
             method: method.to_string(),
@@ -248,12 +235,10 @@ impl McpTcpClient {
             id: time::timestamp_millis() as u64,
         };
 
-        
-        let request_json = to_json(&request)
-            .map_err(|e| format!("Failed to serialize request: {}", e))?;
+        let request_json =
+            to_json(&request).map_err(|e| format!("Failed to serialize request: {}", e))?;
         debug!("Sending MCP request: {}", request_json);
 
-        
         let request_data = format!("{}\n", request_json);
         stream
             .write_all(request_data.as_bytes())
@@ -264,11 +249,9 @@ impl McpTcpClient {
             .await
             .map_err(|e| format!("Failed to flush stream: {}", e))?;
 
-        
         let response_str = self.read_response(&mut stream).await?;
         debug!("Received MCP response: {}", response_str.trim());
 
-        
         let response: McpResponse = from_json(response_str.trim())
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
@@ -285,7 +268,6 @@ impl McpTcpClient {
             .ok_or_else(|| "No result in MCP response".into())
     }
 
-    
     async fn read_response(
         &self,
         stream: &mut TcpStream,
@@ -293,7 +275,6 @@ impl McpTcpClient {
         let mut reader = BufReader::new(stream);
         let mut response_line = String::new();
 
-        
         match tokio::time::timeout(self.timeout, reader.read_line(&mut response_line)).await {
             Ok(Ok(bytes_read)) => {
                 if bytes_read == 0 {
@@ -307,7 +288,6 @@ impl McpTcpClient {
         }
     }
 
-    
     pub async fn query_agent_list(
         &self,
     ) -> Result<Vec<MultiMcpAgentStatus>, Box<dyn std::error::Error + Send + Sync>> {
@@ -321,7 +301,6 @@ impl McpTcpClient {
         let result = self.send_tool_call("agent_list", params).await?;
         debug!("Agent list response: {}", result);
 
-        
         let agents = self.parse_agent_list_response(&result)?;
         info!(
             "Successfully retrieved {} agents from MCP server",
@@ -331,7 +310,6 @@ impl McpTcpClient {
         Ok(agents)
     }
 
-    
     pub async fn query_swarm_status(
         &self,
     ) -> Result<SwarmTopologyData, Box<dyn std::error::Error + Send + Sync>> {
@@ -345,14 +323,12 @@ impl McpTcpClient {
         let result = self.send_tool_call("swarm_status", params).await?;
         debug!("Swarm status response: {}", result);
 
-        
         let topology = self.parse_swarm_topology_response(&result)?;
         info!("Successfully retrieved swarm topology from MCP server");
 
         Ok(topology)
     }
 
-    
     pub async fn query_server_info(
         &self,
     ) -> Result<McpServerInfo, Box<dyn std::error::Error + Send + Sync>> {
@@ -363,14 +339,12 @@ impl McpTcpClient {
         let result = self.send_tool_call("server_info", params).await?;
         debug!("Server info response: {}", result);
 
-        
         let server_info = self.parse_server_info_response(&result)?;
         info!("Successfully retrieved server info from MCP server");
 
         Ok(server_info)
     }
 
-    
     fn parse_agent_list_response(
         &self,
         response: &Value,
@@ -395,7 +369,6 @@ impl McpTcpClient {
         Ok(agents)
     }
 
-    
     fn parse_single_agent(
         &self,
         agent_data: &Value,
@@ -430,7 +403,6 @@ impl McpTcpClient {
             .unwrap_or("default")
             .to_string();
 
-        
         let capabilities = agent_data
             .get("capabilities")
             .and_then(|v| v.as_array())
@@ -441,13 +413,10 @@ impl McpTcpClient {
             })
             .unwrap_or_else(Vec::new);
 
-        
         let performance = self.parse_performance_data(agent_data.get("performance"))?;
 
-        
         let metadata = self.parse_agent_metadata(agent_data.get("metadata"))?;
 
-        
         let neural_info = agent_data
             .get("neural")
             .map(|neural_data| self.parse_neural_data(neural_data))
@@ -482,7 +451,6 @@ impl McpTcpClient {
         })
     }
 
-    
     fn parse_performance_data(
         &self,
         perf_data: Option<&Value>,
@@ -542,7 +510,6 @@ impl McpTcpClient {
         })
     }
 
-    
     fn parse_agent_metadata(
         &self,
         meta_data: Option<&Value>,
@@ -615,7 +582,6 @@ impl McpTcpClient {
         })
     }
 
-    
     fn parse_neural_data(
         &self,
         neural_data: &Value,
@@ -670,7 +636,6 @@ impl McpTcpClient {
         )
     }
 
-    
     fn parse_swarm_topology_response(
         &self,
         response: &Value,
@@ -701,13 +666,12 @@ impl McpTcpClient {
             total_agents,
             coordination_layers,
             efficiency_score,
-            load_distribution: vec![], 
-            critical_paths: vec![],    
-            bottlenecks: vec![],       
+            load_distribution: vec![],
+            critical_paths: vec![],
+            bottlenecks: vec![],
         })
     }
 
-    
     fn parse_server_info_response(
         &self,
         response: &Value,
@@ -759,7 +723,6 @@ impl McpTcpClient {
         })
     }
 
-    
     pub async fn test_connection(&self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         match self.connect().await {
             Ok(_) => {
@@ -773,7 +736,6 @@ impl McpTcpClient {
         }
     }
 
-    
     pub async fn initialize_session(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         debug!("Initializing MCP session");
 
@@ -791,7 +753,6 @@ impl McpTcpClient {
             }
         });
 
-        
         let result = self.send_request("initialize", params).await?;
         debug!("MCP session initialized: {}", result);
 
@@ -800,7 +761,6 @@ impl McpTcpClient {
 }
 
 impl McpConnectionPool {
-    
     pub fn new(max_connections_per_server: usize) -> Self {
         Self {
             servers: Arc::new(Mutex::new(HashMap::new())),
@@ -808,7 +768,6 @@ impl McpConnectionPool {
         }
     }
 
-    
     pub async fn get_client(&self, server_id: &str, host: &str, port: u16) -> McpTcpClient {
         let mut servers = self.servers.lock().await;
 
@@ -829,7 +788,6 @@ impl McpConnectionPool {
         }
     }
 
-    
     pub async fn remove_client(&self, server_id: &str) {
         let mut servers = self.servers.lock().await;
         if servers.remove(server_id).is_some() {
@@ -837,7 +795,6 @@ impl McpConnectionPool {
         }
     }
 
-    
     pub async fn get_stats(&self) -> HashMap<String, usize> {
         let servers = self.servers.lock().await;
         let mut stats = HashMap::new();
@@ -856,8 +813,8 @@ pub fn create_mcp_client(server_type: &McpServerType, host: &str, port: u16) -> 
         server_type, host, port
     );
     McpTcpClient::new(host.to_string(), port)
-        .with_timeout(Duration::from_secs(15)) 
-        .with_retry_config(5, Duration::from_millis(1000)) 
+        .with_timeout(Duration::from_secs(15))
+        .with_retry_config(5, Duration::from_millis(1000))
 }
 
 pub async fn get_pooled_mcp_client(
@@ -880,10 +837,7 @@ pub async fn test_mcp_connectivity(
             Ok(connected) => {
                 results.insert(server_id.clone(), connected);
                 if connected {
-                    info!(
-                        "MCP server {} is reachable at {}:{}",
-                        server_id, host, port
-                    );
+                    info!("MCP server {} is reachable at {}:{}", server_id, host, port);
                 } else {
                     warn!(
                         "✗ MCP server {} is not reachable at {}:{}",

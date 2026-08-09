@@ -90,7 +90,8 @@ async fn execute_handler_concurrent(
                 Ok(_) => {
                     let mw_list = spawn_middleware.read().await;
                     for mw in mw_list.iter() {
-                        mw.after_handle(&spawn_event, &spawn_handler_id, &Ok(())).await?;
+                        mw.after_handle(&spawn_event, &spawn_handler_id, &Ok(()))
+                            .await?;
                     }
                     return Ok(());
                 }
@@ -111,7 +112,9 @@ async fn execute_handler_concurrent(
 
         let mw_list = spawn_middleware.read().await;
         for mw in mw_list.iter() {
-            let _ = mw.after_handle(&spawn_event, &spawn_handler_id, &result).await;
+            let _ = mw
+                .after_handle(&spawn_event, &spawn_handler_id, &result)
+                .await;
         }
 
         Err(error)
@@ -127,15 +130,11 @@ async fn execute_handler_concurrent(
 }
 
 pub struct EventBus {
-
     subscribers: Arc<RwLock<HashMap<String, Vec<Arc<dyn EventHandler>>>>>,
-
 
     middleware: Arc<RwLock<Vec<Arc<dyn EventMiddleware>>>>,
 
-
     sequence: Arc<RwLock<i64>>,
-
 
     enabled: Arc<RwLock<bool>>,
 
@@ -143,7 +142,6 @@ pub struct EventBus {
 }
 
 impl EventBus {
-    
     pub fn new() -> Self {
         Self {
             subscribers: Arc::new(RwLock::new(HashMap::new())),
@@ -154,44 +152,38 @@ impl EventBus {
         }
     }
 
-    
     pub async fn publish<E: DomainEvent>(&self, event: E) -> EventResult<()> {
-        
         if !*self.enabled.read().await {
             return Ok(());
         }
 
-        
         let metadata = EventMetadata::new(
             event.aggregate_id().to_string(),
             event.aggregate_type().to_string(),
             event.event_type().to_string(),
         );
 
-        
-        let data = event.to_json_string().map_err(|e| EventError::Serialization(e.to_string()))?;
+        let data = event
+            .to_json_string()
+            .map_err(|e| EventError::Serialization(e.to_string()))?;
 
-        
         let mut seq = self.sequence.write().await;
         *seq += 1;
         let sequence = *seq;
         drop(seq);
 
-        
         let mut stored_event = StoredEvent {
             metadata,
             data,
             sequence,
         };
 
-        
         let middleware = self.middleware.read().await;
         for mw in middleware.iter() {
             mw.before_publish(&mut stored_event).await?;
         }
         drop(middleware);
 
-        
         let subscribers = self.subscribers.read().await;
         let mut handlers = subscribers
             .get(event.event_type())
@@ -205,7 +197,6 @@ impl EventBus {
         }
         drop(subscribers);
 
-        
         let handler_count = handlers.len();
         let middleware_ref = Arc::clone(&self.middleware);
         let handler_futures: Vec<_> = handlers
@@ -257,9 +248,9 @@ impl EventBus {
         }
         drop(middleware);
 
-
         if !errors.is_empty() {
-            let failure_summary: String = errors.iter()
+            let failure_summary: String = errors
+                .iter()
                 .map(|(id, e)| format!("{}={}", id, e))
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -285,7 +276,6 @@ impl EventBus {
         Ok(())
     }
 
-    
     pub async fn subscribe(&self, handler: Arc<dyn EventHandler>) {
         let event_type = handler.event_type().to_string();
         let mut subscribers = self.subscribers.write().await;
@@ -296,7 +286,6 @@ impl EventBus {
             .push(handler);
     }
 
-    
     pub async fn unsubscribe(&self, handler_id: &str, event_type: &str) {
         let mut subscribers = self.subscribers.write().await;
 
@@ -305,7 +294,6 @@ impl EventBus {
         }
     }
 
-    
     pub async fn add_middleware(&self, middleware: Arc<dyn EventMiddleware>) {
         let mut mw_list = self.middleware.write().await;
         mw_list.push(middleware);
@@ -316,31 +304,25 @@ impl EventBus {
         self.middleware.read().await.clone()
     }
 
-
-    
     pub async fn subscriber_count(&self, event_type: &str) -> usize {
         let subscribers = self.subscribers.read().await;
         subscribers.get(event_type).map(|h| h.len()).unwrap_or(0)
     }
 
-    
     pub async fn clear_subscribers(&self) {
         let mut subscribers = self.subscribers.write().await;
         subscribers.clear();
     }
 
-    
     pub async fn set_enabled(&self, enabled: bool) {
         let mut flag = self.enabled.write().await;
         *flag = enabled;
     }
 
-    
     pub async fn is_enabled(&self) -> bool {
         *self.enabled.read().await
     }
 
-    
     pub async fn current_sequence(&self) -> i64 {
         *self.sequence.read().await
     }
@@ -363,11 +345,11 @@ impl Default for EventBus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::domain_events::NodeAddedEvent;
+    use crate::utils::time;
     use async_trait::async_trait;
     use chrono::Utc;
-    use crate::events::domain_events::NodeAddedEvent;
     use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::utils::time;
 
     struct TestHandler {
         id: String,

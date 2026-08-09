@@ -92,10 +92,7 @@ fn spawn_fake_mgmt_api(task_id: &'static str) -> (u16, Arc<Mutex<FakeState>>) {
             if trimmed.is_empty() {
                 break; // end of headers
             }
-            if let Some(v) = trimmed
-                .to_ascii_lowercase()
-                .strip_prefix("content-length:")
-            {
+            if let Some(v) = trimmed.to_ascii_lowercase().strip_prefix("content-length:") {
                 content_length = v.trim().parse().unwrap_or(0);
             }
         }
@@ -212,7 +209,8 @@ async fn claude_flow_agent_id_join_resolves_to_task_id_and_issues_stop() {
     // (stop) — and NEVER a DELETE on the raw swarm agent_id (the 404).
     let reqs = methods_paths(&state);
     assert!(
-        reqs.iter().any(|r| r.method == "GET" && r.path == "/v1/tasks"),
+        reqs.iter()
+            .any(|r| r.method == "GET" && r.path == "/v1/tasks"),
         "resolution must consult GET /v1/tasks; saw {reqs:?}"
     );
     assert!(

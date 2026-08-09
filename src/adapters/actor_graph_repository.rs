@@ -11,21 +11,20 @@ use std::sync::Arc;
 use crate::actors::graph_actor::{AutoBalanceNotification, PhysicsState};
 use crate::actors::graph_state_actor::GraphStateActor;
 use crate::actors::messages as actor_msgs;
-use visionclaw_domain::models::constraints::ConstraintSet;
-use visionclaw_domain::models::edge::Edge;
-use visionclaw_domain::models::graph::GraphData;
-use visionclaw_domain::models::node::Node;
 use crate::ports::graph_repository::{
     GraphRepository, GraphRepositoryError, PathfindingParams, PathfindingResult, Result,
 };
 use glam::Vec3;
+use visionclaw_domain::models::constraints::ConstraintSet;
+use visionclaw_domain::models::edge::Edge;
+use visionclaw_domain::models::graph::GraphData;
+use visionclaw_domain::models::node::Node;
 
 pub struct ActorGraphRepository {
     actor_addr: Addr<GraphStateActor>,
 }
 
 impl ActorGraphRepository {
-
     pub fn new(actor_addr: Addr<GraphStateActor>) -> Self {
         Self { actor_addr }
     }
@@ -33,12 +32,6 @@ impl ActorGraphRepository {
 
 #[async_trait]
 impl GraphRepository for ActorGraphRepository {
-    
-
-    
-    
-    
-    
     async fn add_nodes(&self, nodes: Vec<Node>) -> Result<Vec<u32>> {
         let mut added_ids = Vec::with_capacity(nodes.len());
 
@@ -57,10 +50,6 @@ impl GraphRepository for ActorGraphRepository {
         Ok(added_ids)
     }
 
-    
-    
-    
-    
     async fn add_edges(&self, edges: Vec<Edge>) -> Result<Vec<String>> {
         let mut added_ids = Vec::with_capacity(edges.len());
 
@@ -79,36 +68,20 @@ impl GraphRepository for ActorGraphRepository {
         Ok(added_ids)
     }
 
-    
-    
-    
-    
     async fn update_positions(
         &self,
         updates: Vec<(u32, crate::ports::graph_repository::BinaryNodeData)>,
     ) -> Result<()> {
-
-        
         // GraphStateActor doesn't handle physics operations
         // Physics updates are handled by PhysicsOrchestratorActor
         log::debug!("ActorGraphRepository: update_node_positions called with {} updates but GraphStateActor doesn't handle physics", updates.len());
         Ok(())
     }
 
-    
-    
-    
     async fn clear_dirty_nodes(&self) -> Result<()> {
-        
-        
         Ok(())
     }
 
-    
-
-    
-    
-    
     async fn get_graph(&self) -> Result<Arc<GraphData>> {
         self.actor_addr
             .send(actor_msgs::GetGraphData)
@@ -117,9 +90,6 @@ impl GraphRepository for ActorGraphRepository {
             .map_err(GraphRepositoryError::AccessError)
     }
 
-    
-    
-    
     async fn get_node_map(&self) -> Result<Arc<HashMap<u32, Node>>> {
         self.actor_addr
             .send(actor_msgs::GetNodeMap)
@@ -128,9 +98,6 @@ impl GraphRepository for ActorGraphRepository {
             .map_err(GraphRepositoryError::AccessError)
     }
 
-    
-    
-    
     async fn get_physics_state(&self) -> Result<PhysicsState> {
         // GraphStateActor doesn't handle physics operations
         // Return default/empty physics state
@@ -138,9 +105,6 @@ impl GraphRepository for ActorGraphRepository {
         Ok(PhysicsState::default())
     }
 
-    
-    
-    
     async fn get_node_positions(&self) -> Result<Vec<(u32, Vec3)>> {
         let node_map = self.get_node_map().await?;
 
@@ -152,9 +116,6 @@ impl GraphRepository for ActorGraphRepository {
         Ok(positions)
     }
 
-    
-    
-    
     async fn get_bots_graph(&self) -> Result<Arc<GraphData>> {
         self.actor_addr
             .send(actor_msgs::GetBotsGraphData)
@@ -163,9 +124,6 @@ impl GraphRepository for ActorGraphRepository {
             .map_err(GraphRepositoryError::AccessError)
     }
 
-    
-    
-    
     async fn get_constraints(&self) -> Result<ConstraintSet> {
         // GraphStateActor doesn't handle physics operations
         // Return empty constraint set
@@ -173,9 +131,6 @@ impl GraphRepository for ActorGraphRepository {
         Ok(ConstraintSet::default())
     }
 
-    
-    
-    
     async fn get_auto_balance_notifications(&self) -> Result<Vec<AutoBalanceNotification>> {
         // GraphStateActor doesn't handle physics operations
         // Return empty notification list
@@ -183,9 +138,6 @@ impl GraphRepository for ActorGraphRepository {
         Ok(Vec::new())
     }
 
-    
-    
-    
     async fn get_equilibrium_status(&self) -> Result<bool> {
         // GraphStateActor doesn't handle physics operations
         // Return false (not in equilibrium) as default
@@ -193,13 +145,9 @@ impl GraphRepository for ActorGraphRepository {
         Ok(false)
     }
 
-    
-    
-    
     async fn compute_shortest_paths(&self, params: PathfindingParams) -> Result<PathfindingResult> {
         use visionclaw_domain::ports::gpu_semantic_analyzer::PathfindingResult as GpuPathfindingResult;
 
-        
         let gpu_result: GpuPathfindingResult = self
             .actor_addr
             .send(actor_msgs::ComputeShortestPaths {
@@ -209,7 +157,6 @@ impl GraphRepository for ActorGraphRepository {
             .map_err(|e| GraphRepositoryError::AccessError(format!("Mailbox error: {}", e)))?
             .map_err(GraphRepositoryError::AccessError)?;
 
-        
         let path = gpu_result
             .paths
             .get(&params.end_node)
@@ -228,13 +175,7 @@ impl GraphRepository for ActorGraphRepository {
         })
     }
 
-    
-    
-    
-    
     async fn get_dirty_nodes(&self) -> Result<HashSet<u32>> {
-        
-        
         Ok(HashSet::new())
     }
 }
@@ -243,12 +184,6 @@ impl GraphRepository for ActorGraphRepository {
 mod tests {
     use super::*;
 
-    
-    
-
     #[test]
-    fn test_repository_construction() {
-        
-        
-    }
+    fn test_repository_construction() {}
 }

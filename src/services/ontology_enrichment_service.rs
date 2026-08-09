@@ -4,12 +4,12 @@
 //! Enriches parsed graph data with ontology information (owl_class_iri, owl_property_iri)
 //! AFTER parsing but BEFORE saving to database.
 
+use log::{debug, info};
 use std::sync::Arc;
-use log::{info, debug};
 
-use visionclaw_domain::models::graph::GraphData;
-use crate::services::ontology_reasoner::OntologyReasoner;
 use crate::services::edge_classifier::EdgeClassifier;
+use crate::services::ontology_reasoner::OntologyReasoner;
+use visionclaw_domain::models::graph::GraphData;
 
 /// Service that enriches graph data with ontology classifications
 pub struct OntologyEnrichmentService {
@@ -19,10 +19,7 @@ pub struct OntologyEnrichmentService {
 
 impl OntologyEnrichmentService {
     /// Create a new enrichment service
-    pub fn new(
-        reasoner: Arc<OntologyReasoner>,
-        classifier: Arc<EdgeClassifier>,
-    ) -> Self {
+    pub fn new(reasoner: Arc<OntologyReasoner>, classifier: Arc<EdgeClassifier>) -> Self {
         info!("Initializing OntologyEnrichmentService");
         Self {
             reasoner,
@@ -31,14 +28,14 @@ impl OntologyEnrichmentService {
     }
 
     /// Enrich a graph with ontology information
-        /// This modifies the graph in-place, adding:
+    /// This modifies the graph in-place, adding:
     /// - `owl_class_iri` to all nodes based on file path/content analysis
     /// - `owl_property_iri` to all edges based on context analysis
-        /// # Arguments
+    /// # Arguments
     /// * `graph` - Mutable reference to graph data
     /// * `file_path` - Path to the source markdown file
     /// * `content` - Full markdown content
-        /// # Returns
+    /// # Returns
     /// Number of nodes and edges enriched
     pub async fn enrich_graph(
         &self,
@@ -94,10 +91,7 @@ impl OntologyEnrichmentService {
                 node.owl_class_iri = Some(iri.clone());
                 enriched_count += 1;
 
-                debug!(
-                    "Enriched node '{}' with class: {}",
-                    node.label, iri
-                );
+                debug!("Enriched node '{}' with class: {}", node.label, iri);
 
                 // Also update visual properties based on class
                 self.update_node_visuals_by_class(node, &iri);
@@ -108,11 +102,7 @@ impl OntologyEnrichmentService {
     }
 
     /// Enrich all edges in the graph with owl_property_iri
-    async fn enrich_edges(
-        &self,
-        graph: &mut GraphData,
-        content: &str,
-    ) -> Result<usize, String> {
+    async fn enrich_edges(&self, graph: &mut GraphData, content: &str) -> Result<usize, String> {
         let mut enriched_count = 0;
 
         // Build node ID to node map for lookups
@@ -182,10 +172,7 @@ impl OntologyEnrichmentService {
                 break; // End of frontmatter
             } else {
                 if let Some((key, value)) = line.split_once(':') {
-                    metadata.insert(
-                        key.trim().to_string(),
-                        value.trim().to_string(),
-                    );
+                    metadata.insert(key.trim().to_string(), value.trim().to_string());
                 }
             }
         }
@@ -217,7 +204,11 @@ impl OntologyEnrichmentService {
     }
 
     /// Update node visual properties based on its OWL class
-    fn update_node_visuals_by_class(&self, node: &mut visionclaw_domain::models::node::Node, class_iri: &str) {
+    fn update_node_visuals_by_class(
+        &self,
+        node: &mut visionclaw_domain::models::node::Node,
+        class_iri: &str,
+    ) {
         // Match the visual properties from OntologyConverter
         let (color, size) = if class_iri.contains("Person") || class_iri.contains("Individual") {
             ("#90EE90", 8.0) // Light green, small

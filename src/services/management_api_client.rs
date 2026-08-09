@@ -177,13 +177,6 @@ impl std::fmt::Display for ManagementApiError {
 impl std::error::Error for ManagementApiError {}
 
 impl ManagementApiClient {
-    
-    
-    
-    
-    
-    
-    
     pub fn new(host: String, port: u16, api_key: String) -> Self {
         let base_url = format!("http://{}:{}", host, port);
 
@@ -205,13 +198,6 @@ impl ManagementApiClient {
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
     pub async fn create_task(
         &self,
         agent: &str,
@@ -219,8 +205,16 @@ impl ManagementApiClient {
         provider: &str,
         claude_flow_agent_id: Option<&str>,
     ) -> Result<TaskResponse, ManagementApiError> {
-        self.create_task_with_context(agent, task, provider, None, false, None, claude_flow_agent_id)
-            .await
+        self.create_task_with_context(
+            agent,
+            task,
+            provider,
+            None,
+            false,
+            None,
+            claude_flow_agent_id,
+        )
+        .await
     }
 
     /// Create a task with full user context and beads integration.
@@ -318,7 +312,6 @@ impl ManagementApiClient {
         }
     }
 
-    
     pub async fn get_task_status(&self, task_id: &str) -> Result<TaskStatus, ManagementApiError> {
         let url = format!("{}/v1/tasks/{}", self.base_url, task_id);
 
@@ -349,7 +342,6 @@ impl ManagementApiClient {
         }
     }
 
-    
     pub async fn list_tasks(&self) -> Result<TaskListResponse, ManagementApiError> {
         let url = format!("{}/v1/tasks", self.base_url);
 
@@ -380,7 +372,6 @@ impl ManagementApiClient {
         }
     }
 
-    
     pub async fn stop_task(&self, task_id: &str) -> Result<(), ManagementApiError> {
         let url = format!("{}/v1/tasks/{}", self.base_url, task_id);
 
@@ -408,7 +399,6 @@ impl ManagementApiClient {
         }
     }
 
-    
     pub async fn get_system_status(&self) -> Result<SystemStatus, ManagementApiError> {
         let url = format!("{}/v1/status", self.base_url);
 

@@ -250,7 +250,6 @@ impl Handler<DetectCommunitiesMessage> for SemanticProcessorActor {
     type Result = Result<CommunityDetectionResult, String>;
 
     fn handle(&mut self, _msg: DetectCommunitiesMessage, _ctx: &mut Self::Context) -> Self::Result {
-        
         Ok(CommunityDetectionResult {
             clusters: HashMap::new(),
             cluster_sizes: HashMap::new(),
@@ -274,7 +273,6 @@ impl Handler<ComputeShortestPathsMessage> for SemanticProcessorActor {
         };
 
         Box::pin(async move {
-            
             Ok(PathfindingResult {
                 source_node: msg.source_node_id,
                 distances: HashMap::new(),

@@ -6,8 +6,8 @@
 //! Schemas reflect the actual StandardResponse<T> envelope used by handler macros.
 //! Path definitions cover the core API surface.
 
-use utoipa::OpenApi;
 use serde::{Deserialize, Serialize};
+use utoipa::OpenApi;
 use utoipa::ToSchema;
 
 /// VisionClaw API - WebXR Graph Visualization Server
@@ -779,7 +779,9 @@ pub struct AddEdgeRequest {
     pub label: Option<String>,
 }
 
-fn default_weight() -> f32 { 1.0 }
+fn default_weight() -> f32 {
+    1.0
+}
 
 /// Semantic search request
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -797,7 +799,9 @@ pub struct SearchRequest {
     pub semantic_expansion: bool,
 }
 
-fn default_limit() -> usize { 10 }
+fn default_limit() -> usize {
+    10
+}
 
 /// Pathfinding request
 #[derive(Serialize, Deserialize, ToSchema)]
@@ -817,9 +821,15 @@ pub struct PathfindingRequest {
     pub weighted: bool,
 }
 
-fn default_true() -> bool { true }
-fn default_max_hops() -> usize { 10 }
-fn default_algorithm() -> String { "dijkstra".to_string() }
+fn default_true() -> bool {
+    true
+}
+fn default_max_hops() -> usize {
+    10
+}
+fn default_algorithm() -> String {
+    "dijkstra".to_string()
+}
 
 /// Pathfinding response
 #[derive(Serialize, Deserialize, ToSchema)]

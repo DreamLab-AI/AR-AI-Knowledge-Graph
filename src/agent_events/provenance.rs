@@ -109,7 +109,11 @@ mod tests {
 
     const PK: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
-    fn envelope(pubkey: Option<&str>, source: Option<&str>, target: Option<&str>) -> AgentActionEnvelope {
+    fn envelope(
+        pubkey: Option<&str>,
+        source: Option<&str>,
+        target: Option<&str>,
+    ) -> AgentActionEnvelope {
         AgentActionEnvelope {
             version: 3,
             id: 1,
@@ -132,9 +136,18 @@ mod tests {
 
     #[test]
     fn classify_signed_malformed_anonymous() {
-        assert_eq!(classify(&envelope(Some(PK), None, None)), ProvenanceStatus::Attributed);
-        assert_eq!(classify(&envelope(Some("xyz"), None, None)), ProvenanceStatus::Malformed);
-        assert_eq!(classify(&envelope(None, None, None)), ProvenanceStatus::Anonymous);
+        assert_eq!(
+            classify(&envelope(Some(PK), None, None)),
+            ProvenanceStatus::Attributed
+        );
+        assert_eq!(
+            classify(&envelope(Some("xyz"), None, None)),
+            ProvenanceStatus::Malformed
+        );
+        assert_eq!(
+            classify(&envelope(None, None, None)),
+            ProvenanceStatus::Anonymous
+        );
         assert!(ProvenanceStatus::Attributed.is_attributed());
         assert!(!ProvenanceStatus::Anonymous.is_attributed());
     }
@@ -149,8 +162,13 @@ mod tests {
         let p = record(&e);
         assert_eq!(p.status, ProvenanceStatus::Attributed);
         let sc = p.source_crossing.unwrap();
-        assert!(sc.visionclaw_id.starts_with(&format!("urn:visionclaw:kg:{PK}:")));
-        assert_eq!(sc.agentbox_urn, format!("urn:agentbox:thing:{PK}:proposal-1"));
+        assert!(sc
+            .visionclaw_id
+            .starts_with(&format!("urn:visionclaw:kg:{PK}:")));
+        assert_eq!(
+            sc.agentbox_urn,
+            format!("urn:agentbox:thing:{PK}:proposal-1")
+        );
         let tc = p.target_crossing.unwrap();
         assert!(tc.visionclaw_id.starts_with("urn:visionclaw:execution:"));
     }

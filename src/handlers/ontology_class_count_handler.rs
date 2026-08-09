@@ -53,10 +53,13 @@ pub async fn class_count(state: web::Data<AppState>) -> Result<HttpResponse> {
     // RES-d: a live read fires the one-shot canary as the DriftCounter's own
     // query traffic — the count source is live. Fail-open: a canary write error
     // never fails the count read the canon depends on.
-    let evidence = format!(
-        "ontology class-count read: {count} classes from Oxigraph <{ONTOLOGY_GRAPH}>"
-    );
-    if let Err(e) = state.liveness_harness.observe(CANARY_RESD_COUNT, &evidence).await {
+    let evidence =
+        format!("ontology class-count read: {count} classes from Oxigraph <{ONTOLOGY_GRAPH}>");
+    if let Err(e) = state
+        .liveness_harness
+        .observe(CANARY_RESD_COUNT, &evidence)
+        .await
+    {
         log::warn!("[ontology-class-count] failed to record {CANARY_RESD_COUNT} fire: {e}");
     }
 

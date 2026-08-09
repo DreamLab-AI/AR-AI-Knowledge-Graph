@@ -4,16 +4,21 @@
 //! All PUT routes validate input before applying. (QE Fix #1, #2, #3, #5)
 
 use actix_web::{web, HttpResponse, Responder};
-use serde::{Deserialize, Serialize};
 use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::config::{PhysicsSettings, RenderingSettings};
-use crate::actors::messages::{BroadcastMessage, ForceResumePhysics, GetSettings, ResetPositions, SetComputeMode, UpdateClusteringParams, UpdateConstraints, UpdateSettings, UpdateSimulationParams};
-use crate::utils::unified_gpu_compute::ComputeMode;
-use crate::settings::models::{ConstraintSettings, NodeFilterSettings, QualityGateSettings, AllSettings};
-use crate::settings::auth_extractor::{AuthenticatedUser, OptionalAuth};
+use crate::actors::messages::{
+    BroadcastMessage, ForceResumePhysics, GetSettings, ResetPositions, SetComputeMode,
+    UpdateClusteringParams, UpdateConstraints, UpdateSettings, UpdateSimulationParams,
+};
 use crate::adapters::SqliteSettingsRepository;
+use crate::config::{PhysicsSettings, RenderingSettings};
+use crate::settings::auth_extractor::{AuthenticatedUser, OptionalAuth};
+use crate::settings::models::{
+    AllSettings, ConstraintSettings, NodeFilterSettings, QualityGateSettings,
+};
+use crate::utils::unified_gpu_compute::ComputeMode;
 /// Placeholder for the per-user filter record. Full SQLite migration in Phase 2.
 // Persisted per-user via the `settings` table's owner layer (ADR-11 §D5) —
 // see `update_user_filter` / `get_user_filter`, keyed by `USER_FILTER_KEY`.
@@ -62,38 +67,40 @@ pub struct ErrorResponse {
 ///
 /// This maps common aliases (snake_case, legacy names, client variants) so that
 /// both `{"spring_k": 0.05}` and `{"springK": 0.05}` work correctly.
-fn normalize_physics_keys(patch: serde_json::Map<String, serde_json::Value>) -> serde_json::Map<String, serde_json::Value> {
+fn normalize_physics_keys(
+    patch: serde_json::Map<String, serde_json::Value>,
+) -> serde_json::Map<String, serde_json::Value> {
     let mut normalized = serde_json::Map::new();
     for (key, value) in patch {
         let canonical = match key.as_str() {
             // snake_case → camelCase mappings
-            "spring_k"          => "springK",
-            "repel_k"           => "repelK",
-            "spring_strength"   => "springK",
-            "repulsion_strength"=> "repelK",
-            "center_gravity_k"  => "centerGravityK",
-            "max_velocity"      => "maxVelocity",
-            "max_force"         => "maxForce",
-            "enable_bounds"     => "enableBounds",
-            "bounds_size"       => "boundsSize",
+            "spring_k" => "springK",
+            "repel_k" => "repelK",
+            "spring_strength" => "springK",
+            "repulsion_strength" => "repelK",
+            "center_gravity_k" => "centerGravityK",
+            "max_velocity" => "maxVelocity",
+            "max_force" => "maxForce",
+            "enable_bounds" => "enableBounds",
+            "bounds_size" => "boundsSize",
             "separation_radius" => "separationRadius",
-            "boundary_damping"  => "boundaryDamping",
-            "rest_length"       => "restLength",
-            "grid_cell_size"    => "gridCellSize",
+            "boundary_damping" => "boundaryDamping",
+            "rest_length" => "restLength",
+            "grid_cell_size" => "gridCellSize",
             "warmup_iterations" => "warmupIterations",
-            "cooling_rate"      => "coolingRate",
-            "max_repulsion_dist"=> "maxRepulsionDist",
-            "auto_balance"      => "autoBalance",
-            "cluster_strength"  => "clusterStrength",
-            "sssp_alpha"        => "ssspAlpha",
+            "cooling_rate" => "coolingRate",
+            "max_repulsion_dist" => "maxRepulsionDist",
+            "auto_balance" => "autoBalance",
+            "cluster_strength" => "clusterStrength",
+            "sssp_alpha" => "ssspAlpha",
             // Legacy/client aliases
-            "springStrength"    => "springK",
+            "springStrength" => "springK",
             "repulsionStrength" => "repelK",
-            "attractionStrength"=> "centerGravityK",
-            "attractionK"       => "centerGravityK",
-            "springStiffness"   => "springK",
-            "springDamping"     => "damping",
-            "deltaTime"         => "dt",
+            "attractionStrength" => "centerGravityK",
+            "attractionK" => "centerGravityK",
+            "springStiffness" => "springK",
+            "springDamping" => "damping",
+            "deltaTime" => "dt",
             // Already camelCase — pass through
             other => other,
         };
@@ -113,16 +120,25 @@ pub fn validate_physics_settings(settings: &PhysicsSettings) -> Result<(), Strin
     // Helper closure: check finite
     let check_finite = |val: f32, name: &str, errs: &mut Vec<String>| {
         if !val.is_finite() {
-            errs.push(format!("{} must be a finite number (not NaN or Infinity)", name));
+            errs.push(format!(
+                "{} must be a finite number (not NaN or Infinity)",
+                name
+            ));
         }
     };
 
     // Helper closure: check range (inclusive)
     let check_range = |val: f32, name: &str, min: f32, max: f32, errs: &mut Vec<String>| {
         if !val.is_finite() {
-            errs.push(format!("{} must be a finite number (not NaN or Infinity)", name));
+            errs.push(format!(
+                "{} must be a finite number (not NaN or Infinity)",
+                name
+            ));
         } else if val < min || val > max {
-            errs.push(format!("{} must be between {} and {} (got {})", name, min, max, val));
+            errs.push(format!(
+                "{} must be between {} and {} (got {})",
+                name, min, max, val
+            ));
         }
     };
 
@@ -132,33 +148,129 @@ pub fn validate_physics_settings(settings: &PhysicsSettings) -> Result<(), Strin
     // canonical client defaults again (T4 ceiling-consistency fix, 2026-06-03).
     use crate::actors::gpu::physics_bounds as bounds;
 
-    check_range(settings.gravity, "gravity", bounds::GRAVITY.0, bounds::GRAVITY.1, &mut errors);
-    check_range(settings.damping, "damping", bounds::DAMPING.0, bounds::DAMPING.1, &mut errors);
-    check_range(settings.spring_k, "spring_k", bounds::SPRING_K.0, bounds::SPRING_K.1, &mut errors);
-    check_range(settings.max_velocity, "max_velocity", bounds::MAX_VELOCITY.0, bounds::MAX_VELOCITY.1, &mut errors);
-    check_range(settings.max_force, "max_force", bounds::MAX_FORCE.0, bounds::MAX_FORCE.1, &mut errors);
-    check_range(settings.dt, "timestep (dt)", bounds::DT.0, bounds::DT.1, &mut errors);
-    check_range(settings.max_repulsion_dist, "max_repulsion_dist", bounds::MAX_REPULSION_DIST.0, bounds::MAX_REPULSION_DIST.1, &mut errors);
-    check_range(settings.cooling_rate, "cooling_rate", bounds::COOLING_RATE.0, bounds::COOLING_RATE.1, &mut errors);
-    check_range(settings.boundary_damping, "boundary_damping", bounds::BOUNDARY_DAMPING.0, bounds::BOUNDARY_DAMPING.1, &mut errors);
+    check_range(
+        settings.gravity,
+        "gravity",
+        bounds::GRAVITY.0,
+        bounds::GRAVITY.1,
+        &mut errors,
+    );
+    check_range(
+        settings.damping,
+        "damping",
+        bounds::DAMPING.0,
+        bounds::DAMPING.1,
+        &mut errors,
+    );
+    check_range(
+        settings.spring_k,
+        "spring_k",
+        bounds::SPRING_K.0,
+        bounds::SPRING_K.1,
+        &mut errors,
+    );
+    check_range(
+        settings.max_velocity,
+        "max_velocity",
+        bounds::MAX_VELOCITY.0,
+        bounds::MAX_VELOCITY.1,
+        &mut errors,
+    );
+    check_range(
+        settings.max_force,
+        "max_force",
+        bounds::MAX_FORCE.0,
+        bounds::MAX_FORCE.1,
+        &mut errors,
+    );
+    check_range(
+        settings.dt,
+        "timestep (dt)",
+        bounds::DT.0,
+        bounds::DT.1,
+        &mut errors,
+    );
+    check_range(
+        settings.max_repulsion_dist,
+        "max_repulsion_dist",
+        bounds::MAX_REPULSION_DIST.0,
+        bounds::MAX_REPULSION_DIST.1,
+        &mut errors,
+    );
+    check_range(
+        settings.cooling_rate,
+        "cooling_rate",
+        bounds::COOLING_RATE.0,
+        bounds::COOLING_RATE.1,
+        &mut errors,
+    );
+    check_range(
+        settings.boundary_damping,
+        "boundary_damping",
+        bounds::BOUNDARY_DAMPING.0,
+        bounds::BOUNDARY_DAMPING.1,
+        &mut errors,
+    );
     // cluster_strength is the raw kernel coefficient (no scale factor applied).
-    check_range(settings.cluster_strength, "cluster_strength", bounds::CLUSTER_STRENGTH.0, bounds::CLUSTER_STRENGTH.1, &mut errors);
-    check_range(settings.sssp_alpha, "sssp_alpha", bounds::SSSP_ALPHA.0, bounds::SSSP_ALPHA.1, &mut errors);
+    check_range(
+        settings.cluster_strength,
+        "cluster_strength",
+        bounds::CLUSTER_STRENGTH.0,
+        bounds::CLUSTER_STRENGTH.1,
+        &mut errors,
+    );
+    check_range(
+        settings.sssp_alpha,
+        "sssp_alpha",
+        bounds::SSSP_ALPHA.0,
+        bounds::SSSP_ALPHA.1,
+        &mut errors,
+    );
     // repel_k now has a bounded range from the shared source of truth (was
     // previously finite-only here, while the actor capped it at 100 — the exact
     // divergence this fix resolves).
-    check_range(settings.repel_k, "repel_k", bounds::REPEL_K.0, bounds::REPEL_K.1, &mut errors);
-    check_range(settings.bounds_size, "bounds_size", bounds::BOUNDS_SIZE.0, bounds::BOUNDS_SIZE.1, &mut errors);
-    check_range(settings.temperature, "temperature", bounds::TEMPERATURE.0, bounds::TEMPERATURE.1, &mut errors);
+    check_range(
+        settings.repel_k,
+        "repel_k",
+        bounds::REPEL_K.0,
+        bounds::REPEL_K.1,
+        &mut errors,
+    );
+    check_range(
+        settings.bounds_size,
+        "bounds_size",
+        bounds::BOUNDS_SIZE.0,
+        bounds::BOUNDS_SIZE.1,
+        &mut errors,
+    );
+    check_range(
+        settings.temperature,
+        "temperature",
+        bounds::TEMPERATURE.0,
+        bounds::TEMPERATURE.1,
+        &mut errors,
+    );
 
     // All other f32 fields: reject NaN/Infinity
     check_finite(settings.separation_radius, "separation_radius", &mut errors);
     check_finite(settings.rest_length, "rest_length", &mut errors);
-    check_finite(settings.repulsion_softening_epsilon, "repulsion_softening_epsilon", &mut errors);
+    check_finite(
+        settings.repulsion_softening_epsilon,
+        "repulsion_softening_epsilon",
+        &mut errors,
+    );
     check_finite(settings.center_gravity_k, "center_gravity_k", &mut errors);
     check_finite(settings.grid_cell_size, "grid_cell_size", &mut errors);
-    check_finite(settings.constraint_max_force_per_node, "constraint_max_force_per_node", &mut errors);
-    check_finite(settings.clustering_resolution, "clustering_resolution", &mut errors);
+    check_finite(
+        settings.constraint_max_force_per_node,
+        "constraint_max_force_per_node",
+        &mut errors,
+    );
+    check_finite(
+        settings.clustering_resolution,
+        "clustering_resolution",
+        &mut errors,
+    );
 
     if errors.is_empty() {
         Ok(())
@@ -182,7 +294,9 @@ pub fn validate_constraint_settings(settings: &ConstraintSettings) -> Result<(),
     if !settings.near_threshold.is_finite() || settings.near_threshold < 0.0 {
         return Err("near_threshold must be finite and non-negative".into());
     }
-    if settings.near_threshold >= settings.medium_threshold || settings.medium_threshold >= settings.far_threshold {
+    if settings.near_threshold >= settings.medium_threshold
+        || settings.medium_threshold >= settings.far_threshold
+    {
         return Err("Thresholds must be ordered: near < medium < far".into());
     }
     Ok(())
@@ -201,9 +315,18 @@ pub fn validate_rendering_settings(settings: &RenderingSettings) -> Result<(), S
             Ok(())
         }
     };
-    check_finite(settings.ambient_light_intensity as f64, "ambient_light_intensity")?;
-    check_finite(settings.directional_light_intensity as f64, "directional_light_intensity")?;
-    check_finite(settings.environment_intensity as f64, "environment_intensity")?;
+    check_finite(
+        settings.ambient_light_intensity as f64,
+        "ambient_light_intensity",
+    )?;
+    check_finite(
+        settings.directional_light_intensity as f64,
+        "directional_light_intensity",
+    )?;
+    check_finite(
+        settings.environment_intensity as f64,
+        "environment_intensity",
+    )?;
     Ok(())
 }
 
@@ -233,27 +356,69 @@ pub fn validate_node_filter_settings(settings: &NodeFilterSettings) -> Result<()
 pub fn validate_quality_gate_settings(settings: &QualityGateSettings) -> Result<(), String> {
     let mut errors = Vec::new();
 
-    if !settings.ontology_strength.is_finite() || settings.ontology_strength < 0.0 || settings.ontology_strength > 1.0 {
-        errors.push(format!("ontology_strength must be between 0.0 and 1.0 (got {})", settings.ontology_strength));
+    if !settings.ontology_strength.is_finite()
+        || settings.ontology_strength < 0.0
+        || settings.ontology_strength > 1.0
+    {
+        errors.push(format!(
+            "ontology_strength must be between 0.0 and 1.0 (got {})",
+            settings.ontology_strength
+        ));
     }
-    if !settings.dag_level_attraction.is_finite() || settings.dag_level_attraction < 0.0 || settings.dag_level_attraction > 2.0 {
-        errors.push(format!("dag_level_attraction must be between 0.0 and 2.0 (got {})", settings.dag_level_attraction));
+    if !settings.dag_level_attraction.is_finite()
+        || settings.dag_level_attraction < 0.0
+        || settings.dag_level_attraction > 2.0
+    {
+        errors.push(format!(
+            "dag_level_attraction must be between 0.0 and 2.0 (got {})",
+            settings.dag_level_attraction
+        ));
     }
-    if !settings.dag_sibling_repulsion.is_finite() || settings.dag_sibling_repulsion < 0.0 || settings.dag_sibling_repulsion > 2.0 {
-        errors.push(format!("dag_sibling_repulsion must be between 0.0 and 2.0 (got {})", settings.dag_sibling_repulsion));
+    if !settings.dag_sibling_repulsion.is_finite()
+        || settings.dag_sibling_repulsion < 0.0
+        || settings.dag_sibling_repulsion > 2.0
+    {
+        errors.push(format!(
+            "dag_sibling_repulsion must be between 0.0 and 2.0 (got {})",
+            settings.dag_sibling_repulsion
+        ));
     }
-    if !settings.type_cluster_attraction.is_finite() || settings.type_cluster_attraction < 0.0 || settings.type_cluster_attraction > 2.0 {
-        errors.push(format!("type_cluster_attraction must be between 0.0 and 2.0 (got {})", settings.type_cluster_attraction));
+    if !settings.type_cluster_attraction.is_finite()
+        || settings.type_cluster_attraction < 0.0
+        || settings.type_cluster_attraction > 2.0
+    {
+        errors.push(format!(
+            "type_cluster_attraction must be between 0.0 and 2.0 (got {})",
+            settings.type_cluster_attraction
+        ));
     }
-    if !settings.type_cluster_radius.is_finite() || settings.type_cluster_radius < 10.0 || settings.type_cluster_radius > 500.0 {
-        errors.push(format!("type_cluster_radius must be between 10.0 and 500.0 (got {})", settings.type_cluster_radius));
+    if !settings.type_cluster_radius.is_finite()
+        || settings.type_cluster_radius < 10.0
+        || settings.type_cluster_radius > 500.0
+    {
+        errors.push(format!(
+            "type_cluster_radius must be between 10.0 and 500.0 (got {})",
+            settings.type_cluster_radius
+        ));
     }
-    let valid_modes = ["force-directed", "dag-topdown", "dag-radial", "dag-leftright", "type-clustering"];
+    let valid_modes = [
+        "force-directed",
+        "dag-topdown",
+        "dag-radial",
+        "dag-leftright",
+        "type-clustering",
+    ];
     if !valid_modes.contains(&settings.layout_mode.as_str()) {
-        errors.push(format!("layout_mode must be one of {:?} (got '{}')", valid_modes, settings.layout_mode));
+        errors.push(format!(
+            "layout_mode must be one of {:?} (got '{}')",
+            valid_modes, settings.layout_mode
+        ));
     }
     if settings.min_fps_threshold < 10 || settings.min_fps_threshold > 120 {
-        errors.push(format!("min_fps_threshold must be between 10 and 120 (got {})", settings.min_fps_threshold));
+        errors.push(format!(
+            "min_fps_threshold must be between 10 and 120 (got {})",
+            settings.min_fps_threshold
+        ));
     }
 
     if errors.is_empty() {
@@ -307,7 +472,10 @@ pub async fn update_physics_settings(
     auth: AuthenticatedUser,
     settings_repo: web::Data<Arc<SqliteSettingsRepository>>,
 ) -> impl Responder {
-    debug!("User {} updating physics settings — request body: {:?}", auth.pubkey, body);
+    debug!(
+        "User {} updating physics settings — request body: {:?}",
+        auth.pubkey, body
+    );
 
     // Single GetSettings call -- fetch full settings snapshot once to avoid TOCTOU race
     let mut full_settings = match state.settings_addr.send(GetSettings).await {
@@ -330,27 +498,28 @@ pub async fn update_physics_settings(
     let current_physics = &full_settings.visualisation.graphs.logseq.physics;
     let current_json = serde_json::to_value(current_physics).unwrap_or_default();
 
-    let new_physics = if let (serde_json::Value::Object(mut base), serde_json::Value::Object(patch)) =
-        (current_json, body.into_inner())
-    {
-        // Normalize incoming keys: map common aliases (snake_case, legacy names)
-        // to the canonical camelCase field names used by PhysicsSettings.
-        let normalized_patch = normalize_physics_keys(patch);
-        for (k, v) in normalized_patch {
-            base.insert(k, v);
-        }
-        match serde_json::from_value::<PhysicsSettings>(serde_json::Value::Object(base)) {
-            Ok(merged) => merged,
-            Err(e) => {
-                warn!("Physics settings merge failed: {}", e);
-                return HttpResponse::BadRequest().json(ErrorResponse {
-                    error: format!("Invalid settings value: {}", e),
-                });
+    let new_physics =
+        if let (serde_json::Value::Object(mut base), serde_json::Value::Object(patch)) =
+            (current_json, body.into_inner())
+        {
+            // Normalize incoming keys: map common aliases (snake_case, legacy names)
+            // to the canonical camelCase field names used by PhysicsSettings.
+            let normalized_patch = normalize_physics_keys(patch);
+            for (k, v) in normalized_patch {
+                base.insert(k, v);
             }
-        }
-    } else {
-        full_settings.visualisation.graphs.logseq.physics.clone()
-    };
+            match serde_json::from_value::<PhysicsSettings>(serde_json::Value::Object(base)) {
+                Ok(merged) => merged,
+                Err(e) => {
+                    warn!("Physics settings merge failed: {}", e);
+                    return HttpResponse::BadRequest().json(ErrorResponse {
+                        error: format!("Invalid settings value: {}", e),
+                    });
+                }
+            }
+        } else {
+            full_settings.visualisation.graphs.logseq.physics.clone()
+        };
 
     // Validate before applying
     if let Err(validation_err) = validate_physics_settings(&new_physics) {
@@ -362,13 +531,23 @@ pub async fn update_physics_settings(
 
     // Apply merged physics to the same snapshot and write back atomically
     full_settings.visualisation.graphs.logseq.physics = new_physics.clone();
-    match state.settings_addr.send(UpdateSettings { settings: full_settings }).await {
+    match state
+        .settings_addr
+        .send(UpdateSettings {
+            settings: full_settings,
+        })
+        .await
+    {
         Ok(Ok(())) => {
             info!("Physics settings updated successfully by {}", auth.pubkey);
 
             // Propagate physics changes to GPU actors so layout actually responds
-            let sim_params: crate::models::simulation_params::SimulationParams = (&new_physics).into();
-            info!("Propagating SimulationParams: spring_k={}, repel_k={}, damping={}", sim_params.spring_k, sim_params.repel_k, sim_params.damping);
+            let sim_params: crate::models::simulation_params::SimulationParams =
+                (&new_physics).into();
+            info!(
+                "Propagating SimulationParams: spring_k={}, repel_k={}, damping={}",
+                sim_params.spring_k, sim_params.repel_k, sim_params.damping
+            );
             let update_msg = UpdateSimulationParams { params: sim_params };
 
             if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
@@ -384,7 +563,10 @@ pub async fn update_physics_settings(
                 warn!("Direct GPUComputeActor address not available, routing via GPUManagerActor fallback");
                 if let Some(ref gpu_mgr) = state.gpu_manager_addr {
                     if let Err(e) = gpu_mgr.send(update_msg.clone()).await {
-                        error!("Fallback: Failed to route physics via GPUManagerActor: {}", e);
+                        error!(
+                            "Fallback: Failed to route physics via GPUManagerActor: {}",
+                            e
+                        );
                     } else {
                         info!("Fallback: UpdateSimulationParams routed via GPUManagerActor");
                     }
@@ -416,9 +598,13 @@ pub async fn update_physics_settings(
             // Force-resume physics so the new parameters actually take effect.
             // Without this, a converged system stays paused and param changes are invisible.
             info!("Sending ForceResumePhysics to GraphServiceSupervisor");
-            if let Err(e) = state.graph_service_addr.send(
-                ForceResumePhysics { reason: "Physics settings updated via API".to_string() }
-            ).await {
+            if let Err(e) = state
+                .graph_service_addr
+                .send(ForceResumePhysics {
+                    reason: "Physics settings updated via API".to_string(),
+                })
+                .await
+            {
                 warn!("Failed to send ForceResumePhysics: {}", e);
             } else {
                 info!("ForceResumePhysics sent to GraphServiceSupervisor successfully");
@@ -427,16 +613,22 @@ pub async fn update_physics_settings(
             // Persist physics settings to SQLite for cross-restart survival
             match serde_json::to_value(&new_physics) {
                 Ok(physics_json) => {
-                    if let Err(e) = settings_repo.set_setting(
-                        "physics",
-                        SettingValue::Json(physics_json),
-                        Some("Physics simulation settings"),
-                    ).await {
+                    if let Err(e) = settings_repo
+                        .set_setting(
+                            "physics",
+                            SettingValue::Json(physics_json),
+                            Some("Physics simulation settings"),
+                        )
+                        .await
+                    {
                         warn!("Failed to persist physics settings to SQLite: {}", e);
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to serialize physics settings for persistence: {}", e);
+                    warn!(
+                        "Failed to serialize physics settings for persistence: {}",
+                        e
+                    );
                 }
             }
 
@@ -473,7 +665,10 @@ pub async fn get_constraint_settings(
             match serde_json::from_value::<ConstraintSettings>(json) {
                 Ok(settings) => HttpResponse::Ok().json(settings),
                 Err(e) => {
-                    warn!("Failed to parse stored constraint settings, returning defaults: {}", e);
+                    warn!(
+                        "Failed to parse stored constraint settings, returning defaults: {}",
+                        e
+                    );
                     HttpResponse::Ok().json(ConstraintSettings::default())
                 }
             }
@@ -518,36 +713,50 @@ pub async fn update_constraint_settings(
         }
     };
 
-    if let Err(e) = settings_repo.set_setting(
-        "constraints",
-        crate::ports::settings_repository::SettingValue::Json(settings_json),
-        Some("Constraint settings for physics simulation"),
-    ).await {
+    if let Err(e) = settings_repo
+        .set_setting(
+            "constraints",
+            crate::ports::settings_repository::SettingValue::Json(settings_json),
+            Some("Constraint settings for physics simulation"),
+        )
+        .await
+    {
         error!("Failed to persist constraint settings: {}", e);
         return HttpResponse::InternalServerError().json(ErrorResponse {
             error: format!("Failed to persist constraint settings: {}", e),
         });
     }
 
-    info!("Constraint settings updated and persisted for user {}", auth.pubkey);
+    info!(
+        "Constraint settings updated and persisted for user {}",
+        auth.pubkey
+    );
 
     // Propagate constraint settings to GPU actors so physics simulation reflects changes
     let constraint_json = match serde_json::to_value(&settings) {
         Ok(json) => json,
         Err(e) => {
-            error!("Failed to serialize constraint settings for GPU propagation: {}", e);
+            error!(
+                "Failed to serialize constraint settings for GPU propagation: {}",
+                e
+            );
             // Settings are already persisted; return success but log the propagation failure
             return HttpResponse::Ok().json(&settings);
         }
     };
 
-    let constraint_msg = UpdateConstraints { constraint_data: constraint_json };
+    let constraint_msg = UpdateConstraints {
+        constraint_data: constraint_json,
+    };
 
     if let Some(ref gpu_manager) = state.gpu_manager_addr {
         if let Err(e) = gpu_manager.send(constraint_msg).await {
             error!("Failed to propagate constraints to GPUManagerActor: {}", e);
         } else {
-            info!("Constraint settings propagated to GPUManagerActor for user {}", auth.pubkey);
+            info!(
+                "Constraint settings propagated to GPUManagerActor for user {}",
+                auth.pubkey
+            );
         }
     } else {
         warn!("GPUManagerActor not available; constraint settings persisted but not propagated to GPU");
@@ -604,7 +813,13 @@ pub async fn update_rendering_settings(
     match state.settings_addr.send(GetSettings).await {
         Ok(Ok(mut full_settings)) => {
             full_settings.visualisation.rendering = new_rendering.clone();
-            match state.settings_addr.send(UpdateSettings { settings: full_settings }).await {
+            match state
+                .settings_addr
+                .send(UpdateSettings {
+                    settings: full_settings,
+                })
+                .await
+            {
                 Ok(Ok(())) => {
                     info!("Rendering settings updated successfully by {}", auth.pubkey);
 
@@ -618,7 +833,9 @@ pub async fn update_rendering_settings(
                         "timestamp": chrono::Utc::now().timestamp_millis()
                     });
                     if let Ok(msg_str) = serde_json::to_string(&broadcast_payload) {
-                        state.client_manager_addr.do_send(BroadcastMessage { message: msg_str });
+                        state
+                            .client_manager_addr
+                            .do_send(BroadcastMessage { message: msg_str });
                         info!("Rendering settings change broadcast sent to connected clients");
                     }
 
@@ -669,7 +886,10 @@ pub async fn get_node_filter_settings(
             match serde_json::from_value::<NodeFilterSettings>(json) {
                 Ok(settings) => HttpResponse::Ok().json(settings),
                 Err(e) => {
-                    warn!("Failed to parse stored node filter settings, returning defaults: {}", e);
+                    warn!(
+                        "Failed to parse stored node filter settings, returning defaults: {}",
+                        e
+                    );
                     HttpResponse::Ok().json(NodeFilterSettings::default())
                 }
             }
@@ -691,8 +911,10 @@ pub async fn update_node_filter_settings(
     body: web::Json<NodeFilterSettings>,
     auth: AuthenticatedUser,
 ) -> impl Responder {
-    info!("User {} updating node filter settings: enabled={}, threshold={}",
-          auth.pubkey, body.enabled, body.quality_threshold);
+    info!(
+        "User {} updating node filter settings: enabled={}, threshold={}",
+        auth.pubkey, body.enabled, body.quality_threshold
+    );
 
     let settings = body.into_inner();
 
@@ -715,11 +937,14 @@ pub async fn update_node_filter_settings(
         }
     };
 
-    if let Err(e) = settings_repo.set_setting(
-        "node_filter",
-        crate::ports::settings_repository::SettingValue::Json(settings_json),
-        Some("Node confidence filter settings"),
-    ).await {
+    if let Err(e) = settings_repo
+        .set_setting(
+            "node_filter",
+            crate::ports::settings_repository::SettingValue::Json(settings_json),
+            Some("Node confidence filter settings"),
+        )
+        .await
+    {
         error!("Failed to persist node filter settings: {}", e);
         return HttpResponse::InternalServerError().json(ErrorResponse {
             error: format!("Failed to persist node filter settings: {}", e),
@@ -745,12 +970,16 @@ pub async fn update_node_filter_settings(
         "timestamp": chrono::Utc::now().timestamp_millis()
     });
     if let Ok(msg_str) = serde_json::to_string(&broadcast_payload) {
-        state.client_manager_addr.do_send(BroadcastMessage { message: msg_str });
+        state
+            .client_manager_addr
+            .do_send(BroadcastMessage { message: msg_str });
         info!("Node filter settings change broadcast sent to connected clients");
     }
 
-    info!("Node filter settings updated and persisted for user {}: enabled={}, quality_threshold={}",
-          auth.pubkey, settings.enabled, settings.quality_threshold);
+    info!(
+        "Node filter settings updated and persisted for user {}: enabled={}, quality_threshold={}",
+        auth.pubkey, settings.enabled, settings.quality_threshold
+    );
     HttpResponse::Ok().json(&settings)
 }
 
@@ -770,14 +999,20 @@ pub async fn get_quality_gate_settings(
             match serde_json::from_value::<QualityGateSettings>(json) {
                 Ok(settings) => HttpResponse::Ok().json(settings),
                 Err(e) => {
-                    warn!("Failed to parse stored quality gate settings, returning defaults: {}", e);
+                    warn!(
+                        "Failed to parse stored quality gate settings, returning defaults: {}",
+                        e
+                    );
                     HttpResponse::Ok().json(QualityGateSettings::default())
                 }
             }
         }
         Ok(_) => HttpResponse::Ok().json(QualityGateSettings::default()),
         Err(e) => {
-            warn!("Failed to load quality gate settings from repository: {}", e);
+            warn!(
+                "Failed to load quality gate settings from repository: {}",
+                e
+            );
             HttpResponse::Ok().json(QualityGateSettings::default())
         }
     }
@@ -822,7 +1057,10 @@ pub async fn update_quality_gate_settings(
 
     // Validate before persisting
     if let Err(validation_err) = validate_quality_gate_settings(&settings) {
-        warn!("Quality gate settings validation failed: {}", validation_err);
+        warn!(
+            "Quality gate settings validation failed: {}",
+            validation_err
+        );
         return HttpResponse::BadRequest().json(ErrorResponse {
             error: format!("Validation failed: {}", validation_err),
         });
@@ -839,11 +1077,14 @@ pub async fn update_quality_gate_settings(
         }
     };
 
-    if let Err(e) = settings_repo.set_setting(
-        "quality_gates",
-        crate::ports::settings_repository::SettingValue::Json(settings_json),
-        Some("Quality gate settings for feature toggles and performance thresholds"),
-    ).await {
+    if let Err(e) = settings_repo
+        .set_setting(
+            "quality_gates",
+            crate::ports::settings_repository::SettingValue::Json(settings_json),
+            Some("Quality gate settings for feature toggles and performance thresholds"),
+        )
+        .await
+    {
         error!("Failed to persist quality gate settings: {}", e);
         return HttpResponse::InternalServerError().json(ErrorResponse {
             error: format!("Failed to persist quality gate settings: {}", e),
@@ -875,7 +1116,10 @@ pub async fn update_quality_gate_settings(
             // Type-clustering enables cluster/alignment forces for grouping.
             match settings.layout_mode.as_str() {
                 "dag-topdown" | "dag-radial" | "dag-leftright" => {
-                    info!("Quality gates: applying DAG layout overrides for mode: {}", settings.layout_mode);
+                    info!(
+                        "Quality gates: applying DAG layout overrides for mode: {}",
+                        settings.layout_mode
+                    );
                     sim_params.center_gravity_k = sim_params.center_gravity_k.max(0.1);
                     sim_params.use_sssp_distances = true;
                     sim_params.sssp_alpha = Some(sim_params.sssp_alpha.unwrap_or(0.0).max(0.5));
@@ -903,25 +1147,41 @@ pub async fn update_quality_gate_settings(
                     ComputeMode::Basic
                 };
                 if let Err(e) = gpu_addr.send(SetComputeMode { mode: compute_mode }).await {
-                    error!("Quality gates: failed to propagate ComputeMode to ForceComputeActor: {}", e);
+                    error!(
+                        "Quality gates: failed to propagate ComputeMode to ForceComputeActor: {}",
+                        e
+                    );
                 }
             }
 
             if let Err(e) = state.graph_service_addr.send(update_msg).await {
-                error!("Quality gates: failed to propagate SimulationParams to GraphServiceActor: {}", e);
+                error!(
+                    "Quality gates: failed to propagate SimulationParams to GraphServiceActor: {}",
+                    e
+                );
             }
 
-            info!("Quality gates propagated to physics engine: gpu={}, compute_mode={}, layout={}",
-                  settings.gpu_acceleration,
-                  if settings.gpu_acceleration { "Advanced" } else { "Basic" },
-                  settings.layout_mode);
+            info!(
+                "Quality gates propagated to physics engine: gpu={}, compute_mode={}, layout={}",
+                settings.gpu_acceleration,
+                if settings.gpu_acceleration {
+                    "Advanced"
+                } else {
+                    "Basic"
+                },
+                settings.layout_mode
+            );
 
             // --- Propagate semantic forces configuration to SemanticForcesActor ---
             if let Some(ref gpu_manager) = state.gpu_manager_addr {
-                use crate::actors::messages::{ConfigureDAG, ConfigureTypeClustering, AdjustConstraintWeights};
+                use crate::actors::messages::{
+                    AdjustConstraintWeights, ConfigureDAG, ConfigureTypeClustering,
+                };
 
-                let is_dag_mode = matches!(settings.layout_mode.as_str(),
-                    "dag-topdown" | "dag-radial" | "dag-leftright");
+                let is_dag_mode = matches!(
+                    settings.layout_mode.as_str(),
+                    "dag-topdown" | "dag-radial" | "dag-leftright"
+                );
                 let is_type_clustering = settings.layout_mode == "type-clustering";
 
                 // Configure DAG layout forces
@@ -941,10 +1201,16 @@ pub async fn update_quality_gate_settings(
                     cluster_attraction: Some(settings.type_cluster_attraction),
                     cluster_radius: Some(settings.type_cluster_radius),
                     inter_cluster_repulsion: None,
-                    enabled: Some(settings.semantic_forces && (is_type_clustering || settings.layout_mode == "force-directed")),
+                    enabled: Some(
+                        settings.semantic_forces
+                            && (is_type_clustering || settings.layout_mode == "force-directed"),
+                    ),
                 };
                 if let Err(e) = gpu_manager.send(cluster_msg).await {
-                    warn!("Quality gates: failed to propagate type clustering config: {}", e);
+                    warn!(
+                        "Quality gates: failed to propagate type clustering config: {}",
+                        e
+                    );
                 }
 
                 // Adjust ontology constraint weights when strength changes
@@ -964,10 +1230,16 @@ pub async fn update_quality_gate_settings(
             }
         }
         Ok(Err(e)) => {
-            warn!("Quality gates persisted but failed to read settings for propagation: {}", e);
+            warn!(
+                "Quality gates persisted but failed to read settings for propagation: {}",
+                e
+            );
         }
         Err(e) => {
-            warn!("Quality gates persisted but settings actor unreachable for propagation: {}", e);
+            warn!(
+                "Quality gates persisted but settings actor unreachable for propagation: {}",
+                e
+            );
         }
     }
 
@@ -981,7 +1253,9 @@ pub async fn update_quality_gate_settings(
 /// Recursively deep-merge `patch` into `base`. Values in `patch` take priority.
 /// Both must be JSON objects; non-object values in `patch` replace `base` wholesale.
 fn deep_merge_json(base: &mut serde_json::Value, patch: serde_json::Value) {
-    if let (serde_json::Value::Object(base_map), serde_json::Value::Object(patch_map)) = (base, patch) {
+    if let (serde_json::Value::Object(base_map), serde_json::Value::Object(patch_map)) =
+        (base, patch)
+    {
         for (key, value) in patch_map {
             let entry = base_map.entry(key).or_insert(serde_json::Value::Null);
             if value.is_object() && entry.is_object() {
@@ -1051,7 +1325,10 @@ pub async fn update_visual_settings(
         });
     }
 
-    info!("Visual settings updated and persisted for user {}", auth.pubkey);
+    info!(
+        "Visual settings updated and persisted for user {}",
+        auth.pubkey
+    );
     HttpResponse::Ok().json(current)
 }
 
@@ -1077,7 +1354,10 @@ pub async fn get_all_settings(
         Some(user) => {
             info!("GET /api/settings/all (per-user layer for {})", user.pubkey);
             CURRENT_OWNER_PUBKEY
-                .scope(Some(user.pubkey), get_all_from_actor(&state, &settings_repo))
+                .scope(
+                    Some(user.pubkey),
+                    get_all_from_actor(&state, &settings_repo),
+                )
                 .await
         }
         None => {
@@ -1175,14 +1455,19 @@ pub async fn get_user_filter(
     let repo = settings_repo.get_ref().clone();
     let owner = auth.pubkey.clone();
     let stored = CURRENT_OWNER_PUBKEY
-        .scope(Some(owner), async move { repo.get_setting(USER_FILTER_KEY).await })
+        .scope(Some(owner), async move {
+            repo.get_setting(USER_FILTER_KEY).await
+        })
         .await;
 
     match stored {
         Ok(Some(SettingValue::Json(json))) => match serde_json::from_value::<UserFilter>(json) {
             Ok(mut filter) => {
                 filter.pubkey = auth.pubkey.clone();
-                info!("GET /api/user/filter served persisted filter for user {}", auth.pubkey);
+                info!(
+                    "GET /api/user/filter served persisted filter for user {}",
+                    auth.pubkey
+                );
                 HttpResponse::Ok().json(filter)
             }
             Err(e) => {
@@ -1196,7 +1481,10 @@ pub async fn get_user_filter(
             }
         },
         Ok(_) => {
-            info!("GET /api/user/filter no stored filter for user {}; returning default", auth.pubkey);
+            info!(
+                "GET /api/user/filter no stored filter for user {}; returning default",
+                auth.pubkey
+            );
             let mut filter = UserFilter::default();
             filter.pubkey = auth.pubkey.clone();
             HttpResponse::Ok().json(filter)
@@ -1270,7 +1558,10 @@ pub async fn save_profile(
     body: web::Json<SaveProfileRequest>,
     auth: AuthenticatedUser,
 ) -> impl Responder {
-    info!("User {} saving settings profile: {}", auth.pubkey, body.name);
+    info!(
+        "User {} saving settings profile: {}",
+        auth.pubkey, body.name
+    );
     HttpResponse::Created().json(ProfileIdResponse { id: 1 })
 }
 
@@ -1288,10 +1579,7 @@ pub async fn load_profile(
 }
 
 /// GET /api/settings/profiles
-pub async fn list_profiles(
-    _state: web::Data<AppState>,
-    _auth: OptionalAuth,
-) -> impl Responder {
+pub async fn list_profiles(_state: web::Data<AppState>, _auth: OptionalAuth) -> impl Responder {
     HttpResponse::Ok().json(Vec::<crate::settings::models::SettingsProfile>::new())
 }
 
@@ -1302,7 +1590,10 @@ pub async fn delete_profile(
     auth: AuthenticatedUser,
 ) -> impl Responder {
     let profile_id = path.into_inner();
-    info!("User {} deleting settings profile: {}", auth.pubkey, profile_id);
+    info!(
+        "User {} deleting settings profile: {}",
+        auth.pubkey, profile_id
+    );
     HttpResponse::Ok().finish()
 }
 
@@ -1339,11 +1630,17 @@ pub async fn reset_layout(
 
     if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
         if let Err(e) = gpu_addr.send(update_msg.clone()).await {
-            warn!("Failed to send canonical physics defaults to ForceComputeActor: {}", e);
+            warn!(
+                "Failed to send canonical physics defaults to ForceComputeActor: {}",
+                e
+            );
         }
     }
     if let Err(e) = state.graph_service_addr.send(update_msg).await {
-        warn!("Failed to propagate canonical physics to GraphServiceSupervisor: {}", e);
+        warn!(
+            "Failed to propagate canonical physics to GraphServiceSupervisor: {}",
+            e
+        );
     }
 
     // Persist the canonical default to SQLite so the persisted store and the live
@@ -1360,12 +1657,18 @@ pub async fn reset_layout(
                 )
                 .await
             {
-                warn!("Failed to persist canonical physics to SQLite on reset: {}", e);
+                warn!(
+                    "Failed to persist canonical physics to SQLite on reset: {}",
+                    e
+                );
             } else {
                 info!("Persisted canonical physics default to SQLite on reset");
             }
         }
-        Err(e) => warn!("Failed to serialize canonical physics for persistence on reset: {}", e),
+        Err(e) => warn!(
+            "Failed to serialize canonical physics for persistence on reset: {}",
+            e
+        ),
     }
 
     // 2. Re-randomize positions on GPU
@@ -1385,9 +1688,13 @@ pub async fn reset_layout(
     }
 
     // 3. Force-resume physics so the new layout starts settling
-    if let Err(e) = state.graph_service_addr.send(
-        ForceResumePhysics { reason: "Layout reset via API".to_string() }
-    ).await {
+    if let Err(e) = state
+        .graph_service_addr
+        .send(ForceResumePhysics {
+            reason: "Layout reset via API".to_string(),
+        })
+        .await
+    {
         warn!("Failed to send ForceResumePhysics after reset: {}", e);
     }
 
@@ -1427,7 +1734,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/user")
             .route("/filter", web::get().to(get_user_filter))
-            .route("/filter", web::put().to(update_user_filter))
+            .route("/filter", web::put().to(update_user_filter)),
     );
 
     log::info!("Settings routes configuration complete (single actor, validated PUT routes)");

@@ -1,6 +1,6 @@
 use crate::actors::messages::{GetGPUStatus, GetGraphData, GetMetadata, GetSettings};
-use crate::services::mcp_relay_manager::McpRelayManager;
 use crate::ok_json;
+use crate::services::mcp_relay_manager::McpRelayManager;
 use crate::AppState;
 use actix_web::{web, Error, HttpResponse, Result};
 use chrono::Utc;
@@ -70,9 +70,7 @@ pub async fn unified_health_check(app_state: web::Data<AppState>) -> Result<Http
         issues.push(reason);
     }
 
-
     let system_metrics = check_system_metrics(&mut health_status, &mut issues);
-
 
     // D5: compute the real MCP state ONCE, before building ServiceMetrics, so the
     // `services.mcp_status` field derives from the same check as the `mcp` block
@@ -86,7 +84,6 @@ pub async fn unified_health_check(app_state: web::Data<AppState>) -> Result<Http
         &mut issues,
     )
     .await;
-
 
     if health_status == "healthy" && !issues.is_empty() {
         health_status = "degraded".to_string();
@@ -113,7 +110,6 @@ fn check_system_metrics(health_status: &mut String, issues: &mut Vec<String>) ->
     let disk_usage = check_disk_usage();
     let gpu_status = check_gpu_status();
 
-
     if cpu_usage > HIGH_CPU_THRESHOLD {
         *health_status = "degraded".to_string();
         issues.push("High CPU usage".to_string());
@@ -135,7 +131,6 @@ fn check_system_metrics(health_status: &mut String, issues: &mut Vec<String>) ->
     }
 }
 
-
 /// Derive the single-word `services.mcp_status` label from the real MCP check,
 /// so it never disagrees with the `mcp` block on the same /api/health response
 /// (D5). Kept in lockstep with [`check_mcp_metrics`]'s message states.
@@ -153,7 +148,6 @@ async fn check_service_metrics(
     health_status: &mut String,
     issues: &mut Vec<String>,
 ) -> ServiceMetrics {
-
     let metadata_count = match tokio::time::timeout(
         HEALTH_CHECK_TIMEOUT,
         app_state.metadata_addr.send(GetMetadata),
@@ -177,7 +171,6 @@ async fn check_service_metrics(
             0
         }
     };
-
 
     let (nodes_count, edges_count) = match tokio::time::timeout(
         HEALTH_CHECK_TIMEOUT,
@@ -315,7 +308,6 @@ async fn get_physics_diagnostics(
     let mut diagnostics = Vec::new();
     let mut status = "healthy".to_string();
 
-    
     match tokio::time::timeout(
         Duration::from_secs(3),
         app_state.graph_service_addr.send(GetGraphData),
@@ -347,7 +339,6 @@ async fn get_physics_diagnostics(
         }
     }
 
-
     #[cfg(feature = "gpu")]
     if let Some(gpu_compute_addr) = app_state.get_gpu_compute_addr().await {
         match tokio::time::timeout(Duration::from_secs(2), gpu_compute_addr.send(GetGPUStatus))
@@ -372,7 +363,6 @@ async fn get_physics_diagnostics(
     } else {
         diagnostics.push("GPU compute not available - using CPU fallback".to_string());
     }
-
 
     let physics_info = check_physics_parameters(app_state).await;
     diagnostics.push(physics_info);

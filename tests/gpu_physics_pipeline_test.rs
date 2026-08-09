@@ -63,21 +63,33 @@ fn ptx_isa_passthrough_when_below_max() {
 fn ptx_validate_rejects_missing_version() {
     let ptx = ".target sm_75\n.entry foo() {}";
     let err = visionclaw_server::utils::ptx::validate_ptx(ptx).unwrap_err();
-    assert!(err.contains(".version"), "Error should mention .version: {}", err);
+    assert!(
+        err.contains(".version"),
+        "Error should mention .version: {}",
+        err
+    );
 }
 
 #[test]
 fn ptx_validate_rejects_missing_target() {
     let ptx = ".version 9.0\n.entry foo() {}";
     let err = visionclaw_server::utils::ptx::validate_ptx(ptx).unwrap_err();
-    assert!(err.contains(".target"), "Error should mention .target: {}", err);
+    assert!(
+        err.contains(".target"),
+        "Error should mention .target: {}",
+        err
+    );
 }
 
 #[test]
 fn ptx_validate_rejects_missing_entry() {
     let ptx = ".version 9.0\n.target sm_75\n// no kernel entry point";
     let err = visionclaw_server::utils::ptx::validate_ptx(ptx).unwrap_err();
-    assert!(err.contains(".entry"), "Error should mention .entry: {}", err);
+    assert!(
+        err.contains(".entry"),
+        "Error should mention .entry: {}",
+        err
+    );
 }
 
 #[test]
@@ -100,21 +112,38 @@ fn ptx_module_source_and_env_var_consistency() {
     use visionclaw_server::utils::ptx::PTXModule;
 
     let modules = PTXModule::all_modules();
-    assert!(modules.len() >= 10, "Expected >= 10 PTX modules, got {}", modules.len());
+    assert!(
+        modules.len() >= 10,
+        "Expected >= 10 PTX modules, got {}",
+        modules.len()
+    );
 
     for module in &modules {
         let src = module.source_file();
-        assert!(src.ends_with(".cu"), "{:?} source should be .cu: {}", module, src);
+        assert!(
+            src.ends_with(".cu"),
+            "{:?} source should be .cu: {}",
+            module,
+            src
+        );
 
         let env = module.env_var();
-        assert!(env.ends_with("_PTX_PATH"), "{:?} env var should end _PTX_PATH: {}", module, env);
+        assert!(
+            env.ends_with("_PTX_PATH"),
+            "{:?} env var should end _PTX_PATH: {}",
+            module,
+            env
+        );
 
         // Stem of .cu file should appear uppercase in env var name
         let stem = src.replace(".cu", "").to_uppercase();
         assert!(
             env.contains(&stem),
             "Env var '{}' for {:?} should contain stem '{}' from '{}'",
-            env, module, stem, src
+            env,
+            module,
+            stem,
+            src
         );
     }
 }

@@ -59,9 +59,8 @@ pub mod version;
 pub use crate::version::{SCHEMA_VERSION, SCHEMA_VERSION_STRING};
 
 pub use crate::agent_action::{
-    ActionKind, AgentAction, AgentActionEnvelope, AgentActionTargetOrigin, ModifierKeys,
-    NodeClass, WorldPosition, AGENT_ACTION_CHANNEL, AGENT_ACTION_DEEP_LINK_TEMPLATE,
-    AGENT_ACTION_TYPE,
+    ActionKind, AgentAction, AgentActionEnvelope, AgentActionTargetOrigin, ModifierKeys, NodeClass,
+    WorldPosition, AGENT_ACTION_CHANNEL, AGENT_ACTION_DEEP_LINK_TEMPLATE, AGENT_ACTION_TYPE,
 };
 
 pub use crate::telemetry::{

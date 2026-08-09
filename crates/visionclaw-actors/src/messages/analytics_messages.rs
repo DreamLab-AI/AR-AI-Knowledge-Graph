@@ -198,7 +198,9 @@ pub struct UpdateComponentEdges {
 #[rtype(result = "()")]
 pub struct SetNodeAnalytics {
     pub node_analytics: std::sync::Arc<
-        std::sync::RwLock<std::collections::HashMap<u32, visionclaw_domain::analytics::NodeAnalytics>>,
+        std::sync::RwLock<
+            std::collections::HashMap<u32, visionclaw_domain::analytics::NodeAnalytics>,
+        >,
     >,
 }
 
@@ -210,7 +212,5 @@ pub struct SetNodeAnalytics {
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
 pub struct SetNodeSSSP {
-    pub node_sssp: std::sync::Arc<
-        std::sync::RwLock<std::collections::HashMap<u32, (f32, i32)>>,
-    >,
+    pub node_sssp: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<u32, (f32, i32)>>>,
 }

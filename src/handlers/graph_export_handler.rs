@@ -1,9 +1,10 @@
-use visionclaw_domain::models::graph::GraphData;
+use crate::middleware::RequireAuth;
 use crate::models::graph_export::*;
 use crate::services::graph_serialization::GraphSerializationService;
-use crate::middleware::RequireAuth;
-use crate::{ok_json, error_json, bad_request, not_found, unauthorized, forbidden, too_many_requests};
 use crate::AppState;
+use crate::{
+    bad_request, error_json, forbidden, not_found, ok_json, too_many_requests, unauthorized,
+};
 use actix_web::{http::header::HeaderValue, web, HttpRequest, HttpResponse, Result as ActixResult};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -12,6 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use visionclaw_domain::models::graph::GraphData;
 
 #[derive(Debug, Clone, Default)]
 pub struct RateLimitState {
@@ -33,7 +35,6 @@ pub struct GraphExportHandler {
 }
 
 impl GraphExportHandler {
-    
     pub fn new(storage_path: std::path::PathBuf) -> Self {
         Self {
             serialization_service: GraphSerializationService::new(storage_path),
@@ -44,7 +45,6 @@ impl GraphExportHandler {
         }
     }
 
-    
     async fn check_rate_limit(&self, client_ip: &str) -> Result<RateLimitInfo> {
         let mut rate_limits = self.rate_limits.write().await;
         let now = Utc::now();
@@ -53,12 +53,10 @@ impl GraphExportHandler {
             .entry(client_ip.to_string())
             .or_insert_with(RateLimitState::default);
 
-        
         state
             .requests
             .retain(|&timestamp| now.signed_duration_since(timestamp).num_hours() < 24);
 
-        
         let hourly_count = state
             .requests
             .iter()
@@ -67,7 +65,6 @@ impl GraphExportHandler {
 
         let daily_count = state.requests.len() as u32;
 
-        
         if daily_count >= self.daily_export_limit {
             return Ok(RateLimitInfo {
                 remaining_exports: 0,
@@ -86,7 +83,6 @@ impl GraphExportHandler {
             });
         }
 
-        
         state.requests.push(now);
         state.daily_count = daily_count + 1;
         state.hourly_count = hourly_count + 1;
@@ -99,7 +95,6 @@ impl GraphExportHandler {
         })
     }
 
-    
     async fn get_current_graph(&self, app_state: &AppState) -> Result<GraphData> {
         use crate::actors::messages::GetGraphData;
 
@@ -133,14 +128,12 @@ pub async fn export_graph(
         _ => {}
     }
 
-
     let graph = match handler.get_current_graph(&app_state).await {
         Ok(graph) => graph,
         Err(e) => {
             return error_json!("Failed to get graph: {}", e);
         }
     };
-
 
     match handler
         .serialization_service
@@ -174,7 +167,6 @@ pub async fn share_graph(
         _ => {}
     }
 
-
     let graph = match handler.get_current_graph(&app_state).await {
         Ok(graph) => graph,
         Err(e) => {
@@ -182,14 +174,12 @@ pub async fn share_graph(
         }
     };
 
-
     match handler
         .serialization_service
         .create_shared_graph(&graph, &request)
         .await
     {
         Ok((shared_graph, share_response)) => {
-
             {
                 let mut shared_graphs = handler.shared_graphs.write().await;
                 shared_graphs.insert(shared_graph.id, shared_graph);
@@ -213,7 +203,6 @@ pub async fn get_shared_graph(
         }
     };
 
-    
     let shared_graph = {
         let shared_graphs = handler.shared_graphs.read().await;
         match shared_graphs.get(&share_id) {
@@ -224,19 +213,15 @@ pub async fn get_shared_graph(
         }
     };
 
-    
     if shared_graph.is_expired() {
         return Ok(HttpResponse::Gone().json(serde_json::json!({
             "error": "Shared graph has expired"
         })));
     }
 
-
-
     if shared_graph.access_limit_reached() {
         return forbidden!("Access limit reached for this shared graph");
     }
-
 
     if let Some(password) = query.get("password") {
         if !shared_graph.validate_password(password) {
@@ -246,7 +231,6 @@ pub async fn get_shared_graph(
         return unauthorized!("Password required");
     }
 
-    
     {
         let mut shared_graphs = handler.shared_graphs.write().await;
         if let Some(graph) = shared_graphs.get_mut(&share_id) {
@@ -254,7 +238,6 @@ pub async fn get_shared_graph(
         }
     }
 
-    
     match std::fs::read(&shared_graph.file_path) {
         Ok(file_data) => {
             let content_type = match shared_graph.original_format {
@@ -302,7 +285,6 @@ pub async fn delete_shared_graph(
         }
     };
 
-    
     let removed_graph = {
         let mut shared_graphs = handler.shared_graphs.write().await;
         shared_graphs.remove(&share_id)
@@ -310,7 +292,6 @@ pub async fn delete_shared_graph(
 
     match removed_graph {
         Some(graph) => {
-            
             if let Err(e) = std::fs::remove_file(&graph.file_path) {
                 log::warn!("Failed to delete shared graph file: {}", e);
             }
@@ -360,10 +341,8 @@ mod tests {
 
         let client_ip = "127.0.0.1";
 
-
         let rate_info = handler.check_rate_limit(client_ip).await?;
         assert!(rate_info.remaining_exports > 0);
-
 
         let rate_info2 = handler.check_rate_limit(client_ip).await?;
         assert!(rate_info2.remaining_exports < rate_info.remaining_exports);

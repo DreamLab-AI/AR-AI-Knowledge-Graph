@@ -19,14 +19,13 @@ pub mod ontology_messages;
 pub use graph_messages::{
     AddEdge, AddNode, AddNodesFromMetadata, ArchiveWorkspace, AutoBalanceNotification,
     BuildGraphFromMetadata, CreateWorkspace, DeleteWorkspace, GetAutoBalanceNotifications,
-    GetGraphData, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions,
-    GetNodeTypeArrays, GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount,
-    GetWorkspaces, InitializeActor, LoadWorkspaces, NodeIdMapping, NodeTypeArrays,
-    PositionFrameSnapshot, PositionRow, RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge,
-    RemoveNode, RemoveNodeByMetadata, SaveWorkspaces, ToggleFavoriteWorkspace,
-    UpdateGraphData, UpdateMetadata, UpdateNodeFromMetadata, UpdateNodePosition,
-    UpdateNodePositions, UpdateNodeTypeArrays, UpdateWorkspace, WorkspaceChangeType,
-    WorkspaceStateChanged,
+    GetGraphData, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions, GetNodeTypeArrays,
+    GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount, GetWorkspaces, InitializeActor,
+    LoadWorkspaces, NodeIdMapping, NodeTypeArrays, PositionFrameSnapshot, PositionRow,
+    RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata,
+    SaveWorkspaces, ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata,
+    UpdateNodeFromMetadata, UpdateNodePosition, UpdateNodePositions, UpdateNodeTypeArrays,
+    UpdateWorkspace, WorkspaceChangeType, WorkspaceStateChanged,
 };
 
 // ---------------------------------------------------------------------------
@@ -34,16 +33,15 @@ pub use graph_messages::{
 // ---------------------------------------------------------------------------
 
 pub use agent_messages::{
-    AgentMetrics, AgentUpdate, Bottleneck, BottleneckAnalyze, CloseTcpConnection,
-    ConnectionFailed, CoordinationPattern, CoordinationSync, EstablishTcpConnection,
-    GetAgentMetrics, GetBotsGraphData, GetCachedAgentStatuses, GetNeuralStatus,
-    GetPerformanceReport, GetSwarmStatus, InitializeJsonRpc, InitializeSwarm, LoadBalance,
-    MemoryPersist, MemorySearch, MessageFlowEvent, MetricsCollect, NeuralPredict, NeuralStatus,
-    NeuralTrain, PerformanceReport, PollAgentStatuses, PollSwarmData, PollSystemMetrics,
-    RecordPollFailure, RecordPollSuccess, RetryMCPConnection, SpawnAgent, SpawnAgentCommand,
-    StateSnapshot, SwarmDestroy, SwarmMonitor, SwarmMonitorData, SwarmScale, SwarmStatus,
-    SystemMetrics, TaskOrchestrate, TopologyOptimize, UpdateAgentCache,
-    TaskStatusChanged,
+    AgentMetrics, AgentUpdate, Bottleneck, BottleneckAnalyze, CloseTcpConnection, ConnectionFailed,
+    CoordinationPattern, CoordinationSync, EstablishTcpConnection, GetAgentMetrics,
+    GetBotsGraphData, GetCachedAgentStatuses, GetNeuralStatus, GetPerformanceReport,
+    GetSwarmStatus, InitializeJsonRpc, InitializeSwarm, LoadBalance, MemoryPersist, MemorySearch,
+    MessageFlowEvent, MetricsCollect, NeuralPredict, NeuralStatus, NeuralTrain, PerformanceReport,
+    PollAgentStatuses, PollSwarmData, PollSystemMetrics, RecordPollFailure, RecordPollSuccess,
+    RetryMCPConnection, SpawnAgent, SpawnAgentCommand, StateSnapshot, SwarmDestroy, SwarmMonitor,
+    SwarmMonitorData, SwarmScale, SwarmStatus, SystemMetrics, TaskOrchestrate, TaskStatusChanged,
+    TopologyOptimize, UpdateAgentCache,
 };
 
 // ---------------------------------------------------------------------------
@@ -52,12 +50,10 @@ pub use agent_messages::{
 
 pub use analytics_messages::{
     AnomalyDetectionMethod, AnomalyDetectionParams, AnomalyDetectionStats, AnomalyMethod,
-    AnomalyParams, ClearPageRankCache, CommunityDetectionAlgorithm,
-    CommunityDetectionParams, ComputeAllPairsShortestPaths,
-    ComputeSSSP, DBSCANParams,
-    DBSCANStats, ExportClusterAssignments, GetClusteringResults, GetClusteringStatus,
-    KMeansParams, SetNodeAnalytics, SetNodeSSSP, StartGPUClustering,
-    UpdateComponentEdges,
+    AnomalyParams, ClearPageRankCache, CommunityDetectionAlgorithm, CommunityDetectionParams,
+    ComputeAllPairsShortestPaths, ComputeSSSP, DBSCANParams, DBSCANStats, ExportClusterAssignments,
+    GetClusteringResults, GetClusteringStatus, KMeansParams, SetNodeAnalytics, SetNodeSSSP,
+    StartGPUClustering, UpdateComponentEdges,
 };
 
 // ---------------------------------------------------------------------------
@@ -65,11 +61,9 @@ pub use analytics_messages::{
 // ---------------------------------------------------------------------------
 
 pub use broadcast_messages::{
-    BroadcastActorStatus, BroadcastState, BroadcastTick,
-    ClientId,
-    GetBroadcastActorStatus, OnLayoutDestabilised, OnLayoutSettled, OnLayoutStarted,
-    OnPhysicsClamped, ShutdownBroadcastActor, TriggerHeartbeat,
-    UnregisterBroadcastClient,
+    BroadcastActorStatus, BroadcastState, BroadcastTick, ClientId, GetBroadcastActorStatus,
+    OnLayoutDestabilised, OnLayoutSettled, OnLayoutStarted, OnPhysicsClamped,
+    ShutdownBroadcastActor, TriggerHeartbeat, UnregisterBroadcastClient,
 };
 
 // ---------------------------------------------------------------------------
@@ -77,9 +71,8 @@ pub use broadcast_messages::{
 // ---------------------------------------------------------------------------
 
 pub use client_messages::{
-    AuthenticateClient, BroadcastMessage, BroadcastNodePositions,
-    ClientBroadcastAck, ForcePositionBroadcast, GetClientCount, InitialClientSync,
-    SendToClientBinary,
+    AuthenticateClient, BroadcastMessage, BroadcastNodePositions, ClientBroadcastAck,
+    ForcePositionBroadcast, GetClientCount, InitialClientSync, SendToClientBinary,
     SendToClientText, UnregisterClient, UpdateClientFilter,
 };
 
@@ -88,10 +81,9 @@ pub use client_messages::{
 // ---------------------------------------------------------------------------
 
 pub use ontology_messages::{
-    ApplyOntologyConstraints, CachedOntologyInfo, ClearOntologyCaches,
-    ConstraintMergeMode, ConstraintStats, GetCachedOntologies, GetConstraintStats,
-    GetOntologyConstraintStats, GetOntologyHealth, GetOntologyHealthLegacy, GetValidationReport,
-    LoadOntologyAxioms, OntologyConstraintStats, OntologyHealth,
-    SetConstraintGroupActive, ValidateGraph,
+    ApplyOntologyConstraints, CachedOntologyInfo, ClearOntologyCaches, ConstraintMergeMode,
+    ConstraintStats, GetCachedOntologies, GetConstraintStats, GetOntologyConstraintStats,
+    GetOntologyHealth, GetOntologyHealthLegacy, GetValidationReport, LoadOntologyAxioms,
+    OntologyConstraintStats, OntologyHealth, SetConstraintGroupActive, ValidateGraph,
     ValidationMode,
 };

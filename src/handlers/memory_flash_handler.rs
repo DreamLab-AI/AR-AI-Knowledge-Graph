@@ -60,7 +60,9 @@ pub async fn handle_memory_flash(
 
     match serde_json::to_string(&broadcast) {
         Ok(json) => {
-            let result = client_coordinator.send(BroadcastMessage { message: json }).await;
+            let result = client_coordinator
+                .send(BroadcastMessage { message: json })
+                .await;
             match result {
                 Ok(Ok(())) => {
                     debug!(
@@ -130,5 +132,8 @@ pub async fn handle_memory_flash_batch(
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     cfg.route("/memory-flash", web::post().to(handle_memory_flash))
-        .route("/memory-flash/batch", web::post().to(handle_memory_flash_batch));
+        .route(
+            "/memory-flash/batch",
+            web::post().to(handle_memory_flash_batch),
+        );
 }

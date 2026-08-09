@@ -73,7 +73,7 @@ impl ValidateInput {
             config: ValidationConfig {
                 max_content_length: MAX_ONTOLOGY_SIZE,
                 validate_json: true,
-                check_injection: false,  // Ontologies may contain special chars
+                check_injection: false, // Ontologies may contain special chars
             },
         }
     }
@@ -135,11 +135,10 @@ where
                                 "Request rejected: payload too large ({} bytes, max {})",
                                 length, config.max_content_length
                             );
-                            let resp = HttpResponse::PayloadTooLarge()
-                                .body(format!(
-                                    "Payload too large. Max size: {} bytes",
-                                    config.max_content_length
-                                ));
+                            let resp = HttpResponse::PayloadTooLarge().body(format!(
+                                "Payload too large. Max size: {} bytes",
+                                config.max_content_length
+                            ));
                             return Ok(req.into_response(resp).map_into_boxed_body());
                         }
                     }
@@ -166,12 +165,13 @@ where
 
 /// Validation helpers for use in handlers
 pub mod validators {
-    use regex::Regex;
     use once_cell::sync::Lazy;
+    use regex::Regex;
 
     /// IRI/URI validation regex
     static IRI_REGEX: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.-]*:.+$").expect("IRI regex is a valid compile-time constant")
+        Regex::new(r"^[a-zA-Z][a-zA-Z0-9+.-]*:.+$")
+            .expect("IRI regex is a valid compile-time constant")
     });
 
     /// URL validation regex
@@ -254,7 +254,11 @@ pub mod validators {
             Err(format!(
                 "Invalid value '{}'. Allowed: {}",
                 value,
-                allowed.iter().map(|a| a.as_ref()).collect::<Vec<_>>().join(", ")
+                allowed
+                    .iter()
+                    .map(|a| a.as_ref())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ))
         }
     }

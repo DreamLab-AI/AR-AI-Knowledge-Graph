@@ -8,17 +8,16 @@ use tokio::time::{timeout, Instant, Sleep};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeoutConfig {
-    
     pub connect_timeout: Duration,
-    
+
     pub request_timeout: Duration,
-    
+
     pub read_timeout: Duration,
-    
+
     pub write_timeout: Duration,
-    
+
     pub keepalive_timeout: Duration,
-    
+
     pub total_timeout: Duration,
 }
 
@@ -36,7 +35,6 @@ impl Default for TimeoutConfig {
 }
 
 impl TimeoutConfig {
-    
     pub fn low_latency() -> Self {
         Self {
             connect_timeout: Duration::from_secs(2),
@@ -48,7 +46,6 @@ impl TimeoutConfig {
         }
     }
 
-    
     pub fn high_throughput() -> Self {
         Self {
             connect_timeout: Duration::from_secs(15),
@@ -60,7 +57,6 @@ impl TimeoutConfig {
         }
     }
 
-    
     pub fn tcp_connection() -> Self {
         Self {
             connect_timeout: Duration::from_secs(8),
@@ -72,19 +68,17 @@ impl TimeoutConfig {
         }
     }
 
-    
     pub fn websocket() -> Self {
         Self {
             connect_timeout: Duration::from_secs(5),
             request_timeout: Duration::from_secs(20),
-            read_timeout: Duration::from_secs(30), 
+            read_timeout: Duration::from_secs(30),
             write_timeout: Duration::from_secs(5),
             keepalive_timeout: Duration::from_secs(60),
             total_timeout: Duration::from_secs(120),
         }
     }
 
-    
     pub fn mcp_operations() -> Self {
         Self {
             connect_timeout: Duration::from_secs(3),
@@ -99,31 +93,26 @@ impl TimeoutConfig {
 
 #[derive(Debug)]
 pub enum TimeoutResult<T> {
-    
     Success(T),
-    
+
     Timeout,
-    
+
     Error(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl<T> TimeoutResult<T> {
-    
     pub fn is_success(&self) -> bool {
         matches!(self, TimeoutResult::Success(_))
     }
 
-    
     pub fn is_timeout(&self) -> bool {
         matches!(self, TimeoutResult::Timeout)
     }
 
-    
     pub fn is_error(&self) -> bool {
         matches!(self, TimeoutResult::Error(_))
     }
 
-    
     pub fn into_result(self) -> Result<T, TimeoutError> {
         match self {
             TimeoutResult::Success(value) => Ok(value),
@@ -132,7 +121,6 @@ impl<T> TimeoutResult<T> {
         }
     }
 
-    
     pub fn success(self) -> Option<T> {
         match self {
             TimeoutResult::Success(value) => Some(value),
@@ -215,7 +203,6 @@ pub struct TimeoutGuard {
 }
 
 impl TimeoutGuard {
-    
     pub fn new(config: TimeoutConfig) -> Self {
         Self {
             total_timeout: config.total_timeout,
@@ -224,13 +211,11 @@ impl TimeoutGuard {
         }
     }
 
-    
     pub fn remaining_time(&self) -> Option<Duration> {
         let elapsed = self.started_at.elapsed();
         self.total_timeout.checked_sub(elapsed)
     }
 
-    
     pub fn timeout_for(&self, operation_type: TimeoutType) -> Option<Duration> {
         let operation_timeout = match operation_type {
             TimeoutType::Connect => self.config.connect_timeout,
@@ -241,19 +226,16 @@ impl TimeoutGuard {
             TimeoutType::Total => return self.remaining_time(),
         };
 
-        
         match self.remaining_time() {
             Some(remaining) => Some(operation_timeout.min(remaining)),
-            None => None, 
+            None => None,
         }
     }
 
-    
     pub fn is_expired(&self) -> bool {
         self.remaining_time().is_none()
     }
 
-    
     pub async fn execute<F, T>(&self, operation_type: TimeoutType, future: F) -> TimeoutResult<T>
     where
         F: Future<Output = Result<T, Box<dyn std::error::Error + Send + Sync>>>,
@@ -282,7 +264,6 @@ impl TimeoutGuard {
         }
     }
 }
-
 
 pub async fn connect_with_timeout<F, T>(
     config: &TimeoutConfig,
@@ -337,7 +318,6 @@ impl<F> AdaptiveTimeout<F>
 where
     F: Future,
 {
-    
     pub fn new(future: F, initial_timeout: Duration) -> Self {
         let sleep = Box::pin(tokio::time::sleep(initial_timeout));
         Self {
@@ -348,7 +328,6 @@ where
         }
     }
 
-    
     pub fn extend_timeout(&mut self, additional_time: Duration) {
         let new_timeout = self.timeout_duration + additional_time;
         let elapsed = self.started_at.elapsed();
@@ -372,12 +351,10 @@ where
     type Output = Result<F::Output, TimeoutError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        
         if let Poll::Ready(output) = self.future.as_mut().poll(cx) {
             return Poll::Ready(Ok(output));
         }
 
-        
         if let Poll::Ready(_) = self.sleep.as_mut().poll(cx) {
             return Poll::Ready(Err(TimeoutError::Timeout));
         }
@@ -394,9 +371,7 @@ pub struct BatchTimeoutManager {
 }
 
 impl BatchTimeoutManager {
-    
     pub fn new(total_timeout: Duration, expected_operations: usize) -> Self {
-        
         let per_operation_timeout = total_timeout / expected_operations as u32;
         let operation_timeouts = vec![per_operation_timeout; expected_operations];
 
@@ -408,7 +383,6 @@ impl BatchTimeoutManager {
         }
     }
 
-    
     pub fn next_operation_timeout(&mut self) -> Option<Duration> {
         if self.completed_operations >= self.operation_timeouts.len() {
             return None;
@@ -421,24 +395,20 @@ impl BatchTimeoutManager {
             return Some(remaining_total);
         }
 
-        
         let per_operation = remaining_total / remaining_operations as u32;
         let planned_timeout = self.operation_timeouts[self.completed_operations];
 
         Some(per_operation.min(planned_timeout))
     }
 
-    
     pub fn mark_operation_completed(&mut self) {
         self.completed_operations += 1;
     }
 
-    
     pub fn has_time_remaining(&self) -> bool {
         self.started_at.elapsed() < self.total_timeout
     }
 
-    
     pub fn elapsed(&self) -> Duration {
         self.started_at.elapsed()
     }
@@ -482,11 +452,9 @@ mod tests {
 
         let guard = TimeoutGuard::new(config);
 
-        
         assert!(!guard.is_expired());
         assert!(guard.remaining_time().is_some());
 
-        
         let connect_timeout = guard.timeout_for(TimeoutType::Connect);
         assert!(connect_timeout.is_some());
     }
@@ -500,7 +468,6 @@ mod tests {
 
         let guard = TimeoutGuard::new(config);
 
-        
         sleep(Duration::from_millis(20)).await;
 
         assert!(guard.is_expired());

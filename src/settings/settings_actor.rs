@@ -1,14 +1,16 @@
 // src/settings/settings_actor.rs
 //! Settings Actor - Actix runtime settings management
 
-use actix::prelude::*;
-use actix::dev::{MessageResponse, MessageResult, OneshotSender};
-use std::sync::Arc;
-use anyhow::Result;
-use log::{info, error};
+use super::models::{
+    AllSettings, ConstraintSettings, NodeFilterSettings, QualityGateSettings, SettingsProfile,
+};
 use crate::config::{PhysicsSettings, RenderingSettings};
 use crate::ports::settings_repository::SettingsRepository;
-use super::models::{ConstraintSettings, AllSettings, SettingsProfile, NodeFilterSettings, QualityGateSettings};
+use actix::dev::{MessageResponse, MessageResult, OneshotSender};
+use actix::prelude::*;
+use anyhow::Result;
+use log::{error, info};
+use std::sync::Arc;
 
 pub struct SettingsActor {
     repository: Arc<dyn SettingsRepository>,
@@ -31,8 +33,6 @@ impl SettingsActor {
         }
     }
 
-    
-    
     pub fn initialize(&mut self) -> Result<()> {
         info!("Settings actor initialized with defaults (async load will occur on start)");
         Ok(())
@@ -227,8 +227,9 @@ impl Handler<UpdatePhysicsSettings> for SettingsActor {
         let settings = msg.0;
 
         Box::pin(async move {
-            
-            repository.save_physics_settings("default", &settings).await?;
+            repository
+                .save_physics_settings("default", &settings)
+                .await?;
             info!("Physics settings updated and persisted");
             Ok(())
         })
@@ -255,11 +256,13 @@ impl Handler<UpdateConstraintSettings> for SettingsActor {
             let settings_json = serde_json::to_value(&settings)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize constraint settings: {}", e))?;
 
-            repository.set_setting(
-                "constraints",
-                crate::ports::settings_repository::SettingValue::Json(settings_json),
-                Some("Constraint settings for physics simulation"),
-            ).await?;
+            repository
+                .set_setting(
+                    "constraints",
+                    crate::ports::settings_repository::SettingValue::Json(settings_json),
+                    Some("Constraint settings for physics simulation"),
+                )
+                .await?;
 
             info!("Constraint settings updated and persisted");
             Ok(())
@@ -287,11 +290,13 @@ impl Handler<UpdateRenderingSettings> for SettingsActor {
             let settings_json = serde_json::to_value(&settings)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize rendering settings: {}", e))?;
 
-            repository.set_setting(
-                "rendering",
-                crate::ports::settings_repository::SettingValue::Json(settings_json),
-                Some("Rendering settings for visualization"),
-            ).await?;
+            repository
+                .set_setting(
+                    "rendering",
+                    crate::ports::settings_repository::SettingValue::Json(settings_json),
+                    Some("Rendering settings for visualization"),
+                )
+                .await?;
 
             info!("Rendering settings updated and persisted");
             Ok(())
@@ -323,7 +328,7 @@ impl Handler<SaveProfile> for SettingsActor {
     fn handle(&mut self, msg: SaveProfile, _ctx: &mut Self::Context) -> Self::Result {
         let name = msg.name.clone();
         info!("Profile saving not implemented for '{}'", name);
-        Box::pin(async move { Ok(1) }) 
+        Box::pin(async move { Ok(1) })
     }
 }
 
@@ -374,14 +379,18 @@ impl Handler<UpdateNodeFilterSettings> for SettingsActor {
             let settings_json = serde_json::to_value(&settings)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize node filter settings: {}", e))?;
 
-            repository.set_setting(
-                "node_filter",
-                crate::ports::settings_repository::SettingValue::Json(settings_json),
-                Some("Node confidence filter settings"),
-            ).await?;
+            repository
+                .set_setting(
+                    "node_filter",
+                    crate::ports::settings_repository::SettingValue::Json(settings_json),
+                    Some("Node confidence filter settings"),
+                )
+                .await?;
 
-            info!("Node filter settings updated and persisted: enabled={}, quality_threshold={}",
-                  settings.enabled, settings.quality_threshold);
+            info!(
+                "Node filter settings updated and persisted: enabled={}, quality_threshold={}",
+                settings.enabled, settings.quality_threshold
+            );
             Ok(())
         })
     }
@@ -408,11 +417,13 @@ impl Handler<UpdateQualityGateSettings> for SettingsActor {
             let settings_json = serde_json::to_value(&settings)
                 .map_err(|e| anyhow::anyhow!("Failed to serialize quality gate settings: {}", e))?;
 
-            repository.set_setting(
-                "quality_gates",
-                crate::ports::settings_repository::SettingValue::Json(settings_json),
-                Some("Quality gate settings for feature toggles and performance thresholds"),
-            ).await?;
+            repository
+                .set_setting(
+                    "quality_gates",
+                    crate::ports::settings_repository::SettingValue::Json(settings_json),
+                    Some("Quality gate settings for feature toggles and performance thresholds"),
+                )
+                .await?;
 
             info!("Quality gate settings updated and persisted: gpu={}, ontology={}, semantic={}, layout={}",
                   settings.gpu_acceleration, settings.ontology_physics, settings.semantic_forces, settings.layout_mode);

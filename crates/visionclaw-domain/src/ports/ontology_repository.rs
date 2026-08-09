@@ -137,10 +137,7 @@ pub trait OntologyRepository: Send + Sync {
         Ok(())
     }
 
-    async fn get_cached_sssp(
-        &self,
-        _source_node_id: u32,
-    ) -> Result<Option<PathfindingCacheEntry>> {
+    async fn get_cached_sssp(&self, _source_node_id: u32) -> Result<Option<PathfindingCacheEntry>> {
         Ok(None)
     }
 

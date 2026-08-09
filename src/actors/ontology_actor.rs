@@ -156,7 +156,8 @@ pub struct OntologyActor {
     gpu_manager_addr: Option<Addr<crate::actors::gpu::gpu_manager_actor::GPUManagerActor>>,
 
     /// Optional client coordinator for broadcasting validation updates via WebSocket
-    client_manager_addr: Option<Addr<crate::actors::client_coordinator_actor::ClientCoordinatorActor>>,
+    client_manager_addr:
+        Option<Addr<crate::actors::client_coordinator_actor::ClientCoordinatorActor>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -178,23 +179,21 @@ impl Default for OntologyActorConfig {
             max_queue_size: 1000,
             max_active_jobs: 5,
             max_cached_reports: 100,
-            report_ttl_seconds: 3600, 
-            job_timeout_seconds: 300, 
+            report_ttl_seconds: 3600,
+            job_timeout_seconds: 300,
             enable_incremental_validation: true,
             validation_interval_seconds: 30,
-            backpressure_threshold: 0.8, 
+            backpressure_threshold: 0.8,
             health_check_interval_seconds: 60,
         }
     }
 }
 
 impl OntologyActor {
-    
     pub fn new() -> Self {
         Self::with_config(OntologyActorConfig::default())
     }
 
-    
     pub fn with_config(config: OntologyActorConfig) -> Self {
         let validation_config = ValidationConfig::default();
         let validator_service = Arc::new(OwlValidatorService::with_config(validation_config));
@@ -217,15 +216,10 @@ impl OntologyActor {
         }
     }
 
-
-    pub fn set_graph_service_addr(
-        &mut self,
-        addr: Addr<crate::actors::GraphStateActor>,
-    ) {
+    pub fn set_graph_service_addr(&mut self, addr: Addr<crate::actors::GraphStateActor>) {
         self.graph_service_addr = Some(addr);
     }
 
-    
     pub fn set_physics_orchestrator_addr(
         &mut self,
         addr: Addr<crate::actors::physics_orchestrator_actor::PhysicsOrchestratorActor>,
@@ -233,7 +227,6 @@ impl OntologyActor {
         self.physics_orchestrator_addr = Some(addr);
     }
 
-    
     pub fn set_semantic_processor_addr(
         &mut self,
         addr: Addr<crate::actors::semantic_processor_actor::SemanticProcessorActor>,
@@ -255,17 +248,14 @@ impl OntologyActor {
         self.client_manager_addr = Some(addr);
     }
 
-    
     #[allow(dead_code)]
     fn calculate_graph_signature(&self, graph: &PropertyGraph) -> String {
         use blake3::Hasher;
         let mut hasher = Hasher::new();
 
-        
         hasher.update(graph.nodes.len().to_string().as_bytes());
         hasher.update(graph.edges.len().to_string().as_bytes());
 
-        
         for (i, node) in graph.nodes.iter().enumerate().take(100) {
             hasher.update(node.id.as_bytes());
             hasher.update(format!("{}", i).as_bytes());
@@ -281,7 +271,6 @@ impl OntologyActor {
         hasher.finalize().to_hex().to_string()
     }
 
-    
     #[allow(dead_code)]
     fn can_perform_incremental_validation(&self, ontology_id: &str, graph: &PropertyGraph) -> bool {
         if !self.config.enable_incremental_validation {
@@ -291,18 +280,15 @@ impl OntologyActor {
         let current_signature = self.calculate_graph_signature(graph);
 
         if let Some((_cached_graph, cached_signature, _)) = self.graph_cache.get(ontology_id) {
-            
             let similarity = self.calculate_graph_similarity(&current_signature, cached_signature);
-            similarity > 0.8 
+            similarity > 0.8
         } else {
             false
         }
     }
 
-    
     #[allow(dead_code)]
     fn calculate_graph_similarity(&self, sig1: &str, sig2: &str) -> f32 {
-        
         if sig1.len() != sig2.len() {
             return 0.0;
         }
@@ -316,19 +302,16 @@ impl OntologyActor {
         matches as f32 / sig1.len() as f32
     }
 
-    
     fn enqueue_validation_job(
         &mut self,
         mut job: ValidationJob,
     ) -> Result<String, OntologyActorError> {
-        
         if self.validation_queue.len() >= self.config.max_queue_size {
             return Err(OntologyActorError::QueueFull {
                 max_size: self.config.max_queue_size,
             });
         }
 
-        
         let mut insert_pos = self.validation_queue.len();
         for (i, existing_job) in self.validation_queue.iter().enumerate() {
             if job.priority < existing_job.priority {
@@ -348,7 +331,6 @@ impl OntologyActor {
         Ok(job_id)
     }
 
-    
     fn process_next_job(&mut self, ctx: &mut Context<Self>) {
         if self.active_jobs.len() >= self.config.max_active_jobs {
             debug!("Max active jobs reached, deferring job processing");
@@ -364,7 +346,6 @@ impl OntologyActor {
             info!("Starting validation job: {}", job_id);
             self.active_jobs.insert(job_id.clone(), job.clone());
 
-            
             let validator = self.validator_service.clone();
             let ontology_id = job.ontology_id.clone();
             let graph_data = job.graph_data.clone();
@@ -380,16 +361,13 @@ impl OntologyActor {
                 // empty ontology cache, so every Quick validation failed with
                 // "Ontology not found". Mode already drove job priority at enqueue.
                 let result = match mode {
-                    ValidationMode::Quick
-                    | ValidationMode::Full
-                    | ValidationMode::Incremental => {
+                    ValidationMode::Quick | ValidationMode::Full | ValidationMode::Incremental => {
                         validator.validate(&ontology_id, &graph_data).await
                     }
                 };
 
                 let duration = start_time.elapsed();
 
-                
                 let completion_msg = JobCompleted {
                     job_id: job_id.clone(),
                     result,
@@ -401,12 +379,10 @@ impl OntologyActor {
                 }
             };
 
-            
             ctx.spawn(future.into_actor(self));
         }
     }
 
-    
     fn handle_job_completion(
         &mut self,
         job_id: &str,
@@ -453,7 +429,9 @@ impl OntologyActor {
                             "timestamp": chrono::Utc::now().timestamp_millis()
                         });
                         if let Ok(msg_str) = serde_json::to_string(&update_msg) {
-                            client_mgr.do_send(crate::actors::messages::BroadcastMessage { message: msg_str });
+                            client_mgr.do_send(crate::actors::messages::BroadcastMessage {
+                                message: msg_str,
+                            });
                         }
                     }
 
@@ -507,12 +485,7 @@ impl OntologyActor {
     /// Store a validation report in the single report cache under BOTH the job id
     /// and the ontology id, so a `GetOntologyReport` lookup by either key resolves
     /// the same entry. Eviction runs once up front so the cache stays bounded.
-    fn store_report_dual_key(
-        &mut self,
-        job_id: &str,
-        ontology_id: &str,
-        report: ValidationReport,
-    ) {
+    fn store_report_dual_key(&mut self, job_id: &str, ontology_id: &str, report: ValidationReport) {
         if self.report_storage.len() >= self.config.max_cached_reports {
             self.evict_oldest_reports();
         }
@@ -541,9 +514,8 @@ impl OntologyActor {
         }
     }
 
-    
     fn evict_oldest_reports(&mut self) {
-        let evict_count = self.config.max_cached_reports / 4; 
+        let evict_count = self.config.max_cached_reports / 4;
         let mut reports_by_access: Vec<_> = self
             .report_storage
             .iter()
@@ -559,25 +531,25 @@ impl OntologyActor {
         debug!("Evicted {} reports from cache", evict_count);
     }
 
-    
     fn update_avg_validation_time(&mut self, duration: Duration) {
         let new_time_ms = duration.as_millis() as f32;
 
         if self.statistics.total_validations == 0 {
             self.statistics.avg_validation_time_ms = new_time_ms;
         } else {
-            let weight = 0.1; 
+            let weight = 0.1;
             self.statistics.avg_validation_time_ms =
                 (1.0 - weight) * self.statistics.avg_validation_time_ms + weight * new_time_ms;
         }
     }
 
-    
     fn send_constraints_to_physics(&self, report: &ValidationReport) {
         // Route through GPUManagerActor which delegates to OntologyConstraintActor
         if let Some(gpu_addr) = &self.gpu_manager_addr {
-            use visionclaw_domain::models::constraints::{Constraint, ConstraintKind, ConstraintSet};
             use crate::actors::messages::{ApplyOntologyConstraints, ConstraintMergeMode};
+            use visionclaw_domain::models::constraints::{
+                Constraint, ConstraintKind, ConstraintSet,
+            };
 
             let mut constraint_set = ConstraintSet::new();
             for violation in &report.violations {
@@ -619,11 +591,8 @@ impl OntologyActor {
         }
     }
 
-    
     fn send_inferences_to_semantic(&self, inferred_triples: &[RdfTriple]) {
         if let Some(_addr) = &self.semantic_processor_addr {
-            
-            
             debug!(
                 "Would send {} inferred triples to semantic processor",
                 inferred_triples.len()
@@ -631,24 +600,19 @@ impl OntologyActor {
         }
     }
 
-    
     fn perform_health_check(&mut self) {
         let now = time::now();
 
-        
         self.cleanup_expired_reports();
 
-        
         self.check_stuck_jobs();
 
-        
         self.update_memory_usage();
 
         self.last_health_check = now;
         debug!("Health check completed");
     }
 
-    
     fn cleanup_expired_reports(&mut self) {
         let ttl = Duration::from_secs(self.config.report_ttl_seconds);
         let now = time::now();
@@ -675,7 +639,6 @@ impl OntologyActor {
         }
     }
 
-    
     fn check_stuck_jobs(&mut self) {
         let timeout = Duration::from_secs(self.config.job_timeout_seconds);
         let now = time::now();
@@ -713,12 +676,10 @@ impl OntologyActor {
         }
     }
 
-    
     fn update_memory_usage(&mut self) {
-        
-        let reports_size = self.report_storage.len() * 10; 
-        let queue_size = self.validation_queue.len() * 5; 
-        let graph_cache_size = self.graph_cache.len() * 20; 
+        let reports_size = self.report_storage.len() * 10;
+        let queue_size = self.validation_queue.len() * 5;
+        let graph_cache_size = self.graph_cache.len() * 20;
 
         self.statistics.memory_usage_mb =
             (reports_size + queue_size + graph_cache_size) as f32 / 1024.0;
@@ -731,7 +692,6 @@ impl Actor for OntologyActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("OntologyActor started");
 
-        
         ctx.address()
             .do_send(crate::actors::messages::InitializeActor);
     }
@@ -739,7 +699,6 @@ impl Actor for OntologyActor {
     fn stopped(&mut self, _ctx: &mut Self::Context) {
         info!("OntologyActor stopped");
 
-        
         self.validator_service.clear_caches();
     }
 }
@@ -755,12 +714,10 @@ impl Handler<crate::actors::messages::InitializeActor> for OntologyActor {
     ) -> Self::Result {
         info!("OntologyActor: Initializing periodic tasks (deferred from started)");
 
-        
         ctx.run_interval(Duration::from_secs(1), |actor, ctx| {
             actor.process_next_job(ctx);
         });
 
-        
         let health_interval = Duration::from_secs(self.config.health_check_interval_seconds);
         ctx.run_interval(health_interval, |actor, _ctx| {
             actor.perform_health_check();
@@ -825,7 +782,6 @@ impl Handler<UpdateOntologyMapping> for OntologyActor {
     type Result = Result<(), String>;
 
     fn handle(&mut self, msg: UpdateOntologyMapping, _ctx: &mut Self::Context) -> Self::Result {
-        
         self.validator_service = Arc::new(OwlValidatorService::with_config(msg.config));
         info!("Updated ontology mapping configuration");
         Ok(())
@@ -929,7 +885,6 @@ impl Handler<GetOntologyReport> for OntologyActor {
                 }
             }
             None => {
-                
                 let latest = self
                     .report_storage
                     .values()
@@ -1018,8 +973,10 @@ impl Handler<TriggerReasoning> for OntologyActor {
         // New code should use ReasoningActor directly for CustomReasoner inference.
 
         Box::pin(async move {
-            info!("Reasoning job {} acknowledged for ontology {} (forwarded to ReasoningActor)",
-                  job_id, msg.ontology_id);
+            info!(
+                "Reasoning job {} acknowledged for ontology {} (forwarded to ReasoningActor)",
+                job_id, msg.ontology_id
+            );
             Ok(job_id)
         })
     }
@@ -1029,8 +986,6 @@ impl Handler<GetCachedOntologies> for OntologyActor {
     type Result = Result<Vec<CachedOntologyInfo>, String>;
 
     fn handle(&mut self, _msg: GetCachedOntologies, _ctx: &mut Self::Context) -> Self::Result {
-        
-        
         let cached_ontologies = vec![];
         Ok(cached_ontologies)
     }

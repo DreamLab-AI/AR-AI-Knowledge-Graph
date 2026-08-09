@@ -34,9 +34,8 @@ static DOMAIN_PREFIXES: &[(&str, &str)] = &[
 ];
 
 // Regex patterns for content analysis
-static TERM_ID_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"term-id::\s*([A-Z]+-[A-Z0-9_-]+)").expect("Invalid TERM_ID_PATTERN")
-});
+static TERM_ID_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"term-id::\s*([A-Z]+-[A-Z0-9_-]+)").expect("Invalid TERM_ID_PATTERN"));
 
 static OWL_CLASS_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"owl[_:]class::\s*([a-zA-Z0-9_:/-]+)").expect("Invalid OWL_CLASS_PATTERN")
@@ -54,9 +53,8 @@ static SUBCLASS_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"subClassOf::\s*([a-zA-Z0-9_:/-]+)").expect("Invalid SUBCLASS_PATTERN")
 });
 
-static TOPIC_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"topic::\s*\[\[([^\]]+)\]\]").expect("Invalid TOPIC_PATTERN")
-});
+static TOPIC_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"topic::\s*\[\[([^\]]+)\]\]").expect("Invalid TOPIC_PATTERN"));
 
 /// Content analysis results
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -83,13 +81,10 @@ impl OntologyContentAnalyzer {
         let mut analysis = ContentAnalysis::default();
 
         // Check for public:: true flag (case-insensitive, flexible spacing)
-        analysis.has_public_flag = content
-            .lines()
-            .take(20)
-            .any(|line| {
-                let trimmed = line.trim().to_lowercase();
-                trimmed == "public:: true" || trimmed == "public::true"
-            });
+        analysis.has_public_flag = content.lines().take(20).any(|line| {
+            let trimmed = line.trim().to_lowercase();
+            trimmed == "public:: true" || trimmed == "public::true"
+        });
 
         // Check for OntologyBlock section
         analysis.has_ontology_block = self.detect_ontology_block(content);
@@ -159,7 +154,8 @@ impl OntologyContentAnalyzer {
         }
 
         // Count occurrences of each domain prefix
-        let mut domain_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let mut domain_counts: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
 
         for term_id in term_ids {
             for (prefix, domain) in DOMAIN_PREFIXES {
@@ -192,7 +188,8 @@ impl OntologyContentAnalyzer {
         }
 
         // Also check for tags:: [[...]] patterns
-        let tag_pattern = Regex::new(r"tags?::\s*\[\[([^\]]+)\]\]").expect("tag regex is a valid compile-time constant");
+        let tag_pattern = Regex::new(r"tags?::\s*\[\[([^\]]+)\]\]")
+            .expect("tag regex is a valid compile-time constant");
         for cap in tag_pattern.captures_iter(content) {
             if let Some(tag_match) = cap.get(1) {
                 let tag = tag_match.as_str().trim().to_string();
@@ -230,13 +227,10 @@ impl OntologyContentAnalyzer {
 
     /// Quick check if content should be processed (has public or ontology block)
     pub fn should_process(&self, content: &str) -> bool {
-        let has_public = content
-            .lines()
-            .take(20)
-            .any(|line| {
-                let trimmed = line.trim().to_lowercase();
-                trimmed == "public:: true" || trimmed == "public::true"
-            });
+        let has_public = content.lines().take(20).any(|line| {
+            let trimmed = line.trim().to_lowercase();
+            trimmed == "public:: true" || trimmed == "public::true"
+        });
 
         let has_ontology = self.detect_ontology_block(content);
 
@@ -287,7 +281,10 @@ term-id:: BC-001
 "#;
 
         let analysis = analyzer.analyze_content(content, "test.md");
-        assert_eq!(analysis.source_domain, Some("Artificial Intelligence".to_string()));
+        assert_eq!(
+            analysis.source_domain,
+            Some("Artificial Intelligence".to_string())
+        );
         assert_eq!(analysis.term_ids.len(), 3);
     }
 

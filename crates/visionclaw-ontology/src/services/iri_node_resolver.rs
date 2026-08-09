@@ -169,23 +169,39 @@ mod tests {
         // Fixture node: id minted from its slug so the local-name fallback works.
         let slug = "transformer-models";
         let id = NodeIdHasher::derive_id(slug);
-        let mut node = node_with(id, slug, Some("urn:ngm:class:transformer-models"), Some("ml"));
-        node.metadata
-            .insert("class_iri".to_string(), "https://example.org/Transformer".to_string());
+        let mut node = node_with(
+            id,
+            slug,
+            Some("urn:ngm:class:transformer-models"),
+            Some("ml"),
+        );
+        node.metadata.insert(
+            "class_iri".to_string(),
+            "https://example.org/Transformer".to_string(),
+        );
 
         let resolver = IriNodeResolver::from_nodes(&[node]);
 
         // Direct owl_class_iri hit.
-        assert_eq!(resolver.resolve("urn:ngm:class:transformer-models"), Some(id));
+        assert_eq!(
+            resolver.resolve("urn:ngm:class:transformer-models"),
+            Some(id)
+        );
         // metadata class_iri hit.
-        assert_eq!(resolver.resolve("https://example.org/Transformer"), Some(id));
+        assert_eq!(
+            resolver.resolve("https://example.org/Transformer"),
+            Some(id)
+        );
         // Canonical vc: IRI built from group + slug.
         assert_eq!(resolver.resolve(&canonical_iri("ml", slug)), Some(id));
         // Slug (metadata_id) direct hit.
         assert_eq!(resolver.resolve(slug), Some(id));
         // Local-name hash fallback: an unindexed IRI whose local name slugifies
         // to the same slug resolves through the minting hash.
-        assert_eq!(resolver.resolve("http://other.example/Transformer_Models"), Some(id));
+        assert_eq!(
+            resolver.resolve("http://other.example/Transformer_Models"),
+            Some(id)
+        );
         // True miss — local name names no node.
         assert_eq!(resolver.resolve("urn:ngm:class:nonexistent-thing"), None);
     }

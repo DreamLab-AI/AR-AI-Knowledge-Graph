@@ -4,8 +4,8 @@
 //! Analyzes the context of links between nodes to determine the appropriate
 //! OWL property (relationship type) that should be assigned to graph edges.
 
+use log::{debug, info};
 use std::collections::HashMap;
-use log::{info, debug};
 
 /// Edge classification based on contextual analysis
 pub struct EdgeClassifier {
@@ -35,58 +35,136 @@ impl EdgeClassifier {
     /// Load default classification patterns
     fn load_default_patterns(&mut self) {
         // Employment/Work relationships
-        self.add_pattern("worksAt", vec![
-            "works at", "employed by", "employee of", "works for",
-            "position at", "job at", "career at"
-        ], "mv:worksAt", 0.9);
+        self.add_pattern(
+            "worksAt",
+            vec![
+                "works at",
+                "employed by",
+                "employee of",
+                "works for",
+                "position at",
+                "job at",
+                "career at",
+            ],
+            "mv:worksAt",
+            0.9,
+        );
 
         // Leadership relationships
-        self.add_pattern("hasCEO", vec![
-            "CEO", "Chief Executive Officer", "chief executive",
-            "CEO of", "leads", "headed by"
-        ], "mv:hasCEO", 0.95);
+        self.add_pattern(
+            "hasCEO",
+            vec![
+                "CEO",
+                "Chief Executive Officer",
+                "chief executive",
+                "CEO of",
+                "leads",
+                "headed by",
+            ],
+            "mv:hasCEO",
+            0.95,
+        );
 
-        self.add_pattern("hasCTO", vec![
-            "CTO", "Chief Technology Officer", "chief technology"
-        ], "mv:hasCTO", 0.95);
+        self.add_pattern(
+            "hasCTO",
+            vec!["CTO", "Chief Technology Officer", "chief technology"],
+            "mv:hasCTO",
+            0.95,
+        );
 
-        self.add_pattern("hasFounder", vec![
-            "founded by", "founder", "co-founder", "founded"
-        ], "mv:hasFounder", 0.9);
+        self.add_pattern(
+            "hasFounder",
+            vec!["founded by", "founder", "co-founder", "founded"],
+            "mv:hasFounder",
+            0.9,
+        );
 
         // Project relationships
-        self.add_pattern("contributesTo", vec![
-            "contributes to", "contributor", "works on", "developing",
-            "maintains", "maintainer of"
-        ], "mv:contributesTo", 0.85);
+        self.add_pattern(
+            "contributesTo",
+            vec![
+                "contributes to",
+                "contributor",
+                "works on",
+                "developing",
+                "maintains",
+                "maintainer of",
+            ],
+            "mv:contributesTo",
+            0.85,
+        );
 
-        self.add_pattern("usesProject", vec![
-            "uses", "depends on", "built with", "powered by",
-            "based on", "utilizes"
-        ], "mv:usesProject", 0.8);
+        self.add_pattern(
+            "usesProject",
+            vec![
+                "uses",
+                "depends on",
+                "built with",
+                "powered by",
+                "based on",
+                "utilizes",
+            ],
+            "mv:usesProject",
+            0.8,
+        );
 
         // Knowledge relationships
-        self.add_pattern("relatedTo", vec![
-            "related to", "similar to", "connected to", "associated with",
-            "linked to", "see also"
-        ], "mv:relatedTo", 0.7);
+        self.add_pattern(
+            "relatedTo",
+            vec![
+                "related to",
+                "similar to",
+                "connected to",
+                "associated with",
+                "linked to",
+                "see also",
+            ],
+            "mv:relatedTo",
+            0.7,
+        );
 
-        self.add_pattern("subConceptOf", vec![
-            "is a", "type of", "kind of", "subclass of",
-            "category", "subcategory"
-        ], "mv:subConceptOf", 0.85);
+        self.add_pattern(
+            "subConceptOf",
+            vec![
+                "is a",
+                "type of",
+                "kind of",
+                "subclass of",
+                "category",
+                "subcategory",
+            ],
+            "mv:subConceptOf",
+            0.85,
+        );
 
         // Technology relationships
-        self.add_pattern("usesTechnology", vec![
-            "built with", "technology stack", "uses technology",
-            "implemented in", "written in"
-        ], "mv:usesTechnology", 0.85);
+        self.add_pattern(
+            "usesTechnology",
+            vec![
+                "built with",
+                "technology stack",
+                "uses technology",
+                "implemented in",
+                "written in",
+            ],
+            "mv:usesTechnology",
+            0.85,
+        );
 
-        info!("EdgeClassifier initialized with {} pattern groups", self.patterns.len());
+        info!(
+            "EdgeClassifier initialized with {} pattern groups",
+            self.patterns.len()
+        );
     }
 
     /// Add a classification pattern
-    fn add_pattern(&mut self, name: &str, keywords: Vec<&str>, property_iri: &str, confidence: f32) {
+    fn add_pattern(
+        &mut self,
+        name: &str,
+        keywords: Vec<&str>,
+        property_iri: &str,
+        confidence: f32,
+    ) {
         let pattern = Pattern {
             keywords: keywords.iter().map(|s| s.to_lowercase()).collect(),
             property_iri: property_iri.to_string(),
@@ -100,13 +178,13 @@ impl EdgeClassifier {
     }
 
     /// Classify an edge based on context
-        /// # Arguments
+    /// # Arguments
     /// * `source_label` - Label of source node (e.g., "Tim Cook")
     /// * `target_label` - Label of target node (e.g., "Apple Inc")
     /// * `source_class` - OWL class IRI of source (e.g., "mv:Person")
     /// * `target_class` - OWL class IRI of target (e.g., "mv:Company")
     /// * `context` - Surrounding text context (e.g., "CEO: [[Apple Inc]]")
-        /// # Returns
+    /// # Returns
     /// Optional OWL property IRI if classification succeeds
     pub fn classify_edge(
         &self,
@@ -203,10 +281,7 @@ impl EdgeClassifier {
     }
 
     /// Batch classify multiple edges
-    pub fn classify_edges_batch(
-        &self,
-        edges: Vec<EdgeContext>,
-    ) -> Vec<Option<String>> {
+    pub fn classify_edges_batch(&self, edges: Vec<EdgeContext>) -> Vec<Option<String>> {
         edges
             .iter()
             .map(|ctx| {
@@ -291,13 +366,7 @@ mod tests {
     fn test_no_classification() {
         let classifier = EdgeClassifier::new();
 
-        let result = classifier.classify_edge(
-            "Unknown",
-            "Something",
-            None,
-            None,
-            "Random text",
-        );
+        let result = classifier.classify_edge("Unknown", "Something", None, None, "Random text");
 
         assert!(result.is_none());
     }

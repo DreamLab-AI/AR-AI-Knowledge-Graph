@@ -167,7 +167,9 @@ fn normalise_pubkey(value: &str) -> Option<String> {
 }
 
 fn is_hex64(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
 /// `sha256-12-<first 12 hex of sha256(stable_stringify(payload))>` — the
@@ -258,10 +260,25 @@ pub fn build_decision_quads(decision_urn: &str, input: &DecisionInput) -> Vec<Qu
     ));
 
     edge_quads(decision_urn, &p_caused(), &input.caused, &mut quads);
-    edge_quads(decision_urn, &p_precedent_for(), &input.precedent_for, &mut quads);
+    edge_quads(
+        decision_urn,
+        &p_precedent_for(),
+        &input.precedent_for,
+        &mut quads,
+    );
     edge_quads(decision_urn, &p_influenced(), &input.influenced, &mut quads);
-    edge_quads(decision_urn, &p_considered_input(), &input.considered_inputs, &mut quads);
-    edge_quads(decision_urn, &p_governed_by(), &input.governed_by, &mut quads);
+    edge_quads(
+        decision_urn,
+        &p_considered_input(),
+        &input.considered_inputs,
+        &mut quads,
+    );
+    edge_quads(
+        decision_urn,
+        &p_governed_by(),
+        &input.governed_by,
+        &mut quads,
+    );
 
     quads
 }
@@ -276,7 +293,9 @@ pub fn build_decision_quads(decision_urn: &str, input: &DecisionInput) -> Vec<Qu
 /// cannot break out of the SPARQL literal.
 fn sanitise_iri(urn: &str) -> String {
     urn.chars()
-        .filter(|c| !matches!(c, '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\') && !c.is_whitespace())
+        .filter(|c| {
+            !matches!(c, '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\') && !c.is_whitespace()
+        })
         .collect()
 }
 
@@ -390,11 +409,11 @@ use crate::services::ontology_conflict_gate::{evaluate as evaluate_conflicts, Pr
 use crate::services::ontology_mutation_service::{
     CONFLICT_BLOCKED_PREFIX, ENVELOPE_REJECTED_PREFIX, IDEMPOTENCY_CONFLICT_PREFIX,
 };
-use crate::services::provenance_writer::{self, AssertionInput};
 use crate::services::proposal_spine::{
     self, canonicalize, payload_hash, verify_envelope, CommitOutcome, CommitRequest, EnvelopeError,
     EnvelopeSig, IdempotencyStore, IntentLog,
 };
+use crate::services::provenance_writer::{self, AssertionInput};
 use crate::types::ontology_tools::{GateOutcome, GateSummary, ProposalReceipt};
 use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 
@@ -587,7 +606,11 @@ impl DecisionService {
         let provenance_quads = assertion.provenance_quads.clone();
 
         // Load the corpus once for both gates.
-        let corpus = self.ontology_repo.list_owl_classes().await.unwrap_or_default();
+        let corpus = self
+            .ontology_repo
+            .list_owl_classes()
+            .await
+            .unwrap_or_default();
 
         // Gate 1: conflict-integrity (W-A), DELTA-SCOPED. A DecisionRecord is an ABox
         // individual with no subclass/contrast edges, so it cannot itself introduce a
@@ -836,7 +859,11 @@ mod tests {
             governed_commit(&store, &idem, &intents, &req_b).unwrap(),
             CommitOutcome::Conflict
         );
-        assert_eq!(store.len().unwrap(), committed_len, "conflict mutates nothing");
+        assert_eq!(
+            store.len().unwrap(),
+            committed_len,
+            "conflict mutates nothing"
+        );
     }
 
     /// FIX 2 (defect: receipt always shows `auto:<hash>`): a SUPPLIED idempotency key
@@ -961,18 +988,31 @@ mod tests {
         let svc = service_with_sink(sink.clone()).await;
 
         let ok = svc
-            .record_decision(PK, significant_input("merge duplicate concepts"), None, None)
+            .record_decision(
+                PK,
+                significant_input("merge duplicate concepts"),
+                None,
+                None,
+            )
             .await
             .expect("a broker/PR outage must NOT fail the governed decision write");
         assert!(!ok.replayed);
-        assert!(ok.quads_written >= 2, "the decision still committed its quads");
+        assert!(
+            ok.quads_written >= 2,
+            "the decision still committed its quads"
+        );
         assert_eq!(
             sink.count.load(SeqCst),
             1,
             "the significant decision fired the elevation trigger exactly once"
         );
         // The trigger carried the minted URN + attribution to the sink.
-        let last = sink.last.lock().unwrap().clone().expect("sink saw a payload");
+        let last = sink
+            .last
+            .lock()
+            .unwrap()
+            .clone()
+            .expect("sink saw a payload");
         assert_eq!(last.decision_urn, ok.decision_urn);
         assert!(last.agent_did.starts_with("did:nostr:"));
         assert!(!last.acsp_approved, "ACSP verdict is Pending on this path");
@@ -1019,7 +1059,11 @@ mod tests {
             .await
             .expect("identical replay");
         assert!(replay.replayed);
-        assert_eq!(sink.count.load(SeqCst), 1, "replay must not re-fire the trigger");
+        assert_eq!(
+            sink.count.load(SeqCst),
+            1,
+            "replay must not re-fire the trigger"
+        );
     }
 
     // --- Quad builder: asserted graph, exact PROV-O typing ---
@@ -1072,9 +1116,18 @@ mod tests {
         // One of each direct edge.
         let preds: Vec<&String> = triples.iter().map(|(_, p, _, _)| p).collect();
         assert_eq!(preds.iter().filter(|p| **p == &p_caused()).count(), 1);
-        assert_eq!(preds.iter().filter(|p| **p == &p_precedent_for()).count(), 1);
+        assert_eq!(
+            preds.iter().filter(|p| **p == &p_precedent_for()).count(),
+            1
+        );
         assert_eq!(preds.iter().filter(|p| **p == &p_influenced()).count(), 1);
-        assert_eq!(preds.iter().filter(|p| **p == &p_considered_input()).count(), 1);
+        assert_eq!(
+            preds
+                .iter()
+                .filter(|p| **p == &p_considered_input())
+                .count(),
+            1
+        );
         assert_eq!(preds.iter().filter(|p| **p == &p_governed_by()).count(), 1);
         // 2 type + 5 edges.
         assert_eq!(quads.len(), 7);
@@ -1107,11 +1160,11 @@ mod tests {
 
     #[test]
     fn frontier_query_is_length_one_not_transitive() {
-        let q = direct_links_query(
-            &["urn:agentbox:decision:AA:x".into()],
-            Direction::Ancestry,
+        let q = direct_links_query(&["urn:agentbox:decision:AA:x".into()], Direction::Ancestry);
+        assert!(
+            q.contains("dl:caused|dl:precedentFor"),
+            "one-hop alternation"
         );
-        assert!(q.contains("dl:caused|dl:precedentFor"), "one-hop alternation");
         assert!(!q.contains('*'), "no transitive * path");
         assert!(!q.contains('+'), "no transitive + path");
         assert!(q.contains(GRAPH_ASSERT));

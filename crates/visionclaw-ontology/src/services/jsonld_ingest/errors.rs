@@ -32,7 +32,9 @@ use thiserror::Error;
 pub enum JsonLdIngestError {
     /// JSON-LD 1.1 features (`@version`, `@included`, `@nest`, framing) used
     /// without declaring `@version: 1.1` on the document. Fixture 100.
-    #[error("[SchemaVersionMissing] at {file}:block#{block_index}: {feature} used without @version 1.1")]
+    #[error(
+        "[SchemaVersionMissing] at {file}:block#{block_index}: {feature} used without @version 1.1"
+    )]
     SchemaVersionMissing {
         file: String,
         block_index: usize,

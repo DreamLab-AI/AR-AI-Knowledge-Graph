@@ -371,7 +371,12 @@ fn shacl_shapes_hash() -> String {
         hasher.update(body.as_bytes());
         hasher.update([0u8]);
     }
-    hasher.finalize().iter().take(8).map(|b| format!("{:02x}", b)).collect()
+    hasher
+        .finalize()
+        .iter()
+        .take(8)
+        .map(|b| format!("{:02x}", b))
+        .collect()
 }
 
 /// Read the content-hash marker currently stored in `GRAPH_SHAPES`, if any.
@@ -380,13 +385,14 @@ fn stored_shapes_hash(store: &Store) -> Option<String> {
         "SELECT ?h FROM <{GRAPH_SHAPES}> WHERE {{ <{SHAPES_CATALOGUE_IRI}> <{P_SHAPES_CONTENT_HASH}> ?h }} LIMIT 1"
     );
     match store.query(&q) {
-        Ok(QueryResults::Solutions(mut sols)) => sols
-            .next()
-            .and_then(|r| r.ok())
-            .and_then(|s| match s.get("h") {
-                Some(Term::Literal(l)) => Some(l.value().to_string()),
-                _ => None,
-            }),
+        Ok(QueryResults::Solutions(mut sols)) => {
+            sols.next()
+                .and_then(|r| r.ok())
+                .and_then(|s| match s.get("h") {
+                    Some(Term::Literal(l)) => Some(l.value().to_string()),
+                    _ => None,
+                })
+        }
         _ => None,
     }
 }
@@ -400,9 +406,7 @@ fn stored_shapes_hash(store: &Store) -> Option<String> {
 /// after loading.
 pub fn load_shacl_shapes(store: &Store) -> RepoResult<usize> {
     use oxigraph::io::{RdfFormat, RdfParser};
-    use oxigraph::model::{
-        GraphName, GraphNameRef, Literal, NamedNode, NamedNodeRef, QuadRef,
-    };
+    use oxigraph::model::{GraphName, GraphNameRef, Literal, NamedNode, NamedNodeRef, QuadRef};
 
     let want_hash = shacl_shapes_hash();
     if stored_shapes_hash(store).as_deref() == Some(want_hash.as_str()) {
@@ -593,14 +597,17 @@ impl OxigraphOntologyRepository {
         // startup, recorded in `urn:ngm:graph:migrations`. Idempotent —
         // already-applied migrations are skipped via the ledger.
         let mig_store = Arc::clone(&store);
-        let applied = tokio::task::spawn_blocking(move || {
-            crate::sparql_migrations::run_pending(&mig_store)
-        })
-        .await
-        .map_err(|e| db_err(format!("join error: {e}")))?
-        .map_err(db_err)?;
+        let applied =
+            tokio::task::spawn_blocking(move || crate::sparql_migrations::run_pending(&mig_store))
+                .await
+                .map_err(|e| db_err(format!("join error: {e}")))?
+                .map_err(db_err)?;
         if !applied.is_empty() {
-            tracing::info!("applied {} SPARQL migration(s): {:?}", applied.len(), applied);
+            tracing::info!(
+                "applied {} SPARQL migration(s): {:?}",
+                applied.len(),
+                applied
+            );
         }
 
         // PRD-022 WS-1: load the real W3C SHACL shape files into GRAPH_SHAPES so
@@ -637,7 +644,11 @@ impl OxigraphOntologyRepository {
         hasher.update(results.reasoner_version.as_bytes());
         hasher.update(results.inferred_axioms.len().to_le_bytes());
         let digest = hasher.finalize();
-        digest.iter().take(6).map(|b| format!("{:02x}", b)).collect()
+        digest
+            .iter()
+            .take(6)
+            .map(|b| format!("{:02x}", b))
+            .collect()
     }
 
     /// ADR-099 D3 — "clear inferred" is a single-graph `CLEAR`. Idempotent;
@@ -2467,9 +2478,7 @@ impl OntologyRepository for OxigraphOntologyRepository {
             body.push_str(&Self::axiom_insert_block(axiom));
             let iri = axiom_iri(axiom);
             // ... plus provenance + derivation marker on the axiom IRI.
-            body.push_str(&format!(
-                "<{iri}> <{P_PROV_GENERATED_BY}> <{run_iri}> .\n"
-            ));
+            body.push_str(&format!("<{iri}> <{P_PROV_GENERATED_BY}> <{run_iri}> .\n"));
             body.push_str(&format!(
                 "<{iri}> <{P_DERIVATION}> \"{DERIVATION_INFERRED}\" .\n"
             ));
@@ -2543,7 +2552,9 @@ impl OntologyRepository for OxigraphOntologyRepository {
         .await
         {
             Ok(Ok(n)) => {
-                tracing::debug!("inference provenance: reified {n} PROV-O triple(s) for run {run_id}")
+                tracing::debug!(
+                    "inference provenance: reified {n} PROV-O triple(s) for run {run_id}"
+                )
             }
             Ok(Err(e)) => tracing::warn!("inference provenance emit failed (non-fatal): {e}"),
             Err(e) => tracing::warn!("inference provenance join error (non-fatal): {e}"),
@@ -3054,8 +3065,8 @@ fn _force_imports() -> (HashSet<u32>, OntologyRepositoryError) {
 mod tests {
     use super::*;
     use visionclaw_domain::ports::ontology_repository::OntologyRepository;
+    use visionclaw_domain::ports::ontology_repository::{AxiomType, OwlAxiom};
     use visionclaw_domain::ports::owl_types::OwlClass;
-    use visionclaw_domain::ports::ontology_repository::{OwlAxiom, AxiomType};
 
     fn in_memory_repo() -> OxigraphOntologyRepository {
         OxigraphOntologyRepository::from_store(Arc::new(Store::new().unwrap()))
@@ -3080,7 +3091,10 @@ mod tests {
             n
         );
         // The content-hash marker is present so a restart is a no-op.
-        assert_eq!(stored_shapes_hash(&store).as_deref(), Some(shacl_shapes_hash().as_str()));
+        assert_eq!(
+            stored_shapes_hash(&store).as_deref(),
+            Some(shacl_shapes_hash().as_str())
+        );
     }
 
     #[test]
@@ -3109,15 +3123,24 @@ mod tests {
     fn clamp_appends_limit_when_absent() {
         let q = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let out = clamp_select_limit(q);
-        assert!(out.ends_with(&format!("LIMIT {}", DEFAULT_SPARQL_LIMIT)), "got: {out}");
+        assert!(
+            out.ends_with(&format!("LIMIT {}", DEFAULT_SPARQL_LIMIT)),
+            "got: {out}"
+        );
     }
 
     #[test]
     fn clamp_rewrites_oversized_limit() {
         let q = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 999999";
         let out = clamp_select_limit(q);
-        assert!(out.contains(&format!("LIMIT {}", MAX_SPARQL_ROWS)), "got: {out}");
-        assert!(!out.contains("999999"), "oversized limit not removed: {out}");
+        assert!(
+            out.contains(&format!("LIMIT {}", MAX_SPARQL_ROWS)),
+            "got: {out}"
+        );
+        assert!(
+            !out.contains("999999"),
+            "oversized limit not removed: {out}"
+        );
     }
 
     #[test]
@@ -3165,7 +3188,10 @@ mod tests {
         assert!(!iri.is_empty());
 
         let fetched = repo.get_owl_class(&iri).await.unwrap();
-        assert!(fetched.is_some(), "get_owl_class should return the saved class");
+        assert!(
+            fetched.is_some(),
+            "get_owl_class should return the saved class"
+        );
         let fetched = fetched.unwrap();
         assert_eq!(fetched.iri, iri);
     }
@@ -3203,7 +3229,9 @@ mod tests {
 
         let stored_axioms = repo.get_axioms().await.unwrap();
         assert!(
-            stored_axioms.iter().any(|a| a.subject == "urn:test:Cat" && a.object == "urn:test:Animal"),
+            stored_axioms
+                .iter()
+                .any(|a| a.subject == "urn:test:Cat" && a.object == "urn:test:Animal"),
             "Expected Cat subClassOf Animal; got {:?}",
             stored_axioms
         );
@@ -3212,7 +3240,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn remove_owl_class_removes_it() {
         let repo = in_memory_repo();
-        let iri = repo.add_owl_class(&make_class("urn:test:Temp", "Temp")).await.unwrap();
+        let iri = repo
+            .add_owl_class(&make_class("urn:test:Temp", "Temp"))
+            .await
+            .unwrap();
         repo.remove_owl_class(&iri).await.unwrap();
         let fetched = repo.get_owl_class(&iri).await.unwrap();
         assert!(fetched.is_none(), "Class should have been removed");
@@ -3225,7 +3256,9 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn get_metrics_returns_non_negative_counts() {
         let repo = in_memory_repo();
-        repo.add_owl_class(&make_class("urn:test:X", "X")).await.unwrap();
+        repo.add_owl_class(&make_class("urn:test:X", "X"))
+            .await
+            .unwrap();
         let metrics = repo.get_metrics().await.unwrap();
         assert!(metrics.class_count >= 1);
     }
@@ -3264,7 +3297,11 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(json["boolean"], serde_json::Value::Bool(true), "subClassOf must be materialised: {json}");
+        assert_eq!(
+            json["boolean"],
+            serde_json::Value::Bool(true),
+            "subClassOf must be materialised: {json}"
+        );
 
         // Every axiom record is wasGeneratedBy a prov:Activity and marked inferred.
         let prov = repo
@@ -3276,13 +3313,20 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(prov["boolean"], serde_json::Value::Bool(true), "provenance + derivation must be present: {prov}");
+        assert_eq!(
+            prov["boolean"],
+            serde_json::Value::Bool(true),
+            "provenance + derivation must be present: {prov}"
+        );
 
         // read_inferred_graph exposes the runId + triples for the panel.
         let g = repo.read_inferred_graph().await.unwrap();
         assert_eq!(g["namedGraph"], GRAPH_ONTOLOGY_INFERRED);
         assert!(g["runId"].is_string(), "runId surfaced: {g}");
-        assert!(g["triples"].as_array().map(|a| !a.is_empty()).unwrap_or(false));
+        assert!(g["triples"]
+            .as_array()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false));
     }
 
     /// PRD-022 WS-2: a completed inference run is reified as an append-only
@@ -3302,17 +3346,16 @@ mod tests {
 
         // The reasoner run is present as a prov:Activity attributed to the
         // system reasoner DID with action="infer" / derivation="inferred".
-        let acts = crate::provenance_emitter::query_agent_activities(
-            repo.store(),
-            REASONER_AGENT_DID,
-            10,
-        )
-        .unwrap();
+        let acts =
+            crate::provenance_emitter::query_agent_activities(repo.store(), REASONER_AGENT_DID, 10)
+                .unwrap();
         assert_eq!(acts.len(), 1, "exactly one inference activity reified");
         assert_eq!(acts[0].action, "infer");
         assert_eq!(acts[0].derivation, "inferred");
         assert_eq!(acts[0].generated.as_deref(), Some(GRAPH_ONTOLOGY_INFERRED));
-        assert!(acts[0].activity_urn.starts_with("urn:visionclaw:execution:inference-"));
+        assert!(acts[0]
+            .activity_urn
+            .starts_with("urn:visionclaw:execution:inference-"));
         assert!(
             crate::provenance_emitter::count_provenance_triples(repo.store()).unwrap() >= 5,
             "reified activity writes 5+ provenance triples"
@@ -3336,7 +3379,11 @@ mod tests {
             ))
             .await
             .unwrap();
-        assert_eq!(ask["boolean"], serde_json::Value::Bool(true), "equivalence must be bidirectional: {ask}");
+        assert_eq!(
+            ask["boolean"],
+            serde_json::Value::Bool(true),
+            "equivalence must be bidirectional: {ask}"
+        );
     }
 
     /// ADR-099 D3: "clear inferred" empties only the inferred graph.
@@ -3344,30 +3391,49 @@ mod tests {
     async fn clear_inferred_graph_empties_only_inferred() {
         let repo = in_memory_repo();
         // Seed the assert graph so we can prove it survives.
-        repo.add_owl_class(&make_class("urn:test:Survivor", "Survivor")).await.unwrap();
+        repo.add_owl_class(&make_class("urn:test:Survivor", "Survivor"))
+            .await
+            .unwrap();
         let results = inference_results_with(vec![make_axiom("urn:test:A", "urn:test:B")]);
         repo.store_inference_results(&results).await.unwrap();
 
         repo.clear_inferred_graph().await.unwrap();
 
         let g = repo.read_inferred_graph().await.unwrap();
-        assert!(g["triples"].as_array().map(|a| a.is_empty()).unwrap_or(false), "inferred graph must be empty: {g}");
+        assert!(
+            g["triples"]
+                .as_array()
+                .map(|a| a.is_empty())
+                .unwrap_or(false),
+            "inferred graph must be empty: {g}"
+        );
 
         // Assert graph untouched.
         let classes = repo.list_owl_classes().await.unwrap();
-        assert!(classes.iter().any(|c| c.iri == "urn:test:Survivor"), "assert graph must survive clear");
+        assert!(
+            classes.iter().any(|c| c.iri == "urn:test:Survivor"),
+            "assert graph must survive clear"
+        );
     }
 
     /// SPARQL JSON shape: SELECT returns head.vars + results.bindings.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn sparql_select_json_has_sparql11_shape() {
         let repo = in_memory_repo();
-        repo.add_owl_class(&make_class("urn:test:Q", "Q")).await.unwrap();
+        repo.add_owl_class(&make_class("urn:test:Q", "Q"))
+            .await
+            .unwrap();
         let json = repo
             .sparql_select_json("SELECT ?s WHERE { ?s ?p ?o } LIMIT 1".to_string())
             .await
             .unwrap();
-        assert!(json["head"]["vars"].as_array().is_some(), "head.vars present: {json}");
-        assert!(json["results"]["bindings"].as_array().is_some(), "results.bindings present: {json}");
+        assert!(
+            json["head"]["vars"].as_array().is_some(),
+            "head.vars present: {json}"
+        );
+        assert!(
+            json["results"]["bindings"].as_array().is_some(),
+            "results.bindings present: {json}"
+        );
     }
 }

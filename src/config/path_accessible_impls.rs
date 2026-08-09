@@ -1,6 +1,6 @@
-use super::{AppFullSettings, PhysicsSettings, AuthSettings, SystemSettings};
-use super::{GraphSettings, GraphsSettings, VisualisationSettings, XRSettings};
 use super::path_access::{parse_path, PathAccessible};
+use super::{AppFullSettings, AuthSettings, PhysicsSettings, SystemSettings};
+use super::{GraphSettings, GraphsSettings, VisualisationSettings, XRSettings};
 
 // PathAccessible implementation for AppFullSettings
 impl PathAccessible for AppFullSettings {

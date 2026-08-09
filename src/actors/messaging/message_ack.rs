@@ -14,19 +14,13 @@ pub enum AckStatus {
     Success,
 
     /// Message partially processed (some operations failed)
-    PartialSuccess {
-        reason: String,
-    },
+    PartialSuccess { reason: String },
 
     /// Message processing failed
-    Failed {
-        error: String,
-    },
+    Failed { error: String },
 
     /// Message is being retried
-    Retrying {
-        attempt: u32,
-    },
+    Retrying { attempt: u32 },
 }
 
 impl AckStatus {
@@ -177,6 +171,9 @@ mod tests {
             .with_metadata("processing_time_ms", "42");
 
         assert_eq!(ack.metadata.get("node_count"), Some(&"1000".to_string()));
-        assert_eq!(ack.metadata.get("processing_time_ms"), Some(&"42".to_string()));
+        assert_eq!(
+            ack.metadata.get("processing_time_ms"),
+            Some(&"42".to_string())
+        );
     }
 }

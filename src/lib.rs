@@ -1,12 +1,12 @@
 pub mod actors;
 pub mod adapters;
 pub mod agent_events;
-pub mod layout;
 pub mod app_state;
 pub mod application;
 pub mod client;
 pub mod config;
 pub mod constraints;
+pub mod layout;
 // Storage-agnostic domain kernels (ADR-130 Decision 2 broker kernel lives here).
 pub mod domain;
 pub mod errors;
@@ -18,10 +18,10 @@ pub mod middleware;
 pub mod models;
 pub mod ontology;
 pub mod openapi;
-pub mod reasoning;
 pub mod physics;
 pub mod ports;
 pub mod protocol;
+pub mod reasoning;
 pub mod repositories;
 pub mod services;
 pub mod settings;
@@ -46,20 +46,18 @@ pub mod web_contract;
 
 pub mod test_helpers;
 
-pub use actors::{
-    ClientCoordinatorActor, MetadataActor, OptimizedSettingsActor,
-};
+pub use actors::{ClientCoordinatorActor, MetadataActor, OptimizedSettingsActor};
 pub use app_state::AppState;
 // ADR-090: model types now canonical in visionclaw-domain. Re-exports here
 // preserve the old `visionclaw_server::MetadataStore` etc. API for external callers
 // (tests, downstream binaries) without forcing them through a long import.
+pub use models::user_settings::UserSettings;
 pub use visionclaw_domain::models::metadata::MetadataStore;
 pub use visionclaw_domain::models::protected_settings::ProtectedSettings;
 pub use visionclaw_domain::models::simulation_params::SimulationParams;
-pub use models::user_settings::UserSettings;
 
 // Re-export commonly used utilities for easier access
-pub use utils::json::{to_json, from_json};
+pub use utils::json::{from_json, to_json};
 pub use utils::result_helpers::safe_json_number;
 pub use utils::time;
 // Re-export HandlerResponse trait for response macros

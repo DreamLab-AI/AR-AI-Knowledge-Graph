@@ -20,24 +20,20 @@ impl AudioProcessor {
     ) -> Result<(String, Vec<u8>), String> {
         let _settings = self.settings.read().await;
 
-        
         let json_response: Value = crate::utils::json::from_json_bytes(response_data)
             .map_err(|e| format!("Failed to parse JSON response: {}", e))?;
 
-        
         info!(
             "Received JSON response: {}",
             crate::utils::json::to_json_pretty(&json_response)
                 .unwrap_or_else(|_| "Unable to prettify JSON".to_string())
         );
 
-        
         if let Some(error_msg) = json_response["error"].as_str() {
             error!("Error in JSON response: {}", error_msg);
             return Err(format!("Error in JSON response: {}", error_msg));
         }
 
-        
         let answer = json_response["data"]["answer"]
             .as_str()
             .or_else(|| json_response["answer"].as_str())
@@ -47,7 +43,6 @@ impl AudioProcessor {
             })?
             .to_string();
 
-        
         let audio_data = if let Some(audio) = json_response["data"]["audio"].as_str() {
             info!("Found audio data in data.audio");
             BASE64
@@ -59,7 +54,6 @@ impl AudioProcessor {
                 .decode(audio)
                 .map_err(|e| format!("Failed to decode base64 audio data from root.audio: {}", e))?
         } else {
-            
             warn!("Audio data not found in JSON response. Available paths:");
             if let Some(obj) = json_response.as_object() {
                 for (key, value) in obj {
@@ -85,7 +79,6 @@ impl AudioProcessor {
             audio_data.len()
         );
 
-        
         if audio_data.len() >= 44 {
             info!("WAV header: {:?}", &audio_data[..44]);
 
@@ -94,7 +87,6 @@ impl AudioProcessor {
                 return Err("Invalid WAV header".to_string());
             }
 
-            
             let channels = u16::from_le_bytes([audio_data[22], audio_data[23]]);
             let sample_rate = u32::from_le_bytes([
                 audio_data[24],
@@ -153,9 +145,9 @@ impl AudioProcessor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::json::{from_json, to_json};
     use serde_json::json;
     use tokio::runtime::Runtime;
-use crate::utils::json::{from_json, to_json};
 
     fn create_test_settings() -> Arc<RwLock<AppFullSettings>> {
         let settings = AppFullSettings::default();
@@ -169,19 +161,10 @@ use crate::utils::json::{from_json, to_json};
         let processor = AudioProcessor::new(settings);
 
         let test_wav = vec![
-            b'R', b'I', b'F', b'F', 
-            0x24, 0x00, 0x00, 0x00, 
-            b'W', b'A', b'V', b'E', 
-            b'f', b'm', b't', b' ', 
-            0x10, 0x00, 0x00, 0x00, 
-            0x01, 0x00, 
-            0x01, 0x00, 
-            0x44, 0xAC, 0x00, 0x00, 
-            0x88, 0x58, 0x01, 0x00, 
-            0x02, 0x00, 
-            0x10, 0x00, 
-            b'd', b'a', b't', b'a', 
-            0x00, 0x00, 0x00, 0x00, 
+            b'R', b'I', b'F', b'F', 0x24, 0x00, 0x00, 0x00, b'W', b'A', b'V', b'E', b'f', b'm',
+            b't', b' ', 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x44, 0xAC, 0x00, 0x00,
+            0x88, 0x58, 0x01, 0x00, 0x02, 0x00, 0x10, 0x00, b'd', b'a', b't', b'a', 0x00, 0x00,
+            0x00, 0x00,
         ];
 
         let json_data = json!({
@@ -192,7 +175,11 @@ use crate::utils::json::{from_json, to_json};
         });
 
         let result = rt.block_on(
-            processor.process_json_response(crate::utils::json::to_json_bytes(&json_data).unwrap().as_slice()),
+            processor.process_json_response(
+                crate::utils::json::to_json_bytes(&json_data)
+                    .unwrap()
+                    .as_slice(),
+            ),
         );
 
         assert!(result.is_ok());
@@ -207,7 +194,7 @@ use crate::utils::json::{from_json, to_json};
         let settings = create_test_settings();
         let processor = AudioProcessor::new(settings);
 
-        let invalid_wav = vec![0x00; 44]; 
+        let invalid_wav = vec![0x00; 44];
         let json_data = json!({
             "data": {
                 "answer": "Test answer",
@@ -216,7 +203,11 @@ use crate::utils::json::{from_json, to_json};
         });
 
         let result = rt.block_on(
-            processor.process_json_response(crate::utils::json::to_json_bytes(&json_data).unwrap().as_slice()),
+            processor.process_json_response(
+                crate::utils::json::to_json_bytes(&json_data)
+                    .unwrap()
+                    .as_slice(),
+            ),
         );
 
         assert!(result.is_err());

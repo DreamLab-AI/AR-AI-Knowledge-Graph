@@ -34,7 +34,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::actors::messages::BroadcastMessage;
 use crate::actors::ClientCoordinatorActor;
-use crate::adapters::sqlite_enrichment_repository::{EnrichmentProposal as StoredProposal, StoredDecision};
+use crate::adapters::sqlite_enrichment_repository::{
+    EnrichmentProposal as StoredProposal, StoredDecision,
+};
 use crate::domain::broker::{
     BrokerCase, CaseCategory, DecisionOrchestrator, DecisionOutcome, SubjectKind, SubjectRef,
 };
@@ -207,8 +209,7 @@ pub(crate) fn record_decision(
 /// decision. Uses the minted proposal URN as the subject so the KG node is
 /// owner-scoped + content-addressed.
 fn summary_triples_for(record: &RecordedDecision) -> Vec<(String, String, String)> {
-    const P_ENRICHMENT_DECISION: &str =
-        "https://narrativegoldmine.com/ns/v1#enrichmentDecision";
+    const P_ENRICHMENT_DECISION: &str = "https://narrativegoldmine.com/ns/v1#enrichmentDecision";
     let subject = record
         .proposal_urn
         .clone()
@@ -272,9 +273,7 @@ fn derive_kernel_decision(record: &RecordedDecision) -> (String, Option<serde_js
         record.reasoning.clone().unwrap_or_default(),
     ) {
         Ok(report) => {
-            let share_plan = report
-                .share_plan
-                .and_then(|p| serde_json::to_value(p).ok());
+            let share_plan = report.share_plan.and_then(|p| serde_json::to_value(p).ok());
             (report.entry.outcome.action_str().to_string(), share_plan)
         }
         Err(e) => {
@@ -474,11 +473,8 @@ pub(crate) async fn apply_decision(
     let forum_projection: &'static str = match &state.acsp_client {
         Some(client) => {
             let reasoning = record.reasoning.clone().unwrap_or_default();
-            let ev = crate::services::acsp::build_action_response(
-                &case_id,
-                &kernel_action,
-                &reasoning,
-            );
+            let ev =
+                crate::services::acsp::build_action_response(&case_id, &kernel_action, &reasoning);
             match client.publish(&ev).await {
                 Ok(id) => {
                     info!(
@@ -541,10 +537,7 @@ pub(crate) async fn apply_decision(
 }
 
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.route(
-        "/enrichment-proposals/{id}/decide",
-        web::post().to(decide),
-    );
+    cfg.route("/enrichment-proposals/{id}/decide", web::post().to(decide));
 }
 
 /// Broker-facing projection of the durable enrichment store (WS-12 dependency).
@@ -734,7 +727,10 @@ mod tests {
             reasoning: None,
         };
         let rec = record_decision("case-1", &req).expect("record");
-        assert!(!rec.attributed, "malformed pubkey ⇒ unattributed, not error");
+        assert!(
+            !rec.attributed,
+            "malformed pubkey ⇒ unattributed, not error"
+        );
         assert!(rec.proposal_urn.is_none());
     }
 
@@ -782,8 +778,14 @@ mod tests {
         };
         let rec = record_decision("case-7", &req).unwrap();
         let (action, plan) = derive_kernel_decision(&rec);
-        assert_eq!(action, "approve", "approval synonyms collapse to the canonical verb");
-        assert!(plan.is_none(), "knowledge enrichment has no share-state ladder");
+        assert_eq!(
+            action, "approve",
+            "approval synonyms collapse to the canonical verb"
+        );
+        assert!(
+            plan.is_none(),
+            "knowledge enrichment has no share-state ladder"
+        );
     }
 
     #[test]

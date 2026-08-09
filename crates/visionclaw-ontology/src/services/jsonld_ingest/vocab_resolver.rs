@@ -55,7 +55,9 @@ pub enum ImportResolution {
     /// (network/HTTP failure). The term still resolves to its *canonical
     /// namespace* via the registry — only the document body is unavailable.
     /// Non-fatal: callers keep the canonical IRI; nothing is blocked.
-    NamespaceOnly { registration: VocabularyRegistration },
+    NamespaceOnly {
+        registration: VocabularyRegistration,
+    },
     /// The import is not in the registry at all. The vocab term degrades to a
     /// local mint; a warning has been logged. Non-fatal (ADR-100 D4).
     LocalMint { target: String },
@@ -297,7 +299,11 @@ mod tests {
         let results = resolver.resolve_document_imports(&doc);
         assert_eq!(results.len(), 1);
         match &results[0] {
-            ImportResolution::Resolved { registration, document, cached } => {
+            ImportResolution::Resolved {
+                registration,
+                document,
+                cached,
+            } => {
                 assert_eq!(registration.prefix, "prov");
                 assert!(document.contains("prov-o"));
                 assert!(!cached, "first fetch is not cached");

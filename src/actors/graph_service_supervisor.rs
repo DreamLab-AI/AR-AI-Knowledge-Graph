@@ -40,11 +40,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::actors::graph_state_actor::GraphStateActor;
+use crate::actors::supervisor::{ActorFailed, SupervisorActor};
 use crate::actors::{
     ClientCoordinatorActor, GPUManagerActor, PhysicsOrchestratorActor, SemanticProcessorActor,
 };
-use crate::actors::graph_state_actor::GraphStateActor;
-use crate::actors::supervisor::{ActorFailed, SupervisorActor};
 // Removed unused import - we don't use graph_messages types for handlers
 use crate::actors::messages as msgs;
 // Removed graph_messages::GetGraphData import - not used
@@ -120,9 +120,15 @@ impl AutoTriggerCadence {
     /// uppercase token in `VISIONCLAW_AUTO_<algo>_*`.
     fn from_env(algo: &str, default_initial: Duration, default_refresh: Duration) -> Self {
         Self::resolve(
-            std::env::var(format!("VISIONCLAW_AUTO_{algo}_ENABLED")).ok().as_deref(),
-            std::env::var(format!("VISIONCLAW_AUTO_{algo}_INITIAL_SECS")).ok().as_deref(),
-            std::env::var(format!("VISIONCLAW_AUTO_{algo}_INTERVAL_SECS")).ok().as_deref(),
+            std::env::var(format!("VISIONCLAW_AUTO_{algo}_ENABLED"))
+                .ok()
+                .as_deref(),
+            std::env::var(format!("VISIONCLAW_AUTO_{algo}_INITIAL_SECS"))
+                .ok()
+                .as_deref(),
+            std::env::var(format!("VISIONCLAW_AUTO_{algo}_INTERVAL_SECS"))
+                .ok()
+                .as_deref(),
             default_initial,
             default_refresh,
         )
@@ -139,7 +145,10 @@ impl AutoTriggerCadence {
         default_refresh: Duration,
     ) -> Self {
         let enabled = match enabled_raw {
-            Some(v) => !matches!(v.trim().to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+            Some(v) => !matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "off" | "no"
+            ),
             None => true,
         };
         let initial_delay = initial_raw
@@ -154,7 +163,11 @@ impl AutoTriggerCadence {
             },
             None => Some(default_refresh),
         };
-        Self { enabled, initial_delay, refresh_interval }
+        Self {
+            enabled,
+            initial_delay,
+            refresh_interval,
+        }
     }
 }
 
@@ -179,10 +192,13 @@ impl AutoAnalyticsConfig {
         // auto-trigger is OPT-IN: a channel runs only when its
         // VISIONCLAW_AUTO_<ALGO>_ENABLED env var is explicitly set. Absent env
         // means disabled so analytics can never crash physics by default.
-        fn channel(algo: &str, default_initial: Duration, default_refresh: Duration) -> AutoTriggerCadence {
+        fn channel(
+            algo: &str,
+            default_initial: Duration,
+            default_refresh: Duration,
+        ) -> AutoTriggerCadence {
             let mut cadence = AutoTriggerCadence::from_env(algo, default_initial, default_refresh);
-            let explicitly_set =
-                std::env::var(format!("VISIONCLAW_AUTO_{algo}_ENABLED")).is_ok();
+            let explicitly_set = std::env::var(format!("VISIONCLAW_AUTO_{algo}_ENABLED")).is_ok();
             if !explicitly_set {
                 cadence.enabled = false;
             }
@@ -243,7 +259,10 @@ mod cadence_tests {
     #[test]
     fn interval_zero_means_one_shot_no_refresh() {
         let c = AutoTriggerCadence::resolve(None, None, Some("0"), DI, DR);
-        assert_eq!(c.refresh_interval, None, "interval 0 disables periodic refresh");
+        assert_eq!(
+            c.refresh_interval, None,
+            "interval 0 disables periodic refresh"
+        );
     }
 
     #[test]
@@ -257,19 +276,22 @@ mod cadence_tests {
     fn garbage_falls_back_to_defaults() {
         let c = AutoTriggerCadence::resolve(None, Some("nope"), Some("bad"), DI, DR);
         assert_eq!(c.initial_delay, DI, "unparsable initial -> default");
-        assert_eq!(c.refresh_interval, Some(DR), "unparsable interval -> default refresh");
+        assert_eq!(
+            c.refresh_interval,
+            Some(DR),
+            "unparsable interval -> default refresh"
+        );
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum GraphSupervisionStrategy {
-    
     OneForOne,
-    
+
     OneForAll,
-    
+
     RestForOne,
-    
+
     Escalate,
 }
 
@@ -408,7 +430,8 @@ pub struct GraphServiceSupervisor {
     gpu_manager: Option<Addr<GPUManagerActor>>,
 
     // AppState's gpu_compute_addr — kept in sync when ForceComputeActor is respawned
-    app_gpu_compute_addr: Option<Arc<tokio::sync::RwLock<Option<Addr<crate::actors::gpu::ForceComputeActor>>>>>,
+    app_gpu_compute_addr:
+        Option<Arc<tokio::sync::RwLock<Option<Addr<crate::actors::gpu::ForceComputeActor>>>>>,
 
     // Knowledge graph repository
     kg_repo: Option<Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>>,
@@ -418,22 +441,17 @@ pub struct GraphServiceSupervisor {
     /// instead of stopping self.
     parent_supervisor: Option<Addr<SupervisorActor>>,
 
-
     strategy: GraphSupervisionStrategy,
     restart_policy: RestartPolicy,
 
-
     actor_info: HashMap<ActorType, ActorInfo>,
-
 
     health_check_interval: Duration,
     last_health_check: Instant,
 
-
     #[allow(dead_code)]
     message_buffer_size: usize,
     total_messages_routed: u64,
-
 
     supervision_stats: SupervisionStats,
 
@@ -462,7 +480,7 @@ impl Default for RestartPolicy {
     fn default() -> Self {
         Self {
             max_restarts: 5,
-            within_time_period: Duration::from_secs(300), 
+            within_time_period: Duration::from_secs(300),
             backoff_strategy: BackoffStrategy::Exponential {
                 initial: Duration::from_secs(1),
                 max: Duration::from_secs(60),
@@ -486,8 +504,9 @@ impl Default for ActorStats {
 }
 
 impl GraphServiceSupervisor {
-
-    pub fn new(kg_repo: Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>) -> Self {
+    pub fn new(
+        kg_repo: Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
+    ) -> Self {
         Self {
             graph_state: None,
             physics: None,
@@ -512,7 +531,6 @@ impl GraphServiceSupervisor {
         }
     }
 
-
     pub fn with_config(
         kg_repo: Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
         strategy: GraphSupervisionStrategy,
@@ -526,7 +544,6 @@ impl GraphServiceSupervisor {
         supervisor
     }
 
-
     /// Wire physics and client coordinator together for position broadcasting
     fn wire_physics_and_client(&mut self) {
         if let (Some(ref physics_addr), Some(ref client_addr)) = (&self.physics, &self.client) {
@@ -538,11 +555,9 @@ impl GraphServiceSupervisor {
         }
     }
 
-
     fn initialize_actors(&mut self, ctx: &mut Context<Self>) {
         info!("Initializing supervised actors");
 
-        
         self.actor_info.insert(
             ActorType::GraphState,
             ActorInfo {
@@ -599,12 +614,10 @@ impl GraphServiceSupervisor {
             },
         );
 
-        
-        
         self.start_actor(ActorType::ClientCoordinator, ctx);
         self.start_actor(ActorType::PhysicsOrchestrator, ctx);
         self.start_actor(ActorType::SemanticProcessor, ctx);
-        self.start_actor(ActorType::GraphState, ctx); 
+        self.start_actor(ActorType::GraphState, ctx);
 
         // Health check interval for detecting stale heartbeats
         ctx.run_interval(self.health_check_interval, |act, ctx| {
@@ -642,14 +655,11 @@ impl GraphServiceSupervisor {
         info!("All supervised actors initialized successfully");
     }
 
-    
     fn start_actor(&mut self, actor_type: ActorType, _ctx: &mut Context<Self>) {
         info!("Starting actor: {:?}", actor_type);
 
         match actor_type {
             ActorType::GraphState => {
-                
-                
                 info!("Starting GraphStateActor as temporary GraphState manager");
 
                 if let Some(ref kg_repo) = self.kg_repo {
@@ -680,10 +690,11 @@ impl GraphServiceSupervisor {
         }
 
         // Wire actors together after starting
-        if actor_type == ActorType::ClientCoordinator || actor_type == ActorType::PhysicsOrchestrator {
+        if actor_type == ActorType::ClientCoordinator
+            || actor_type == ActorType::PhysicsOrchestrator
+        {
             self.wire_physics_and_client();
         }
-
 
         if let Some(info) = self.actor_info.get_mut(&actor_type) {
             info.health = ActorHealth::Healthy;
@@ -692,17 +703,14 @@ impl GraphServiceSupervisor {
         }
     }
 
-    
     fn restart_actor(&mut self, actor_type: ActorType, ctx: &mut Context<Self>) {
         warn!("Restarting failed actor: {:?}", actor_type);
 
-        
         if let Some(info) = self.actor_info.get_mut(&actor_type) {
             info.health = ActorHealth::Restarting;
             info.restart_count += 1;
             info.last_restart = Some(Instant::now());
 
-            
             if info.restart_count > self.restart_policy.max_restarts {
                 error!(
                     "Actor {:?} exceeded maximum restarts ({}), escalating",
@@ -713,7 +721,6 @@ impl GraphServiceSupervisor {
             }
         }
 
-        
         let backoff_duration = self.calculate_backoff(&actor_type);
         let actor_type_clone = actor_type.clone();
         let actor_type_clone2 = actor_type.clone();
@@ -726,7 +733,6 @@ impl GraphServiceSupervisor {
         self.supervision_stats.total_restarts += 1;
     }
 
-    
     fn calculate_backoff(&self, actor_type: &ActorType) -> Duration {
         if let Some(info) = self.actor_info.get(actor_type) {
             match &self.restart_policy.backoff_strategy {
@@ -742,7 +748,6 @@ impl GraphServiceSupervisor {
         }
     }
 
-    
     fn escalate_failure(&mut self, actor_type: ActorType, ctx: &mut Context<Self>) {
         error!("Escalating failure for actor: {:?}", actor_type);
 
@@ -753,15 +758,13 @@ impl GraphServiceSupervisor {
             }
             GraphSupervisionStrategy::Escalate => {
                 if let Some(ref parent) = self.parent_supervisor {
-                    warn!(
-                        "Escalating {:?} failure to parent supervisor",
-                        actor_type
-                    );
+                    warn!("Escalating {:?} failure to parent supervisor", actor_type);
                     parent.do_send(ActorFailed {
                         actor_name: format!("GraphServiceSupervisor/{:?}", actor_type),
-                        error: VisionClawError::Actor(ActorError::ActorNotAvailable(
-                            format!("{:?} exceeded restart limits", actor_type),
-                        )),
+                        error: VisionClawError::Actor(ActorError::ActorNotAvailable(format!(
+                            "{:?} exceeded restart limits",
+                            actor_type
+                        ))),
                     });
                 } else {
                     error!(
@@ -781,24 +784,20 @@ impl GraphServiceSupervisor {
         }
     }
 
-    
     fn restart_all_actors(&mut self, ctx: &mut Context<Self>) {
         info!("Restarting all supervised actors");
 
-        
         self.graph_state = None;
         self.physics = None;
         self.semantic = None;
         self.client = None;
 
-        
         self.start_actor(ActorType::GraphState, ctx);
         self.start_actor(ActorType::PhysicsOrchestrator, ctx);
         self.start_actor(ActorType::SemanticProcessor, ctx);
         self.start_actor(ActorType::ClientCoordinator, ctx);
     }
 
-    
     #[allow(dead_code)]
     fn buffer_message(&mut self, actor_type: ActorType, message: SupervisedMessage) {
         if let Some(info) = self.actor_info.get_mut(&actor_type) {
@@ -814,7 +813,6 @@ impl GraphServiceSupervisor {
         }
     }
 
-    
     fn replay_buffered_messages(&mut self, actor_type: ActorType) {
         if let Some(info) = self.actor_info.get_mut(&actor_type) {
             let messages = std::mem::take(&mut info.message_buffer);
@@ -831,51 +829,67 @@ impl GraphServiceSupervisor {
                         if let Some(ref addr) = self.graph_state {
                             addr.do_send(msg);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     BufferedMessage::ReloadGraphFromDatabase => {
                         if let Some(ref addr) = self.graph_state {
                             addr.do_send(msgs::ReloadGraphFromDatabase);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     // Physics operations → PhysicsOrchestratorActor
                     BufferedMessage::StartSimulation => {
                         if let Some(ref addr) = self.physics {
                             addr.do_send(msgs::StartSimulation);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     BufferedMessage::StopSimulation => {
                         if let Some(ref addr) = self.physics {
                             addr.do_send(msgs::StopSimulation);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     BufferedMessage::SimulationStep => {
                         if let Some(ref addr) = self.physics {
                             addr.do_send(msgs::SimulationStep);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     BufferedMessage::UpdateSimulationParams(msg) => {
                         if let Some(ref addr) = self.physics {
                             addr.do_send(msg);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     BufferedMessage::UpdateNodePositions(msg) => {
                         if let Some(ref addr) = self.physics {
                             addr.do_send(msg);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                     // Client operations → ClientCoordinatorActor
                     BufferedMessage::BroadcastMessage(msg) => {
                         if let Some(ref addr) = self.client {
                             addr.do_send(msg);
                             true
-                        } else { false }
+                        } else {
+                            false
+                        }
                     }
                 };
 
@@ -889,7 +903,6 @@ impl GraphServiceSupervisor {
         }
     }
 
-    
     fn perform_health_check(&mut self, _ctx: &mut Context<Self>) {
         debug!("Performing health check on supervised actors");
 
@@ -898,7 +911,6 @@ impl GraphServiceSupervisor {
         self.supervision_stats.health_checks_performed += 1;
 
         for (actor_type, info) in &mut self.actor_info {
-            
             if let Some(last_heartbeat) = info.last_heartbeat {
                 if now.duration_since(last_heartbeat) > Duration::from_secs(60) {
                     warn!("Actor {:?} heartbeat timeout", actor_type);
@@ -906,14 +918,12 @@ impl GraphServiceSupervisor {
                 }
             }
 
-            
             if let Some(last_restart) = info.last_restart {
                 info.stats.uptime = now.duration_since(last_restart);
             }
         }
     }
 
-    
     fn route_message(
         &mut self,
         message: SupervisorMessage,
@@ -1026,7 +1036,6 @@ impl GraphServiceSupervisor {
         result
     }
 
-    
     pub fn get_status(&self) -> SupervisorStatus {
         SupervisorStatus {
             strategy: self.strategy.clone(),
@@ -1103,7 +1112,10 @@ impl GraphServiceSupervisor {
             act.auto_community_in_flight = false;
             match res {
                 Ok(Ok(clusters)) => {
-                    debug!("Auto-community: Louvain pass produced {} clusters", clusters.len())
+                    debug!(
+                        "Auto-community: Louvain pass produced {} clusters",
+                        clusters.len()
+                    )
                 }
                 Ok(Err(e)) => warn!("Auto-community: Louvain pass failed: {}", e),
                 Err(e) => warn!("Auto-community: GPU manager mailbox error: {}", e),
@@ -1464,7 +1476,11 @@ impl Handler<msgs::GetGraphData> for GraphServiceSupervisor {
 impl Handler<msgs::ReloadGraphFromDatabase> for GraphServiceSupervisor {
     type Result = ResponseFuture<Result<(), String>>;
 
-    fn handle(&mut self, _msg: msgs::ReloadGraphFromDatabase, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        _msg: msgs::ReloadGraphFromDatabase,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         info!("GraphServiceSupervisor: ReloadGraphFromDatabase received");
 
         let graph_state_addr = self.graph_state.clone();
@@ -1475,13 +1491,18 @@ impl Handler<msgs::ReloadGraphFromDatabase> for GraphServiceSupervisor {
             if let Some(graph_state) = graph_state_addr {
                 // Step 1: Tell GraphStateActor to reload its data from Oxigraph.
                 // This replaces the old approach of just reading stale cached data.
-                debug!("GraphServiceSupervisor: Sending ReloadGraphFromDatabase to GraphStateActor");
+                debug!(
+                    "GraphServiceSupervisor: Sending ReloadGraphFromDatabase to GraphStateActor"
+                );
                 match graph_state.send(msgs::ReloadGraphFromDatabase).await {
                     Ok(Ok(())) => {
                         info!("GraphServiceSupervisor: GraphStateActor reloaded successfully");
                     }
                     Ok(Err(e)) => {
-                        error!("GraphServiceSupervisor: GraphStateActor reload failed: {}", e);
+                        error!(
+                            "GraphServiceSupervisor: GraphStateActor reload failed: {}",
+                            e
+                        );
                         return Err(e);
                     }
                     Err(e) => {
@@ -1524,11 +1545,17 @@ impl Handler<msgs::ReloadGraphFromDatabase> for GraphServiceSupervisor {
                         Ok(())
                     }
                     Ok(Err(e)) => {
-                        error!("GraphServiceSupervisor: Failed to get graph data after reload: {}", e);
+                        error!(
+                            "GraphServiceSupervisor: Failed to get graph data after reload: {}",
+                            e
+                        );
                         Err(e)
                     }
                     Err(e) => {
-                        error!("GraphServiceSupervisor: Mailbox error getting graph data: {}", e);
+                        error!(
+                            "GraphServiceSupervisor: Mailbox error getting graph data: {}",
+                            e
+                        );
                         Err(format!("Mailbox error: {}", e))
                     }
                 }
@@ -1541,14 +1568,22 @@ impl Handler<msgs::ReloadGraphFromDatabase> for GraphServiceSupervisor {
 
 /// Handler for ComputeShortestPaths - delegates to GraphStateActor
 impl Handler<msgs::ComputeShortestPaths> for GraphServiceSupervisor {
-    type Result = ResponseFuture<Result<crate::ports::gpu_semantic_analyzer::PathfindingResult, String>>;
+    type Result =
+        ResponseFuture<Result<crate::ports::gpu_semantic_analyzer::PathfindingResult, String>>;
 
-    fn handle(&mut self, msg: msgs::ComputeShortestPaths, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        msg: msgs::ComputeShortestPaths,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         if let Some(ref graph_state_addr) = self.graph_state {
             let addr = graph_state_addr.clone();
             Box::pin(async move {
                 addr.send(msg).await.unwrap_or_else(|e| {
-                    error!("Failed to forward ComputeShortestPaths to GraphStateActor: {}", e);
+                    error!(
+                        "Failed to forward ComputeShortestPaths to GraphStateActor: {}",
+                        e
+                    );
                     Err(format!("Message forwarding failed: {}", e))
                 })
             })
@@ -1567,7 +1602,10 @@ impl Handler<msgs::UpdateGraphData> for GraphServiceSupervisor {
             Box::pin(
                 async move {
                     addr.send(msg).await.unwrap_or_else(|e| {
-                        error!("Failed to forward UpdateGraphData to GraphStateActor: {}", e);
+                        error!(
+                            "Failed to forward UpdateGraphData to GraphStateActor: {}",
+                            e
+                        );
                         Err(format!("Message forwarding failed: {}", e))
                     })
                 }
@@ -1575,7 +1613,9 @@ impl Handler<msgs::UpdateGraphData> for GraphServiceSupervisor {
             )
         } else {
             warn!("UpdateGraphData: GraphStateActor not initialized");
-            Box::pin(actix::fut::ready(Err("GraphStateActor not initialized".to_string())))
+            Box::pin(actix::fut::ready(Err(
+                "GraphStateActor not initialized".to_string()
+            )))
         }
     }
 }
@@ -1592,7 +1632,10 @@ impl Handler<msgs::AddNodesFromMetadata> for GraphServiceSupervisor {
             let addr = graph_state_addr.clone();
             Box::pin(async move {
                 addr.send(msg).await.unwrap_or_else(|e| {
-                    error!("Failed to forward AddNodesFromMetadata to GraphStateActor: {}", e);
+                    error!(
+                        "Failed to forward AddNodesFromMetadata to GraphStateActor: {}",
+                        e
+                    );
                     Err(format!("Message forwarding failed: {}", e))
                 })
             })
@@ -1615,7 +1658,9 @@ impl Handler<msgs::StartSimulation> for GraphServiceSupervisor {
             Box::pin(actix::fut::ready(Ok(())))
         } else {
             warn!("StartSimulation: PhysicsOrchestratorActor not available");
-            Box::pin(actix::fut::ready(Err("Physics actor not initialized".to_string())))
+            Box::pin(actix::fut::ready(Err(
+                "Physics actor not initialized".to_string()
+            )))
         }
     }
 }
@@ -1629,7 +1674,10 @@ impl Handler<msgs::SimulationStep> for GraphServiceSupervisor {
             Box::pin(
                 async move {
                     addr.send(msg).await.unwrap_or_else(|e| {
-                        error!("Failed to forward SimulationStep to PhysicsOrchestratorActor: {}", e);
+                        error!(
+                            "Failed to forward SimulationStep to PhysicsOrchestratorActor: {}",
+                            e
+                        );
                         Err(format!("Message forwarding failed: {}", e))
                     })
                 }
@@ -1637,14 +1685,18 @@ impl Handler<msgs::SimulationStep> for GraphServiceSupervisor {
             )
         } else {
             warn!("SimulationStep: PhysicsOrchestratorActor not initialized");
-            Box::pin(actix::fut::ready(Err("Physics actor not initialized".to_string())))
+            Box::pin(actix::fut::ready(Err(
+                "Physics actor not initialized".to_string()
+            )))
         }
     }
 }
 
 impl Handler<msgs::GetBotsGraphData> for GraphServiceSupervisor {
-    type Result =
-        ResponseActFuture<Self, Result<std::sync::Arc<visionclaw_domain::models::graph::GraphData>, String>>;
+    type Result = ResponseActFuture<
+        Self,
+        Result<std::sync::Arc<visionclaw_domain::models::graph::GraphData>, String>,
+    >;
 
     fn handle(&mut self, msg: msgs::GetBotsGraphData, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(ref graph_state_addr) = self.graph_state {
@@ -1654,7 +1706,10 @@ impl Handler<msgs::GetBotsGraphData> for GraphServiceSupervisor {
                     match addr.send(msg).await {
                         Ok(result) => result,
                         Err(e) => {
-                            error!("Failed to forward GetBotsGraphData to GraphStateActor: {}", e);
+                            error!(
+                                "Failed to forward GetBotsGraphData to GraphStateActor: {}",
+                                e
+                            );
                             Err(format!("Message forwarding failed: {}", e))
                         }
                     }
@@ -1663,7 +1718,9 @@ impl Handler<msgs::GetBotsGraphData> for GraphServiceSupervisor {
             )
         } else {
             warn!("GetBotsGraphData: GraphStateActor not initialized");
-            Box::pin(actix::fut::ready(Err("GraphStateActor not initialized".to_string())))
+            Box::pin(actix::fut::ready(Err(
+                "GraphStateActor not initialized".to_string()
+            )))
         }
     }
 }
@@ -1689,7 +1746,9 @@ impl Handler<msgs::UpdateSimulationParams> for GraphServiceSupervisor {
             )
         } else {
             warn!("UpdateSimulationParams: PhysicsOrchestratorActor not initialized");
-            Box::pin(actix::fut::ready(Err("Physics actor not initialized".to_string())))
+            Box::pin(actix::fut::ready(Err(
+                "Physics actor not initialized".to_string()
+            )))
         }
     }
 }
@@ -1697,17 +1756,16 @@ impl Handler<msgs::UpdateSimulationParams> for GraphServiceSupervisor {
 impl Handler<msgs::ForceResumePhysics> for GraphServiceSupervisor {
     type Result = ResponseActFuture<Self, Result<(), VisionClawError>>;
 
-    fn handle(
-        &mut self,
-        msg: msgs::ForceResumePhysics,
-        _ctx: &mut Self::Context,
-    ) -> Self::Result {
+    fn handle(&mut self, msg: msgs::ForceResumePhysics, _ctx: &mut Self::Context) -> Self::Result {
         if let Some(ref physics_addr) = self.physics {
             let addr = physics_addr.clone();
             Box::pin(
                 async move {
                     addr.send(msg).await.unwrap_or_else(|e| {
-                        error!("Failed to forward ForceResumePhysics to PhysicsOrchestratorActor: {}", e);
+                        error!(
+                            "Failed to forward ForceResumePhysics to PhysicsOrchestratorActor: {}",
+                            e
+                        );
                         Err(VisionClawError::Actor(ActorError::ActorNotAvailable(
                             format!("ForceResumePhysics forwarding failed: {}", e),
                         )))
@@ -1717,9 +1775,9 @@ impl Handler<msgs::ForceResumePhysics> for GraphServiceSupervisor {
             )
         } else {
             warn!("ForceResumePhysics: PhysicsOrchestratorActor not initialized");
-            Box::pin(actix::fut::ready(Err(VisionClawError::Actor(ActorError::ActorNotAvailable(
-                "Physics".to_string(),
-            )))))
+            Box::pin(actix::fut::ready(Err(VisionClawError::Actor(
+                ActorError::ActorNotAvailable("Physics".to_string()),
+            ))))
         }
     }
 }
@@ -1867,7 +1925,9 @@ impl Handler<msgs::UpdateNodePositions> for GraphServiceSupervisor {
 
         // Forward to PhysicsOrchestratorActor for WebSocket push broadcast
         if let Some(ref physics_addr) = self.physics {
-            debug!("Forwarding UpdateNodePositions to PhysicsOrchestratorActor and GraphStateActor");
+            debug!(
+                "Forwarding UpdateNodePositions to PhysicsOrchestratorActor and GraphStateActor"
+            );
             physics_addr.do_send(msg);
             Ok(())
         } else {
@@ -1881,13 +1941,22 @@ impl Handler<msgs::UpdateNodePositions> for GraphServiceSupervisor {
 impl Handler<msgs::NodeInteractionMessage> for GraphServiceSupervisor {
     type Result = Result<(), crate::errors::VisionClawError>;
 
-    fn handle(&mut self, msg: msgs::NodeInteractionMessage, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        msg: msgs::NodeInteractionMessage,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         if let Some(ref physics_addr) = self.physics {
-            debug!("Forwarding NodeInteractionMessage ({:?}) to PhysicsOrchestratorActor", msg.interaction_type);
+            debug!(
+                "Forwarding NodeInteractionMessage ({:?}) to PhysicsOrchestratorActor",
+                msg.interaction_type
+            );
             physics_addr.do_send(msg);
             Ok(())
         } else {
-            debug!("Cannot forward NodeInteractionMessage: PhysicsOrchestratorActor not initialized");
+            debug!(
+                "Cannot forward NodeInteractionMessage: PhysicsOrchestratorActor not initialized"
+            );
             Err(crate::errors::VisionClawError::Generic {
                 message: "PhysicsOrchestratorActor not initialized".to_string(),
                 source: None,
@@ -1949,7 +2018,11 @@ impl Handler<msgs::GetGraphStateActor> for GraphServiceSupervisor {
 impl Handler<msgs::GetPhysicsOrchestratorActor> for GraphServiceSupervisor {
     type Result = Result<Addr<PhysicsOrchestratorActor>, String>;
 
-    fn handle(&mut self, _msg: msgs::GetPhysicsOrchestratorActor, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        _msg: msgs::GetPhysicsOrchestratorActor,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         self.physics
             .clone()
             .ok_or_else(|| "PhysicsOrchestratorActor not available".to_string())
@@ -1965,7 +2038,10 @@ impl Handler<msgs::GetNodeTypeArrays> for GraphServiceSupervisor {
             let addr = graph_state_addr.clone();
             Box::pin(async move {
                 addr.send(msg).await.unwrap_or_else(|e| {
-                    error!("Failed to forward GetNodeTypeArrays to GraphStateActor: {}", e);
+                    error!(
+                        "Failed to forward GetNodeTypeArrays to GraphStateActor: {}",
+                        e
+                    );
                     msgs::NodeTypeArrays::default()
                 })
             })
@@ -1984,7 +2060,10 @@ impl Handler<msgs::GetNodeIdMapping> for GraphServiceSupervisor {
             let addr = graph_state_addr.clone();
             Box::pin(async move {
                 addr.send(msg).await.unwrap_or_else(|e| {
-                    error!("Failed to forward GetNodeIdMapping to GraphStateActor: {}", e);
+                    error!(
+                        "Failed to forward GetNodeIdMapping to GraphStateActor: {}",
+                        e
+                    );
                     msgs::NodeIdMapping::default()
                 })
             })

@@ -4,8 +4,8 @@
 //! This module contains the authoritative struct definitions for GPU operations.
 //! All other modules should import from here to ensure consistency.
 
-use serde::{Deserialize, Serialize};
 use crate::utils::gpu_safety::GPUSafetyError;
+use serde::{Deserialize, Serialize};
 
 // =============================================================================
 // RenderData - CANONICAL DEFINITION
@@ -140,11 +140,7 @@ pub struct BinaryNodeData {
 }
 
 impl BinaryNodeData {
-    pub fn new(
-        node_id: u32,
-        position: [f32; 3],
-        velocity: [f32; 3],
-    ) -> Self {
+    pub fn new(node_id: u32, position: [f32; 3], velocity: [f32; 3]) -> Self {
         Self {
             node_id,
             x: position[0],
@@ -271,11 +267,7 @@ mod tests {
     #[test]
     fn test_binary_node_data_validation() {
         // Valid data
-        let valid = BinaryNodeData::new(
-            1,
-            [10.0, 20.0, 30.0],
-            [1.0, 2.0, 3.0],
-        );
+        let valid = BinaryNodeData::new(1, [10.0, 20.0, 30.0], [1.0, 2.0, 3.0]);
         assert!(valid.validate().is_ok());
 
         // Invalid: NaN

@@ -90,7 +90,12 @@ fn stage_instants(row: &LoopTraceRow) -> (i64, i64, Option<i64>, Option<i64>) {
     let body_ms = |key: &str| row.proposal_json.get(key).and_then(|v| v.as_i64());
     let propose = body_ms("proposed_at_ms").unwrap_or(created_ms);
     let queued = body_ms("queued_at_ms").unwrap_or(created_ms);
-    (propose, queued, row.decided_at_ms, row.writeback_committed_at_ms)
+    (
+        propose,
+        queued,
+        row.decided_at_ms,
+        row.writeback_committed_at_ms,
+    )
 }
 
 /// Assemble the five-stage insight-loop trace for one joined row (REC-10). Pure:
@@ -124,7 +129,11 @@ pub fn build_trace(row: &LoopTraceRow) -> InsightLoopTrace {
     let decision = LoopStage {
         stage: STAGE_DECISION,
         label: "Broker decided",
-        status: if decision_at.is_some() { "complete" } else { "pending" },
+        status: if decision_at.is_some() {
+            "complete"
+        } else {
+            "pending"
+        },
         at_ms: decision_at,
         detail: row.decision_outcome.clone().map(|o| format!("outcome={o}")),
     };
@@ -220,11 +229,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn row(
-        decided: Option<i64>,
-        triggered: Option<bool>,
-        merged: Option<i64>,
-    ) -> LoopTraceRow {
+    fn row(decided: Option<i64>, triggered: Option<bool>, merged: Option<i64>) -> LoopTraceRow {
         LoopTraceRow {
             case_id: "case-loop".into(),
             category: Some("knowledge_enrichment".into()),
@@ -304,8 +309,16 @@ mod tests {
         r.proposal_json = json!({ "target_path": "pages/bar.md" }); // no stamps
         r.created_at_s = 2; // → 2_000 ms
         let t = build_trace(&r);
-        assert_eq!(t.stages[0].at_ms, Some(2_000), "propose falls back to created_at*1000");
-        assert_eq!(t.stages[1].at_ms, Some(2_000), "queued falls back to created_at*1000");
+        assert_eq!(
+            t.stages[0].at_ms,
+            Some(2_000),
+            "propose falls back to created_at*1000"
+        );
+        assert_eq!(
+            t.stages[1].at_ms,
+            Some(2_000),
+            "queued falls back to created_at*1000"
+        );
         // created_at(2000) ≤ decided(3000) ≤ merged(4000): still monotonic.
         assert!(t.monotonic);
         assert_eq!(t.mesh_velocity_ms, Some(2_000));

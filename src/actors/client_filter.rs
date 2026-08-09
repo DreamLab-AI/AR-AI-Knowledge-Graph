@@ -4,8 +4,8 @@
 //! are visible to each client based on their filter criteria.
 
 use crate::actors::client_coordinator_actor::{ClientFilter, FilterMode};
-use visionclaw_domain::models::graph::GraphData;
 use log::{debug, trace};
+use visionclaw_domain::models::graph::GraphData;
 
 /// Recomputes which node IDs pass the client's filter criteria
 /// Called when:
@@ -54,25 +54,32 @@ pub fn recompute_filtered_nodes(filter: &mut ClientFilter, graph_data: &GraphDat
 
         // Extract quality and authority scores from node.metadata HashMap (loaded from Oxigraph store)
         // Falls back to graph_data.metadata if not found in node
-        let quality = node.metadata.get("quality_score")
+        let quality = node
+            .metadata
+            .get("quality_score")
             .and_then(|s| s.parse::<f64>().ok())
             .or_else(|| {
-                graph_data.metadata.get(&node.metadata_id)
+                graph_data
+                    .metadata
+                    .get(&node.metadata_id)
                     .and_then(|m| m.quality_score)
             })
             .unwrap_or(0.5); // Default to middle value
 
-        let authority = node.metadata.get("authority_score")
+        let authority = node
+            .metadata
+            .get("authority_score")
             .and_then(|s| s.parse::<f64>().ok())
             .or_else(|| {
-                graph_data.metadata.get(&node.metadata_id)
+                graph_data
+                    .metadata
+                    .get(&node.metadata_id)
                     .and_then(|m| m.authority_score)
             })
             .unwrap_or(0.5);
 
         // Check individual thresholds
-        let passes_quality =
-            !filter.filter_by_quality || quality >= filter.quality_threshold;
+        let passes_quality = !filter.filter_by_quality || quality >= filter.quality_threshold;
         let passes_authority =
             !filter.filter_by_authority || authority >= filter.authority_threshold;
 
@@ -144,8 +151,7 @@ pub fn node_passes_filter(
     let authority = authority_score.unwrap_or(0.5);
 
     let passes_quality = !filter.filter_by_quality || quality >= filter.quality_threshold;
-    let passes_authority =
-        !filter.filter_by_authority || authority >= filter.authority_threshold;
+    let passes_authority = !filter.filter_by_authority || authority >= filter.authority_threshold;
 
     match filter.filter_mode {
         FilterMode::And => passes_quality && passes_authority,
@@ -156,9 +162,9 @@ pub fn node_passes_filter(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use visionclaw_domain::models::metadata::{Metadata, MetadataStore};
     use visionclaw_domain::models::node::Node;
-    use std::collections::HashMap;
 
     fn create_test_graph() -> GraphData {
         let mut graph = GraphData::new();
@@ -307,7 +313,7 @@ mod tests {
         filter.filter_by_quality = true;
         filter.filter_by_authority = false;
         filter.quality_threshold = 0.6; // Above default 0.5
-        // Use And mode for single-criterion filtering
+                                        // Use And mode for single-criterion filtering
         filter.filter_mode = FilterMode::And;
 
         recompute_filtered_nodes(&mut filter, &graph);
@@ -334,7 +340,10 @@ mod tests {
 
         recompute_filtered_nodes(&mut filter, &graph);
 
-        assert!(filter.filtered_node_ids.contains(&10), "stub should be included when include_linked_pages=true");
+        assert!(
+            filter.filtered_node_ids.contains(&10),
+            "stub should be included when include_linked_pages=true"
+        );
     }
 
     #[test]
@@ -346,7 +355,10 @@ mod tests {
 
         recompute_filtered_nodes(&mut filter, &graph);
 
-        assert!(!filter.filtered_node_ids.contains(&10), "stub should be excluded when include_linked_pages=false");
+        assert!(
+            !filter.filtered_node_ids.contains(&10),
+            "stub should be excluded when include_linked_pages=false"
+        );
         // Regular page nodes still pass
         assert!(filter.filtered_node_ids.contains(&1));
         assert!(filter.filtered_node_ids.contains(&2));

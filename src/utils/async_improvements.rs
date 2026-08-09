@@ -33,7 +33,7 @@ impl MCPConnectionPool {
             max_connections_per_host,
             connection_timeout,
             idle_timeout,
-            semaphore: Arc::new(Semaphore::new(max_connections_per_host * 10)), 
+            semaphore: Arc::new(Semaphore::new(max_connections_per_host * 10)),
         }
     }
 
@@ -45,7 +45,6 @@ impl MCPConnectionPool {
         let _permit = self.semaphore.acquire().await?;
         let key = format!("{}:{}", host, port);
 
-        
         {
             let mut connections = self.connections.write().await;
             if let Some(conn) = connections.get_mut(&key) {
@@ -53,15 +52,12 @@ impl MCPConnectionPool {
                     conn.in_use = true;
                     conn.last_used = Instant::now();
                     debug!("Reusing existing connection to {}", key);
-                    
-                    
-                    
+
                     return Err("Connection reuse needs proper implementation".into());
                 }
             }
         }
 
-        
         debug!("Creating new connection to {}", key);
         let stream = tokio::time::timeout(
             self.connection_timeout,
@@ -69,11 +65,8 @@ impl MCPConnectionPool {
         )
         .await??;
 
-        
         {
             let _connections = self.connections.write().await;
-            
-            
         }
 
         Ok(stream)
@@ -106,7 +99,6 @@ impl MCPConnectionPool {
         }
     }
 
-    
     pub fn start_cleanup_task(self: Arc<Self>, cancellation_token: CancellationToken) {
         let pool = self;
         let cleanup_interval = Duration::from_secs(60);
@@ -252,7 +244,6 @@ impl TaskManager {
         self.tasks.read().await.len()
     }
 
-    
     pub async fn wait_for_all_tasks(&self, timeout: Option<Duration>) {
         let tasks = {
             let mut tasks_guard = self.tasks.write().await;

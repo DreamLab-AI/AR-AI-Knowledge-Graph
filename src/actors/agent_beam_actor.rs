@@ -392,7 +392,11 @@ mod tests {
     fn agent_flag_is_set_and_idempotent() {
         let flagged = stamp_agent_flag(7);
         assert_eq!(flagged, 0x80000007, "high bit set, low bits preserved");
-        assert_eq!(flagged & AGENT_NODE_FLAG, AGENT_NODE_FLAG, "flag bit present");
+        assert_eq!(
+            flagged & AGENT_NODE_FLAG,
+            AGENT_NODE_FLAG,
+            "flag bit present"
+        );
         assert_eq!(
             stamp_agent_flag(flagged),
             flagged,
@@ -433,17 +437,25 @@ mod tests {
         use crate::utils::binary_protocol::decode_agent_actions;
 
         let mut coalescer = BeamCoalescer::new();
-        assert!(!coalescer.push(project_action(&envelope(7, 4242))), "no eviction under cap");
+        assert!(
+            !coalescer.push(project_action(&envelope(7, 4242))),
+            "no eviction under cap"
+        );
         assert_eq!(coalescer.len(), 1);
 
-        let frame = coalescer.encode_pending().expect("one pending ⇒ Some frame");
+        let frame = coalescer
+            .encode_pending()
+            .expect("one pending ⇒ Some frame");
         // The wire frame leads with the MessageType::AgentAction tag (0x23); the
         // browser's decodeAgentActions consumes the batch body after that byte.
         assert_eq!(frame[0], 0x23, "frame must lead with the AGENT_ACTION tag");
 
         let decoded = decode_agent_actions(&frame[1..]).expect("batch decodes");
         assert_eq!(decoded.len(), 1, "count=1 round-trips");
-        assert_eq!(decoded[0].source_agent_id, 0x80000007, "flag survives the batch round-trip");
+        assert_eq!(
+            decoded[0].source_agent_id, 0x80000007,
+            "flag survives the batch round-trip"
+        );
         assert_eq!(decoded[0].target_node_id, 4242);
     }
 
@@ -486,7 +498,11 @@ mod tests {
 
         assert_eq!(coalescer.len(), MAX_PENDING_ACTIONS, "backlog is capped");
         assert_eq!(evictions, 2, "two pushes reported an eviction");
-        assert_eq!(coalescer.dropped_total(), 2, "drop counter matches evictions");
+        assert_eq!(
+            coalescer.dropped_total(),
+            2,
+            "drop counter matches evictions"
+        );
 
         // Drop-OLDEST: ids 0 and 1 are gone; the surviving front is id 2.
         let frame = coalescer.encode_pending().expect("Some frame");
@@ -508,12 +524,18 @@ mod tests {
     fn empty_backlog_encodes_to_none_and_clear_empties() {
         let mut coalescer = BeamCoalescer::new();
         assert!(coalescer.is_empty());
-        assert!(coalescer.encode_pending().is_none(), "nothing pending ⇒ no frame");
+        assert!(
+            coalescer.encode_pending().is_none(),
+            "nothing pending ⇒ no frame"
+        );
 
         coalescer.push(project_action(&envelope(9, 99)));
         assert!(!coalescer.is_empty());
         coalescer.clear();
-        assert!(coalescer.is_empty(), "clear drains the backlog after dispatch");
+        assert!(
+            coalescer.is_empty(),
+            "clear drains the backlog after dispatch"
+        );
         assert!(coalescer.encode_pending().is_none());
     }
 }

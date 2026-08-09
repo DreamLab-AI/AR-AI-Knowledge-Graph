@@ -62,13 +62,17 @@ pub fn compute_distances_simd(
         if has_avx2() {
             // SAFETY: feature check guarantees AVX2+FMA are available on this CPU.
             unsafe {
-                compute_distances_avx2(pos_x, pos_y, pos_z, other_x, other_y, other_z, distances, n);
+                compute_distances_avx2(
+                    pos_x, pos_y, pos_z, other_x, other_y, other_z, distances, n,
+                );
             }
             return;
         }
         if has_sse41() {
             unsafe {
-                compute_distances_sse41(pos_x, pos_y, pos_z, other_x, other_y, other_z, distances, n);
+                compute_distances_sse41(
+                    pos_x, pos_y, pos_z, other_x, other_y, other_z, distances, n,
+                );
             }
             return;
         }
@@ -237,7 +241,9 @@ pub fn accumulate_forces_simd(
         }
     }
 
-    accumulate_forces_scalar(forces_x, forces_y, forces_z, delta_x, delta_y, delta_z, magnitudes, n);
+    accumulate_forces_scalar(
+        forces_x, forces_y, forces_z, delta_x, delta_y, delta_z, magnitudes, n,
+    );
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -388,8 +394,8 @@ pub fn integrate_positions_simd(
         if has_avx2() {
             unsafe {
                 integrate_positions_avx2(
-                    pos_x, pos_y, pos_z, vel_x, vel_y, vel_z, force_x, force_y, force_z, mass,
-                    dt, damping, n,
+                    pos_x, pos_y, pos_z, vel_x, vel_y, vel_z, force_x, force_y, force_z, mass, dt,
+                    damping, n,
                 );
             }
             return;
@@ -397,8 +403,8 @@ pub fn integrate_positions_simd(
         if has_sse41() {
             unsafe {
                 integrate_positions_sse41(
-                    pos_x, pos_y, pos_z, vel_x, vel_y, vel_z, force_x, force_y, force_z, mass,
-                    dt, damping, n,
+                    pos_x, pos_y, pos_z, vel_x, vel_y, vel_z, force_x, force_y, force_z, mass, dt,
+                    damping, n,
                 );
             }
             return;
@@ -542,9 +548,18 @@ unsafe fn integrate_positions_sse41(
         let py = _mm_loadu_ps(pos_y.as_ptr().add(i));
         let pz = _mm_loadu_ps(pos_z.as_ptr().add(i));
 
-        _mm_storeu_ps(pos_x.as_mut_ptr().add(i), _mm_add_ps(px, _mm_mul_ps(vx, v_dt)));
-        _mm_storeu_ps(pos_y.as_mut_ptr().add(i), _mm_add_ps(py, _mm_mul_ps(vy, v_dt)));
-        _mm_storeu_ps(pos_z.as_mut_ptr().add(i), _mm_add_ps(pz, _mm_mul_ps(vz, v_dt)));
+        _mm_storeu_ps(
+            pos_x.as_mut_ptr().add(i),
+            _mm_add_ps(px, _mm_mul_ps(vx, v_dt)),
+        );
+        _mm_storeu_ps(
+            pos_y.as_mut_ptr().add(i),
+            _mm_add_ps(py, _mm_mul_ps(vy, v_dt)),
+        );
+        _mm_storeu_ps(
+            pos_z.as_mut_ptr().add(i),
+            _mm_add_ps(pz, _mm_mul_ps(vz, v_dt)),
+        );
     }
 
     let tail = chunks * 4;
@@ -699,10 +714,14 @@ pub fn compute_stress_batch_simd(
     #[cfg(target_arch = "x86_64")]
     {
         if has_avx2() {
-            return unsafe { compute_stress_batch_avx2(ideal_distances, actual_distances, weights, n) };
+            return unsafe {
+                compute_stress_batch_avx2(ideal_distances, actual_distances, weights, n)
+            };
         }
         if has_sse41() {
-            return unsafe { compute_stress_batch_sse41(ideal_distances, actual_distances, weights, n) };
+            return unsafe {
+                compute_stress_batch_sse41(ideal_distances, actual_distances, weights, n)
+            };
         }
     }
 
@@ -788,12 +807,7 @@ unsafe fn compute_stress_batch_sse41(
     total
 }
 
-fn compute_stress_batch_scalar(
-    ideal: &[f32],
-    actual: &[f32],
-    weights: &[f32],
-    n: usize,
-) -> f32 {
+fn compute_stress_batch_scalar(ideal: &[f32], actual: &[f32], weights: &[f32], n: usize) -> f32 {
     let mut total = 0.0f32;
     for i in 0..n {
         let diff = ideal[i] - actual[i];
@@ -988,8 +1002,7 @@ mod tests {
         let mass = [1.0f32; 4];
 
         integrate_positions_simd(
-            &mut px, &mut py, &mut pz, &mut vx, &mut vy, &mut vz, &fx, &fy, &fz, &mass, 0.1,
-            0.99,
+            &mut px, &mut py, &mut pz, &mut vx, &mut vy, &mut vz, &fx, &fy, &fz, &mass, 0.1, 0.99,
         );
 
         // vel_x = (0 + 10/1 * 0.1) * 0.99 = 0.99

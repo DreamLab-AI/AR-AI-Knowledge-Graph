@@ -172,9 +172,8 @@ impl AgentEventsIngestWs {
         if CTC_CANARY_FIRED.swap(true, Ordering::SeqCst) {
             return;
         }
-        let evidence = format!(
-            "agent-events envelope carried a populated typed CTC field (action={action})"
-        );
+        let evidence =
+            format!("agent-events envelope carried a populated typed CTC field (action={action})");
         actix::spawn(async move {
             if let Err(e) = harness.observe(CANARY_REC3_CTC, &evidence).await {
                 warn!("[agent-events] failed to record {CANARY_REC3_CTC} fire: {e}");
@@ -275,8 +274,9 @@ async fn authenticate(
                 );
                 Ok(None)
             }
-            None => Err(HttpResponse::Unauthorized()
-                .body("Invalid or expired authentication token")),
+            None => {
+                Err(HttpResponse::Unauthorized().body("Invalid or expired authentication token"))
+            }
         },
         _ if is_insecure_defaults_allowed() => {
             warn!("agent-events: unauthenticated ingest accepted (dev / insecure defaults)");

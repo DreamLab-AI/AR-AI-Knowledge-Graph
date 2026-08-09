@@ -105,7 +105,6 @@ impl RateLimiter {
             last_cleanup: Arc::new(RwLock::new(Instant::now())),
         };
 
-
         limiter.start_cleanup_task();
         limiter
     }
@@ -115,8 +114,8 @@ impl RateLimiter {
     fn maybe_probabilistic_cleanup(&self) {
         // 1% chance per request to trigger cleanup check
         // This ensures cleanup happens even under sustained load between intervals
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
         let now = Instant::now();
         let mut hasher = DefaultHasher::new();
@@ -149,11 +148,16 @@ impl RateLimiter {
                         .map(|(key, _)| key.clone());
 
                     if let Some(key) = oldest_key {
-                        debug!("Evicting oldest rate limit entry to stay within bounds: {}", key);
+                        debug!(
+                            "Evicting oldest rate limit entry to stay within bounds: {}",
+                            key
+                        );
                         clients.remove(&key);
                     } else {
                         // All entries are banned, can't evict - fail open for new client
-                        warn!("Rate limiter at capacity with all banned entries, allowing new client");
+                        warn!(
+                            "Rate limiter at capacity with all banned entries, allowing new client"
+                        );
                         return true;
                     }
                 }
@@ -171,7 +175,10 @@ impl RateLimiter {
                 allowed
             }
             Err(e) => {
-                warn!("RwLock poisoned in rate limiter (is_allowed): {} - Allowing request", e);
+                warn!(
+                    "RwLock poisoned in rate limiter (is_allowed): {} - Allowing request",
+                    e
+                );
                 // Fail open: allow the request to continue
                 true
             }
@@ -190,7 +197,10 @@ impl RateLimiter {
                 entry.tokens
             }
             Err(e) => {
-                warn!("RwLock poisoned in rate limiter (remaining_tokens): {} - Returning burst size", e);
+                warn!(
+                    "RwLock poisoned in rate limiter (remaining_tokens): {} - Returning burst size",
+                    e
+                );
                 self.config.burst_size
             }
         }
@@ -210,7 +220,10 @@ impl RateLimiter {
                 }
             }
             Err(e) => {
-                warn!("RwLock poisoned in rate limiter (reset_time): {} - Returning 0", e);
+                warn!(
+                    "RwLock poisoned in rate limiter (reset_time): {} - Returning 0",
+                    e
+                );
                 Duration::from_secs(0)
             }
         }
@@ -219,14 +232,15 @@ impl RateLimiter {
     /// Check if a client is currently banned
     pub fn is_banned(&self, client_id: &str) -> bool {
         match self.clients.read() {
-            Ok(clients) => {
-                clients
-                    .get(client_id)
-                    .map(|entry| entry.is_banned())
-                    .unwrap_or(false)
-            }
+            Ok(clients) => clients
+                .get(client_id)
+                .map(|entry| entry.is_banned())
+                .unwrap_or(false),
             Err(e) => {
-                warn!("RwLock poisoned in rate limiter (is_banned): {} - Returning false", e);
+                warn!(
+                    "RwLock poisoned in rate limiter (is_banned): {} - Returning false",
+                    e
+                );
                 false
             }
         }
@@ -333,7 +347,9 @@ impl RateLimiter {
                 let banned_clients = clients.values().filter(|entry| entry.is_banned()).count();
                 let active_clients = clients
                     .values()
-                    .filter(|entry| now.duration_since(entry.last_refill) < Duration::from_secs(300))
+                    .filter(|entry| {
+                        now.duration_since(entry.last_refill) < Duration::from_secs(300)
+                    })
                     .count();
 
                 RateLimitStats {
@@ -344,7 +360,10 @@ impl RateLimiter {
                 }
             }
             Err(e) => {
-                warn!("RwLock poisoned in rate limiter (get_stats): {} - Returning empty stats", e);
+                warn!(
+                    "RwLock poisoned in rate limiter (get_stats): {} - Returning empty stats",
+                    e
+                );
                 RateLimitStats {
                     total_clients: 0,
                     banned_clients: 0,
@@ -365,7 +384,6 @@ pub struct RateLimitStats {
 }
 
 pub fn extract_client_id(req: &HttpRequest) -> String {
-
     let real_ip = req
         .headers()
         .get("X-Real-IP")
@@ -373,7 +391,6 @@ pub fn extract_client_id(req: &HttpRequest) -> String {
         .and_then(|hv| hv.to_str().ok())
         .and_then(|s| s.split(',').next())
         .and_then(|s| s.trim().parse::<IpAddr>().ok());
-
 
     let ip = real_ip.or_else(|| req.peer_addr().map(|addr| addr.ip()));
 
@@ -439,7 +456,6 @@ pub fn create_rate_limit_response(client_id: &str, limiter: &RateLimiter) -> Res
 pub struct EndpointRateLimits;
 
 impl EndpointRateLimits {
-
     pub fn settings_update() -> RateLimitConfig {
         RateLimitConfig {
             requests_per_minute: 30,
@@ -447,7 +463,6 @@ impl EndpointRateLimits {
             ..Default::default()
         }
     }
-
 
     pub fn ragflow_chat() -> RateLimitConfig {
         RateLimitConfig {
@@ -457,7 +472,6 @@ impl EndpointRateLimits {
         }
     }
 
-
     pub fn bots_operations() -> RateLimitConfig {
         RateLimitConfig {
             requests_per_minute: 40,
@@ -466,7 +480,6 @@ impl EndpointRateLimits {
         }
     }
 
-
     pub fn health_check() -> RateLimitConfig {
         RateLimitConfig {
             requests_per_minute: 120,
@@ -474,7 +487,6 @@ impl EndpointRateLimits {
             ..Default::default()
         }
     }
-
 
     pub fn socket_flow_updates() -> RateLimitConfig {
         RateLimitConfig {
@@ -485,7 +497,6 @@ impl EndpointRateLimits {
             max_violations: 10,
         }
     }
-
 
     pub fn default() -> RateLimitConfig {
         RateLimitConfig::default()
@@ -507,11 +518,9 @@ mod tests {
         let limiter = RateLimiter::new(config);
         let client_id = "test_client";
 
-
         for _ in 0..5 {
             assert!(limiter.is_allowed(client_id));
         }
-
 
         assert!(!limiter.is_allowed(client_id));
     }
@@ -526,13 +535,10 @@ mod tests {
         let limiter = RateLimiter::new(config);
         let client_id = "test_client_refill";
 
-
         assert!(limiter.is_allowed(client_id));
         assert!(!limiter.is_allowed(client_id));
 
-
         tokio::time::sleep(Duration::from_secs(2)).await;
-
 
         assert!(limiter.is_allowed(client_id));
     }
@@ -549,11 +555,9 @@ mod tests {
         let limiter = RateLimiter::new(config);
         let client_id = "test_client_ban";
 
-
         assert!(limiter.is_allowed(client_id));
         assert!(!limiter.is_allowed(client_id));
         assert!(!limiter.is_allowed(client_id));
-
 
         assert!(limiter.is_banned(client_id));
         assert!(!limiter.is_allowed(client_id));

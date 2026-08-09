@@ -48,7 +48,10 @@ impl CanonicalState {
         let mut hasher = Sha256::new();
         hasher.update(&canonical_json);
         let state_hash = hex::encode(hasher.finalize());
-        Ok(Self { canonical_json, state_hash })
+        Ok(Self {
+            canonical_json,
+            state_hash,
+        })
     }
 
     /// True iff this state's hash matches a stored/expected hash. The core of the
@@ -89,8 +92,16 @@ mod tests {
 
     #[test]
     fn different_states_hash_differently() {
-        let a = CanonicalState::from_state(&S { pot_sats: 3000, owner_did: "did:nostr:aa".into() }).unwrap();
-        let b = CanonicalState::from_state(&S { pot_sats: 4000, owner_did: "did:nostr:aa".into() }).unwrap();
+        let a = CanonicalState::from_state(&S {
+            pot_sats: 3000,
+            owner_did: "did:nostr:aa".into(),
+        })
+        .unwrap();
+        let b = CanonicalState::from_state(&S {
+            pot_sats: 4000,
+            owner_did: "did:nostr:aa".into(),
+        })
+        .unwrap();
         assert_ne!(a.state_hash, b.state_hash);
         assert!(!a.matches(&b.state_hash));
     }

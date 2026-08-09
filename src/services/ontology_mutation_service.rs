@@ -20,7 +20,6 @@
 //! Notes are per-user — each user's agents write to their own namespace.
 
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine;
-use visionclaw_domain::ports::ontology_repository::{OwlAxiom, AxiomType, OntologyRepository, OwlClass};
 use crate::services::file_service::MARKDOWN_DIR;
 use crate::services::github_pr_service::GitHubPRService;
 use crate::services::ontology_conflict_gate::{evaluate as evaluate_conflicts, ProposedCandidate};
@@ -33,6 +32,9 @@ use chrono::Utc;
 use log::{error, info, warn};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use visionclaw_domain::ports::ontology_repository::{
+    AxiomType, OntologyRepository, OwlAxiom, OwlClass,
+};
 
 /// Error-string sentinel prefix: a blocking conflict-integrity report. The
 /// handler maps this to HTTP 409 and returns the serialised [`ConflictReport`].
@@ -136,7 +138,11 @@ impl OntologyMutationService {
             .collect();
 
         // Load the corpus once — reused by the conflict gate and the Whelk gate.
-        let corpus = self.ontology_repo.list_owl_classes().await.unwrap_or_default();
+        let corpus = self
+            .ontology_repo
+            .list_owl_classes()
+            .await
+            .unwrap_or_default();
 
         // W-E stage 3: conflict-integrity gate (W-A / DDD-020 I07).
         let candidate = ProposedCandidate {
@@ -369,7 +375,11 @@ impl OntologyMutationService {
             }
         }
 
-        let corpus = self.ontology_repo.list_owl_classes().await.unwrap_or_default();
+        let corpus = self
+            .ontology_repo
+            .list_owl_classes()
+            .await
+            .unwrap_or_default();
 
         // Stage 3: conflict gate over the amended candidate.
         let mut subclass_of = existing.parent_classes.clone();
@@ -377,9 +387,15 @@ impl OntologyMutationService {
         let candidate = ProposedCandidate {
             iri: target_iri.to_string(),
             label: existing.label.clone().unwrap_or_else(|| {
-                existing.preferred_term.clone().unwrap_or_else(|| target_iri.to_string())
+                existing
+                    .preferred_term
+                    .clone()
+                    .unwrap_or_else(|| target_iri.to_string())
             }),
-            entity_type: existing.class_type.clone().unwrap_or_else(|| "Class".to_string()),
+            entity_type: existing
+                .class_type
+                .clone()
+                .unwrap_or_else(|| "Class".to_string()),
             subclass_of,
             contrasts_with: extract_contrasts(&amendment.add_relationships),
         };
@@ -562,7 +578,11 @@ impl OntologyMutationService {
             _ => "GEN",
         };
 
-        let classes = self.ontology_repo.list_owl_classes().await.unwrap_or_default();
+        let classes = self
+            .ontology_repo
+            .list_owl_classes()
+            .await
+            .unwrap_or_default();
         let max_seq = classes
             .iter()
             .filter_map(|c| {
@@ -599,7 +619,11 @@ impl OntologyMutationService {
         let alt_terms_str = if proposal.alt_terms.is_empty() {
             String::new()
         } else {
-            let terms: Vec<String> = proposal.alt_terms.iter().map(|t| format!("[[{}]]", t)).collect();
+            let terms: Vec<String> = proposal
+                .alt_terms
+                .iter()
+                .map(|t| format!("[[{}]]", t))
+                .collect();
             format!("    - alt-terms:: {}\n", terms.join(", "))
         };
 
@@ -672,21 +696,39 @@ impl OntologyMutationService {
         let mut score = 0.0f32;
         let mut fields = 0.0f32;
 
-        if !proposal.preferred_term.is_empty() { score += 1.0; }
+        if !proposal.preferred_term.is_empty() {
+            score += 1.0;
+        }
         fields += 1.0;
-        if !proposal.definition.is_empty() { score += 1.0; }
+        if !proposal.definition.is_empty() {
+            score += 1.0;
+        }
         fields += 1.0;
-        if !proposal.owl_class.is_empty() { score += 1.0; }
+        if !proposal.owl_class.is_empty() {
+            score += 1.0;
+        }
         fields += 1.0;
-        if !proposal.is_subclass_of.is_empty() { score += 1.0; }
+        if !proposal.is_subclass_of.is_empty() {
+            score += 1.0;
+        }
         fields += 1.0;
-        if !proposal.physicality.is_empty() { score += 1.0; }
+        if !proposal.physicality.is_empty() {
+            score += 1.0;
+        }
         fields += 1.0;
-        if !proposal.role.is_empty() { score += 1.0; }
+        if !proposal.role.is_empty() {
+            score += 1.0;
+        }
         fields += 1.0;
 
-        if !proposal.alt_terms.is_empty() { score += 0.5; fields += 0.5; }
-        if !proposal.relationships.is_empty() { score += 0.5; fields += 0.5; }
+        if !proposal.alt_terms.is_empty() {
+            score += 0.5;
+            fields += 0.5;
+        }
+        if !proposal.relationships.is_empty() {
+            score += 0.5;
+            fields += 0.5;
+        }
 
         (score / fields).min(1.0)
     }
@@ -733,8 +775,15 @@ impl OntologyMutationService {
             term = proposal.preferred_term,
             domain = proposal.domain,
             parents = proposal.is_subclass_of.join(", "),
-            consistency_status = if consistency.consistent { "**Consistent**" } else { "❌ **Inconsistent**" },
-            consistency_detail = consistency.explanation.as_deref().unwrap_or("No logical contradictions"),
+            consistency_status = if consistency.consistent {
+                "**Consistent**"
+            } else {
+                "❌ **Inconsistent**"
+            },
+            consistency_detail = consistency
+                .explanation
+                .as_deref()
+                .unwrap_or("No logical contradictions"),
             quality = quality,
             confidence = agent_ctx.confidence,
         )
@@ -784,8 +833,16 @@ impl OntologyMutationService {
             agent_type = agent_ctx.agent_type,
             agent_id = agent_ctx.agent_id,
             user_id = agent_ctx.user_id,
-            changes = changes.iter().map(|c| format!("- {}", c)).collect::<Vec<_>>().join("\n"),
-            consistency_status = if consistency.consistent { "Consistent" } else { "❌ Inconsistent" },
+            changes = changes
+                .iter()
+                .map(|c| format!("- {}", c))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            consistency_status = if consistency.consistent {
+                "Consistent"
+            } else {
+                "❌ Inconsistent"
+            },
         )
     }
 }
@@ -811,7 +868,10 @@ fn extract_contrasts(rels: &std::collections::HashMap<String, Vec<String>>) -> V
 
 /// The plain current triples a create proposal projects into the asserted graph.
 fn create_assert_triples(proposal: &NoteProposal) -> Vec<String> {
-    let mut triples = vec![format!("<{}> <{}> <{}>", proposal.owl_class, RDF_TYPE, OWL_CLASS)];
+    let mut triples = vec![format!(
+        "<{}> <{}> <{}>",
+        proposal.owl_class, RDF_TYPE, OWL_CLASS
+    )];
     for parent in &proposal.is_subclass_of {
         triples.push(format!(
             "<{}> <{}> <{}>",

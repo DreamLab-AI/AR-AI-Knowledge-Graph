@@ -170,9 +170,7 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             // the same decision core as the agentbox `X-Agent-Key` route.
             .route(
                 "/cases/{id}/decide",
-                web::post().to(
-                    crate::handlers::enrichment_proposals_handler::decide_as_operator,
-                ),
+                web::post().to(crate::handlers::enrichment_proposals_handler::decide_as_operator),
             ),
     );
 }
@@ -209,7 +207,10 @@ mod tests {
         assert_eq!(c.status, "pending");
         assert_eq!(c.id, "case-7");
         // metadata keys the bridge reads in _enrichCase.
-        assert_eq!(c.metadata.target_path.as_deref(), Some("mainKnowledgeGraph/pages/foo.md"));
+        assert_eq!(
+            c.metadata.target_path.as_deref(),
+            Some("mainKnowledgeGraph/pages/foo.md")
+        );
         assert_eq!(c.metadata.content.as_deref(), Some("proposed body"));
         assert_eq!(c.metadata.proposed_by.as_deref(), Some("did:nostr:aaaa"));
         assert_eq!(c.metadata.enrichment_type.as_deref(), Some("wikilink"));

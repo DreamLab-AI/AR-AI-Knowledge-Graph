@@ -1,17 +1,16 @@
 // src/settings/models.rs
 //! Settings data models
 
-use serde::{Deserialize, Serialize};
 use crate::config::{PhysicsSettings, RenderingSettings};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PriorityWeighting {
-    
     Linear,
-    
+
     Exponential,
-    
+
     Quadratic,
 }
 
@@ -24,25 +23,18 @@ impl Default for PriorityWeighting {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ConstraintSettings {
-    
     pub lod_enabled: bool,
 
-    
     pub far_threshold: f32,
 
-    
     pub medium_threshold: f32,
 
-    
     pub near_threshold: f32,
 
-    
     pub priority_weighting: PriorityWeighting,
 
-    
     pub progressive_activation: bool,
 
-    
     pub activation_frames: u32,
 }
 
@@ -121,11 +113,21 @@ pub struct QualityGateSettings {
     pub type_cluster_radius: f32,
 }
 
-fn default_ontology_strength() -> f32 { 0.5 }
-fn default_dag_level_attraction() -> f32 { 0.5 }
-fn default_dag_sibling_repulsion() -> f32 { 0.3 }
-fn default_type_cluster_attraction() -> f32 { 0.3 }
-fn default_type_cluster_radius() -> f32 { 100.0 }
+fn default_ontology_strength() -> f32 {
+    0.5
+}
+fn default_dag_level_attraction() -> f32 {
+    0.5
+}
+fn default_dag_sibling_repulsion() -> f32 {
+    0.3
+}
+fn default_type_cluster_attraction() -> f32 {
+    0.3
+}
+fn default_type_cluster_radius() -> f32 {
+    100.0
+}
 
 impl Default for QualityGateSettings {
     fn default() -> Self {
@@ -141,7 +143,7 @@ impl Default for QualityGateSettings {
             gnn_physics: false,      // Off by default (advanced)
             min_fps_threshold: 30,
             max_node_count: 500000,
-            auto_adjust: true,       // Auto-adjust on by default
+            auto_adjust: true, // Auto-adjust on by default
             ontology_strength: 0.5,
             dag_level_attraction: 0.5,
             dag_sibling_repulsion: 0.3,

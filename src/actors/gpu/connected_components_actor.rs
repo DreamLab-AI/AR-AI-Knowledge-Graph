@@ -233,7 +233,11 @@ impl Handler<SetSharedGPUContext> for ConnectedComponentsActor {
 impl Handler<ComputeConnectedComponents> for ConnectedComponentsActor {
     type Result = Result<ConnectedComponentsResult, String>;
 
-    fn handle(&mut self, msg: ComputeConnectedComponents, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        msg: ComputeConnectedComponents,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         info!("ConnectedComponentsActor: Computing connected components");
 
         let start_time = Instant::now();
@@ -323,7 +327,11 @@ pub struct GetConnectedComponentsStats;
 impl Handler<GetConnectedComponentsStats> for ConnectedComponentsActor {
     type Result = MessageResult<GetConnectedComponentsStats>;
 
-    fn handle(&mut self, _msg: GetConnectedComponentsStats, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        _msg: GetConnectedComponentsStats,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         MessageResult(self.stats.clone())
     }
 }

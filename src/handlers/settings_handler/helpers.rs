@@ -61,15 +61,12 @@ pub fn extract_failed_field(physics: &Value) -> String {
 pub fn create_physics_settings_update(physics_update: Value) -> Value {
     let mut normalized_physics = physics_update.clone();
 
-
     if let Some(obj) = normalized_physics.as_object_mut() {
-
         if let Some(spring_strength) = obj.remove("springStrength") {
             if !obj.contains_key("springK") {
                 obj.insert("springK".to_string(), spring_strength);
             }
         }
-
 
         if let Some(repulsion_strength) = obj.remove("repulsionStrength") {
             if !obj.contains_key("repelK") {
@@ -77,13 +74,11 @@ pub fn create_physics_settings_update(physics_update: Value) -> Value {
             }
         }
 
-
         if let Some(attraction_strength) = obj.remove("attractionStrength") {
             if !obj.contains_key("attractionK") {
                 obj.insert("attractionK".to_string(), attraction_strength);
             }
         }
-
 
         if let Some(collision_radius) = obj.remove("collisionRadius") {
             if !obj.contains_key("separationRadius") {

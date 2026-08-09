@@ -9,16 +9,15 @@
 // ---------------------------------------------------------------------------
 
 pub use visionclaw_actors::messages::agent_messages::{
-    AgentMetrics, AgentUpdate, Bottleneck, BottleneckAnalyze, CloseTcpConnection,
-    ConnectionFailed, CoordinationPattern, CoordinationSync, EstablishTcpConnection,
-    GetAgentMetrics, GetBotsGraphData, GetCachedAgentStatuses, GetNeuralStatus,
-    GetPerformanceReport, GetSwarmStatus, InitializeJsonRpc, InitializeSwarm, LoadBalance,
-    MemoryPersist, MemorySearch, MessageFlowEvent, MetricsCollect, NeuralPredict, NeuralStatus,
-    NeuralTrain, PerformanceReport, PollAgentStatuses, PollSwarmData, PollSystemMetrics,
-    RecordPollFailure, RecordPollSuccess, RetryMCPConnection, SpawnAgent, SpawnAgentCommand,
-    StateSnapshot, SwarmDestroy, SwarmMonitor, SwarmMonitorData, SwarmScale, SwarmStatus,
-    SystemMetrics, TaskOrchestrate, TopologyOptimize, UpdateAgentCache,
-    TaskStatusChanged,
+    AgentMetrics, AgentUpdate, Bottleneck, BottleneckAnalyze, CloseTcpConnection, ConnectionFailed,
+    CoordinationPattern, CoordinationSync, EstablishTcpConnection, GetAgentMetrics,
+    GetBotsGraphData, GetCachedAgentStatuses, GetNeuralStatus, GetPerformanceReport,
+    GetSwarmStatus, InitializeJsonRpc, InitializeSwarm, LoadBalance, MemoryPersist, MemorySearch,
+    MessageFlowEvent, MetricsCollect, NeuralPredict, NeuralStatus, NeuralTrain, PerformanceReport,
+    PollAgentStatuses, PollSwarmData, PollSystemMetrics, RecordPollFailure, RecordPollSuccess,
+    RetryMCPConnection, SpawnAgent, SpawnAgentCommand, StateSnapshot, SwarmDestroy, SwarmMonitor,
+    SwarmMonitorData, SwarmScale, SwarmStatus, SystemMetrics, TaskOrchestrate, TaskStatusChanged,
+    TopologyOptimize, UpdateAgentCache,
 };
 
 // ---------------------------------------------------------------------------

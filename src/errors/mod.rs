@@ -18,30 +18,29 @@ where
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum VisionClawError {
-    
     Actor(ActorError),
-    
+
     GPU(GPUError),
-    
+
     Settings(SettingsError),
-    
+
     Network(NetworkError),
-    
+
     #[serde(serialize_with = "serialize_io_error")]
     IO(std::sync::Arc<std::io::Error>),
-    
+
     Serialization(String),
-    
+
     Speech(SpeechError),
-    
+
     GitHub(GitHubError),
-    
+
     Audio(AudioError),
-    
+
     Resource(ResourceError),
-    
+
     Performance(PerformanceError),
-    
+
     Protocol(ProtocolError),
 
     Database(DatabaseError),
@@ -59,46 +58,58 @@ pub enum VisionClawError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ActorError {
-    
-    StartupFailed { actor_name: String, reason: String },
-    
-    RuntimeFailure { actor_name: String, reason: String },
-    
+    StartupFailed {
+        actor_name: String,
+        reason: String,
+    },
+
+    RuntimeFailure {
+        actor_name: String,
+        reason: String,
+    },
+
     MessageHandlingFailed {
         message_type: String,
         reason: String,
     },
-    
+
     SupervisionFailed {
         supervisor: String,
         supervised: String,
         reason: String,
     },
-    
-    MailboxError { actor_name: String, reason: String },
-    
+
+    MailboxError {
+        actor_name: String,
+        reason: String,
+    },
+
     ActorNotAvailable(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum GPUError {
-    
     DeviceInitializationFailed(String),
-    
+
     MemoryAllocationFailed {
         requested_bytes: usize,
         reason: String,
     },
-    
-    KernelExecutionFailed { kernel_name: String, reason: String },
-    
+
+    KernelExecutionFailed {
+        kernel_name: String,
+        reason: String,
+    },
+
     DataTransferFailed {
         direction: DataTransferDirection,
         reason: String,
     },
-    
-    FallbackToCPU { reason: String },
-    
+
+    FallbackToCPU {
+        reason: String,
+    },
+
     DriverError(String),
 }
 
@@ -110,125 +121,140 @@ pub enum DataTransferDirection {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum SettingsError {
-    
     FileNotFound(String),
-    
-    ParseError { file_path: String, reason: String },
-    
+
+    ParseError {
+        file_path: String,
+        reason: String,
+    },
+
     ValidationFailed {
         setting_path: String,
         reason: String,
     },
-    
-    SaveFailed { file_path: String, reason: String },
-    
+
+    SaveFailed {
+        file_path: String,
+        reason: String,
+    },
+
     CacheError(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum NetworkError {
-    
     ConnectionFailed {
         host: String,
         port: u16,
         reason: String,
     },
-    
+
     WebSocketError(String),
-    
-    MCPError { method: String, reason: String },
-    
+
+    MCPError {
+        method: String,
+        reason: String,
+    },
+
     HTTPError {
         url: String,
         status: Option<u16>,
         reason: String,
     },
-    
-    RequestFailed { url: String, reason: String },
-    
-    Timeout { operation: String, timeout_ms: u64 },
+
+    RequestFailed {
+        url: String,
+        reason: String,
+    },
+
+    Timeout {
+        operation: String,
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum SpeechError {
-    
     InitializationFailed(String),
-    
+
     TTSFailed { text: String, reason: String },
-    
+
     STTFailed { reason: String },
-    
+
     AudioProcessingFailed { reason: String },
-    
+
     ProviderConfigError { provider: String, reason: String },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum GitHubError {
-    
     APIRequestFailed {
         url: String,
         status: Option<u16>,
         reason: String,
     },
-    
+
     AuthenticationFailed(String),
-    
+
     FileOperationFailed {
         path: String,
         operation: String,
         reason: String,
     },
-    
-    BranchOperationFailed { branch: String, reason: String },
-    
-    PullRequestFailed { reason: String },
+
+    BranchOperationFailed {
+        branch: String,
+        reason: String,
+    },
+
+    PullRequestFailed {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum AudioError {
-    
     FormatValidationFailed { format: String, reason: String },
-    
+
     WAVHeaderValidationFailed(String),
-    
+
     DataProcessingFailed(String),
-    
+
     JSONProcessingFailed(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ResourceError {
-    
     MonitoringFailed(String),
-    
+
     AvailabilityCheckFailed(String),
-    
+
     FileDescriptorLimit { current: usize, limit: usize },
-    
+
     MemoryLimit { current: u64, limit: u64 },
-    
+
     ProcessLimit { current: usize, limit: usize },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum PerformanceError {
-    
     BenchmarkFailed {
         benchmark_name: String,
         reason: String,
     },
-    
+
     ReportGenerationFailed(String),
-    
-    MetricCollectionFailed { metric: String, reason: String },
-    
+
+    MetricCollectionFailed {
+        metric: String,
+        reason: String,
+    },
+
     ComparisonFailed(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ProtocolError {
-
     EncodingFailed { data_type: String, reason: String },
 
     DecodingFailed { data_type: String, reason: String },
@@ -240,7 +266,6 @@ pub enum ProtocolError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum DatabaseError {
-
     ConnectionFailed { database: String, reason: String },
 
     QueryFailed { query: String, reason: String },
@@ -256,40 +281,84 @@ pub enum DatabaseError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ValidationError {
+    FieldValidation {
+        field: String,
+        reason: String,
+    },
 
-    FieldValidation { field: String, reason: String },
+    RequiredField {
+        field: String,
+    },
 
-    RequiredField { field: String },
+    InvalidFormat {
+        field: String,
+        expected: String,
+        actual: String,
+    },
 
-    InvalidFormat { field: String, expected: String, actual: String },
+    OutOfRange {
+        field: String,
+        min: String,
+        max: String,
+        actual: String,
+    },
 
-    OutOfRange { field: String, min: String, max: String, actual: String },
-
-    InvalidLength { field: String, min: Option<usize>, max: Option<usize>, actual: usize },
+    InvalidLength {
+        field: String,
+        min: Option<usize>,
+        max: Option<usize>,
+        actual: usize,
+    },
 
     Custom(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ParseError {
+    JSON {
+        input: String,
+        reason: String,
+    },
 
-    JSON { input: String, reason: String },
+    TOML {
+        input: String,
+        reason: String,
+    },
 
-    TOML { input: String, reason: String },
+    YAML {
+        input: String,
+        reason: String,
+    },
 
-    YAML { input: String, reason: String },
+    Integer {
+        input: String,
+        reason: String,
+    },
 
-    Integer { input: String, reason: String },
+    Float {
+        input: String,
+        reason: String,
+    },
 
-    Float { input: String, reason: String },
+    Boolean {
+        input: String,
+    },
 
-    Boolean { input: String },
+    URL {
+        input: String,
+        reason: String,
+    },
 
-    URL { input: String, reason: String },
+    DateTime {
+        input: String,
+        reason: String,
+    },
 
-    DateTime { input: String, reason: String },
-
-    Custom { format: String, input: String, reason: String },
+    Custom {
+        format: String,
+        input: String,
+        reason: String,
+    },
 }
 
 impl fmt::Display for VisionClawError {
@@ -587,7 +656,11 @@ impl fmt::Display for DatabaseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DatabaseError::ConnectionFailed { database, reason } => {
-                write!(f, "Database connection to '{}' failed: {}", database, reason)
+                write!(
+                    f,
+                    "Database connection to '{}' failed: {}",
+                    database, reason
+                )
             }
             DatabaseError::QueryFailed { query, reason } => {
                 write!(f, "Database query failed: {} (query: {})", reason, query)
@@ -617,24 +690,42 @@ impl fmt::Display for ValidationError {
             ValidationError::RequiredField { field } => {
                 write!(f, "Required field '{}' is missing", field)
             }
-            ValidationError::InvalidFormat { field, expected, actual } => write!(
+            ValidationError::InvalidFormat {
+                field,
+                expected,
+                actual,
+            } => write!(
                 f,
                 "Field '{}' has invalid format: expected {}, got {}",
                 field, expected, actual
             ),
-            ValidationError::OutOfRange { field, min, max, actual } => write!(
+            ValidationError::OutOfRange {
+                field,
+                min,
+                max,
+                actual,
+            } => write!(
                 f,
                 "Field '{}' out of range: expected {}-{}, got {}",
                 field, min, max, actual
             ),
-            ValidationError::InvalidLength { field, min, max, actual } => {
+            ValidationError::InvalidLength {
+                field,
+                min,
+                max,
+                actual,
+            } => {
                 let range = match (min, max) {
                     (Some(min), Some(max)) => format!("{}-{}", min, max),
                     (Some(min), None) => format!(">= {}", min),
                     (None, Some(max)) => format!("<= {}", max),
                     (None, None) => "unknown".to_string(),
                 };
-                write!(f, "Field '{}' invalid length: expected {}, got {}", field, range, actual)
+                write!(
+                    f,
+                    "Field '{}' invalid length: expected {}, got {}",
+                    field, range, actual
+                )
             }
             ValidationError::Custom(msg) => write!(f, "Validation failed: {}", msg),
         }
@@ -668,11 +759,11 @@ impl fmt::Display for ParseError {
             ParseError::DateTime { input, reason } => {
                 write!(f, "DateTime parse error: {} (input: {})", reason, input)
             }
-            ParseError::Custom { format, input, reason } => write!(
-                f,
-                "{} parse error: {} (input: {})",
-                format, reason, input
-            ),
+            ParseError::Custom {
+                format,
+                input,
+                reason,
+            } => write!(f, "{} parse error: {} (input: {})", format, reason, input),
         }
     }
 }
@@ -876,10 +967,12 @@ where
 #[macro_export]
 macro_rules! validation_error {
     ($field:expr, $reason:expr) => {
-        $crate::errors::VisionClawError::Validation($crate::errors::ValidationError::FieldValidation {
-            field: $field.to_string(),
-            reason: $reason.to_string(),
-        })
+        $crate::errors::VisionClawError::Validation(
+            $crate::errors::ValidationError::FieldValidation {
+                field: $field.to_string(),
+                reason: $reason.to_string(),
+            },
+        )
     };
 }
 
@@ -926,7 +1019,11 @@ pub trait OptionExt<T> {
     fn ok_or_validation(self, field: impl Into<String>) -> VisionClawResult<T>;
 
     /// Convert Option to Result with a not found error
-    fn ok_or_not_found(self, entity: impl Into<String>, id: impl Into<String>) -> VisionClawResult<T>;
+    fn ok_or_not_found(
+        self,
+        entity: impl Into<String>,
+        id: impl Into<String>,
+    ) -> VisionClawResult<T>;
 }
 
 impl<T> OptionExt<T> for Option<T> {
@@ -945,7 +1042,11 @@ impl<T> OptionExt<T> for Option<T> {
         })
     }
 
-    fn ok_or_not_found(self, entity: impl Into<String>, id: impl Into<String>) -> VisionClawResult<T> {
+    fn ok_or_not_found(
+        self,
+        entity: impl Into<String>,
+        id: impl Into<String>,
+    ) -> VisionClawResult<T> {
         self.ok_or_else(|| {
             VisionClawError::Database(DatabaseError::NotFound {
                 entity: entity.into(),

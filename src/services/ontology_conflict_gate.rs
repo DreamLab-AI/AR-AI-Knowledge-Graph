@@ -285,9 +285,7 @@ fn detect_duplicate_concepts(ents: &[EntityView]) -> Vec<Conflict> {
         let first_label = &ents[group[0]].label;
         let mut detail = format!("{} classes share label \"{}\"", iris.len(), first_label);
         if distinct_defs.len() > 1 {
-            detail.push_str(
-                " with DIFFERING definitions (contradiction, not just a duplicate)",
-            );
+            detail.push_str(" with DIFFERING definitions (contradiction, not just a duplicate)");
         }
         out.push(Conflict {
             kind: ConflictKind::DuplicateConcept,
@@ -315,7 +313,10 @@ fn detect_subclass_cycles(ents: &[EntityView]) -> Vec<Conflict> {
     let mut roots: Vec<&str> = Vec::with_capacity(ents.len());
     for e in ents {
         // Last write wins on a repeated IRI, mirroring the Python dict comprehension.
-        if parents.insert(e.iri.as_str(), e.subclass_of.as_slice()).is_none() {
+        if parents
+            .insert(e.iri.as_str(), e.subclass_of.as_slice())
+            .is_none()
+        {
             roots.push(e.iri.as_str());
         }
     }
@@ -349,11 +350,8 @@ fn detect_subclass_cycles(ents: &[EntityView]) -> Vec<Conflict> {
                         let mut key = cyc.clone();
                         key.sort();
                         if seen.insert(key) {
-                            let detail = format!(
-                                "subClassOf cycle: {} -> {}",
-                                cyc.join(" -> "),
-                                child
-                            );
+                            let detail =
+                                format!("subClassOf cycle: {} -> {}", cyc.join(" -> "), child);
                             out.push(Conflict {
                                 kind: ConflictKind::SubclassCycle,
                                 severity: ConflictSeverity::High,
@@ -389,10 +387,7 @@ fn detect_relation_contradictions(ents: &[EntityView]) -> Vec<Conflict> {
                 kind: ConflictKind::RelationContradiction,
                 severity: ConflictSeverity::Medium,
                 iris: vec![e.iri.clone(), t.to_string()],
-                detail: format!(
-                    "{} is both subClassOf and contrasts_with {}",
-                    e.iri, t
-                ),
+                detail: format!("{} is both subClassOf and contrasts_with {}", e.iri, t),
             });
         }
     }
@@ -608,7 +603,13 @@ mod tests {
 
     /// A harmless candidate that introduces no conflict against a `Class` parent.
     fn benign_candidate() -> ProposedCandidate {
-        cand("ex:New", "Wholly Unique Fresh Concept", "Class", &["ex:Root"], &[])
+        cand(
+            "ex:New",
+            "Wholly Unique Fresh Concept",
+            "Class",
+            &["ex:Root"],
+            &[],
+        )
     }
 
     /// Every detected conflict kind across BOTH partitions (blocking + advisory).
@@ -651,8 +652,22 @@ mod tests {
         // benign candidate does NOT touch → advisory (pre_existing), never blocking.
         let corpus2 = vec![
             owl("ex:Root", "Root", "Class", &[], &[], ""),
-            owl("ex:D1", "Graph Node", "Class", &["ex:Root"], &[], "a vertex"),
-            owl("ex:D2", "graph  node", "Class", &["ex:Root"], &[], "a different thing"),
+            owl(
+                "ex:D1",
+                "Graph Node",
+                "Class",
+                &["ex:Root"],
+                &[],
+                "a vertex",
+            ),
+            owl(
+                "ex:D2",
+                "graph  node",
+                "Class",
+                &["ex:Root"],
+                &[],
+                "a different thing",
+            ),
         ];
         let report = evaluate(&corpus2, &benign_candidate());
         let dupes: Vec<&Conflict> = report
@@ -661,7 +676,10 @@ mod tests {
             .filter(|c| c.kind == ConflictKind::DuplicateConcept)
             .collect();
         assert_eq!(dupes.len(), 1, "exactly one pre-existing duplicate cluster");
-        assert_eq!(dupes[0].iris, vec!["ex:D1".to_string(), "ex:D2".to_string()]);
+        assert_eq!(
+            dupes[0].iris,
+            vec!["ex:D1".to_string(), "ex:D2".to_string()]
+        );
         assert!(
             dupes[0].detail.contains("DIFFERING"),
             "differing definitions escalate the detail: {}",
@@ -676,7 +694,14 @@ mod tests {
         // to the EntityMerger — non-blocking, surfaced ONLY as a merge candidate.
         let corpus = vec![
             owl("ex:Root", "Root", "Class", &[], &[], ""),
-            owl("ex:D1", "Graph Node", "Class", &["ex:Root"], &[], "a vertex"),
+            owl(
+                "ex:D1",
+                "Graph Node",
+                "Class",
+                &["ex:Root"],
+                &[],
+                "a vertex",
+            ),
         ];
         let dup_cand = cand("ex:D2", "graph node", "Class", &["ex:Root"], &[]);
         let folded = evaluate(&corpus, &dup_cand);
@@ -720,7 +745,14 @@ mod tests {
     fn duplicate_is_non_blocking_and_routes_to_merge() {
         let corpus = vec![
             owl("ex:Root", "Root", "Class", &[], &[], ""),
-            owl("ex:D1", "Graph Node", "Class", &["ex:Root"], &[], "a vertex"),
+            owl(
+                "ex:D1",
+                "Graph Node",
+                "Class",
+                &["ex:Root"],
+                &[],
+                "a vertex",
+            ),
         ];
         let dup_cand = cand("ex:D2", "graph node", "Class", &["ex:Root"], &[]);
         let report = evaluate(&corpus, &dup_cand);
@@ -817,7 +849,10 @@ mod tests {
             HashSet::from(["ex:time-series-forecasting", "ex:probabilistic-forecasting"])
         );
         assert!(cyc[0].detail.contains("subClassOf cycle:"));
-        assert!(report.ok(), "advisory cycle does not block the clean candidate");
+        assert!(
+            report.ok(),
+            "advisory cycle does not block the clean candidate"
+        );
     }
 
     #[test]
@@ -872,7 +907,10 @@ mod tests {
         // No incidental TYPE_CONFLICT because ex:T is a real Class.
         assert!(!kinds(&report).contains(&ConflictKind::TypeConflict));
         // Fail-closed: a relation contradiction blocks pending ACSP override.
-        assert!(!report.ok(), "relation contradiction is blocking (fail-closed)");
+        assert!(
+            !report.ok(),
+            "relation contradiction is blocking (fail-closed)"
+        );
     }
 
     #[test]
@@ -931,8 +969,16 @@ mod tests {
             owl("ex:Leaf", "Leaf", "Class", &["ex:Root"], &[], ""),
         ];
         let report = evaluate(&corpus, &benign_candidate());
-        assert!(report.blocking.is_empty(), "no blocking: {:?}", report.blocking);
-        assert!(report.pre_existing.is_empty(), "no advisory: {:?}", report.pre_existing);
+        assert!(
+            report.blocking.is_empty(),
+            "no blocking: {:?}",
+            report.blocking
+        );
+        assert!(
+            report.pre_existing.is_empty(),
+            "no advisory: {:?}",
+            report.pre_existing
+        );
         assert!(report.merge_candidates.is_empty());
         assert!(report.ok());
         assert_eq!(report.exit_code(), 0);
@@ -1074,7 +1120,11 @@ mod tests {
         let report = evaluate(&corpus, &candidate);
 
         assert!(!report.ok(), "an introduced contradiction blocks");
-        assert_eq!(report.blocking.len(), 1, "exactly the introduced conflict blocks");
+        assert_eq!(
+            report.blocking.len(),
+            1,
+            "exactly the introduced conflict blocks"
+        );
         assert_eq!(report.blocking[0].kind, ConflictKind::RelationContradiction);
         assert_eq!(
             report.blocking[0].iris,
@@ -1108,8 +1158,7 @@ mod tests {
             "a clean proposal is not blocked by pre-existing corpus conflicts"
         );
         assert!(report.blocking.is_empty());
-        let advisory: HashSet<ConflictKind> =
-            report.pre_existing.iter().map(|c| c.kind).collect();
+        let advisory: HashSet<ConflictKind> = report.pre_existing.iter().map(|c| c.kind).collect();
         assert!(
             advisory.contains(&ConflictKind::SubclassCycle),
             "pre-existing cycle surfaced as advisory"
@@ -1135,7 +1184,10 @@ mod tests {
         let candidate = cand("ex:D3", "Graph Node", "Class", &["ex:Root"], &[]);
         let report = evaluate(&corpus, &candidate);
 
-        assert!(!report.ok(), "joining a pre-existing duplicate label blocks");
+        assert!(
+            !report.ok(),
+            "joining a pre-existing duplicate label blocks"
+        );
         assert_eq!(report.blocking.len(), 1);
         assert_eq!(report.blocking[0].kind, ConflictKind::DuplicateConcept);
         let iris: HashSet<&str> = report.blocking[0].iris.iter().map(|s| s.as_str()).collect();

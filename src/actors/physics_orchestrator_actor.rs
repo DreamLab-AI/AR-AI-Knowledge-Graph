@@ -27,12 +27,12 @@ use crate::actors::messages::{
     SetConstraintGroupActive, SimulationStep, StartSimulation, StopSimulation,
     StoreGPUComputeAddress, UpdateNodePosition, UpdateNodePositions, UpdateSimulationParams,
 };
-use visionclaw_domain::models::constraints::ConstraintSet;
 use crate::models::constraints::ConstraintGpuExt;
-use visionclaw_domain::models::graph::GraphData;
 use crate::models::simulation_params::{SettleMode, SimulationParams};
 use crate::utils::socket_flow_messages::BinaryNodeData;
 use crate::utils::socket_flow_messages::BinaryNodeDataClient;
+use visionclaw_domain::models::constraints::ConstraintSet;
+use visionclaw_domain::models::graph::GraphData;
 
 pub struct PhysicsOrchestratorActor {
     simulation_running: AtomicBool,
@@ -534,10 +534,7 @@ impl PhysicsOrchestratorActor {
         // the new graph to ForceComputeActor — otherwise the GPU keeps computing
         // on the previous (stale) graph forever. This is the documented
         // "UpdateGPUGraphData propagation gap" from the ADR-090 sprint.
-        if self.gpu_initialized
-            && self.gpu_compute_addr.is_some()
-            && new_count != prev_count
-        {
+        if self.gpu_initialized && self.gpu_compute_addr.is_some() && new_count != prev_count {
             if let Some(ref gpu_addr) = self.gpu_compute_addr {
                 let msg_id = crate::actors::messaging::MessageId::new();
                 let tracker = self.message_tracker.clone();
@@ -778,7 +775,8 @@ impl PhysicsOrchestratorActor {
                     // reports settled once ticks stop (Continuous-mode analogue of
                     // the FastSettle convergence latch).
                     if let Some(ref gpu_addr) = self.gpu_compute_addr {
-                        gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: true });
+                        gpu_addr
+                            .do_send(crate::actors::messages::SetPhysicsSettled { settled: true });
                     }
 
                     self.broadcast_physics_paused();
@@ -2141,7 +2139,10 @@ mod tests {
                 "must not converge while energy is still descending"
             );
         }
-        assert_eq!(actor.settle_rest_run, 0, "descent resets the plateau run each frame");
+        assert_eq!(
+            actor.settle_rest_run, 0,
+            "descent resets the plateau run each frame"
+        );
 
         // Energy now plateaus (flat). After SETTLE_REST_FRAMES no-improvement frames
         // the whole graph is declared settled — regardless of its absolute value.
@@ -2150,10 +2151,16 @@ mod tests {
         for i in 0..frames {
             converged = actor.note_settle_energy(e, 100, true);
             if i + 1 < frames {
-                assert!(!converged, "should not converge before the plateau window fills");
+                assert!(
+                    !converged,
+                    "should not converge before the plateau window fills"
+                );
             }
         }
-        assert!(converged, "a sustained energy plateau = whole graph settled");
+        assert!(
+            converged,
+            "a sustained energy plateau = whole graph settled"
+        );
     }
 
     // ------------------------------------------------------------------
@@ -2175,7 +2182,10 @@ mod tests {
                 "must never converge during warmup"
             );
         }
-        assert_eq!(actor.settle_rest_run, 0, "warmup keeps the plateau run re-armed at 0");
+        assert_eq!(
+            actor.settle_rest_run, 0,
+            "warmup keeps the plateau run re-armed at 0"
+        );
         assert_eq!(
             actor.settle_ref_per_node_energy,
             f64::MAX,

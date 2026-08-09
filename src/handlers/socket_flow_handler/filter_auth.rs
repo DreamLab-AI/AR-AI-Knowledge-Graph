@@ -2,9 +2,9 @@ use actix::prelude::*;
 use log::{error, info, warn};
 
 use super::types::SocketFlowServer;
-use crate::settings::api::settings_routes::UserFilter;
-use crate::ports::settings_repository::{SettingValue, SettingsRepository};
 use crate::adapters::sqlite_settings_repository::CURRENT_OWNER_PUBKEY;
+use crate::ports::settings_repository::{SettingValue, SettingsRepository};
+use crate::settings::api::settings_routes::UserFilter;
 
 /// Handle "authenticate" message -- NIP-98 and legacy token/pubkey paths.
 pub(crate) fn handle_authenticate(
@@ -79,14 +79,8 @@ pub(crate) fn handle_authenticate(
         );
     } else {
         // --- Legacy path: { type: "authenticate", token, pubkey, ephemeral? } ---
-        let token = msg
-            .get("token")
-            .and_then(|t| t.as_str())
-            .map(String::from);
-        let pubkey = msg
-            .get("pubkey")
-            .and_then(|p| p.as_str())
-            .map(String::from);
+        let token = msg.get("token").and_then(|t| t.as_str()).map(String::from);
+        let pubkey = msg.get("pubkey").and_then(|p| p.as_str()).map(String::from);
         let is_ephemeral = msg
             .get("ephemeral")
             .and_then(|e| e.as_bool())
@@ -388,9 +382,7 @@ pub(crate) fn handle_ontology_validation(
 }
 
 /// Handle ontology constraint update/toggle requests.
-pub(crate) fn handle_ontology_constraint_update(
-    ctx: &mut <SocketFlowServer as Actor>::Context,
-) {
+pub(crate) fn handle_ontology_constraint_update(ctx: &mut <SocketFlowServer as Actor>::Context) {
     info!("[WebSocket] Ontology constraint update request");
     let response = serde_json::json!({
         "type": "ontology_constraint_update",
@@ -412,10 +404,7 @@ pub(crate) fn handle_ontology_reasoning(
     info!("[WebSocket] Ontology reasoning request received");
     if let Some(ref ontology_addr) = act.app_state.ontology_actor_addr {
         let addr = ontology_addr.clone();
-        let ontology_id = msg
-            .get("ontologyId")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+        let ontology_id = msg.get("ontologyId").and_then(|v| v.as_i64()).unwrap_or(0);
         let source = msg
             .get("source")
             .and_then(|v| v.as_str())

@@ -51,7 +51,12 @@ fn collect_markdown_recursive(dir: &Path) -> Vec<PathBuf> {
 fn errors_only(issues: &[ValidationIssue]) -> Vec<&ValidationIssue> {
     issues
         .iter()
-        .filter(|i| matches!(i.severity, visionclaw_server::services::jsonld_validator::Severity::Error))
+        .filter(|i| {
+            matches!(
+                i.severity,
+                visionclaw_server::services::jsonld_validator::Severity::Error
+            )
+        })
         .collect()
 }
 
@@ -109,38 +114,30 @@ fn expected_invalid_mapping() -> Vec<(&'static str, fn(&ErrorCategory) -> bool)>
             "100-missing-schema-version.md",
             (|c| matches!(c, ErrorCategory::SchemaVersionMissing)) as fn(&ErrorCategory) -> bool,
         ),
-        (
-            "101-missing-context.md",
-            |c| matches!(c, ErrorCategory::ContextMissing),
-        ),
-        (
-            "102-unknown-context-version.md",
-            |c| matches!(c, ErrorCategory::ContextVersionUnknown { .. }),
-        ),
-        (
-            "103-missing-required-field.md",
-            |c| matches!(c, ErrorCategory::RequiredFieldMissing { .. }),
-        ),
-        (
-            "104-malformed-iri.md",
-            |c| matches!(c, ErrorCategory::MalformedIri { .. }),
-        ),
-        (
-            "105-bridgeTo-pointing-at-stub.md",
-            |c| matches!(c, ErrorCategory::BridgeTargetMustBeConcrete { .. }),
-        ),
-        (
-            "106-disjunction-not-in-EL.md",
-            |c| matches!(c, ErrorCategory::OutsideOwl2ElProfile { .. }),
-        ),
-        (
-            "107-bare-jsonld-without-block-marker.md",
-            |c| matches!(c, ErrorCategory::MissingCodeFenceMarker),
-        ),
-        (
-            "108-mismatched-class-bit.md",
-            |c| matches!(c, ErrorCategory::ClassBitMismatch { .. }),
-        ),
+        ("101-missing-context.md", |c| {
+            matches!(c, ErrorCategory::ContextMissing)
+        }),
+        ("102-unknown-context-version.md", |c| {
+            matches!(c, ErrorCategory::ContextVersionUnknown { .. })
+        }),
+        ("103-missing-required-field.md", |c| {
+            matches!(c, ErrorCategory::RequiredFieldMissing { .. })
+        }),
+        ("104-malformed-iri.md", |c| {
+            matches!(c, ErrorCategory::MalformedIri { .. })
+        }),
+        ("105-bridgeTo-pointing-at-stub.md", |c| {
+            matches!(c, ErrorCategory::BridgeTargetMustBeConcrete { .. })
+        }),
+        ("106-disjunction-not-in-EL.md", |c| {
+            matches!(c, ErrorCategory::OutsideOwl2ElProfile { .. })
+        }),
+        ("107-bare-jsonld-without-block-marker.md", |c| {
+            matches!(c, ErrorCategory::MissingCodeFenceMarker)
+        }),
+        ("108-mismatched-class-bit.md", |c| {
+            matches!(c, ErrorCategory::ClassBitMismatch { .. })
+        }),
     ]
 }
 
@@ -154,11 +151,7 @@ fn invalid_fixtures_yield_expected_category() {
 
     for (filename, predicate) in &mapping {
         let path = dir.join(filename);
-        assert!(
-            path.exists(),
-            "missing invalid fixture: {}",
-            path.display()
-        );
+        assert!(path.exists(), "missing invalid fixture: {}", path.display());
         let issues = v.validate_markdown_file(&path);
         let errors = errors_only(&issues);
         if errors.is_empty() {
@@ -172,8 +165,10 @@ fn invalid_fixtures_yield_expected_category() {
         if hit {
             matched += 1;
         } else {
-            let codes: Vec<String> =
-                errors.iter().map(|i| i.category.code().to_string()).collect();
+            let codes: Vec<String> = errors
+                .iter()
+                .map(|i| i.category.code().to_string())
+                .collect();
             diagnostics.push(format!(
                 "{}: expected predicate did not match. Got: [{}]",
                 filename,
@@ -227,10 +222,7 @@ fn owl_el_profile_rejects_unionof() {
     assert!(
         hit,
         "expected OutsideOwl2ElProfile {{ owl:unionOf }} but got: {:#?}",
-        issues
-            .iter()
-            .map(|i| i.category.code())
-            .collect::<Vec<_>>()
+        issues.iter().map(|i| i.category.code()).collect::<Vec<_>>()
     );
 }
 
@@ -250,15 +242,12 @@ fn class_bit_mismatch_detection() {
         &block,
         visionclaw_server::services::jsonld_validator::SourceRef::default(),
     );
-    let hit = issues.iter().any(|i| {
-        matches!(&i.category, ErrorCategory::ClassBitMismatch { .. })
-    });
+    let hit = issues
+        .iter()
+        .any(|i| matches!(&i.category, ErrorCategory::ClassBitMismatch { .. }));
     assert!(
         hit,
         "expected ClassBitMismatch but got: {:#?}",
-        issues
-            .iter()
-            .map(|i| i.category.code())
-            .collect::<Vec<_>>()
+        issues.iter().map(|i| i.category.code()).collect::<Vec<_>>()
     );
 }

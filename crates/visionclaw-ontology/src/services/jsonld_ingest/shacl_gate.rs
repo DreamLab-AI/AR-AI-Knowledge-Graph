@@ -86,19 +86,28 @@ impl ShaclGateReport {
     /// In advisory mode, the gate always passes (violations are logged).
     pub fn is_valid(&self) -> bool {
         match self.mode {
-            GateMode::Enforcing => self.violations.iter().all(|v| v.severity != ShapeSeverity::Violation),
+            GateMode::Enforcing => self
+                .violations
+                .iter()
+                .all(|v| v.severity != ShapeSeverity::Violation),
             GateMode::Advisory => true,
         }
     }
 
     /// Count of violations at the Violation severity level.
     pub fn violation_count(&self) -> usize {
-        self.violations.iter().filter(|v| v.severity == ShapeSeverity::Violation).count()
+        self.violations
+            .iter()
+            .filter(|v| v.severity == ShapeSeverity::Violation)
+            .count()
     }
 
     /// Count of violations at the Warning severity level.
     pub fn warning_count(&self) -> usize {
-        self.violations.iter().filter(|v| v.severity == ShapeSeverity::Warning).count()
+        self.violations
+            .iter()
+            .filter(|v| v.severity == ShapeSeverity::Warning)
+            .count()
     }
 }
 
@@ -132,7 +141,9 @@ fn infer_shape_name(types: &[String]) -> String {
     for t in types {
         match t.as_str() {
             "OntologyClass" | "owl:Class" | "Class" => return "OntologyClassShape".to_string(),
-            "BridgeRecord" | "Bridge" | "vc:BridgeRecord" => return "BridgeRecordShape".to_string(),
+            "BridgeRecord" | "Bridge" | "vc:BridgeRecord" => {
+                return "BridgeRecordShape".to_string()
+            }
             "KnowledgeNode" | "vc:KnowledgeNode" => return "KnowledgeNodeShape".to_string(),
             "AgentNode" | "vc:AgentNode" => return "AgentNodeShape".to_string(),
             _ => {}
@@ -192,11 +203,17 @@ mod tests {
         });
         let mut report = ShaclGateReport::default();
         gate_block(&block, 3, GateMode::Enforcing, &mut report);
-        assert!(!report.is_valid(), "orphan class must fail in enforcing mode");
+        assert!(
+            !report.is_valid(),
+            "orphan class must fail in enforcing mode"
+        );
         assert_eq!(report.violation_count(), 1);
         let v = &report.violations[0];
         assert_eq!(v.block_index, 3);
-        assert_eq!(v.subject.as_deref(), Some("urn:visionclaw:owl:class:orphan"));
+        assert_eq!(
+            v.subject.as_deref(),
+            Some("urn:visionclaw:owl:class:orphan")
+        );
         assert_eq!(v.shape_name, "OntologyClassShape");
         assert_eq!(v.severity, ShapeSeverity::Violation);
     }
@@ -211,7 +228,11 @@ mod tests {
         let mut report = ShaclGateReport::default();
         gate_block(&block, 0, GateMode::Advisory, &mut report);
         assert!(report.is_valid(), "advisory mode always passes");
-        assert_eq!(report.violation_count(), 1, "but violations are still recorded");
+        assert_eq!(
+            report.violation_count(),
+            1,
+            "but violations are still recorded"
+        );
     }
 
     #[test]
@@ -233,7 +254,10 @@ mod tests {
         gate_block(&block, 0, GateMode::Enforcing, &mut report);
         assert_eq!(report.shapes_checked, 2);
         assert_eq!(report.violations.len(), 1, "only the orphan violates");
-        assert_eq!(report.violations[0].subject.as_deref(), Some("urn:visionclaw:owl:class:b-orphan"));
+        assert_eq!(
+            report.violations[0].subject.as_deref(),
+            Some("urn:visionclaw:owl:class:b-orphan")
+        );
     }
 
     #[test]

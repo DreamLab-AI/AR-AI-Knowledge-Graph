@@ -11,11 +11,11 @@
 //!
 //! Based on canonical-ontology-block.md specification v1.0.0
 
-use visionclaw_domain::ports::ontology_repository::{AxiomType, OwlAxiom, OwlClass, OwlProperty};
 use log::{debug, info};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
+use visionclaw_domain::ports::ontology_repository::{AxiomType, OwlAxiom, OwlClass, OwlProperty};
 
 // ============================================================================
 // Regex Patterns - Compiled once at startup for performance
@@ -26,9 +26,8 @@ static PROPERTY_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^\s*-\s*([a-zA-Z0-9_:-]+)::\s*(.+)$").expect("Invalid PROPERTY_PATTERN regex")
 });
 
-static WIKI_LINK_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid WIKI_LINK_PATTERN regex")
-});
+static WIKI_LINK_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"\[\[([^\]]+)\]\]").expect("Invalid WIKI_LINK_PATTERN regex"));
 
 #[allow(dead_code)]
 static SECTION_HEADER_PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -36,7 +35,8 @@ static SECTION_HEADER_PATTERN: Lazy<Regex> = Lazy::new(|| {
 });
 
 static OWL_AXIOM_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?s)```(?:clojure|owl)\s*\n(.*?)\n\s*```").expect("Invalid OWL_AXIOM_PATTERN regex")
+    Regex::new(r"(?s)```(?:clojure|owl)\s*\n(.*?)\n\s*```")
+        .expect("Invalid OWL_AXIOM_PATTERN regex")
 });
 
 static BRIDGE_PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -291,15 +291,16 @@ impl OntologyBlock {
         }
 
         if self.is_subclass_of.is_empty() {
-            errors.push("Missing required property: is-subclass-of (at least one parent class)".to_string());
+            errors.push(
+                "Missing required property: is-subclass-of (at least one parent class)".to_string(),
+            );
         }
 
         // Validate term-id format
         if let Some(ref term_id) = self.term_id {
             if let Some(domain) = self.get_domain() {
-                if let Some((&expected_prefix, _)) = DOMAIN_PREFIXES
-                    .iter()
-                    .find(|(_, &d)| d == domain.as_str())
+                if let Some((&expected_prefix, _)) =
+                    DOMAIN_PREFIXES.iter().find(|(_, &d)| d == domain.as_str())
                 {
                     if !term_id.starts_with(expected_prefix) {
                         errors.push(format!(
@@ -405,10 +406,14 @@ impl OntologyParser {
         let classes = self.block_to_classes(&block);
         let properties = Vec::new(); // Could extract from OWL axioms if needed
         let axioms = self.block_to_axioms(&block);
-        let class_hierarchy = block.is_subclass_of
+        let class_hierarchy = block
+            .is_subclass_of
             .iter()
             .filter_map(|parent| {
-                block.owl_class.as_ref().map(|cls| (cls.clone(), parent.clone()))
+                block
+                    .owl_class
+                    .as_ref()
+                    .map(|cls| (cls.clone(), parent.clone()))
             })
             .collect();
 
@@ -528,8 +533,15 @@ impl OntologyParser {
         let relationships_section = self.extract_relationships_section(section);
 
         let known_rels = vec![
-            "is-subclass-of", "has-part", "is-part-of", "requires",
-            "depends-on", "enables", "relates-to", "bridges-to", "bridges-from"
+            "is-subclass-of",
+            "has-part",
+            "is-part-of",
+            "requires",
+            "depends-on",
+            "enables",
+            "relates-to",
+            "bridges-to",
+            "bridges-from",
         ];
 
         for (rel_name, targets) in relationships_section {
@@ -565,7 +577,10 @@ impl OntologyParser {
                     // Extract wiki-links
                     let wiki_links = self.extract_wiki_links(value_text);
                     if !wiki_links.is_empty() {
-                        relationships.entry(prop_name).or_insert_with(Vec::new).extend(wiki_links);
+                        relationships
+                            .entry(prop_name)
+                            .or_insert_with(Vec::new)
+                            .extend(wiki_links);
                     }
                 }
             }
@@ -604,7 +619,9 @@ impl OntologyParser {
     fn extract_owl_axioms(&self, content: &str, block: &mut OntologyBlock) {
         for caps in OWL_AXIOM_PATTERN.captures_iter(content) {
             if let Some(axiom_match) = caps.get(1) {
-                block.owl_axioms.push(axiom_match.as_str().trim().to_string());
+                block
+                    .owl_axioms
+                    .push(axiom_match.as_str().trim().to_string());
             }
         }
     }
@@ -836,7 +853,10 @@ mod tests {
 
         // Tier 1 properties
         assert_eq!(block.term_id, Some("AI-0850".to_string()));
-        assert_eq!(block.preferred_term, Some("Large Language Models".to_string()));
+        assert_eq!(
+            block.preferred_term,
+            Some("Large Language Models".to_string())
+        );
         assert_eq!(block.source_domain, Some("ai".to_string()));
         assert_eq!(block.status, Some("complete".to_string()));
         assert_eq!(block.public_access, Some(true));
@@ -853,8 +873,13 @@ mod tests {
 
         // Relationships
         assert_eq!(block.is_subclass_of.len(), 2);
-        assert!(block.is_subclass_of.contains(&"Artificial Intelligence".to_string()));
-        assert_eq!(block.requires, vec!["Training Data", "Computational Resources"]);
+        assert!(block
+            .is_subclass_of
+            .contains(&"Artificial Intelligence".to_string()));
+        assert_eq!(
+            block.requires,
+            vec!["Training Data", "Computational Resources"]
+        );
         assert_eq!(block.enables, vec!["Few-Shot Learning", "Text Generation"]);
 
         // Validation
@@ -891,7 +916,10 @@ mod tests {
         assert!(result.is_ok());
 
         let block = result.unwrap();
-        assert_eq!(block.bridges_to, vec!["Blockchain Verification via enables"]);
+        assert_eq!(
+            block.bridges_to,
+            vec!["Blockchain Verification via enables"]
+        );
         assert_eq!(block.bridges_from, vec!["Robot Control via requires"]);
     }
 
@@ -961,7 +989,10 @@ mod tests {
         block.owl_class = Some("ai:LargeLanguageModel".to_string());
 
         let iri = block.get_full_iri();
-        assert_eq!(iri, Some("http://narrativegoldmine.com/ai#LargeLanguageModel".to_string()));
+        assert_eq!(
+            iri,
+            Some("http://narrativegoldmine.com/ai#LargeLanguageModel".to_string())
+        );
     }
 
     #[test]

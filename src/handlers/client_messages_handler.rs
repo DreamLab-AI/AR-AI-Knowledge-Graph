@@ -35,7 +35,6 @@ impl ClientMessagesWs {
         let rx = self.app_state.client_message_rx.clone();
 
         ctx.run_interval(Duration::from_millis(100), move |_act, ctx| {
-            
             if let Ok(mut receiver) = rx.try_lock() {
                 while let Ok(msg) = receiver.try_recv() {
                     let json = json!({
@@ -62,7 +61,6 @@ impl Actor for ClientMessagesWs {
         self.start_heartbeat(ctx);
         self.start_message_stream(ctx);
 
-        
         let init_json = json!({
             "type": "init",
             "status": "connected",
@@ -88,7 +86,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for ClientMessagesWs 
             }
             Ok(ws::Message::Text(text)) => {
                 debug!("Received WebSocket text: {}", text);
-                
             }
             Ok(ws::Message::Close(reason)) => {
                 info!("Client messages WebSocket closing: {:?}", reason);
@@ -118,7 +115,9 @@ pub async fn websocket_client_messages(
     // Currently allows but logs unauthenticated connections -- enforcement will come
     // when all clients send tokens.
     {
-        let token = req.headers().get("Authorization")
+        let token = req
+            .headers()
+            .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
             .map(|s| s.to_string())
@@ -130,12 +129,16 @@ pub async fn websocket_client_messages(
             });
 
         if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req.peer_addr().map(|a| a.to_string()).unwrap_or_else(|| "unknown".to_string());
+            let client_ip = req
+                .peer_addr()
+                .map(|a| a.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             log::warn!(
                 "SECURITY: Rejected unauthenticated WebSocket upgrade on /ws/client-messages from {}",
                 client_ip
             );
-            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({"error": "Authentication required"})));
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Authentication required"})));
         }
     }
 

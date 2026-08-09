@@ -36,10 +36,7 @@ pub fn validate_entry_shape(entry: &Value) -> Vec<ErrorCategory> {
                     || s == "urn:ngm:class:built-environment"
             })
             .unwrap_or(false);
-        let has_parent = has_any_key(
-            entry,
-            &["subClassOf", "rdfs:subClassOf", "parentClasses"],
-        );
+        let has_parent = has_any_key(entry, &["subClassOf", "rdfs:subClassOf", "parentClasses"]);
         if !is_root && !has_parent {
             issues.push(ErrorCategory::RequiredFieldMissing {
                 what: "subClassOf".to_string(),
@@ -51,13 +48,11 @@ pub fn validate_entry_shape(entry: &Value) -> Vec<ErrorCategory> {
     // ADR-08): `vc:bridgeTo` must target a concrete entity, not a
     // `LinkedPage` stub.
     if types.iter().any(|t| is_bridge_type(t)) {
-        if let Some(target_iri) = extract_iri_reference(
-            map.get("vc:bridgeTo").or_else(|| map.get("bridgeTo")),
-        ) {
+        if let Some(target_iri) =
+            extract_iri_reference(map.get("vc:bridgeTo").or_else(|| map.get("bridgeTo")))
+        {
             if iri::is_linked_page_iri(&target_iri) {
-                issues.push(ErrorCategory::BridgeTargetMustBeConcrete {
-                    target: target_iri,
-                });
+                issues.push(ErrorCategory::BridgeTargetMustBeConcrete { target: target_iri });
             }
         }
     }
@@ -147,9 +142,8 @@ mod tests {
             "vc:bridgeTo": { "@id": "urn:visionclaw:linked:tempietto" }
         });
         let issues = validate_entry_shape(&entry);
-        assert!(issues.iter().any(|c| matches!(
-            c,
-            ErrorCategory::BridgeTargetMustBeConcrete { .. }
-        )));
+        assert!(issues
+            .iter()
+            .any(|c| matches!(c, ErrorCategory::BridgeTargetMustBeConcrete { .. })));
     }
 }

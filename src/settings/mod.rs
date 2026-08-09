@@ -7,12 +7,14 @@
 //! - REST API endpoints (api/settings_routes)
 //! - Authentication extractors (auth_extractor)
 
-pub mod settings_actor;
 pub mod api;
-pub mod models;
 pub mod auth_extractor;
+pub mod models;
+pub mod settings_actor;
 
 // SettingsActor is retained for backward compatibility but routes now use OptimizedSettingsActor.
-pub use settings_actor::{SettingsActor, UpdatePhysicsSettings, GetPhysicsSettings, LoadProfile, SaveProfile};
-pub use models::{ConstraintSettings, PriorityWeighting, AllSettings, SettingsProfile};
 pub use auth_extractor::{AuthenticatedUser, OptionalAuth};
+pub use models::{AllSettings, ConstraintSettings, PriorityWeighting, SettingsProfile};
+pub use settings_actor::{
+    GetPhysicsSettings, LoadProfile, SaveProfile, SettingsActor, UpdatePhysicsSettings,
+};

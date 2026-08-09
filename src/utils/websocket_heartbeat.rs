@@ -1,11 +1,11 @@
+use crate::utils::json::to_json;
+use crate::utils::time;
 use actix::{Actor, AsyncContext};
 use actix_web_actors::ws;
 use chrono::Utc;
 use log::warn;
 use serde_json::json;
 use std::time::{Duration, Instant};
-use crate::utils::time;
-use crate::utils::json::to_json;
 
 /// ADR-031 item 4: Server-to-client directives carried in heartbeat pong frames.
 ///
@@ -27,12 +27,9 @@ pub trait WebSocketHeartbeat: Actor<Context = ws::WebsocketContext<Self>>
 where
     Self: Sized,
 {
-
     fn get_client_id(&self) -> &str;
 
-
     fn get_last_heartbeat(&self) -> Instant;
-
 
     fn update_last_heartbeat(&mut self);
 
@@ -44,7 +41,6 @@ where
         Vec::new()
     }
 
-    
     fn start_heartbeat(
         &self,
         ctx: &mut ws::WebsocketContext<Self>,
@@ -62,7 +58,7 @@ where
                     "WebSocket client {} heartbeat timeout, disconnecting",
                     act.get_client_id()
                 );
-                
+
                 ctx.close(Some(ws::CloseReason {
                     code: ws::CloseCode::Abnormal,
                     description: Some("Heartbeat timeout".to_string()),
@@ -74,7 +70,6 @@ where
         });
     }
 
-    
     fn send_ping(&self, ctx: &mut ws::WebsocketContext<Self>)
     where
         Self: actix::Actor<Context = ws::WebsocketContext<Self>>,
@@ -118,7 +113,6 @@ where
         }
     }
 
-    
     fn handle_heartbeat_message(
         &mut self,
         msg: Result<ws::Message, ws::ProtocolError>,
@@ -131,13 +125,13 @@ where
             Ok(ws::Message::Ping(msg)) => {
                 self.update_last_heartbeat();
                 ctx.pong(&msg);
-                true 
+                true
             }
             Ok(ws::Message::Pong(_)) => {
                 self.update_last_heartbeat();
-                true 
+                true
             }
-            _ => false, 
+            _ => false,
         }
     }
 }
@@ -150,8 +144,8 @@ pub struct HeartbeatConfig {
 impl Default for HeartbeatConfig {
     fn default() -> Self {
         Self {
-            ping_interval_secs: 5, 
-            timeout_secs: 30,      
+            ping_interval_secs: 5,
+            timeout_secs: 30,
         }
     }
 }
@@ -165,11 +159,11 @@ impl HeartbeatConfig {
     }
 
     pub fn fast() -> Self {
-        Self::new(2, 10) 
+        Self::new(2, 10)
     }
 
     pub fn slow() -> Self {
-        Self::new(15, 60) 
+        Self::new(15, 60)
     }
 }
 

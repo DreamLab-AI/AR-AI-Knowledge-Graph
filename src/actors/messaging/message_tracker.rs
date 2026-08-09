@@ -4,10 +4,10 @@ use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
 use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 
-use super::{MessageId, MessageAck, AckStatus, MessageMetrics};
+use super::{AckStatus, MessageAck, MessageId, MessageMetrics};
 
 /// Types of critical messages that need tracking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -193,13 +193,8 @@ impl MessageTracker {
 
     /// Track a message with default timeout and retries
     pub async fn track_default(&self, id: MessageId, kind: MessageKind) {
-        self.track(
-            id,
-            kind,
-            kind.default_timeout(),
-            kind.default_max_retries(),
-        )
-        .await;
+        self.track(id, kind, kind.default_timeout(), kind.default_max_retries())
+            .await;
     }
 
     /// Acknowledge a message (removes from pending)
@@ -231,12 +226,7 @@ impl MessageTracker {
                     self.metrics.record_success(msg.kind, latency);
                 }
                 AckStatus::Failed { ref error } => {
-                    error!(
-                        "Message {} ({}) failed: {}",
-                        msg_id,
-                        msg.kind.name(),
-                        error
-                    );
+                    error!("Message {} ({}) failed: {}", msg_id, msg.kind.name(), error);
                     self.metrics.record_failure(msg.kind);
                 }
                 AckStatus::Retrying { attempt } => {
@@ -259,10 +249,7 @@ impl MessageTracker {
                 }
             }
         } else {
-            warn!(
-                "Received acknowledgment for unknown message: {}",
-                msg_id
-            );
+            warn!("Received acknowledgment for unknown message: {}", msg_id);
         }
     }
 
@@ -505,7 +492,12 @@ mod tests {
 
         // Verify retry was recorded
         let metrics = tracker.metrics();
-        assert!(metrics.total_retried.load(std::sync::atomic::Ordering::Relaxed) > 0);
+        assert!(
+            metrics
+                .total_retried
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > 0
+        );
     }
 
     #[test]

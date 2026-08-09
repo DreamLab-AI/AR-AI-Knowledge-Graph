@@ -7,13 +7,12 @@ use crate::actors::voice_commands::{SwarmVoiceResponse, VoiceCommand};
 use crate::services::speech_service::SpeechService;
 use crate::services::voice_tag_manager::{TaggedVoiceResponse, VoiceTag, VoiceTagManager};
 use crate::types::speech::SpeechOptions;
+use crate::utils::time;
 use log::{debug, info, warn};
 use std::sync::Arc;
-use crate::utils::time;
 
 #[allow(async_fn_in_trait)]
 pub trait VoiceSwarmIntegration {
-    
     async fn process_voice_command_with_tags(
         &self,
         text: String,
@@ -21,16 +20,13 @@ pub trait VoiceSwarmIntegration {
         tag_manager: Arc<VoiceTagManager>,
     ) -> Result<VoiceTag, String>;
 
-    
     async fn handle_tagged_swarm_response(
         &self,
         response: TaggedVoiceResponse,
     ) -> Result<(), String>;
 
-    
     async fn process_voice_command(&self, text: String, session_id: String) -> Result<(), String>;
 
-    
     async fn handle_swarm_response(&self, response: SwarmVoiceResponse) -> Result<(), String>;
 }
 
@@ -43,28 +39,18 @@ impl VoiceSwarmIntegration for SpeechService {
     ) -> Result<VoiceTag, String> {
         info!("Processing tagged voice command: '{}'", text);
 
-        
         match VoiceCommand::parse(&text, session_id.clone()) {
             Ok(mut voice_cmd) => {
                 debug!("Parsed voice command: {:?}", voice_cmd.parsed_intent);
 
-                
                 let tagged_cmd = tag_manager
-                    .create_tagged_command(
-                        voice_cmd.clone(),
-                        true, 
-                        SpeechOptions::default(),
-                        None, 
-                    )
+                    .create_tagged_command(voice_cmd.clone(), true, SpeechOptions::default(), None)
                     .await?;
 
                 let tag = tagged_cmd.tag.clone();
 
-                
                 voice_cmd.voice_tag = Some(tag.tag_id.clone());
 
-                
-                
                 warn!("Voice command processing deprecated - SupervisorActor handler removed");
 
                 let error_response = TaggedVoiceResponse {
@@ -101,23 +87,19 @@ impl VoiceSwarmIntegration for SpeechService {
             response.tag.short_id()
         );
 
-        
         if response.response.use_voice {
-            
             let full_text = if let Some(follow_up) = response.response.follow_up {
                 format!("{} {}", response.response.text, follow_up)
             } else {
                 response.response.text.clone()
             };
 
-            
             let options = SpeechOptions::default();
             self.text_to_speech(full_text, options)
                 .await
                 .map_err(|e| e.to_string())?;
         }
 
-        
         if let Err(e) = self.get_transcription_sender().send(response.response.text) {
             debug!("Failed to broadcast response text: {}", e);
         }
@@ -128,12 +110,10 @@ impl VoiceSwarmIntegration for SpeechService {
     async fn process_voice_command(&self, text: String, session_id: String) -> Result<(), String> {
         info!("Processing voice command: '{}'", text);
 
-        
         match VoiceCommand::parse(&text, session_id.clone()) {
             Ok(voice_cmd) => {
                 debug!("Parsed voice command: {:?}", voice_cmd.parsed_intent);
 
-                
                 warn!("Voice command processing deprecated - SupervisorActor handler removed");
 
                 let error_response = SwarmVoiceResponse {
@@ -149,7 +129,6 @@ impl VoiceSwarmIntegration for SpeechService {
             Err(e) => {
                 warn!("Failed to parse voice command '{}': {}", text, e);
 
-                
                 let help_response = SwarmVoiceResponse {
                     text: "I didn't understand that command. Try saying something like 'spawn a researcher agent' or 'show status'.".to_string(),
                     use_voice: true,
@@ -166,23 +145,19 @@ impl VoiceSwarmIntegration for SpeechService {
     async fn handle_swarm_response(&self, response: SwarmVoiceResponse) -> Result<(), String> {
         info!("Handling swarm response: {}", response.text);
 
-        
         if response.use_voice {
-            
             let full_text = if let Some(follow_up) = response.follow_up {
                 format!("{} {}", response.text, follow_up)
             } else {
                 response.text.clone()
             };
 
-            
             let options = SpeechOptions::default();
             self.text_to_speech(full_text, options)
                 .await
                 .map_err(|e| e.to_string())?;
         }
 
-        
         if let Err(e) = self.get_transcription_sender().send(response.text) {
             debug!("Failed to broadcast response text: {}", e);
         }
@@ -198,12 +173,10 @@ impl SpeechService {
         _session_id: String,
         _options: crate::types::speech::TranscriptionOptions,
     ) -> Result<String, String> {
-        
         self.process_audio_chunk(audio_data)
             .await
             .map_err(|e| e.to_string())?;
 
-        
         use tokio::time::{timeout, Duration};
 
         match timeout(Duration::from_secs(5), self.wait_for_transcription_result()).await {
@@ -229,23 +202,19 @@ impl SpeechService {
         }
     }
 
-    
     async fn wait_for_transcription_result(
         &self,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         use tokio::time::{sleep, Duration};
 
-        
         let mut attempts = 0;
         let max_attempts = 10;
 
         while attempts < max_attempts {
-            
             if let Some(transcription) = self.check_transcription_result().await? {
                 return Ok(transcription);
             }
 
-            
             let delay = Duration::from_millis(100 * 2_u64.pow(attempts));
             sleep(delay).await;
             attempts += 1;
@@ -254,27 +223,20 @@ impl SpeechService {
         Err("Transcription result not available within timeout".into())
     }
 
-    
     async fn check_transcription_result(
         &self,
     ) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        
-        
-
-        
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         if rng.gen_bool(0.7) {
-            
             if rng.gen_bool(0.8) {
-                
                 Ok(Some("Sample transcribed speech text".to_string()))
             } else {
-                Ok(Some("".to_string())) 
+                Ok(Some("".to_string()))
             }
         } else {
-            Ok(None) 
+            Ok(None)
         }
     }
 }

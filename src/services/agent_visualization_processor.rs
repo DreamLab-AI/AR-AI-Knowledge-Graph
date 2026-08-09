@@ -1,6 +1,5 @@
 use crate::config::dev_config;
 use crate::time;
-use visionclaw_domain::types::claude_flow::{AgentStatus, Vec3};
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -9,6 +8,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 use sysinfo::{Pid, System};
+use visionclaw_domain::types::claude_flow::{AgentStatus, Vec3};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VisualizedAgent {
@@ -17,33 +17,27 @@ pub struct VisualizedAgent {
     pub agent_type: String,
     pub status: String,
 
-    
     pub position: Vec3,
     pub velocity: Vec3,
     pub color: String,
     pub size: f32,
     pub glow_intensity: f32,
 
-    
     pub health: f32,
     pub cpu_usage: f32,
     pub memory_usage: f32,
     pub activity_level: f32,
 
-    
     pub active_tasks: u32,
     pub completed_tasks: u32,
     pub success_rate: f32,
     pub current_task: Option<String>,
 
-    
     pub token_usage: u64,
-    pub token_rate: f32, 
+    pub token_rate: f32,
 
-    
     pub metadata: AgentMetadata,
 
-    
     pub shape_type: ShapeType,
     pub animation_state: AnimationState,
 }
@@ -62,13 +56,13 @@ pub struct AgentMetadata {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ShapeType {
-    Sphere,     
-    Cube,       
-    Octahedron, 
-    Cylinder,   
-    Torus,      
-    Cone,       
-    Pyramid,    
+    Sphere,
+    Cube,
+    Octahedron,
+    Cylinder,
+    Torus,
+    Cone,
+    Pyramid,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,7 +73,7 @@ pub enum AnimationState {
     Rotating,
     Bouncing,
     Glowing,
-    Flashing, 
+    Flashing,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,19 +82,16 @@ pub struct VisualizedConnection {
     pub source_id: String,
     pub target_id: String,
 
-    
-    pub strength: f32,  
-    pub flow_rate: f32, 
+    pub strength: f32,
+    pub flow_rate: f32,
     pub color: String,
     pub particle_count: u32,
 
-    
-    pub data_volume: u64, 
+    pub data_volume: u64,
     pub message_count: u64,
     pub latency_ms: f32,
     pub error_rate: f32,
 
-    
     pub is_active: bool,
     pub pulse_frequency: f32,
 }
@@ -112,17 +103,14 @@ pub struct SwarmVisualization {
     pub total_agents: u32,
     pub active_agents: u32,
 
-    
     pub overall_health: f32,
     pub total_cpu_usage: f32,
     pub total_memory_usage: f32,
     pub total_token_usage: u64,
     pub tokens_per_second: f32,
 
-    
     pub clusters: Vec<AgentCluster>,
 
-    
     pub performance_history: Vec<PerformanceSnapshot>,
 }
 
@@ -152,10 +140,8 @@ pub struct AgentVisualizationData {
     pub agents: Vec<VisualizedAgent>,
     pub connections: Vec<VisualizedConnection>,
 
-    
     pub physics_config: PhysicsConfig,
 
-    
     pub visual_config: VisualConfig,
 }
 
@@ -222,45 +208,36 @@ impl AgentVisualizationProcessor {
         self.process_map.retain(|_, pid| is_pid_alive(*pid));
     }
 
-    
     pub fn process_agents(&mut self, agents: Vec<AgentStatus>) -> Vec<VisualizedAgent> {
         agents
             .into_iter()
             .map(|agent| {
-                
                 let agent_type = agent.agent_type.clone();
 
-                
                 let health = agent.health;
                 let cpu_usage = agent.cpu_usage;
                 let memory_usage = agent.memory_usage;
                 let activity_level = agent.activity;
 
-                
                 let (color, shape, animation) =
                     self.get_visual_properties(&agent_type, &agent.status, health);
 
-                
                 let size = agent
                     .workload
                     .unwrap_or_else(|| 1.0 + (agent.active_tasks_count as f32 * 0.2).min(2.0));
 
-                
                 let glow_intensity = 0.3 + activity_level * 0.7;
 
-                
                 let token_usage = agent.tokens;
                 let token_rate = agent.token_rate;
 
-                
                 let position = agent.position.unwrap_or_else(|| {
-                    
                     use rand::Rng;
                     let mut rng = rand::thread_rng();
-                    let radius = 30.0; 
+                    let radius = 30.0;
                     let theta = rng.gen::<f32>() * 2.0 * std::f32::consts::PI;
                     let phi = rng.gen::<f32>() * std::f32::consts::PI;
-                    let r = rng.gen::<f32>().powf(1.0 / 3.0) * radius; 
+                    let r = rng.gen::<f32>().powf(1.0 / 3.0) * radius;
 
                     Vec3 {
                         x: r * phi.sin() * theta.cos(),
@@ -315,7 +292,6 @@ impl AgentVisualizationProcessor {
             .collect()
     }
 
-    
     fn get_visual_properties(
         &self,
         agent_type: &str,
@@ -365,7 +341,6 @@ impl AgentVisualizationProcessor {
         (color, shape, animation)
     }
 
-    
     #[allow(dead_code)]
     fn calculate_token_rate(&mut self, agent_id: &str, current_usage: u64) -> f32 {
         let now = time::now();
@@ -374,14 +349,11 @@ impl AgentVisualizationProcessor {
             .entry(agent_id.to_string())
             .or_insert_with(Vec::new);
 
-        
         history.push((now, current_usage));
 
-        
         let cutoff = now - chrono::Duration::seconds(60);
         history.retain(|(time, _)| *time > cutoff);
 
-        
         if history.len() < 2 {
             return 0.0;
         }
@@ -397,21 +369,17 @@ impl AgentVisualizationProcessor {
         }
     }
 
-    
     #[allow(dead_code)]
     fn get_agent_token_usage(&self, agent_id: &str) -> u64 {
-        
         if let Some(history) = self.token_history.get(agent_id) {
             history.last().map(|(_, usage)| *usage).unwrap_or(0)
         } else {
-            
             let mut hasher = DefaultHasher::new();
             agent_id.hash(&mut hasher);
             (hasher.finish() % 10000) + 500
         }
     }
 
-    
     #[allow(dead_code)]
     fn get_real_system_metrics(&mut self, agent_id: &str) -> (f32, f32) {
         // Periodic eviction of dead PIDs to prevent unbounded map growth
@@ -484,7 +452,6 @@ impl AgentVisualizationProcessor {
         (agent_cpu, agent_memory)
     }
 
-    
     pub fn create_visualization_packet(
         &mut self,
         agents: Vec<AgentStatus>,
@@ -493,7 +460,6 @@ impl AgentVisualizationProcessor {
     ) -> AgentVisualizationData {
         let processed_agents = self.process_agents(agents);
 
-        
         let total_agents = processed_agents.len() as u32;
         let active_agents = processed_agents
             .iter()
@@ -509,10 +475,8 @@ impl AgentVisualizationProcessor {
 
         let tokens_per_second = processed_agents.iter().map(|a| a.token_rate).sum::<f32>();
 
-        
         let connections = self.create_connections(&processed_agents);
 
-        
         let clusters = self.create_clusters(&processed_agents);
 
         AgentVisualizationData {
@@ -545,11 +509,9 @@ impl AgentVisualizationProcessor {
         }
     }
 
-    
     fn create_connections(&self, agents: &[VisualizedAgent]) -> Vec<VisualizedConnection> {
         let mut connections = Vec::new();
 
-        
         for coordinator in agents.iter().filter(|a| a.agent_type == "coordinator") {
             for agent in agents.iter().filter(|a| a.id != coordinator.id) {
                 connections.push(VisualizedConnection {
@@ -573,12 +535,10 @@ impl AgentVisualizationProcessor {
         connections
     }
 
-    
     fn create_clusters(&self, agents: &[VisualizedAgent]) -> Vec<AgentCluster> {
         let mut clusters = Vec::new();
         let mut type_groups: HashMap<String, Vec<String>> = HashMap::new();
 
-        
         for agent in agents {
             type_groups
                 .entry(agent.agent_type.clone())
@@ -586,7 +546,6 @@ impl AgentVisualizationProcessor {
                 .push(agent.id.clone());
         }
 
-        
         for (agent_type, agent_ids) in type_groups {
             if agent_ids.len() > 1 {
                 clusters.push(AgentCluster {
@@ -595,7 +554,7 @@ impl AgentVisualizationProcessor {
                         x: 0.0,
                         y: 0.0,
                         z: 0.0,
-                    }, 
+                    },
                     radius: 15.0,
                     agent_ids,
                     cluster_type: agent_type.clone(),
@@ -646,17 +605,13 @@ impl AgentVisualizationProcessor {
         }
     }
 
-    
     fn get_performance_history(&self) -> Vec<PerformanceSnapshot> {
-        
         let now = time::now();
         let mut history = Vec::new();
 
-        
         for i in 0..10 {
             let timestamp = now - chrono::Duration::minutes(i);
 
-            
             let variation = (i as f32 * 0.1).sin() * 0.1;
 
             history.push(PerformanceSnapshot {
@@ -668,7 +623,6 @@ impl AgentVisualizationProcessor {
             });
         }
 
-        
         history.reverse();
         history
     }

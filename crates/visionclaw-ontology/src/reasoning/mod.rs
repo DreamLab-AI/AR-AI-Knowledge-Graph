@@ -1,7 +1,6 @@
 /// Reasoning module for VisionClaw ontology inference
 /// This module provides custom OWL reasoning capabilities using the Whelk reasoner.
 /// The reasoning system validates ontologies, infers new axioms, and detects contradictions.
-
 pub mod custom_reasoner;
 
 // Re-export main types

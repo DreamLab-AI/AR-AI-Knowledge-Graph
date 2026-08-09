@@ -44,8 +44,7 @@ pub const VC_NS: &str = "https://narrativegoldmine.com/ns/v1#";
 /// Named graphs that are **never** included in a data export (ADR-101 D5):
 /// the migration ledger and the volatile path-distance caches. These carry
 /// bookkeeping/derived state, not authored ontology or knowledge triples.
-pub const EXPORT_EXCLUDED_GRAPHS: &[&str] =
-    &[GRAPH_MIGRATIONS, GRAPH_CACHE_SSSP, GRAPH_CACHE_APSP];
+pub const EXPORT_EXCLUDED_GRAPHS: &[&str] = &[GRAPH_MIGRATIONS, GRAPH_CACHE_SSSP, GRAPH_CACHE_APSP];
 
 /// Errors surfaced by the round-trip serialiser.
 ///
@@ -331,7 +330,10 @@ mod tests {
         assert_eq!(count_authored(&dst), count_authored(&src));
         // Diacritics in the rdfs:label must survive the round trip verbatim.
         let text = String::from_utf8(bytes).unwrap();
-        assert!(text.contains("Café Gödel Δelta"), "diacritics not preserved");
+        assert!(
+            text.contains("Café Gödel Δelta"),
+            "diacritics not preserved"
+        );
     }
 
     #[test]
@@ -359,14 +361,16 @@ mod tests {
             text.contains("manipulator") && text.contains("vc:"),
             "ontology class missing from Turtle export"
         );
-        assert!(!text.contains("Café"), "other graph leaked into Turtle export");
+        assert!(
+            !text.contains("Café"),
+            "other graph leaked into Turtle export"
+        );
     }
 
     #[test]
     fn turtle_export_of_bookkeeping_graph_is_empty() {
         let src = seed_store();
-        let ttl =
-            export_graph_turtle(&src, NamedNodeRef::new(GRAPH_MIGRATIONS).unwrap()).unwrap();
+        let ttl = export_graph_turtle(&src, NamedNodeRef::new(GRAPH_MIGRATIONS).unwrap()).unwrap();
         assert!(ttl.is_empty(), "bookkeeping graph must not export");
     }
 

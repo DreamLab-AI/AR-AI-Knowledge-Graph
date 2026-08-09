@@ -1,5 +1,4 @@
 // use crate::utils::unified_gpu_compute::UnifiedGPUCompute;
-use visionclaw_gpu::ptx_loader as ptx;
 use cust::context::Context;
 use cust::device::Device;
 use cust::module::Module;
@@ -7,15 +6,16 @@ use log::{error, info, warn};
 use std::env;
 use std::io::{Error, ErrorKind};
 use std::path::Path;
+use visionclaw_gpu::ptx_loader as ptx;
 
 pub fn ptx_module_smoke_test() -> String {
     let mut report = String::new();
     report.push_str("==== GPU PTX MODULE SMOKE TEST ====\n");
-    
+
     match ptx::load_ptx_sync() {
         Ok(ptx_content) => {
             report.push_str(&format!("PTX loaded ({} bytes)\n", ptx_content.len()));
-            
+
             let device = match Device::get_device(0) {
                 Ok(d) => {
                     report.push_str("CUDA device(0) acquired\n");
@@ -36,11 +36,11 @@ pub fn ptx_module_smoke_test() -> String {
                     return report;
                 }
             };
-            
+
             match Module::from_ptx(&ptx_content, &[]) {
                 Ok(module) => {
                     report.push_str("PTX module created successfully\n");
-                    
+
                     let kernels = [
                         "build_grid_kernel",
                         "compute_cell_bounds_kernel",
@@ -82,7 +82,6 @@ pub fn run_gpu_diagnostics() -> String {
     let mut report = String::new();
     report.push_str("==== GPU DIAGNOSTIC REPORT (Phase 0 Enhanced) ====\n");
 
-    
     report.push_str("PTX Build Environment:\n");
     match std::env::var("VISIONCLAW_PTX_PATH") {
         Ok(path) => {
@@ -117,7 +116,6 @@ pub fn run_gpu_diagnostics() -> String {
         }
     }
 
-    
     report.push_str(&format!(
         "\nEffective fallback CUDA arch (for runtime PTX compile): sm_{}\n",
         ptx::effective_cuda_arch()
@@ -140,7 +138,6 @@ pub fn run_gpu_diagnostics() -> String {
         }
     }
 
-    
     let ptx_paths = [
         "/app/src/utils/ptx/visionclaw_unified.ptx",
         "./src/utils/ptx/visionclaw_unified.ptx",
@@ -153,7 +150,7 @@ pub fn run_gpu_diagnostics() -> String {
             ptx_found = true;
             report.push_str(&format!("  PTX file found at: {}\n", path));
             info!("GPU Diagnostic: PTX file found at {}", path);
-            
+
             match std::fs::metadata(path) {
                 Ok(metadata) => {
                     report.push_str(&format!("     Size: {} bytes\n", metadata.len()));
@@ -172,26 +169,12 @@ pub fn run_gpu_diagnostics() -> String {
 
     if !ptx_found {
         error!("GPU Diagnostic: No PTX file found at any expected location");
-        
+
         report.push_str("  ⚠️ CRITICAL ERROR: No PTX file found. GPU physics will not work.\n");
     }
 
-    
     report.push_str("\nCUDA Device Detection:\n");
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     report.push_str("  ⚠️ GPU testing temporarily disabled - cust crate not available\n");
 
     report.push_str("=============================\n");
@@ -204,7 +187,6 @@ pub fn validate_ptx_content(ptx_content: &str) -> Result<(), String> {
         return Err("PTX content is empty".to_string());
     }
 
-    
     if !ptx_content.contains(".version") {
         return Err("PTX content missing .version directive".to_string());
     }
@@ -213,7 +195,6 @@ pub fn validate_ptx_content(ptx_content: &str) -> Result<(), String> {
         return Err("PTX content missing .target directive".to_string());
     }
 
-    
     let required_kernels = [
         "build_grid_kernel",
         "compute_cell_bounds_kernel",
@@ -315,8 +296,6 @@ pub fn create_gpu_metrics_report() -> String {
     let mut report = String::new();
     report.push_str("==== GPU METRICS REPORT ====\n");
 
-    
-    
     report.push_str("Memory Usage:\n");
     report.push_str("  Device Memory: N/A (requires CUDA context)\n");
     report.push_str("  Host Memory: N/A (requires implementation)\n");
@@ -334,14 +313,12 @@ pub fn create_gpu_metrics_report() -> String {
 pub fn fix_cuda_environment() -> Result<(), Error> {
     info!("Attempting to fix CUDA environment...");
 
-    
     if env::var("CUDA_VISIBLE_DEVICES").is_err() {
         info!("CUDA_VISIBLE_DEVICES not set, setting to 0");
-        
+
         unsafe { env::set_var("CUDA_VISIBLE_DEVICES", "0") };
     }
 
-    
     let primary_path = "/app/src/utils/ptx/visionclaw_unified.ptx";
     let alternative_path = "./src/utils/ptx/visionclaw_unified.ptx";
 

@@ -36,15 +36,12 @@ pub struct UnifiedGPUCompute {
     pub(crate) apsp_module: Option<Module>,
     pub(crate) stream: Stream,
 
-
     pub(crate) build_grid_kernel_name: &'static str,
     pub(crate) compute_cell_bounds_kernel_name: &'static str,
     pub(crate) force_pass_kernel_name: &'static str,
     pub(crate) integrate_pass_kernel_name: &'static str,
 
-
     pub(crate) params: SimParams,
-
 
     pub pos_in_x: DeviceBuffer<f32>,
     pub pos_in_y: DeviceBuffer<f32>,
@@ -60,28 +57,24 @@ pub struct UnifiedGPUCompute {
     pub vel_out_y: DeviceBuffer<f32>,
     pub vel_out_z: DeviceBuffer<f32>,
 
-
     pub mass: DeviceBuffer<f32>,
     pub node_graph_id: DeviceBuffer<i32>,
 
     // Ontology class metadata for class-based physics
-    pub class_id: DeviceBuffer<i32>,        // Maps owl_class_iri to integer class ID
-    pub class_charge: DeviceBuffer<f32>,    // Class-specific charge modifiers
-    pub class_mass: DeviceBuffer<f32>,      // Class-specific mass modifiers
+    pub class_id: DeviceBuffer<i32>, // Maps owl_class_iri to integer class ID
+    pub class_charge: DeviceBuffer<f32>, // Class-specific charge modifiers
+    pub class_mass: DeviceBuffer<f32>, // Class-specific mass modifiers
     // Per-population spring strength multiplier (Knowledge/Ontology/Agent).
     // Default 1.0 == identity (current LinLog coefficient). Read in both spring paths.
     pub spring_scale: DeviceBuffer<f32>,
-
 
     pub edge_row_offsets: DeviceBuffer<i32>,
     pub edge_col_indices: DeviceBuffer<i32>,
     pub edge_weights: DeviceBuffer<f32>,
 
-
     pub(crate) force_x: DeviceBuffer<f32>,
     pub(crate) force_y: DeviceBuffer<f32>,
     pub(crate) force_z: DeviceBuffer<f32>,
-
 
     pub(crate) cell_keys: DeviceBuffer<i32>,
     pub(crate) sorted_node_indices: DeviceBuffer<i32>,
@@ -93,9 +86,7 @@ pub struct UnifiedGPUCompute {
     pub(crate) cell_start: DeviceBuffer<i32>,
     pub(crate) cell_end: DeviceBuffer<i32>,
 
-
     pub(crate) cub_temp_storage: DeviceBuffer<u8>,
-
 
     pub num_nodes: usize,
     pub num_edges: usize,
@@ -104,28 +95,22 @@ pub struct UnifiedGPUCompute {
     pub max_grid_cells: usize,
     pub(crate) iteration: i32,
 
-
     pub(crate) zero_buffer: Vec<i32>,
-
 
     pub(crate) cell_buffer_growth_factor: f32,
     pub(crate) max_allowed_grid_cells: usize,
     pub(crate) resize_count: usize,
     pub(crate) total_memory_allocated: usize,
 
-
     pub dist: DeviceBuffer<f32>,
     pub current_frontier: DeviceBuffer<i32>,
     pub next_frontier_flags: DeviceBuffer<i32>,
     pub parents: Option<DeviceBuffer<i32>>,
 
-
     pub(crate) sssp_stream: Option<Stream>,
-
 
     pub(crate) constraint_data: DeviceBuffer<ConstraintData>,
     pub(crate) num_constraints: usize,
-
 
     pub sssp_available: bool,
 
@@ -136,9 +121,7 @@ pub struct UnifiedGPUCompute {
     /// Whether the SSSP-spring-adjust feature is enabled (toggled at runtime).
     pub(crate) sssp_spring_adjust_enabled: bool,
 
-
     pub(crate) performance_metrics: GPUPerformanceMetrics,
-
 
     pub centroids_x: DeviceBuffer<f32>,
     pub centroids_y: DeviceBuffer<f32>,
@@ -176,14 +159,12 @@ pub struct UnifiedGPUCompute {
     /// Iteration index of the last Louvain label refresh (force-step counter).
     pub last_cohesion_refresh_iter: i32,
 
-
     pub lof_scores: DeviceBuffer<f32>,
     pub local_densities: DeviceBuffer<f32>,
     pub zscore_values: DeviceBuffer<f32>,
     pub feature_values: DeviceBuffer<f32>,
     pub partial_sums: DeviceBuffer<f32>,
     pub partial_sq_sums: DeviceBuffer<f32>,
-
 
     pub labels_current: DeviceBuffer<i32>,
     pub labels_next: DeviceBuffer<i32>,
@@ -195,28 +176,23 @@ pub struct UnifiedGPUCompute {
     pub rand_states: DeviceBuffer<curandState>,
     pub max_labels: usize,
 
-
     pub partial_kinetic_energy: DeviceBuffer<f32>,
     pub active_node_count: DeviceBuffer<i32>,
     pub should_skip_physics: DeviceBuffer<i32>,
     pub system_kinetic_energy: DeviceBuffer<f32>,
 
-
     pub(crate) transfer_stream: Stream,
     pub(crate) transfer_events: [Event; 2],
-
 
     pub(crate) host_pos_buffer_a: (Vec<f32>, Vec<f32>, Vec<f32>),
     pub(crate) host_pos_buffer_b: (Vec<f32>, Vec<f32>, Vec<f32>),
     pub(crate) host_vel_buffer_a: (Vec<f32>, Vec<f32>, Vec<f32>),
     pub(crate) host_vel_buffer_b: (Vec<f32>, Vec<f32>, Vec<f32>),
 
-
     pub(crate) current_pos_buffer: bool,
     pub(crate) current_vel_buffer: bool,
     pub(crate) pos_transfer_pending: bool,
     pub(crate) vel_transfer_pending: bool,
-
 
     pub(crate) aabb_block_results: DeviceBuffer<AABB>,
     pub(crate) aabb_num_blocks: usize,
@@ -261,7 +237,6 @@ impl UnifiedGPUCompute {
         clustering_ptx: Option<&str>,
         apsp_ptx: Option<&str>,
     ) -> Result<Self> {
-
         if let Err(e) = crate::utils::gpu_diagnostics::validate_ptx_content(ptx_content) {
             let diagnosis = crate::utils::gpu_diagnostics::diagnose_ptx_error(&e);
             return Err(anyhow!("PTX validation failed: {}\n{}", e, diagnosis));
@@ -270,13 +245,11 @@ impl UnifiedGPUCompute {
         let device = Device::get_device(0)?;
         let _context = Context::new(device)?;
 
-
         let module = Module::from_ptx(ptx_content, &[]).map_err(|e| {
             let error_msg = format!("Module::from_ptx() failed: {}", e);
             let diagnosis = crate::utils::gpu_diagnostics::diagnose_ptx_error(&error_msg);
             anyhow!("{}\n{}", error_msg, diagnosis)
         })?;
-
 
         let clustering_module = if let Some(clustering_ptx_content) = clustering_ptx {
             if let Err(e) =
@@ -304,9 +277,7 @@ impl UnifiedGPUCompute {
         };
 
         let apsp_module = if let Some(apsp_ptx_content) = apsp_ptx {
-            if let Err(e) =
-                crate::utils::gpu_diagnostics::validate_ptx_content(apsp_ptx_content)
-            {
+            if let Err(e) = crate::utils::gpu_diagnostics::validate_ptx_content(apsp_ptx_content) {
                 warn!(
                     "APSP PTX validation failed: {}. Continuing without GPU APSP support.",
                     e
@@ -319,7 +290,10 @@ impl UnifiedGPUCompute {
                         Some(module)
                     }
                     Err(e) => {
-                        warn!("Failed to load APSP module: {}. Continuing without GPU APSP support.", e);
+                        warn!(
+                            "Failed to load APSP module: {}. Continuing without GPU APSP support.",
+                            e
+                        );
                         None
                     }
                 }
@@ -329,7 +303,6 @@ impl UnifiedGPUCompute {
         };
 
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
-
 
         let pos_in_x = DeviceBuffer::zeroed(num_nodes)?;
         let pos_in_y = DeviceBuffer::zeroed(num_nodes)?;
@@ -345,15 +318,14 @@ impl UnifiedGPUCompute {
         let vel_out_y = DeviceBuffer::zeroed(num_nodes)?;
         let vel_out_z = DeviceBuffer::zeroed(num_nodes)?;
 
-
         let mass = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?;
         let node_graph_id = DeviceBuffer::zeroed(num_nodes)?;
 
         // Initialize ontology class metadata buffers
-        let class_id = DeviceBuffer::zeroed(num_nodes)?;           // Default class ID = 0 (unknown)
-        let class_charge = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?;  // Default charge = 1.0
-        let class_mass = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?;    // Default mass = 1.0
-        let spring_scale = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?;  // Default spring multiplier = 1.0
+        let class_id = DeviceBuffer::zeroed(num_nodes)?; // Default class ID = 0 (unknown)
+        let class_charge = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default charge = 1.0
+        let class_mass = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default mass = 1.0
+        let spring_scale = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default spring multiplier = 1.0
 
         let edge_row_offsets = DeviceBuffer::zeroed(num_nodes + 1)?;
         let edge_col_indices = DeviceBuffer::zeroed(num_edges)?;
@@ -361,7 +333,6 @@ impl UnifiedGPUCompute {
         let force_x = DeviceBuffer::zeroed(num_nodes)?;
         let force_y = DeviceBuffer::zeroed(num_nodes)?;
         let force_z = DeviceBuffer::zeroed(num_nodes)?;
-
 
         let cell_keys = DeviceBuffer::zeroed(num_nodes)?;
         let mut sorted_node_indices = DeviceBuffer::zeroed(num_nodes)?;
@@ -373,21 +344,16 @@ impl UnifiedGPUCompute {
         let sort_keys_out = DeviceBuffer::zeroed(num_nodes)?;
         let sort_values_out = DeviceBuffer::zeroed(num_nodes)?;
 
-
-
         let max_grid_cells = 32 * 32 * 32;
         let cell_start = DeviceBuffer::zeroed(max_grid_cells)?;
         let cell_end = DeviceBuffer::zeroed(max_grid_cells)?;
 
-
         let cub_temp_storage = Self::calculate_cub_temp_storage(num_nodes, max_grid_cells)?;
-
 
         let dist = DeviceBuffer::from_slice(&vec![f32::INFINITY; num_nodes])?;
         let current_frontier = DeviceBuffer::zeroed(num_nodes)?;
         let next_frontier_flags = DeviceBuffer::zeroed(num_nodes)?;
         let sssp_stream = Some(Stream::new(StreamFlags::NON_BLOCKING, None)?);
-
 
         let max_clusters = 50;
         let centroids_x = DeviceBuffer::zeroed(max_clusters)?;
@@ -408,14 +374,12 @@ impl UnifiedGPUCompute {
         let min_distances = DeviceBuffer::zeroed(num_nodes)?;
         let selected_nodes = DeviceBuffer::zeroed(max_clusters)?;
 
-
         let lof_scores = DeviceBuffer::zeroed(num_nodes)?;
         let local_densities = DeviceBuffer::zeroed(num_nodes)?;
         let zscore_values = DeviceBuffer::zeroed(num_nodes)?;
         let feature_values = DeviceBuffer::zeroed(num_nodes)?;
         let partial_sums = DeviceBuffer::zeroed(num_blocks)?;
         let partial_sq_sums = DeviceBuffer::zeroed(num_blocks)?;
-
 
         let labels_current = DeviceBuffer::zeroed(num_nodes)?;
         let labels_next = DeviceBuffer::zeroed(num_nodes)?;
@@ -433,9 +397,7 @@ impl UnifiedGPUCompute {
         ])?;
         let max_labels = num_nodes;
 
-
         let kernel_module = module;
-
 
         let initial_memory = Self::calculate_memory_usage(num_nodes, num_edges, max_grid_cells);
 
@@ -555,13 +517,11 @@ impl UnifiedGPUCompute {
             should_skip_physics: DeviceBuffer::zeroed(1)?,
             system_kinetic_energy: DeviceBuffer::zeroed(1)?,
 
-
             transfer_stream: Stream::new(StreamFlags::NON_BLOCKING, None)?,
             transfer_events: [
                 Event::new(EventFlags::DEFAULT)?,
                 Event::new(EventFlags::DEFAULT)?,
             ],
-
 
             host_pos_buffer_a: (
                 vec![0.0f32; num_nodes],
@@ -584,12 +544,10 @@ impl UnifiedGPUCompute {
                 vec![0.0f32; num_nodes],
             ),
 
-
             current_pos_buffer: false,
             current_vel_buffer: false,
             pos_transfer_pending: false,
             vel_transfer_pending: false,
-
 
             aabb_num_blocks: (num_nodes + 255) / 256,
             aabb_block_results: DeviceBuffer::zeroed((num_nodes + 255) / 256)?,
@@ -601,8 +559,6 @@ impl UnifiedGPUCompute {
             prev_force_y: DeviceBuffer::zeroed(num_nodes)?,
             prev_force_z: DeviceBuffer::zeroed(num_nodes)?,
         };
-
-
 
         Ok(gpu_compute)
     }
@@ -639,12 +595,20 @@ impl UnifiedGPUCompute {
             sort_bytes, scan_bytes, total_bytes, num_items
         );
 
-        DeviceBuffer::zeroed(total_bytes)
-            .map_err(|e| anyhow!("Failed to allocate CUB temp storage ({} bytes): {}", total_bytes, e))
+        DeviceBuffer::zeroed(total_bytes).map_err(|e| {
+            anyhow!(
+                "Failed to allocate CUB temp storage ({} bytes): {}",
+                total_bytes,
+                e
+            )
+        })
     }
 
-    pub(crate) fn calculate_memory_usage(num_nodes: usize, num_edges: usize, max_grid_cells: usize) -> usize {
-
+    pub(crate) fn calculate_memory_usage(
+        num_nodes: usize,
+        num_edges: usize,
+        max_grid_cells: usize,
+    ) -> usize {
         let node_memory = num_nodes * (12 * 4 + 1 * 4 + 1 * 4);
 
         let edge_memory = (num_nodes + 1) * 4 + num_edges * (4 + 4);

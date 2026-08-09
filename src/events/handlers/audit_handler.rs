@@ -65,7 +65,6 @@ impl AuditEventHandler {
     }
 
     fn summarize_data(data: &str) -> String {
-        
         const MAX_LEN: usize = 100;
         if data.len() <= MAX_LEN {
             data.to_string()
@@ -78,7 +77,6 @@ impl AuditEventHandler {
 #[async_trait]
 impl EventHandler for AuditEventHandler {
     fn event_type(&self) -> &'static str {
-        
         "*"
     }
 
@@ -107,7 +105,7 @@ impl EventHandler for AuditEventHandler {
     }
 
     fn max_retries(&self) -> u32 {
-        1 
+        1
     }
 }
 
@@ -142,7 +140,6 @@ mod tests {
     async fn test_get_entries_for_aggregate() {
         let handler = AuditEventHandler::new("audit-handler");
 
-        
         for i in 0..5 {
             let event = StoredEvent {
                 metadata: EventMetadata::new(

@@ -12,12 +12,10 @@ use super::types::{GraphPattern, InsightsResponse};
 pub async fn get_ai_insights(app_state: web::Data<AppState>) -> Result<HttpResponse> {
     info!("Generating AI insights for graph analysis");
 
-
     let graph_data = match app_state.graph_service_addr.send(GetGraphData).await {
         Ok(Ok(data)) => Some(data),
         _ => None,
     };
-
 
     let clustering_tasks = CLUSTERING_TASKS.lock().await;
     let anomaly_state = ANOMALY_STATE.lock().await;
@@ -29,7 +27,6 @@ pub async fn get_ai_insights(app_state: web::Data<AppState>) -> Result<HttpRespo
 
     let mut patterns = vec![];
     let mut recommendations = vec![];
-
 
     if let Some(latest_clusters) = clustering_tasks
         .values()
@@ -52,7 +49,6 @@ pub async fn get_ai_insights(app_state: web::Data<AppState>) -> Result<HttpRespo
             );
         }
 
-
         if let Some(largest_cluster) = latest_clusters.iter().max_by_key(|c| c.node_count) {
             patterns.push(GraphPattern {
                 id: Uuid::new_v4().to_string(),
@@ -72,7 +68,6 @@ pub async fn get_ai_insights(app_state: web::Data<AppState>) -> Result<HttpRespo
             });
         }
     }
-
 
     if anomaly_state.enabled && anomaly_state.stats.total > 0 {
         insights.push(format!(
@@ -103,7 +98,6 @@ pub async fn get_ai_insights(app_state: web::Data<AppState>) -> Result<HttpRespo
             significance: "high".to_string(),
         });
     }
-
 
     if let Some(data) = graph_data {
         let node_count = data.nodes.len();
@@ -141,7 +135,6 @@ pub async fn get_ai_insights(app_state: web::Data<AppState>) -> Result<HttpRespo
 pub async fn get_realtime_insights(app_state: web::Data<AppState>) -> Result<HttpResponse> {
     info!("Client requesting real-time AI insights");
 
-
     let graph_data = app_state
         .graph_service_addr
         .send(GetGraphData)
@@ -158,10 +151,8 @@ pub async fn get_realtime_insights(app_state: web::Data<AppState>) -> Result<Htt
     let clustering_tasks = CLUSTERING_TASKS.lock().await;
     let anomaly_state = ANOMALY_STATE.lock().await;
 
-
     let mut insights = vec![];
     let mut urgency_level = "low";
-
 
     if !graph_data.nodes.is_empty() {
         let density = (2.0 * graph_data.edges.len() as f32)
@@ -180,7 +171,6 @@ pub async fn get_realtime_insights(app_state: web::Data<AppState>) -> Result<Htt
         ));
     }
 
-
     if let Some(running_task) = clustering_tasks.values().find(|t| t.status == "running") {
         insights.push(format!(
             "Clustering in progress: {} method at {:.1}% completion",
@@ -189,7 +179,6 @@ pub async fn get_realtime_insights(app_state: web::Data<AppState>) -> Result<Htt
         ));
         urgency_level = "medium";
     }
-
 
     if anomaly_state.enabled {
         if anomaly_state.stats.critical > 0 {
@@ -209,13 +198,11 @@ pub async fn get_realtime_insights(app_state: web::Data<AppState>) -> Result<Htt
         }
     }
 
-
     if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
         if let Ok(Ok(stats)) = gpu_addr
             .send(crate::actors::messages::GetPhysicsStats)
             .await
         {
-
             if stats.gpu_failure_count > 0 {
                 insights.push(format!(
                     "Performance warning: {} GPU failures detected",
@@ -246,7 +233,6 @@ pub async fn get_dashboard_status(app_state: web::Data<AppState>) -> Result<Http
     let clustering_tasks = CLUSTERING_TASKS.lock().await;
     let anomaly_state = ANOMALY_STATE.lock().await;
 
-
     let active_clustering = clustering_tasks
         .values()
         .filter(|t| t.status == "running")
@@ -256,7 +242,6 @@ pub async fn get_dashboard_status(app_state: web::Data<AppState>) -> Result<Http
         .values()
         .filter(|t| t.status == "completed")
         .count();
-
 
     let mut health_status = "healthy";
     let mut issues = vec![];

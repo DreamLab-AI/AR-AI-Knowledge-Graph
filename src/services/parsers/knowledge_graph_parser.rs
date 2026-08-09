@@ -6,13 +6,13 @@
 //! - Edges (links, relationships)
 //! - Metadata (properties, tags)
 
+use crate::utils::socket_flow_messages::BinaryNodeData;
+use log::{debug, info};
+use std::collections::HashMap;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::metadata::MetadataStore;
 use visionclaw_domain::models::node::Node;
-use crate::utils::socket_flow_messages::BinaryNodeData;
-use log::{debug, info};
-use std::collections::HashMap;
 
 /// Knowledge graph parser with position preservation support
 pub struct KnowledgeGraphParser {
@@ -64,21 +64,15 @@ impl KnowledgeGraphParser {
         )
     }
 
-    
     pub fn parse(&self, content: &str, filename: &str) -> Result<GraphData, String> {
         info!("Parsing knowledge graph file: {}", filename);
 
-        
         let page_name = filename.strip_suffix(".md").unwrap_or(filename).to_string();
 
-        
         let mut nodes = vec![self.create_page_node(&page_name, content)];
         let mut id_to_metadata = HashMap::new();
         id_to_metadata.insert(nodes[0].id.to_string(), page_name.clone());
 
-        
-        
-        
         // Wikilink edges-only: create Edge objects for [[WikiLinks]] without
         // inflating the node count. Only edges are emitted; target nodes are NOT
         // created here. Edges whose target doesn't exist as a page node will
@@ -140,13 +134,17 @@ impl KnowledgeGraphParser {
             vx: 0.0,
             vy: 0.0,
             vz: 0.0,
-        }.into();
+        }
+        .into();
 
         // Pages with owl:class metadata are surfaced as ontology nodes so the
         // dual-graph (knowledge ↔ ontology) X-axis separation control has something
         // to separate. Pages without it remain "page" (knowledge population).
         let (node_type, color) = if owl_class_iri.is_some() {
-            (Some("ontology_node".to_string()), Some("#B91C7B".to_string()))
+            (
+                Some("ontology_node".to_string()),
+                Some("#B91C7B".to_string()),
+            )
         } else {
             (Some("page".to_string()), Some("#4A90E2".to_string()))
         };
@@ -213,8 +211,8 @@ impl KnowledgeGraphParser {
         let mut edges = Vec::new();
         let mut seen_targets = std::collections::HashSet::new();
 
-        let link_pattern = regex::Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
-            .expect("Invalid regex pattern");
+        let link_pattern =
+            regex::Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").expect("Invalid regex pattern");
 
         for cap in link_pattern.captures_iter(content) {
             if let Some(link_match) = cap.get(1) {
@@ -247,7 +245,8 @@ impl KnowledgeGraphParser {
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
 
-        let link_pattern = regex::Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").expect("Invalid regex pattern");
+        let link_pattern =
+            regex::Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").expect("Invalid regex pattern");
 
         for cap in link_pattern.captures_iter(content) {
             if let Some(link_match) = cap.get(1) {
@@ -267,7 +266,8 @@ impl KnowledgeGraphParser {
                     vx: 0.0,
                     vy: 0.0,
                     vz: 0.0,
-                }.into();
+                }
+                .into();
 
                 nodes.push(Node {
                     id: target_id,
@@ -307,37 +307,30 @@ impl KnowledgeGraphParser {
         (nodes, edges)
     }
 
-    
     fn extract_metadata_store(&self, content: &str) -> MetadataStore {
         let store = MetadataStore::new();
 
-        
-        let prop_pattern = regex::Regex::new(r"([a-zA-Z_]+)::\s*(.+)").expect("Invalid regex pattern");
+        let prop_pattern =
+            regex::Regex::new(r"([a-zA-Z_]+)::\s*(.+)").expect("Invalid regex pattern");
 
-        
         let mut properties = HashMap::new();
         for cap in prop_pattern.captures_iter(content) {
             if let (Some(key), Some(value)) = (cap.get(1), cap.get(2)) {
                 let key_str = key.as_str().to_string();
                 let value_str = value.as_str().trim().to_string();
 
-                
                 properties.insert(key_str, value_str);
             }
         }
 
-        
-        
         store
     }
 
-    
     fn extract_tags(&self, content: &str) -> Vec<String> {
         let mut tags = Vec::new();
 
-        
-        let tag_pattern =
-            regex::Regex::new(r"#([a-zA-Z0-9_-]+)|tag::\s*#?([a-zA-Z0-9_-]+)").expect("Invalid regex pattern");
+        let tag_pattern = regex::Regex::new(r"#([a-zA-Z0-9_-]+)|tag::\s*#?([a-zA-Z0-9_-]+)")
+            .expect("Invalid regex pattern");
 
         for cap in tag_pattern.captures_iter(content) {
             if let Some(tag) = cap.get(1).or_else(|| cap.get(2)) {
@@ -349,7 +342,6 @@ impl KnowledgeGraphParser {
         tags
     }
 
-    
     pub fn page_name_to_id(&self, page_name: &str) -> u32 {
         // Deterministic, seeded SHA-256 derivation (ADR-100 D2 / PRD-018 WS-0),
         // replacing the previous `DefaultHasher` whose output is explicitly NOT

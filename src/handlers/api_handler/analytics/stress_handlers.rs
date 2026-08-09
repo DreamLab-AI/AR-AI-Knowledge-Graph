@@ -2,13 +2,12 @@ use actix_web::{web, HttpResponse, Result};
 use log::error;
 
 use crate::actors::messages::{
-    ConfigureStressMajorization, GetStressMajorizationConfig,
-    GetStressMajorizationStats, ResetStressMajorizationSafety,
-    TriggerStressMajorization, UpdateStressMajorizationParams,
+    ConfigureStressMajorization, GetStressMajorizationConfig, GetStressMajorizationStats,
+    ResetStressMajorizationSafety, TriggerStressMajorization, UpdateStressMajorizationParams,
 };
-use visionclaw_domain::models::constraints::AdvancedParams;
-use crate::{ok_json, error_json, service_unavailable};
 use crate::AppState;
+use crate::{error_json, ok_json, service_unavailable};
+use visionclaw_domain::models::constraints::AdvancedParams;
 
 pub async fn trigger_stress_majorization(
     _auth: crate::settings::auth_extractor::AuthenticatedUser,
@@ -37,7 +36,9 @@ pub async fn trigger_stress_majorization(
     }
 }
 
-pub async fn get_stress_majorization_stats(data: web::Data<AppState>) -> Result<HttpResponse, actix_web::Error> {
+pub async fn get_stress_majorization_stats(
+    data: web::Data<AppState>,
+) -> Result<HttpResponse, actix_web::Error> {
     if let Some(gpu_actor) = data.get_gpu_compute_addr().await {
         match gpu_actor.send(GetStressMajorizationStats).await {
             Ok(Ok(stats)) => ok_json!(serde_json::json!({

@@ -1,12 +1,12 @@
 //! Workspace model definitions and related structures
 
+use crate::utils::time;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
-use crate::utils::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, PartialEq, Default)]
 pub enum WorkspaceType {
@@ -30,10 +30,8 @@ pub enum WorkspaceStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Validate)]
 pub struct Workspace {
-    
     pub id: String,
 
-    
     #[validate(length(
         min = 1,
         max = 100,
@@ -41,35 +39,26 @@ pub struct Workspace {
     ))]
     pub name: String,
 
-    
     #[validate(length(max = 500, message = "Description cannot exceed 500 characters"))]
     pub description: Option<String>,
 
-    
     pub workspace_type: WorkspaceType,
 
-    
     pub status: WorkspaceStatus,
 
-    
     pub member_count: u32,
 
-    
     pub is_favorite: bool,
 
-    
     pub owner_id: Option<String>,
 
-    
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     #[specta(skip)]
     pub metadata: HashMap<String, serde_json::Value>,
 
-    
     #[specta(type = String)]
     pub created_at: DateTime<Utc>,
 
-    
     #[specta(type = String)]
     pub updated_at: DateTime<Utc>,
 }
@@ -94,7 +83,6 @@ impl Default for Workspace {
 }
 
 impl Workspace {
-    
     pub fn new(name: String, description: Option<String>, workspace_type: WorkspaceType) -> Self {
         let now = time::now();
         Self {
@@ -112,7 +100,6 @@ impl Workspace {
         }
     }
 
-    
     pub fn update(
         &mut self,
         name: Option<String>,
@@ -131,37 +118,31 @@ impl Workspace {
         self.updated_at = time::now();
     }
 
-    
     pub fn toggle_favorite(&mut self) -> bool {
         self.is_favorite = !self.is_favorite;
         self.updated_at = time::now();
         self.is_favorite
     }
 
-    
     pub fn archive(&mut self) {
         self.status = WorkspaceStatus::Archived;
         self.updated_at = time::now();
     }
 
-    
     pub fn unarchive(&mut self) {
         self.status = WorkspaceStatus::Active;
         self.updated_at = time::now();
     }
 
-    
     pub fn is_archived(&self) -> bool {
         self.status == WorkspaceStatus::Archived
     }
 
-    
     pub fn set_metadata(&mut self, key: String, value: serde_json::Value) {
         self.metadata.insert(key, value);
         self.updated_at = time::now();
     }
 
-    
     pub fn remove_metadata(&mut self, key: &str) -> Option<serde_json::Value> {
         let result = self.metadata.remove(key);
         if result.is_some() {
@@ -170,13 +151,11 @@ impl Workspace {
         result
     }
 
-    
     pub fn set_member_count(&mut self, count: u32) {
         self.member_count = count;
         self.updated_at = time::now();
     }
 
-    
     pub fn set_owner(&mut self, owner_id: String) {
         self.owner_id = Some(owner_id);
         self.updated_at = time::now();
@@ -294,15 +273,14 @@ impl WorkspaceListResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct WorkspaceFilter {
-    
     pub status: Option<WorkspaceStatus>,
-    
+
     pub workspace_type: Option<WorkspaceType>,
-    
+
     pub is_favorite: Option<bool>,
-    
+
     pub owner_id: Option<String>,
-    
+
     pub search: Option<String>,
 }
 
@@ -489,12 +467,18 @@ mod tests {
 
     #[test]
     fn workspace_sort_by_default_is_updated_at() {
-        assert!(matches!(WorkspaceSortBy::default(), WorkspaceSortBy::UpdatedAt));
+        assert!(matches!(
+            WorkspaceSortBy::default(),
+            WorkspaceSortBy::UpdatedAt
+        ));
     }
 
     #[test]
     fn sort_direction_default_is_descending() {
-        assert!(matches!(SortDirection::default(), SortDirection::Descending));
+        assert!(matches!(
+            SortDirection::default(),
+            SortDirection::Descending
+        ));
     }
 
     #[test]

@@ -43,11 +43,11 @@ impl Handler<BroadcastPositionUpdate> for SocketFlowServer {
             let analytics_ref = analytics_guard.as_deref();
             binary_protocol::encode_node_data_extended_with_sssp(
                 &msg.0,
-                &[], // agent_node_ids — flags already set on node IDs by callers
-                &[], // knowledge_node_ids
-                &[], // ontology_class_ids
-                &[], // ontology_individual_ids
-                &[], // ontology_property_ids
+                &[],  // agent_node_ids — flags already set on node IDs by callers
+                &[],  // knowledge_node_ids
+                &[],  // ontology_class_ids
+                &[],  // ontology_individual_ids
+                &[],  // ontology_property_ids
                 None, // sssp_data
                 analytics_ref,
             )
@@ -55,10 +55,7 @@ impl Handler<BroadcastPositionUpdate> for SocketFlowServer {
         ctx.binary(binary_data);
 
         if self.should_log_update() {
-            debug!(
-                "[WebSocket] Position broadcast sent: {} nodes",
-                msg.0.len()
-            );
+            debug!("[WebSocket] Position broadcast sent: {} nodes", msg.0.len());
         }
     }
 }

@@ -118,13 +118,18 @@ impl_domain_event!(ClassAddedEvent, "ClassAdded", "OntologyClass", class_id);
 pub struct PropertyAddedEvent {
     pub property_id: String,
     pub property_iri: String,
-    pub property_type: String, 
+    pub property_type: String,
     pub domain: Option<String>,
     pub range: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(PropertyAddedEvent, "PropertyAdded", "OntologyProperty", property_id);
+impl_domain_event!(
+    PropertyAddedEvent,
+    "PropertyAdded",
+    "OntologyProperty",
+    property_id
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AxiomAddedEvent {
@@ -142,14 +147,19 @@ impl_domain_event!(AxiomAddedEvent, "AxiomAdded", "Axiom", axiom_id);
 pub struct OntologyImportedEvent {
     pub ontology_id: String,
     pub file_path: String,
-    pub format: String, 
+    pub format: String,
     pub class_count: usize,
     pub property_count: usize,
     pub individual_count: usize,
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(OntologyImportedEvent, "OntologyImported", "Ontology", ontology_id);
+impl_domain_event!(
+    OntologyImportedEvent,
+    "OntologyImported",
+    "Ontology",
+    ontology_id
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InferenceCompletedEvent {
@@ -160,7 +170,12 @@ pub struct InferenceCompletedEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(InferenceCompletedEvent, "InferenceCompleted", "Ontology", ontology_id);
+impl_domain_event!(
+    InferenceCompletedEvent,
+    "InferenceCompleted",
+    "Ontology",
+    ontology_id
+);
 
 // ==================== Physics Events ====================
 
@@ -172,7 +187,12 @@ pub struct SimulationStartedEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(SimulationStartedEvent, "SimulationStarted", "Simulation", simulation_id);
+impl_domain_event!(
+    SimulationStartedEvent,
+    "SimulationStarted",
+    "Simulation",
+    simulation_id
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationStoppedEvent {
@@ -182,7 +202,12 @@ pub struct SimulationStoppedEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(SimulationStoppedEvent, "SimulationStopped", "Simulation", simulation_id);
+impl_domain_event!(
+    SimulationStoppedEvent,
+    "SimulationStopped",
+    "Simulation",
+    simulation_id
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayoutOptimizedEvent {
@@ -215,7 +240,12 @@ pub struct SettingUpdatedEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(SettingUpdatedEvent, "SettingUpdated", "Setting", setting_key);
+impl_domain_event!(
+    SettingUpdatedEvent,
+    "SettingUpdated",
+    "Setting",
+    setting_key
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicsProfileSavedEvent {
@@ -225,7 +255,12 @@ pub struct PhysicsProfileSavedEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(PhysicsProfileSavedEvent, "PhysicsProfileSaved", "PhysicsProfile", profile_id);
+impl_domain_event!(
+    PhysicsProfileSavedEvent,
+    "PhysicsProfileSaved",
+    "PhysicsProfile",
+    profile_id
+);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettingsImportedEvent {
@@ -235,7 +270,12 @@ pub struct SettingsImportedEvent {
     pub timestamp: DateTime<Utc>,
 }
 
-impl_domain_event!(SettingsImportedEvent, "SettingsImported", "Settings", settings_id);
+impl_domain_event!(
+    SettingsImportedEvent,
+    "SettingsImported",
+    "Settings",
+    settings_id
+);
 
 #[cfg(test)]
 mod tests {

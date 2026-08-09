@@ -30,72 +30,40 @@ use reqwest::Client;
 use uuid::Uuid;
 
 pub struct SpeechService {
-    
     sender: Arc<Mutex<mpsc::Sender<SpeechCommand>>>,
-    
+
     settings: Arc<RwLock<AppFullSettings>>,
-    
+
     tts_provider: Arc<RwLock<TTSProvider>>,
-    
+
     stt_provider: Arc<RwLock<STTProvider>>,
-    
-    
+
     audio_tx: broadcast::Sender<Vec<u8>>,
-    
-    
+
     transcription_tx: broadcast::Sender<String>,
-    
-    
+
     http_client: Arc<Client>,
-    
+
     context_manager: Arc<VoiceContextManager>,
-    
+
     tag_manager: Arc<VoiceTagManager>,
-    
+
     tts_response_rx: Option<Arc<Mutex<mpsc::Receiver<TaggedVoiceResponse>>>>,
 }
 
 impl SpeechService {
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     pub fn new(settings: Arc<RwLock<AppFullSettings>>) -> Self {
-        
         let (tx, rx) = mpsc::channel(100);
         let sender = Arc::new(Mutex::new(tx));
 
-        
-        
         let (audio_tx, _) = broadcast::channel(100);
 
-        
-        
         let http_client = Arc::new(Client::new());
 
-        
-        
         let (transcription_tx, _) = broadcast::channel(100);
 
-        
         let (tts_response_tx, tts_response_rx) = mpsc::channel(100);
 
-        
         let mut tag_manager = VoiceTagManager::new();
         tag_manager.set_tts_sender(tts_response_tx);
         let tag_manager = Arc::new(tag_manager);
@@ -103,8 +71,8 @@ impl SpeechService {
         let service = SpeechService {
             sender,
             settings,
-            tts_provider: Arc::new(RwLock::new(TTSProvider::Kokoro)), 
-            stt_provider: Arc::new(RwLock::new(STTProvider::Whisper)), 
+            tts_provider: Arc::new(RwLock::new(TTSProvider::Kokoro)),
+            stt_provider: Arc::new(RwLock::new(STTProvider::Whisper)),
             audio_tx,
             transcription_tx,
             http_client,
@@ -113,10 +81,8 @@ impl SpeechService {
             tts_response_rx: Some(Arc::new(Mutex::new(tts_response_rx))),
         };
 
-        
         service.start(rx);
 
-        
         service.start_tagged_tts_handler();
 
         service
@@ -138,7 +104,6 @@ impl SpeechService {
                     SpeechCommand::Initialize => {
                         let settings_read = settings.read().await;
 
-                        
                         let openai_api_key = match settings_read
                             .openai
                             .as_ref()
@@ -147,7 +112,7 @@ impl SpeechService {
                             Some(key) if !key.is_empty() => key.clone(),
                             _ => {
                                 error!("OpenAI API key not configured or empty. Cannot initialize OpenAI Realtime API.");
-                                continue; 
+                                continue;
                             }
                         };
 
@@ -398,7 +363,6 @@ impl SpeechService {
                                     let api_url_base = match config.api_url.as_deref() {
                                         Some(url) if !url.is_empty() => url,
                                         _ => {
-                                            
                                             info!("Using default Kokoro API URL on Docker network");
                                             "http://kokoro-tts-container:8880"
                                         }
@@ -559,10 +523,8 @@ impl SpeechService {
                     SpeechCommand::StopTranscription => {
                         info!("Stopping transcription");
 
-                        
                         let _ = transcription_tx.send("Transcription stopped".to_string());
 
-                        
                         match stt_provider.read().await.clone() {
                             STTProvider::Whisper => {
                                 debug!("Whisper transcription stopped");
@@ -597,19 +559,13 @@ impl SpeechService {
                                         api_url_base.trim_end_matches('/')
                                     );
 
-                                    
-                                    
-                                    
                                     let (mime_type, file_ext) = if audio_data.len() >= 4 {
                                         let header = &audio_data[0..4];
                                         if header == [0x1A, 0x45, 0xDF, 0xA3] {
-                                            
                                             ("audio/webm", "audio.webm")
                                         } else if header == [0x52, 0x49, 0x46, 0x46] {
-                                            
                                             ("audio/wav", "audio.wav")
                                         } else {
-                                            
                                             info!("Unknown audio format, header: {:?}, defaulting to webm", header);
                                             ("audio/webm", "audio.webm")
                                         }
@@ -622,7 +578,6 @@ impl SpeechService {
                                         mime_type
                                     );
 
-                                    
                                     let mut form = reqwest::multipart::Form::new().part(
                                         "file",
                                         reqwest::multipart::Part::bytes(audio_data)
@@ -635,7 +590,6 @@ impl SpeechService {
                                             }),
                                     );
 
-                                    
                                     if let Some(model) = config.default_model.clone() {
                                         form = form.text("model_size", model);
                                     }
@@ -656,14 +610,11 @@ impl SpeechService {
                                         form = form.text("initial_prompt", initial_prompt);
                                     }
 
-                                    
                                     let http_client_clone = Arc::clone(&http_client);
                                     let transcription_broadcaster = transcription_tx.clone();
                                     let api_url_clone = api_url.clone();
 
-                                    
                                     {
-                                        
                                         match http_client_clone
                                             .post(&api_url_clone)
                                             .multipart(form)
@@ -675,14 +626,12 @@ impl SpeechService {
                                                     match response.json::<serde_json::Value>().await
                                                     {
                                                         Ok(json) => {
-                                                            
                                                             if let Some(identifier) = json
                                                                 .get("identifier")
                                                                 .and_then(|t| t.as_str())
                                                             {
                                                                 info!("Whisper task queued with ID: {}", identifier);
 
-                                                                
                                                                 let task_url = format!(
                                                                     "{}/task/{}",
                                                                     api_url_clone.trim_end_matches(
@@ -717,7 +666,7 @@ impl SpeechService {
                                                                                     if let Some(status) = task_json.get("status").and_then(|s| s.as_str()) {
                                                                                         match status {
                                                                                             "completed" => {
-                                                                                                
+
                                                                                                 if let Some(result) = task_json.get("result").and_then(|r| r.as_array()) {
                                                                                                     let mut full_text = String::new();
                                                                                                     for segment in result {
@@ -732,20 +681,20 @@ impl SpeechService {
                                                                                                         info!("Whisper transcription: {}", transcription_text);
                                                                                                         let _ = transcription_broadcaster.send(transcription_text.clone());
 
-                                                                                                        
+
                                                                                                         if Self::is_voice_command(&transcription_text) {
                                                                                                             let session_id = Uuid::new_v4().to_string();
                                                                                                             debug!("Processing as voice command: {}", transcription_text);
 
-                                                                                                            
+
                                                                                                             if let Ok(voice_cmd) = VoiceCommand::parse(&transcription_text, session_id) {
                                                                                                                 debug!("Executing voice command: {:?}", voice_cmd.parsed_intent);
 
-                                                                                                                
+
                                                                                                                 let context_manager = Arc::new(VoiceContextManager::new());
                                                                                                                 let response_text = Self::execute_voice_command_with_context(voice_cmd, context_manager).await;
 
-                                                                                                                
+
                                                                                                                 let _ = transcription_broadcaster.send(format!("Response: {}", response_text));
                                                                                                             }
                                                                                                         }
@@ -758,7 +707,7 @@ impl SpeechService {
                                                                                                 break;
                                                                                             },
                                                                                             "queued" | "in_progress" => {
-                                                                                                
+
                                                                                                 debug!("Whisper task {} status: {}", identifier, status);
                                                                                             },
                                                                                             _ => {
@@ -904,19 +853,22 @@ impl SpeechService {
                     SpeechCommand::TextToSpeechForUser(text, _options, user_id) => {
                         log::warn!(
                             "TextToSpeechForUser not yet implemented (text={}, user={})",
-                            text, user_id
+                            text,
+                            user_id
                         );
                     }
                     SpeechCommand::TextToSpeechSpatial(text, _options, spatial_info) => {
                         log::warn!(
                             "TextToSpeechSpatial not yet implemented (text={}, agent={})",
-                            text, spatial_info.agent_id
+                            text,
+                            spatial_info.agent_id
                         );
                     }
                     SpeechCommand::ProcessAudioChunkForUser(audio_data, user_id) => {
                         log::warn!(
                             "ProcessAudioChunkForUser not yet implemented (bytes={}, user={})",
-                            audio_data.len(), user_id
+                            audio_data.len(),
+                            user_id
                         );
                     }
                 }
@@ -924,7 +876,6 @@ impl SpeechService {
         });
     }
 
-    
     fn start_tagged_tts_handler(&self) {
         if let Some(rx) = &self.tts_response_rx {
             let rx = Arc::clone(rx);
@@ -941,13 +892,11 @@ impl SpeechService {
                         tagged_response.tag.short_id()
                     );
 
-                    
                     let tts_command = SpeechCommand::TextToSpeech(
                         tagged_response.response.text.clone(),
                         SpeechOptions::default(),
                     );
 
-                    
                     if let Err(e) = sender.lock().await.send(tts_command).await {
                         error!("Failed to send tagged response to TTS: {}", e);
                     } else {
@@ -957,7 +906,6 @@ impl SpeechService {
                         );
                     }
 
-                    
                     tag_manager.cleanup_expired_commands().await;
                 }
 
@@ -985,21 +933,6 @@ impl SpeechService {
         Ok(())
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     pub async fn text_to_speech(
         &self,
         text: String,
@@ -1037,20 +970,10 @@ impl SpeechService {
         Ok(())
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
     pub fn subscribe_to_audio(&self) -> broadcast::Receiver<Vec<u8>> {
         self.audio_tx.subscribe()
     }
 
-    
     pub async fn get_tts_provider(&self) -> TTSProvider {
         self.tts_provider.read().await.clone()
     }
@@ -1086,21 +1009,6 @@ impl SpeechService {
         Ok(())
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     pub async fn process_audio_chunk(&self, audio_data: Vec<u8>) -> VisionClawResult<()> {
         let command = SpeechCommand::ProcessAudioChunk(audio_data);
         self.sender.lock().await.send(command).await.map_err(|e| {
@@ -1111,20 +1019,10 @@ impl SpeechService {
         Ok(())
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
     pub fn subscribe_to_transcriptions(&self) -> broadcast::Receiver<String> {
         self.transcription_tx.subscribe()
     }
 
-    
     pub async fn process_voice_command(&self, text: String) -> VisionClawResult<String> {
         let session_id = Uuid::new_v4().to_string();
 
@@ -1136,7 +1034,6 @@ impl SpeechService {
                 )
                 .await;
 
-                
                 let _ = self
                     .context_manager
                     .add_conversation_turn(
@@ -1147,7 +1044,6 @@ impl SpeechService {
                     )
                     .await;
 
-                
                 let contextual_response = self
                     .context_manager
                     .generate_contextual_response(&voice_cmd.session_id, &response)
@@ -1162,7 +1058,6 @@ impl SpeechService {
         }
     }
 
-    
     pub async fn get_conversation_context(
         &self,
         session_id: &str,
@@ -1170,22 +1065,18 @@ impl SpeechService {
         self.context_manager.get_context(session_id).await
     }
 
-    
     pub async fn session_needs_follow_up(&self, session_id: &str) -> bool {
         self.context_manager.needs_follow_up(session_id).await
     }
 
-    
     pub fn get_tag_manager(&self) -> Arc<VoiceTagManager> {
         Arc::clone(&self.tag_manager)
     }
 
-    
     pub fn get_transcription_sender(&self) -> broadcast::Sender<String> {
         self.transcription_tx.clone()
     }
 
-    
     pub async fn process_voice_command_with_tags(
         &self,
         text: String,
@@ -1216,7 +1107,6 @@ impl SpeechService {
         }
     }
 
-    
     fn is_voice_command(text: &str) -> bool {
         let command_keywords = [
             "spawn",
@@ -1247,7 +1137,6 @@ impl SpeechService {
             .any(|keyword| lower.contains(keyword))
     }
 
-    
     async fn execute_voice_command_with_context(
         voice_cmd: VoiceCommand,
         context_manager: Arc<VoiceContextManager>,
@@ -1256,7 +1145,6 @@ impl SpeechService {
             std::env::var("MCP_HOST").unwrap_or_else(|_| "multi-agent-container".to_string());
         let mcp_port = std::env::var("MCP_TCP_PORT").unwrap_or_else(|_| "9500".to_string());
 
-        
         let session_id = context_manager
             .get_or_create_session(Some(voice_cmd.session_id.clone()), None)
             .await;
@@ -1265,17 +1153,17 @@ impl SpeechService {
             crate::actors::voice_commands::SwarmIntent::SpawnAgent { agent_type, .. } => {
                 info!("Executing spawn agent command for type: {}", agent_type);
 
-                
+
                 match call_swarm_init(&mcp_host, &mcp_port, "mesh", 10, "balanced").await {
                     Ok(swarm_result) => {
                         let swarm_id = swarm_result.get("swarmId")
                             .and_then(|s| s.as_str())
                             .unwrap_or("default-swarm");
 
-                        
+
                         match call_agent_spawn(&mcp_host, &mcp_port, &agent_type, swarm_id).await {
                             Ok(_) => {
-                                
+
                                 let mut params = std::collections::HashMap::new();
                                 params.insert("agent_type".to_string(), agent_type.clone());
                                 params.insert("swarm_id".to_string(), swarm_id.to_string());
@@ -1307,7 +1195,7 @@ impl SpeechService {
 
                 match call_agent_list(&mcp_host, &mcp_port, "all").await {
                     Ok(agent_result) => {
-                        
+
                         let agent_count = agent_result.get("content")
                             .and_then(|c| c.as_array())
                             .map(|arr| arr.len())
@@ -1331,7 +1219,7 @@ impl SpeechService {
 
                 match call_agent_list(&mcp_host, &mcp_port, "all").await {
                     Ok(agent_result) => {
-                        
+
                         if let Some(content) = agent_result.get("content").and_then(|c| c.as_array()) {
                             let mut agent_names: Vec<String> = Vec::new();
                             for agent in content.iter() {
@@ -1380,7 +1268,7 @@ impl SpeechService {
                             .and_then(|id| id.as_str())
                             .unwrap_or("unknown");
 
-                        
+
                         let mut params = std::collections::HashMap::new();
                         params.insert("task_id".to_string(), task_id.to_string());
                         params.insert("description".to_string(), description.clone());
@@ -1390,7 +1278,7 @@ impl SpeechService {
                             &session_id,
                             "execute_task".to_string(),
                             params,
-                            Some(time::now() + chrono::Duration::minutes(30)), 
+                            Some(time::now() + chrono::Duration::minutes(30)),
                         ).await;
 
                         format!("Task '{}' has been assigned to the swarm with ID: {}.", description, task_id)

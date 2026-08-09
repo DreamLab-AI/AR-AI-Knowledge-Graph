@@ -8,43 +8,31 @@ pub type NodeId = i64;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PhysicsConstraintType {
-    
-    
     Separation {
         min_distance: f32,
         strength: f32,
     },
 
-    
-    
     Clustering {
         ideal_distance: f32,
         stiffness: f32,
     },
 
-    
-    
     Colocation {
         target_distance: f32,
         strength: f32,
     },
 
-    
-    
     Boundary {
-        bounds: [f32; 6], 
+        bounds: [f32; 6],
         strength: f32,
     },
 
-    
-    
     HierarchicalLayer {
         z_level: f32,
         strength: f32,
     },
 
-    
-    
     Containment {
         parent_node: NodeId,
         radius: f32,
@@ -52,44 +40,28 @@ pub enum PhysicsConstraintType {
     },
 }
 
-pub const PRIORITY_USER_DEFINED: u8 = 1; 
-pub const PRIORITY_INFERRED: u8 = 3;     
-pub const PRIORITY_ASSERTED: u8 = 5;     
-pub const PRIORITY_DEFAULT: u8 = 8;      
+pub const PRIORITY_USER_DEFINED: u8 = 1;
+pub const PRIORITY_INFERRED: u8 = 3;
+pub const PRIORITY_ASSERTED: u8 = 5;
+pub const PRIORITY_DEFAULT: u8 = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicsConstraint {
-    
     pub constraint_type: PhysicsConstraintType,
 
-    
     pub nodes: Vec<NodeId>,
 
-    
-    
-    
-    
-    
     pub priority: u8,
 
-    
     pub user_defined: bool,
 
-    
     pub activation_frame: Option<i32>,
 
-    
     pub axiom_id: Option<i64>,
 }
 
 impl PhysicsConstraint {
-    
-    pub fn separation(
-        nodes: Vec<NodeId>,
-        min_distance: f32,
-        strength: f32,
-        priority: u8,
-    ) -> Self {
+    pub fn separation(nodes: Vec<NodeId>, min_distance: f32, strength: f32, priority: u8) -> Self {
         Self {
             constraint_type: PhysicsConstraintType::Separation {
                 min_distance,
@@ -103,7 +75,6 @@ impl PhysicsConstraint {
         }
     }
 
-    
     pub fn clustering(
         nodes: Vec<NodeId>,
         ideal_distance: f32,
@@ -123,7 +94,6 @@ impl PhysicsConstraint {
         }
     }
 
-    
     pub fn colocation(
         nodes: Vec<NodeId>,
         target_distance: f32,
@@ -143,13 +113,7 @@ impl PhysicsConstraint {
         }
     }
 
-    
-    pub fn boundary(
-        nodes: Vec<NodeId>,
-        bounds: [f32; 6],
-        strength: f32,
-        priority: u8,
-    ) -> Self {
+    pub fn boundary(nodes: Vec<NodeId>, bounds: [f32; 6], strength: f32, priority: u8) -> Self {
         Self {
             constraint_type: PhysicsConstraintType::Boundary { bounds, strength },
             nodes,
@@ -160,7 +124,6 @@ impl PhysicsConstraint {
         }
     }
 
-    
     pub fn hierarchical_layer(
         nodes: Vec<NodeId>,
         z_level: f32,
@@ -177,7 +140,6 @@ impl PhysicsConstraint {
         }
     }
 
-    
     pub fn containment(
         nodes: Vec<NodeId>,
         parent_node: NodeId,
@@ -199,44 +161,34 @@ impl PhysicsConstraint {
         }
     }
 
-    
     pub fn mark_user_defined(mut self) -> Self {
         self.user_defined = true;
         self.priority = PRIORITY_USER_DEFINED;
         self
     }
 
-    
     pub fn with_axiom_id(mut self, axiom_id: i64) -> Self {
         self.axiom_id = Some(axiom_id);
         self
     }
 
-    
     pub fn with_activation_frame(mut self, frame: i32) -> Self {
         self.activation_frame = Some(frame);
         self
     }
 
-    
-    
-    
-    
     pub fn priority_weight(&self) -> f32 {
         10.0_f32.powf(-(self.priority as f32 - 1.0) / 9.0)
     }
 
-    
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
 
-    
     pub fn affects_node(&self, node_id: NodeId) -> bool {
         self.nodes.contains(&node_id)
     }
 
-    
     pub fn strength(&self) -> f32 {
         match &self.constraint_type {
             PhysicsConstraintType::Separation { strength, .. } => *strength,
@@ -258,7 +210,9 @@ impl fmt::Display for PhysicsConstraint {
             PhysicsConstraintType::Clustering { ideal_distance, .. } => {
                 format!("Clustering(ideal_dist={})", ideal_distance)
             }
-            PhysicsConstraintType::Colocation { target_distance, .. } => {
+            PhysicsConstraintType::Colocation {
+                target_distance, ..
+            } => {
                 format!("Colocation(target_dist={})", target_distance)
             }
             PhysicsConstraintType::Boundary { bounds, .. } => {
@@ -267,7 +221,11 @@ impl fmt::Display for PhysicsConstraint {
             PhysicsConstraintType::HierarchicalLayer { z_level, .. } => {
                 format!("HierarchicalLayer(z={})", z_level)
             }
-            PhysicsConstraintType::Containment { parent_node, radius, .. } => {
+            PhysicsConstraintType::Containment {
+                parent_node,
+                radius,
+                ..
+            } => {
                 format!("Containment(parent={}, r={})", parent_node, radius)
             }
         };
@@ -289,19 +247,17 @@ mod tests {
 
     #[test]
     fn test_separation_constraint_creation() {
-        let constraint = PhysicsConstraint::separation(
-            vec![1, 2],
-            35.0,
-            0.8,
-            PRIORITY_ASSERTED,
-        );
+        let constraint = PhysicsConstraint::separation(vec![1, 2], 35.0, 0.8, PRIORITY_ASSERTED);
 
         assert_eq!(constraint.nodes.len(), 2);
         assert_eq!(constraint.priority, PRIORITY_ASSERTED);
         assert!(!constraint.user_defined);
 
         match constraint.constraint_type {
-            PhysicsConstraintType::Separation { min_distance, strength } => {
+            PhysicsConstraintType::Separation {
+                min_distance,
+                strength,
+            } => {
                 assert_eq!(min_distance, 35.0);
                 assert_eq!(strength, 0.8);
             }
@@ -323,8 +279,8 @@ mod tests {
 
     #[test]
     fn test_user_defined_override() {
-        let constraint = PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5)
-            .mark_user_defined();
+        let constraint =
+            PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5).mark_user_defined();
 
         assert!(constraint.user_defined);
         assert_eq!(constraint.priority, PRIORITY_USER_DEFINED);
@@ -332,12 +288,8 @@ mod tests {
 
     #[test]
     fn test_clustering_constraint() {
-        let constraint = PhysicsConstraint::clustering(
-            vec![10, 20, 30],
-            20.0,
-            0.6,
-            PRIORITY_INFERRED,
-        );
+        let constraint =
+            PhysicsConstraint::clustering(vec![10, 20, 30], 20.0, 0.6, PRIORITY_INFERRED);
 
         assert_eq!(constraint.nodes.len(), 3);
         assert_eq!(constraint.priority, PRIORITY_INFERRED);
@@ -356,28 +308,23 @@ mod tests {
 
     #[test]
     fn test_with_axiom_id() {
-        let constraint = PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5)
-            .with_axiom_id(123);
+        let constraint = PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5).with_axiom_id(123);
 
         assert_eq!(constraint.axiom_id, Some(123));
     }
 
     #[test]
     fn test_with_activation_frame() {
-        let constraint = PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5)
-            .with_activation_frame(60);
+        let constraint =
+            PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5).with_activation_frame(60);
 
         assert_eq!(constraint.activation_frame, Some(60));
     }
 
     #[test]
     fn test_hierarchical_layer_constraint() {
-        let constraint = PhysicsConstraint::hierarchical_layer(
-            vec![1, 2, 3],
-            100.0,
-            0.7,
-            PRIORITY_ASSERTED,
-        );
+        let constraint =
+            PhysicsConstraint::hierarchical_layer(vec![1, 2, 3], 100.0, 0.7, PRIORITY_ASSERTED);
 
         match constraint.constraint_type {
             PhysicsConstraintType::HierarchicalLayer { z_level, strength } => {
@@ -390,16 +337,15 @@ mod tests {
 
     #[test]
     fn test_containment_constraint() {
-        let constraint = PhysicsConstraint::containment(
-            vec![1, 2, 3],
-            100,
-            50.0,
-            0.8,
-            PRIORITY_ASSERTED,
-        );
+        let constraint =
+            PhysicsConstraint::containment(vec![1, 2, 3], 100, 50.0, 0.8, PRIORITY_ASSERTED);
 
         match constraint.constraint_type {
-            PhysicsConstraintType::Containment { parent_node, radius, strength } => {
+            PhysicsConstraintType::Containment {
+                parent_node,
+                radius,
+                strength,
+            } => {
                 assert_eq!(parent_node, 100);
                 assert_eq!(radius, 50.0);
                 assert_eq!(strength, 0.8);

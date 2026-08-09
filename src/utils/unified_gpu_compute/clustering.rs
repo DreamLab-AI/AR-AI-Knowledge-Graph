@@ -56,7 +56,6 @@ impl UnifiedGPUCompute {
             ));
         }
 
-
         let module = if let Some(ref clustering_mod) = self.clustering_module {
             clustering_mod
         } else {
@@ -65,7 +64,6 @@ impl UnifiedGPUCompute {
 
         let block_size = 256;
         let grid_size = (self.num_nodes as u32 + block_size - 1) / block_size;
-
 
         for centroid in 0..num_clusters {
             let init_kernel = module.get_function("init_centroids_kernel")?;
@@ -95,9 +93,7 @@ impl UnifiedGPUCompute {
         let mut prev_inertia = f32::INFINITY;
         let mut final_inertia = 0.0f32;
 
-
         for _iteration in 0..max_iterations {
-
             let assign_kernel = self._module.get_function("assign_clusters_kernel")?;
             let stream = &self.stream;
             unsafe {
@@ -115,7 +111,6 @@ impl UnifiedGPUCompute {
                     num_clusters as i32
                 ))?;
             }
-
 
             let update_kernel = self._module.get_function("update_centroids_kernel")?;
             let centroid_shared_memory = block_size * (3 * 4 + 4);
@@ -135,7 +130,6 @@ impl UnifiedGPUCompute {
                     num_clusters as i32
                 ))?;
             }
-
 
             let inertia_kernel = self._module.get_function("compute_inertia_kernel")?;
             let inertia_shared_memory = block_size * 4;
@@ -157,12 +151,10 @@ impl UnifiedGPUCompute {
 
             self.stream.synchronize()?;
 
-
             let partial_inertias = safe_download(&self.partial_inertia, grid_size as usize)?;
-            
+
             let current_inertia: f32 = partial_inertias.iter().sum();
             final_inertia = current_inertia;
-
 
             if (prev_inertia - current_inertia).abs() < tolerance {
                 info!(
@@ -175,16 +167,11 @@ impl UnifiedGPUCompute {
             prev_inertia = current_inertia;
         }
 
-
         let assignments = safe_download(&self.cluster_assignments, self.num_nodes)?;
-        
 
         let centroids_x = safe_download(&self.centroids_x, num_clusters)?;
         let centroids_y = safe_download(&self.centroids_y, num_clusters)?;
         let centroids_z = safe_download(&self.centroids_z, num_clusters)?;
-        
-        
-        
 
         let centroids: Vec<(f32, f32, f32)> = centroids_x
             .into_iter()
@@ -195,7 +182,6 @@ impl UnifiedGPUCompute {
 
         Ok((assignments, centroids, final_inertia))
     }
-
 
     pub fn run_kmeans_clustering_with_metrics(
         &mut self,
@@ -217,7 +203,6 @@ impl UnifiedGPUCompute {
 
         let block_size = 256;
         let grid_size = (self.num_nodes as u32 + block_size - 1) / block_size;
-
 
         for centroid in 0..num_clusters {
             let init_kernel = self._module.get_function("init_centroids_kernel")?;
@@ -249,10 +234,8 @@ impl UnifiedGPUCompute {
         let mut converged = false;
         let mut actual_iterations = 0u32;
 
-
         for iteration in 0..max_iterations {
             actual_iterations = iteration + 1;
-
 
             let assign_kernel = self._module.get_function("assign_clusters_kernel")?;
             let stream = &self.stream;
@@ -272,7 +255,6 @@ impl UnifiedGPUCompute {
                 ))?;
             }
 
-
             let update_kernel = self._module.get_function("update_centroids_kernel")?;
             let centroid_shared_memory = block_size * (3 * 4 + 4);
             let stream = &self.stream;
@@ -291,7 +273,6 @@ impl UnifiedGPUCompute {
                     num_clusters as i32
                 ))?;
             }
-
 
             let inertia_kernel = self._module.get_function("compute_inertia_kernel")?;
             let inertia_shared_memory = block_size * 4;
@@ -313,12 +294,10 @@ impl UnifiedGPUCompute {
 
             self.stream.synchronize()?;
 
-
             let partial_inertias = safe_download(&self.partial_inertia, grid_size as usize)?;
-            
+
             let current_inertia: f32 = partial_inertias.iter().sum();
             final_inertia = current_inertia;
-
 
             if (prev_inertia - current_inertia).abs() < tolerance {
                 info!(
@@ -332,16 +311,11 @@ impl UnifiedGPUCompute {
             prev_inertia = current_inertia;
         }
 
-
         let assignments = safe_download(&self.cluster_assignments, self.num_nodes)?;
-        
 
         let centroids_x = safe_download(&self.centroids_x, num_clusters)?;
         let centroids_y = safe_download(&self.centroids_y, num_clusters)?;
         let centroids_z = safe_download(&self.centroids_z, num_clusters)?;
-        
-        
-        
 
         let centroids: Vec<(f32, f32, f32)> = centroids_x
             .into_iter()
@@ -359,17 +333,13 @@ impl UnifiedGPUCompute {
         ))
     }
 
-
     pub fn run_lof_anomaly_detection(
         &mut self,
         k_neighbors: i32,
         radius: f32,
     ) -> Result<(Vec<f32>, Vec<f32>)> {
-
         let block_size = 256;
         let grid_size = (self.num_nodes as u32 + block_size - 1) / block_size;
-
-
 
         let grid_dims = int3 {
             x: 32,
@@ -410,15 +380,11 @@ impl UnifiedGPUCompute {
 
         self.stream.synchronize()?;
 
-
         let lof_scores = safe_download(&self.lof_scores, self.num_nodes)?;
         let local_densities = safe_download(&self.local_densities, self.num_nodes)?;
-        
-        
 
         Ok((lof_scores, local_densities))
     }
-
 
     pub fn run_zscore_anomaly_detection(&mut self, feature_data: &[f32]) -> Result<Vec<f32>> {
         if feature_data.len() != self.num_nodes {
@@ -428,7 +394,6 @@ impl UnifiedGPUCompute {
                 self.num_nodes
             ));
         }
-
 
         // Pad to allocated_nodes for overallocated device buffer
         if feature_data.len() < self.feature_values.len() {
@@ -441,7 +406,6 @@ impl UnifiedGPUCompute {
 
         let block_size = 256;
         let grid_size = (self.num_nodes as u32 + block_size - 1) / block_size;
-
 
         let stats_kernel = self._module.get_function("compute_feature_stats_kernel")?;
         let stats_shared_memory = block_size * 2 * 4;
@@ -463,7 +427,6 @@ impl UnifiedGPUCompute {
 
         self.stream.synchronize()?;
 
-
         let partial_sums = safe_download(&self.partial_sums, grid_size as usize)?;
         let partial_sq_sums = safe_download(&self.partial_sq_sums, grid_size as usize)?;
 
@@ -473,7 +436,6 @@ impl UnifiedGPUCompute {
         let mean = total_sum / self.num_nodes as f32;
         let variance = (total_sq_sum / self.num_nodes as f32) - (mean * mean);
         let std_dev = variance.sqrt();
-
 
         let zscore_kernel = self._module.get_function("compute_zscore_kernel")?;
         let stream = &self.stream;
@@ -495,13 +457,10 @@ impl UnifiedGPUCompute {
 
         self.stream.synchronize()?;
 
-
         let zscore_values = safe_download(&self.zscore_values, self.num_nodes)?;
-        
 
         Ok(zscore_values)
     }
-
 
     pub fn run_kmeans_clustering(
         &mut self,
@@ -512,7 +471,6 @@ impl UnifiedGPUCompute {
     ) -> Result<(Vec<i32>, Vec<(f32, f32, f32)>, f32)> {
         self.run_kmeans(num_clusters, max_iterations, tolerance, seed)
     }
-
 
     pub fn run_anomaly_detection_lof(
         &mut self,

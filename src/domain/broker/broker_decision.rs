@@ -70,7 +70,9 @@ impl DecisionOutcome {
         match action.trim().to_ascii_lowercase().as_str() {
             "approve" | "approved" | "accept" | "accepted" => Some(DecisionOutcome::Approve),
             s if s.starts_with("reject") => Some(DecisionOutcome::Reject),
-            "amend" => detail.map(|d| DecisionOutcome::Amend { diff: d.to_string() }),
+            "amend" => detail.map(|d| DecisionOutcome::Amend {
+                diff: d.to_string(),
+            }),
             "delegate" => detail.map(|d| DecisionOutcome::Delegate {
                 delegate_to: d.to_string(),
             }),
@@ -294,22 +296,35 @@ mod tests {
         // Approval synonyms all collapse to Approve (agrees with the durable
         // store's `classify`).
         for v in ["approve", "approved", "Accept", "accepted"] {
-            assert_eq!(DecisionOutcome::from_action(v, None), Some(DecisionOutcome::Approve));
+            assert_eq!(
+                DecisionOutcome::from_action(v, None),
+                Some(DecisionOutcome::Approve)
+            );
         }
         // Reject prefix matches reject/rejected.
-        assert_eq!(DecisionOutcome::from_action("reject", None), Some(DecisionOutcome::Reject));
-        assert_eq!(DecisionOutcome::from_action("rejected", None), Some(DecisionOutcome::Reject));
+        assert_eq!(
+            DecisionOutcome::from_action("reject", None),
+            Some(DecisionOutcome::Reject)
+        );
+        assert_eq!(
+            DecisionOutcome::from_action("rejected", None),
+            Some(DecisionOutcome::Reject)
+        );
         // Payload-carrying variants need their detail; absent detail fails the
         // mapping rather than fabricating an empty payload.
         assert_eq!(DecisionOutcome::from_action("amend", None), None);
         assert_eq!(
             DecisionOutcome::from_action("amend", Some("patch")),
-            Some(DecisionOutcome::Amend { diff: "patch".into() })
+            Some(DecisionOutcome::Amend {
+                diff: "patch".into()
+            })
         );
         assert_eq!(DecisionOutcome::from_action("delegate", None), None);
         assert_eq!(
             DecisionOutcome::from_action("delegate", Some("carol")),
-            Some(DecisionOutcome::Delegate { delegate_to: "carol".into() })
+            Some(DecisionOutcome::Delegate {
+                delegate_to: "carol".into()
+            })
         );
         // Unknown verb is not a decision outcome.
         assert_eq!(DecisionOutcome::from_action("frobnicate", None), None);
@@ -321,7 +336,9 @@ mod tests {
             DecisionOutcome::Approve,
             DecisionOutcome::Reject,
             DecisionOutcome::Amend { diff: "d".into() },
-            DecisionOutcome::Delegate { delegate_to: "x".into() },
+            DecisionOutcome::Delegate {
+                delegate_to: "x".into(),
+            },
             DecisionOutcome::Precedent { scope: "s".into() },
         ] {
             let back = DecisionOutcome::from_action(oc.action_str(), Some("d")).unwrap();

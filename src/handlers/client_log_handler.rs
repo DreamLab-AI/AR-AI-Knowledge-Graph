@@ -6,8 +6,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use uuid::Uuid;
 
-use crate::telemetry::agent_telemetry::{get_telemetry_logger, CorrelationId};
 use crate::ok_json;
+use crate::telemetry::agent_telemetry::{get_telemetry_logger, CorrelationId};
 use crate::AppState;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -55,7 +55,6 @@ pub async fn handle_client_logs(
 
     let log_file_path = "/app/logs/client.log";
 
-    
     let header_session_id = req
         .headers()
         .get("X-Session-ID")
@@ -64,9 +63,7 @@ pub async fn handle_client_logs(
 
     let client_session_id = header_session_id.as_ref().unwrap_or(&payload.session_id);
 
-    
     let correlation_id = Uuid::parse_str(client_session_id).unwrap_or_else(|_| {
-        
         let new_corr_id = Uuid::new_v4();
         debug!(
             "Created new correlation ID for session {}: {}",
@@ -75,7 +72,6 @@ pub async fn handle_client_logs(
         new_corr_id
     });
 
-    
     if let Some(telemetry) = get_telemetry_logger() {
         let event = crate::telemetry::agent_telemetry::TelemetryEvent::new(
             CorrelationId(correlation_id.to_string()),
@@ -102,7 +98,6 @@ pub async fn handle_client_logs(
         telemetry.log_event(event);
     }
 
-    
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -112,11 +107,9 @@ pub async fn handle_client_logs(
             actix_web::error::ErrorInternalServerError(format!("Failed to open log file: {}", e))
         })?;
 
-    
     for entry in &payload.logs {
         let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
 
-        
         let log_line = format!(
             "[{}] [{}] [{}] [corr:{}] {} - {} | UA: {} | URL: {}{}\n",
             timestamp,
@@ -137,13 +130,11 @@ pub async fn handle_client_logs(
             }
         );
 
-        
         file.write_all(log_line.as_bytes()).map_err(|e| {
             error!("Failed to write to client.log: {}", e);
             actix_web::error::ErrorInternalServerError(format!("Failed to write log: {}", e))
         })?;
 
-        
         match entry.level.as_str() {
             "error" => error!(
                 "[CLIENT:{}] {} - {}",
@@ -165,7 +156,6 @@ pub async fn handle_client_logs(
             ),
         }
 
-        
         if let Some(stack) = &entry.stack {
             let stack_line = format!(
                 "[{}] [STACK] [corr:{}] {}\n{}\n",
@@ -178,7 +168,6 @@ pub async fn handle_client_logs(
         }
     }
 
-    
     file.flush().map_err(|e| {
         error!("Failed to flush client.log: {}", e);
         actix_web::error::ErrorInternalServerError(format!("Failed to flush log file: {}", e))

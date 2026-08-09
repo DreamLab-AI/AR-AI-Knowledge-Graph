@@ -22,8 +22,12 @@ const MIN_DRAG_INTERVAL_MS: u64 = 16;
 /// Returns `None` for NaN, Infinity, or out-of-range values (VULN-05).
 fn sanitize_position(x: f32, y: f32, z: f32) -> Option<(f32, f32, f32)> {
     const MAX_BOUND: f32 = 10000.0;
-    if x.is_finite() && y.is_finite() && z.is_finite()
-        && x.abs() <= MAX_BOUND && y.abs() <= MAX_BOUND && z.abs() <= MAX_BOUND
+    if x.is_finite()
+        && y.is_finite()
+        && z.is_finite()
+        && x.abs() <= MAX_BOUND
+        && y.abs() <= MAX_BOUND
+        && z.abs() <= MAX_BOUND
     {
         Some((x, y, z))
     } else {
@@ -72,7 +76,8 @@ pub(crate) async fn fetch_nodes(
     let agent_set: HashSet<u32> = nta.agent_ids.iter().copied().collect();
     let knowledge_set: HashSet<u32> = nta.knowledge_ids.iter().copied().collect();
     let ontology_class_set: HashSet<u32> = nta.ontology_class_ids.iter().copied().collect();
-    let ontology_individual_set: HashSet<u32> = nta.ontology_individual_ids.iter().copied().collect();
+    let ontology_individual_set: HashSet<u32> =
+        nta.ontology_individual_ids.iter().copied().collect();
     let ontology_property_set: HashSet<u32> = nta.ontology_property_ids.iter().copied().collect();
 
     let debug_enabled = crate::utils::logging::is_debug_enabled();
@@ -88,7 +93,9 @@ pub(crate) async fn fetch_nodes(
         for (i, node) in graph_data.nodes.iter().take(5).enumerate() {
             trace!(
                 "  Node {}: id={} (compact), metadata_id={} (filename)",
-                i, node.id, node.metadata_id
+                i,
+                node.id,
+                node.metadata_id
             );
         }
     }
@@ -111,8 +118,11 @@ pub(crate) async fn fetch_nodes(
         } else {
             compact_id
         };
-        let node_data =
-            BinaryNodeDataClient::new(flagged_id, node.data.position().into(), node.data.velocity().into());
+        let node_data = BinaryNodeDataClient::new(
+            flagged_id,
+            node.data.position().into(),
+            node.data.velocity().into(),
+        );
         nodes.push((flagged_id, node_data));
     }
 
@@ -131,30 +141,38 @@ pub(crate) fn handle_request_full_snapshot(
     debug!("Client requested full position snapshot");
 
     let graphs = msg.get("graphs").and_then(|g| g.as_array());
-    let include_knowledge = graphs.map_or(true, |arr| arr.iter().any(|v| v.as_str() == Some("knowledge")));
+    let include_knowledge = graphs.map_or(true, |arr| {
+        arr.iter().any(|v| v.as_str() == Some("knowledge"))
+    });
     let include_agent = graphs.map_or(true, |arr| arr.iter().any(|v| v.as_str() == Some("agent")));
 
     let app_state = _act.app_state.clone();
     let fut = async move {
-        use crate::actors::messages::{GetGraphData, GetBotsGraphData, GetNodeTypeArrays};
+        use crate::actors::messages::{GetBotsGraphData, GetGraphData, GetNodeTypeArrays};
         use std::collections::HashSet;
 
         // hot-path: trace only (fires per snapshot request)
         trace!(
             "RequestPositionSnapshot: include_knowledge={}, include_agent={}",
-            include_knowledge, include_agent
+            include_knowledge,
+            include_agent
         );
 
         let mut knowledge_nodes = Vec::new();
         let mut agent_nodes = Vec::new();
 
         // Fetch node type arrays (already compact IDs from source remapping)
-        let nta = app_state.graph_service_addr.send(GetNodeTypeArrays).await
+        let nta = app_state
+            .graph_service_addr
+            .send(GetNodeTypeArrays)
+            .await
             .unwrap_or_default();
         let agent_set: HashSet<u32> = nta.agent_ids.iter().copied().collect();
         let ontology_class_set: HashSet<u32> = nta.ontology_class_ids.iter().copied().collect();
-        let ontology_individual_set: HashSet<u32> = nta.ontology_individual_ids.iter().copied().collect();
-        let ontology_property_set: HashSet<u32> = nta.ontology_property_ids.iter().copied().collect();
+        let ontology_individual_set: HashSet<u32> =
+            nta.ontology_individual_ids.iter().copied().collect();
+        let ontology_property_set: HashSet<u32> =
+            nta.ontology_property_ids.iter().copied().collect();
 
         if include_knowledge {
             if let Ok(Ok(graph_data)) = app_state.graph_service_addr.send(GetGraphData).await {
@@ -173,8 +191,13 @@ pub(crate) fn handle_request_full_snapshot(
                         binary_protocol::set_knowledge_flag(compact_id)
                     };
                     let node_data = BinaryNodeData {
-                        node_id: flagged_id, x: node.data.x, y: node.data.y, z: node.data.z,
-                        vx: node.data.vx, vy: node.data.vy, vz: node.data.vz,
+                        node_id: flagged_id,
+                        x: node.data.x,
+                        y: node.data.y,
+                        z: node.data.z,
+                        vx: node.data.vx,
+                        vy: node.data.vy,
+                        vz: node.data.vz,
                     };
                     if agent_set.contains(&compact_id) {
                         agent_nodes.push((flagged_id, node_data));
@@ -191,8 +214,13 @@ pub(crate) fn handle_request_full_snapshot(
                     // Bots graph IDs — use as-is (bots have their own ID scheme)
                     let compact_id = node.id;
                     let node_data = BinaryNodeData {
-                        node_id: compact_id, x: node.data.x, y: node.data.y, z: node.data.z,
-                        vx: node.data.vx, vy: node.data.vy, vz: node.data.vz,
+                        node_id: compact_id,
+                        x: node.data.x,
+                        y: node.data.y,
+                        z: node.data.z,
+                        vx: node.data.vx,
+                        vy: node.data.vy,
+                        vz: node.data.vz,
                     };
                     agent_nodes.push((compact_id, node_data));
                 }
@@ -227,7 +255,11 @@ pub(crate) fn handle_request_full_snapshot(
             let analytics_ref = analytics.as_deref();
             let sssp = _act.app_state.node_sssp.read().ok();
             let sssp_ref = sssp.as_deref();
-            let binary_data = binary_protocol::encode_node_data_with_live_analytics(&all_nodes, analytics_ref, sssp_ref);
+            let binary_data = binary_protocol::encode_node_data_with_live_analytics(
+                &all_nodes,
+                analytics_ref,
+                sssp_ref,
+            );
             ctx.binary(binary_data);
             debug!("Sent position snapshot with {} nodes", all_nodes.len());
         }
@@ -254,7 +286,10 @@ pub(crate) fn handle_request_initial_data(
 }
 
 pub(crate) fn handle_enable_randomization(msg: &serde_json::Value) {
-    let enabled = msg.get("enabled").and_then(|e| e.as_bool()).unwrap_or(false);
+    let enabled = msg
+        .get("enabled")
+        .and_then(|e| e.as_bool())
+        .unwrap_or(false);
     info!(
         "Client requested to {} node position randomization (server-side removed, client-side used instead)",
         if enabled { "enable" } else { "disable" }
@@ -407,7 +442,11 @@ pub(crate) fn handle_request_bots_positions(
                 let analytics_ref = analytics.as_deref();
                 let sssp = _act.app_state.node_sssp.read().ok();
                 let sssp_ref = sssp.as_deref();
-                let binary_data = binary_protocol::encode_node_data_with_live_analytics(&nodes_data, analytics_ref, sssp_ref);
+                let binary_data = binary_protocol::encode_node_data_with_live_analytics(
+                    &nodes_data,
+                    analytics_ref,
+                    sssp_ref,
+                );
 
                 // hot-path: trace only (fires per bots position update cycle)
                 trace!(
@@ -501,14 +540,16 @@ pub(crate) fn handle_subscribe_position_updates(
     if actual_interval != interval {
         trace!(
             "Adjusted position update interval from {}ms to {}ms to comply with rate limits",
-            interval, actual_interval
+            interval,
+            actual_interval
         );
     }
 
     // hot-path: trace only (fires every re-subscription cycle)
     trace!(
         "Starting position updates with interval: {}ms, binary: {}",
-        actual_interval, binary
+        actual_interval,
+        binary
     );
 
     let update_interval = std::time::Duration::from_millis(actual_interval);
@@ -675,10 +716,13 @@ pub(crate) fn handle_request_swarm_telemetry(
                         "swarm_ids": std::collections::HashSet::<String>::new(),
                     });
 
-                    let (mut active_count, mut total_health, mut total_cpu, mut total_workload) = (0u32, 0.0f32, 0.0f32, 0.0f32);
+                    let (mut active_count, mut total_health, mut total_cpu, mut total_workload) =
+                        (0u32, 0.0f32, 0.0f32, 0.0f32);
 
                     for (idx, agent) in agents.iter().enumerate() {
-                        if agent.status == "active" { active_count += 1; }
+                        if agent.status == "active" {
+                            active_count += 1;
+                        }
                         total_health += agent.health;
                         total_cpu += agent.cpu_usage;
                         total_workload += agent.workload;
@@ -690,7 +734,10 @@ pub(crate) fn handle_request_swarm_telemetry(
                             node_id: flagged_id,
                             x: (idx as f32 * 100.0).sin() * 500.0,
                             y: (idx as f32 * 100.0).cos() * 500.0,
-                            z: 0.0, vx: 0.0, vy: 0.0, vz: 0.0,
+                            z: 0.0,
+                            vx: 0.0,
+                            vy: 0.0,
+                            vz: 0.0,
                         };
                         nodes_data.push((flagged_id, node_data));
                     }
@@ -716,7 +763,11 @@ pub(crate) fn handle_request_swarm_telemetry(
                 let analytics_ref = analytics.as_deref();
                 let sssp = _act.app_state.node_sssp.read().ok();
                 let sssp_ref = sssp.as_deref();
-                let binary_data = binary_protocol::encode_node_data_with_live_analytics(&nodes_data, analytics_ref, sssp_ref);
+                let binary_data = binary_protocol::encode_node_data_with_live_analytics(
+                    &nodes_data,
+                    analytics_ref,
+                    sssp_ref,
+                );
                 ctx.binary(binary_data);
             }
 
@@ -776,26 +827,49 @@ pub(crate) fn handle_node_drag_start(
         }
     };
 
-    let pos_x = data.get("position").and_then(|p| p.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-    let pos_y = data.get("position").and_then(|p| p.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-    let pos_z = data.get("position").and_then(|p| p.get("z")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let pos_x = data
+        .get("position")
+        .and_then(|p| p.get("x"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+    let pos_y = data
+        .get("position")
+        .and_then(|p| p.get("y"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+    let pos_z = data
+        .get("position")
+        .and_then(|p| p.get("z"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
 
     // VULN-05: Reject NaN / Infinity / out-of-bounds positions
     let (pos_x, pos_y, pos_z) = match sanitize_position(pos_x, pos_y, pos_z) {
         Some(p) => p,
         None => {
-            warn!("[Drag] nodeDragStart: rejecting invalid position [{}, {}, {}]", pos_x, pos_y, pos_z);
+            warn!(
+                "[Drag] nodeDragStart: rejecting invalid position [{}, {}, {}]",
+                pos_x, pos_y, pos_z
+            );
             return;
         }
     };
 
     // VULN-10: Cap simultaneous drags per client
-    if act.dragged_nodes.len() >= MAX_DRAGGED_NODES_PER_CLIENT && !act.dragged_nodes.contains(&node_id) {
-        warn!("[Drag] Client exceeded max simultaneous drags ({})", MAX_DRAGGED_NODES_PER_CLIENT);
+    if act.dragged_nodes.len() >= MAX_DRAGGED_NODES_PER_CLIENT
+        && !act.dragged_nodes.contains(&node_id)
+    {
+        warn!(
+            "[Drag] Client exceeded max simultaneous drags ({})",
+            MAX_DRAGGED_NODES_PER_CLIENT
+        );
         return;
     }
 
-    info!("[Drag] nodeDragStart: node_id={}, pos=[{:.2}, {:.2}, {:.2}]", node_id, pos_x, pos_y, pos_z);
+    info!(
+        "[Drag] nodeDragStart: node_id={}, pos=[{:.2}, {:.2}, {:.2}]",
+        node_id, pos_x, pos_y, pos_z
+    );
 
     // Track drag state on this connection
     act.dragged_nodes.insert(node_id);
@@ -807,11 +881,13 @@ pub(crate) fn handle_node_drag_start(
     let fut = async move {
         // 1. Send NodeInteractionMessage to resume physics if auto-paused
         use crate::actors::messages::{NodeInteractionMessage, NodeInteractionType};
-        app_state.graph_service_addr.do_send(NodeInteractionMessage {
-            node_id,
-            interaction_type: NodeInteractionType::Dragged,
-            position: Some([pos_x, pos_y, pos_z]),
-        });
+        app_state
+            .graph_service_addr
+            .do_send(NodeInteractionMessage {
+                node_id,
+                interaction_type: NodeInteractionType::Dragged,
+                position: Some([pos_x, pos_y, pos_z]),
+            });
 
         // 2. Update the node position in graph state (velocity zeroed -- pinned)
         use crate::actors::messages::UpdateNodePositions;
@@ -896,25 +972,48 @@ pub(crate) fn handle_node_drag_update(
 
     // Ignore updates for nodes we haven't received a drag start for
     if !act.dragged_nodes.contains(&node_id) {
-        debug!("[Drag] Received dragUpdate for non-dragged node {}, treating as implicit drag start", node_id);
+        debug!(
+            "[Drag] Received dragUpdate for non-dragged node {}, treating as implicit drag start",
+            node_id
+        );
         // VULN-10: Cap simultaneous drags per client (implicit drag start path)
-        if act.dragged_nodes.len() >= MAX_DRAGGED_NODES_PER_CLIENT && !act.dragged_nodes.contains(&node_id) {
-            warn!("[Drag] Client exceeded max simultaneous drags ({})", MAX_DRAGGED_NODES_PER_CLIENT);
+        if act.dragged_nodes.len() >= MAX_DRAGGED_NODES_PER_CLIENT
+            && !act.dragged_nodes.contains(&node_id)
+        {
+            warn!(
+                "[Drag] Client exceeded max simultaneous drags ({})",
+                MAX_DRAGGED_NODES_PER_CLIENT
+            );
             return;
         }
         // Implicit drag start -- pin and track
         act.dragged_nodes.insert(node_id);
     }
 
-    let pos_x = data.get("position").and_then(|p| p.get("x")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-    let pos_y = data.get("position").and_then(|p| p.get("y")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-    let pos_z = data.get("position").and_then(|p| p.get("z")).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+    let pos_x = data
+        .get("position")
+        .and_then(|p| p.get("x"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+    let pos_y = data
+        .get("position")
+        .and_then(|p| p.get("y"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
+    let pos_z = data
+        .get("position")
+        .and_then(|p| p.get("z"))
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0) as f32;
 
     // VULN-05: Reject NaN / Infinity / out-of-bounds positions
     let (pos_x, pos_y, pos_z) = match sanitize_position(pos_x, pos_y, pos_z) {
         Some(p) => p,
         None => {
-            warn!("[Drag] nodeDragUpdate: rejecting invalid position [{}, {}, {}]", pos_x, pos_y, pos_z);
+            warn!(
+                "[Drag] nodeDragUpdate: rejecting invalid position [{}, {}, {}]",
+                pos_x, pos_y, pos_z
+            );
             return;
         }
     };
@@ -1007,8 +1106,14 @@ pub(crate) fn handle_node_drag_update(
                 let analytics_ref = analytics.as_deref();
                 let sssp = app_state.node_sssp.read().ok();
                 let sssp_ref = sssp.as_deref();
-                let binary_data = binary_protocol::encode_node_data_with_live_analytics(&node_data, analytics_ref, sssp_ref);
-                client_manager_addr.do_send(BroadcastNodePositions { positions: binary_data });
+                let binary_data = binary_protocol::encode_node_data_with_live_analytics(
+                    &node_data,
+                    analytics_ref,
+                    sssp_ref,
+                );
+                client_manager_addr.do_send(BroadcastNodePositions {
+                    positions: binary_data,
+                });
             }
         }
     };
@@ -1065,11 +1170,13 @@ pub(crate) fn handle_node_drag_end(
     let fut = async move {
         // 1. Notify physics that the drag interaction ended (node released)
         use crate::actors::messages::{NodeInteractionMessage, NodeInteractionType};
-        app_state.graph_service_addr.do_send(NodeInteractionMessage {
-            node_id,
-            interaction_type: NodeInteractionType::Released,
-            position: None,
-        });
+        app_state
+            .graph_service_addr
+            .do_send(NodeInteractionMessage {
+                node_id,
+                interaction_type: NodeInteractionType::Released,
+                position: None,
+            });
 
         // 2. Run one final settle cycle with the node free
         use crate::actors::messages::SimulationStep;
@@ -1085,7 +1192,10 @@ pub(crate) fn handle_node_drag_end(
                     break;
                 }
                 Err(e) => {
-                    debug!("[Drag] Final settle step {} mailbox error: {}", iterations, e);
+                    debug!(
+                        "[Drag] Final settle step {} mailbox error: {}",
+                        iterations, e
+                    );
                     break;
                 }
             }
@@ -1129,8 +1239,14 @@ pub(crate) fn handle_node_drag_end(
                 let analytics_ref = analytics.as_deref();
                 let sssp = app_state.node_sssp.read().ok();
                 let sssp_ref = sssp.as_deref();
-                let binary_data = binary_protocol::encode_node_data_with_live_analytics(&node_data, analytics_ref, sssp_ref);
-                client_manager_addr.do_send(BroadcastNodePositions { positions: binary_data });
+                let binary_data = binary_protocol::encode_node_data_with_live_analytics(
+                    &node_data,
+                    analytics_ref,
+                    sssp_ref,
+                );
+                client_manager_addr.do_send(BroadcastNodePositions {
+                    positions: binary_data,
+                });
             }
         }
     };

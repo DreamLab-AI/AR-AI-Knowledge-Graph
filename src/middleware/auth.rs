@@ -150,8 +150,7 @@ where
                 Some(service) => service.clone(),
                 None => {
                     warn!("NostrService not found in app data - authentication cannot proceed");
-                    let resp = HttpResponse::Unauthorized()
-                        .body("Unauthorized");
+                    let resp = HttpResponse::Unauthorized().body("Unauthorized");
                     return Ok(req.into_response(resp).map_into_boxed_body());
                 }
             };

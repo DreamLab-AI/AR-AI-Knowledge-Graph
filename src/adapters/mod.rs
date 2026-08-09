@@ -55,18 +55,18 @@ pub mod sqlite_canary_repository;
 // REC-4: durable KPI snapshot + lineage store (data/kpi.sqlite3), ADR-130 D5
 pub mod sqlite_kpi_repository;
 
-pub use oxigraph_ontology_repository::OxigraphOntologyRepository;
 pub use oxigraph_graph_repository::OxigraphGraphRepository;
-pub use sqlite_settings_repository::SqliteSettingsRepository;
-pub use sqlite_enrichment_repository::{
-    EnrichmentProposal, EnrichmentStoreError, SqliteEnrichmentRepository, StoredDecision,
-};
+pub use oxigraph_ontology_repository::OxigraphOntologyRepository;
 pub use sqlite_canary_repository::{
     CanaryRegistration, CanaryStatus, CanaryStoreError, SqliteCanaryRepository,
+};
+pub use sqlite_enrichment_repository::{
+    EnrichmentProposal, EnrichmentStoreError, SqliteEnrichmentRepository, StoredDecision,
 };
 pub use sqlite_kpi_repository::{
     KpiLineageRow, KpiSnapshotRow, KpiStoreError, NewKpiSnapshot, SqliteKpiRepository,
 };
+pub use sqlite_settings_repository::SqliteSettingsRepository;
 
 pub use whelk_inference_engine::WhelkInferenceEngine;
 

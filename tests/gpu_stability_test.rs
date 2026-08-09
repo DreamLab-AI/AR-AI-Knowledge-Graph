@@ -34,10 +34,9 @@ mod gpu_stability_tests {
         // The test documents the intended stability-gate behavior:
         // after enough iterations with high damping, system kinetic energy
         // should drop below stability_threshold * num_nodes.
-        let _gpu_compute = UnifiedGPUCompute::new_with_modules(
-            num_nodes, num_edges, &ptx_content, None, None,
-        )
-        .expect("Failed to create GPU compute");
+        let _gpu_compute =
+            UnifiedGPUCompute::new_with_modules(num_nodes, num_edges, &ptx_content, None, None)
+                .expect("Failed to create GPU compute");
 
         // TODO: Update to current API for uploading node/edge data
         // and running the physics simulation loop.
@@ -57,10 +56,9 @@ mod gpu_stability_tests {
         let num_nodes = 1000;
         let num_edges = 0;
 
-        let _gpu_compute = UnifiedGPUCompute::new_with_modules(
-            num_nodes, num_edges, &ptx_content, None, None,
-        )
-        .expect("Failed to create GPU compute");
+        let _gpu_compute =
+            UnifiedGPUCompute::new_with_modules(num_nodes, num_edges, &ptx_content, None, None)
+                .expect("Failed to create GPU compute");
 
         // TODO: Update to current API for uploading positions/velocities.
         //

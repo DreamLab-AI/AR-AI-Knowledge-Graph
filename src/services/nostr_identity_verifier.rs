@@ -196,9 +196,12 @@ mod tests {
         let (xonly_b, _) = Keypair::from_secret_key(&secp, &sk_b).x_only_public_key();
         let payload_did_b = format!("did:nostr:{}", hex::encode(xonly_b.serialize()));
 
-        let err =
-            verify_did_matches_challenge(&payload_did_b, &challenge_a, &NostrIdentityVerifier::new())
-                .unwrap_err();
+        let err = verify_did_matches_challenge(
+            &payload_did_b,
+            &challenge_a,
+            &NostrIdentityVerifier::new(),
+        )
+        .unwrap_err();
         assert!(matches!(err, RoomError::InvalidDid { .. }));
     }
 

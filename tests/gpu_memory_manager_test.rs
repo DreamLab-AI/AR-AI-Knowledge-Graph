@@ -23,13 +23,22 @@ mod gpu_memory_manager_tests {
     #[ignore = "Requires CUDA device"]
     fn test_manager_creation_default() {
         let manager = GpuMemoryManager::new();
-        assert!(manager.is_ok(), "Manager creation with defaults should succeed");
+        assert!(
+            manager.is_ok(),
+            "Manager creation with defaults should succeed"
+        );
 
         let manager = manager.unwrap();
         let stats = manager.stats();
         assert_eq!(stats.buffer_count, 0, "New manager should have no buffers");
-        assert_eq!(stats.total_allocated_bytes, 0, "New manager should have 0 allocated bytes");
-        assert_eq!(stats.allocation_count, 0, "New manager should have 0 allocations");
+        assert_eq!(
+            stats.total_allocated_bytes, 0,
+            "New manager should have 0 allocated bytes"
+        );
+        assert_eq!(
+            stats.allocation_count, 0,
+            "New manager should have 0 allocations"
+        );
     }
 
     /// Test manager creation with custom memory limit
@@ -38,7 +47,10 @@ mod gpu_memory_manager_tests {
     fn test_manager_creation_with_limit() {
         let limit_bytes = 512 * 1024 * 1024; // 512MB
         let manager = GpuMemoryManager::with_limit(limit_bytes);
-        assert!(manager.is_ok(), "Manager creation with custom limit should succeed");
+        assert!(
+            manager.is_ok(),
+            "Manager creation with custom limit should succeed"
+        );
     }
 
     /// Test single buffer allocation
@@ -65,8 +77,12 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("buffer_a", 100, config.clone()).unwrap();
-        manager.allocate::<f32>("buffer_b", 200, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buffer_a", 100, config.clone())
+            .unwrap();
+        manager
+            .allocate::<f32>("buffer_b", 200, config.clone())
+            .unwrap();
         manager.allocate::<f32>("buffer_c", 300, config).unwrap();
 
         let stats = manager.stats();
@@ -81,7 +97,9 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("duplicate_name", 100, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("duplicate_name", 100, config.clone())
+            .unwrap();
 
         // Second allocation with same name should be skipped (not error)
         let result = manager.allocate::<f32>("duplicate_name", 500, config);
@@ -107,7 +125,10 @@ mod gpu_memory_manager_tests {
         assert!(result.is_ok(), "Buffer deallocation should succeed");
 
         let stats_after = manager.stats();
-        assert_eq!(stats_after.buffer_count, 0, "Buffer count should be 0 after free");
+        assert_eq!(
+            stats_after.buffer_count, 0,
+            "Buffer count should be 0 after free"
+        );
     }
 
     /// Test freeing non-existent buffer returns error
@@ -127,8 +148,12 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("buf1", 100, config.clone()).unwrap();
-        manager.allocate::<f32>("buf2", 200, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buf1", 100, config.clone())
+            .unwrap();
+        manager
+            .allocate::<f32>("buf2", 200, config.clone())
+            .unwrap();
         manager.allocate::<f32>("buf3", 300, config).unwrap();
 
         // Free middle buffer first
@@ -154,7 +179,10 @@ mod gpu_memory_manager_tests {
         manager.allocate::<f32>("readable", 100, config).unwrap();
 
         let buffer = manager.get_buffer::<f32>("readable");
-        assert!(buffer.is_ok(), "get_buffer should succeed for existing buffer");
+        assert!(
+            buffer.is_ok(),
+            "get_buffer should succeed for existing buffer"
+        );
     }
 
     /// Test buffer access (get_buffer_mut mutable)
@@ -167,7 +195,10 @@ mod gpu_memory_manager_tests {
         manager.allocate::<f32>("writable", 100, config).unwrap();
 
         let buffer = manager.get_buffer_mut::<f32>("writable");
-        assert!(buffer.is_ok(), "get_buffer_mut should succeed for existing buffer");
+        assert!(
+            buffer.is_ok(),
+            "get_buffer_mut should succeed for existing buffer"
+        );
     }
 
     /// Test accessing non-existent buffer returns error
@@ -177,7 +208,10 @@ mod gpu_memory_manager_tests {
         let manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let result = manager.get_buffer::<f32>("not_allocated");
-        assert!(result.is_err(), "Accessing non-existent buffer should error");
+        assert!(
+            result.is_err(),
+            "Accessing non-existent buffer should error"
+        );
     }
 
     /// Test type mismatch when accessing buffer
@@ -202,10 +236,23 @@ mod gpu_memory_manager_tests {
     #[test]
     fn test_buffer_config_defaults() {
         let config = BufferConfig::default();
-        assert_eq!(config.bytes_per_element, 4, "Default should be f32 (4 bytes)");
-        assert_eq!(config.growth_factor, 1.5, "Default growth factor should be 1.5");
-        assert_eq!(config.min_size_bytes, 4096, "Default min size should be 4KB");
-        assert_eq!(config.max_size_bytes, 1024 * 1024 * 1024, "Default max should be 1GB");
+        assert_eq!(
+            config.bytes_per_element, 4,
+            "Default should be f32 (4 bytes)"
+        );
+        assert_eq!(
+            config.growth_factor, 1.5,
+            "Default growth factor should be 1.5"
+        );
+        assert_eq!(
+            config.min_size_bytes, 4096,
+            "Default min size should be 4KB"
+        );
+        assert_eq!(
+            config.max_size_bytes,
+            1024 * 1024 * 1024,
+            "Default max should be 1GB"
+        );
         assert!(!config.enable_async, "Async should be disabled by default");
     }
 
@@ -213,8 +260,14 @@ mod gpu_memory_manager_tests {
     #[test]
     fn test_buffer_config_for_positions() {
         let config = BufferConfig::for_positions();
-        assert_eq!(config.bytes_per_element, 12, "Positions should be 12 bytes (f32x3)");
-        assert_eq!(config.growth_factor, 1.3, "Positions growth factor should be 1.3");
+        assert_eq!(
+            config.bytes_per_element, 12,
+            "Positions should be 12 bytes (f32x3)"
+        );
+        assert_eq!(
+            config.growth_factor, 1.3,
+            "Positions growth factor should be 1.3"
+        );
         assert!(config.enable_async, "Positions should have async enabled");
     }
 
@@ -222,7 +275,10 @@ mod gpu_memory_manager_tests {
     #[test]
     fn test_buffer_config_for_velocities() {
         let config = BufferConfig::for_velocities();
-        assert_eq!(config.bytes_per_element, 12, "Velocities should be 12 bytes (f32x3)");
+        assert_eq!(
+            config.bytes_per_element, 12,
+            "Velocities should be 12 bytes (f32x3)"
+        );
         assert!(config.enable_async, "Velocities should have async enabled");
     }
 
@@ -231,7 +287,10 @@ mod gpu_memory_manager_tests {
     fn test_buffer_config_for_edges() {
         let config = BufferConfig::for_edges();
         assert_eq!(config.bytes_per_element, 32, "Edges should be 32 bytes");
-        assert_eq!(config.growth_factor, 2.0, "Edges growth factor should be 2.0");
+        assert_eq!(
+            config.growth_factor, 2.0,
+            "Edges growth factor should be 2.0"
+        );
         assert!(!config.enable_async, "Edges should not have async enabled");
     }
 
@@ -240,7 +299,10 @@ mod gpu_memory_manager_tests {
     fn test_buffer_config_for_grid_cells() {
         let config = BufferConfig::for_grid_cells();
         assert_eq!(config.bytes_per_element, 8, "Grid cells should be 8 bytes");
-        assert!(!config.enable_async, "Grid cells should not have async enabled");
+        assert!(
+            !config.enable_async,
+            "Grid cells should not have async enabled"
+        );
     }
 
     /// Test ensure_capacity when no resize needed
@@ -254,7 +316,10 @@ mod gpu_memory_manager_tests {
 
         // Request smaller capacity - should not resize
         let result = manager.ensure_capacity::<f32>("buffer", 500);
-        assert!(result.is_ok(), "ensure_capacity with smaller size should succeed");
+        assert!(
+            result.is_ok(),
+            "ensure_capacity with smaller size should succeed"
+        );
 
         let stats = manager.stats();
         assert_eq!(stats.resize_count, 0, "No resize should occur");
@@ -286,10 +351,14 @@ mod gpu_memory_manager_tests {
         let mut config = BufferConfig::default();
         config.growth_factor = 2.0; // Double each time
 
-        manager.allocate::<f32>("growing_buffer", 100, config).unwrap();
+        manager
+            .allocate::<f32>("growing_buffer", 100, config)
+            .unwrap();
 
         // Request 150 elements - with 2.0 growth, should get 200
-        manager.ensure_capacity::<f32>("growing_buffer", 150).unwrap();
+        manager
+            .ensure_capacity::<f32>("growing_buffer", 150)
+            .unwrap();
 
         let stats = manager.stats();
         assert!(stats.resize_count > 0, "Resize should occur");
@@ -302,7 +371,10 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let result = manager.ensure_capacity::<f32>("not_allocated", 100);
-        assert!(result.is_err(), "ensure_capacity on non-existent buffer should error");
+        assert!(
+            result.is_err(),
+            "ensure_capacity on non-existent buffer should error"
+        );
     }
 
     /// Test total allocated tracking
@@ -312,7 +384,9 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("buf1", 100, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buf1", 100, config.clone())
+            .unwrap();
         manager.allocate::<f32>("buf2", 200, config).unwrap();
 
         let stats = manager.stats();
@@ -332,7 +406,9 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("buf1", 1000, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buf1", 1000, config.clone())
+            .unwrap();
         manager.allocate::<f32>("buf2", 2000, config).unwrap();
 
         let peak_after_alloc = manager.stats().peak_allocated_bytes;
@@ -364,7 +440,10 @@ mod gpu_memory_manager_tests {
         manager.free("temp").unwrap();
 
         let leaks = manager.check_leaks();
-        assert!(leaks.is_empty(), "No leaks should be detected when all buffers freed");
+        assert!(
+            leaks.is_empty(),
+            "No leaks should be detected when all buffers freed"
+        );
     }
 
     /// Test leak detection catches unfree'd buffers
@@ -374,7 +453,9 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("leaked_buffer", 100, config).unwrap();
+        manager
+            .allocate::<f32>("leaked_buffer", 100, config)
+            .unwrap();
 
         // Don't free it - should be detected as leak
         let leaks = manager.check_leaks();
@@ -389,8 +470,12 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("leak1", 100, config.clone()).unwrap();
-        manager.allocate::<f32>("leak2", 200, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("leak1", 100, config.clone())
+            .unwrap();
+        manager
+            .allocate::<f32>("leak2", 200, config.clone())
+            .unwrap();
         manager.allocate::<f32>("leak3", 300, config).unwrap();
 
         let leaks = manager.check_leaks();
@@ -411,7 +496,9 @@ mod gpu_memory_manager_tests {
 
         // Allocate
         let config = BufferConfig::for_positions();
-        manager.allocate::<f32>("buf1", 100, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buf1", 100, config.clone())
+            .unwrap();
         manager.allocate::<f32>("buf2", 200, config).unwrap();
 
         let stats = manager.stats();
@@ -428,7 +515,10 @@ mod gpu_memory_manager_tests {
         manager.free("buf1").unwrap();
 
         let stats = manager.stats();
-        assert_eq!(stats.buffer_count, 1, "Buffer count should decrease after free");
+        assert_eq!(
+            stats.buffer_count, 1,
+            "Buffer count should decrease after free"
+        );
     }
 
     // ============================================================
@@ -440,13 +530,17 @@ mod gpu_memory_manager_tests {
     #[ignore = "Requires CUDA device"]
     fn test_memory_limit_enforcement() {
         let small_limit = 4096; // 4KB limit
-        let mut manager = GpuMemoryManager::with_limit(small_limit).expect("Manager creation failed");
+        let mut manager =
+            GpuMemoryManager::with_limit(small_limit).expect("Manager creation failed");
 
         let config = BufferConfig::default();
 
         // Allocate within limit
         let result = manager.allocate::<f32>("small", 100, config.clone());
-        assert!(result.is_ok(), "Small allocation within limit should succeed");
+        assert!(
+            result.is_ok(),
+            "Small allocation within limit should succeed"
+        );
 
         // Try to allocate beyond limit
         let result = manager.allocate::<f32>("huge", 1_000_000, config);
@@ -462,18 +556,24 @@ mod gpu_memory_manager_tests {
         let mut config = BufferConfig::default();
         config.max_size_bytes = 4096; // Very small max
 
-        manager.allocate::<f32>("limited_buffer", 100, config).unwrap();
+        manager
+            .allocate::<f32>("limited_buffer", 100, config)
+            .unwrap();
 
         // Request capacity that would exceed max_size_bytes
         let result = manager.ensure_capacity::<f32>("limited_buffer", 10_000_000);
-        assert!(result.is_err(), "Resize exceeding max_size_bytes should fail");
+        assert!(
+            result.is_err(),
+            "Resize exceeding max_size_bytes should fail"
+        );
     }
 
     /// Test handling of very large allocation request
     #[test]
     #[ignore = "Requires CUDA device"]
     fn test_very_large_allocation_rejected() {
-        let mut manager = GpuMemoryManager::with_limit(1024 * 1024).expect("Manager creation failed");
+        let mut manager =
+            GpuMemoryManager::with_limit(1024 * 1024).expect("Manager creation failed");
 
         let config = BufferConfig::default();
         // Request more than available GPU memory
@@ -493,11 +593,17 @@ mod gpu_memory_manager_tests {
 
         // Try to resize before allocation
         let result = manager.ensure_capacity::<f32>("not_allocated", 100);
-        assert!(result.is_err(), "ensure_capacity before allocation should error");
+        assert!(
+            result.is_err(),
+            "ensure_capacity before allocation should error"
+        );
 
         // Try to start async download before allocation
         let result = manager.start_async_download::<f32>("not_allocated");
-        assert!(result.is_err(), "start_async_download before allocation should error");
+        assert!(
+            result.is_err(),
+            "start_async_download before allocation should error"
+        );
 
         // Try to free before allocation
         let result = manager.free("not_allocated");
@@ -516,7 +622,10 @@ mod gpu_memory_manager_tests {
         manager.allocate::<f32>("sync_only", 100, config).unwrap();
 
         let result = manager.start_async_download::<f32>("sync_only");
-        assert!(result.is_err(), "Async download on non-async buffer should fail");
+        assert!(
+            result.is_err(),
+            "Async download on non-async buffer should fail"
+        );
     }
 
     /// Test wait_for_download without pending transfer fails
@@ -532,7 +641,10 @@ mod gpu_memory_manager_tests {
 
         // Don't start a download, just try to wait
         let result = manager.wait_for_download::<f32>("async_buf");
-        assert!(result.is_err(), "wait_for_download without pending transfer should fail");
+        assert!(
+            result.is_err(),
+            "wait_for_download without pending transfer should fail"
+        );
     }
 
     // ============================================================
@@ -560,8 +672,7 @@ mod gpu_memory_manager_tests {
 
         let stats = manager.stats();
         assert_eq!(
-            stats.buffer_count,
-            num_allocations,
+            stats.buffer_count, num_allocations,
             "All rapid allocations should succeed"
         );
     }
@@ -575,11 +686,19 @@ mod gpu_memory_manager_tests {
         let config = BufferConfig::default();
 
         // Interleave allocations and frees
-        manager.allocate::<f32>("buf_0", 100, config.clone()).unwrap();
-        manager.allocate::<f32>("buf_1", 100, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buf_0", 100, config.clone())
+            .unwrap();
+        manager
+            .allocate::<f32>("buf_1", 100, config.clone())
+            .unwrap();
         manager.free("buf_0").unwrap();
-        manager.allocate::<f32>("buf_2", 100, config.clone()).unwrap();
-        manager.allocate::<f32>("buf_3", 100, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("buf_2", 100, config.clone())
+            .unwrap();
+        manager
+            .allocate::<f32>("buf_3", 100, config.clone())
+            .unwrap();
         manager.free("buf_1").unwrap();
         manager.free("buf_2").unwrap();
         manager.allocate::<f32>("buf_4", 100, config).unwrap();
@@ -599,12 +718,25 @@ mod gpu_memory_manager_tests {
 
         for i in 0..10 {
             let config = BufferConfig::default();
-            manager.allocate::<f32>(&format!("stats_test_{}", i), 100, config).unwrap();
+            manager
+                .allocate::<f32>(&format!("stats_test_{}", i), 100, config)
+                .unwrap();
 
             let stats = manager.stats();
-            assert_eq!(stats.buffer_count, i + 1, "Buffer count should track allocations");
-            assert!(stats.total_allocated_bytes > 0, "Should have bytes allocated");
-            assert_eq!(stats.allocation_count, i + 1, "Allocation count should increment");
+            assert_eq!(
+                stats.buffer_count,
+                i + 1,
+                "Buffer count should track allocations"
+            );
+            assert!(
+                stats.total_allocated_bytes > 0,
+                "Should have bytes allocated"
+            );
+            assert_eq!(
+                stats.allocation_count,
+                i + 1,
+                "Allocation count should increment"
+            );
         }
 
         // Free half
@@ -625,8 +757,12 @@ mod gpu_memory_manager_tests {
         let buffer_size = 1000;
         let element_size = std::mem::size_of::<f32>();
 
-        manager.allocate::<f32>("atomic_test_1", buffer_size, config.clone()).unwrap();
-        manager.allocate::<f32>("atomic_test_2", buffer_size, config.clone()).unwrap();
+        manager
+            .allocate::<f32>("atomic_test_1", buffer_size, config.clone())
+            .unwrap();
+        manager
+            .allocate::<f32>("atomic_test_2", buffer_size, config.clone())
+            .unwrap();
 
         let stats = manager.stats();
         assert_eq!(stats.allocation_count, 2);
@@ -654,7 +790,10 @@ mod gpu_memory_manager_tests {
             after_resize_stats.total_allocated_bytes > initial_allocated,
             "Total allocated should increase after resize"
         );
-        assert!(after_resize_stats.resize_count > 0, "Resize count should increment");
+        assert!(
+            after_resize_stats.resize_count > 0,
+            "Resize count should increment"
+        );
     }
 
     // ============================================================
@@ -670,7 +809,9 @@ mod gpu_memory_manager_tests {
         let mut config = BufferConfig::default();
         config.enable_async = true;
 
-        manager.allocate::<f32>("async_buffer", 100, config).unwrap();
+        manager
+            .allocate::<f32>("async_buffer", 100, config)
+            .unwrap();
 
         // Start async download
         let result = manager.start_async_download::<f32>("async_buffer");
@@ -705,7 +846,10 @@ mod gpu_memory_manager_tests {
         assert_eq!(data2.len(), 100);
 
         let stats = manager.stats();
-        assert_eq!(stats.async_transfer_count, 2, "Should record 2 async transfers");
+        assert_eq!(
+            stats.async_transfer_count, 2,
+            "Should record 2 async transfers"
+        );
     }
 
     // ============================================================
@@ -754,10 +898,18 @@ mod gpu_memory_manager_tests {
         let mut manager = GpuMemoryManager::new().expect("Manager creation failed");
 
         // Allocate different buffer types
-        manager.allocate::<f32>("positions", 1000, BufferConfig::for_positions()).unwrap();
-        manager.allocate::<f32>("velocities", 1000, BufferConfig::for_velocities()).unwrap();
-        manager.allocate::<u8>("edges", 500, BufferConfig::for_edges()).unwrap();
-        manager.allocate::<i32>("grid", 200, BufferConfig::for_grid_cells()).unwrap();
+        manager
+            .allocate::<f32>("positions", 1000, BufferConfig::for_positions())
+            .unwrap();
+        manager
+            .allocate::<f32>("velocities", 1000, BufferConfig::for_velocities())
+            .unwrap();
+        manager
+            .allocate::<u8>("edges", 500, BufferConfig::for_edges())
+            .unwrap();
+        manager
+            .allocate::<i32>("grid", 200, BufferConfig::for_grid_cells())
+            .unwrap();
 
         assert_eq!(manager.stats().buffer_count, 4);
 

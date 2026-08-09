@@ -2,33 +2,24 @@ use serde_json::Value;
 use std::any::Any;
 
 pub trait PathAccessible {
-    
     fn get_by_path(&self, path: &str) -> Result<Box<dyn Any>, String>;
 
-    
     fn set_by_path(&mut self, path: &str, value: Box<dyn Any>) -> Result<(), String>;
 }
 
 pub trait JsonPathAccessible: serde::Serialize + serde::de::DeserializeOwned {
-    
     fn get_json_by_path(&self, path: &str) -> Result<Value, String> {
-        
         let root = serde_json::to_value(self).map_err(|e| format!("Failed to serialize: {}", e))?;
 
-        
         navigate_json_path(&root, path).ok_or_else(|| format!("Path '{}' not found", path))
     }
 
-    
     fn set_json_by_path(&mut self, path: &str, value: Value) -> Result<(), String> {
-        
         let mut root =
             serde_json::to_value(&*self).map_err(|e| format!("Failed to serialize: {}", e))?;
 
-        
         set_json_at_path(&mut root, path, value)?;
 
-        
         *self =
             serde_json::from_value(root).map_err(|e| format!("Failed to deserialize: {}", e))?;
 
@@ -46,7 +37,6 @@ pub fn parse_path(path: &str) -> Result<Vec<&str>, String> {
 
     let segments: Vec<&str> = path.split('.').collect();
 
-    
     if segments.iter().any(|s| s.is_empty()) {
         return Err("Path segments cannot be empty".to_string());
     }
@@ -69,7 +59,7 @@ macro_rules! impl_field_access {
                             if segments.len() == 1 {
                                 Ok(Box::new(self.$field.clone()))
                             } else {
-                                
+
                                 let remaining = segments[1..].join(".");
                                 self.$field.get_by_path(&remaining)
                             }
@@ -94,7 +84,7 @@ macro_rules! impl_field_access {
                                     Err(_) => Err(format!("Type mismatch for field {}", segments[0]))
                                 }
                             } else {
-                                
+
                                 let remaining = segments[1..].join(".");
                                 self.$field.set_by_path(&remaining, value)
                             }
@@ -122,7 +112,6 @@ fn navigate_json_path(root: &Value, path: &str) -> Option<Value> {
     for segment in segments {
         match current {
             Value::Object(map) => {
-
                 current = map
                     .get(segment)
                     .or_else(|| map.get(&camel_to_snake_case(segment)))
@@ -151,7 +140,6 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
         return Err("Invalid empty path".to_string());
     }
 
-    
     if !validate_path_exists(root, &segments) {
         return Err(format!(
             "Path '{}' does not exist in the settings structure",
@@ -159,20 +147,15 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
         ));
     }
 
-    
     let mut current = root;
 
     for (i, segment) in segments.iter().enumerate() {
         if i == segments.len() - 1 {
-            
             match current {
                 Value::Object(map) => {
-                    
-                    
                     let field_key = find_field_key(map, segment)
                         .ok_or_else(|| format!("Field '{}' not found in object", segment))?;
 
-                    
                     if let Some(existing) = map.get(&field_key) {
                         if !values_have_compatible_types(existing, &value) {
                             return Err(format!(
@@ -184,11 +167,9 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
                         }
                     }
 
-                    
                     let final_value = if let Some(existing) = map.get(&field_key) {
                         match (existing, &value) {
                             (Value::Number(_), Value::String(s)) => {
-                                
                                 if let Ok(num) = s.parse::<f64>() {
                                     serde_json::Number::from_f64(num)
                                         .map(Value::Number)
@@ -212,7 +193,11 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
                             arr[index] = value;
                             return Ok(());
                         } else {
-                            return Err(format!("Array index {} out of bounds (length {})", index, arr.len()));
+                            return Err(format!(
+                                "Array index {} out of bounds (length {})",
+                                index,
+                                arr.len()
+                            ));
                         }
                     } else {
                         return Err(format!("Cannot use non-numeric key '{}' on array", segment));
@@ -221,10 +206,8 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
                 _ => return Err(format!("Parent of '{}' is not an object or array", segment)),
             }
         } else {
-
             match current {
                 Value::Object(map) => {
-
                     let field_key = find_field_key(map, segment).ok_or_else(|| {
                         format!("Field '{}' not found while navigating path", segment)
                     })?;
@@ -238,10 +221,17 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
                         if index < arr.len() {
                             current = &mut arr[index];
                         } else {
-                            return Err(format!("Array index {} out of bounds (length {})", index, arr.len()));
+                            return Err(format!(
+                                "Array index {} out of bounds (length {})",
+                                index,
+                                arr.len()
+                            ));
                         }
                     } else {
-                        return Err(format!("Cannot use non-numeric key '{}' to navigate array", segment));
+                        return Err(format!(
+                            "Cannot use non-numeric key '{}' to navigate array",
+                            segment
+                        ));
                     }
                 }
                 _ => {
@@ -258,18 +248,15 @@ fn set_json_at_path(root: &mut Value, path: &str, value: Value) -> Result<(), St
 }
 
 fn find_field_key(map: &serde_json::Map<String, Value>, segment: &str) -> Option<String> {
-    
     if map.contains_key(segment) {
         return Some(segment.to_string());
     }
 
-    
     let camel_case = snake_to_camel_case(segment);
     if map.contains_key(&camel_case) {
         return Some(camel_case);
     }
 
-    
     let snake_case = camel_to_snake_case(segment);
     if map.contains_key(&snake_case) {
         return Some(snake_case);
@@ -315,7 +302,6 @@ fn validate_path_exists(root: &Value, segments: &[&str]) -> bool {
     for segment in segments {
         match current {
             Value::Object(map) => {
-
                 if let Some(field_key) = find_field_key(map, segment) {
                     current = &map[&field_key];
                 } else {
@@ -345,9 +331,9 @@ fn values_have_compatible_types(existing: &Value, new_value: &Value) -> bool {
         (Value::Null, _) | (_, Value::Null) => true,
         (Value::Bool(_), Value::Bool(_)) => true,
         (Value::Number(_), Value::Number(_)) => true,
-        
+
         (Value::Number(_), Value::String(s)) => s.parse::<f64>().is_ok(),
-        
+
         (Value::String(_), Value::Number(_)) => true,
         (Value::String(_), Value::String(_)) => true,
         (Value::Array(_), Value::Array(_)) => true,
@@ -390,11 +376,11 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-    #[serde(rename_all = "camelCase")] 
+    #[serde(rename_all = "camelCase")]
     struct TestSettings {
-        enable_hologram: bool, 
-        max_velocity: f32,     
-        auto_balance: bool,    
+        enable_hologram: bool,
+        max_velocity: f32,
+        auto_balance: bool,
     }
 
     #[test]
@@ -405,15 +391,11 @@ mod tests {
             auto_balance: false,
         };
 
-        
         let value = settings.get_json_by_path("enableHologram").unwrap();
         assert_eq!(value, Value::Bool(true));
 
         let value = settings.get_json_by_path("maxVelocity").unwrap();
-        assert_eq!(
-            value,
-            Value::Number(safe_json_number(10.0))
-        );
+        assert_eq!(value, Value::Number(safe_json_number(10.0)));
     }
 
     #[test]
@@ -424,7 +406,6 @@ mod tests {
             auto_balance: false,
         };
 
-        
         settings
             .set_json_by_path("enableHologram", Value::Bool(false))
             .unwrap();
@@ -436,10 +417,7 @@ mod tests {
         assert_eq!(settings.auto_balance, true);
 
         settings
-            .set_json_by_path(
-                "maxVelocity",
-                Value::Number(safe_json_number(25.5)),
-            )
+            .set_json_by_path("maxVelocity", Value::Number(safe_json_number(25.5)))
             .unwrap();
         assert_eq!(settings.max_velocity, 25.5);
     }
@@ -474,7 +452,6 @@ mod tests {
             },
         };
 
-        
         let value = settings
             .get_json_by_path("visualisation.enableHologram")
             .unwrap();
@@ -483,12 +460,8 @@ mod tests {
         let value = settings
             .get_json_by_path("visualisation.physics.maxVelocity")
             .unwrap();
-        assert_eq!(
-            value,
-            Value::Number(safe_json_number(100.0))
-        );
+        assert_eq!(value, Value::Number(safe_json_number(100.0)));
 
-        
         settings
             .set_json_by_path(
                 "visualisation.physics.maxVelocity",
@@ -512,18 +485,15 @@ mod tests {
             max_count: 10,
         };
 
-        
         assert!(settings
             .set_json_by_path("enableFeature", Value::Bool(false))
             .is_ok());
         assert_eq!(settings.enable_feature, false);
 
-        
         let result = settings.set_json_by_path("nonExistentField", Value::Bool(true));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
 
-        
         let result = settings.set_json_by_path("maxCount", Value::Bool(true));
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Type mismatch"));
@@ -531,7 +501,6 @@ mod tests {
 
     #[test]
     fn test_batch_update_scenario() {
-        
         #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
         #[serde(rename_all = "camelCase")]
         struct Settings {
@@ -558,7 +527,6 @@ mod tests {
             },
         };
 
-        
         let updates = vec![
             ("visualisation.enableHologram", Value::Bool(true)),
             (
@@ -574,7 +542,6 @@ mod tests {
         assert_eq!(settings.visualisation.enable_hologram, true);
         assert_eq!(settings.visualisation.hologram_settings.ring_count, 5);
 
-        
         let json = serde_json::to_value(&settings).unwrap();
         let deserialized: Settings = serde_json::from_value(json).unwrap();
         assert_eq!(settings, deserialized);

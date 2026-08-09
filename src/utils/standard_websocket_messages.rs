@@ -1,8 +1,8 @@
+use crate::utils::json::{from_json, to_json};
+use crate::utils::time;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::utils::time;
-use crate::utils::json::{from_json, to_json};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WebSocketEnvelope<T> {
@@ -17,7 +17,6 @@ pub struct WebSocketEnvelope<T> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum StandardWebSocketMessage {
-    
     #[serde(rename = "ping")]
     Ping {
         timestamp: DateTime<Utc>,
@@ -44,7 +43,6 @@ pub enum StandardWebSocketMessage {
         timestamp: DateTime<Utc>,
     },
 
-    
     #[serde(rename = "subscribe")]
     Subscribe {
         channels: Vec<String>,
@@ -66,7 +64,6 @@ pub enum StandardWebSocketMessage {
         timestamp: DateTime<Utc>,
     },
 
-    
     #[serde(rename = "data_update")]
     DataUpdate {
         channel: String,
@@ -81,7 +78,6 @@ pub enum StandardWebSocketMessage {
         timestamp: DateTime<Utc>,
     },
 
-    
     #[serde(rename = "error")]
     Error {
         error_type: String,
@@ -90,7 +86,6 @@ pub enum StandardWebSocketMessage {
         timestamp: DateTime<Utc>,
     },
 
-    
     #[serde(rename = "request")]
     Request {
         request_id: String,
@@ -127,7 +122,7 @@ pub enum HealthWebSocketMessage {
 
     #[serde(rename = "alert")]
     Alert {
-        severity: String, 
+        severity: String,
         message: String,
         component: Option<String>,
         timestamp: DateTime<Utc>,
@@ -137,7 +132,7 @@ pub enum HealthWebSocketMessage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ComponentStatus {
     pub name: String,
-    pub status: String, 
+    pub status: String,
     pub details: Option<String>,
     pub metrics: Option<serde_json::Value>,
 }
@@ -187,7 +182,7 @@ pub enum SpeechWebSocketMessage {
         format: String,
         sample_rate: u32,
         channels: u8,
-        data: Vec<u8>, 
+        data: Vec<u8>,
         timestamp: DateTime<Utc>,
     },
 
@@ -389,13 +384,23 @@ impl ToStandardMessage for StandardWebSocketMessage {
 }
 
 pub fn serialize_message<T: Serialize>(message: &T) -> Result<String, serde_json::Error> {
-    to_json(message).map_err(|e| serde_json::Error::io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+    to_json(message).map_err(|e| {
+        serde_json::Error::io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    })
 }
 
 pub fn deserialize_message<T: for<'de> Deserialize<'de>>(
     data: &str,
 ) -> Result<T, serde_json::Error> {
-    from_json(data).map_err(|e| serde_json::Error::io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))
+    from_json(data).map_err(|e| {
+        serde_json::Error::io(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    })
 }
 
 pub fn create_error_message(error_type: &str, message: &str) -> StandardWebSocketMessage {

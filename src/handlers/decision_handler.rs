@@ -170,7 +170,11 @@ pub async fn record_decision(
         Ok(success) => {
             info!(
                 "decisions/record: {} for {} ({} quad(s))",
-                if success.replayed { "replayed" } else { "committed" },
+                if success.replayed {
+                    "replayed"
+                } else {
+                    "committed"
+                },
                 success.decision_urn,
                 success.quads_written
             );
@@ -240,50 +244,49 @@ pub async fn trace_decision(
         Direction::Ancestry => "ancestry",
         Direction::Downstream => "downstream",
     };
-    info!(
-        "decisions/trace: root={root} direction={direction_label} max_depth={max_depth}"
-    );
+    info!("decisions/trace: root={root} direction={direction_label} max_depth={max_depth}");
 
     let store: Arc<Store> = state.ontology_repository.store().clone();
     let root_for_task = root.clone();
 
     // Gather the DIRECT-link adjacency by expanding one bounded SPARQL frontier
     // per depth level (≤ max_depth queries) — never a transitive property path.
-    let adjacency = tokio::task::spawn_blocking(move || -> Result<HashMap<String, Vec<String>>, String> {
-        let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
-        let mut seen: HashSet<String> = HashSet::new();
-        seen.insert(root_for_task.clone());
-        let mut frontier: Vec<String> = vec![root_for_task];
+    let adjacency =
+        tokio::task::spawn_blocking(move || -> Result<HashMap<String, Vec<String>>, String> {
+            let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
+            let mut seen: HashSet<String> = HashSet::new();
+            seen.insert(root_for_task.clone());
+            let mut frontier: Vec<String> = vec![root_for_task];
 
-        for _ in 0..max_depth {
-            if frontier.is_empty() {
-                break;
-            }
-            let sparql = direct_links_query(&frontier, direction);
-            let results = store.query(&sparql).map_err(|e| e.to_string())?;
-            let mut next: Vec<String> = Vec::new();
-            if let QueryResults::Solutions(solutions) = results {
-                for sol in solutions {
-                    let sol = sol.map_err(|e| e.to_string())?;
-                    let cur = match sol.get("cur") {
-                        Some(Term::NamedNode(n)) => n.as_str().to_string(),
-                        _ => continue,
-                    };
-                    let nb = match sol.get("nb") {
-                        Some(Term::NamedNode(n)) => n.as_str().to_string(),
-                        _ => continue,
-                    };
-                    adjacency.entry(cur).or_default().push(nb.clone());
-                    if seen.insert(nb.clone()) {
-                        next.push(nb);
+            for _ in 0..max_depth {
+                if frontier.is_empty() {
+                    break;
+                }
+                let sparql = direct_links_query(&frontier, direction);
+                let results = store.query(&sparql).map_err(|e| e.to_string())?;
+                let mut next: Vec<String> = Vec::new();
+                if let QueryResults::Solutions(solutions) = results {
+                    for sol in solutions {
+                        let sol = sol.map_err(|e| e.to_string())?;
+                        let cur = match sol.get("cur") {
+                            Some(Term::NamedNode(n)) => n.as_str().to_string(),
+                            _ => continue,
+                        };
+                        let nb = match sol.get("nb") {
+                            Some(Term::NamedNode(n)) => n.as_str().to_string(),
+                            _ => continue,
+                        };
+                        adjacency.entry(cur).or_default().push(nb.clone());
+                        if seen.insert(nb.clone()) {
+                            next.push(nb);
+                        }
                     }
                 }
+                frontier = next;
             }
-            frontier = next;
-        }
-        Ok(adjacency)
-    })
-    .await;
+            Ok(adjacency)
+        })
+        .await;
 
     match adjacency {
         Ok(Ok(adjacency)) => {

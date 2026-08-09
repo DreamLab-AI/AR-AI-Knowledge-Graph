@@ -14,7 +14,11 @@ pub struct Vec3Data {
 // Both are plain (x, y, z) f32 triples — the only difference is bytemuck derives.
 impl From<visionclaw_domain::Vec3Data> for Vec3Data {
     fn from(v: visionclaw_domain::Vec3Data) -> Self {
-        Self { x: v.x, y: v.y, z: v.z }
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
     }
 }
 

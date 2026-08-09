@@ -215,7 +215,10 @@ impl Handler<ComputeSSP> for ShortestPathActor {
     type Result = Result<SSSPResult, String>;
 
     fn handle(&mut self, msg: ComputeSSP, _ctx: &mut Self::Context) -> Self::Result {
-        info!("ShortestPathActor: Computing SSSP from node {}", msg.source_idx);
+        info!(
+            "ShortestPathActor: Computing SSSP from node {}",
+            msg.source_idx
+        );
 
         // Acquire lock, compute, then drop lock before calling update_stats
         let (filtered_distances, nodes_reached, max_distance, computation_time, node_id_map) = {
@@ -279,14 +282,21 @@ impl Handler<ComputeSSP> for ShortestPathActor {
 
             // Apply max_distance filter if specified
             let filtered_distances = if let Some(max_dist) = msg.max_distance {
-                distances.into_iter().map(|d| {
-                    if d <= max_dist { d } else { f32::MAX }
-                }).collect()
+                distances
+                    .into_iter()
+                    .map(|d| if d <= max_dist { d } else { f32::MAX })
+                    .collect()
             } else {
                 distances
             };
 
-            (filtered_distances, nodes_reached, max_distance, computation_time, node_id_map)
+            (
+                filtered_distances,
+                nodes_reached,
+                max_distance,
+                computation_time,
+                node_id_map,
+            )
         }; // unified_compute lock dropped here
 
         // Now we can safely call update_stats with mutable borrow
@@ -321,7 +331,9 @@ impl Handler<ComputeSSP> for ShortestPathActor {
 
         info!(
             "ShortestPathActor: SSSP completed in {}ms, reached {}/{} nodes",
-            computation_time, nodes_reached, filtered_distances.len()
+            computation_time,
+            nodes_reached,
+            filtered_distances.len()
         );
 
         Ok(SSSPResult {

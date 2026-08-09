@@ -6,17 +6,16 @@ use std::time::Duration;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RetryConfig {
-    
     pub max_attempts: usize,
-    
+
     pub initial_delay: Duration,
-    
+
     pub max_delay: Duration,
-    
+
     pub backoff_multiplier: f64,
-    
+
     pub jitter_factor: f64,
-    
+
     pub preserve_original_error: bool,
 }
 
@@ -34,7 +33,6 @@ impl Default for RetryConfig {
 }
 
 impl RetryConfig {
-    
     pub fn network() -> Self {
         Self {
             max_attempts: 5,
@@ -46,7 +44,6 @@ impl RetryConfig {
         }
     }
 
-    
     pub fn tcp_connection() -> Self {
         Self {
             max_attempts: 6,
@@ -58,7 +55,6 @@ impl RetryConfig {
         }
     }
 
-    
     pub fn websocket() -> Self {
         Self {
             max_attempts: 4,
@@ -70,7 +66,6 @@ impl RetryConfig {
         }
     }
 
-    
     pub fn mcp_operations() -> Self {
         Self {
             max_attempts: 3,
@@ -114,7 +109,7 @@ impl RetryableError for std::io::Error {
             | std::io::ErrorKind::Interrupted
             | std::io::ErrorKind::WouldBlock
             | std::io::ErrorKind::UnexpectedEof
-            | std::io::ErrorKind::BrokenPipe => true, 
+            | std::io::ErrorKind::BrokenPipe => true,
             _ => false,
         }
     }
@@ -122,7 +117,7 @@ impl RetryableError for std::io::Error {
 
 impl RetryableError for tokio::time::error::Elapsed {
     fn is_retryable(&self) -> bool {
-        true 
+        true
     }
 }
 
@@ -150,24 +145,20 @@ where
 // Implementation for Arc<dyn std::error::Error + Send + Sync>
 impl RetryableError for std::sync::Arc<dyn std::error::Error + Send + Sync> {
     fn is_retryable(&self) -> bool {
-        
-        
-        true 
+        true
     }
 }
 
 fn calculate_delay(config: &RetryConfig, attempt: usize) -> Duration {
     if attempt == 0 {
-        return Duration::from_millis(0); 
+        return Duration::from_millis(0);
     }
 
     let base_delay = config.initial_delay.as_millis() as f64;
     let exponential_delay = base_delay * config.backoff_multiplier.powi((attempt - 1) as i32);
 
-    
     let capped_delay = exponential_delay.min(config.max_delay.as_millis() as f64);
 
-    
     let jitter = if config.jitter_factor > 0.0 {
         let mut rng = rand::thread_rng();
         let jitter_amount = capped_delay * config.jitter_factor;
@@ -194,7 +185,6 @@ where
     for attempt in 0..config.max_attempts {
         debug!("Retry attempt {} of {}", attempt + 1, config.max_attempts);
 
-        
         if let Err(resource_error) = check_system_resources().await {
             warn!(
                 "System resources exhausted, aborting retry: {:?}",
@@ -219,7 +209,6 @@ where
                     return Err(RetryError::AllAttemptsFailed(error));
                 }
 
-                
                 if is_resource_exhaustion_error(&error) {
                     error!(
                         "Resource exhaustion detected, aborting retries: {:?}",
@@ -250,17 +239,15 @@ where
         }
     }
 
-    
     Err(RetryError::AllAttemptsFailed(
         last_error.expect("Should have at least one error"),
     ))
 }
 
 async fn check_system_resources() -> Result<(), String> {
-    
     if let Ok(fd_count) = count_open_file_descriptors() {
-        const FD_WARNING_THRESHOLD: usize = 800; 
-        const FD_ERROR_THRESHOLD: usize = 950; 
+        const FD_WARNING_THRESHOLD: usize = 800;
+        const FD_ERROR_THRESHOLD: usize = 950;
 
         if fd_count > FD_ERROR_THRESHOLD {
             return Err(format!(
@@ -275,7 +262,6 @@ async fn check_system_resources() -> Result<(), String> {
         }
     }
 
-    
     #[cfg(target_os = "linux")]
     if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
         if let Some(available_line) = meminfo
@@ -284,7 +270,7 @@ async fn check_system_resources() -> Result<(), String> {
         {
             if let Some(available_kb) = available_line.split_whitespace().nth(1) {
                 if let Ok(available_kb) = available_kb.parse::<u64>() {
-                    const MIN_AVAILABLE_MB: u64 = 100; 
+                    const MIN_AVAILABLE_MB: u64 = 100;
                     let available_mb = available_kb / 1024;
                     if available_mb < MIN_AVAILABLE_MB {
                         return Err(format!("Low memory: {}MB available", available_mb));
@@ -302,14 +288,13 @@ fn count_open_file_descriptors() -> Result<usize, std::io::Error> {
     {
         use std::fs;
         match fs::read_dir("/proc/self/fd") {
-            Ok(entries) => Ok(entries.count().saturating_sub(1)), 
+            Ok(entries) => Ok(entries.count().saturating_sub(1)),
             Err(e) => Err(e),
         }
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        
         Ok(10)
     }
 }
@@ -490,7 +475,7 @@ mod tests {
             initial_delay: Duration::from_millis(100),
             max_delay: Duration::from_secs(10),
             backoff_multiplier: 2.0,
-            jitter_factor: 0.0, 
+            jitter_factor: 0.0,
             ..Default::default()
         };
 

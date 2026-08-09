@@ -4,13 +4,15 @@
 //! Loads OWL ontology data from GitHub repository markdown files
 //! and populates the Oxigraph quad-store (ADR-11).
 
-use std::sync::Arc;
-use std::collections::HashMap;
 use log::info;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 use visionclaw_server::adapters::OxigraphOntologyRepository;
+use visionclaw_server::ports::ontology_repository::{
+    AxiomType, OntologyRepository, OwlAxiom, OwlClass, OwlProperty, PropertyType,
+};
 use visionclaw_server::services::parsers::ontology_parser::OntologyParser;
-use visionclaw_server::ports::ontology_repository::{OntologyRepository, OwlClass, OwlProperty, PropertyType, OwlAxiom, AxiomType};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -26,9 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let oxigraph_path = std::path::Path::new(&data_dir).join("oxigraph");
     info!("Opening Oxigraph store at: {}", oxigraph_path.display());
 
-    let ontology_repo = Arc::new(
-        OxigraphOntologyRepository::open(&oxigraph_path).await?
-    );
+    let ontology_repo = Arc::new(OxigraphOntologyRepository::open(&oxigraph_path).await?);
 
     info!("Oxigraph store opened successfully");
 
@@ -41,10 +41,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create sample OWL classes for testing
     let sample_classes = vec![
         ("mv:Person", "Person", "A human individual", vec![]),
-        ("mv:Company", "Company", "A business organization", vec!["mv:Concept".to_string()]),
-        ("mv:Project", "Project", "A collaborative endeavor", vec!["mv:Concept".to_string()]),
+        (
+            "mv:Company",
+            "Company",
+            "A business organization",
+            vec!["mv:Concept".to_string()],
+        ),
+        (
+            "mv:Project",
+            "Project",
+            "A collaborative endeavor",
+            vec!["mv:Concept".to_string()],
+        ),
         ("mv:Concept", "Concept", "An abstract idea", vec![]),
-        ("mv:Technology", "Technology", "A technical tool or system", vec![]),
+        (
+            "mv:Technology",
+            "Technology",
+            "A technical tool or system",
+            vec![],
+        ),
     ];
 
     let mut _total_classes = 0;

@@ -24,7 +24,6 @@ pub struct EventCoordinator {
 }
 
 impl EventCoordinator {
-    
     pub fn new(
         physics_service: Arc<PhysicsService>,
         semantic_service: Arc<SemanticService>,
@@ -45,77 +44,62 @@ impl EventCoordinator {
         info!("Event coordination initialized (handlers registered via EventBus)");
     }
 
-    
     pub async fn on_graph_saved(&self, event: GraphSavedEvent) {
         info!(
             "Graph saved event received: {} nodes, {} edges",
             event.node_count, event.edge_count
         );
 
-        
         let _graph = self.graph_data.read().await.clone();
 
-        
         if let Err(e) = self.physics_service.reset().await {
             warn!("Failed to reset physics: {}", e);
         }
 
-        
         if let Err(e) = self.semantic_service.invalidate_cache().await {
             warn!("Failed to invalidate semantic cache: {}", e);
         }
     }
 
-    
     pub async fn on_ontology_imported(&self, event: OntologyImportedEvent) {
         info!(
             "Ontology imported: {} classes, {} properties",
             event.class_count, event.property_count
         );
 
-        
         let graph = self.graph_data.read().await.clone();
 
-        
         if let Err(e) = self.semantic_service.initialize(Arc::new(graph)).await {
             warn!("Failed to initialize semantic analyzer: {}", e);
         }
 
-        
         if let Err(e) = self.semantic_service.detect_communities_louvain().await {
             warn!("Failed to detect communities: {}", e);
         }
     }
 
-    
     pub async fn on_positions_updated(&self, event: PositionsUpdatedEvent) {
         debug!("Positions updated for {} nodes", event.updated_nodes.len());
 
-        
         let event_bus = self.event_bus.write().await;
         let _ = event_bus.publish(event).await;
     }
 
-    
     pub async fn on_node_added(&self, event: NodeAddedEvent) {
         info!("Node added: {}", event.node_id);
 
-        
         if let Err(e) = self.semantic_service.invalidate_cache().await {
             warn!("Failed to invalidate cache after node addition: {}", e);
         }
 
-        
         if self.physics_service.is_running().await {
             debug!("Physics simulation running, will incorporate new node");
         }
     }
 
-    
     pub async fn on_edge_added(&self, event: EdgeAddedEvent) {
         info!("Edge added: {} -> {}", event.source_id, event.target_id);
 
-        
         if let Err(e) = self.semantic_service.invalidate_cache().await {
             warn!("Failed to invalidate cache after edge addition: {}", e);
         }
@@ -142,14 +126,11 @@ pub async fn initialize_event_coordinator(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::time;
     use chrono::Utc;
-use crate::utils::time;
 
     #[tokio::test]
-    async fn test_event_coordinator_creation() {
-        
-        
-    }
+    async fn test_event_coordinator_creation() {}
 
     #[test]
     fn test_graph_saved_event() {

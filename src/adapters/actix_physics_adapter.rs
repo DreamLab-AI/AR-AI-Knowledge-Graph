@@ -21,24 +21,16 @@ use visionclaw_domain::ports::gpu_physics_adapter::{
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct ActixPhysicsAdapter {
-    
     actor_addr: Option<Addr<PhysicsOrchestratorActor>>,
 
-    
     timeout: Duration,
 
-    
     initialized: bool,
 
-    
     current_params: Option<PhysicsParameters>,
 }
 
 impl ActixPhysicsAdapter {
-    
-    
-    
-    
     pub fn new() -> Self {
         info!("Creating ActixPhysicsAdapter");
         Self {
@@ -49,7 +41,6 @@ impl ActixPhysicsAdapter {
         }
     }
 
-    
     pub fn with_timeout(timeout: Duration) -> Self {
         info!(
             "Creating ActixPhysicsAdapter with custom timeout: {:?}",
@@ -63,7 +54,6 @@ impl ActixPhysicsAdapter {
         }
     }
 
-    
     pub fn from_actor(actor_addr: Addr<PhysicsOrchestratorActor>) -> Self {
         info!("Creating ActixPhysicsAdapter from existing actor");
         Self {
@@ -74,17 +64,14 @@ impl ActixPhysicsAdapter {
         }
     }
 
-    
     pub fn actor_addr(&self) -> Option<&Addr<PhysicsOrchestratorActor>> {
         self.actor_addr.as_ref()
     }
 
-    
     pub fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = timeout;
     }
 
-    
     async fn send_message<M>(&self, msg: M) -> PortResult<M::Result>
     where
         M: Message + Send + 'static,
@@ -120,10 +107,6 @@ impl Default for ActixPhysicsAdapter {
 
 #[async_trait]
 impl GpuPhysicsAdapter for ActixPhysicsAdapter {
-    
-    
-    
-    
     async fn initialize(
         &mut self,
         graph: Arc<GraphData>,
@@ -134,23 +117,15 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
             graph.nodes.len()
         );
 
-        
         if self.actor_addr.is_none() {
-            
-            
             let simulation_params = crate::models::simulation_params::SimulationParams::default();
 
-            let actor = PhysicsOrchestratorActor::new(
-                simulation_params,
-                None,
-                Some(graph.clone()),
-            );
+            let actor = PhysicsOrchestratorActor::new(simulation_params, None, Some(graph.clone()));
 
             let addr = actor.start();
             self.actor_addr = Some(addr);
         }
 
-        
         let msg = InitializePhysicsMessage::new(graph, params.clone());
         let _ = self.send_message(msg).await?;
 
@@ -160,7 +135,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         Ok(())
     }
 
-    
     async fn compute_forces(&mut self) -> PortResult<Vec<NodeForce>> {
         debug!("Computing forces via actor");
 
@@ -188,7 +162,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn update_positions(
         &mut self,
         forces: &[NodeForce],
@@ -201,7 +174,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn step(&mut self) -> PortResult<PhysicsStepResult> {
         debug!("Executing physics step via actor");
         let msg = PhysicsStepMessage;
@@ -211,7 +183,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn simulate_until_convergence(&mut self) -> PortResult<PhysicsStepResult> {
         info!("Running simulation until convergence via actor");
         let msg = SimulateUntilConvergenceMessage;
@@ -221,7 +192,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn apply_external_forces(&mut self, forces: Vec<(u32, f32, f32, f32)>) -> PortResult<()> {
         debug!(
             "Applying external forces to {} nodes via actor",
@@ -234,7 +204,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn pin_nodes(&mut self, nodes: Vec<(u32, f32, f32, f32)>) -> PortResult<()> {
         debug!("Pinning {} nodes via actor", nodes.len());
         let msg = PinNodesMessage::new(nodes);
@@ -244,7 +213,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn unpin_nodes(&mut self, node_ids: Vec<u32>) -> PortResult<()> {
         debug!("Unpinning {} nodes via actor", node_ids.len());
         let msg = UnpinNodesMessage::new(node_ids);
@@ -254,7 +222,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn update_parameters(&mut self, params: PhysicsParameters) -> PortResult<()> {
         info!("Updating physics parameters via actor");
         let msg = UpdatePhysicsParametersMessage::new(params.clone());
@@ -264,7 +231,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         Ok(())
     }
 
-    
     async fn update_graph_data(&mut self, graph: Arc<GraphData>) -> PortResult<()> {
         info!(
             "Updating graph data with {} nodes via actor",
@@ -277,7 +243,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn get_gpu_status(&self) -> PortResult<GpuDeviceInfo> {
         debug!("Getting GPU status via actor");
         let msg = GetGpuStatusMessage;
@@ -287,7 +252,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn get_statistics(&self) -> PortResult<PhysicsStatistics> {
         debug!("Getting physics statistics via actor");
         let msg = GetPhysicsStatisticsMessage;
@@ -297,7 +261,6 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn reset(&mut self) -> PortResult<()> {
         info!("Resetting physics simulation via actor");
         let msg = ResetPhysicsMessage;
@@ -307,20 +270,15 @@ impl GpuPhysicsAdapter for ActixPhysicsAdapter {
         })
     }
 
-    
     async fn cleanup(&mut self) -> PortResult<()> {
         info!("Cleaning up physics adapter");
 
         if let Some(addr) = self.actor_addr.take() {
             let msg = CleanupPhysicsMessage;
 
-            
             if let Err(e) = addr.send(msg).timeout(self.timeout).await {
                 warn!("Cleanup message failed: {}", e);
             }
-
-            
-            
         }
 
         self.initialized = false;
@@ -342,7 +300,6 @@ impl Handler<InitializePhysicsMessage> for PhysicsOrchestratorActor {
     fn handle(&mut self, msg: InitializePhysicsMessage, _ctx: &mut Self::Context) -> Self::Result {
         info!("PhysicsOrchestratorActor: Handling initialization");
 
-        
         use crate::actors::physics_orchestrator_actor::UpdateGraphData;
         self.handle(
             UpdateGraphData {
@@ -351,7 +308,6 @@ impl Handler<InitializePhysicsMessage> for PhysicsOrchestratorActor {
             _ctx,
         );
 
-        
         use crate::actors::messages::UpdateSimulationParams;
         let simulation_params = crate::models::simulation_params::SimulationParams {
             repel_k: msg.params.repulsion_strength,
@@ -378,8 +334,6 @@ impl Handler<ComputeForcesMessage> for PhysicsOrchestratorActor {
     fn handle(&mut self, _msg: ComputeForcesMessage, _ctx: &mut Self::Context) -> Self::Result {
         debug!("PhysicsOrchestratorActor: Computing forces");
 
-        
-        
         Ok(Vec::new())
     }
 }
@@ -393,8 +347,6 @@ impl Handler<UpdatePositionsMessage> for PhysicsOrchestratorActor {
             msg.forces.len()
         );
 
-        
-        
         Ok(Vec::new())
     }
 }
@@ -405,11 +357,9 @@ impl Handler<PhysicsStepMessage> for PhysicsOrchestratorActor {
     fn handle(&mut self, _msg: PhysicsStepMessage, ctx: &mut Self::Context) -> Self::Result {
         debug!("PhysicsOrchestratorActor: Executing physics step");
 
-        
         use crate::actors::messages::SimulationStep;
         self.handle(SimulationStep, ctx)?;
 
-        
         Ok(PhysicsStepResult {
             nodes_updated: 0,
             total_energy: 0.0,
@@ -430,7 +380,6 @@ impl Handler<SimulateUntilConvergenceMessage> for PhysicsOrchestratorActor {
     ) -> Self::Result {
         info!("PhysicsOrchestratorActor: Simulating until convergence");
 
-        
         Ok(PhysicsStepResult {
             nodes_updated: 0,
             total_energy: 0.0,
@@ -536,7 +485,6 @@ impl Handler<GetGpuStatusMessage> for PhysicsOrchestratorActor {
     fn handle(&mut self, _msg: GetGpuStatusMessage, _ctx: &mut Self::Context) -> Self::Result {
         debug!("PhysicsOrchestratorActor: Getting GPU status");
 
-        
         Ok(GpuDeviceInfo {
             device_id: 0,
             device_name: "Simulated GPU".to_string(),
@@ -560,7 +508,6 @@ impl Handler<GetPhysicsStatisticsMessage> for PhysicsOrchestratorActor {
     ) -> Self::Result {
         debug!("PhysicsOrchestratorActor: Getting physics statistics");
 
-        
         Ok(PhysicsStatistics {
             total_steps: 0,
             average_step_time_ms: 0.0,

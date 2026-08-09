@@ -13,10 +13,10 @@ use std::time::Instant;
 use tracing::instrument;
 
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine; // Currently used for initialization only
+use crate::utils::time;
 use visionclaw_domain::ports::ontology_repository::{
     AxiomType, OntologyRepository, OntologyRepositoryError, OwlAxiom,
 };
-use crate::utils::time;
 
 /// Inferred axiom with metadata about the inference process
 #[derive(Debug, Clone, Serialize, Deserialize)]

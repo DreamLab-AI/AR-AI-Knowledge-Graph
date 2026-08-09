@@ -103,7 +103,11 @@ impl fmt::Display for ErrorCategory {
                 what
             ),
             Self::MalformedIri { value } => {
-                write!(f, "MalformedIri: `@id` value `{}` is not a valid IRI", value)
+                write!(
+                    f,
+                    "MalformedIri: `@id` value `{}` is not a valid IRI",
+                    value
+                )
             }
             Self::BridgeTargetMustBeConcrete { target } => write!(
                 f,
@@ -128,7 +132,10 @@ impl fmt::Display for ErrorCategory {
                 declared, implied_by_iri
             ),
             Self::ProvAttributionMissing => {
-                write!(f, "ProvAttributionMissing: `prov:wasAttributedTo` is absent")
+                write!(
+                    f,
+                    "ProvAttributionMissing: `prov:wasAttributedTo` is absent"
+                )
             }
             Self::ProvTimestampMissing => {
                 write!(f, "ProvTimestampMissing: `prov:generatedAtTime` is absent")

@@ -19,130 +19,109 @@ pub struct DevConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhysicsInternals {
-    
-    pub force_epsilon: f32, 
-    pub spring_length_multiplier: f32, 
-    pub spring_length_max: f32, 
-    pub spring_force_clamp_factor: f32, 
+    pub force_epsilon: f32,
+    pub spring_length_multiplier: f32,
+    pub spring_length_max: f32,
+    pub spring_force_clamp_factor: f32,
 
-    
-    pub rest_length: f32,                 
-    pub repulsion_cutoff: f32,            
-    pub repulsion_softening_epsilon: f32, 
-    pub center_gravity_k: f32,            
-    pub grid_cell_size: f32,              
-    pub warmup_iterations: u32,           
-    pub cooling_rate: f32,                
+    pub rest_length: f32,
+    pub repulsion_cutoff: f32,
+    pub repulsion_softening_epsilon: f32,
+    pub center_gravity_k: f32,
+    pub grid_cell_size: f32,
+    pub warmup_iterations: u32,
+    pub cooling_rate: f32,
 
-    
-    pub max_force: f32,                
-    pub max_velocity: f32,             
-    pub world_bounds_min: f32,         
-    pub world_bounds_max: f32,         
-    pub cell_size_lod: f32,            
-    pub k_neighbors_max: u32,          
-    pub anomaly_detection_radius: f32, 
-    pub learning_rate_default: f32,    
-    pub min_velocity_threshold: f32,   
-    pub stability_threshold: f32,      
+    pub max_force: f32,
+    pub max_velocity: f32,
+    pub world_bounds_min: f32,
+    pub world_bounds_max: f32,
+    pub cell_size_lod: f32,
+    pub k_neighbors_max: u32,
+    pub anomaly_detection_radius: f32,
+    pub learning_rate_default: f32,
+    pub min_velocity_threshold: f32,
+    pub stability_threshold: f32,
 
-    
-    pub norm_delta_cap: f32, 
-    pub position_constraint_attraction: f32, 
-    pub lof_score_min: f32,  
-    pub lof_score_max: f32,  
-    pub weight_precision_multiplier: f32, 
+    pub norm_delta_cap: f32,
+    pub position_constraint_attraction: f32,
+    pub lof_score_min: f32,
+    pub lof_score_max: f32,
+    pub weight_precision_multiplier: f32,
 
-    
-    pub boundary_extreme_multiplier: f32, 
-    pub boundary_extreme_force_multiplier: f32, 
-    pub boundary_velocity_damping: f32,   
+    pub boundary_extreme_multiplier: f32,
+    pub boundary_extreme_force_multiplier: f32,
+    pub boundary_velocity_damping: f32,
 
-    
-    pub golden_ratio: f32,         
-    pub initial_radius_min: f32,   
-    pub initial_radius_range: f32, 
+    pub golden_ratio: f32,
+    pub initial_radius_min: f32,
+    pub initial_radius_range: f32,
 
-    
-    pub cross_graph_repulsion_scale: f32, 
-    pub cross_graph_spring_scale: f32,    
+    pub cross_graph_repulsion_scale: f32,
+    pub cross_graph_spring_scale: f32,
 
-    
-    pub cluster_repulsion_scale: f32, 
-    pub importance_scale_factor: f32, 
+    pub cluster_repulsion_scale: f32,
+    pub importance_scale_factor: f32,
 
-    
-    pub repulsion_distance_squared_min: f32, 
-    pub stress_majorization_epsilon: f32,    
+    pub repulsion_distance_squared_min: f32,
+    pub stress_majorization_epsilon: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CudaInternals {
-    
     pub warmup_iterations_default: u32,
     pub warmup_damping_start: f32,
     pub warmup_damping_end: f32,
     pub warmup_temperature_scale: f32,
     pub warmup_cooling_iterations: u32,
 
-    
     pub max_kernel_time_ms: u32,
     pub max_gpu_failures: u32,
     pub debug_output_throttle: u32,
-    pub debug_node_count: u32, 
+    pub debug_node_count: u32,
 
-    
     pub max_nodes: u32,
     pub max_edges: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkInternals {
-    
     pub pool_max_idle_per_host: usize,
     pub pool_idle_timeout_secs: u64,
     pub pool_connect_timeout_secs: u64,
 
-    
     pub circuit_failure_threshold: u32,
     pub circuit_recovery_timeout_secs: u64,
     pub circuit_half_open_max_requests: u32,
 
-    
     pub max_retry_attempts: u32,
     pub retry_base_delay_ms: u64,
     pub retry_max_delay_ms: u64,
     pub retry_exponential_base: f32,
 
-    
     pub ws_ping_interval_secs: u64,
     pub ws_pong_timeout_secs: u64,
     pub ws_frame_size: usize,
     pub ws_max_pending_messages: usize,
 
-    
     pub rate_limit_burst_size: u32,
     pub rate_limit_refill_rate: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RenderingInternals {
-    
     pub agent_colors: AgentColors,
 
-    
     pub agent_base_size: f32,
     pub agent_size_per_task: f32,
     pub agent_max_size: f32,
     pub node_base_radius: f32,
 
-    
     pub pulse_speed: f32,
     pub rotate_speed: f32,
     pub glow_speed: f32,
     pub wave_speed: f32,
 
-    
     pub lod_distance_high: f32,
     pub lod_distance_medium: f32,
     pub lod_distance_low: f32,
@@ -164,22 +143,18 @@ pub struct AgentColors {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceInternals {
-    
     pub batch_size_nodes: usize,
     pub batch_size_edges: usize,
     pub batch_timeout_ms: u64,
 
-    
     pub cache_ttl_secs: u64,
     pub cache_max_entries: usize,
     pub cache_eviction_percentage: f32,
 
-    
     pub worker_threads: usize,
     pub blocking_threads: usize,
     pub stack_size_mb: usize,
 
-    
     pub gc_interval_secs: u64,
     pub memory_warning_threshold_mb: usize,
     pub memory_critical_threshold_mb: usize,
@@ -207,7 +182,6 @@ impl Default for DevConfig {
                 spring_length_max: 10.0,
                 spring_force_clamp_factor: 0.5,
 
-                
                 rest_length: 50.0,
                 repulsion_cutoff: 50.0,
                 repulsion_softening_epsilon: 0.0001,
@@ -216,7 +190,6 @@ impl Default for DevConfig {
                 warmup_iterations: 100,
                 cooling_rate: 0.001,
 
-                
                 max_force: crate::config::CANONICAL_MAX_FORCE,
                 max_velocity: crate::config::CANONICAL_MAX_VELOCITY,
                 world_bounds_min: -1000.0,
@@ -226,10 +199,9 @@ impl Default for DevConfig {
                 anomaly_detection_radius: 150.0,
                 learning_rate_default: 0.1,
                 min_velocity_threshold: 0.01,
-                stability_threshold: 1e-4,  // Relaxed: allows system to settle without over-damping
+                stability_threshold: 1e-4, // Relaxed: allows system to settle without over-damping
 
-                
-                norm_delta_cap: 100.0,  // Cap SSSP delta to prevent ideal > world bounds
+                norm_delta_cap: 100.0, // Cap SSSP delta to prevent ideal > world bounds
                 position_constraint_attraction: 0.1,
                 lof_score_min: 0.1,
                 lof_score_max: 10.0,
@@ -333,35 +305,29 @@ impl Default for DevConfig {
 }
 
 impl DevConfig {
-    
     pub fn load() -> &'static Self {
-        DEV_CONFIG.get_or_init(|| {
-            
-            match std::fs::read_to_string("data/dev_config.toml") {
-                Ok(content) => match toml::from_str::<DevConfig>(&content) {
-                    Ok(config) => {
-                        log::info!("Loaded developer configuration from data/dev_config.toml");
-                        config
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to parse dev_config.toml: {}, using defaults", e);
-                        Self::default()
-                    }
-                },
-                Err(_) => {
-                    log::info!("No dev_config.toml found, using default developer configuration");
+        DEV_CONFIG.get_or_init(|| match std::fs::read_to_string("data/dev_config.toml") {
+            Ok(content) => match toml::from_str::<DevConfig>(&content) {
+                Ok(config) => {
+                    log::info!("Loaded developer configuration from data/dev_config.toml");
+                    config
+                }
+                Err(e) => {
+                    log::warn!("Failed to parse dev_config.toml: {}, using defaults", e);
                     Self::default()
                 }
+            },
+            Err(_) => {
+                log::info!("No dev_config.toml found, using default developer configuration");
+                Self::default()
             }
         })
     }
 
-    
     pub fn get() -> &'static Self {
         Self::load()
     }
 
-    
     pub fn save_to_file(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         let toml_string = toml::to_string_pretty(self)?;
         std::fs::write(path, toml_string)?;

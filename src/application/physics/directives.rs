@@ -23,7 +23,6 @@ impl Directive for UpdatePhysicsParams {
             return Err(Hexserror::validation("Graph name cannot be empty"));
         }
 
-        
         let settings = &self.params.settings;
         if settings.repel_k < 0.0 {
             return Err(Hexserror::validation(
@@ -88,7 +87,6 @@ impl Directive for ApplyConstraints {
             return Err(Hexserror::validation("Constraints list cannot be empty"));
         }
 
-        
         for constraint in &self.constraints {
             if constraint.strength < 0.0 || constraint.strength > 1.0 {
                 return Err(Hexserror::validation(
@@ -239,7 +237,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
 
-    
+
     struct MockPhysicsSimulator {
         running: AtomicBool,
         params: Mutex<Option<SimulationParams>>,
@@ -302,7 +300,7 @@ mod tests {
     fn test_update_physics_params_validation() {
         let params = SimulationParams {
             settings: PhysicsSettings {
-                repulsion_strength: -1.0, 
+                repulsion_strength: -1.0,
                 ..Default::default()
             },
             graph_name: "test".to_string(),
@@ -334,7 +332,7 @@ mod tests {
             node_id: 1,
             constraint_type: ConstraintType::Fixed,
             target_position: Some((0.0, 0.0, 0.0)),
-            strength: 1.5, 
+            strength: 1.5,
         }];
 
         let directive = ApplyConstraints { constraints };
@@ -352,7 +350,7 @@ mod tests {
     #[test]
     fn test_start_simulation_validation() {
         let directive = StartSimulation {
-            graph_name: "".to_string(), 
+            graph_name: "".to_string(),
         };
         assert!(directive.validate().is_err());
 
@@ -379,7 +377,7 @@ mod tests {
         let result = handler.handle(directive);
         assert!(result.is_ok());
 
-        
+
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         let stored_params = simulator.params.lock().expect("Mutex poisoned");
@@ -393,7 +391,7 @@ mod tests {
         let start_handler = StartSimulationHandler::new(simulator.clone());
         let stop_handler = StopSimulationHandler::new(simulator.clone());
 
-        
+
         let start_directive = StartSimulation {
             graph_name: "test".to_string(),
         };
@@ -402,7 +400,7 @@ mod tests {
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         assert!(simulator.is_running().await.unwrap());
 
-        
+
         let stop_directive = StopSimulation {
             graph_name: "test".to_string(),
         };

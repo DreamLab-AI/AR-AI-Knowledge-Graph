@@ -36,18 +36,18 @@
 //! use crate::models::constraints::ConstraintSet;
 //! use visionclaw_domain::models::graph::GraphData;
 //!
-//! 
+//!
 //! let mut solver = StressMajorizationSolver::new(params);
 //!
-//! 
+//!
 //! let constraint_generator = SemanticConstraintGenerator::new();
 //! let semantic_constraints = constraint_generator.generate_constraints(&graph_data)?;
 //!
-//! 
+//!
 //! let mut ontology_translator = OntologyConstraintTranslator::new();
 //! let ontology_constraints = ontology_translator.apply_ontology_constraints(&graph_data, &reasoning_report)?;
 //!
-//! 
+//!
 //! let mut combined_constraints = semantic_constraints.constraints;
 //! combined_constraints.extend(ontology_constraints.constraints);
 //!
@@ -83,7 +83,9 @@ pub use ontology_constraints::{
 pub use semantic_constraints::SemanticConstraintGenerator;
 pub use stress_majorization::StressMajorizationSolver;
 
-pub use visionclaw_domain::models::constraints::{AdvancedParams, Constraint, ConstraintKind, ConstraintSet};
+pub use visionclaw_domain::models::constraints::{
+    AdvancedParams, Constraint, ConstraintKind, ConstraintSet,
+};
 pub use visionclaw_domain::models::graph::GraphData;
 pub use visionclaw_domain::models::metadata::Metadata;
 pub use visionclaw_domain::models::node::Node;

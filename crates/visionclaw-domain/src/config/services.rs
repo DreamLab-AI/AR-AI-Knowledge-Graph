@@ -3,7 +3,9 @@ use specta::Type;
 use std::collections::HashMap;
 use validator::Validate;
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, Type, Validate)]
 #[serde(rename_all = "camelCase")]
@@ -124,7 +126,11 @@ pub struct VoiceRoutingSettings {
     #[serde(skip_serializing_if = "Option::is_none", alias = "turbo_whisper")]
     pub turbo_whisper: Option<TurboWhisperSettings>,
     /// Per-agent voice presets mapping agent_type -> Kokoro voice ID
-    #[serde(default, skip_serializing_if = "HashMap::is_empty", alias = "agent_voices")]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        alias = "agent_voices"
+    )]
     pub agent_voices: HashMap<String, AgentVoicePreset>,
     /// Audio format for the entire pipeline (default: opus)
     #[serde(default = "default_audio_format", alias = "audio_format")]
@@ -140,9 +146,15 @@ pub struct VoiceRoutingSettings {
     pub agent_voice_public: bool,
 }
 
-fn default_audio_format() -> String { "opus".to_string() }
-fn default_sample_rate_48k() -> u32 { 48000 }
-fn default_ptt_mode() -> String { "push".to_string() }
+fn default_audio_format() -> String {
+    "opus".to_string()
+}
+fn default_sample_rate_48k() -> u32 {
+    48000
+}
+fn default_ptt_mode() -> String {
+    "push".to_string()
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, Type, Validate)]
 #[serde(rename_all = "camelCase")]
@@ -163,11 +175,16 @@ pub struct LiveKitSettings {
     #[serde(default = "default_true", alias = "spatial_audio")]
     pub spatial_audio: bool,
     /// Max distance (in Vircadia units) before audio falls to zero
-    #[serde(default = "default_spatial_max_distance", alias = "spatial_max_distance")]
+    #[serde(
+        default = "default_spatial_max_distance",
+        alias = "spatial_max_distance"
+    )]
     pub spatial_max_distance: f32,
 }
 
-fn default_spatial_max_distance() -> f32 { 50.0 }
+fn default_spatial_max_distance() -> f32 {
+    50.0
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, Type, Validate)]
 #[serde(rename_all = "camelCase")]
@@ -192,7 +209,9 @@ pub struct TurboWhisperSettings {
     pub beam_size: u32,
 }
 
-fn default_beam_size() -> u32 { 1 }
+fn default_beam_size() -> u32 {
+    1
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, Type, Validate)]
 #[serde(rename_all = "camelCase")]
@@ -207,7 +226,9 @@ pub struct AgentVoicePreset {
     pub spatial: bool,
 }
 
-fn default_speed() -> f32 { 1.0 }
+fn default_speed() -> f32 {
+    1.0
+}
 
 // ---------- Ontology Agent Settings ----------
 
@@ -243,10 +264,18 @@ pub struct OntologyAgentSettings {
     pub pr_labels: Vec<String>,
 }
 
-fn default_auto_merge_threshold() -> f32 { 0.9 }
-fn default_min_confidence() -> f32 { 0.7 }
-fn default_max_discovery_results() -> usize { 20 }
-fn default_notes_path_prefix() -> String { "pages/".to_string() }
+fn default_auto_merge_threshold() -> f32 {
+    0.9
+}
+fn default_min_confidence() -> f32 {
+    0.7
+}
+fn default_max_discovery_results() -> usize {
+    20
+}
+fn default_notes_path_prefix() -> String {
+    "pages/".to_string()
+}
 fn default_pr_labels() -> Vec<String> {
     vec!["ontology".to_string(), "agent-proposed".to_string()]
 }

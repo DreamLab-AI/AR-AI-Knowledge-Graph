@@ -27,7 +27,6 @@ impl Default for ActorLifecycleManager {
 }
 
 impl ActorLifecycleManager {
-    
     pub fn new() -> Self {
         Self {
             physics_actor: None,
@@ -36,33 +35,24 @@ impl ActorLifecycleManager {
         }
     }
 
-    
     pub async fn initialize(&mut self) -> Result<(), ActorLifecycleError> {
         info!("Initializing actor system");
 
-        
         self.start_physics_actor().await?;
 
-        
         self.start_semantic_actor().await?;
 
-        
         self.start_health_monitoring();
 
         info!("Actor system initialized successfully");
         Ok(())
     }
 
-    
     async fn start_physics_actor(&mut self) -> Result<(), ActorLifecycleError> {
         info!("Starting PhysicsOrchestratorActor");
 
         let simulation_params = SimulationParams::default();
-        let actor = PhysicsOrchestratorActor::new(
-            simulation_params,
-            None,
-            None,
-        );
+        let actor = PhysicsOrchestratorActor::new(simulation_params, None, None);
         let addr = actor.start();
 
         self.physics_actor = Some(addr);
@@ -71,11 +61,10 @@ impl ActorLifecycleManager {
         Ok(())
     }
 
-    
     async fn start_semantic_actor(&mut self) -> Result<(), ActorLifecycleError> {
         info!("Starting SemanticProcessorActor");
 
-        let actor = SemanticProcessorActor::new(None); 
+        let actor = SemanticProcessorActor::new(None);
         let addr = actor.start();
 
         self.semantic_actor = Some(addr);
@@ -84,7 +73,6 @@ impl ActorLifecycleManager {
         Ok(())
     }
 
-    
     fn start_health_monitoring(&self) {
         let physics_actor = self.physics_actor.clone();
         let semantic_actor = self.semantic_actor.clone();
@@ -96,7 +84,6 @@ impl ActorLifecycleManager {
             loop {
                 timer.tick().await;
 
-                
                 if let Some(addr) = &physics_actor {
                     if addr.connected() {
                         info!("PhysicsActor health check: OK");
@@ -105,7 +92,6 @@ impl ActorLifecycleManager {
                     }
                 }
 
-                
                 if let Some(addr) = &semantic_actor {
                     if addr.connected() {
                         info!("SemanticActor health check: OK");
@@ -117,7 +103,6 @@ impl ActorLifecycleManager {
         });
     }
 
-    
     /// Gracefully shut down all managed actors.
     ///
     /// `shutdown_timeout` controls how long to wait for actors to process their
@@ -175,51 +160,40 @@ impl ActorLifecycleManager {
         self.shutdown_with_timeout(Duration::from_secs(5)).await
     }
 
-    
     pub async fn restart_physics_actor(&mut self) -> Result<(), ActorLifecycleError> {
         warn!("Restarting PhysicsOrchestratorActor");
 
-        
         if let Some(_addr) = self.physics_actor.take() {
-            
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        
         self.start_physics_actor().await?;
 
         info!("PhysicsOrchestratorActor restarted successfully");
         Ok(())
     }
 
-    
     pub async fn restart_semantic_actor(&mut self) -> Result<(), ActorLifecycleError> {
         warn!("Restarting SemanticProcessorActor");
 
-        
         if let Some(_addr) = self.semantic_actor.take() {
-            
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        
         self.start_semantic_actor().await?;
 
         info!("SemanticProcessorActor restarted successfully");
         Ok(())
     }
 
-    
     pub fn get_physics_actor(&self) -> Option<&Addr<PhysicsOrchestratorActor>> {
         self.physics_actor.as_ref()
     }
 
-    
     pub fn get_semantic_actor(&self) -> Option<&Addr<SemanticProcessorActor>> {
         self.semantic_actor.as_ref()
     }
 
-    
     pub fn is_healthy(&self) -> bool {
         self.physics_actor.as_ref().map_or(false, |a| a.connected())
             && self
@@ -228,7 +202,6 @@ impl ActorLifecycleManager {
                 .map_or(false, |a| a.connected())
     }
 
-    
     pub fn set_health_check_interval(&mut self, interval: Duration) {
         self.health_check_interval = interval;
     }
@@ -265,7 +238,6 @@ impl Default for SupervisionStrategy {
 }
 
 impl SupervisionStrategy {
-    
     pub fn new(max_restarts: usize, restart_window: Duration) -> Self {
         Self {
             max_restarts,
@@ -273,7 +245,6 @@ impl SupervisionStrategy {
         }
     }
 
-    
     pub async fn handle_failure(
         &self,
         actor_name: &str,

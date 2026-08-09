@@ -312,7 +312,10 @@ pub fn build_action_request(spec: &CaseSpec) -> UnsignedAcspEvent {
             vec!["d".into(), spec.case_id.clone()],
             vec!["priority".into(), spec.priority.as_tag_value().into()],
             vec!["category".into(), spec.category.as_tag_value().into()],
-            vec!["subject-kind".into(), spec.subject_kind.as_tag_value().into()],
+            vec![
+                "subject-kind".into(),
+                spec.subject_kind.as_tag_value().into(),
+            ],
             vec!["subject-id".into(), spec.subject_id.clone()],
             vec!["title".into(), spec.title.clone()],
         ],
@@ -421,9 +424,15 @@ mod tests {
             "https://github.com/o/r/pull/42",
         );
         assert_eq!(ev.kind, KIND_PANEL_UPDATE);
-        assert_eq!(ev.tags[0], vec!["d".to_string(), "vc-elevation".to_string()]);
+        assert_eq!(
+            ev.tags[0],
+            vec!["d".to_string(), "vc-elevation".to_string()]
+        );
         let content: serde_json::Value = serde_json::from_str(&ev.content).unwrap();
-        assert!(content.is_object(), "31404 content must be a shallow-merge object");
+        assert!(
+            content.is_object(),
+            "31404 content must be a shallow-merge object"
+        );
         assert_eq!(content["case_id"], "vc-elev-finality-mechanism");
         assert_eq!(content["status"], "concept_elevated");
         assert_eq!(content["pr_url"], "https://github.com/o/r/pull/42");
@@ -476,9 +485,7 @@ mod tests {
 mod broker_kernel_reconciliation {
     use super::*;
     use crate::domain::broker::{
-        broker_case::{
-            CaseCategory as KernelCaseCategory, SubjectKind as KernelSubjectKind,
-        },
+        broker_case::{CaseCategory as KernelCaseCategory, SubjectKind as KernelSubjectKind},
         DecisionOutcome,
     };
 
@@ -487,13 +494,31 @@ mod broker_kernel_reconciliation {
     #[test]
     fn case_category_vocabulary_is_single_sourced() {
         let pairs = [
-            (KernelCaseCategory::ContributorMeshShare, CaseCategory::ContributorMeshShare),
-            (KernelCaseCategory::WorkflowReview, CaseCategory::WorkflowReview),
-            (KernelCaseCategory::PolicyException, CaseCategory::PolicyException),
+            (
+                KernelCaseCategory::ContributorMeshShare,
+                CaseCategory::ContributorMeshShare,
+            ),
+            (
+                KernelCaseCategory::WorkflowReview,
+                CaseCategory::WorkflowReview,
+            ),
+            (
+                KernelCaseCategory::PolicyException,
+                CaseCategory::PolicyException,
+            ),
             (KernelCaseCategory::TrustAlert, CaseCategory::TrustAlert),
-            (KernelCaseCategory::ManualSubmission, CaseCategory::ManualSubmission),
-            (KernelCaseCategory::KnowledgeEnrichment, CaseCategory::KnowledgeEnrichment),
-            (KernelCaseCategory::DecisionElevation, CaseCategory::DecisionElevation),
+            (
+                KernelCaseCategory::ManualSubmission,
+                CaseCategory::ManualSubmission,
+            ),
+            (
+                KernelCaseCategory::KnowledgeEnrichment,
+                CaseCategory::KnowledgeEnrichment,
+            ),
+            (
+                KernelCaseCategory::DecisionElevation,
+                CaseCategory::DecisionElevation,
+            ),
         ];
         for (kernel, acsp) in pairs {
             let kernel_wire = serde_json::to_value(&kernel).unwrap();
@@ -512,8 +537,14 @@ mod broker_kernel_reconciliation {
         let pairs = [
             (KernelSubjectKind::WorkArtifact, SubjectKind::WorkArtifact),
             (KernelSubjectKind::SkillPackage, SubjectKind::SkillPackage),
-            (KernelSubjectKind::AutomationProposal, SubjectKind::AutomationProposal),
-            (KernelSubjectKind::PolicyException, SubjectKind::PolicyException),
+            (
+                KernelSubjectKind::AutomationProposal,
+                SubjectKind::AutomationProposal,
+            ),
+            (
+                KernelSubjectKind::PolicyException,
+                SubjectKind::PolicyException,
+            ),
             (KernelSubjectKind::Opaque, SubjectKind::Opaque),
         ];
         for (kernel, acsp) in pairs {
@@ -559,11 +590,21 @@ mod broker_kernel_reconciliation {
         let ev = build_action_request(&spec);
         assert_eq!(
             extract_tag(&ev.tags, "category"),
-            Some(serde_json::to_value(KernelCaseCategory::KnowledgeEnrichment).unwrap().as_str().unwrap())
+            Some(
+                serde_json::to_value(KernelCaseCategory::KnowledgeEnrichment)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+            )
         );
         assert_eq!(
             extract_tag(&ev.tags, "subject-kind"),
-            Some(serde_json::to_value(KernelSubjectKind::WorkArtifact).unwrap().as_str().unwrap())
+            Some(
+                serde_json::to_value(KernelSubjectKind::WorkArtifact)
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+            )
         );
     }
 }

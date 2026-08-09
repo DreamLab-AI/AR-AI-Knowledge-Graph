@@ -33,7 +33,7 @@ impl RetryableError for McpRelayError {
     fn is_retryable(&self) -> bool {
         match self {
             McpRelayError::DockerCommandFailed(_) => true,
-            McpRelayError::ContainerNotFound(_) => false, 
+            McpRelayError::ContainerNotFound(_) => false,
             McpRelayError::HealthCheckFailed => true,
             McpRelayError::Timeout => true,
         }
@@ -41,7 +41,6 @@ impl RetryableError for McpRelayError {
 }
 
 impl McpRelayManager {
-    
     pub fn new() -> Self {
         let circuit_breaker = Arc::new(CircuitBreaker::new(CircuitBreakerConfig {
             failure_threshold: 3,
@@ -62,7 +61,6 @@ impl McpRelayManager {
         }
     }
 
-    
     pub async fn check_relay_status(&self) -> Result<bool, McpRelayError> {
         let operation = || {
             Box::pin(async {
@@ -81,14 +79,12 @@ impl McpRelayManager {
         }
     }
 
-    
     async fn check_relay_status_internal() -> Result<bool, McpRelayError> {
         let start_time = Instant::now();
         let correlation_id = CorrelationId::new();
 
         info!("Checking MCP relay status in multi-agent-container...");
 
-        
         if let Some(logger) = get_telemetry_logger() {
             logger.log_mcp_message("status_check", "outbound", 0, "initiated");
         }
@@ -110,7 +106,6 @@ impl McpRelayManager {
                     warn!("MCP relay is not running in multi-agent-container");
                 }
 
-                
                 if let Some(logger) = get_telemetry_logger() {
                     let event = TelemetryEvent::new(
                         correlation_id,
@@ -131,7 +126,6 @@ impl McpRelayManager {
 
                     logger.log_event(event);
 
-                    
                     logger.log_mcp_message("status_check", "inbound", result.stdout.len(), status);
                 }
 
@@ -140,7 +134,6 @@ impl McpRelayManager {
             Err(e) => {
                 error!("Failed to check MCP relay status: {}", e);
 
-                
                 if let Some(logger) = get_telemetry_logger() {
                     let event = TelemetryEvent::new(
                         correlation_id,
@@ -164,9 +157,7 @@ impl McpRelayManager {
         }
     }
 
-    
     pub async fn ensure_relay_running(&self) -> Result<(), String> {
-        
         if let Some(health_result) = self.health_manager.check_service_now("mcp-relay").await {
             match health_result.status {
                 crate::utils::network::HealthStatus::Healthy => {
@@ -187,7 +178,6 @@ impl McpRelayManager {
 
         info!("Starting MCP relay in multi-agent-container...");
 
-        
         let output = Command::new("docker")
             .args(&[
                 "exec",
@@ -204,10 +194,8 @@ impl McpRelayManager {
                 if result.status.success() {
                     info!("Successfully started MCP relay in multi-agent-container");
 
-                    
                     std::thread::sleep(std::time::Duration::from_secs(2));
 
-                    
                     if Self::check_relay_status_internal().await.unwrap_or(false) {
                         Ok(())
                     } else {
@@ -222,7 +210,6 @@ impl McpRelayManager {
         }
     }
 
-    
     pub fn get_relay_logs(lines: usize) -> Result<String, String> {
         let output = Command::new("docker")
             .args(&[
@@ -250,7 +237,6 @@ impl McpRelayManager {
         }
     }
 
-    
     pub async fn start_health_monitoring(&self) {
         let health_manager = self.health_manager.clone();
 
@@ -267,7 +253,6 @@ impl McpRelayManager {
                         }
                         _ => {
                             warn!("MCP relay health check failed: {:?}", health_result);
-                            
                         }
                     }
                 } else {
@@ -277,7 +262,6 @@ impl McpRelayManager {
         });
     }
 
-    
     pub fn check_mcp_container() -> bool {
         let output = Command::new("docker")
             .args(&["ps", "-q", "-f", "name=multi-agent-container"])
@@ -291,18 +275,14 @@ impl McpRelayManager {
 }
 
 pub async fn ensure_mcp_ready() -> Result<(), String> {
-    
     if !McpRelayManager::check_mcp_container() {
         return Err("multi-agent-container is not running".to_string());
     }
 
-    
     let manager = McpRelayManager::new();
 
-    
     manager.ensure_relay_running().await?;
 
-    
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     Ok(())

@@ -3,12 +3,12 @@
 //!
 //! HTTP handlers for semantic analysis endpoints using SemanticService.
 
+use crate::{error_json, ok_json};
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::{ok_json, error_json};
 
 use crate::application::semantic_service::{
     CentralityRequest, CommunityDetectionRequest, SemanticService, ShortestPathRequest,
@@ -76,12 +76,10 @@ pub async fn detect_communities(
     graph_data: web::Data<Arc<RwLock<GraphData>>>,
     req: web::Json<DetectCommunitiesRequest>,
 ) -> ActixResult<HttpResponse> {
-    
     let graph = graph_data.read().await.clone();
     if let Err(e) = semantic_service.initialize(Arc::new(graph)).await {
         return error_json!("Failed to initialize: {}", e);
     }
-
 
     let algorithm = match req.algorithm.as_str() {
         "louvain" => ClusteringAlgorithm::Louvain,
@@ -114,12 +112,10 @@ pub async fn compute_centrality(
     graph_data: web::Data<Arc<RwLock<GraphData>>>,
     req: web::Json<CentralityAnalysisRequest>,
 ) -> ActixResult<HttpResponse> {
-    
     let graph = graph_data.read().await.clone();
     if let Err(e) = semantic_service.initialize(Arc::new(graph)).await {
         return error_json!("Failed to initialize: {}", e);
     }
-
 
     let algorithm = match req.algorithm.as_str() {
         "pagerank" => ImportanceAlgorithm::PageRank {
@@ -143,7 +139,6 @@ pub async fn compute_centrality(
 
     match semantic_service.compute_centrality(request).await {
         Ok(scores) => {
-
             let mut top_nodes: Vec<_> = scores.iter().map(|(&id, &score)| (id, score)).collect();
             top_nodes.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
             if let Some(k) = req.top_k {
@@ -167,7 +162,6 @@ pub async fn compute_shortest_path(
     graph_data: web::Data<Arc<RwLock<GraphData>>>,
     req: web::Json<ShortestPathAnalysisRequest>,
 ) -> ActixResult<HttpResponse> {
-    
     let graph = graph_data.read().await.clone();
     if let Err(e) = semantic_service.initialize(Arc::new(graph)).await {
         return error_json!("Failed to initialize: {}", e);
@@ -195,7 +189,6 @@ pub async fn generate_constraints(
     graph_data: web::Data<Arc<RwLock<GraphData>>>,
     req: web::Json<GenerateConstraintsRequest>,
 ) -> ActixResult<HttpResponse> {
-    
     let graph = graph_data.read().await.clone();
     if let Err(e) = semantic_service.initialize(Arc::new(graph)).await {
         return error_json!("Failed to initialize: {}", e);

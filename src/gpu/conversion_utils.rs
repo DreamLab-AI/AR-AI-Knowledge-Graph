@@ -130,11 +130,7 @@ where
 /// * `buffer` - The buffer to validate
 /// * `expected_elements` - Expected number of elements
 /// * `stride` - Number of values per element (e.g., 3 for Vec3, 4 for Vec4)
-pub fn validate_buffer_size(
-    buffer: &[f32],
-    expected_elements: usize,
-    stride: usize,
-) -> Result<()> {
+pub fn validate_buffer_size(buffer: &[f32], expected_elements: usize, stride: usize) -> Result<()> {
     let expected_size = expected_elements * stride;
 
     if buffer.len() != expected_size {
@@ -173,9 +169,9 @@ pub fn get_element_count(buffer: &[f32], stride: usize) -> Result<usize> {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct GpuNode {
-    pub position: [f32; 4],  // x, y, z, w
-    pub velocity: [f32; 4],  // vx, vy, vz, vw
-    pub color: [f32; 4],     // r, g, b, a
+    pub position: [f32; 4], // x, y, z, w
+    pub velocity: [f32; 4], // vx, vy, vz, vw
+    pub color: [f32; 4],    // r, g, b, a
     pub importance: f32,
 }
 
@@ -191,7 +187,8 @@ impl GpuNode {
         importance: f32,
     ) -> Result<Self> {
         // Validate all values are finite
-        for &val in position.iter()
+        for &val in position
+            .iter()
             .chain(velocity.iter())
             .chain(color.iter())
             .chain(std::iter::once(&importance))
@@ -419,20 +416,8 @@ mod tests {
     #[test]
     fn test_nodes_to_gpu_buffer() {
         let nodes = vec![
-            GpuNode::new(
-                [1.0, 2.0, 3.0, 1.0],
-                [0.0; 4],
-                [1.0, 0.0, 0.0, 1.0],
-                0.5,
-            )
-            .unwrap(),
-            GpuNode::new(
-                [4.0, 5.0, 6.0, 1.0],
-                [0.0; 4],
-                [0.0, 1.0, 0.0, 1.0],
-                0.8,
-            )
-            .unwrap(),
+            GpuNode::new([1.0, 2.0, 3.0, 1.0], [0.0; 4], [1.0, 0.0, 0.0, 1.0], 0.5).unwrap(),
+            GpuNode::new([4.0, 5.0, 6.0, 1.0], [0.0; 4], [0.0, 1.0, 0.0, 1.0], 0.8).unwrap(),
         ];
 
         let buffer = nodes_to_gpu_buffer(&nodes);
@@ -445,7 +430,7 @@ mod tests {
     #[test]
     fn test_validate_render_data() {
         let positions = vec![0.0; 16]; // 4 Vec4 positions
-        let colors = vec![0.0; 16];    // 4 Vec4 colors
+        let colors = vec![0.0; 16]; // 4 Vec4 colors
         let importance = vec![0.0; 4]; // 4 importance values
 
         let node_count = validate_render_data(&positions, &colors, &importance).unwrap();
@@ -455,7 +440,7 @@ mod tests {
     #[test]
     fn test_validate_render_data_mismatch() {
         let positions = vec![0.0; 16]; // 4 nodes
-        let colors = vec![0.0; 12];    // 3 nodes - MISMATCH
+        let colors = vec![0.0; 12]; // 3 nodes - MISMATCH
         let importance = vec![0.0; 4];
 
         assert!(validate_render_data(&positions, &colors, &importance).is_err());

@@ -3,13 +3,13 @@ use crate::actors::messages::UpdateBotsGraph;
 use crate::services::agent_visualization_protocol::{McpServerType, MultiMcpAgentStatus};
 use crate::utils::mcp_connection::call_agent_spawn;
 use crate::utils::mcp_tcp_client::{create_mcp_client, McpTcpClient};
+use crate::utils::time;
 use actix::Addr;
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::utils::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Agent {
@@ -83,7 +83,7 @@ impl From<MultiMcpAgentStatus> for Agent {
             name: mcp_agent.name,
             agent_type: mcp_agent.agent_type,
             status: mcp_agent.status,
-            x: 0.0, 
+            x: 0.0,
             y: 0.0,
             z: 0.0,
             cpu_usage: mcp_agent.performance.cpu_usage,
@@ -112,7 +112,6 @@ pub struct BotsClient {
 
 impl BotsClient {
     pub fn new() -> Self {
-        
         let host = std::env::var("CLAUDE_FLOW_HOST")
             .or_else(|_| std::env::var("MCP_HOST"))
             .unwrap_or_else(|_| "multi-agent-container".to_string());
@@ -142,19 +141,16 @@ impl BotsClient {
             self.mcp_client.host, self.mcp_client.port
         );
 
-        
         match self.mcp_client.test_connection().await {
             Ok(true) => {
                 info!("MCP server is reachable");
 
-                
                 match self.mcp_client.initialize_session().await {
                     Ok(_) => {
                         info!("MCP session initialized successfully");
                     }
                     Err(e) => {
                         warn!("Failed to initialize MCP session: {}", e);
-                        
                     }
                 }
             }
@@ -168,7 +164,6 @@ impl BotsClient {
             }
         }
 
-        
         self.start_polling().await;
 
         Ok(())
@@ -190,30 +185,25 @@ impl BotsClient {
                         if !mcp_agents.is_empty() {
                             info!("Received {} agents from MCP server", mcp_agents.len());
 
-                            
                             let converted_agents: Vec<Agent> =
                                 mcp_agents.into_iter().map(Agent::from).collect();
 
-                            
                             {
                                 let mut agents_lock = agents.write().await;
                                 *agents_lock = converted_agents.clone();
                             }
 
-                            
                             if let Some(ref graph_addr) = graph_service_addr {
                                 info!(
                                     "📨 BotsClient sending {} agents to graph",
                                     converted_agents.len()
                                 );
 
-                                
                                 graph_addr.do_send(UpdateBotsGraph {
                                     agents: converted_agents.clone(),
                                 });
                             }
                         } else {
-                            
                             let mut agents_lock = agents.write().await;
                             if !agents_lock.is_empty() {
                                 debug!("Clearing stored agents - MCP returned empty list");
@@ -235,15 +225,13 @@ impl BotsClient {
     }
 
     pub async fn get_status(&self) -> Result<serde_json::Value> {
-        
-        
-        let connected = true; 
+        let connected = true;
         let agents = self.agents.read().await;
 
         Ok(serde_json::json!({
             "connected": connected,
             "host": "agentic-workstation",
-            "port": 9090, 
+            "port": 9090,
             "agent_count": agents.len(),
             "agents": agents.iter().map(|a| {
                 serde_json::json!({
@@ -269,11 +257,9 @@ impl BotsClient {
             agent_type, swarm_id
         );
 
-        
         let port_str = self.mcp_client.port.to_string();
         match call_agent_spawn(&self.mcp_client.host, &port_str, agent_type, swarm_id).await {
             Ok(response) => {
-                
                 let agent_id = if let Some(content) = response.get("content") {
                     if let Some(agent_data) = content.get("agent_id") {
                         agent_data.as_str().unwrap_or("unknown").to_string()

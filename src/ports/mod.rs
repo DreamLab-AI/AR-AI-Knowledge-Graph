@@ -20,10 +20,10 @@ pub use physics_simulator::PhysicsSimulator;
 pub use semantic_analyzer::SemanticAnalyzer;
 
 // New hexser-based exports (canonical paths in visionclaw-domain)
-pub use visionclaw_domain::ports::inference_engine::InferenceEngine;
 pub use knowledge_graph_repository::KnowledgeGraphRepository;
-pub use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 pub use settings_repository::SettingsRepository;
+pub use visionclaw_domain::ports::inference_engine::InferenceEngine;
+pub use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 
 // Module-path re-exports so existing callers writing
 // `use crate::ports::gpu_physics_adapter::Foo` keep resolving without

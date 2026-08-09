@@ -35,7 +35,8 @@ impl TimeoutConfig {
     }
 
     pub fn get_timeout(&self, path: &str) -> Duration {
-        self.endpoint_overrides.get(path)
+        self.endpoint_overrides
+            .get(path)
             .copied()
             .unwrap_or(self.default_timeout)
     }
@@ -52,18 +53,20 @@ pub struct TimeoutMiddleware {
 }
 
 impl TimeoutMiddleware {
-
     pub fn new(timeout: Duration) -> Self {
-        Self { config: TimeoutConfig::new(timeout) }
+        Self {
+            config: TimeoutConfig::new(timeout),
+        }
     }
 
     pub fn with_config(config: TimeoutConfig) -> Self {
         Self { config }
     }
 
-
     pub fn default() -> Self {
-        Self { config: TimeoutConfig::default() }
+        Self {
+            config: TimeoutConfig::default(),
+        }
     }
 }
 

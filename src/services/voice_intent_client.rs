@@ -163,7 +163,11 @@ impl VoiceIntentClient {
             .ok()
             .filter(|s| !s.is_empty());
         info!("[voice-intent] governed voice loop configured → {endpoint}");
-        Some(Arc::new(Self::new(endpoint, Keys::new(secret_key), actor_label)))
+        Some(Arc::new(Self::new(
+            endpoint,
+            Keys::new(secret_key),
+            actor_label,
+        )))
     }
 
     /// Direct constructor (used by [`Self::from_env`] and the round-trip tests).
@@ -202,8 +206,7 @@ impl VoiceIntentClient {
         }
 
         let unsigned = build_voice_action_request(transcript, actor_did);
-        let signed = sign_unsigned(&unsigned, &self.keys)
-            .map_err(VoiceIntentError::Sign)?;
+        let signed = sign_unsigned(&unsigned, &self.keys).map_err(VoiceIntentError::Sign)?;
 
         let body = VoiceIntentRequest {
             transcript: transcript.to_string(),
@@ -218,8 +221,8 @@ impl VoiceIntentClient {
                 target_did: actor_did.to_string(),
             },
         };
-        let body_json = serde_json::to_string(&body)
-            .map_err(|e| VoiceIntentError::Sign(e.to_string()))?;
+        let body_json =
+            serde_json::to_string(&body).map_err(|e| VoiceIntentError::Sign(e.to_string()))?;
 
         // The mandate: a NIP-98 header over POST + endpoint + the exact body, so
         // the un-gated producer authenticates the dispatch (ADR-037 D7).
@@ -251,8 +254,9 @@ impl VoiceIntentClient {
         if !status.is_success() {
             return Err(VoiceIntentError::Rejected(format!("HTTP {status}: {text}")));
         }
-        let accepted: VoiceIntentAccepted = serde_json::from_str(&text)
-            .map_err(|e| VoiceIntentError::Rejected(format!("unparseable acceptance: {e}: {text}")))?;
+        let accepted: VoiceIntentAccepted = serde_json::from_str(&text).map_err(|e| {
+            VoiceIntentError::Rejected(format!("unparseable acceptance: {e}: {text}"))
+        })?;
         if !accepted.success {
             return Err(VoiceIntentError::Rejected(text));
         }
@@ -268,7 +272,10 @@ impl VoiceIntentClient {
 
 /// True iff `s` is a canonical `did:nostr:<64-hex>` (ADR-125 I1).
 pub fn is_canonical_did(s: &str) -> bool {
-    matches!(crate::uri::parse(s), Ok(crate::uri::ParsedUri::DidNostr { .. }))
+    matches!(
+        crate::uri::parse(s),
+        Ok(crate::uri::ParsedUri::DidNostr { .. })
+    )
 }
 
 /// Build the unsigned kind-31402 `ActionRequest` for a voice command targeted at
@@ -367,7 +374,8 @@ mod tests {
     use super::*;
     use crate::services::acsp::events::extract_tag;
 
-    const DID_A: &str = "did:nostr:1111111111111111111111111111111111111111111111111111111111111111";
+    const DID_A: &str =
+        "did:nostr:1111111111111111111111111111111111111111111111111111111111111111";
 
     #[test]
     fn builds_31402_targeted_at_the_did() {
@@ -400,11 +408,8 @@ mod tests {
         // (ADR-037 D7). `dispatch` refuses it before any signing or HTTP, so this
         // resolves without a server.
         let keys = Keys::generate();
-        let client = VoiceIntentClient::new(
-            "http://127.0.0.1:1/v1/voice-intent".to_string(),
-            keys,
-            None,
-        );
+        let client =
+            VoiceIntentClient::new("http://127.0.0.1:1/v1/voice-intent".to_string(), keys, None);
         let err = tokio_test::block_on(client.dispatch("do a thing", "researcher-7", 200))
             .expect_err("a non-did target must be refused");
         assert!(matches!(err, VoiceIntentError::NotADid(_)));
@@ -431,7 +436,10 @@ mod tests {
             },
         };
         let line = ack_sentence(&accepted, DID_A);
-        assert!(line.contains("nostr:1111"), "names the target agent: {line}");
+        assert!(
+            line.contains("nostr:1111"),
+            "names the target agent: {line}"
+        );
         assert!(line.contains("query"), "names the understood verb: {line}");
         assert!(line.contains("budget node"), "names the subject: {line}");
     }

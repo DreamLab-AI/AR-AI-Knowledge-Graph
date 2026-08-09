@@ -18,9 +18,9 @@ use log::{debug, error, info, warn};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::supervisor_messages::*;
-use super::shared::SharedGPUContext;
 use super::context_bus::GPUContextBus;
+use super::shared::SharedGPUContext;
+use super::supervisor_messages::*;
 use super::GPUResourceActor;
 use crate::actors::messages::*;
 
@@ -50,7 +50,8 @@ pub struct ResourceSupervisor {
     /// Subsystem supervisor addresses for direct notification
     physics_supervisor: Option<Addr<super::physics_supervisor::PhysicsSupervisor>>,
     analytics_supervisor: Option<Addr<super::analytics_supervisor::AnalyticsSupervisor>>,
-    graph_analytics_supervisor: Option<Addr<super::graph_analytics_supervisor::GraphAnalyticsSupervisor>>,
+    graph_analytics_supervisor:
+        Option<Addr<super::graph_analytics_supervisor::GraphAnalyticsSupervisor>>,
 
     /// Graph service address
     graph_service_addr: Option<Addr<crate::actors::GraphServiceSupervisor>>,
@@ -179,7 +180,10 @@ impl ResourceSupervisor {
 
         // Also publish to event bus for any additional subscribers
         let receiver_count = self.context_bus.publish(context);
-        info!("ResourceSupervisor: Context published to {} event bus subscribers", receiver_count);
+        info!(
+            "ResourceSupervisor: Context published to {} event bus subscribers",
+            receiver_count
+        );
 
         // Clear pending graph data after distribution
         self.pending_graph_data = None;
@@ -206,12 +210,14 @@ impl ResourceSupervisor {
         // Schedule retry with backoff
         let delay = self.current_delay;
         self.current_delay = Duration::from_millis(
-            (self.current_delay.as_millis() as f64 * self.policy.backoff_multiplier) as u64
-        ).min(self.policy.max_delay);
+            (self.current_delay.as_millis() as f64 * self.policy.backoff_multiplier) as u64,
+        )
+        .min(self.policy.max_delay);
 
         info!(
             "ResourceSupervisor: Scheduling GPU initialization retry in {:?} (attempt {})",
-            delay, self.failure_count + 1
+            delay,
+            self.failure_count + 1
         );
 
         ctx.run_later(delay, |actor, ctx| {
@@ -230,7 +236,9 @@ impl ResourceSupervisor {
             InitializationState::Completed if has_context => SubsystemStatus::Healthy,
             InitializationState::InProgress => SubsystemStatus::Initializing,
             InitializationState::NotStarted => SubsystemStatus::Initializing,
-            InitializationState::Failed(_) | InitializationState::TimedOut => SubsystemStatus::Degraded,
+            InitializationState::Failed(_) | InitializationState::TimedOut => {
+                SubsystemStatus::Degraded
+            }
             _ => SubsystemStatus::Degraded,
         };
 
@@ -274,7 +282,6 @@ impl Actor for ResourceSupervisor {
     }
 }
 
-
 // ============================================================================
 // Message Handlers
 // ============================================================================
@@ -314,7 +321,7 @@ impl Handler<InitializeGPU> for ResourceSupervisor {
                     None => {
                         return Box::pin(
                             async { Err("Failed to spawn GPUResourceActor".to_string()) }
-                                .into_actor(self)
+                                .into_actor(self),
                         );
                     }
                 }
@@ -474,18 +481,18 @@ impl Handler<UpdateGPUGraphData> for ResourceSupervisor {
             Some(a) => a.clone(),
             None => {
                 return Box::pin(
-                    async { Err("GPUResourceActor not available".to_string()) }
-                        .into_actor(self)
+                    async { Err("GPUResourceActor not available".to_string()) }.into_actor(self),
                 );
             }
         };
 
         Box::pin(
             async move {
-                addr.send(msg).await
+                addr.send(msg)
+                    .await
                     .map_err(|e| format!("Communication failed: {}", e))?
             }
-            .into_actor(self)
+            .into_actor(self),
         )
     }
 }

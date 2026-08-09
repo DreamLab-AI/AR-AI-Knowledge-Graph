@@ -17,17 +17,16 @@ use crate::utils::time;
 
 #[derive(Debug, Clone)]
 pub enum SupervisionStrategy {
-    
     Restart,
-    
+
     RestartWithBackoff {
         initial_delay: Duration,
         max_delay: Duration,
         multiplier: f64,
     },
-    
+
     Escalate,
-    
+
     Stop,
 }
 
@@ -141,7 +140,6 @@ impl SupervisorActor {
 
     #[allow(dead_code)]
     fn should_restart(&self, actor_name: &str, state: &ActorState) -> bool {
-        
         if state.restart_count >= state.actor_info.max_restart_count {
             if let Some(last_restart) = state.last_restart {
                 if last_restart.elapsed() < state.actor_info.restart_window {
@@ -153,7 +151,6 @@ impl SupervisorActor {
                     );
                     return false;
                 }
-                
             }
         }
         true
@@ -198,9 +195,6 @@ impl SupervisorActor {
             ctx.run_later(delay, move |_act, ctx| {
                 info!("Attempting to restart actor '{}'", actor_name_clone);
 
-                
-                
-                
                 ctx.notify(RestartAttempt {
                     actor_name: actor_name_clone,
                     supervisor_name,
@@ -303,10 +297,8 @@ impl Handler<ActorFailed> for SupervisorActor {
             state.is_running = false;
             let strategy = state.actor_info.strategy.clone();
 
-            
             let should_restart = match &strategy {
                 SupervisionStrategy::Restart | SupervisionStrategy::RestartWithBackoff { .. } => {
-                    
                     if state.restart_count >= state.actor_info.max_restart_count {
                         if let Some(last_restart) = state.last_restart {
                             if last_restart.elapsed() < state.actor_info.restart_window {
@@ -315,7 +307,6 @@ impl Handler<ActorFailed> for SupervisorActor {
                                       state.actor_info.restart_window);
                                 false
                             } else {
-                                
                                 state.restart_count = 0;
                                 true
                             }
@@ -329,7 +320,6 @@ impl Handler<ActorFailed> for SupervisorActor {
                 _ => false,
             };
 
-            
             match strategy {
                 SupervisionStrategy::Restart => {
                     if should_restart {
@@ -356,7 +346,6 @@ impl Handler<ActorFailed> for SupervisorActor {
                         "Escalating failure of actor '{}' to parent supervisor",
                         msg.actor_name
                     );
-                    
                 }
                 SupervisionStrategy::Stop => {
                     info!(
@@ -473,8 +462,6 @@ impl Handler<RestartAttempt> for SupervisorActor {
 // DEPRECATED: Voice command handler removed - uses legacy DockerHiveMind
 // Replace with TaskOrchestratorActor integration
 
-
-
 pub trait SupervisedActorTrait: Actor {
     fn actor_name() -> &'static str;
 
@@ -491,10 +478,9 @@ pub trait SupervisedActorTrait: Actor {
     }
 
     fn restart_window() -> Duration {
-        Duration::from_secs(300) 
+        Duration::from_secs(300)
     }
 
-    
     fn report_error(&self, supervisor: &Addr<SupervisorActor>, error: VisionClawError) {
         supervisor.do_send(ActorFailed {
             actor_name: Self::actor_name().to_string(),
@@ -506,8 +492,8 @@ pub trait SupervisedActorTrait: Actor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::time;
     use tokio::time::sleep;
-use crate::utils::time;
 
     #[actix::test]
     async fn test_actor_registration() {
@@ -537,7 +523,6 @@ use crate::utils::time;
     async fn test_actor_failure_handling() {
         let supervisor = SupervisorActor::new("TestSupervisor".to_string()).start();
 
-        
         let register_msg = RegisterActor {
             actor_name: "TestActor".to_string(),
             strategy: SupervisionStrategy::Restart,
@@ -547,7 +532,6 @@ use crate::utils::time;
         };
 
         supervisor.send(register_msg).await.unwrap().unwrap();
-
 
         let failure_msg = ActorFailed {
             actor_name: "TestActor".to_string(),
@@ -559,7 +543,6 @@ use crate::utils::time;
 
         supervisor.send(failure_msg).await.unwrap();
 
-        
         sleep(Duration::from_millis(100)).await;
 
         let status = supervisor

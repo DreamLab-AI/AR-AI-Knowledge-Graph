@@ -20,9 +20,9 @@ pub use validation::{
 };
 
 pub use visualisation::{
-    AnimationSettings, BloomSettings, CameraSettings, EdgeSettings, GlowSettings,
-    GraphSettings, GraphsSettings, HologramSettings, LabelSettings, NodeSettings, Position,
-    RenderingSettings, Sensitivity, SpacePilotSettings, VisualisationSettings,
+    AnimationSettings, BloomSettings, CameraSettings, EdgeSettings, GlowSettings, GraphSettings,
+    GraphsSettings, HologramSettings, LabelSettings, NodeSettings, Position, RenderingSettings,
+    Sensitivity, SpacePilotSettings, VisualisationSettings,
 };
 
 pub use system::{

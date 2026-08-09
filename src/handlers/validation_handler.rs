@@ -3,7 +3,7 @@ use crate::utils::validation::rate_limit::extract_client_id;
 use crate::utils::validation::sanitization::Sanitizer;
 use crate::utils::validation::schemas::{ApiSchemas, ValidationSchema};
 use crate::utils::validation::{ValidationContext, ValidationResult};
-use crate::{ok_json, bad_request};
+use crate::{bad_request, ok_json};
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use log::{debug, info, warn};
 use serde_json::Value;
@@ -27,98 +27,77 @@ impl ValidationService {
         }
     }
 
-    
     pub fn validate_settings_update(&self, payload: &Value) -> ValidationResult<Value> {
         let mut ctx = ValidationContext::new();
         let mut sanitized_payload = payload.clone();
 
-        
         Sanitizer::sanitize_json(&mut sanitized_payload)?;
 
-        
         self.settings_schema
             .validate(&sanitized_payload, &mut ctx)?;
 
-        
         self.validate_settings_custom(&sanitized_payload)?;
 
         Ok(sanitized_payload)
     }
 
-    
     pub fn validate_physics_params(&self, payload: &Value) -> ValidationResult<Value> {
         let mut ctx = ValidationContext::new();
         let mut sanitized_payload = payload.clone();
 
-        
         Sanitizer::sanitize_json(&mut sanitized_payload)?;
 
-        
         self.physics_schema.validate(&sanitized_payload, &mut ctx)?;
 
-        
         self.validate_physics_custom(&sanitized_payload)?;
 
         Ok(sanitized_payload)
     }
 
-    
     pub fn validate_ragflow_chat(&self, payload: &Value) -> ValidationResult<Value> {
         let mut ctx = ValidationContext::new();
         let mut sanitized_payload = payload.clone();
 
-        
         Sanitizer::sanitize_json(&mut sanitized_payload)?;
 
-        
         self.ragflow_schema.validate(&sanitized_payload, &mut ctx)?;
 
         Ok(sanitized_payload)
     }
 
-    
     pub fn validate_bots_data(&self, payload: &Value) -> ValidationResult<Value> {
         let mut ctx = ValidationContext::new();
         let mut sanitized_payload = payload.clone();
 
-        
         Sanitizer::sanitize_json(&mut sanitized_payload)?;
 
-        
         self.bots_schema.validate(&sanitized_payload, &mut ctx)?;
 
         Ok(sanitized_payload)
     }
 
-    
     pub fn validate_swarm_init(&self, payload: &Value) -> ValidationResult<Value> {
         let mut ctx = ValidationContext::new();
         let mut sanitized_payload = payload.clone();
 
-        
         Sanitizer::sanitize_json(&mut sanitized_payload)?;
 
-        
         self.swarm_schema.validate(&sanitized_payload, &mut ctx)?;
 
         Ok(sanitized_payload)
     }
 
-    
     fn validate_settings_custom(&self, payload: &Value) -> ValidationResult<()> {
-        
         if let Some(vis) = payload.get("visualisation") {
             if let Some(graphs) = vis.get("graphs") {
                 self.validate_graph_consistency(graphs)?;
             }
 
-            
             if let Some(rendering) = vis.get("rendering") {
                 self.validate_rendering_settings_custom(rendering)?;
             }
         }
 
-        
         if let Some(xr) = payload.get("xr") {
             self.validate_xr_compatibility(xr)?;
         }
@@ -126,12 +105,9 @@ impl ValidationService {
         Ok(())
     }
 
-    
     fn validate_physics_custom(&self, payload: &Value) -> ValidationResult<()> {
-        
         if let Some(damping) = payload.get("damping").and_then(|v| v.as_f64()) {
             if let Some(max_velocity) = payload.get("maxVelocity").and_then(|v| v.as_f64()) {
-                
                 if damping < 0.5 && max_velocity > 100.0 {
                     return Err(DetailedValidationError::new(
                         "physics.parameters",
@@ -142,10 +118,8 @@ impl ValidationService {
             }
         }
 
-        
         if let Some(spring_k) = payload.get("springK").and_then(|v| v.as_f64()) {
             if let Some(repel_k) = payload.get("repelK").and_then(|v| v.as_f64()) {
-                
                 if spring_k > repel_k * 10.0 {
                     return Err(DetailedValidationError::new(
                         "physics.forces",
@@ -159,7 +133,6 @@ impl ValidationService {
         Ok(())
     }
 
-    
     fn validate_graph_consistency(&self, graphs: &Value) -> ValidationResult<()> {
         let graphs_obj = graphs.as_object().ok_or_else(|| {
             DetailedValidationError::new(
@@ -169,7 +142,6 @@ impl ValidationService {
             )
         })?;
 
-        
         if !graphs_obj.contains_key("logseq") && !graphs_obj.contains_key("visionclaw") {
             return Err(DetailedValidationError::new(
                 "visualisation.graphs",
@@ -178,7 +150,6 @@ impl ValidationService {
             ));
         }
 
-        
         if let (Some(logseq), Some(visionclaw)) =
             (graphs_obj.get("logseq"), graphs_obj.get("visionclaw"))
         {
@@ -192,13 +163,11 @@ impl ValidationService {
         Ok(())
     }
 
-    
     fn validate_physics_consistency(
         &self,
         physics1: &Value,
         physics2: &Value,
     ) -> ValidationResult<()> {
-        
         let auto_balance1 = physics1
             .get("autoBalance")
             .and_then(|v| v.as_bool())
@@ -219,11 +188,9 @@ impl ValidationService {
         Ok(())
     }
 
-    
     fn validate_xr_compatibility(&self, xr: &Value) -> ValidationResult<()> {
         if let Some(enabled) = xr.get("enabled").and_then(|v| v.as_bool()) {
             if enabled {
-                
                 if let Some(render_scale) = xr.get("renderScale").and_then(|v| v.as_f64()) {
                     if render_scale > 2.0 {
                         return Err(DetailedValidationError::new(
@@ -234,7 +201,6 @@ impl ValidationService {
                     }
                 }
 
-                
                 if let Some(quality) = xr.get("quality").and_then(|v| v.as_str()) {
                     if quality == "high" {
                         info!("High quality XR mode enabled - ensure adequate GPU performance");
@@ -246,9 +212,7 @@ impl ValidationService {
         Ok(())
     }
 
-    
     fn validate_rendering_settings_custom(&self, rendering: &Value) -> ValidationResult<()> {
-        
         let bloom_glow_field = rendering.get("bloom").or_else(|| rendering.get("glow"));
         if let Some(bloom_glow) = bloom_glow_field {
             self.validate_bloom_glow_effects(bloom_glow)?;
@@ -257,9 +221,7 @@ impl ValidationService {
         Ok(())
     }
 
-    
     fn validate_bloom_glow_effects(&self, bloom_glow: &Value) -> ValidationResult<()> {
-        
         if let Some(enabled) = bloom_glow.get("enabled") {
             if !enabled.is_boolean() {
                 return Err(DetailedValidationError::new(
@@ -270,7 +232,6 @@ impl ValidationService {
             }
         }
 
-        
         for field_name in ["intensity", "strength"] {
             if let Some(intensity) = bloom_glow.get(field_name) {
                 if let Some(val) = intensity.as_f64() {
@@ -292,7 +253,6 @@ impl ValidationService {
             }
         }
 
-        
         if let Some(radius) = bloom_glow.get("radius") {
             if let Some(val) = radius.as_f64() {
                 if val < 0.0 || val > 5.0 {
@@ -312,7 +272,6 @@ impl ValidationService {
             }
         }
 
-        
         if let Some(threshold) = bloom_glow.get("threshold") {
             if let Some(val) = threshold.as_f64() {
                 if val < 0.0 || val > 2.0 {
@@ -332,7 +291,6 @@ impl ValidationService {
             }
         }
 
-        
         for field_name in [
             "edgeBloomStrength",
             "environmentBloomStrength",
@@ -376,7 +334,6 @@ pub async fn validate_payload(
     let client_id = extract_client_id(&req);
     info!("Validation test request from client: {}", client_id);
 
-    
     let validation_type = req.match_info().get("type").unwrap_or("settings");
 
     let result = match validation_type {
@@ -386,7 +343,10 @@ pub async fn validate_payload(
         "bots" => validation_service.validate_bots_data(&payload),
         "swarm" => validation_service.validate_swarm_init(&payload),
         _ => {
-            return bad_request!("invalid_validation_type", "Supported types: settings, physics, ragflow, bots, swarm");
+            return bad_request!(
+                "invalid_validation_type",
+                "Supported types: settings, physics, ragflow, bots, swarm"
+            );
         }
     };
 

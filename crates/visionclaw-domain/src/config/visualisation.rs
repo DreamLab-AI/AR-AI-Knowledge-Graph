@@ -3,8 +3,8 @@ use specta::Type;
 use std::collections::HashMap;
 use validator::Validate;
 
-use crate::types::physics_config::PhysicsSettings;
 use super::validation::{validate_hex_color, validate_width_range};
+use crate::types::physics_config::PhysicsSettings;
 
 fn default_glow_color() -> String {
     "#00ffff".to_string()
@@ -447,7 +447,11 @@ impl Default for CameraSettings {
             fov: 75.0,
             near: 0.1,
             far: 2000.0,
-            position: Position { x: 0.0, y: 10.0, z: 50.0 },
+            position: Position {
+                x: 0.0,
+                y: 10.0,
+                z: 50.0,
+            },
             look_at: Position::default(),
         }
     }

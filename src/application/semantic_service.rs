@@ -44,7 +44,6 @@ pub struct SemanticService {
 }
 
 impl SemanticService {
-    
     pub fn new(
         semantic_adapter: Arc<RwLock<dyn GpuSemanticAnalyzer>>,
         event_bus: Arc<RwLock<EventBus>>,
@@ -55,13 +54,11 @@ impl SemanticService {
         }
     }
 
-    
     pub async fn initialize(&self, graph: Arc<GraphData>) -> SemanticResult<()> {
         let mut adapter = self.semantic_adapter.write().await;
         adapter.initialize(graph).await
     }
 
-    
     pub async fn detect_communities(
         &self,
         request: CommunityDetectionRequest,
@@ -70,7 +67,6 @@ impl SemanticService {
         adapter.detect_communities(request.algorithm).await
     }
 
-    
     pub async fn compute_centrality(
         &self,
         request: CentralityRequest,
@@ -78,7 +74,6 @@ impl SemanticService {
         let mut adapter = self.semantic_adapter.write().await;
         let scores = adapter.analyze_node_importance(request.algorithm).await?;
 
-        
         if let Some(k) = request.top_k {
             let mut sorted: Vec<_> = scores.into_iter().collect();
             sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -89,7 +84,6 @@ impl SemanticService {
         }
     }
 
-    
     pub async fn compute_shortest_paths(
         &self,
         request: ShortestPathRequest,
@@ -99,7 +93,6 @@ impl SemanticService {
         if request.include_path {
             adapter.compute_shortest_paths(request.source_node_id).await
         } else {
-            
             let distances = adapter
                 .compute_sssp_distances(request.source_node_id)
                 .await?;
@@ -116,7 +109,6 @@ impl SemanticService {
         }
     }
 
-    
     pub async fn compute_all_pairs_shortest_paths(
         &self,
     ) -> SemanticResult<HashMap<(u32, u32), Vec<u32>>> {
@@ -124,7 +116,6 @@ impl SemanticService {
         adapter.compute_all_pairs_shortest_paths().await
     }
 
-    
     pub async fn compute_landmark_apsp(
         &self,
         num_landmarks: usize,
@@ -133,7 +124,6 @@ impl SemanticService {
         adapter.compute_landmark_apsp(num_landmarks).await
     }
 
-    
     pub async fn generate_semantic_constraints(
         &self,
         config: SemanticConstraintConfig,
@@ -142,7 +132,6 @@ impl SemanticService {
         adapter.generate_semantic_constraints(config).await
     }
 
-    
     pub async fn optimize_layout(
         &self,
         constraints: &ConstraintSet,
@@ -152,7 +141,6 @@ impl SemanticService {
         adapter.optimize_layout(constraints, max_iterations).await
     }
 
-    
     pub async fn compute_pagerank(
         &self,
         damping: f32,
@@ -166,7 +154,6 @@ impl SemanticService {
         adapter.analyze_node_importance(algorithm).await
     }
 
-    
     pub async fn compute_betweenness_centrality(&self) -> SemanticResult<HashMap<u32, f32>> {
         let mut adapter = self.semantic_adapter.write().await;
         adapter
@@ -174,7 +161,6 @@ impl SemanticService {
             .await
     }
 
-    
     pub async fn compute_closeness_centrality(&self) -> SemanticResult<HashMap<u32, f32>> {
         let mut adapter = self.semantic_adapter.write().await;
         adapter
@@ -182,25 +168,21 @@ impl SemanticService {
             .await
     }
 
-    
     pub async fn update_graph_data(&self, graph: Arc<GraphData>) -> SemanticResult<()> {
         let mut adapter = self.semantic_adapter.write().await;
         adapter.update_graph_data(graph).await
     }
 
-    
     pub async fn invalidate_cache(&self) -> SemanticResult<()> {
         let mut adapter = self.semantic_adapter.write().await;
         adapter.invalidate_pathfinding_cache().await
     }
 
-    
     pub async fn get_statistics(&self) -> SemanticResult<SemanticStatistics> {
         let adapter = self.semantic_adapter.read().await;
         adapter.get_statistics().await
     }
 
-    
     pub async fn detect_communities_louvain(&self) -> SemanticResult<CommunityDetectionResult> {
         self.detect_communities(CommunityDetectionRequest {
             algorithm: ClusteringAlgorithm::Louvain,
@@ -209,7 +191,6 @@ impl SemanticService {
         .await
     }
 
-    
     pub async fn detect_communities_label_propagation(
         &self,
     ) -> SemanticResult<CommunityDetectionResult> {
@@ -220,7 +201,6 @@ impl SemanticService {
         .await
     }
 
-    
     pub async fn find_connected_components(&self) -> SemanticResult<CommunityDetectionResult> {
         self.detect_communities(CommunityDetectionRequest {
             algorithm: ClusteringAlgorithm::ConnectedComponents,

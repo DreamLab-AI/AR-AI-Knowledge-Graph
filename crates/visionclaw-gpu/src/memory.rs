@@ -74,7 +74,6 @@ impl GPUMemoryTracker {
     }
 
     fn track_allocation(&self, name: String, size: usize) {
-        
         if let Ok(mut alloc_map) = self.allocations.lock() {
             alloc_map.insert(name.clone(), size);
             let total = self
@@ -90,7 +89,6 @@ impl GPUMemoryTracker {
     }
 
     fn track_deallocation(&self, name: String, size: usize) {
-        
         if let Ok(mut alloc_map) = self.allocations.lock() {
             if alloc_map.remove(&name).is_some() {
                 let total = self
@@ -209,7 +207,6 @@ impl MultiStreamManager {
         &self.analysis_stream
     }
 
-    
     pub fn get_next_stream(&mut self) -> &cust::stream::Stream {
         let stream = match self.current_stream % 3 {
             0 => &self.compute_stream,
@@ -220,7 +217,6 @@ impl MultiStreamManager {
         stream
     }
 
-    
     pub fn synchronize_all(&self) -> Result<(), cust::error::CudaError> {
         self.compute_stream.synchronize()?;
         self.memory_stream.synchronize()?;
@@ -228,19 +224,15 @@ impl MultiStreamManager {
         Ok(())
     }
 
-    
     pub async fn synchronize_async(&self) -> Result<(), cust::error::CudaError> {
-        
         let compute_event = cust::event::Event::new(cust::event::EventFlags::DEFAULT)?;
         let memory_event = cust::event::Event::new(cust::event::EventFlags::DEFAULT)?;
         let analysis_event = cust::event::Event::new(cust::event::EventFlags::DEFAULT)?;
 
-        
         compute_event.record(&self.compute_stream)?;
         memory_event.record(&self.memory_stream)?;
         analysis_event.record(&self.analysis_stream)?;
 
-        
         loop {
             let compute_done = compute_event
                 .query()
@@ -259,7 +251,6 @@ impl MultiStreamManager {
                 break;
             }
 
-            
             tokio::task::yield_now().await;
         }
 
@@ -290,7 +281,6 @@ impl LabelMappingCache {
     {
         let key = labels.to_vec();
 
-        
         if let Ok(cache) = self.cached_mappings.read() {
             if let Some(cached_result) = cache.get(&key) {
                 self.cache_hits
@@ -299,13 +289,11 @@ impl LabelMappingCache {
             }
         }
 
-        
         self.cache_misses
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let result = compute_fn(labels);
 
         if let Ok(mut cache) = self.cached_mappings.write() {
-            
             if cache.len() > 1000 {
                 cache.clear();
                 debug!("Cleared label mapping cache to prevent memory bloat");
@@ -465,7 +453,10 @@ mod tests {
         assert!(result.is_empty());
         // Second call should hit.
         let mut called = false;
-        cache.get_or_compute_mapping(&[], |_| { called = true; vec![] });
+        cache.get_or_compute_mapping(&[], |_| {
+            called = true;
+            vec![]
+        });
         assert!(!called);
     }
 }

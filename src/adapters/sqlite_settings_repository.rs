@@ -168,7 +168,11 @@ fn encode_setting_value(value: &SettingValue) -> RepoResult<String> {
 ///
 /// Arrays and primitive leaves are stored as a single JSON value at the
 /// path leading to them; only object branches recurse.
-fn flatten_json(value: &serde_json::Value, prefix: &str, out: &mut Vec<(String, serde_json::Value)>) {
+fn flatten_json(
+    value: &serde_json::Value,
+    prefix: &str,
+    out: &mut Vec<(String, serde_json::Value)>,
+) {
     match value {
         serde_json::Value::Object(map) => {
             for (k, v) in map {
@@ -272,9 +276,8 @@ impl SqliteSettingsRepository {
     pub async fn get_file_sha1s(&self) -> Result<HashMap<String, String>, SettingsRepositoryError> {
         self.conn
             .call(|c| {
-                let mut stmt = c.prepare_cached(
-                    "SELECT file_name, sha1 FROM sync_file_metadata",
-                )?;
+                let mut stmt =
+                    c.prepare_cached("SELECT file_name, sha1 FROM sync_file_metadata")?;
                 let mut rows = stmt.query([])?;
                 let mut map: HashMap<String, String> = HashMap::new();
                 while let Some(row) = rows.next()? {
@@ -324,9 +327,7 @@ impl SqliteSettingsRepository {
         let key_owned = key.to_string();
         self.conn
             .call(move |c| {
-                let mut stmt = c.prepare_cached(
-                    "SELECT value FROM sync_config WHERE key = ?1",
-                )?;
+                let mut stmt = c.prepare_cached("SELECT value FROM sync_config WHERE key = ?1")?;
                 let mut rows = stmt.query(rusqlite::params![&key_owned])?;
                 if let Some(row) = rows.next()? {
                     let val: String = row.get(0)?;
@@ -574,10 +575,7 @@ impl SettingsRepository for SqliteSettingsRepository {
     // ------------------------------------------------------------------
     // 6. set_settings_batch — atomic UPSERT batch
     // ------------------------------------------------------------------
-    async fn set_settings_batch(
-        &self,
-        updates: HashMap<String, SettingValue>,
-    ) -> RepoResult<()> {
+    async fn set_settings_batch(&self, updates: HashMap<String, SettingValue>) -> RepoResult<()> {
         if updates.is_empty() {
             return Ok(());
         }
@@ -900,7 +898,10 @@ impl SettingsRepository for SqliteSettingsRepository {
             if let Some(d) = description {
                 row_obj.insert("description".to_string(), serde_json::Value::String(d));
             }
-            row_obj.insert("updated_at".to_string(), serde_json::Value::from(updated_at));
+            row_obj.insert(
+                "updated_at".to_string(),
+                serde_json::Value::from(updated_at),
+            );
 
             let row_value = serde_json::Value::Object(row_obj);
             if owner.is_empty() {
@@ -946,12 +947,7 @@ impl SettingsRepository for SqliteSettingsRepository {
                 if let serde_json::Value::Object(map) = settings_for_user {
                     for (key, entry) in map {
                         let (value_json, description) = stage_row_entry(entry)?;
-                        staged.push((
-                            key.clone(),
-                            pubkey.clone(),
-                            value_json,
-                            description,
-                        ));
+                        staged.push((key.clone(), pubkey.clone(), value_json, description));
                     }
                 }
             }
@@ -1016,9 +1012,7 @@ impl SettingsRepository for SqliteSettingsRepository {
 ///     `description` fields, or
 ///   * a bare value — interpreted as the JSON-encoded value with no
 ///     description.
-fn stage_row_entry(
-    entry: &serde_json::Value,
-) -> RepoResult<(String, Option<String>)> {
+fn stage_row_entry(entry: &serde_json::Value) -> RepoResult<(String, Option<String>)> {
     if let serde_json::Value::Object(obj) = entry {
         if let Some(value) = obj.get("value") {
             // Canonical shape. The stored `value` column holds a JSON-encoded

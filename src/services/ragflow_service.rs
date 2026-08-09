@@ -1,4 +1,5 @@
 use crate::config::AppFullSettings;
+use crate::utils::json::to_json;
 use bytes::Bytes;
 use futures::stream::{Stream, StreamExt};
 use log::{error, info};
@@ -8,7 +9,6 @@ use std::fmt;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::utils::json::to_json;
 
 #[derive(Debug)]
 pub enum RAGFlowError {
@@ -99,11 +99,8 @@ pub struct RAGFlowService {
 }
 
 impl RAGFlowService {
-    
     pub async fn new(_settings: Arc<RwLock<AppFullSettings>>) -> Result<Self, RAGFlowError> {
-        
         let client = Client::new();
-        
 
         info!("[RAGFlowService::new] Attempting to load RAGFlow config directly from environment variables.");
 
@@ -144,7 +141,6 @@ impl RAGFlowService {
         info!("[RAGFlowService::new] RAGFLOW_API_BASE_URL: {}", base_url);
         info!("[RAGFlowService::new] RAGFLOW_AGENT_ID: {}", agent_id);
 
-        
         if api_key.is_empty() {
             error!(
                 "[RAGFlowService::new] RAGFLOW_API_KEY is empty after loading from environment."
@@ -193,7 +189,7 @@ impl RAGFlowService {
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
-            .body("{}") 
+            .body("{}")
             .send()
             .await?;
 
@@ -204,7 +200,6 @@ impl RAGFlowService {
             let result: serde_json::Value = response.json().await?;
             info!("Successful response: {:?}", result);
 
-            
             match result["data"]["id"].as_str() {
                 Some(id) => Ok(id.to_string()),
                 None => {
@@ -228,8 +223,8 @@ impl RAGFlowService {
         &self,
         session_id: String,
         message: String,
-        _quote: bool,                  
-        _doc_ids: Option<Vec<String>>, 
+        _quote: bool,
+        _doc_ids: Option<Vec<String>>,
         stream: bool,
     ) -> Result<
         Pin<Box<dyn Stream<Item = Result<String, RAGFlowError>> + Send + 'static>>,
@@ -270,11 +265,12 @@ impl RAGFlowService {
 
         if status.is_success() {
             if stream {
-                let stream = response.bytes_stream().map(move |chunk_result| {
-                    match chunk_result {
+                let stream = response
+                    .bytes_stream()
+                    .map(move |chunk_result| match chunk_result {
                         Ok(chunk) => {
                             let chunk_str = String::from_utf8_lossy(&chunk);
-                            
+
                             let chunk_str = chunk_str.trim();
 
                             if chunk_str.starts_with("data:") {
@@ -282,7 +278,6 @@ impl RAGFlowService {
                                 match serde_json::from_str::<serde_json::Value>(json_str) {
                                     Ok(json_response) => {
                                         if let Some(true) = json_response["data"].as_bool() {
-                                            
                                             Ok("".to_string())
                                         } else if let Some(answer) =
                                             json_response["data"]["answer"].as_str()
@@ -307,16 +302,13 @@ impl RAGFlowService {
                             }
                         }
                         Err(e) => Err(RAGFlowError::ReqwestError(e)),
-                    }
-                });
+                    });
 
                 Ok(Box::pin(stream))
             } else {
-                
                 let result: serde_json::Value = response.json().await?;
 
                 if let Some(answer) = result["data"]["answer"].as_str() {
-                    
                     let stream = futures::stream::once(futures::future::ok(answer.to_string()));
                     Ok(Box::pin(stream))
                 } else {
@@ -507,7 +499,7 @@ impl RAGFlowService {
             Ok(ChatResponse::Streaming(Box::pin(byte_stream)))
         }
     }
-} 
+}
 
 impl Clone for RAGFlowService {
     fn clone(&self) -> Self {

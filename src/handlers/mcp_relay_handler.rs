@@ -39,7 +39,7 @@ pub struct MCPRelayActor {
     client_id: String,
     orchestrator_tx: Option<OrchestratorSink>,
     self_addr: Option<Addr<Self>>,
-    
+
     circuit_breaker: Arc<CircuitBreaker>,
     health_manager: Arc<HealthCheckManager>,
     timeout_config: TimeoutConfig,
@@ -54,8 +54,6 @@ impl MCPRelayActor {
         let circuit_breaker = Arc::new(CircuitBreaker::mcp_operations());
         let health_manager = Arc::new(HealthCheckManager::new());
         let timeout_config = TimeoutConfig::mcp_operations();
-
-        
 
         info!(
             "[MCP Relay] Creating new actor with resilience features: {}",
@@ -93,7 +91,6 @@ impl MCPRelayActor {
         let connection_attempts = self.connection_attempts;
 
         actix::spawn(async move {
-            
             let connection_result = circuit_breaker
                 .execute(async {
                     let conn_timeout = timeout_config.connect_timeout;
@@ -132,7 +129,6 @@ impl MCPRelayActor {
 
                     addr.do_send(OrchestratorText("connected".to_string()));
 
-                    
                     while let Some(msg) = rx.next().await {
                         match msg {
                             Ok(TungsteniteMessage::Text(text)) => {
@@ -149,7 +145,6 @@ impl MCPRelayActor {
                                 let tx_clone = tx.clone();
                                 let health_manager_clone = health_manager.clone();
                                 actix::spawn(async move {
-                                    
                                     let mut tx_guard = tx_clone.lock().await;
                                     match tx_guard.send(TungsteniteMessage::Pong(data)).await {
                                         Err(e) => {
@@ -166,13 +161,11 @@ impl MCPRelayActor {
                                     }
                                 });
                             }
-                            Ok(TungsteniteMessage::Pong(_)) => {
-                                
-                            }
+                            Ok(TungsteniteMessage::Pong(_)) => {}
                             Ok(_) => {}
                             Err(e) => {
                                 error!("[MCP Relay] Error receiving from orchestrator: {}", e);
-                                
+
                                 let _ = health_manager.check_service_now("orchestrator").await;
                                 break;
                             }
@@ -187,10 +180,8 @@ impl MCPRelayActor {
                         connection_attempts, e
                     );
 
-                    
                     let _ = health_manager.check_service_now("orchestrator").await;
 
-                    
                     let retry_delay = std::cmp::min(
                         Duration::from_secs(5) * 2_u32.pow(connection_attempts.saturating_sub(1)),
                         Duration::from_secs(60),
@@ -214,24 +205,21 @@ impl Actor for MCPRelayActor {
             self.client_id
         );
 
-        
         let health_manager = self.health_manager.clone();
         actix::spawn(async move {
             let endpoint = ServiceEndpoint {
                 name: "orchestrator".to_string(),
                 host: "localhost".to_string(),
-                port: 8080, 
+                port: 8080,
                 config: HealthCheckConfig::default(),
                 additional_endpoints: vec![],
             };
             health_manager.register_service(endpoint).await;
         });
 
-        
         ctx.run_interval(Duration::from_secs(30), |act, ctx| {
             ctx.ping(b"");
 
-            
             let health_manager = act.health_manager.clone();
             actix::spawn(async move {
                 let health_result = health_manager.check_service_now("orchestrator").await;
@@ -243,10 +231,9 @@ impl Actor for MCPRelayActor {
             });
         });
 
-        
         ctx.run_interval(Duration::from_secs(60), |act, _ctx| {
             act.last_health_check = Instant::now();
-            
+
             let health_manager = act.health_manager.clone();
             actix::spawn(async move {
                 let _health = health_manager.get_service_health("orchestrator").await;
@@ -262,7 +249,6 @@ impl Actor for MCPRelayActor {
             });
         });
 
-        
         self.connect_to_orchestrator(ctx);
     }
 
@@ -278,7 +264,6 @@ impl Handler<OrchestratorText> for MCPRelayActor {
     fn handle(&mut self, msg: OrchestratorText, ctx: &mut Self::Context) {
         match msg.0.as_str() {
             "connected" => {
-                
                 ctx.text(
                     serde_json::json!({
                         "type": "orchestrator_connected",
@@ -288,11 +273,9 @@ impl Handler<OrchestratorText> for MCPRelayActor {
                 );
             }
             "retry" => {
-                
                 self.connect_to_orchestrator(ctx);
             }
             _ => {
-                
                 ctx.text(msg.0);
             }
         }
@@ -303,7 +286,6 @@ impl Handler<OrchestratorBinary> for MCPRelayActor {
     type Result = ();
 
     fn handle(&mut self, msg: OrchestratorBinary, ctx: &mut Self::Context) {
-
         ctx.binary(msg.0);
     }
 }
@@ -328,15 +310,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MCPRelayActor {
             Ok(ws::Message::Ping(msg)) => {
                 ctx.pong(&msg);
             }
-            Ok(ws::Message::Pong(_)) => {
-                
-            }
+            Ok(ws::Message::Pong(_)) => {}
             Ok(ws::Message::Text(text)) => {
                 debug!("[MCP Relay] Received text from client: {}", text);
 
-                
                 if let Ok(msg) = serde_json::from_str::<serde_json::Value>(&text) {
-                    
                     if let Some(msg_type) = msg.get("type").and_then(|t| t.as_str()) {
                         match msg_type {
                             "ping" => {
@@ -354,7 +332,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MCPRelayActor {
                     }
                 }
 
-                
                 if let Some(tx) = &self.orchestrator_tx {
                     if !self.is_orchestrator_healthy {
                         warn!("[MCP Relay] Orchestrator unhealthy, dropping message");
@@ -382,7 +359,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MCPRelayActor {
                         .await
                         {
                             Ok(Ok(_)) => {
-                                
                                 let _ = health_manager.check_service_now("orchestrator").await;
                             }
                             Ok(Err(e)) => {
@@ -413,7 +389,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MCPRelayActor {
                     bin.len()
                 );
 
-                
                 if let Some(tx) = &self.orchestrator_tx {
                     if !self.is_orchestrator_healthy {
                         warn!("[MCP Relay] Orchestrator unhealthy, dropping binary message");
@@ -474,7 +449,9 @@ pub async fn mcp_relay_handler(
     // Currently allows but logs unauthenticated connections -- enforcement will come
     // when all clients send tokens.
     {
-        let token = req.headers().get("Authorization")
+        let token = req
+            .headers()
+            .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
             .map(|s| s.to_string())
@@ -486,12 +463,16 @@ pub async fn mcp_relay_handler(
             });
 
         if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req.peer_addr().map(|a| a.to_string()).unwrap_or_else(|| "unknown".to_string());
+            let client_ip = req
+                .peer_addr()
+                .map(|a| a.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             log::warn!(
                 "SECURITY: Rejected unauthenticated WebSocket upgrade on /ws/mcp-relay from {}",
                 client_ip
             );
-            return Ok(HttpResponse::Unauthorized().json(serde_json::json!({"error": "Authentication required"})));
+            return Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Authentication required"})));
         }
     }
 

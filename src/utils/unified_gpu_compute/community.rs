@@ -68,7 +68,6 @@ pub(super) fn modularity_csr(
 }
 
 impl UnifiedGPUCompute {
-
     pub fn run_community_detection(
         &mut self,
         max_iterations: u32,
@@ -131,15 +130,12 @@ impl UnifiedGPUCompute {
             )?;
         }
 
-
         self.stream.synchronize()?;
         let node_degrees_host = safe_download(&self.node_degrees, self.num_nodes)?;
         let total_weight: f32 = node_degrees_host.iter().sum::<f32>() / 2.0;
 
-
         let mut iterations = 0;
         let mut converged = false;
-
 
         // Single canonical community LPA kernel. It uses ZERO shared memory
         // (votes are tallied over each node's own neighbour list), so the launch
@@ -202,7 +198,6 @@ impl UnifiedGPUCompute {
             }
         }
 
-
         // Modularity (host CSR computation — correct Newman Q with the global
         // sigma_tot^2 null model). Computed on the final partition before
         // relabeling; relabeling only compacts ids so Q is invariant under it.
@@ -220,8 +215,6 @@ impl UnifiedGPUCompute {
             &node_degrees_host,
             total_weight,
         );
-
-
 
         let zero_communities = vec![0i32; self.max_labels];
         safe_upload(&mut self.community_sizes, &zero_communities)?;
@@ -244,10 +237,8 @@ impl UnifiedGPUCompute {
 
         self.stream.synchronize()?;
 
-
         let mut labels = safe_download(&self.labels_current, self.num_nodes)?;
         let community_sizes_host = safe_download(&self.community_sizes, self.max_labels)?;
-
 
         let mut label_map = vec![-1i32; self.max_labels];
         let mut compact_community_sizes = Vec::new();
@@ -260,7 +251,6 @@ impl UnifiedGPUCompute {
                 num_communities += 1;
             }
         }
-
 
         if num_communities < self.max_labels {
             safe_upload(&mut self.label_mapping, &label_map)?;
@@ -295,16 +285,13 @@ impl UnifiedGPUCompute {
         ))
     }
 
-
     pub fn run_community_detection_label_propagation(
         &mut self,
         max_iterations: u32,
         seed: u32,
     ) -> Result<(Vec<i32>, usize, f32, u32, Vec<i32>, bool)> {
-
         self.run_community_detection(max_iterations, seed)
     }
-
 
     /// REAL GPU Louvain community detection.
     ///
@@ -322,7 +309,10 @@ impl UnifiedGPUCompute {
         let _ctx = Context::new(self.device.clone())
             .map_err(|e| anyhow!("Failed to set CUDA context for Louvain: {}", e))?;
 
-        info!("Running REAL Louvain community detection on GPU ({} nodes)", self.num_nodes);
+        info!(
+            "Running REAL Louvain community detection on GPU ({} nodes)",
+            self.num_nodes
+        );
 
         if self.num_nodes == 0 {
             return Ok((Vec::new(), 0, 0.0, 0, Vec::new(), true));
@@ -605,9 +595,15 @@ impl UnifiedGPUCompute {
             num_communities, best_modularity, total_iterations, any_converged
         );
 
-        Ok((labels, num_communities, best_modularity, total_iterations, sizes, any_converged))
+        Ok((
+            labels,
+            num_communities,
+            best_modularity,
+            total_iterations,
+            sizes,
+            any_converged,
+        ))
     }
-
 
     pub fn run_dbscan_clustering(&mut self, eps: f32, min_pts: i32) -> Result<Vec<i32>> {
         let _ctx = Context::new(self.device.clone())
@@ -618,7 +614,6 @@ impl UnifiedGPUCompute {
         let block_size = 256;
         let grid_size = (self.num_nodes as u32 + block_size - 1) / block_size;
 
-
         let mut labels = vec![0i32; self.num_nodes];
         let neighbor_counts = vec![0i32; self.num_nodes];
         let max_neighbors = 64;
@@ -627,14 +622,15 @@ impl UnifiedGPUCompute {
             .map(|i| (i * max_neighbors) as i32)
             .collect::<Vec<i32>>();
 
-
         let d_labels = DeviceBuffer::from_slice(&labels)?;
         let d_neighbors = DeviceBuffer::from_slice(&neighbors)?;
         let d_neighbor_counts = DeviceBuffer::from_slice(&neighbor_counts)?;
         let d_neighbor_offsets = DeviceBuffer::from_slice(&neighbor_offsets)?;
 
-
-        let clustering_mod = self.clustering_module.as_ref().ok_or(anyhow!("Clustering PTX module not loaded"))?;
+        let clustering_mod = self
+            .clustering_module
+            .as_ref()
+            .ok_or(anyhow!("Clustering PTX module not loaded"))?;
         let find_neighbors_kernel = clustering_mod.get_function("dbscan_find_neighbors_kernel")?;
 
         // SAFETY: DBSCAN neighbor finding kernel launch is safe because:
@@ -661,9 +657,7 @@ impl UnifiedGPUCompute {
 
         self.stream.synchronize()?;
 
-
-        let mark_core_kernel = clustering_mod
-            .get_function("dbscan_mark_core_points_kernel")?;
+        let mark_core_kernel = clustering_mod.get_function("dbscan_mark_core_points_kernel")?;
 
         // SAFETY: DBSCAN core point marking kernel is safe because:
         // 1. d_neighbor_counts contains neighbor counts from previous kernel
@@ -684,8 +678,7 @@ impl UnifiedGPUCompute {
         self.stream.synchronize()?;
 
         // Phase 3: Propagate cluster labels until convergence
-        let propagate_kernel = clustering_mod
-            .get_function("dbscan_propagate_labels_kernel")?;
+        let propagate_kernel = clustering_mod.get_function("dbscan_propagate_labels_kernel")?;
 
         let mut changed = vec![0i32; 1];
         let mut d_changed = DeviceBuffer::from_slice(&changed)?;
@@ -724,8 +717,7 @@ impl UnifiedGPUCompute {
         }
 
         // Phase 4: Finalize noise points
-        let finalize_kernel = clustering_mod
-            .get_function("dbscan_finalize_noise_kernel")?;
+        let finalize_kernel = clustering_mod.get_function("dbscan_finalize_noise_kernel")?;
 
         // SAFETY: DBSCAN finalization kernel is safe because:
         // 1. d_labels contains cluster labels from propagation phase
@@ -846,7 +838,6 @@ impl UnifiedGPUCompute {
             algo, resolution, iterations
         );
     }
-
 }
 
 #[cfg(test)]
@@ -925,14 +916,23 @@ mod tests {
     const TRIANGLE: &[(usize, usize)] = &[(0, 1), (1, 2), (0, 2)];
     const K4: &[(usize, usize)] = &[(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)];
     // Two K3s joined by a single bridge (node 2 — node 3).
-    const BARBELL_K3: &[(usize, usize)] =
-        &[(0, 1), (1, 2), (0, 2), (3, 4), (4, 5), (3, 5), (2, 3)];
+    const BARBELL_K3: &[(usize, usize)] = &[(0, 1), (1, 2), (0, 2), (3, 4), (4, 5), (3, 5), (2, 3)];
     // Two disjoint K3s, no bridge.
     const TWO_K3: &[(usize, usize)] = &[(0, 1), (1, 2), (0, 2), (3, 4), (4, 5), (3, 5)];
     // Two K4s joined by a single bridge (node 3 — node 4).
     const TWO_K4_BRIDGE: &[(usize, usize)] = &[
-        (0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3),
-        (4, 5), (4, 6), (4, 7), (5, 6), (5, 7), (6, 7),
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (1, 2),
+        (1, 3),
+        (2, 3),
+        (4, 5),
+        (4, 6),
+        (4, 7),
+        (5, 6),
+        (5, 7),
+        (6, 7),
         (3, 4),
     ];
 

@@ -6,20 +6,18 @@ use crate::errors::VisionClawResult;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use log::{error, info};
 
-use std::sync::Arc;
 use crate::utils::time;
+use std::sync::Arc;
 
 pub struct PullRequestAPI {
     client: Arc<GitHubClient>,
 }
 
 impl PullRequestAPI {
-    
     pub fn new(client: Arc<GitHubClient>) -> Self {
         Self { client }
     }
 
-    
     pub async fn create_pull_request(
         &self,
         file_name: &str,
@@ -74,7 +72,6 @@ impl PullRequestAPI {
         Ok(pr_response.html_url)
     }
 
-    
     async fn get_main_branch_sha(&self) -> VisionClawResult<String> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/git/ref/heads/main",
@@ -104,7 +101,6 @@ impl PullRequestAPI {
             .to_string())
     }
 
-    
     async fn create_branch(&self, branch_name: &str, sha: &str) -> VisionClawResult<()> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/git/refs",
@@ -136,7 +132,6 @@ impl PullRequestAPI {
         Ok(())
     }
 
-    
     async fn update_file(
         &self,
         file_path: &str,

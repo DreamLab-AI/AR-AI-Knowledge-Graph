@@ -187,7 +187,10 @@ impl UnifiedGPUCompute {
         let _ctx = Context::new(self.device.clone())
             .map_err(|e| anyhow!("Failed to set CUDA context for Leiden: {}", e))?;
 
-        info!("Running GPU Leiden community detection ({} nodes)", self.num_nodes);
+        info!(
+            "Running GPU Leiden community detection ({} nodes)",
+            self.num_nodes
+        );
 
         if self.num_nodes == 0 {
             return Ok((Vec::new(), 0, 0.0, 0, Vec::new(), true));
@@ -452,6 +455,13 @@ impl UnifiedGPUCompute {
             num_communities, best_modularity, total_iterations, any_converged
         );
 
-        Ok((labels, num_communities, best_modularity, total_iterations, sizes, any_converged))
+        Ok((
+            labels,
+            num_communities,
+            best_modularity,
+            total_iterations,
+            sizes,
+            any_converged,
+        ))
     }
 }

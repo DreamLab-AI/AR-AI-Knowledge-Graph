@@ -63,7 +63,10 @@ pub struct ParsedMarkdown {
     #[cfg_attr(feature = "typescript-export", ts(type = "Record<string, unknown>"))]
     pub frontmatter_json: serde_json::Value,
     /// `### OntologyBlock` JSON-LD bodies, one per block. Order preserved.
-    #[cfg_attr(feature = "typescript-export", ts(type = "Array<Record<string, unknown>>"))]
+    #[cfg_attr(
+        feature = "typescript-export",
+        ts(type = "Array<Record<string, unknown>>")
+    )]
     pub jsonld_blocks: Vec<serde_json::Value>,
     /// Git blob SHA1 (40 hex chars). Used by the SHA1-gated sync.
     pub commit_sha: String,

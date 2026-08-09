@@ -64,7 +64,6 @@ pub enum EdgeType {
     Custom(String),
 }
 
-
 impl std::fmt::Display for GraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -93,7 +92,6 @@ impl std::str::FromStr for GraphType {
         }
     }
 }
-
 
 impl std::fmt::Display for NodeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -128,7 +126,6 @@ impl std::str::FromStr for NodeType {
         }
     }
 }
-
 
 impl std::fmt::Display for EdgeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

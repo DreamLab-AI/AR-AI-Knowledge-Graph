@@ -1,12 +1,12 @@
 // REMOVED: advanced_gpu_compute module - functionality moved to unified_gpu_compute
 // REMOVED: gpu_compute module - legacy implementation replaced by unified_gpu_compute
 pub mod actor_timeout;
-pub mod cache;
 pub mod advanced_logging;
-pub mod auth;
 pub mod async_improvements;
 pub mod audio_processor;
+pub mod auth;
 pub mod binary_protocol;
+pub mod cache;
 pub mod client_message_extractor;
 pub mod edge_data;
 pub mod gpu_diagnostics;
@@ -14,8 +14,8 @@ pub mod gpu_diagnostics;
 // alias is preserved so existing `crate::utils::gpu_memory::*` paths in tests
 // and downstream crates continue to resolve.
 pub use visionclaw_gpu::memory as gpu_memory;
-pub mod gpu_safety;
 pub mod cuda_error_handling;
+pub mod gpu_safety;
 pub mod handler_commons;
 pub mod response_macros;
 // pub mod hybrid_fault_tolerance;
@@ -35,13 +35,13 @@ pub mod network;
 // alias is preserved so existing `crate::utils::ptx::*` paths in tests
 // and downstream crates continue to resolve.
 pub use visionclaw_gpu::ptx_loader as ptx;
+pub mod nip98; // NIP-98 HTTP authentication for Solid Server integration
+pub mod result_helpers;
 pub mod socket_flow_constants;
 pub mod socket_flow_messages;
 pub mod standard_websocket_messages;
-pub mod unified_gpu_compute;
 pub mod time;
+pub mod unified_gpu_compute;
 pub mod validation;
 pub mod websocket_heartbeat;
-pub mod nip98; // NIP-98 HTTP authentication for Solid Server integration
-pub mod result_helpers;
 // REMOVED: result_mappers module - no longer exists

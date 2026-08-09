@@ -1,19 +1,19 @@
 // WebSocket handler for the /wss endpoint.
 // Split into submodules for maintainability.
 
-pub mod types;
 pub mod actor_messages;
-pub mod message_routing;
 pub mod binary_protocol;
-pub mod position_updates;
 pub mod filter_auth;
 pub mod http_handler;
+pub mod message_routing;
+pub mod position_updates;
+pub mod types;
 
 // Re-export public API (preserves all external imports)
-pub use types::{PreReadSocketSettings, SocketFlowServer};
 pub use actor_messages::BroadcastPositionUpdate;
 pub use actor_messages::PushDirective;
 pub use http_handler::socket_flow_handler;
+pub use types::{PreReadSocketSettings, SocketFlowServer};
 
 // StreamHandler glue -- delegates text/binary to submodules
 use actix::prelude::*;

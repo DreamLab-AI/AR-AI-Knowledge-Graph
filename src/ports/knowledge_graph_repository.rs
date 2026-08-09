@@ -47,18 +47,12 @@ pub struct GraphStatistics {
 
 #[async_trait]
 pub trait KnowledgeGraphRepository: Send + Sync {
-    
     async fn load_graph(&self) -> Result<Arc<GraphData>>;
 
-    
     async fn save_graph(&self, graph: &GraphData) -> Result<()>;
 
-    
-    
     async fn add_node(&self, node: &Node) -> Result<u32>;
 
-    
-    
     async fn batch_add_nodes(&self, nodes: Vec<Node>) -> Result<Vec<u32>>;
 
     /// Insert nodes only where no node with the same id already exists in the
@@ -67,24 +61,17 @@ pub trait KnowledgeGraphRepository: Send + Sync {
     /// incremental sync. Returns the ids that were actually written.
     async fn batch_add_nodes_if_absent(&self, nodes: Vec<Node>) -> Result<Vec<u32>>;
 
-    
     async fn update_node(&self, node: &Node) -> Result<()>;
 
-    
     async fn batch_update_nodes(&self, nodes: Vec<Node>) -> Result<()>;
 
-    
     async fn remove_node(&self, node_id: u32) -> Result<()>;
 
-    
     async fn batch_remove_nodes(&self, node_ids: Vec<u32>) -> Result<()>;
 
-    
     async fn get_node(&self, node_id: u32) -> Result<Option<Node>>;
 
-    
     async fn get_nodes(&self, node_ids: Vec<u32>) -> Result<Vec<Node>>;
-
 
     async fn get_nodes_by_metadata_id(&self, metadata_id: &str) -> Result<Vec<Node>>;
 
@@ -92,30 +79,20 @@ pub trait KnowledgeGraphRepository: Send + Sync {
     /// Used by semantic physics to resolve ontology class IRIs to actual node IDs
     async fn get_nodes_by_owl_class_iri(&self, owl_class_iri: &str) -> Result<Vec<Node>>;
 
-
     async fn search_nodes_by_label(&self, label: &str) -> Result<Vec<Node>>;
 
-    
-    
     async fn add_edge(&self, edge: &Edge) -> Result<String>;
 
-    
-    
     async fn batch_add_edges(&self, edges: Vec<Edge>) -> Result<Vec<String>>;
 
-    
     async fn update_edge(&self, edge: &Edge) -> Result<()>;
 
-    
     async fn remove_edge(&self, edge_id: &str) -> Result<()>;
 
-    
     async fn batch_remove_edges(&self, edge_ids: Vec<String>) -> Result<()>;
 
-    
     async fn get_node_edges(&self, node_id: u32) -> Result<Vec<Edge>>;
 
-    
     async fn get_edges_between(&self, source_id: u32, target_id: u32) -> Result<Vec<Edge>>;
 
     /// Batch update positions for multiple nodes (simulation -> database)
@@ -128,15 +105,11 @@ pub trait KnowledgeGraphRepository: Send + Sync {
 
     async fn query_nodes(&self, query: &str) -> Result<Vec<Node>>;
 
-    
     async fn get_neighbors(&self, node_id: u32) -> Result<Vec<Node>>;
 
-    
     async fn get_statistics(&self) -> Result<GraphStatistics>;
 
-    
     async fn clear_graph(&self) -> Result<()>;
-
 
     async fn health_check(&self) -> Result<bool>;
 }

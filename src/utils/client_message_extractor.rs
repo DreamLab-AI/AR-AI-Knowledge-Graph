@@ -1,7 +1,7 @@
+use crate::utils::time;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
-use crate::utils::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientMessage {
@@ -62,26 +62,21 @@ impl ClientMessageStream {
             buffer: String::new(),
             session_id,
             agent_id,
-            max_buffer_size: 100_000, 
+            max_buffer_size: 100_000,
         }
     }
 
-    
     pub fn process_chunk(&mut self, chunk: &str) -> Vec<ClientMessage> {
-        
         self.buffer.push_str(chunk);
 
-        
         let messages =
             extract_client_messages(&self.buffer, self.session_id.clone(), self.agent_id.clone());
 
-        
         if !messages.is_empty() {
             let regex = get_message_regex();
             self.buffer = regex.replace_all(&self.buffer, "").to_string();
         }
 
-        
         if self.buffer.len() > self.max_buffer_size {
             let start_idx = self.buffer.len() - (self.max_buffer_size / 2);
             self.buffer = self.buffer[start_idx..].to_string();
@@ -90,12 +85,10 @@ impl ClientMessageStream {
         messages
     }
 
-    
     pub fn clear(&mut self) {
         self.buffer.clear();
     }
 
-    
     pub fn buffer_size(&self) -> usize {
         self.buffer.len()
     }
@@ -152,11 +145,9 @@ mod tests {
     fn test_stream_processor() {
         let mut stream = ClientMessageStream::new(None, None);
 
-        
         let messages = stream.process_chunk("**[CLIENT_MESSAGE]** Start of mes");
         assert_eq!(messages.len(), 0);
 
-        
         let messages = stream.process_chunk("sage **[/CLIENT_MESSAGE]**");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].content, "Start of message");

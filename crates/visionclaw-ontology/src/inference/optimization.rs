@@ -4,55 +4,44 @@
 //! Performance optimizations for inference including batch processing,
 //! incremental reasoning, and parallel classification.
 
+use futures::future::join_all;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use futures::future::join_all;
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 
 use visionclaw_domain::ports::inference_engine::{InferenceEngine, Result as EngineResult};
-use visionclaw_domain::ports::ontology_repository::{OwlClass, OwlAxiom, InferenceResults};
+use visionclaw_domain::ports::ontology_repository::{InferenceResults, OwlAxiom, OwlClass};
 
 #[derive(Debug, Clone)]
 pub struct BatchInferenceRequest {
-    
     pub ontology_ids: Vec<String>,
 
-    
     pub max_parallelism: usize,
 
-    
     pub timeout_ms: u64,
 }
 
 #[derive(Debug, Clone)]
 pub struct IncrementalChange {
-    
     pub added_classes: Vec<OwlClass>,
 
-    
     pub removed_classes: Vec<OwlClass>,
 
-    
     pub added_axioms: Vec<OwlAxiom>,
 
-    
     pub removed_axioms: Vec<OwlAxiom>,
 }
 
 pub struct IncrementalInference {
-    
     previous_checksum: Option<String>,
 
-    
     previous_results: Option<InferenceResults>,
 
-    
     changes: Vec<IncrementalChange>,
 }
 
 impl IncrementalInference {
-    
     pub fn new() -> Self {
         Self {
             previous_checksum: None,
@@ -61,27 +50,22 @@ impl IncrementalInference {
         }
     }
 
-    
     pub fn add_change(&mut self, change: IncrementalChange) {
         self.changes.push(change);
     }
 
-    
     pub fn can_use_incremental(&self) -> bool {
         self.previous_results.is_some() && !self.changes.is_empty()
     }
 
-    
     pub fn get_accumulated_changes(&self) -> Vec<IncrementalChange> {
         self.changes.clone()
     }
 
-    
     pub fn clear_changes(&mut self) {
         self.changes.clear();
     }
 
-    
     pub fn update_state(&mut self, checksum: String, results: InferenceResults) {
         self.previous_checksum = Some(checksum);
         self.previous_results = Some(results);
@@ -96,17 +80,14 @@ impl Default for IncrementalInference {
 }
 
 pub struct ParallelClassification {
-    
     worker_count: usize,
 }
 
 impl ParallelClassification {
-    
     pub fn new(worker_count: usize) -> Self {
         Self { worker_count }
     }
 
-    
     pub async fn classify_batch(
         &self,
         engine: Arc<RwLock<dyn InferenceEngine>>,
@@ -137,7 +118,6 @@ impl ParallelClassification {
 
         let chunk_results = join_all(tasks).await;
 
-        
         let mut final_results = HashMap::new();
         for result in chunk_results {
             if let Ok(chunk_map) = result {
@@ -151,27 +131,20 @@ impl ParallelClassification {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OptimizationMetrics {
-    
     pub total_time_ms: u64,
 
-    
     pub ontologies_processed: usize,
 
-    
     pub parallel_tasks: usize,
 
-    
     pub avg_time_per_ontology: f64,
 
-    
     pub speedup_factor: f64,
 
-    
     pub cache_hit_rate: f64,
 }
 
 impl OptimizationMetrics {
-    
     pub fn calculate(
         total_time_ms: u64,
         ontologies_processed: usize,
@@ -211,19 +184,15 @@ impl OptimizationMetrics {
 }
 
 pub struct InferenceOptimizer {
-    
     incremental: Arc<RwLock<IncrementalInference>>,
 
-    
     #[allow(dead_code)]
     parallel: ParallelClassification,
 
-    
     metrics: Arc<RwLock<OptimizationMetrics>>,
 }
 
 impl InferenceOptimizer {
-    
     pub fn new(worker_count: usize) -> Self {
         Self {
             incremental: Arc::new(RwLock::new(IncrementalInference::new())),
@@ -232,7 +201,6 @@ impl InferenceOptimizer {
         }
     }
 
-    
     pub async fn process_batch(
         &self,
         engine: Arc<RwLock<dyn InferenceEngine>>,
@@ -240,8 +208,8 @@ impl InferenceOptimizer {
     ) -> EngineResult<HashMap<String, InferenceResults>> {
         let start = std::time::Instant::now();
 
-        let chunk_size = (request.ontology_ids.len() + request.max_parallelism - 1)
-            / request.max_parallelism;
+        let chunk_size =
+            (request.ontology_ids.len() + request.max_parallelism - 1) / request.max_parallelism;
 
         let chunks: Vec<Vec<String>> = request
             .ontology_ids
@@ -277,7 +245,6 @@ impl InferenceOptimizer {
 
         let elapsed = start.elapsed().as_millis() as u64;
 
-        
         let mut metrics = self.metrics.write().await;
         metrics.total_time_ms = elapsed;
         metrics.ontologies_processed = request.ontology_ids.len();
@@ -287,18 +254,15 @@ impl InferenceOptimizer {
         Ok(final_results)
     }
 
-    
     pub async fn get_metrics(&self) -> OptimizationMetrics {
         self.metrics.read().await.clone()
     }
 
-    
     pub async fn add_change(&self, change: IncrementalChange) {
         let mut incr = self.incremental.write().await;
         incr.add_change(change);
     }
 
-    
     pub async fn can_use_incremental(&self) -> bool {
         let incr = self.incremental.read().await;
         incr.can_use_incremental()
@@ -332,14 +296,7 @@ mod tests {
 
     #[test]
     fn test_optimization_metrics_calculation() {
-        let metrics = OptimizationMetrics::calculate(
-            1000, 
-            10,   
-            4,    
-            5000, 
-            80,   
-            20,   
-        );
+        let metrics = OptimizationMetrics::calculate(1000, 10, 4, 5000, 80, 20);
 
         assert_eq!(metrics.total_time_ms, 1000);
         assert_eq!(metrics.ontologies_processed, 10);

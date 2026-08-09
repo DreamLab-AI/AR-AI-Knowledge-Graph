@@ -40,16 +40,20 @@ impl NostrBridge {
         let forum_relay_url = std::env::var("FORUM_RELAY_URL")
             .ok()
             .filter(|s| !s.is_empty())?;
-        let source_relay_url = std::env::var("NOSTR_RELAY_URL")
-            .unwrap_or_else(|_| "ws://localhost:7000".to_string());
+        let source_relay_url =
+            std::env::var("NOSTR_RELAY_URL").unwrap_or_else(|_| "ws://localhost:7000".to_string());
 
         // Validate relay URL schemes to prevent SSRF via env var injection.
         if !source_relay_url.starts_with("ws://") && !source_relay_url.starts_with("wss://") {
-            error!("[NostrBridge] NOSTR_RELAY_URL must start with ws:// or wss://: {source_relay_url}");
+            error!(
+                "[NostrBridge] NOSTR_RELAY_URL must start with ws:// or wss://: {source_relay_url}"
+            );
             return None;
         }
         if !forum_relay_url.starts_with("ws://") && !forum_relay_url.starts_with("wss://") {
-            error!("[NostrBridge] FORUM_RELAY_URL must start with ws:// or wss://: {forum_relay_url}");
+            error!(
+                "[NostrBridge] FORUM_RELAY_URL must start with ws:// or wss://: {forum_relay_url}"
+            );
             return None;
         }
 
@@ -153,10 +157,7 @@ impl NostrBridge {
                 TagKind::Custom("h".into()),
                 vec!["visionclaw-activity".to_string()],
             ),
-            Tag::custom(
-                TagKind::Custom("bead_id".into()),
-                vec![bead_id.to_string()],
-            ),
+            Tag::custom(TagKind::Custom("bead_id".into()), vec![bead_id.to_string()]),
             Tag::custom(
                 TagKind::Custom("source_event".into()),
                 vec![source_event_id.to_string()],

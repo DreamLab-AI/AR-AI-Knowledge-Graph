@@ -231,7 +231,11 @@ mod tests {
             .find(|c| c.kernel == "pagerank")
             .map(|c| c.gpu_runs)
             .unwrap();
-        assert_eq!(after, before + 1, "GPU run must increment the gpu_runs counter");
+        assert_eq!(
+            after,
+            before + 1,
+            "GPU run must increment the gpu_runs counter"
+        );
     }
 
     #[test]

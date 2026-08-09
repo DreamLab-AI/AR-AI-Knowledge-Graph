@@ -1,5 +1,3 @@
-
-
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -8,8 +6,8 @@ use uuid::Uuid;
 use crate::actors::messages::{
     CommunityDetectionAlgorithm, CommunityDetectionParams, RunCommunityDetection,
 };
-use crate::AppState;
 use crate::utils::result_helpers::safe_json_number;
+use crate::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +29,7 @@ pub struct Community {
     pub size: u32,
     pub modularity_contribution: f32,
     pub color: String,
-    pub center_node: Option<u32>, 
+    pub center_node: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,7 +63,6 @@ pub async fn run_gpu_community_detection(
         .await
         .ok_or_else(|| "GPU compute actor not available".to_string())?;
 
-    
     let algorithm = match request.algorithm.as_str() {
         "label_propagation" | "lp" => CommunityDetectionAlgorithm::LabelPropagation,
         "louvain" => CommunityDetectionAlgorithm::Louvain,
@@ -78,7 +75,6 @@ pub async fn run_gpu_community_detection(
         }
     };
 
-
     let params = CommunityDetectionParams {
         algorithm: algorithm.clone(),
         max_iterations: Some(request.max_iterations.unwrap_or(100)),
@@ -88,7 +84,6 @@ pub async fn run_gpu_community_detection(
         resolution: Some(request.resolution.unwrap_or(1.0)),
     };
 
-    
     validate_community_params(&params)?;
 
     let msg = RunCommunityDetection { params };
@@ -161,7 +156,6 @@ fn convert_gpu_result_to_communities(
     let mut communities = Vec::new();
     let mut community_nodes: HashMap<i32, Vec<u32>> = HashMap::new();
 
-    
     for (node_id, &label) in result.node_labels.iter().enumerate() {
         community_nodes
             .entry(label)
@@ -169,19 +163,15 @@ fn convert_gpu_result_to_communities(
             .push(node_id as u32);
     }
 
-    
     for (community_id, nodes) in community_nodes {
         let size = nodes.len() as u32;
 
-        
         let modularity_contribution = if result.num_communities > 0 {
             result.modularity / result.num_communities as f32
         } else {
             0.0
         };
 
-        
-        
         let center_node = nodes.first().cloned();
 
         communities.push(Community {
@@ -195,7 +185,6 @@ fn convert_gpu_result_to_communities(
         });
     }
 
-    
     communities.sort_by(|a, b| b.size.cmp(&a.size));
 
     Ok(communities)
@@ -217,13 +206,11 @@ pub fn get_community_statistics(communities: &[Community]) -> HashMap<String, se
         return stats;
     }
 
-    
     let total_nodes: u32 = communities.iter().map(|c| c.size).sum();
     let avg_size = total_nodes as f32 / communities.len() as f32;
     let max_size = communities.iter().map(|c| c.size).max().unwrap_or(0);
     let min_size = communities.iter().map(|c| c.size).min().unwrap_or(0);
 
-    
     let mut size_counts = HashMap::new();
     for community in communities {
         let size_range = match community.size {
@@ -256,7 +243,6 @@ pub fn get_community_statistics(communities: &[Community]) -> HashMap<String, se
         serde_json::Value::Number(serde_json::Number::from(min_size)),
     );
 
-    
     let size_dist: HashMap<String, serde_json::Value> = size_counts
         .into_iter()
         .map(|(k, v)| {
@@ -281,4 +267,3 @@ pub async fn run_gpu_community_detection(
 ) -> Result<CommunityDetectionResponse, String> {
     Err("GPU features not enabled in this build".to_string())
 }
-

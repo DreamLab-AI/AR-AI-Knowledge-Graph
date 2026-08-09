@@ -1,58 +1,43 @@
+use crate::utils::time;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-use crate::utils::time;
 
 pub trait DomainEvent: Send + Sync + Debug {
-    
     fn event_type(&self) -> &'static str;
 
-    
     fn aggregate_id(&self) -> &str;
 
-    
     fn timestamp(&self) -> DateTime<Utc>;
 
-    
     fn aggregate_type(&self) -> &'static str;
 
-    
     fn version(&self) -> u32 {
         1
     }
 
-    
     fn to_json_string(&self) -> Result<String, serde_json::Error>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventMetadata {
-    
     pub event_id: String,
 
-    
     pub aggregate_id: String,
 
-    
     pub aggregate_type: String,
 
-    
     pub event_type: String,
 
-    
     pub timestamp: DateTime<Utc>,
 
-    
     pub causation_id: Option<String>,
 
-    
     pub correlation_id: Option<String>,
 
-    
     pub user_id: Option<String>,
 
-    
     pub version: u32,
 }
 
@@ -89,33 +74,25 @@ impl EventMetadata {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredEvent {
-    
     pub metadata: EventMetadata,
 
-    
     pub data: String,
 
-    
     pub sequence: i64,
 }
 
 #[async_trait]
 pub trait EventHandler: Send + Sync {
-    
     fn event_type(&self) -> &'static str;
 
-    
     fn handler_id(&self) -> &str;
 
-    
     async fn handle(&self, event: &StoredEvent) -> Result<(), EventError>;
 
-    
     fn is_async(&self) -> bool {
         true
     }
 
-    
     fn max_retries(&self) -> u32 {
         3
     }
@@ -123,15 +100,11 @@ pub trait EventHandler: Send + Sync {
 
 #[async_trait]
 pub trait EventMiddleware: Send + Sync {
-
     async fn before_publish(&self, event: &mut StoredEvent) -> Result<(), EventError>;
-
 
     async fn after_publish(&self, event: &StoredEvent) -> Result<(), EventError>;
 
-
     async fn before_handle(&self, event: &StoredEvent, handler_id: &str) -> Result<(), EventError>;
-
 
     async fn after_handle(
         &self,

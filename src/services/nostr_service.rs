@@ -1,8 +1,8 @@
 use crate::config::feature_access::FeatureAccess;
 use crate::models::protected_settings::{ApiKeys, NostrUser};
-use crate::utils::nip98::{
-    parse_auth_header, validate_nip98_token, Nip98ValidationResult,
-};
+use crate::utils::json::to_json;
+use crate::utils::nip98::{parse_auth_header, validate_nip98_token, Nip98ValidationResult};
+use crate::utils::time;
 use log::{debug, error, info, warn};
 use nostr_sdk::{event::Error as EventError, prelude::*};
 use serde::{Deserialize, Serialize};
@@ -11,8 +11,6 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use crate::utils::time;
-use crate::utils::json::to_json;
 
 #[cfg(feature = "redis")]
 use redis::{AsyncCommands, Client as RedisClient};
@@ -142,8 +140,10 @@ impl NostrService {
         let redis_client = match std::env::var("REDIS_URL") {
             Ok(url) => match RedisClient::open(url.clone()) {
                 Ok(client) => {
-                    info!("[NostrService] Connected to Redis for session persistence: {}",
-                          url.split('@').last().unwrap_or(&url));
+                    info!(
+                        "[NostrService] Connected to Redis for session persistence: {}",
+                        url.split('@').last().unwrap_or(&url)
+                    );
                     Some(client)
                 }
                 Err(e) => {
@@ -186,7 +186,9 @@ impl NostrService {
             None => return Ok(0),
         };
 
-        let mut conn = client.get_multiplexed_async_connection().await
+        let mut conn = client
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| NostrError::InvalidEvent(format!("Redis connection failed: {}", e)))?;
 
         // Scan for all user data keys
@@ -208,23 +210,33 @@ impl NostrService {
                         // Check if session is still valid (not expired)
                         let now = time::timestamp_seconds();
                         if now - user.last_seen <= self.token_expiry {
-                            info!("[NostrService] Restored session for user: {}",
-                                  &user.pubkey[..16.min(user.pubkey.len())]);
+                            info!(
+                                "[NostrService] Restored session for user: {}",
+                                &user.pubkey[..16.min(user.pubkey.len())]
+                            );
                             users.insert(user.pubkey.clone(), user);
                             restored_count += 1;
                         } else {
-                            debug!("[NostrService] Skipping expired session for user: {}",
-                                   &key[redis_keys::USER_DATA.len()..]);
+                            debug!(
+                                "[NostrService] Skipping expired session for user: {}",
+                                &key[redis_keys::USER_DATA.len()..]
+                            );
                         }
                     }
                     Err(e) => {
-                        warn!("[NostrService] Failed to deserialize user from Redis: {}", e);
+                        warn!(
+                            "[NostrService] Failed to deserialize user from Redis: {}",
+                            e
+                        );
                     }
                 }
             }
         }
 
-        info!("[NostrService] Restored {} active sessions from Redis", restored_count);
+        info!(
+            "[NostrService] Restored {} active sessions from Redis",
+            restored_count
+        );
         Ok(restored_count)
     }
 
@@ -239,7 +251,10 @@ impl NostrService {
         let mut conn = match client.get_multiplexed_async_connection().await {
             Ok(c) => c,
             Err(e) => {
-                warn!("[NostrService] Failed to get Redis connection for session persist: {}", e);
+                warn!(
+                    "[NostrService] Failed to get Redis connection for session persist: {}",
+                    e
+                );
                 return;
             }
         };
@@ -256,7 +271,10 @@ impl NostrService {
 
         // Store user data with TTL
         let user_key = format!("{}{}", redis_keys::USER_DATA, user.pubkey);
-        if let Err(e) = conn.set_ex::<_, _, ()>(&user_key, &user_json, ttl_secs).await {
+        if let Err(e) = conn
+            .set_ex::<_, _, ()>(&user_key, &user_json, ttl_secs)
+            .await
+        {
             warn!("[NostrService] Failed to store user data in Redis: {}", e);
             return;
         }
@@ -264,19 +282,30 @@ impl NostrService {
         // Store session token -> pubkey mapping for token lookups
         if let Some(ref token) = user.session_token {
             let token_key = format!("{}{}", redis_keys::SESSION_TOKEN, token);
-            if let Err(e) = conn.set_ex::<_, _, ()>(&token_key, &user.pubkey, ttl_secs).await {
-                warn!("[NostrService] Failed to store session token in Redis: {}", e);
+            if let Err(e) = conn
+                .set_ex::<_, _, ()>(&token_key, &user.pubkey, ttl_secs)
+                .await
+            {
+                warn!(
+                    "[NostrService] Failed to store session token in Redis: {}",
+                    e
+                );
             }
 
             // Store pubkey -> session token for reverse lookups
             let session_key = format!("{}{}", redis_keys::USER_SESSION, user.pubkey);
             if let Err(e) = conn.set_ex::<_, _, ()>(&session_key, token, ttl_secs).await {
-                warn!("[NostrService] Failed to store user session mapping in Redis: {}", e);
+                warn!(
+                    "[NostrService] Failed to store user session mapping in Redis: {}",
+                    e
+                );
             }
         }
 
-        debug!("[NostrService] Persisted session to Redis for user: {}",
-               &user.pubkey[..16.min(user.pubkey.len())]);
+        debug!(
+            "[NostrService] Persisted session to Redis for user: {}",
+            &user.pubkey[..16.min(user.pubkey.len())]
+        );
     }
 
     /// Remove session from Redis
@@ -290,7 +319,10 @@ impl NostrService {
         let mut conn = match client.get_multiplexed_async_connection().await {
             Ok(c) => c,
             Err(e) => {
-                warn!("[NostrService] Failed to get Redis connection for session removal: {}", e);
+                warn!(
+                    "[NostrService] Failed to get Redis connection for session removal: {}",
+                    e
+                );
                 return;
             }
         };
@@ -309,8 +341,10 @@ impl NostrService {
         let session_key = format!("{}{}", redis_keys::USER_SESSION, pubkey);
         let _: Result<(), _> = conn.del(&session_key).await;
 
-        debug!("[NostrService] Removed session from Redis for user: {}",
-               &pubkey[..16.min(pubkey.len())]);
+        debug!(
+            "[NostrService] Removed session from Redis for user: {}",
+            &pubkey[..16.min(pubkey.len())]
+        );
     }
 
     /// Check if Redis is available for session persistence
@@ -325,8 +359,6 @@ impl NostrService {
     }
 
     pub async fn verify_auth_event(&self, event: AuthEvent) -> Result<NostrUser, NostrError> {
-        
-        
         debug!(
             "Verifying auth event with id: {} and pubkey: {}",
             event.id, event.pubkey
@@ -336,7 +368,9 @@ impl NostrService {
             Ok(s) => s,
             Err(e) => {
                 error!("Failed to serialize auth event with id {}: {}", event.id, e);
-                return Err(NostrError::JsonError(serde_json::Error::io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))));
+                return Err(NostrError::JsonError(serde_json::Error::io(
+                    std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
+                )));
             }
         };
 
@@ -371,7 +405,6 @@ impl NostrService {
             return Err(NostrError::InvalidSignature);
         }
 
-        
         let mut feature_access = self.feature_access.write().await;
         if feature_access.register_new_user(&event.pubkey) {
             info!("Registered new user with basic access: {}", event.pubkey);
@@ -380,7 +413,6 @@ impl NostrService {
         let now = time::now();
         let is_power_user = self.power_user_pubkeys.contains(&event.pubkey);
 
-        
         let session_token = Uuid::new_v4().to_string();
 
         let user = NostrUser {
@@ -497,7 +529,8 @@ impl NostrService {
 
             // Remove session from Redis
             #[cfg(feature = "redis")]
-            self.remove_session_from_redis(pubkey, old_token.as_deref()).await;
+            self.remove_session_from_redis(pubkey, old_token.as_deref())
+                .await;
 
             Ok(())
         } else {
@@ -527,10 +560,9 @@ impl NostrService {
     pub async fn get_session(&self, token: &str) -> Option<NostrUser> {
         let users = self.users.read().await;
         let token_string = token.to_string();
-        users.values()
-            .find(|user| {
-                user.session_token.as_ref() == Some(&token_string)
-            })
+        users
+            .values()
+            .find(|user| user.session_token.as_ref() == Some(&token_string))
             .cloned()
     }
 
@@ -568,7 +600,9 @@ impl NostrService {
         );
 
         // Get or create the user
-        let user = self.get_or_create_user_from_pubkey(&validation.pubkey).await?;
+        let user = self
+            .get_or_create_user_from_pubkey(&validation.pubkey)
+            .await?;
 
         info!(
             "NIP-98 auth successful for pubkey: {}, is_power_user: {}",
@@ -601,7 +635,10 @@ impl NostrService {
         // Register new user with feature access
         let mut feature_access = self.feature_access.write().await;
         if feature_access.register_new_user(pubkey) {
-            info!("Registered new user via NIP-98 with basic access: {}", pubkey);
+            info!(
+                "Registered new user via NIP-98 with basic access: {}",
+                pubkey
+            );
         }
         drop(feature_access);
 

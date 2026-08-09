@@ -15,9 +15,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use fastwebsockets::{
-    Frame, FragmentCollector, OpCode, Payload, WebSocket, WebSocketError,
-};
+use fastwebsockets::{FragmentCollector, Frame, OpCode, Payload, WebSocket, WebSocketError};
 use http_body_util::Empty;
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
@@ -33,9 +31,7 @@ use crate::app_state::AppState;
 use crate::utils::binary_protocol;
 use crate::utils::socket_flow_messages::BinaryNodeData;
 
-use super::quic_transport_handler::{
-    PostcardBatchUpdate, PostcardNodeUpdate,
-};
+use super::quic_transport_handler::{PostcardBatchUpdate, PostcardNodeUpdate};
 
 // ============================================================================
 // FASTWEBSOCKET SERVER
@@ -102,7 +98,10 @@ impl FastWebSocketServer {
     /// Start the FastWebSocket server
     pub async fn start(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let listener = TcpListener::bind(self.config.bind_addr).await?;
-        info!("FastWebSocket server listening on {}", self.config.bind_addr);
+        info!(
+            "FastWebSocket server listening on {}",
+            self.config.bind_addr
+        );
 
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
@@ -159,9 +158,7 @@ impl FastWebSocketServer {
         // Hyper service for HTTP upgrade
         let service = service_fn(move |req: Request<Incoming>| {
             let broadcast_tx = broadcast_for_service.clone();
-            async move {
-                Self::upgrade_handler(req, broadcast_tx).await
-            }
+            async move { Self::upgrade_handler(req, broadcast_tx).await }
         });
 
         let io = TokioIo::new(stream);
@@ -185,8 +182,9 @@ impl FastWebSocketServer {
         // SECURITY: Validate Origin header to prevent cross-site WebSocket hijacking
         if let Some(origin) = req.headers().get("origin") {
             let origin_str = origin.to_str().unwrap_or("");
-            let allowed_origins = std::env::var("ALLOWED_WS_ORIGINS")
-                .unwrap_or_else(|_| "http://localhost,https://localhost,http://127.0.0.1,https://127.0.0.1".to_string());
+            let allowed_origins = std::env::var("ALLOWED_WS_ORIGINS").unwrap_or_else(|_| {
+                "http://localhost,https://localhost,http://127.0.0.1,https://127.0.0.1".to_string()
+            });
             let is_allowed = allowed_origins
                 .split(',')
                 .any(|allowed| origin_str.starts_with(allowed.trim()));
@@ -194,7 +192,11 @@ impl FastWebSocketServer {
             // Also allow same-host origins (proxied through nginx in Docker)
             // Nginx $host strips port, so compare hostnames only
             let is_same_host = if !is_allowed {
-                if let Some(host) = req.headers().get("host").or_else(|| req.headers().get("x-forwarded-host")) {
+                if let Some(host) = req
+                    .headers()
+                    .get("host")
+                    .or_else(|| req.headers().get("x-forwarded-host"))
+                {
                     let host_str = host.to_str().unwrap_or("");
                     let origin_host = origin_str
                         .strip_prefix("http://")
@@ -202,7 +204,9 @@ impl FastWebSocketServer {
                         .unwrap_or("");
                     let host_no_port = host_str.split(':').next().unwrap_or("");
                     let origin_no_port = origin_host.split(':').next().unwrap_or("");
-                    !host_no_port.is_empty() && !origin_no_port.is_empty() && origin_no_port == host_no_port
+                    !host_no_port.is_empty()
+                        && !origin_no_port.is_empty()
+                        && origin_no_port == host_no_port
                 } else {
                     false
                 }
@@ -237,7 +241,9 @@ impl FastWebSocketServer {
             });
 
         if token.as_deref().unwrap_or("").is_empty() {
-            warn!("SECURITY: Rejected unauthenticated WebSocket upgrade on fastwebsockets endpoint");
+            warn!(
+                "SECURITY: Rejected unauthenticated WebSocket upgrade on fastwebsockets endpoint"
+            );
             let mut resp = Response::new(Empty::new());
             *resp.status_mut() = hyper::StatusCode::UNAUTHORIZED;
             return Ok(resp);
@@ -461,7 +467,11 @@ impl StandaloneFastWsHandler {
                 let analytics_ref = analytics.as_deref();
                 let sssp = self.app_state.node_sssp.read().ok();
                 let sssp_ref = sssp.as_deref();
-                binary_protocol::encode_node_data_with_live_analytics(nodes, analytics_ref, sssp_ref)
+                binary_protocol::encode_node_data_with_live_analytics(
+                    nodes,
+                    analytics_ref,
+                    sssp_ref,
+                )
             })
         } else {
             let analytics = self.app_state.node_analytics.read().ok();
@@ -522,7 +532,6 @@ pub fn negotiate_protocol(client_capabilities: &[String]) -> NegotiatedProtocol 
             protocol: TransportProtocol::QuicWebTransport,
             serialization: SerializationFormat::Postcard,
             supports_datagrams: true,
-
         };
     }
 
@@ -532,7 +541,6 @@ pub fn negotiate_protocol(client_capabilities: &[String]) -> NegotiatedProtocol 
             protocol: TransportProtocol::FastWebSocketPostcard,
             serialization: SerializationFormat::Postcard,
             supports_datagrams: false,
-
         };
     }
 

@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::services::natural_language_query_service::{
-    NaturalLanguageQueryService, QueryTranslation as CypherTranslation, QueryPatterns
+    NaturalLanguageQueryService, QueryPatterns, QueryTranslation as CypherTranslation,
 };
 
 // Response macros
-use crate::{ok_json, error_json};
+use crate::{error_json, ok_json};
 
 /// Natural language query request
 #[derive(Debug, Deserialize, Serialize)]
@@ -98,7 +98,8 @@ pub async fn translate_query(
         nl_service.suggest_queries(&request.query).await
     } else {
         // Get single best translation
-        nl_service.translate_to_cypher(&request.query)
+        nl_service
+            .translate_to_cypher(&request.query)
             .await
             .map(|t| vec![t])
     };
@@ -235,6 +236,6 @@ pub fn configure_nl_query_routes(cfg: &mut web::ServiceConfig) {
             .route("/translate", web::post().to(translate_query))
             .route("/examples", web::get().to(get_examples))
             .route("/explain", web::post().to(explain_cypher))
-            .route("/validate", web::post().to(validate_cypher))
+            .route("/validate", web::post().to(validate_cypher)),
     );
 }

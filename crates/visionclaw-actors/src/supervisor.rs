@@ -3,31 +3,30 @@
 //! This module provides supervision trees that can restart failed actors
 //! and implement exponential backoff retry strategies.
 
-#[cfg(test)]
-use visionclaw_domain::errors::ActorError;
-use visionclaw_domain::errors::VisionClawError;
 use actix::prelude::*;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+#[cfg(test)]
+use visionclaw_domain::errors::ActorError;
+use visionclaw_domain::errors::VisionClawError;
 
 use visionclaw_domain::utils::time;
 
 #[derive(Debug, Clone)]
 pub enum SupervisionStrategy {
-    
     Restart,
-    
+
     RestartWithBackoff {
         initial_delay: Duration,
         max_delay: Duration,
         multiplier: f64,
     },
-    
+
     Escalate,
-    
+
     Stop,
 }
 
@@ -141,7 +140,6 @@ impl SupervisorActor {
 
     #[allow(dead_code)]
     fn should_restart(&self, actor_name: &str, state: &ActorState) -> bool {
-        
         if state.restart_count >= state.actor_info.max_restart_count {
             if let Some(last_restart) = state.last_restart {
                 if last_restart.elapsed() < state.actor_info.restart_window {
@@ -153,7 +151,6 @@ impl SupervisorActor {
                     );
                     return false;
                 }
-                
             }
         }
         true
@@ -198,9 +195,6 @@ impl SupervisorActor {
             ctx.run_later(delay, move |_act, ctx| {
                 info!("Attempting to restart actor '{}'", actor_name_clone);
 
-                
-                
-                
                 ctx.notify(RestartAttempt {
                     actor_name: actor_name_clone,
                     supervisor_name,
@@ -303,10 +297,8 @@ impl Handler<ActorFailed> for SupervisorActor {
             state.is_running = false;
             let strategy = state.actor_info.strategy.clone();
 
-            
             let should_restart = match &strategy {
                 SupervisionStrategy::Restart | SupervisionStrategy::RestartWithBackoff { .. } => {
-                    
                     if state.restart_count >= state.actor_info.max_restart_count {
                         if let Some(last_restart) = state.last_restart {
                             if last_restart.elapsed() < state.actor_info.restart_window {
@@ -315,7 +307,6 @@ impl Handler<ActorFailed> for SupervisorActor {
                                       state.actor_info.restart_window);
                                 false
                             } else {
-                                
                                 state.restart_count = 0;
                                 true
                             }
@@ -329,7 +320,6 @@ impl Handler<ActorFailed> for SupervisorActor {
                 _ => false,
             };
 
-            
             match strategy {
                 SupervisionStrategy::Restart => {
                     if should_restart {
@@ -356,7 +346,6 @@ impl Handler<ActorFailed> for SupervisorActor {
                         "Escalating failure of actor '{}' to parent supervisor",
                         msg.actor_name
                     );
-                    
                 }
                 SupervisionStrategy::Stop => {
                     info!(
@@ -473,8 +462,6 @@ impl Handler<RestartAttempt> for SupervisorActor {
 // DEPRECATED: Voice command handler removed - uses legacy DockerHiveMind
 // Replace with TaskOrchestratorActor integration
 
-
-
 pub trait SupervisedActorTrait: Actor {
     fn actor_name() -> &'static str;
 
@@ -491,10 +478,9 @@ pub trait SupervisedActorTrait: Actor {
     }
 
     fn restart_window() -> Duration {
-        Duration::from_secs(300) 
+        Duration::from_secs(300)
     }
 
-    
     fn report_error(&self, supervisor: &Addr<SupervisorActor>, error: VisionClawError) {
         supervisor.do_send(ActorFailed {
             actor_name: Self::actor_name().to_string(),
@@ -507,7 +493,7 @@ pub trait SupervisedActorTrait: Actor {
 mod tests {
     use super::*;
     use tokio::time::sleep;
-use visionclaw_domain::utils::time;
+    use visionclaw_domain::utils::time;
 
     #[actix::test]
     async fn test_actor_registration() {
@@ -537,7 +523,6 @@ use visionclaw_domain::utils::time;
     async fn test_actor_failure_handling() {
         let supervisor = SupervisorActor::new("TestSupervisor".to_string()).start();
 
-
         let register_msg = RegisterActor {
             actor_name: "TestActor".to_string(),
             strategy: SupervisionStrategy::Restart,
@@ -548,7 +533,6 @@ use visionclaw_domain::utils::time;
 
         supervisor.send(register_msg).await.unwrap().unwrap();
 
-
         let failure_msg = ActorFailed {
             actor_name: "TestActor".to_string(),
             error: VisionClawError::Actor(ActorError::RuntimeFailure {
@@ -558,7 +542,6 @@ use visionclaw_domain::utils::time;
         };
 
         supervisor.send(failure_msg).await.unwrap();
-
 
         sleep(Duration::from_millis(100)).await;
 
@@ -574,67 +557,118 @@ use visionclaw_domain::utils::time;
     async fn actor_started_sets_running_true() {
         let supervisor = SupervisorActor::new("TestSupervisor".to_string()).start();
 
-        supervisor.send(RegisterActor {
-            actor_name: "alpha".to_string(),
-            strategy: SupervisionStrategy::Stop,
-            max_restart_count: 1,
-            restart_window: Duration::from_secs(10),
-            actor_factory: None,
-        }).await.unwrap().unwrap();
+        supervisor
+            .send(RegisterActor {
+                actor_name: "alpha".to_string(),
+                strategy: SupervisionStrategy::Stop,
+                max_restart_count: 1,
+                restart_window: Duration::from_secs(10),
+                actor_factory: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
 
         // Simulate a failure then a start notification.
-        supervisor.send(ActorFailed {
-            actor_name: "alpha".to_string(),
-            error: VisionClawError::Generic { message: "boom".to_string(), source: None },
-        }).await.unwrap();
+        supervisor
+            .send(ActorFailed {
+                actor_name: "alpha".to_string(),
+                error: VisionClawError::Generic {
+                    message: "boom".to_string(),
+                    source: None,
+                },
+            })
+            .await
+            .unwrap();
 
-        supervisor.send(ActorStarted { actor_name: "alpha".to_string() }).await.unwrap();
+        supervisor
+            .send(ActorStarted {
+                actor_name: "alpha".to_string(),
+            })
+            .await
+            .unwrap();
 
-        let status = supervisor.send(GetSupervisionStatus).await.unwrap().unwrap();
+        let status = supervisor
+            .send(GetSupervisionStatus)
+            .await
+            .unwrap()
+            .unwrap();
         let info = status.actors.iter().find(|a| a.name == "alpha").unwrap();
-        assert!(info.is_running, "Actor should be running after ActorStarted");
+        assert!(
+            info.is_running,
+            "Actor should be running after ActorStarted"
+        );
     }
 
     #[actix::test]
     async fn stop_strategy_does_not_restart_actor() {
         let supervisor = SupervisorActor::new("TestSupervisor".to_string()).start();
 
-        supervisor.send(RegisterActor {
-            actor_name: "beta".to_string(),
-            strategy: SupervisionStrategy::Stop,
-            max_restart_count: 5,
-            restart_window: Duration::from_secs(60),
-            actor_factory: None,
-        }).await.unwrap().unwrap();
+        supervisor
+            .send(RegisterActor {
+                actor_name: "beta".to_string(),
+                strategy: SupervisionStrategy::Stop,
+                max_restart_count: 5,
+                restart_window: Duration::from_secs(60),
+                actor_factory: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
 
-        supervisor.send(ActorFailed {
-            actor_name: "beta".to_string(),
-            error: VisionClawError::Generic { message: "done".to_string(), source: None },
-        }).await.unwrap();
+        supervisor
+            .send(ActorFailed {
+                actor_name: "beta".to_string(),
+                error: VisionClawError::Generic {
+                    message: "done".to_string(),
+                    source: None,
+                },
+            })
+            .await
+            .unwrap();
 
         sleep(Duration::from_millis(50)).await;
 
-        let status = supervisor.send(GetSupervisionStatus).await.unwrap().unwrap();
+        let status = supervisor
+            .send(GetSupervisionStatus)
+            .await
+            .unwrap()
+            .unwrap();
         let info = status.actors.iter().find(|a| a.name == "beta").unwrap();
-        assert!(!info.is_running, "Stop strategy must leave actor not running");
-        assert_eq!(info.restart_count, 0, "Stop strategy must not increment restart_count");
+        assert!(
+            !info.is_running,
+            "Stop strategy must leave actor not running"
+        );
+        assert_eq!(
+            info.restart_count, 0,
+            "Stop strategy must not increment restart_count"
+        );
     }
 
     #[actix::test]
     async fn drain_rejects_new_registrations() {
         let supervisor = SupervisorActor::new("DrainTest".to_string()).start();
 
-        supervisor.send(InitiateGracefulShutdown { timeout_secs: 60 }).await.unwrap();
+        supervisor
+            .send(InitiateGracefulShutdown { timeout_secs: 60 })
+            .await
+            .unwrap();
 
-        let result = supervisor.send(RegisterActor {
-            actor_name: "late-comer".to_string(),
-            strategy: SupervisionStrategy::Restart,
-            max_restart_count: 3,
-            restart_window: Duration::from_secs(30),
-            actor_factory: None,
-        }).await.unwrap();
+        let result = supervisor
+            .send(RegisterActor {
+                actor_name: "late-comer".to_string(),
+                strategy: SupervisionStrategy::Restart,
+                max_restart_count: 3,
+                restart_window: Duration::from_secs(30),
+                actor_factory: None,
+            })
+            .await
+            .unwrap();
 
-        assert!(result.is_err(), "Registration must be rejected while draining");
+        assert!(
+            result.is_err(),
+            "Registration must be rejected while draining"
+        );
     }
 
     #[actix::test]
@@ -652,22 +686,35 @@ use visionclaw_domain::utils::time;
 
         let supervisor = SupervisorActor::new("FactoryTest".to_string()).start();
 
-        supervisor.send(RegisterActor {
-            actor_name: "factory-actor".to_string(),
-            strategy: SupervisionStrategy::Restart,
-            max_restart_count: 3,
-            restart_window: Duration::from_secs(60),
-            actor_factory: Some(factory),
-        }).await.unwrap().unwrap();
+        supervisor
+            .send(RegisterActor {
+                actor_name: "factory-actor".to_string(),
+                strategy: SupervisionStrategy::Restart,
+                max_restart_count: 3,
+                restart_window: Duration::from_secs(60),
+                actor_factory: Some(factory),
+            })
+            .await
+            .unwrap()
+            .unwrap();
 
-        supervisor.send(ActorFailed {
-            actor_name: "factory-actor".to_string(),
-            error: VisionClawError::Generic { message: "oops".to_string(), source: None },
-        }).await.unwrap();
+        supervisor
+            .send(ActorFailed {
+                actor_name: "factory-actor".to_string(),
+                error: VisionClawError::Generic {
+                    message: "oops".to_string(),
+                    source: None,
+                },
+            })
+            .await
+            .unwrap();
 
         // Allow the run_later(0ms) restart to fire.
         sleep(Duration::from_millis(50)).await;
 
-        assert!(call_count.load(Ordering::SeqCst) >= 1, "Factory should have been called");
+        assert!(
+            call_count.load(Ordering::SeqCst) >= 1,
+            "Factory should have been called"
+        );
     }
 }

@@ -51,7 +51,8 @@ mod tests {
     #[test]
     fn graph_data_serde_roundtrip() {
         let mut g = GraphData::new();
-        g.nodes.push(super::super::node::Node::new("meta-1".to_string()));
+        g.nodes
+            .push(super::super::node::Node::new("meta-1".to_string()));
         let json = serde_json::to_string(&g).unwrap();
         let back: GraphData = serde_json::from_str(&json).unwrap();
         assert_eq!(back.nodes.len(), 1);
@@ -61,7 +62,8 @@ mod tests {
     #[test]
     fn graph_data_id_to_metadata_is_skipped_in_serde() {
         let mut g = GraphData::new();
-        g.id_to_metadata.insert("1".to_string(), "doc.md".to_string());
+        g.id_to_metadata
+            .insert("1".to_string(), "doc.md".to_string());
         let json = serde_json::to_string(&g).unwrap();
         // id_to_metadata has #[serde(skip)] so it must not appear in output
         assert!(!json.contains("id_to_metadata"));

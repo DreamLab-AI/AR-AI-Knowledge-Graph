@@ -95,7 +95,6 @@ impl NotificationEventHandler {
 #[async_trait]
 impl EventHandler for NotificationEventHandler {
     fn event_type(&self) -> &'static str {
-        
         "*"
     }
 
@@ -123,7 +122,7 @@ impl EventHandler for NotificationEventHandler {
     }
 
     fn max_retries(&self) -> u32 {
-        2 
+        2
     }
 }
 

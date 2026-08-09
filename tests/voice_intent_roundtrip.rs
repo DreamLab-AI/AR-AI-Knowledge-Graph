@@ -70,10 +70,7 @@ fn spawn_fake_server(
                 }
                 let lower = trimmed.to_ascii_lowercase();
                 if lower.starts_with("authorization:") {
-                    authorization = trimmed
-                        .splitn(2, ':')
-                        .nth(1)
-                        .map(|v| v.trim().to_string());
+                    authorization = trimmed.splitn(2, ':').nth(1).map(|v| v.trim().to_string());
                 } else if let Some(v) = lower.strip_prefix("content-length:") {
                     content_length = v.trim().parse().unwrap_or(0);
                 }
@@ -137,21 +134,39 @@ async fn dispatch_signs_targets_and_is_accepted() {
     // AC3 precondition: the ack the Kokoro path would speak names the agent and
     // the recognised intent.
     let ack = ack_sentence(&accepted, DID);
-    assert!(ack.contains("nostr:aaaa"), "ack names the target agent: {ack}");
-    assert!(ack.contains("query"), "ack names the understood verb: {ack}");
+    assert!(
+        ack.contains("nostr:aaaa"),
+        "ack names the target agent: {ack}"
+    );
+    assert!(
+        ack.contains("query"),
+        "ack names the understood verb: {ack}"
+    );
     assert!(ack.contains("budget node"), "ack names the subject: {ack}");
 
     // The wire carried the D7 contract exactly.
     let reqs = captured.lock().unwrap();
     assert_eq!(reqs.len(), 1, "exactly one dispatch reached the producer");
     let req = &reqs[0];
-    let auth = req.authorization.as_deref().expect("Authorization header present");
-    assert!(auth.starts_with("Nostr "), "mandate is a NIP-98 header: {auth}");
+    let auth = req
+        .authorization
+        .as_deref()
+        .expect("Authorization header present");
+    assert!(
+        auth.starts_with("Nostr "),
+        "mandate is a NIP-98 header: {auth}"
+    );
 
     let body: serde_json::Value = serde_json::from_str(&req.body).expect("body is JSON");
-    assert_eq!(body["actor_did"], DID, "D7 additive actor_did carried the target");
+    assert_eq!(
+        body["actor_did"], DID,
+        "D7 additive actor_did carried the target"
+    );
     assert_eq!(body["transcript"], "find the budget node");
-    assert_eq!(body["actor"], "desktop", "the optional human label is preserved");
+    assert_eq!(
+        body["actor"], "desktop",
+        "the optional human label is preserved"
+    );
     // The signed kind-31402 rides the wire (PRD-023 WP-5 AC2).
     assert_eq!(body["signed_action"]["kind"], 31402);
     assert_eq!(body["signed_action"]["target_did"], DID);

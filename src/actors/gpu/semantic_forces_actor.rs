@@ -11,9 +11,8 @@ use super::shared::{GPUState, SharedGPUContext};
 
 // Re-export message types for handlers
 pub use crate::actors::messages::{
-    ConfigureCollision, ConfigureDAG, ConfigureTypeClustering,
-    GetHierarchyLevels, GetSemanticConfig, RecalculateHierarchy,
-    ReloadRelationshipBuffer, SetSharedGPUContext,
+    ConfigureCollision, ConfigureDAG, ConfigureTypeClustering, GetHierarchyLevels,
+    GetSemanticConfig, RecalculateHierarchy, ReloadRelationshipBuffer, SetSharedGPUContext,
 };
 
 // =============================================================================
@@ -30,12 +29,12 @@ pub use crate::actors::messages::{
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct DAGConfigGPU {
-    vertical_spacing: f32,    // 4 bytes, offset 0
-    horizontal_spacing: f32,  // 4 bytes, offset 4
-    level_attraction: f32,    // 4 bytes, offset 8
-    sibling_repulsion: f32,   // 4 bytes, offset 12
-    enabled: bool,            // 1 byte,  offset 16
-    _pad: [u8; 3],            // 3 bytes padding to align to 4 bytes
+    vertical_spacing: f32,   // 4 bytes, offset 0
+    horizontal_spacing: f32, // 4 bytes, offset 4
+    level_attraction: f32,   // 4 bytes, offset 8
+    sibling_repulsion: f32,  // 4 bytes, offset 12
+    enabled: bool,           // 1 byte,  offset 16
+    _pad: [u8; 3],           // 3 bytes padding to align to 4 bytes
 }
 // Expected size: 20 bytes (5 * 4-byte aligned fields)
 
@@ -64,12 +63,12 @@ struct CollisionConfigGPU {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct AttributeSpringConfigGPU {
-    base_spring_k: f32,      // 4 bytes, offset 0
-    weight_multiplier: f32,  // 4 bytes, offset 4
-    rest_length_min: f32,    // 4 bytes, offset 8
-    rest_length_max: f32,    // 4 bytes, offset 12
-    enabled: bool,           // 1 byte,  offset 16
-    _pad: [u8; 3],           // 3 bytes padding to align to 4 bytes
+    base_spring_k: f32,     // 4 bytes, offset 0
+    weight_multiplier: f32, // 4 bytes, offset 4
+    rest_length_min: f32,   // 4 bytes, offset 8
+    rest_length_max: f32,   // 4 bytes, offset 12
+    enabled: bool,          // 1 byte,  offset 16
+    _pad: [u8; 3],          // 3 bytes padding to align to 4 bytes
 }
 // Expected size: 20 bytes (5 * 4-byte aligned fields)
 
@@ -92,60 +91,60 @@ struct OntologyRelationshipConfigGPU {
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct PhysicalityClusterConfigGPU {
-    cluster_attraction: f32,           // 4 bytes, offset 0
-    cluster_radius: f32,               // 4 bytes, offset 4
-    inter_physicality_repulsion: f32,  // 4 bytes, offset 8
-    enabled: bool,                     // 1 byte,  offset 12
-    _pad: [u8; 3],                     // 3 bytes padding to align to 4 bytes
+    cluster_attraction: f32,          // 4 bytes, offset 0
+    cluster_radius: f32,              // 4 bytes, offset 4
+    inter_physicality_repulsion: f32, // 4 bytes, offset 8
+    enabled: bool,                    // 1 byte,  offset 12
+    _pad: [u8; 3],                    // 3 bytes padding to align to 4 bytes
 }
 // Expected size: 16 bytes (4 * 4-byte aligned fields)
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct RoleClusterConfigGPU {
-    cluster_attraction: f32,     // 4 bytes, offset 0
-    cluster_radius: f32,         // 4 bytes, offset 4
-    inter_role_repulsion: f32,   // 4 bytes, offset 8
-    enabled: bool,               // 1 byte,  offset 12
-    _pad: [u8; 3],               // 3 bytes padding to align to 4 bytes
+    cluster_attraction: f32,   // 4 bytes, offset 0
+    cluster_radius: f32,       // 4 bytes, offset 4
+    inter_role_repulsion: f32, // 4 bytes, offset 8
+    enabled: bool,             // 1 byte,  offset 12
+    _pad: [u8; 3],             // 3 bytes padding to align to 4 bytes
 }
 // Expected size: 16 bytes (4 * 4-byte aligned fields)
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct MaturityLayoutConfigGPU {
-    vertical_spacing: f32,   // 4 bytes, offset 0
-    level_attraction: f32,   // 4 bytes, offset 4
-    stage_separation: f32,   // 4 bytes, offset 8
-    enabled: bool,           // 1 byte,  offset 12
-    _pad: [u8; 3],           // 3 bytes padding to align to 4 bytes
+    vertical_spacing: f32, // 4 bytes, offset 0
+    level_attraction: f32, // 4 bytes, offset 4
+    stage_separation: f32, // 4 bytes, offset 8
+    enabled: bool,         // 1 byte,  offset 12
+    _pad: [u8; 3],         // 3 bytes padding to align to 4 bytes
 }
 // Expected size: 16 bytes (4 * 4-byte aligned fields)
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct CrossDomainConfigGPU {
-    base_strength: f32,          // 4 bytes, offset 0
-    link_count_multiplier: f32,  // 4 bytes, offset 4
-    max_strength_boost: f32,     // 4 bytes, offset 8
-    rest_length: f32,            // 4 bytes, offset 12
-    enabled: bool,               // 1 byte,  offset 16
-    _pad: [u8; 3],               // 3 bytes padding to align to 4 bytes
+    base_strength: f32,         // 4 bytes, offset 0
+    link_count_multiplier: f32, // 4 bytes, offset 4
+    max_strength_boost: f32,    // 4 bytes, offset 8
+    rest_length: f32,           // 4 bytes, offset 12
+    enabled: bool,              // 1 byte,  offset 16
+    _pad: [u8; 3],              // 3 bytes padding to align to 4 bytes
 }
 // Expected size: 20 bytes (5 * 4-byte aligned fields)
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct SemanticConfigGPU {
-    dag: DAGConfigGPU,                                // 20 bytes, offset 0
-    type_cluster: TypeClusterConfigGPU,               // 16 bytes, offset 20
-    collision: CollisionConfigGPU,                    // 16 bytes, offset 36
-    attribute_spring: AttributeSpringConfigGPU,       // 20 bytes, offset 52
+    dag: DAGConfigGPU,                                    // 20 bytes, offset 0
+    type_cluster: TypeClusterConfigGPU,                   // 16 bytes, offset 20
+    collision: CollisionConfigGPU,                        // 16 bytes, offset 36
+    attribute_spring: AttributeSpringConfigGPU,           // 20 bytes, offset 52
     ontology_relationship: OntologyRelationshipConfigGPU, // 36 bytes, offset 72
-    physicality_cluster: PhysicalityClusterConfigGPU, // 16 bytes, offset 108
-    role_cluster: RoleClusterConfigGPU,               // 16 bytes, offset 124
-    maturity_layout: MaturityLayoutConfigGPU,         // 16 bytes, offset 140
-    cross_domain: CrossDomainConfigGPU,               // 20 bytes, offset 156
+    physicality_cluster: PhysicalityClusterConfigGPU,     // 16 bytes, offset 108
+    role_cluster: RoleClusterConfigGPU,                   // 16 bytes, offset 124
+    maturity_layout: MaturityLayoutConfigGPU,             // 16 bytes, offset 140
+    cross_domain: CrossDomainConfigGPU,                   // 20 bytes, offset 156
 }
 // Expected size: 176 bytes
 
@@ -189,10 +188,10 @@ const_assert_eq!(std::mem::align_of::<DynamicForceConfigGPU>(), 4);
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct DynamicForceConfigGPU {
-    pub strength: f32,        // Spring strength (can be negative for repulsion)
-    pub rest_length: f32,     // Rest length for spring calculations
-    pub is_directional: i32,  // 1 = directional, 0 = bidirectional
-    pub force_type: u32,      // Force behavior type (0=spring, 1=orbit, 2=cross-domain, 3=repulsion)
+    pub strength: f32,       // Spring strength (can be negative for repulsion)
+    pub rest_length: f32,    // Rest length for spring calculations
+    pub is_directional: i32, // 1 = directional, 0 = bidirectional
+    pub force_type: u32,     // Force behavior type (0=spring, 1=orbit, 2=cross-domain, 3=repulsion)
 }
 
 impl Default for DynamicForceConfigGPU {
@@ -326,10 +325,7 @@ extern "C" {
     );
 
     /// Finalize role centroids (divide by count)
-    fn finalize_role_centroids(
-        role_centroids: *mut Float3,
-        role_counts: *const i32,
-    );
+    fn finalize_role_centroids(role_centroids: *mut Float3, role_counts: *const i32);
 }
 
 // Import the kernel bridge for safe access to gated FFI functions
@@ -338,10 +334,10 @@ use crate::gpu::kernel_bridge;
 /// DAG layout configuration matching GPU kernel structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DAGConfig {
-    pub vertical_spacing: f32,      // Vertical separation between hierarchy levels
-    pub horizontal_spacing: f32,    // Minimum horizontal separation within a level
-    pub level_attraction: f32,      // Strength of attraction to target level
-    pub sibling_repulsion: f32,     // Repulsion between nodes at same level
+    pub vertical_spacing: f32,   // Vertical separation between hierarchy levels
+    pub horizontal_spacing: f32, // Minimum horizontal separation within a level
+    pub level_attraction: f32,   // Strength of attraction to target level
+    pub sibling_repulsion: f32,  // Repulsion between nodes at same level
     pub enabled: bool,
     pub layout_mode: DAGLayoutMode,
 }
@@ -349,9 +345,9 @@ pub struct DAGConfig {
 /// DAG layout modes for different visual hierarchies
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DAGLayoutMode {
-    TopDown,      // Traditional top-down hierarchy
-    Radial,       // Radial/circular hierarchy
-    LeftRight,    // Left-to-right hierarchy
+    TopDown,   // Traditional top-down hierarchy
+    Radial,    // Radial/circular hierarchy
+    LeftRight, // Left-to-right hierarchy
 }
 
 impl Default for DAGConfig {
@@ -370,8 +366,8 @@ impl Default for DAGConfig {
 /// Type clustering configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeClusterConfig {
-    pub cluster_attraction: f32,    // Attraction between nodes of same type
-    pub cluster_radius: f32,        // Target radius for type clusters
+    pub cluster_attraction: f32,      // Attraction between nodes of same type
+    pub cluster_radius: f32,          // Target radius for type clusters
     pub inter_cluster_repulsion: f32, // Repulsion between different type clusters
     pub enabled: bool,
 }
@@ -390,9 +386,9 @@ impl Default for TypeClusterConfig {
 /// Collision detection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollisionConfig {
-    pub min_distance: f32,          // Minimum allowed distance between nodes
-    pub collision_strength: f32,    // Force strength when colliding
-    pub node_radius: f32,           // Default node radius
+    pub min_distance: f32,       // Minimum allowed distance between nodes
+    pub collision_strength: f32, // Force strength when colliding
+    pub node_radius: f32,        // Default node radius
     pub enabled: bool,
 }
 
@@ -410,10 +406,10 @@ impl Default for CollisionConfig {
 /// Attribute-weighted spring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttributeSpringConfig {
-    pub base_spring_k: f32,         // Base spring constant
-    pub weight_multiplier: f32,     // Multiplier for edge weight influence
-    pub rest_length_min: f32,       // Minimum rest length
-    pub rest_length_max: f32,       // Maximum rest length
+    pub base_spring_k: f32,     // Base spring constant
+    pub weight_multiplier: f32, // Multiplier for edge weight influence
+    pub rest_length_min: f32,   // Minimum rest length
+    pub rest_length_max: f32,   // Maximum rest length
     pub enabled: bool,
 }
 
@@ -452,16 +448,16 @@ impl Default for SemanticConfig {
 /// Node hierarchy level assignment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HierarchyLevels {
-    pub node_levels: Vec<i32>,      // Hierarchy level for each node (-1 = not in DAG)
-    pub max_level: i32,             // Maximum hierarchy level
-    pub level_counts: Vec<usize>,   // Number of nodes at each level
+    pub node_levels: Vec<i32>, // Hierarchy level for each node (-1 = not in DAG)
+    pub max_level: i32,        // Maximum hierarchy level
+    pub level_counts: Vec<usize>, // Number of nodes at each level
 }
 
 /// Type centroid positions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeCentroids {
-    pub centroids: Vec<(f32, f32, f32)>,  // Centroid position for each type
-    pub type_counts: Vec<usize>,          // Number of nodes of each type
+    pub centroids: Vec<(f32, f32, f32)>, // Centroid position for each type
+    pub type_counts: Vec<usize>,         // Number of nodes of each type
 }
 
 /// Semantic Forces Actor - manages semantic layout forces
@@ -601,10 +597,14 @@ impl SemanticForcesActor {
         num_nodes: usize,
         num_edges: usize,
     ) -> Result<HierarchyLevels, String> {
-        info!("SemanticForcesActor: Calculating hierarchy levels for {} nodes, {} edges",
-              num_nodes, num_edges);
+        info!(
+            "SemanticForcesActor: Calculating hierarchy levels for {} nodes, {} edges",
+            num_nodes, num_edges
+        );
 
-        let _shared_context = self.shared_context.as_ref()
+        let _shared_context = self
+            .shared_context
+            .as_ref()
             .ok_or("GPU context not initialized")?;
 
         // Initialize node levels to -1 (not in hierarchy)
@@ -613,7 +613,8 @@ impl SemanticForcesActor {
         // Find root nodes (nodes with no incoming hierarchy edges)
         let mut has_incoming_hierarchy = vec![false; num_nodes];
         for i in 0..self.edge_sources.len() {
-            if self.edge_types[i] == 2 { // Hierarchy edge type = 2
+            if self.edge_types[i] == 2 {
+                // Hierarchy edge type = 2
                 let target = self.edge_targets[i] as usize;
                 if target < num_nodes {
                     has_incoming_hierarchy[target] = true;
@@ -689,11 +690,23 @@ impl SemanticForcesActor {
 
         // Calculate type centroids via kernel bridge (GPU or CPU fallback)
         if self.shared_context.is_some() && num_nodes > 0 && !self.node_types.is_empty() {
-            let mut centroid_f3 = vec![kernel_bridge::Float3 { x: 0.0, y: 0.0, z: 0.0 }; self.num_types];
+            let mut centroid_f3 = vec![
+                kernel_bridge::Float3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0
+                };
+                self.num_types
+            ];
             let mut counts_i32 = vec![0i32; self.num_types];
 
-            let positions_f3: Vec<kernel_bridge::Float3> = positions.iter()
-                .map(|(x, y, z)| kernel_bridge::Float3 { x: *x, y: *y, z: *z })
+            let positions_f3: Vec<kernel_bridge::Float3> = positions
+                .iter()
+                .map(|(x, y, z)| kernel_bridge::Float3 {
+                    x: *x,
+                    y: *y,
+                    z: *z,
+                })
                 .collect();
 
             kernel_bridge::calculate_type_centroids(
@@ -705,18 +718,10 @@ impl SemanticForcesActor {
                 self.num_types,
             );
 
-            kernel_bridge::finalize_type_centroids(
-                &mut centroid_f3,
-                &counts_i32,
-                self.num_types,
-            );
+            kernel_bridge::finalize_type_centroids(&mut centroid_f3, &counts_i32, self.num_types);
 
-            centroids = centroid_f3.iter()
-                .map(|f3| (f3.x, f3.y, f3.z))
-                .collect();
-            type_counts = counts_i32.iter()
-                .map(|&c| c as usize)
-                .collect();
+            centroids = centroid_f3.iter().map(|f3| (f3.x, f3.y, f3.z)).collect();
+            type_counts = counts_i32.iter().map(|&c| c as usize).collect();
         }
 
         Ok(TypeCentroids {
@@ -762,7 +767,10 @@ impl Handler<ConfigureDAG> for SemanticForcesActor {
         if let Some(e) = msg.enabled {
             self.config.dag.enabled = e;
         }
-        info!("SemanticForcesActor: DAG config updated, enabled={}", self.config.dag.enabled);
+        info!(
+            "SemanticForcesActor: DAG config updated, enabled={}",
+            self.config.dag.enabled
+        );
         Ok(())
     }
 }
@@ -783,7 +791,10 @@ impl Handler<ConfigureTypeClustering> for SemanticForcesActor {
         if let Some(e) = msg.enabled {
             self.config.type_cluster.enabled = e;
         }
-        info!("SemanticForcesActor: Type clustering config updated, enabled={}", self.config.type_cluster.enabled);
+        info!(
+            "SemanticForcesActor: Type clustering config updated, enabled={}",
+            self.config.type_cluster.enabled
+        );
         Ok(())
     }
 }
@@ -804,7 +815,10 @@ impl Handler<ConfigureCollision> for SemanticForcesActor {
         if let Some(e) = msg.enabled {
             self.config.collision.enabled = e;
         }
-        info!("SemanticForcesActor: Collision config updated, enabled={}", self.config.collision.enabled);
+        info!(
+            "SemanticForcesActor: Collision config updated, enabled={}",
+            self.config.collision.enabled
+        );
         Ok(())
     }
 }

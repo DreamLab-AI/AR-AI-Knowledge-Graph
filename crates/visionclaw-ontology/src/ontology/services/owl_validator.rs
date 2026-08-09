@@ -124,7 +124,6 @@ pub struct OwlValidatorService {
 }
 
 impl OwlValidatorService {
-    
     pub fn new() -> Result<Self> {
         let mapping_toml = std::fs::read_to_string("ontology/mapping.toml")
             .context("Failed to read ontology/mapping.toml")?;
@@ -137,23 +136,19 @@ impl OwlValidatorService {
         })
     }
 
-    
     pub fn with_config(mapping_config: MappingConfig) -> Self {
         Self {
             mapping_config: Arc::new(mapping_config),
         }
     }
 
-    
     pub fn map_graph_to_rdf(&self, graph: &PropertyGraph) -> Result<Vec<RdfTriple>> {
         let mut triples = Vec::new();
 
-        
         for node in &graph.nodes {
             triples.extend(self.map_node_to_triples(node)?);
         }
 
-        
         for edge in &graph.edges {
             triples.extend(self.map_edge_to_triples(edge)?);
         }
@@ -161,17 +156,13 @@ impl OwlValidatorService {
         Ok(triples)
     }
 
-    
     fn map_node_to_triples(&self, node: &GraphNode) -> Result<Vec<RdfTriple>> {
         let mut triples = Vec::new();
 
-        
         let node_iri = self.generate_node_iri(node)?;
 
-        
         for label in &node.labels {
             if let Some(class_mapping) = self.mapping_config.class_mappings.get(label) {
-                
                 let owl_class_iri = self.expand_prefixed_iri(&class_mapping.owl_class)?;
                 triples.push(RdfTriple {
                     subject: node_iri.clone(),
@@ -182,7 +173,6 @@ impl OwlValidatorService {
                     language: None,
                 });
             } else {
-                
                 triples.push(RdfTriple {
                     subject: node_iri.clone(),
                     predicate: self.expand_prefixed_iri("rdf:type")?,
@@ -195,14 +185,12 @@ impl OwlValidatorService {
             }
         }
 
-        
         for (prop_name, prop_value) in &node.properties {
             if let Some(data_prop_mapping) =
                 self.mapping_config.data_property_mappings.get(prop_name)
             {
                 let prop_iri = self.expand_prefixed_iri(&data_prop_mapping.owl_property)?;
 
-                
                 let values = if let Some(arr) = prop_value.as_array() {
                     arr.iter().collect()
                 } else {
@@ -228,14 +216,12 @@ impl OwlValidatorService {
         Ok(triples)
     }
 
-    
     fn map_edge_to_triples(&self, edge: &GraphEdge) -> Result<Vec<RdfTriple>> {
         let mut triples = Vec::new();
 
         let source_iri = self.generate_node_iri_from_id(&edge.source)?;
         let target_iri = self.generate_node_iri_from_id(&edge.target)?;
 
-        
         if let Some(obj_prop_mapping) = self
             .mapping_config
             .object_property_mappings
@@ -252,7 +238,6 @@ impl OwlValidatorService {
                 language: None,
             });
 
-            
             if self.mapping_config.global.auto_generate_inverses {
                 if let Some(inverse_prop) = &obj_prop_mapping.owl_inverse_of {
                     let inverse_iri = self.expand_prefixed_iri(inverse_prop)?;
@@ -267,7 +252,6 @@ impl OwlValidatorService {
                 }
             }
         } else {
-            
             let default_prop =
                 self.expand_prefixed_iri(&self.mapping_config.defaults.default_edge_property)?;
             triples.push(RdfTriple {
@@ -280,7 +264,6 @@ impl OwlValidatorService {
             });
         }
 
-        
         for (prop_name, prop_value) in &edge.properties {
             if let Some(data_prop_mapping) =
                 self.mapping_config.data_property_mappings.get(prop_name)
@@ -305,9 +288,7 @@ impl OwlValidatorService {
         Ok(triples)
     }
 
-    
     fn generate_node_iri(&self, node: &GraphNode) -> Result<String> {
-        
         if let Some(label) = node.labels.first() {
             let label_lower = label.to_lowercase();
             if let Some(template) = self.mapping_config.iri_templates.nodes.get(&label_lower) {
@@ -315,14 +296,12 @@ impl OwlValidatorService {
             }
         }
 
-        
         Ok(format!(
             "{}{}",
             self.mapping_config.global.base_iri, node.id
         ))
     }
 
-    
     fn generate_node_iri_from_id(&self, node_id: &str) -> Result<String> {
         Ok(format!(
             "{}{}",
@@ -330,7 +309,6 @@ impl OwlValidatorService {
         ))
     }
 
-    
     fn generate_edge_iri(&self, edge: &GraphEdge) -> Result<String> {
         let rel_type_lower = edge.relationship_type.to_lowercase();
         if let Some(template) = self.mapping_config.iri_templates.edges.get(&rel_type_lower) {
@@ -341,21 +319,18 @@ impl OwlValidatorService {
             return Ok(template_str);
         }
 
-        
         Ok(format!(
             "{}edge/{}",
             self.mapping_config.global.base_iri, edge.id
         ))
     }
 
-    
     fn apply_template(&self, template: &str, node_id: &str, _node: &GraphNode) -> Result<String> {
         let mut result = template.to_string();
 
         result = result.replace("{base_iri}", &self.mapping_config.global.base_iri);
         result = result.replace("{id}", node_id);
 
-        
         if result.contains("{hash}") || result.contains("{path_hash}") {
             let hash = self.calculate_hash(node_id);
             result = result.replace("{hash}", &hash);
@@ -365,25 +340,22 @@ impl OwlValidatorService {
         Ok(result)
     }
 
-    
     fn calculate_hash(&self, input: &str) -> String {
         use blake3::Hasher;
         let mut hasher = Hasher::new();
         hasher.update(input.as_bytes());
         let hash = hasher.finalize();
-        hash.to_hex()[..16].to_string() 
+        hash.to_hex()[..16].to_string()
     }
 
-    
     fn expand_prefixed_iri(&self, prefixed: &str) -> Result<String> {
         if prefixed.contains("://") {
-            
             return Ok(prefixed.to_string());
         }
 
         if let Some(colon_pos) = prefixed.find(':') {
             let (prefix, local) = prefixed.split_at(colon_pos);
-            let local = &local[1..]; 
+            let local = &local[1..];
 
             if let Some(namespace) = self.mapping_config.namespaces.get(prefix) {
                 return Ok(format!("{}{}", namespace, local));
@@ -392,14 +364,12 @@ impl OwlValidatorService {
             }
         }
 
-        
         Ok(format!(
             "{}{}",
             self.mapping_config.global.default_vocabulary, prefixed
         ))
     }
 
-    
     fn serialize_literal_value(
         &self,
         value: &serde_json::Value,
@@ -409,12 +379,10 @@ impl OwlValidatorService {
 
         match value {
             serde_json::Value::String(s) => {
-                
                 if s.starts_with("http://") || s.starts_with("https://") {
                     return Ok((s.clone(), full_range_iri));
                 }
 
-                
                 if s.contains('T') && (s.contains('Z') || s.contains('+') || s.contains('-')) {
                     if expected_range == "xsd:dateTime" {
                         return Ok((s.clone(), self.expand_prefixed_iri("xsd:dateTime")?));
@@ -438,22 +406,15 @@ impl OwlValidatorService {
             serde_json::Value::Bool(b) => {
                 Ok((b.to_string(), self.expand_prefixed_iri("xsd:boolean")?))
             }
-            _ => {
-                
-                Ok((value.to_string(), full_range_iri))
-            }
+            _ => Ok((value.to_string(), full_range_iri)),
         }
     }
 
-    
     pub fn run_consistency_checks(&self) -> Result<()> {
-        
         Ok(())
     }
 
-    
     pub fn perform_inference(&self) -> Result<()> {
-        
         Ok(())
     }
 }
@@ -461,13 +422,28 @@ impl OwlValidatorService {
 impl Default for OwlValidatorService {
     fn default() -> Self {
         Self::new().unwrap_or_else(|e| {
-            log::warn!("Failed to load mapping config: {}. Using minimal fallback.", e);
+            log::warn!(
+                "Failed to load mapping config: {}. Using minimal fallback.",
+                e
+            );
             // Create minimal config with essential namespaces
             let mut namespaces = std::collections::HashMap::new();
-            namespaces.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-            namespaces.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-            namespaces.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-            namespaces.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+            namespaces.insert(
+                "rdf".to_string(),
+                "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+            );
+            namespaces.insert(
+                "rdfs".to_string(),
+                "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+            );
+            namespaces.insert(
+                "owl".to_string(),
+                "http://www.w3.org/2002/07/owl#".to_string(),
+            );
+            namespaces.insert(
+                "xsd".to_string(),
+                "http://www.w3.org/2001/XMLSchema#".to_string(),
+            );
 
             let minimal_config = MappingConfig {
                 metadata: MappingMetadata {
@@ -517,71 +493,101 @@ mod tests {
 
     fn create_test_config() -> MappingConfig {
         let mut namespaces = HashMap::new();
-        namespaces.insert("rdf".to_string(), "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string());
-        namespaces.insert("rdfs".to_string(), "http://www.w3.org/2000/01/rdf-schema#".to_string());
-        namespaces.insert("owl".to_string(), "http://www.w3.org/2002/07/owl#".to_string());
-        namespaces.insert("xsd".to_string(), "http://www.w3.org/2001/XMLSchema#".to_string());
+        namespaces.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        namespaces.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        namespaces.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        namespaces.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
         namespaces.insert("foaf".to_string(), "http://xmlns.com/foaf/0.1/".to_string());
         namespaces.insert("mv".to_string(), "http://example.org/mv#".to_string());
 
         let mut class_mappings = HashMap::new();
-        class_mappings.insert("Person".to_string(), ClassMapping {
-            owl_class: "foaf:Person".to_string(),
-            rdfs_label: "Person".to_string(),
-            rdfs_comment: "A person".to_string(),
-            rdfs_subclass_of: Vec::new(),
-            equivalent_classes: Vec::new(),
-            disjoint_with: Vec::new(),
-        });
-        class_mappings.insert("Company".to_string(), ClassMapping {
-            owl_class: "foaf:Organization".to_string(),
-            rdfs_label: "Company".to_string(),
-            rdfs_comment: "A company".to_string(),
-            rdfs_subclass_of: Vec::new(),
-            equivalent_classes: Vec::new(),
-            disjoint_with: Vec::new(),
-        });
+        class_mappings.insert(
+            "Person".to_string(),
+            ClassMapping {
+                owl_class: "foaf:Person".to_string(),
+                rdfs_label: "Person".to_string(),
+                rdfs_comment: "A person".to_string(),
+                rdfs_subclass_of: Vec::new(),
+                equivalent_classes: Vec::new(),
+                disjoint_with: Vec::new(),
+            },
+        );
+        class_mappings.insert(
+            "Company".to_string(),
+            ClassMapping {
+                owl_class: "foaf:Organization".to_string(),
+                rdfs_label: "Company".to_string(),
+                rdfs_comment: "A company".to_string(),
+                rdfs_subclass_of: Vec::new(),
+                equivalent_classes: Vec::new(),
+                disjoint_with: Vec::new(),
+            },
+        );
 
         let mut data_property_mappings = HashMap::new();
-        data_property_mappings.insert("name".to_string(), DataPropertyMapping {
-            owl_property: "foaf:name".to_string(),
-            rdfs_label: "name".to_string(),
-            rdfs_comment: "Name of entity".to_string(),
-            rdfs_domain: PropertyDomain::Single("owl:Thing".to_string()),
-            rdfs_range: "xsd:string".to_string(),
-            property_type: "data".to_string(),
-            characteristics: Vec::new(),
-        });
-        data_property_mappings.insert("age".to_string(), DataPropertyMapping {
-            owl_property: "foaf:age".to_string(),
-            rdfs_label: "age".to_string(),
-            rdfs_comment: "Age in years".to_string(),
-            rdfs_domain: PropertyDomain::Single("foaf:Person".to_string()),
-            rdfs_range: "xsd:integer".to_string(),
-            property_type: "data".to_string(),
-            characteristics: Vec::new(),
-        });
-        data_property_mappings.insert("email".to_string(), DataPropertyMapping {
-            owl_property: "foaf:mbox".to_string(),
-            rdfs_label: "email".to_string(),
-            rdfs_comment: "Email address".to_string(),
-            rdfs_domain: PropertyDomain::Single("foaf:Agent".to_string()),
-            rdfs_range: "xsd:string".to_string(),
-            property_type: "data".to_string(),
-            characteristics: Vec::new(),
-        });
+        data_property_mappings.insert(
+            "name".to_string(),
+            DataPropertyMapping {
+                owl_property: "foaf:name".to_string(),
+                rdfs_label: "name".to_string(),
+                rdfs_comment: "Name of entity".to_string(),
+                rdfs_domain: PropertyDomain::Single("owl:Thing".to_string()),
+                rdfs_range: "xsd:string".to_string(),
+                property_type: "data".to_string(),
+                characteristics: Vec::new(),
+            },
+        );
+        data_property_mappings.insert(
+            "age".to_string(),
+            DataPropertyMapping {
+                owl_property: "foaf:age".to_string(),
+                rdfs_label: "age".to_string(),
+                rdfs_comment: "Age in years".to_string(),
+                rdfs_domain: PropertyDomain::Single("foaf:Person".to_string()),
+                rdfs_range: "xsd:integer".to_string(),
+                property_type: "data".to_string(),
+                characteristics: Vec::new(),
+            },
+        );
+        data_property_mappings.insert(
+            "email".to_string(),
+            DataPropertyMapping {
+                owl_property: "foaf:mbox".to_string(),
+                rdfs_label: "email".to_string(),
+                rdfs_comment: "Email address".to_string(),
+                rdfs_domain: PropertyDomain::Single("foaf:Agent".to_string()),
+                rdfs_range: "xsd:string".to_string(),
+                property_type: "data".to_string(),
+                characteristics: Vec::new(),
+            },
+        );
 
         let mut object_property_mappings = HashMap::new();
-        object_property_mappings.insert("employedBy".to_string(), ObjectPropertyMapping {
-            owl_property: "mv:employedBy".to_string(),
-            rdfs_label: "employed by".to_string(),
-            rdfs_comment: "Employment relationship".to_string(),
-            rdfs_domain: PropertyDomain::Single("foaf:Person".to_string()),
-            rdfs_range: PropertyRange::Single("foaf:Organization".to_string()),
-            owl_inverse_of: Some("mv:employs".to_string()),
-            property_type: "object".to_string(),
-            characteristics: Vec::new(),
-        });
+        object_property_mappings.insert(
+            "employedBy".to_string(),
+            ObjectPropertyMapping {
+                owl_property: "mv:employedBy".to_string(),
+                rdfs_label: "employed by".to_string(),
+                rdfs_comment: "Employment relationship".to_string(),
+                rdfs_domain: PropertyDomain::Single("foaf:Person".to_string()),
+                rdfs_range: PropertyRange::Single("foaf:Organization".to_string()),
+                owl_inverse_of: Some("mv:employs".to_string()),
+                property_type: "object".to_string(),
+                characteristics: Vec::new(),
+            },
+        );
 
         MappingConfig {
             metadata: MappingMetadata {
@@ -659,12 +665,10 @@ mod tests {
 
         let triples = service.map_node_to_triples(&node).unwrap();
 
-        
         assert!(triples
             .iter()
             .any(|t| t.predicate.contains("rdf-syntax-ns#type") && t.object.contains("Person")));
 
-        
         assert!(triples
             .iter()
             .any(|t| t.predicate.contains("foaf") && t.object == "John Doe"));
@@ -710,14 +714,12 @@ mod tests {
 
         assert!(!triples.is_empty());
 
-        
         let type_triples: Vec<_> = triples
             .iter()
             .filter(|t| t.predicate.contains("rdf-syntax-ns#type"))
             .collect();
         assert!(!type_triples.is_empty());
 
-        
         assert!(triples.iter().any(|t| t.predicate.contains("employedBy")));
     }
 }

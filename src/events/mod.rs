@@ -34,6 +34,5 @@ pub use handlers::{
 };
 
 pub use inference_triggers::{
-    InferenceTriggerHandler, AutoInferenceConfig, OntologyEvent,
-    register_inference_triggers,
+    register_inference_triggers, AutoInferenceConfig, InferenceTriggerHandler, OntologyEvent,
 };

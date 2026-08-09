@@ -3,11 +3,11 @@
 use crate::actors::messages::GetSettings;
 use crate::app_state::AppState;
 use crate::config::path_access::JsonPathAccessible;
+use crate::{error_json, not_found, ok_json, service_unavailable};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use log::{error, warn};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use crate::{ok_json, error_json, not_found, service_unavailable};
 
 use super::enhanced::EnhancedSettingsHandler;
 use super::types::SettingsResponseDTO;
@@ -36,16 +36,18 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                     ),
                 ),
         )
-        .service(
-            web::scope("/api/physics").route("/compute-mode", web::post().to(super::physics::update_compute_mode)),
-        )
-        .service(
-            web::scope("/api/constraints").route("/update", web::post().to(super::physics::update_constraints)),
-        )
-        .service(
-            web::scope("/api/stress")
-                .route("/optimization", web::post().to(super::physics::update_stress_optimization)),
-        );
+        .service(web::scope("/api/physics").route(
+            "/compute-mode",
+            web::post().to(super::physics::update_compute_mode),
+        ))
+        .service(web::scope("/api/constraints").route(
+            "/update",
+            web::post().to(super::physics::update_constraints),
+        ))
+        .service(web::scope("/api/stress").route(
+            "/optimization",
+            web::post().to(super::physics::update_stress_optimization),
+        ));
 }
 
 async fn get_setting_by_path(
@@ -95,10 +97,10 @@ async fn update_setting_by_path(
     state: web::Data<AppState>,
     payload: web::Json<Value>,
 ) -> Result<HttpResponse, Error> {
-    use crate::actors::messages::UpdateSettings;
-    use log::info;
-    use crate::bad_request;
     use super::physics::propagate_physics_to_gpu;
+    use crate::actors::messages::UpdateSettings;
+    use crate::bad_request;
+    use log::info;
 
     let update = payload.into_inner();
     let path = update
@@ -258,10 +260,8 @@ async fn get_settings(
     };
 
     let response_dto: SettingsResponseDTO = (&app_settings).into();
-    let redacted = redact_settings_secrets(
-        serde_json::to_value(&response_dto)
-            .unwrap_or_else(|_| json!({})),
-    );
+    let redacted =
+        redact_settings_secrets(serde_json::to_value(&response_dto).unwrap_or_else(|_| json!({})));
 
     ok_json!(redacted)
 }
@@ -283,10 +283,8 @@ async fn get_current_settings(
     };
 
     let response_dto: SettingsResponseDTO = (&app_settings).into();
-    let redacted = redact_settings_secrets(
-        serde_json::to_value(&response_dto)
-            .unwrap_or_else(|_| json!({})),
-    );
+    let redacted =
+        redact_settings_secrets(serde_json::to_value(&response_dto).unwrap_or_else(|_| json!({})));
 
     ok_json!(json!({
         "settings": redacted,

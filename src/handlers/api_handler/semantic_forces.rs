@@ -9,24 +9,22 @@
 //! - `POST /api/semantic-forces/relationship-types/reload` - Sync registry to GPU
 
 use actix_web::{web, HttpResponse, Responder};
-use log::{error, info, debug};
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::actors::gpu::semantic_forces_actor::{
-    DAGConfig, DAGLayoutMode, TypeClusterConfig, CollisionConfig,
-    GetHierarchyLevels, GetSemanticConfig, RecalculateHierarchy,
+    CollisionConfig, DAGConfig, DAGLayoutMode, GetHierarchyLevels, GetSemanticConfig,
+    RecalculateHierarchy, TypeClusterConfig,
 };
-use crate::services::semantic_type_registry::{
-    SEMANTIC_TYPE_REGISTRY, RelationshipForceConfig,
-};
+use crate::services::semantic_type_registry::{RelationshipForceConfig, SEMANTIC_TYPE_REGISTRY};
 use crate::AppState;
 use crate::{bad_request, error_json, ok_json};
 
 /// Request payload for DAG configuration
 #[derive(Debug, Deserialize, Serialize)]
 pub struct DAGConfigRequest {
-    pub mode: String,                // "top-down", "radial", "left-right"
+    pub mode: String, // "top-down", "radial", "left-right"
     pub vertical_spacing: Option<f32>,
     pub horizontal_spacing: Option<f32>,
     pub level_attraction: Option<f32>,
@@ -59,8 +57,10 @@ pub async fn configure_dag(
     state: web::Data<AppState>,
     payload: web::Json<DAGConfigRequest>,
 ) -> impl Responder {
-    info!("DAG configuration request - mode: {}, enabled: {}",
-          payload.mode, payload.enabled);
+    info!(
+        "DAG configuration request - mode: {}, enabled: {}",
+        payload.mode, payload.enabled
+    );
 
     // Parse layout mode
     let layout_mode = match payload.mode.to_lowercase().as_str() {
@@ -115,8 +115,10 @@ pub async fn configure_dag(
 
     match gpu_manager.send(configure_msg).await {
         Ok(Ok(())) => {
-            info!("DAG configuration applied: mode={:?}, enabled={}",
-                  dag_config.layout_mode, dag_config.enabled);
+            info!(
+                "DAG configuration applied: mode={:?}, enabled={}",
+                dag_config.layout_mode, dag_config.enabled
+            );
         }
         Ok(Err(e)) => {
             error!("Failed to apply DAG configuration: {}", e);
@@ -149,7 +151,10 @@ pub async fn configure_type_clustering(
     state: web::Data<AppState>,
     payload: web::Json<TypeClusterConfigRequest>,
 ) -> impl Responder {
-    info!("Type clustering configuration request - enabled: {}", payload.enabled);
+    info!(
+        "Type clustering configuration request - enabled: {}",
+        payload.enabled
+    );
 
     // Get GPU manager actor
     let gpu_manager = match state.gpu_manager_addr.as_ref() {
@@ -188,8 +193,12 @@ pub async fn configure_type_clustering(
 
     match gpu_manager.send(configure_msg).await {
         Ok(Ok(())) => {
-            info!("Type clustering configured: enabled={}, attraction={:.2}, radius={:.2}",
-                  cluster_config.enabled, cluster_config.cluster_attraction, cluster_config.cluster_radius);
+            info!(
+                "Type clustering configured: enabled={}, attraction={:.2}, radius={:.2}",
+                cluster_config.enabled,
+                cluster_config.cluster_attraction,
+                cluster_config.cluster_radius
+            );
         }
         Ok(Err(e)) => {
             error!("Failed to apply type clustering configuration: {}", e);
@@ -220,7 +229,10 @@ pub async fn configure_collision(
     state: web::Data<AppState>,
     payload: web::Json<CollisionConfigRequest>,
 ) -> impl Responder {
-    info!("Collision detection configuration request - enabled: {}", payload.enabled);
+    info!(
+        "Collision detection configuration request - enabled: {}",
+        payload.enabled
+    );
 
     // Get GPU manager actor
     let gpu_manager = match state.gpu_manager_addr.as_ref() {
@@ -259,8 +271,12 @@ pub async fn configure_collision(
 
     match gpu_manager.send(configure_msg).await {
         Ok(Ok(())) => {
-            info!("Collision detection configured: enabled={}, min_distance={:.2}, strength={:.2}",
-                  collision_config.enabled, collision_config.min_distance, collision_config.collision_strength);
+            info!(
+                "Collision detection configured: enabled={}, min_distance={:.2}, strength={:.2}",
+                collision_config.enabled,
+                collision_config.min_distance,
+                collision_config.collision_strength
+            );
         }
         Ok(Err(e)) => {
             error!("Failed to apply collision configuration: {}", e);
@@ -447,7 +463,8 @@ pub async fn register_relationship_type(
             "message": "strength must be a finite number in range 0.0..=10.0"
         }));
     }
-    if !payload.rest_length.is_finite() || payload.rest_length < 0.0 || payload.rest_length > 1000.0 {
+    if !payload.rest_length.is_finite() || payload.rest_length < 0.0 || payload.rest_length > 1000.0
+    {
         return HttpResponse::BadRequest().json(serde_json::json!({
             "status": "error",
             "message": "rest_length must be a finite number in range 0.0..=1000.0"
@@ -465,7 +482,10 @@ pub async fn register_relationship_type(
 
     let id = SEMANTIC_TYPE_REGISTRY.register(&payload.uri, config);
 
-    info!("Registered relationship type '{}' with ID {}", payload.uri, id);
+    info!(
+        "Registered relationship type '{}' with ID {}",
+        payload.uri, id
+    );
 
     HttpResponse::Ok().json(serde_json::json!({
         "status": "success",
@@ -550,18 +570,21 @@ pub async fn list_relationship_types() -> HttpResponse {
     debug!("Listing all relationship types");
 
     let uris = SEMANTIC_TYPE_REGISTRY.registered_uris();
-    let types: Vec<serde_json::Value> = uris.iter().filter_map(|uri| {
-        let id = SEMANTIC_TYPE_REGISTRY.get_id(uri)?;
-        let config = SEMANTIC_TYPE_REGISTRY.get_config(id)?;
-        Some(json!({
-            "id": id,
-            "uri": uri,
-            "strength": config.strength,
-            "rest_length": config.rest_length,
-            "is_directional": config.is_directional,
-            "force_type": config.force_type,
-        }))
-    }).collect();
+    let types: Vec<serde_json::Value> = uris
+        .iter()
+        .filter_map(|uri| {
+            let id = SEMANTIC_TYPE_REGISTRY.get_id(uri)?;
+            let config = SEMANTIC_TYPE_REGISTRY.get_config(id)?;
+            Some(json!({
+                "id": id,
+                "uri": uri,
+                "strength": config.strength,
+                "rest_length": config.rest_length,
+                "is_directional": config.is_directional,
+                "force_type": config.force_type,
+            }))
+        })
+        .collect();
 
     HttpResponse::Ok().json(serde_json::json!({
         "status": "success",
@@ -626,7 +649,10 @@ pub async fn reload_relationship_buffer(
     match buffer_manager.upload_from_registry(&*SEMANTIC_TYPE_REGISTRY) {
         Ok(()) => {
             let count = SEMANTIC_TYPE_REGISTRY.len();
-            info!("Relationship buffer reloaded to GPU: {} types, version {}", count, version);
+            info!(
+                "Relationship buffer reloaded to GPU: {} types, version {}",
+                count, version
+            );
             HttpResponse::Ok().json(serde_json::json!({
                 "status": "success",
                 "message": "GPU buffer reloaded",
@@ -650,16 +676,37 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/semantic-forces")
             .route("/dag/configure", web::post().to(configure_dag))
-            .route("/type-clustering/configure", web::post().to(configure_type_clustering))
+            .route(
+                "/type-clustering/configure",
+                web::post().to(configure_type_clustering),
+            )
             .route("/collision/configure", web::post().to(configure_collision))
             .route("/hierarchy-levels", web::get().to(get_hierarchy_levels))
             .route("/config", web::get().to(get_semantic_config))
-            .route("/hierarchy/recalculate", web::post().to(recalculate_hierarchy))
+            .route(
+                "/hierarchy/recalculate",
+                web::post().to(recalculate_hierarchy),
+            )
             // Dynamic relationship type management (hot-reload)
-            .route("/relationship-types", web::get().to(list_relationship_types))
-            .route("/relationship-types", web::post().to(register_relationship_type))
-            .route("/relationship-types/reload", web::post().to(reload_relationship_buffer))
-            .route("/relationship-types/{uri:.*}", web::get().to(get_relationship_type))
-            .route("/relationship-types/{uri:.*}", web::put().to(update_relationship_type)),
+            .route(
+                "/relationship-types",
+                web::get().to(list_relationship_types),
+            )
+            .route(
+                "/relationship-types",
+                web::post().to(register_relationship_type),
+            )
+            .route(
+                "/relationship-types/reload",
+                web::post().to(reload_relationship_buffer),
+            )
+            .route(
+                "/relationship-types/{uri:.*}",
+                web::get().to(get_relationship_type),
+            )
+            .route(
+                "/relationship-types/{uri:.*}",
+                web::put().to(update_relationship_type),
+            ),
     );
 }

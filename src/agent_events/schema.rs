@@ -156,9 +156,7 @@ impl AgentActionEnvelope {
     /// an envelope carrying a populated typed CTC field proves CTC data rides the
     /// wire as a first-class member, not the untyped `metadata` blob.
     pub fn has_ctc(&self) -> bool {
-        self.handoff_id.is_some()
-            || self.token_count.is_some()
-            || self.verification.is_some()
+        self.handoff_id.is_some() || self.token_count.is_some() || self.verification.is_some()
     }
 
     /// D7 (PRD-023 / ADR-130 register position): the agent's declared pre-action
@@ -236,7 +234,11 @@ mod tests {
             e.source_urn.as_deref(),
             Some("did:nostr:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         );
-        assert!(e.target_urn.as_deref().unwrap().starts_with("urn:visionclaw:kg:"));
+        assert!(e
+            .target_urn
+            .as_deref()
+            .unwrap()
+            .starts_with("urn:visionclaw:kg:"));
         assert_eq!(e.pubkey.as_deref().unwrap().len(), 64);
     }
 
@@ -335,7 +337,10 @@ mod tests {
         // Full-width: 1234 fits, but the field is u64 so a DAG can burn > u32.
         assert_eq!(e.token_count, Some(1234));
         // handoff_id is a correlation URN STRING — an Option<u32> could not hold it.
-        assert_eq!(e.handoff_id.as_deref(), Some("urn:agentbox:activity:chain-7"));
+        assert_eq!(
+            e.handoff_id.as_deref(),
+            Some("urn:agentbox:activity:chain-7")
+        );
         assert_eq!(e.verification.as_deref(), Some("pass"));
         assert!(e.has_ctc(), "a canonical agentbox CTC frame ⇒ has_ctc()");
     }
@@ -349,9 +354,15 @@ mod tests {
         let e = &n.params.event;
         // 5_000_000_000 does not fit u32 — proves the aliased field is u64.
         assert_eq!(e.token_count, Some(5_000_000_000));
-        assert_eq!(e.handoff_id.as_deref(), Some("urn:agentbox:activity:chain-9"));
+        assert_eq!(
+            e.handoff_id.as_deref(),
+            Some("urn:agentbox:activity:chain-9")
+        );
         assert_eq!(e.verification.as_deref(), Some("passed"));
-        assert!(e.has_ctc(), "draft-named CTC frame ⇒ has_ctc() (alias path)");
+        assert!(
+            e.has_ctc(),
+            "draft-named CTC frame ⇒ has_ctc() (alias path)"
+        );
     }
 
     #[test]

@@ -22,7 +22,6 @@ use tokio::net::TcpStream;
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
-
 // ============================================================================
 // Core MCP Types
 // ============================================================================
@@ -137,11 +136,19 @@ pub struct McpConnection {
 
 impl McpConnection {
     /// Create a new MCP connection and initialize the session
-    pub async fn new(config: McpConnectionConfig) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        config: McpConnectionConfig,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let addr = format!("{}:{}", config.host, config.port);
         info!("Establishing MCP connection to {}", addr);
 
-        let stream = Self::connect_with_retry(&addr, config.timeout, config.max_retries, config.retry_delay).await?;
+        let stream = Self::connect_with_retry(
+            &addr,
+            config.timeout,
+            config.max_retries,
+            config.retry_delay,
+        )
+        .await?;
         let session_id = Uuid::new_v4().to_string();
 
         let mut connection = Self {
@@ -466,15 +473,14 @@ impl McpClient {
         let params_json = serde_json::to_value(&params)
             .map_err(|e| format!("Failed to serialize params: {}", e))?;
 
-        let result = self.with_retry(|| {
-            let pool = self.pool.clone();
-            let method = method.to_string();
-            let params = params_json.clone();
-            Box::pin(async move {
-                pool.execute_command("default", &method, params).await
+        let result = self
+            .with_retry(|| {
+                let pool = self.pool.clone();
+                let method = method.to_string();
+                let params = params_json.clone();
+                Box::pin(async move { pool.execute_command("default", &method, params).await })
             })
-        })
-        .await?;
+            .await?;
 
         serde_json::from_value(result)
             .map_err(|e| format!("Failed to deserialize response: {}", e).into())
@@ -491,16 +497,18 @@ impl McpClient {
             "arguments": arguments
         });
 
-        debug!("Sending tool call '{}' with arguments: {}", tool_name, arguments);
+        debug!(
+            "Sending tool call '{}' with arguments: {}",
+            tool_name, arguments
+        );
 
-        let response = self.with_retry(|| {
-            let pool = self.pool.clone();
-            let params = wrapped_params.clone();
-            Box::pin(async move {
-                pool.execute_command("default", "tools/call", params).await
+        let response = self
+            .with_retry(|| {
+                let pool = self.pool.clone();
+                let params = wrapped_params.clone();
+                Box::pin(async move { pool.execute_command("default", "tools/call", params).await })
             })
-        })
-        .await?;
+            .await?;
 
         // Extract result from tool call response
         if let Some(content) = response.get("content") {
@@ -600,7 +608,10 @@ pub async fn test_mcp_connectivity(
                 if connected {
                     info!("MCP server {} is reachable at {}:{}", server_id, host, port);
                 } else {
-                    warn!("✗ MCP server {} is not reachable at {}:{}", server_id, host, port);
+                    warn!(
+                        "✗ MCP server {} is not reachable at {}:{}",
+                        server_id, host, port
+                    );
                 }
             }
             Err(e) => {

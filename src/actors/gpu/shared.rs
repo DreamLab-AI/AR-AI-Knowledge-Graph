@@ -10,8 +10,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 use crate::gpu::memory_manager::GpuMemoryManager;
-use visionclaw_domain::models::constraints::Constraint;
 use crate::models::simulation_params::SimulationParams;
+use visionclaw_domain::models::constraints::Constraint;
 
 // Public re-exports for GPU compute types
 pub use crate::utils::unified_gpu_compute::{SimParams, UnifiedGPUCompute};
@@ -19,7 +19,6 @@ pub use crate::utils::unified_gpu_compute::{SimParams, UnifiedGPUCompute};
 // Import the child actors for address storage
 // use super::{GPUResourceActor, ForceComputeActor, ClusteringActor,
 //            AnomalyDetectionActor, StressMajorizationActor, ConstraintActor};
-
 
 #[derive(Debug, Clone)]
 pub struct GPUResourceMetrics {
@@ -78,7 +77,7 @@ impl GPUOperationBatch {
             operations: Vec::new(),
             priority,
             batch_size_limit: 10,
-            flush_timeout_ms: 16, 
+            flush_timeout_ms: 16,
             created_at: Instant::now(),
         }
     }
@@ -151,15 +150,13 @@ pub struct GPUState {
     pub gpu_failure_count: u32,
     pub is_initialized: bool,
 
-    
     pub graph_structure_hash: u64,
     pub positions_hash: u64,
     pub csr_structure_uploaded: bool,
 
-    
     pub active_operations: Vec<GPUOperation>,
     pub last_sync_timestamp: Option<Instant>,
-    pub gpu_utilization_history: Vec<f32>, 
+    pub gpu_utilization_history: Vec<f32>,
     pub operation_queue_depth: usize,
     pub average_kernel_time_ms: f32,
     pub peak_memory_usage_bytes: usize,
@@ -182,10 +179,9 @@ impl Default for GPUState {
             positions_hash: 0,
             csr_structure_uploaded: false,
 
-            
             active_operations: Vec::new(),
             last_sync_timestamp: None,
-            gpu_utilization_history: Vec::with_capacity(60), 
+            gpu_utilization_history: Vec::with_capacity(60),
             operation_queue_depth: 0,
             average_kernel_time_ms: 0.0,
             peak_memory_usage_bytes: 0,
@@ -196,18 +192,16 @@ impl Default for GPUState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StressMajorizationSafety {
-    
     pub max_displacement_threshold: f32,
-    
+
     pub max_position_magnitude: f32,
-    
+
     pub max_consecutive_failures: u32,
-    
+
     pub convergence_threshold: f32,
-    
+
     pub max_stress_threshold: f32,
 
-    
     pub consecutive_failures: u32,
     pub last_stress_values: Vec<f32>,
     pub last_displacement_values: Vec<f32>,
@@ -269,7 +263,6 @@ impl StressMajorizationSafety {
             self.last_displacement_values.remove(0);
         }
 
-        
         if stress > self.max_stress_threshold {
             self.record_failure(format!("Stress exceeded threshold: {}", stress));
         }
@@ -297,7 +290,7 @@ impl StressMajorizationSafety {
         &self,
     ) -> crate::actors::gpu::stress_majorization_actor::StressMajorizationStats {
         crate::actors::gpu::stress_majorization_actor::StressMajorizationStats {
-            stress_value: 0.0, 
+            stress_value: 0.0,
             iterations_performed: self.total_runs as u32,
             converged: !self.is_emergency_stopped,
             computation_time_ms: if self.successful_runs > 0 {
@@ -320,7 +313,6 @@ impl StressMajorizationSafety {
 }
 
 impl SharedGPUContext {
-    
     pub async fn acquire_gpu_access_qos(
         &self,
         operation: GPUOperation,
@@ -328,7 +320,6 @@ impl SharedGPUContext {
     ) -> Result<(), String> {
         let start_time = Instant::now();
 
-        
         {
             let mut metrics = self
                 .resource_metrics
@@ -337,7 +328,6 @@ impl SharedGPUContext {
             metrics.concurrent_access_attempts += 1;
         }
 
-        
         if matches!(priority, GPUOperationPriority::Critical) {
             let _guard = self.gpu_access_lock.write().await;
             drop(_guard);
@@ -346,14 +336,12 @@ impl SharedGPUContext {
             drop(_guard);
         }
 
-        
         let should_batch = self.should_batch_operation(&operation);
         if should_batch {
             self.add_to_batch(operation.clone())?;
             return Ok(());
         }
 
-        
         let wait_time = start_time.elapsed();
         {
             let mut metrics = self
@@ -368,19 +356,16 @@ impl SharedGPUContext {
         Ok(())
     }
 
-    
     fn should_batch_operation(&self, operation: &GPUOperation) -> bool {
-        
         match operation {
-            GPUOperation::ForceComputation => false, 
-            GPUOperation::PositionUpdate | GPUOperation::VelocityUpdate => true, 
-            GPUOperation::Clustering | GPUOperation::AnomalyDetection => false, 
-            GPUOperation::StressMajorization => false, 
-            GPUOperation::OntologyConstraints => false, 
+            GPUOperation::ForceComputation => false,
+            GPUOperation::PositionUpdate | GPUOperation::VelocityUpdate => true,
+            GPUOperation::Clustering | GPUOperation::AnomalyDetection => false,
+            GPUOperation::StressMajorization => false,
+            GPUOperation::OntologyConstraints => false,
         }
     }
 
-    
     fn add_to_batch(&self, operation: GPUOperation) -> Result<(), String> {
         let mut batch = self
             .operation_batch
@@ -388,7 +373,6 @@ impl SharedGPUContext {
             .map_err(|e| format!("Failed to lock batch: {}", e))?;
         batch.push(operation);
 
-        
         if let Ok(mut metrics) = self.resource_metrics.lock() {
             metrics.batched_operations_count += 1;
         }
@@ -396,7 +380,6 @@ impl SharedGPUContext {
         Ok(())
     }
 
-    
     pub fn try_flush_batch(&self) -> Result<Vec<GPUOperation>, String> {
         let mut batch = self
             .operation_batch
@@ -412,14 +395,12 @@ impl SharedGPUContext {
         }
     }
 
-    
     pub fn update_utilization(&self, utilization_percent: f32) -> Result<(), String> {
         let mut metrics = self
             .resource_metrics
             .lock()
             .map_err(|e| format!("Failed to lock metrics: {}", e))?;
 
-        
         if metrics.average_utilization_percent == 0.0 {
             metrics.average_utilization_percent = utilization_percent;
         } else {
@@ -430,7 +411,6 @@ impl SharedGPUContext {
         Ok(())
     }
 
-    
     pub async fn acquire_gpu_access(&self) -> Result<tokio::sync::RwLockReadGuard<'_, ()>, String> {
         let start_time = Instant::now();
         let guard = self.gpu_access_lock.read().await;
@@ -442,23 +422,18 @@ impl SharedGPUContext {
         Ok(guard)
     }
 
-    
-    
     pub async fn batch_operations(&self) -> Result<Vec<GPUOperation>, String> {
         let start_time = Instant::now();
 
-        
         tokio::time::sleep(self.batch_timeout).await;
 
         let operations = self.try_flush_batch()?;
 
         if !operations.is_empty() {
-            
             let _guard = self.gpu_access_lock.read().await;
 
-            
             if let Ok(mut metrics) = self.resource_metrics.lock() {
-                metrics.kernel_launch_count += 1; 
+                metrics.kernel_launch_count += 1;
                 metrics.total_wait_time_ms += start_time.elapsed().as_millis() as u64;
                 metrics.last_operation_timestamp = Some(Instant::now());
             }
@@ -467,17 +442,13 @@ impl SharedGPUContext {
         Ok(operations)
     }
 
-    
-    
     pub async fn acquire_exclusive_access(
         &self,
     ) -> Result<tokio::sync::RwLockWriteGuard<'_, ()>, String> {
         let start_time = Instant::now();
 
-        
         let guard = self.gpu_access_lock.write().await;
 
-        
         if let Ok(mut metrics) = self.resource_metrics.lock() {
             metrics.total_wait_time_ms += start_time.elapsed().as_millis() as u64;
             metrics.concurrent_access_attempts += 1;
@@ -488,14 +459,12 @@ impl SharedGPUContext {
 }
 
 impl GPUState {
-    
     pub fn start_operation(&mut self, operation: GPUOperation) {
         self.active_operations.push(operation);
         self.concurrent_access_count += 1;
         self.last_sync_timestamp = Some(Instant::now());
     }
 
-    
     pub fn complete_operation(&mut self, operation: &GPUOperation) {
         self.active_operations.retain(|op| {
             !matches!(
@@ -525,16 +494,14 @@ impl GPUState {
         }
     }
 
-    
     pub fn record_utilization(&mut self, utilization_percent: f32) {
         self.gpu_utilization_history.push(utilization_percent);
-        
+
         if self.gpu_utilization_history.len() > 60 {
             self.gpu_utilization_history.remove(0);
         }
     }
 
-    
     pub fn get_average_utilization(&self) -> f32 {
         if self.gpu_utilization_history.is_empty() {
             0.0
@@ -544,10 +511,7 @@ impl GPUState {
         }
     }
 
-    
     pub fn is_gpu_overloaded(&self) -> bool {
-        
-        
         self.concurrent_access_count > 5 && self.get_average_utilization() > 80.0
     }
 }

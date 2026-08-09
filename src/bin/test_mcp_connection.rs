@@ -10,12 +10,10 @@ use visionclaw_server::utils::mcp_tcp_client::{create_mcp_client, test_mcp_conne
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    
     env_logger::init();
 
     info!("Testing MCP TCP connectivity");
 
-    
     let mut servers = HashMap::new();
     servers.insert(
         "localhost-9500".to_string(),
@@ -26,7 +24,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("multi-agent-container".to_string(), 9500),
     );
 
-    
     let connectivity_results = test_mcp_connectivity(&servers).await;
 
     for (server_id, is_connected) in &connectivity_results {
@@ -37,27 +34,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    
     for (server_id, (host, port)) in &servers {
         if *connectivity_results.get(server_id).unwrap_or(&false) {
             info!("Testing detailed MCP functionality with {}:{}", host, port);
 
             let client = create_mcp_client(&McpServerType::ClaudeFlow, host, *port);
 
-            
             match client.test_connection().await {
                 Ok(true) => info!("Basic connection test passed"),
                 Ok(false) => error!("✗ Basic connection test failed"),
                 Err(e) => error!("✗ Connection test error: {}", e),
             }
 
-            
             match client.initialize_session().await {
                 Ok(()) => info!("MCP session initialization passed"),
                 Err(e) => error!("✗ MCP session initialization failed: {}", e),
             }
 
-            
             match client.query_server_info().await {
                 Ok(server_info) => {
                     info!("Server info query passed");
@@ -69,7 +62,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => error!("✗ Server info query failed: {}", e),
             }
 
-            
             match client.query_agent_list().await {
                 Ok(agents) => {
                     info!("Agent list query passed");
@@ -81,7 +73,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => error!("✗ Agent list query failed: {}", e),
             }
 
-            
             match client.query_swarm_status().await {
                 Ok(topology) => {
                     info!("Swarm status query passed");
@@ -92,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Err(e) => error!("✗ Swarm status query failed: {}", e),
             }
 
-            break; 
+            break;
         }
     }
 

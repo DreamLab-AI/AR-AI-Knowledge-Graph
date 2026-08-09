@@ -150,11 +150,12 @@ pub struct ExpandedDocument {
 /// here — they're the validator's job. The expander is permissive on
 /// structure and strict on parse.
 pub fn expand_block(file: &str, block_index: usize, body: &str) -> Result<ExpandedDocument> {
-    let root: Value = serde_json::from_str(body).map_err(|e| JsonLdIngestError::JsonParseError {
-        file: file.to_string(),
-        block_index,
-        message: e.to_string(),
-    })?;
+    let root: Value =
+        serde_json::from_str(body).map_err(|e| JsonLdIngestError::JsonParseError {
+            file: file.to_string(),
+            block_index,
+            message: e.to_string(),
+        })?;
 
     let obj = match root {
         Value::Object(m) => m,
@@ -162,7 +163,10 @@ pub fn expand_block(file: &str, block_index: usize, body: &str) -> Result<Expand
             return Err(JsonLdIngestError::JsonParseError {
                 file: file.to_string(),
                 block_index,
-                message: format!("top-level JSON-LD value must be an object, got {}", type_name(&other)),
+                message: format!(
+                    "top-level JSON-LD value must be an object, got {}",
+                    type_name(&other)
+                ),
             });
         }
     };
@@ -190,7 +194,12 @@ pub fn expand_block(file: &str, block_index: usize, body: &str) -> Result<Expand
         if let Value::Array(arr) = graph {
             for v in arr {
                 if let Value::Object(node_obj) = v {
-                    let node = expand_node(node_obj, NodeOrigin::Graph, block_index, &mut doc.v11_features);
+                    let node = expand_node(
+                        node_obj,
+                        NodeOrigin::Graph,
+                        block_index,
+                        &mut doc.v11_features,
+                    );
                     doc.nodes.push(node);
                 }
             }
@@ -206,7 +215,12 @@ pub fn expand_block(file: &str, block_index: usize, body: &str) -> Result<Expand
         doc.v11_features.insert(V11Feature::Included);
         for v in arr {
             if let Value::Object(node_obj) = v {
-                let node = expand_node(node_obj, NodeOrigin::Included, block_index, &mut doc.v11_features);
+                let node = expand_node(
+                    node_obj,
+                    NodeOrigin::Included,
+                    block_index,
+                    &mut doc.v11_features,
+                );
                 doc.nodes.push(node);
             }
         }
@@ -569,7 +583,10 @@ mod tests {
 
     #[test]
     fn slugify_handles_diacritics_and_spaces() {
-        assert_eq!(slugify("Renaissance Architecture"), "renaissance-architecture");
+        assert_eq!(
+            slugify("Renaissance Architecture"),
+            "renaissance-architecture"
+        );
         assert_eq!(slugify("OWL 2 EL!"), "owl-2-el");
         assert_eq!(slugify("---weird---"), "weird");
     }

@@ -29,130 +29,43 @@ pub mod settings;
 
 // Re-export settings domain
 pub use settings::{
-    ClearSettingsCache,
-    ClearSettingsCacheHandler,
-    DeletePhysicsProfile,
-    DeletePhysicsProfileHandler,
-    GetPhysicsSettings,
-    GetPhysicsSettingsHandler,
-    
-    GetSetting,
-    GetSettingHandler,
-    GetSettingsBatch,
-    GetSettingsBatchHandler,
-    ListPhysicsProfiles,
-    ListPhysicsProfilesHandler,
-    LoadAllSettings,
-    LoadAllSettingsHandler,
-    SaveAllSettings,
-    SaveAllSettingsHandler,
-    UpdatePhysicsSettings,
-    UpdatePhysicsSettingsHandler,
-    
-    UpdateSetting,
-    UpdateSettingHandler,
-    UpdateSettingsBatch,
-    UpdateSettingsBatchHandler,
+    ClearSettingsCache, ClearSettingsCacheHandler, DeletePhysicsProfile,
+    DeletePhysicsProfileHandler, GetPhysicsSettings, GetPhysicsSettingsHandler, GetSetting,
+    GetSettingHandler, GetSettingsBatch, GetSettingsBatchHandler, ListPhysicsProfiles,
+    ListPhysicsProfilesHandler, LoadAllSettings, LoadAllSettingsHandler, SaveAllSettings,
+    SaveAllSettingsHandler, UpdatePhysicsSettings, UpdatePhysicsSettingsHandler, UpdateSetting,
+    UpdateSettingHandler, UpdateSettingsBatch, UpdateSettingsBatchHandler,
 };
 
 // Re-export knowledge graph domain
 pub use knowledge_graph::{
-    AddEdge,
-    AddEdgeHandler,
-    
-    AddNode,
-    AddNodeHandler,
-    BatchUpdatePositions,
-    BatchUpdatePositionsHandler,
-    GetGraphStatistics,
-    GetGraphStatisticsHandler,
-    GetNode,
-    GetNodeEdges,
-    GetNodeEdgesHandler,
-    GetNodeHandler,
-    GetNodesByMetadataId,
-    GetNodesByMetadataIdHandler,
-    LoadGraph,
-    LoadGraphHandler,
-    QueryNodes,
-    QueryNodesHandler,
-    
-    QueryResult,
-    RemoveEdge,
-    RemoveEdgeHandler,
-    RemoveNode,
-    RemoveNodeHandler,
-    SaveGraph,
-    SaveGraphHandler,
-    UpdateEdge,
-    UpdateEdgeHandler,
-    UpdateNode,
-    UpdateNodeHandler,
+    AddEdge, AddEdgeHandler, AddNode, AddNodeHandler, BatchUpdatePositions,
+    BatchUpdatePositionsHandler, GetGraphStatistics, GetGraphStatisticsHandler, GetNode,
+    GetNodeEdges, GetNodeEdgesHandler, GetNodeHandler, GetNodesByMetadataId,
+    GetNodesByMetadataIdHandler, LoadGraph, LoadGraphHandler, QueryNodes, QueryNodesHandler,
+    QueryResult, RemoveEdge, RemoveEdgeHandler, RemoveNode, RemoveNodeHandler, SaveGraph,
+    SaveGraphHandler, UpdateEdge, UpdateEdgeHandler, UpdateNode, UpdateNodeHandler,
 };
 
 // Re-export ontology domain
 pub use ontology::{
-    
-    AddAxiom,
-    AddAxiomHandler,
-    AddOwlClass,
-    AddOwlClassHandler,
-    AddOwlProperty,
-    AddOwlPropertyHandler,
-    
-    GetClassAxioms,
-    GetClassAxiomsHandler,
-    GetInferenceResults,
-    GetInferenceResultsHandler,
-    GetOntologyMetrics,
-    GetOntologyMetricsHandler,
-    GetOwlClass,
-    GetOwlClassHandler,
-    GetOwlProperty,
-    GetOwlPropertyHandler,
-    ListOwlClasses,
-    ListOwlClassesHandler,
-    ListOwlProperties,
-    ListOwlPropertiesHandler,
-    LoadOntologyGraph,
-    LoadOntologyGraphHandler,
-    QueryOntology,
-    QueryOntologyHandler,
-    RemoveAxiom,
-    RemoveAxiomHandler,
-    RemoveOwlClass,
-    RemoveOwlClassHandler,
-    SaveOntologyGraph,
-    SaveOntologyGraphHandler,
-    StoreInferenceResults,
-    StoreInferenceResultsHandler,
-    UpdateOwlClass,
-    UpdateOwlClassHandler,
-    UpdateOwlProperty,
-    UpdateOwlPropertyHandler,
-    ValidateOntology,
-    ValidateOntologyHandler,
+    AddAxiom, AddAxiomHandler, AddOwlClass, AddOwlClassHandler, AddOwlProperty,
+    AddOwlPropertyHandler, GetClassAxioms, GetClassAxiomsHandler, GetInferenceResults,
+    GetInferenceResultsHandler, GetOntologyMetrics, GetOntologyMetricsHandler, GetOwlClass,
+    GetOwlClassHandler, GetOwlProperty, GetOwlPropertyHandler, ListOwlClasses,
+    ListOwlClassesHandler, ListOwlProperties, ListOwlPropertiesHandler, LoadOntologyGraph,
+    LoadOntologyGraphHandler, QueryOntology, QueryOntologyHandler, RemoveAxiom, RemoveAxiomHandler,
+    RemoveOwlClass, RemoveOwlClassHandler, SaveOntologyGraph, SaveOntologyGraphHandler,
+    StoreInferenceResults, StoreInferenceResultsHandler, UpdateOwlClass, UpdateOwlClassHandler,
+    UpdateOwlProperty, UpdateOwlPropertyHandler, ValidateOntology, ValidateOntologyHandler,
 };
 
 // Re-export graph domain
 pub use graph::{
-    
-    ComputeShortestPaths,
-    ComputeShortestPathsHandler,
-    GetAutoBalanceNotifications,
-    GetAutoBalanceNotificationsHandler,
-    GetBotsGraphData,
-    GetBotsGraphDataHandler,
-    GetConstraints,
-    GetConstraintsHandler,
-    GetEquilibriumStatus,
-    GetEquilibriumStatusHandler,
-    GetGraphData,
-    GetGraphDataHandler,
-    GetNodeMap,
-    GetNodeMapHandler,
-    GetPhysicsState,
-    GetPhysicsStateHandler,
+    ComputeShortestPaths, ComputeShortestPathsHandler, GetAutoBalanceNotifications,
+    GetAutoBalanceNotificationsHandler, GetBotsGraphData, GetBotsGraphDataHandler, GetConstraints,
+    GetConstraintsHandler, GetEquilibriumStatus, GetEquilibriumStatusHandler, GetGraphData,
+    GetGraphDataHandler, GetNodeMap, GetNodeMapHandler, GetPhysicsState, GetPhysicsStateHandler,
 };
 
 // Application services removed - handlers use actors directly via CQRS or direct messaging
@@ -167,7 +80,7 @@ pub use semantic_service::SemanticService;
 // Phase 7: Inference service
 pub mod inference_service;
 
-pub use inference_service::{InferenceService, InferenceServiceConfig, InferenceEvent};
+pub use inference_service::{InferenceEvent, InferenceService, InferenceServiceConfig};
 
 // Re-export events
 pub use events::DomainEvent;

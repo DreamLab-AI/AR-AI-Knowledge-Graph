@@ -1,8 +1,8 @@
+use crate::utils::time;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
-use crate::utils::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -146,7 +146,6 @@ pub struct CompressionStats {
 }
 
 impl SharedGraph {
-    
     pub fn new(
         title: String,
         description: Option<String>,
@@ -181,7 +180,6 @@ impl SharedGraph {
         }
     }
 
-    
     pub fn is_expired(&self) -> bool {
         if let Some(expires_at) = self.expires_at {
             time::now() > expires_at
@@ -190,7 +188,6 @@ impl SharedGraph {
         }
     }
 
-    
     pub fn access_limit_reached(&self) -> bool {
         if let Some(max_count) = self.max_access_count {
             self.access_count >= max_count
@@ -199,23 +196,20 @@ impl SharedGraph {
         }
     }
 
-    
     pub fn increment_access(&mut self) {
         self.access_count += 1;
         self.updated_at = time::now();
     }
 
-    
     pub fn set_expiration(&mut self, hours: u32) {
         self.expires_at = Some(time::now() + chrono::Duration::hours(hours as i64));
     }
 
-    
     pub fn validate_password(&self, password: &str) -> bool {
         if let Some(hash) = &self.password_hash {
             bcrypt::verify(password, hash).unwrap_or(false)
         } else {
-            true 
+            true
         }
     }
 }
@@ -279,7 +273,13 @@ mod tests {
 
     #[test]
     fn export_format_serde_roundtrip() {
-        for fmt in [ExportFormat::Json, ExportFormat::Gexf, ExportFormat::Graphml, ExportFormat::Csv, ExportFormat::Dot] {
+        for fmt in [
+            ExportFormat::Json,
+            ExportFormat::Gexf,
+            ExportFormat::Graphml,
+            ExportFormat::Csv,
+            ExportFormat::Dot,
+        ] {
             let json = serde_json::to_string(&fmt).unwrap();
             let back: ExportFormat = serde_json::from_str(&json).unwrap();
             assert_eq!(back, fmt);

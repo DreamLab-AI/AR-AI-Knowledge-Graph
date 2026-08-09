@@ -132,7 +132,13 @@ fn local_name(iri: &str) -> String {
 /// Build a pairwise `ConstraintData` with live-kernel `kind`, two endpoints,
 /// `params[0]` carrying the rest-length / min-distance, and `activation_frame=0`
 /// (`set_constraints` stamps the real frame so the progressive ramp engages).
-fn pairwise(kind: LiveKernelKind, subject: u32, object: u32, param0: f32, weight: f32) -> ConstraintData {
+fn pairwise(
+    kind: LiveKernelKind,
+    subject: u32,
+    object: u32,
+    param0: f32,
+    weight: f32,
+) -> ConstraintData {
     let mut node_idx = [-1i32; 4];
     node_idx[0] = subject as i32;
     node_idx[1] = object as i32;
@@ -280,11 +286,23 @@ mod tests {
 
         let axioms = vec![
             // Dog subClassOf Animal  → DISTANCE attraction
-            axiom(AxiomType::SubClassOf, "urn:vc:class:Dog", "urn:vc:class:Animal"),
+            axiom(
+                AxiomType::SubClassOf,
+                "urn:vc:class:Dog",
+                "urn:vc:class:Animal",
+            ),
             // Animal disjointWith Plant → SEPARATION
-            axiom(AxiomType::DisjointWith, "urn:vc:class:Animal", "urn:vc:class:Plant"),
+            axiom(
+                AxiomType::DisjointWith,
+                "urn:vc:class:Animal",
+                "urn:vc:class:Plant",
+            ),
             // Dog equivalentClass Canine → DISTANCE colocate
-            axiom(AxiomType::EquivalentClass, "urn:vc:class:Dog", "urn:vc:class:Canine"),
+            axiom(
+                AxiomType::EquivalentClass,
+                "urn:vc:class:Dog",
+                "urn:vc:class:Canine",
+            ),
         ];
 
         let constraints = map_axioms_to_constraints(&axioms, &mut resolver);
@@ -311,7 +329,10 @@ mod tests {
 
         // equivalentClass → DISTANCE(0) colocate, near-zero rest-length.
         let eq = &constraints[2];
-        assert_eq!(eq.kind, 0, "equivalentClass maps to live DISTANCE = 0 (colocate)");
+        assert_eq!(
+            eq.kind, 0,
+            "equivalentClass maps to live DISTANCE = 0 (colocate)"
+        );
         assert_eq!(eq.params[0], COLOCATE_REST_LENGTH);
         assert_eq!(eq.weight, COLOCATE_WEIGHT);
     }
@@ -359,9 +380,18 @@ mod tests {
 
         let constraints = map_axioms_to_constraints(&[ax], &mut resolver);
         assert_eq!(constraints.len(), 1, "hasPart resolves to one constraint");
-        assert_eq!(constraints[0].kind, 0, "hasPart maps to live DISTANCE = 0 (attract)");
-        assert_eq!(constraints[0].node_idx[0], 20, "subject (whole) is endpoint 0");
-        assert_eq!(constraints[0].node_idx[1], 21, "object (part) is endpoint 1");
+        assert_eq!(
+            constraints[0].kind, 0,
+            "hasPart maps to live DISTANCE = 0 (attract)"
+        );
+        assert_eq!(
+            constraints[0].node_idx[0], 20,
+            "subject (whole) is endpoint 0"
+        );
+        assert_eq!(
+            constraints[0].node_idx[1], 21,
+            "object (part) is endpoint 1"
+        );
         assert_eq!(constraints[0].params[0], SUBCLASS_REST_LENGTH);
         assert_eq!(constraints[0].weight, SUBCLASS_WEIGHT);
     }
@@ -379,7 +409,10 @@ mod tests {
         )];
 
         let constraints = map_axioms_to_constraints(&axioms, &mut resolver);
-        assert!(constraints.is_empty(), "axiom with unresolved object is skipped");
+        assert!(
+            constraints.is_empty(),
+            "axiom with unresolved object is skipped"
+        );
         assert!(resolver.unresolved_count() >= 1, "miss is counted");
     }
 }

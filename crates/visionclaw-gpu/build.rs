@@ -71,7 +71,10 @@ fn main() {
         }
         "75".to_string()
     });
-    println!("cargo:warning=visionclaw-gpu: Building for sm_{}", cuda_arch);
+    println!(
+        "cargo:warning=visionclaw-gpu: Building for sm_{}",
+        cuda_arch
+    );
 
     // Find a CUDA-compatible host compiler (nvcc supports up to GCC 14).
     // CachyOS ships GCC 16 which is too new.
@@ -86,11 +89,17 @@ fn main() {
     .map(|s| s.to_string());
 
     if let Some(ref cc) = cuda_host_compiler {
-        println!("cargo:warning=visionclaw-gpu: Using CUDA host compiler: {}", cc);
+        println!(
+            "cargo:warning=visionclaw-gpu: Using CUDA host compiler: {}",
+            cc
+        );
     }
 
     // ── Phase 1: PTX compilation ──────────────────────────────────────────────
-    println!("cargo:warning=visionclaw-gpu: Compiling {} CUDA kernels to PTX", cuda_files.len());
+    println!(
+        "cargo:warning=visionclaw-gpu: Compiling {} CUDA kernels to PTX",
+        cuda_files.len()
+    );
 
     for cuda_file in &cuda_files {
         let cuda_src = Path::new(cuda_file);
@@ -159,8 +168,7 @@ fn main() {
                 if version_str != ".version 9.0" {
                     let fixed =
                         ptx_text[..pos].to_string() + ".version 9.0" + &ptx_text[pos + 12..];
-                    std::fs::write(&ptx_output, fixed)
-                        .expect("Failed to write downgraded PTX");
+                    std::fs::write(&ptx_output, fixed).expect("Failed to write downgraded PTX");
                     println!(
                         "cargo:warning=visionclaw-gpu: Downgraded {} -> 9.0 for {}",
                         version_str.trim(),
@@ -189,7 +197,10 @@ fn main() {
         ("src/cuda_sources/visionclaw_unified.cu", "thrust_wrapper"),
         ("src/cuda_sources/semantic_forces.cu", "semantic_forces"),
         ("src/cuda_sources/pagerank.cu", "pagerank"),
-        ("src/cuda_sources/gpu_connected_components.cu", "gpu_connected_components"),
+        (
+            "src/cuda_sources/gpu_connected_components.cu",
+            "gpu_connected_components",
+        ),
     ];
 
     let mut obj_files: Vec<PathBuf> = Vec::new();

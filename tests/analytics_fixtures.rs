@@ -450,7 +450,11 @@ pub fn lof(points: &[Pt], k: usize) -> Vec<f64> {
             .collect();
         d.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
         let kth = d[k - 1].0;
-        let nbrs: Vec<usize> = d.iter().filter(|&&(dd, _)| dd <= kth).map(|&(_, j)| j).collect();
+        let nbrs: Vec<usize> = d
+            .iter()
+            .filter(|&&(dd, _)| dd <= kth)
+            .map(|&(_, j)| j)
+            .collect();
         kdist.push(kth);
         knn.push(nbrs);
     }
@@ -492,7 +496,9 @@ pub fn lof(points: &[Pt], k: usize) -> Vec<f64> {
 /// (community 0 = first clique, 1 = second), which is the modularity optimum.
 pub fn two_clique_optimal_partition(g: &GraphFixture) -> Vec<u32> {
     let half = (g.n / 2) as u32;
-    (0..g.n as u32).map(|i| if i < half { 0 } else { 1 }).collect()
+    (0..g.n as u32)
+        .map(|i| if i < half { 0 } else { 1 })
+        .collect()
 }
 
 /// Count distinct community labels actually used in a partition.

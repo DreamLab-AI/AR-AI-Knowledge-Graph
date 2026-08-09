@@ -12,14 +12,14 @@ use crate::events::domain_events::{
     LayoutOptimizedEvent, PositionsUpdatedEvent, SimulationStartedEvent, SimulationStoppedEvent,
 };
 use crate::events::event_bus::EventBus;
+use crate::models::simulation_params::SettleMode;
+use crate::utils::time;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::node::Node;
-use crate::models::simulation_params::SettleMode;
 use visionclaw_domain::ports::gpu_physics_adapter::{
-    GpuDeviceInfo, GpuPhysicsAdapter, PhysicsParameters, PhysicsStatistics,
-    PhysicsStepResult, Result as PhysicsResult,
+    GpuDeviceInfo, GpuPhysicsAdapter, PhysicsParameters, PhysicsStatistics, PhysicsStepResult,
+    Result as PhysicsResult,
 };
-use crate::utils::time;
 
 #[derive(Debug, Clone)]
 pub struct SimulationParams {
@@ -55,7 +55,6 @@ pub struct PhysicsService {
 }
 
 impl PhysicsService {
-    
     pub fn new(
         physics_adapter: Arc<RwLock<dyn GpuPhysicsAdapter>>,
         event_bus: Arc<RwLock<EventBus>>,
@@ -67,23 +66,19 @@ impl PhysicsService {
         }
     }
 
-    
     pub async fn start_simulation(
         &self,
         graph: Arc<GraphData>,
         params: SimulationParams,
     ) -> PhysicsResult<String> {
-        
         let mut adapter = self.physics_adapter.write().await;
         adapter
             .initialize(graph.clone(), params.physics_params.clone())
             .await?;
 
-        
         let sim_id = format!("sim-{}", uuid::Uuid::new_v4());
         *self.simulation_id.write().await = Some(sim_id.clone());
 
-        
         let event = SimulationStartedEvent {
             simulation_id: sim_id.clone(),
             physics_profile: params.profile_name,
@@ -91,25 +86,18 @@ impl PhysicsService {
             timestamp: time::now(),
         };
 
-        let _ = self.event_bus
-            .write()
-            .await
-            .publish(event)
-            .await;
+        let _ = self.event_bus.write().await.publish(event).await;
 
         Ok(sim_id)
     }
 
-    
     pub async fn stop_simulation(&self) -> PhysicsResult<()> {
         let sim_id = self.simulation_id.read().await.clone();
 
         if let Some(simulation_id) = sim_id {
-            
             let adapter = self.physics_adapter.read().await;
             let stats = adapter.get_statistics().await?;
 
-            
             let event = SimulationStoppedEvent {
                 simulation_id,
                 iterations: stats.total_steps as u32,
@@ -117,12 +105,7 @@ impl PhysicsService {
                 timestamp: time::now(),
             };
 
-            let _ = self.event_bus
-                .write()
-                .await
-                .publish(event)
-                .await;
-
+            let _ = self.event_bus.write().await.publish(event).await;
 
             *self.simulation_id.write().await = None;
         }
@@ -130,24 +113,19 @@ impl PhysicsService {
         Ok(())
     }
 
-    
     pub async fn compute_layout(
         &self,
         graph: Arc<GraphData>,
         params: PhysicsParameters,
     ) -> PhysicsResult<Vec<Node>> {
-        
         let mut adapter = self.physics_adapter.write().await;
         adapter.initialize(graph.clone(), params).await?;
 
-        
         let _result = adapter.simulate_until_convergence().await?;
 
-        
         let forces = adapter.compute_forces().await?;
         let positions = adapter.update_positions(&forces).await?;
 
-        
         let mut nodes = Vec::new();
         for (node_id, x, y, z) in positions {
             if let Some(node) = graph.nodes.iter().find(|n| n.id == node_id) {
@@ -159,43 +137,33 @@ impl PhysicsService {
             }
         }
 
-        
         let event = PositionsUpdatedEvent {
             graph_id: "main".to_string(),
             updated_nodes: nodes.iter().map(|n| n.id.to_string()).collect(),
             timestamp: time::now(),
         };
 
-        let _ = self.event_bus
-            .write()
-            .await
-            .publish(event)
-            .await;
+        let _ = self.event_bus.write().await.publish(event).await;
 
         Ok(nodes)
     }
 
-    
     pub async fn step(&self) -> PhysicsResult<PhysicsStepResult> {
         let mut adapter = self.physics_adapter.write().await;
         adapter.step().await
     }
 
-    
     pub async fn optimize_layout(
         &self,
         graph: Arc<GraphData>,
         request: LayoutOptimizationRequest,
     ) -> PhysicsResult<Vec<Node>> {
-        
         let mut params = PhysicsParameters::default();
         params.max_iterations = request.max_iterations;
         params.convergence_threshold = request.target_energy;
 
-        
         let nodes = self.compute_layout(graph, params).await?;
 
-        
         let event = LayoutOptimizedEvent {
             layout_id: format!("layout-{}", uuid::Uuid::new_v4()),
             algorithm: request.algorithm,
@@ -204,16 +172,11 @@ impl PhysicsService {
             timestamp: time::now(),
         };
 
-        let _ = self.event_bus
-            .write()
-            .await
-            .publish(event)
-            .await;
+        let _ = self.event_bus.write().await.publish(event).await;
 
         Ok(nodes)
     }
 
-    
     pub async fn apply_external_forces(
         &self,
         forces: Vec<(u32, f32, f32, f32)>,
@@ -222,48 +185,40 @@ impl PhysicsService {
         adapter.apply_external_forces(forces).await
     }
 
-    
     pub async fn pin_nodes(&self, nodes: Vec<(u32, f32, f32, f32)>) -> PhysicsResult<()> {
         let mut adapter = self.physics_adapter.write().await;
         adapter.pin_nodes(nodes).await
     }
 
-    
     pub async fn unpin_nodes(&self, node_ids: Vec<u32>) -> PhysicsResult<()> {
         let mut adapter = self.physics_adapter.write().await;
         adapter.unpin_nodes(node_ids).await
     }
 
-    
     pub async fn update_parameters(&self, params: PhysicsParameters) -> PhysicsResult<()> {
         let mut adapter = self.physics_adapter.write().await;
         adapter.update_parameters(params).await
     }
 
-    
     pub async fn get_gpu_status(&self) -> PhysicsResult<GpuDeviceInfo> {
         let adapter = self.physics_adapter.read().await;
         adapter.get_gpu_status().await
     }
 
-    
     pub async fn get_statistics(&self) -> PhysicsResult<PhysicsStatistics> {
         let adapter = self.physics_adapter.read().await;
         adapter.get_statistics().await
     }
 
-    
     pub async fn reset(&self) -> PhysicsResult<()> {
         let mut adapter = self.physics_adapter.write().await;
         adapter.reset().await
     }
 
-    
     pub async fn is_running(&self) -> bool {
         self.simulation_id.read().await.is_some()
     }
 
-    
     pub async fn get_simulation_id(&self) -> Option<String> {
         self.simulation_id.read().await.clone()
     }
@@ -272,11 +227,11 @@ impl PhysicsService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::events::event_bus::EventBus;
-    use visionclaw_domain::ports::gpu_physics_adapter::NodeForce;
+    use async_trait::async_trait;
     use std::sync::Arc;
     use tokio::sync::RwLock;
+    use visionclaw_domain::ports::gpu_physics_adapter::NodeForce;
 
     struct MockPhysicsAdapter;
 

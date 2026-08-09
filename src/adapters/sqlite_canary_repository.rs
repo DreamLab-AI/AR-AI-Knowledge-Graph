@@ -220,7 +220,15 @@ impl SqliteCanaryRepository {
             .map_err(map_db_err)?;
 
         Ok(row.map(
-            |(canary_id, description, kind, owner_repo, wave, sha_at_registration, registered_at_ms)| {
+            |(
+                canary_id,
+                description,
+                kind,
+                owner_repo,
+                wave,
+                sha_at_registration,
+                registered_at_ms,
+            )| {
                 CanaryRegistration {
                     canary_id,
                     description,

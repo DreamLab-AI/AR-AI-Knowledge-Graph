@@ -1,8 +1,8 @@
+use crate::services::nostr_service::NostrService;
 use actix_web::{HttpRequest, HttpResponse};
 use log::warn;
 use tracing::{debug, info};
 use uuid::Uuid;
-use crate::services::nostr_service::NostrService;
 
 /// Scoped permission levels for RBAC.
 ///
@@ -41,7 +41,7 @@ impl AccessLevel {
     pub fn has_permission(&self, required: &AccessLevel) -> bool {
         use AccessLevel::*;
         match required {
-            ReadOnly => true, // every authenticated level can read
+            ReadOnly => true,      // every authenticated level can read
             Authenticated => true, // same as ReadOnly for permission checks
             WriteGraph => matches!(self, WriteGraph | Admin | Authenticated | PowerUser),
             WriteSettings => matches!(self, WriteSettings | Admin | PowerUser),
@@ -66,10 +66,15 @@ pub async fn verify_access(
     // --- Dev bypass (dev builds only) ---
     #[cfg(any(debug_assertions, feature = "dev-auth"))]
     {
-        if let Some(auth_value) = req.headers().get("Authorization").and_then(|h| h.to_str().ok()) {
+        if let Some(auth_value) = req
+            .headers()
+            .get("Authorization")
+            .and_then(|h| h.to_str().ok())
+        {
             if auth_value == "Bearer dev-session-token" {
                 debug!("dev-auth: Bearer dev-session-token accepted in middleware (dev build)");
-                let pubkey = req.headers()
+                let pubkey = req
+                    .headers()
                     .get("X-Nostr-Pubkey")
                     .and_then(|h| h.to_str().ok())
                     .unwrap_or("dev-user")
@@ -89,11 +94,13 @@ pub async fn verify_access(
             // Behind a TLS-terminating proxy, connection_info returns internal
             // scheme/host; prefer X-Forwarded-* headers from the proxy.
             let conn_info = req.connection_info();
-            let scheme = req.headers()
+            let scheme = req
+                .headers()
                 .get("X-Forwarded-Proto")
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or_else(|| conn_info.scheme());
-            let host = req.headers()
+            let host = req
+                .headers()
                 .get("X-Forwarded-Host")
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or_else(|| conn_info.host());
@@ -297,9 +304,24 @@ mod access_level_tests {
     /// power_user-gated destructive routes.
     #[test]
     fn admin_power_user_satisfies_everything() {
-        for required in [ReadOnly, WriteGraph, WriteSettings, Admin, PowerUser, Authenticated] {
-            assert!(Admin.has_permission(&required), "Admin must satisfy {:?}", required);
-            assert!(PowerUser.has_permission(&required), "PowerUser must satisfy {:?}", required);
+        for required in [
+            ReadOnly,
+            WriteGraph,
+            WriteSettings,
+            Admin,
+            PowerUser,
+            Authenticated,
+        ] {
+            assert!(
+                Admin.has_permission(&required),
+                "Admin must satisfy {:?}",
+                required
+            );
+            assert!(
+                PowerUser.has_permission(&required),
+                "PowerUser must satisfy {:?}",
+                required
+            );
         }
     }
 

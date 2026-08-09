@@ -40,11 +40,15 @@ impl QueryHandler<GetPhysicsStatus, PhysicsStatus> for GetPhysicsStatusHandler {
         let simulator = self.simulator.clone();
         let graph_name = query.graph_name.clone();
 
-        
         let is_running = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async { simulator.is_running().await })
         })
-        .map_err(|e| Hexserror::port("E_PHYSICS_STATUS", &format!("Failed to get physics status: {}", e)))?;
+        .map_err(|e| {
+            Hexserror::port(
+                "E_PHYSICS_STATUS",
+                &format!("Failed to get physics status: {}", e),
+            )
+        })?;
 
         Ok(PhysicsStatus {
             is_running,
@@ -77,8 +81,6 @@ impl QueryHandler<GetSimulationParams, SimulationParams> for GetSimulationParams
     fn handle(&self, query: GetSimulationParams) -> HexResult<SimulationParams> {
         log::debug!("Executing GetSimulationParams query: {}", query.graph_name);
 
-        
-        
         Ok(SimulationParams {
             settings: crate::config::PhysicsSettings::default(),
             graph_name: query.graph_name,
@@ -99,7 +101,7 @@ mod tests {
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    
+
     struct MockPhysicsSimulator {
         running: AtomicBool,
     }
@@ -155,7 +157,7 @@ mod tests {
     #[test]
     fn test_get_physics_status_validation() {
         let query = GetPhysicsStatus {
-            graph_name: "".to_string(), 
+            graph_name: "".to_string(),
         };
         assert!(query.validate().is_err());
 

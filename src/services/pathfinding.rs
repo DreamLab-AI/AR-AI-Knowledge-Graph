@@ -4,12 +4,12 @@
 //! queries on the graph. These complement the existing GPU-based SSSP which
 //! visits all reachable nodes.
 
-use visionclaw_domain::models::graph::GraphData;
-use visionclaw_domain::models::node::Node;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
+use visionclaw_domain::models::graph::GraphData;
+use visionclaw_domain::models::node::Node;
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -68,7 +68,7 @@ impl Default for PathAlgorithm {
 #[derive(Clone)]
 struct HeapEntry {
     node_id: u32,
-    f_score: f32,   // For A*: g + h.  For Dijkstra: g.
+    f_score: f32, // For A*: g + h.  For Dijkstra: g.
     g_score: f32,
 }
 

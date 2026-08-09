@@ -28,9 +28,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let oxigraph_path = std::path::Path::new(&data_dir).join("oxigraph");
     log::info!("Opening Oxigraph store at: {}", oxigraph_path.display());
 
-    let onto_repo = Arc::new(
-        OxigraphOntologyRepository::open(&oxigraph_path).await?,
-    );
+    let onto_repo = Arc::new(OxigraphOntologyRepository::open(&oxigraph_path).await?);
     let oxigraph_store = onto_repo.store().clone();
     let kg_repo = Arc::new(OxigraphGraphRepository::from_store(oxigraph_store));
 
@@ -44,24 +42,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let content_api = Arc::new(EnhancedContentAPI::new(github_client));
 
     // Initialize whelk inference engine for ontology reasoning
-    let whelk_engine = Arc::new(visionclaw_server::adapters::whelk_inference_engine::WhelkInferenceEngine::new());
-    let reasoner = Arc::new(visionclaw_server::services::ontology_reasoner::OntologyReasoner::new(
-        whelk_engine,
-        onto_repo.clone() as Arc<dyn visionclaw_server::ports::ontology_repository::OntologyRepository>,
-    ));
+    let whelk_engine =
+        Arc::new(visionclaw_server::adapters::whelk_inference_engine::WhelkInferenceEngine::new());
+    let reasoner = Arc::new(
+        visionclaw_server::services::ontology_reasoner::OntologyReasoner::new(
+            whelk_engine,
+            onto_repo.clone()
+                as Arc<dyn visionclaw_server::ports::ontology_repository::OntologyRepository>,
+        ),
+    );
 
     // Initialize edge classifier (no arguments needed)
-    let edge_classifier = Arc::new(visionclaw_server::services::edge_classifier::EdgeClassifier::new());
+    let edge_classifier =
+        Arc::new(visionclaw_server::services::edge_classifier::EdgeClassifier::new());
 
-    let enrichment_service = Arc::new(OntologyEnrichmentService::new(
-        reasoner,
-        edge_classifier,
-    ));
+    let enrichment_service = Arc::new(OntologyEnrichmentService::new(reasoner, edge_classifier));
 
     // Create sync service
     let sync_service = LocalFileSyncService::new(
         content_api,
-        kg_repo as Arc<dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
+        kg_repo
+            as Arc<
+                dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository,
+            >,
         onto_repo,
         enrichment_service,
     );
@@ -84,10 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  Files updated from GitHub: {}",
         stats.files_updated_from_github
     );
-    println!(
-        "  Knowledge graph files:    {}",
-        stats.kg_files_processed
-    );
+    println!("  Knowledge graph files:    {}", stats.kg_files_processed);
     println!(
         "  Ontology files processed: {}",
         stats.ontology_files_processed

@@ -21,32 +21,26 @@ mod tests {
         let mut graph = create_ai_knowledge_graph();
         let metadata = create_ai_metadata();
 
-        
         let mut constraint_generator = SemanticConstraintGenerator::new();
         let constraint_result = constraint_generator
             .generate_constraints(&graph, Some(&metadata))
             .expect("Failed to generate constraints");
 
-        
         assert!(constraint_result.clusters.len() >= 1);
         assert!(constraint_result.clustering_constraints.len() > 0);
 
-        
         let mut constraint_set = ConstraintSet::default();
         constraint_generator.apply_to_constraint_set(&mut constraint_set, &constraint_result);
 
-        
         let mut solver = StressMajorizationSolver::new();
         let optimization_result = solver
             .optimize(&mut graph, &constraint_set)
             .expect("Failed to optimize layout");
 
-
         assert!(optimization_result.iterations > 0);
         assert!(optimization_result.final_stress.is_finite());
         // Note: computation_time can be 0 for very fast optimizations on small graphs (sub-millisecond)
 
-        
         for node in &graph.nodes {
             assert!(node.data.x.is_finite());
             assert!(node.data.y.is_finite());
@@ -64,16 +58,13 @@ mod tests {
             .generate_constraints(&graph, Some(&metadata))
             .expect("Failed to generate constraints");
 
-        
         assert!(result.clusters.len() >= 2);
 
-        
         for cluster in &result.clusters {
             assert!(cluster.coherence > 0.0);
             assert!(cluster.node_ids.len() >= 2);
         }
 
-        
         assert!(result.separation_constraints.len() > 0);
     }
 
@@ -93,10 +84,8 @@ mod tests {
             .generate_constraints(&graph, Some(&metadata))
             .expect("Failed to generate constraints");
 
-        
         assert!(result.hierarchical_relations.len() > 0);
 
-        
         assert!(result.alignment_constraints.len() > 0);
     }
 
@@ -110,10 +99,8 @@ mod tests {
             .optimize(&mut graph, &constraint_set)
             .expect("Failed to optimize");
 
-        
         assert!(!result.constraint_scores.is_empty());
 
-        
         for (_, score) in &result.constraint_scores {
             assert!(*score >= 0.0 && *score <= 1.0);
         }
@@ -121,10 +108,10 @@ mod tests {
 
     #[test]
     fn test_performance_with_large_graph() {
-        let graph = create_large_graph(1000); 
+        let graph = create_large_graph(1000);
         let mut solver = StressMajorizationSolver::with_config(
             crate::physics::stress_majorization::StressMajorizationConfig {
-                max_iterations: 100, 
+                max_iterations: 100,
                 ..Default::default()
             },
         );
@@ -136,13 +123,11 @@ mod tests {
         let elapsed = start_time.elapsed();
 
         assert!(result.is_ok());
-        assert!(elapsed.as_secs() < 10); 
+        assert!(elapsed.as_secs() < 10);
 
         let result = result.unwrap();
         assert!(result.final_stress.is_finite());
     }
-
-    
 
     fn create_ai_knowledge_graph() -> GraphData {
         let nodes = vec![
@@ -190,10 +175,7 @@ mod tests {
         nodes[3].data.y = 205.0;
         nodes[3].data.z = 102.0;
 
-        let edges = vec![
-            Edge::new(1, 2, 1.0),
-            Edge::new(3, 4, 1.0),
-        ];
+        let edges = vec![Edge::new(1, 2, 1.0), Edge::new(3, 4, 1.0)];
 
         GraphData {
             nodes,
@@ -246,14 +228,13 @@ mod tests {
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
 
-        
         for i in 1..=node_count {
             nodes.push(create_test_node(i, &format!("Node {}", i)));
         }
 
         // Use seeded RNG for reproducible tests
-        use rand::{Rng, SeedableRng};
         use rand::rngs::StdRng;
+        use rand::{Rng, SeedableRng};
         let mut rng = StdRng::seed_from_u64(42);
         let edge_count = (node_count as f32 * 2.0) as usize;
 
@@ -507,13 +488,11 @@ mod tests {
     fn create_test_constraints() -> ConstraintSet {
         let mut constraint_set = ConstraintSet::default();
 
-        
-        constraint_set.add(visionclaw_domain::models::constraints::Constraint::fixed_position(
-            1, 0.0, 0.0, 0.0,
-        ));
-        constraint_set.add(visionclaw_domain::models::constraints::Constraint::separation(
-            2, 3, 100.0,
-        ));
+        constraint_set.add(
+            visionclaw_domain::models::constraints::Constraint::fixed_position(1, 0.0, 0.0, 0.0),
+        );
+        constraint_set
+            .add(visionclaw_domain::models::constraints::Constraint::separation(2, 3, 100.0));
 
         constraint_set
     }

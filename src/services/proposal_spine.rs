@@ -128,8 +128,11 @@ pub fn build_receipt(inputs: &ReceiptInputs<'_>) -> ProposalReceipt {
         assert_graph_hash: hash_lines("assert", inputs.assert_triples),
         provenance_graph_hash: hash_lines("provenance", inputs.provenance_quads),
         envelope_hash: sha256_hex(
-            format!("envelope\n{}", inputs.envelope.unwrap_or("urn:agentbox:envelope:unsigned"))
-                .as_bytes(),
+            format!(
+                "envelope\n{}",
+                inputs.envelope.unwrap_or("urn:agentbox:envelope:unsigned")
+            )
+            .as_bytes(),
         ),
     }
 }
@@ -387,8 +390,12 @@ impl std::fmt::Display for EnvelopeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             EnvelopeError::Required => "signed envelope required but none supplied",
-            EnvelopeError::BadPubkey => "malformed principal public key (expect 32-byte x-only hex)",
-            EnvelopeError::BadSignature => "malformed envelope signature (expect 64-byte BIP-340 hex)",
+            EnvelopeError::BadPubkey => {
+                "malformed principal public key (expect 32-byte x-only hex)"
+            }
+            EnvelopeError::BadSignature => {
+                "malformed envelope signature (expect 64-byte BIP-340 hex)"
+            }
             EnvelopeError::VerifyFailed => "envelope signature failed BIP-340 verification",
         };
         f.write_str(s)
@@ -887,7 +894,11 @@ mod tests {
             CommitOutcome::Replay(r) => assert_eq!(r, committed),
             other => panic!("expected Replay, got {other:?}"),
         }
-        assert_eq!(store.len().unwrap(), len_after_first, "replay mutates nothing");
+        assert_eq!(
+            store.len().unwrap(),
+            len_after_first,
+            "replay mutates nothing"
+        );
     }
 
     #[test]
@@ -924,7 +935,11 @@ mod tests {
             governed_commit(&store, &idem, &intents, &divergent).unwrap(),
             CommitOutcome::Conflict
         );
-        assert_eq!(store.len().unwrap(), len_after_first, "conflict mutates nothing");
+        assert_eq!(
+            store.len().unwrap(),
+            len_after_first,
+            "conflict mutates nothing"
+        );
     }
 
     // --- Signature-envelope verification (BIP-340 seam) ---

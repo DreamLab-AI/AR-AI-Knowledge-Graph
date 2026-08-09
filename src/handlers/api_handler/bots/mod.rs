@@ -13,7 +13,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/data", web::post().to(bots_update))
             .route("/update", web::post().to(bots_update))
             .route("/initialize-swarm", web::post().to(initialize_swarm))
-            .route("/settings-command", web::post().to(process_settings_command))
+            .route(
+                "/settings-command",
+                web::post().to(process_settings_command),
+            )
             .route("/status", web::get().to(get_bots_connection_status))
             .route("/agents", web::get().to(get_bots_agents))
             .route("/spawn-agent-hybrid", web::post().to(spawn_agent_hybrid))

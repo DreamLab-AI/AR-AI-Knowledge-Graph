@@ -5,14 +5,14 @@
 //! Uses hornedowl/whelk-rs for advanced ontology reasoning.
 //! This is the critical bridge that populates owl_class_iri fields.
 
+use log::{info, warn};
 use std::collections::HashMap;
 use std::sync::Arc;
-use log::{info, warn};
 
-use visionclaw_domain::models::node::Node;
-use visionclaw_domain::models::graph::GraphData;
-use visionclaw_domain::ports::ontology_repository::{OntologyRepository, OwlClass};
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
+use visionclaw_domain::models::graph::GraphData;
+use visionclaw_domain::models::node::Node;
+use visionclaw_domain::ports::ontology_repository::{OntologyRepository, OwlClass};
 
 /// Statistics from ontology conversion
 #[derive(Default, Debug)]
@@ -61,7 +61,11 @@ impl OntologyConverter {
                     nodes.push(node);
                     stats.nodes_created += 1;
                     if stats.nodes_created % 100 == 0 {
-                        info!("  Converted {} / {} nodes...", stats.nodes_created, classes.len());
+                        info!(
+                            "  Converted {} / {} nodes...",
+                            stats.nodes_created,
+                            classes.len()
+                        );
                     }
                 }
                 Err(e) => {
@@ -86,7 +90,8 @@ impl OntologyConverter {
     /// Create a graph node from an OWL class
     fn create_node_from_class(&self, class: &OwlClass) -> Result<Node, Box<dyn std::error::Error>> {
         // Extract IRI suffix as metadata_id
-        let metadata_id = class.iri
+        let metadata_id = class
+            .iri
             .split(':')
             .last()
             .or(class.iri.split('/').last())
@@ -120,7 +125,8 @@ impl OntologyConverter {
             vx: 0.0,
             vy: 0.0,
             vz: 0.0,
-        }.into();
+        }
+        .into();
 
         Ok(Node {
             id: 0, // Auto-assigned by database

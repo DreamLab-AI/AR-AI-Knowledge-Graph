@@ -370,9 +370,9 @@ impl LshIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use visionclaw_domain::models::metadata::Metadata;
     use visionclaw_domain::models::node::Node;
-    use std::collections::HashMap;
 
     fn make_node(id: u32, label: &str, node_type: Option<&str>) -> Node {
         let mut node = Node::new_with_id(label.to_string(), Some(id));
@@ -441,12 +441,12 @@ mod tests {
         // With enough separation in features, dissimilar nodes should not collide.
         // This is probabilistic, so we use very different strings.
         let nodes = vec![
-            make_node(1, "quantum chromodynamics particle physics", Some("science")),
             make_node(
-                2,
-                "baroque harpsichord musical composition",
-                Some("music"),
+                1,
+                "quantum chromodynamics particle physics",
+                Some("science"),
             ),
+            make_node(2, "baroque harpsichord musical composition", Some("music")),
         ];
 
         let index = LshIndex::build_from_nodes(&nodes, None);
@@ -539,7 +539,8 @@ mod tests {
             rows_per_band: 1,
             shingle_size: 3,
         };
-        let index = LshIndex::build_from_nodes_with_config(&nodes, Some(&store), high_recall_config);
+        let index =
+            LshIndex::build_from_nodes_with_config(&nodes, Some(&store), high_recall_config);
         assert_eq!(index.len(), 2);
 
         // Both share the "artificial_intelligence" topic, so they should be candidates.

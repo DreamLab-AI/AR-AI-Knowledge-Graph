@@ -8,13 +8,13 @@
 //! - POST /api/workspace/{id}/favorite - Toggle favorite status
 //! - POST /api/workspace/{id}/archive - Archive/unarchive workspace
 
+use crate::middleware::{RateLimit, RequireAuth};
+use crate::{created_json, ok_json};
 use actix::Addr;
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use log::{debug, error, info, warn};
 use serde_json::json;
 use validator::Validate;
-use crate::middleware::{RequireAuth, RateLimit};
-use crate::{ok_json, created_json};
 
 use crate::utils::actor_timeout::{send_with_default_timeout, ActorTimeoutError};
 
@@ -51,7 +51,6 @@ async fn list_workspaces(
 ) -> ActixResult<HttpResponse> {
     debug!("Received workspace list request: {:?}", query);
 
-    
     let workspace_query = WorkspaceQuery {
         page: query.page,
         page_size: query.page_size,
@@ -60,7 +59,6 @@ async fn list_workspaces(
         filter: build_filter_from_query(&query),
     };
 
-    
     if let Err(validation_errors) = workspace_query.validate() {
         warn!("Workspace query validation failed: {:?}", validation_errors);
         return Ok(HttpResponse::BadRequest().json(json!({
@@ -73,7 +71,6 @@ async fn list_workspaces(
         })));
     }
 
-    
     match send_with_default_timeout(
         &workspace_actor,
         GetWorkspaces {
@@ -179,7 +176,6 @@ async fn create_workspace(
 ) -> ActixResult<HttpResponse> {
     debug!("Received create workspace request: {:?}", payload.name);
 
-    
     if let Err(validation_errors) = payload.validate() {
         warn!(
             "Workspace creation validation failed: {:?}",
@@ -237,7 +233,6 @@ async fn update_workspace(
             .json(WorkspaceResponse::error("Workspace ID cannot be empty")));
     }
 
-    
     if let Err(validation_errors) = payload.validate() {
         warn!(
             "Workspace update validation failed: {:?}",
@@ -514,7 +509,6 @@ struct WorkspaceQueryParams {
     sort_by: Option<WorkspaceSortBy>,
     sort_direction: Option<SortDirection>,
 
-    
     status: Option<WorkspaceStatus>,
     workspace_type: Option<WorkspaceType>,
     is_favorite: Option<bool>,

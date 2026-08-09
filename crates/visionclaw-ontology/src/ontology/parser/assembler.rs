@@ -13,18 +13,15 @@ impl OntologyAssembler {
         }
     }
 
-    
     pub fn set_header(&mut self, owl_blocks: &[String]) -> Result<()> {
         if owl_blocks.is_empty() {
             anyhow::bail!("No OWL blocks found in ontology definition");
         }
 
-        
         self.header = owl_blocks.join("\n\n");
         Ok(())
     }
 
-    
     pub fn add_owl_blocks(&mut self, owl_blocks: &[String]) -> Result<()> {
         for block in owl_blocks {
             if !block.trim().is_empty() {
@@ -34,7 +31,6 @@ impl OntologyAssembler {
         Ok(())
     }
 
-    
     pub fn add_axioms(&mut self, axioms: &[String]) -> Result<()> {
         for axiom in axioms {
             if !axiom.trim().is_empty() {
@@ -44,18 +40,12 @@ impl OntologyAssembler {
         Ok(())
     }
 
-    
     pub fn to_string(&self) -> String {
         let mut result = String::new();
 
-        
-        
-
         let header = self.header.trim();
 
-        
         if header.ends_with(')') {
-            
             let header_without_close = &header[..header.len() - 1];
             result.push_str(header_without_close);
             result.push('\n');
@@ -64,10 +54,9 @@ impl OntologyAssembler {
             result.push('\n');
         }
 
-        
         for block in &self.axiom_blocks {
             result.push('\n');
-            
+
             for line in block.lines() {
                 if !line.trim().is_empty() {
                     result.push_str("  ");
@@ -77,13 +66,11 @@ impl OntologyAssembler {
             }
         }
 
-        
         result.push_str(")\n");
 
         result
     }
 
-    
     pub fn validate(&self) -> Result<()> {
         use horned_owl::io::ofn::reader::read as read_ofn;
         use horned_owl::ontology::set::SetOntology;
@@ -93,13 +80,10 @@ impl OntologyAssembler {
         let ontology_text = self.to_string();
         let cursor = Cursor::new(ontology_text.as_bytes());
 
-        
         match read_ofn::<Arc<str>, SetOntology<Arc<str>>, _>(cursor, Default::default()) {
             Ok((_ontology, _prefixes)) => {
                 log::info!("  Parsed successfully");
                 log::info!("  OWL Functional Syntax is valid");
-
-
 
                 log::info!(
                     "  For full reasoning/consistency checking, use a DL reasoner like whelk-rs"

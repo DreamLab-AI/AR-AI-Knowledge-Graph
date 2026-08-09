@@ -101,13 +101,11 @@ mod t4_ceiling_consistency {
     #[test]
     fn t4b_route_validator_max_velocity_equals_rust_backstop() {
         assert_eq!(
-            ROUTE_VALIDATOR_MAX_VELOCITY_MAX,
-            RUST_BACKSTOP_MAX_VELOCITY,
+            ROUTE_VALIDATOR_MAX_VELOCITY_MAX, RUST_BACKSTOP_MAX_VELOCITY,
             "Route validator ceiling ({}) differs from Rust backstop ({}). \
              When they differ, the backstop fires on healthy frames whose velocity \
              was allowed by the validator but exceeds the backstop constant.",
-            ROUTE_VALIDATOR_MAX_VELOCITY_MAX,
-            RUST_BACKSTOP_MAX_VELOCITY
+            ROUTE_VALIDATOR_MAX_VELOCITY_MAX, RUST_BACKSTOP_MAX_VELOCITY
         );
     }
 
@@ -162,7 +160,8 @@ mod t4_ceiling_consistency {
         );
         // repel_k is now bounded by both layers via the same shared constant.
         assert_eq!(
-            ACTOR_PATH_REPEL_K_MAX, physics_bounds::REPEL_K.1,
+            ACTOR_PATH_REPEL_K_MAX,
+            physics_bounds::REPEL_K.1,
             "repel_k actor ceiling diverges from shared bounds source"
         );
     }
@@ -174,9 +173,21 @@ mod t4_ceiling_consistency {
     #[test]
     fn t4_canonical_defaults_accepted_by_unified_ceilings() {
         let d = PhysicsSettings::default();
-        assert!(d.repel_k <= ACTOR_PATH_REPEL_K_MAX, "repel_k {} clamped", d.repel_k);
-        assert!(d.max_velocity <= ACTOR_PATH_MAX_VELOCITY_MAX, "max_velocity {} clamped", d.max_velocity);
-        assert!(d.spring_k <= ACTOR_PATH_SPRING_K_MAX, "spring_k {} clamped", d.spring_k);
+        assert!(
+            d.repel_k <= ACTOR_PATH_REPEL_K_MAX,
+            "repel_k {} clamped",
+            d.repel_k
+        );
+        assert!(
+            d.max_velocity <= ACTOR_PATH_MAX_VELOCITY_MAX,
+            "max_velocity {} clamped",
+            d.max_velocity
+        );
+        assert!(
+            d.spring_k <= ACTOR_PATH_SPRING_K_MAX,
+            "spring_k {} clamped",
+            d.spring_k
+        );
         // velocity ceiling held equal to the backstop so the backstop never
         // fires on healthy default frames.
         assert_eq!(ROUTE_VALIDATOR_MAX_VELOCITY_MAX, RUST_BACKSTOP_MAX_VELOCITY);
@@ -198,7 +209,10 @@ mod t4_ceiling_consistency {
         // Pin the canonical default magnitudes so a silent default change can't
         // make this test vacuously pass on weaker values.
         assert_eq!(d.repel_k, 120.0, "canonical repelK default drifted");
-        assert_eq!(d.max_velocity, 100.0, "canonical maxVelocity default drifted");
+        assert_eq!(
+            d.max_velocity, 100.0,
+            "canonical maxVelocity default drifted"
+        );
         assert_eq!(d.spring_k, 12.0, "canonical springK default drifted");
         assert_eq!(d.max_force, 150.0, "canonical maxForce default drifted");
 

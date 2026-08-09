@@ -31,7 +31,6 @@ impl Vec4 {
             });
         }
 
-        
         const MAX_VAL: f32 = 1e6;
         if x.abs() > MAX_VAL || y.abs() > MAX_VAL || z.abs() > MAX_VAL || t.abs() > MAX_VAL {
             return Err(GPUSafetyError::InvalidKernelParams {
@@ -80,44 +79,36 @@ unsafe impl ValidAsZeroBits for Vec4 {}
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct TSNode {
-    
     pub position: Vec4,
     pub velocity: Vec4,
     pub acceleration: Vec4,
 
-    
     pub trajectory: [Vec4; 8],
     pub temporal_coherence: f32,
     pub motion_saliency: f32,
 
-    
     pub hierarchy_level: i32,
     pub parent_idx: i32,
     pub children: [i32; 4],
     pub lod_importance: f32,
 
-    
     pub layer_membership: [f32; 16],
     pub primary_layer: i32,
     pub isolation_strength: f32,
 
-    
     pub topology: [f32; 32],
     pub betweenness_centrality: f32,
     pub clustering_coefficient: f32,
     pub pagerank: f32,
     pub community_id: i32,
 
-    
     pub semantic_vector: [f32; 16],
     pub semantic_drift: f32,
 
-    
     pub visual_saliency: f32,
     pub information_content: f32,
     pub attention_weight: f32,
 
-    
     pub force_scale: f32,
     pub damping_local: f32,
     pub constraint_mask: i32,
@@ -156,12 +147,10 @@ impl TSNode {
     }
 
     pub fn validate(&self) -> Result<(), GPUSafetyError> {
-        
         self.position.validate()?;
         self.velocity.validate()?;
         self.acceleration.validate()?;
 
-        
         for (i, vec) in self.trajectory.iter().enumerate() {
             vec.validate()
                 .map_err(|_| GPUSafetyError::InvalidKernelParams {
@@ -169,7 +158,6 @@ impl TSNode {
                 })?;
         }
 
-        
         if !self.temporal_coherence.is_finite()
             || self.temporal_coherence < 0.0
             || self.temporal_coherence > 1.0
@@ -191,14 +179,12 @@ impl TSNode {
             });
         }
 
-        
         if !self.lod_importance.is_finite() || self.lod_importance < 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid lod_importance: {}", self.lod_importance),
             });
         }
 
-        
         let layer_sum: f32 = self.layer_membership.iter().sum();
         if !layer_sum.is_finite() || layer_sum < 0.0 || layer_sum > 16.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
@@ -206,7 +192,6 @@ impl TSNode {
             });
         }
 
-        
         if !self.betweenness_centrality.is_finite() || self.betweenness_centrality < 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!(
@@ -234,7 +219,6 @@ impl TSNode {
             });
         }
 
-        
         if !self.visual_saliency.is_finite() || self.visual_saliency < 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid visual_saliency: {}", self.visual_saliency),
@@ -247,7 +231,6 @@ impl TSNode {
             });
         }
 
-        
         if !self.force_scale.is_finite() || self.force_scale <= 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid force_scale: {}", self.force_scale),
@@ -291,23 +274,19 @@ pub struct TSEdge {
     pub source: i32,
     pub target: i32,
 
-    
     pub structural_weight: f32,
     pub semantic_weight: f32,
     pub temporal_weight: f32,
     pub causal_weight: f32,
 
-    
     pub weight_history: [f32; 8],
     pub formation_time: f32,
     pub stability: f32,
 
-    
     pub bundling_strength: f32,
     pub control_points: [Vec4; 2],
     pub layer_mask: i32,
 
-    
     pub information_flow: f32,
     pub latency: f32,
 }
@@ -345,7 +324,6 @@ impl TSEdge {
     }
 
     pub fn validate(&self, max_nodes: usize) -> Result<(), GPUSafetyError> {
-        
         if self.source < 0 || self.target < 0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!(
@@ -375,7 +353,6 @@ impl TSEdge {
             });
         }
 
-        
         let weights = [
             ("structural_weight", self.structural_weight),
             ("semantic_weight", self.semantic_weight),
@@ -395,7 +372,6 @@ impl TSEdge {
             }
         }
 
-        
         for (i, &weight) in self.weight_history.iter().enumerate() {
             if !weight.is_finite() || weight < 0.0 {
                 return Err(GPUSafetyError::InvalidKernelParams {
@@ -404,7 +380,6 @@ impl TSEdge {
             }
         }
 
-        
         for (i, point) in self.control_points.iter().enumerate() {
             point
                 .validate()
@@ -473,7 +448,6 @@ impl IsolationLayer {
             });
         }
 
-        
         if !self.opacity.is_finite() || self.opacity < 0.0 || self.opacity > 1.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid opacity: {}", self.opacity),
@@ -486,7 +460,6 @@ impl IsolationLayer {
             });
         }
 
-        
         self.focus_center
             .validate()
             .map_err(|_| GPUSafetyError::InvalidKernelParams {
@@ -505,7 +478,6 @@ impl IsolationLayer {
             });
         }
 
-        
         if !self.importance_threshold.is_finite()
             || self.importance_threshold < 0.0
             || self.importance_threshold > 1.0
@@ -518,7 +490,6 @@ impl IsolationLayer {
             });
         }
 
-        
         if !self.temporal_range[0].is_finite() || !self.temporal_range[1].is_finite() {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!(
@@ -537,7 +508,6 @@ impl IsolationLayer {
             });
         }
 
-        
         if !self.force_modulation.is_finite() || self.force_modulation <= 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid force_modulation: {}", self.force_modulation),
@@ -566,24 +536,20 @@ impl Default for IsolationLayer {
 #[repr(C)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VisualAnalyticsParams {
-    
     pub total_nodes: i32,
     pub total_edges: i32,
     pub active_layers: i32,
     pub hierarchy_depth: i32,
 
-    
     pub current_frame: i32,
     pub time_step: f32,
     pub temporal_decay: f32,
     pub history_weight: f32,
 
-    
     pub force_scale: [f32; 4],
     pub damping: [f32; 4],
     pub temperature: [f32; 4],
 
-    
     pub rest_length: f32,
     pub repulsion_cutoff: f32,
     pub repulsion_softening_epsilon: f32,
@@ -592,33 +558,27 @@ pub struct VisualAnalyticsParams {
     pub warmup_iterations: i32,
     pub cooling_rate: f32,
 
-    
     pub boundary_extreme_multiplier: f32,
     pub boundary_extreme_force_multiplier: f32,
     pub boundary_velocity_damping: f32,
 
-    
     pub isolation_strength: f32,
     pub focus_gamma: f32,
     pub primary_focus_node: i32,
     pub context_alpha: f32,
 
-    
     pub complexity_threshold: f32,
     pub saliency_boost: f32,
     pub information_bandwidth: f32,
 
-    
     pub community_algorithm: i32,
     pub modularity_resolution: f32,
     pub topology_update_interval: i32,
 
-    
     pub semantic_influence: f32,
     pub drift_threshold: f32,
     pub embedding_dims: i32,
 
-    
     pub camera_position: Vec4,
     pub viewport_bounds: Vec4,
     pub zoom_level: f32,
@@ -628,24 +588,20 @@ pub struct VisualAnalyticsParams {
 impl Default for VisualAnalyticsParams {
     fn default() -> Self {
         Self {
-            
             total_nodes: 0,
             total_edges: 0,
             active_layers: 1,
             hierarchy_depth: 1,
 
-            
             current_frame: 0,
-            time_step: 0.016, 
+            time_step: 0.016,
             temporal_decay: 0.95,
             history_weight: 0.1,
 
-            
             force_scale: [1.0, 0.8, 0.6, 0.4],
             damping: [0.9, 0.95, 0.98, 0.99],
             temperature: [1.0, 0.5, 0.25, 0.1],
 
-            
             rest_length: 50.0,
             repulsion_cutoff: 100.0,
             repulsion_softening_epsilon: 1.0,
@@ -654,33 +610,27 @@ impl Default for VisualAnalyticsParams {
             warmup_iterations: 10,
             cooling_rate: 0.95,
 
-            
             boundary_extreme_multiplier: 2.0,
             boundary_extreme_force_multiplier: 5.0,
             boundary_velocity_damping: 0.8,
 
-            
             isolation_strength: 0.5,
             focus_gamma: 2.0,
-            primary_focus_node: -1, 
+            primary_focus_node: -1,
             context_alpha: 0.3,
 
-            
             complexity_threshold: 0.7,
             saliency_boost: 1.5,
             information_bandwidth: 0.8,
 
-            
-            community_algorithm: 0, 
+            community_algorithm: 0,
             modularity_resolution: 1.0,
             topology_update_interval: 60,
 
-            
             semantic_influence: 0.2,
             drift_threshold: 0.1,
             embedding_dims: 128,
 
-            
             camera_position: Vec4::zero(),
             viewport_bounds: Vec4::new(0.0, 0.0, 1920.0, 1080.0).unwrap_or(Vec4::zero()),
             zoom_level: 1.0,
@@ -691,7 +641,6 @@ impl Default for VisualAnalyticsParams {
 
 impl VisualAnalyticsParams {
     pub fn validate(&self) -> Result<(), GPUSafetyError> {
-        
         if self.total_nodes < 0
             || self.total_edges < 0
             || self.active_layers < 0
@@ -705,7 +654,6 @@ impl VisualAnalyticsParams {
             });
         }
 
-        
         if self.total_nodes > 10_000_000 {
             return Err(GPUSafetyError::ResourceExhaustion {
                 resource: "total_nodes".to_string(),
@@ -722,7 +670,6 @@ impl VisualAnalyticsParams {
             });
         }
 
-        
         if !self.rest_length.is_finite() || self.rest_length <= 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid rest_length: {}", self.rest_length),
@@ -771,7 +718,6 @@ impl VisualAnalyticsParams {
             });
         }
 
-        
         if !self.boundary_extreme_multiplier.is_finite() || self.boundary_extreme_multiplier <= 0.0
         {
             return Err(GPUSafetyError::InvalidKernelParams {
@@ -805,7 +751,6 @@ impl VisualAnalyticsParams {
             });
         }
 
-        
         if !self.time_step.is_finite() || self.time_step <= 0.0 || self.time_step > 1.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid time_step: {}", self.time_step),
@@ -830,7 +775,6 @@ impl VisualAnalyticsParams {
             });
         }
 
-        
         for (i, &scale) in self.force_scale.iter().enumerate() {
             if !scale.is_finite() || scale <= 0.0 {
                 return Err(GPUSafetyError::InvalidKernelParams {
@@ -855,7 +799,6 @@ impl VisualAnalyticsParams {
             }
         }
 
-        
         if !self.focus_gamma.is_finite() || self.focus_gamma <= 0.0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: format!("Invalid focus_gamma: {}", self.focus_gamma),
@@ -868,7 +811,6 @@ impl VisualAnalyticsParams {
             });
         }
 
-        
         self.camera_position
             .validate()
             .map_err(|_| GPUSafetyError::InvalidKernelParams {
@@ -888,35 +830,29 @@ impl VisualAnalyticsParams {
 pub struct VisualAnalyticsGPU {
     device: Arc<CudaDevice>,
 
-    
     nodes: CudaSlice<TSNode>,
     edges: CudaSlice<TSEdge>,
     layers: CudaSlice<IsolationLayer>,
 
-    
     output_positions: CudaSlice<f32>,
     output_colors: CudaSlice<f32>,
     output_importance: CudaSlice<f32>,
 
-    
     safety_validator: Arc<GPUSafetyValidator>,
     bounds_checker: Arc<ThreadSafeMemoryBoundsChecker>,
     kernel_executor: SafeKernelExecutor,
 
-    
     max_nodes: usize,
     max_edges: usize,
     max_layers: usize,
     current_frame: u32,
 
-    
     kernel_times: Vec<Duration>,
     transfer_times: Vec<Duration>,
     last_validation_time: Option<Instant>,
 }
 
 impl VisualAnalyticsGPU {
-    
     pub async fn new(
         max_nodes: usize,
         max_edges: usize,
@@ -928,7 +864,6 @@ impl VisualAnalyticsGPU {
             max_nodes, max_edges, max_layers
         );
 
-        
         if max_nodes == 0 || max_edges == 0 {
             return Err(GPUSafetyError::InvalidKernelParams {
                 reason: "max_nodes and max_edges must be greater than 0".to_string(),
@@ -957,14 +892,12 @@ impl VisualAnalyticsGPU {
             })?
             .into();
 
-        
         let bounds_checker = Arc::new(ThreadSafeMemoryBoundsChecker::new(
             safety_config.max_memory_bytes,
         ));
         let safety_validator = Arc::new(GPUSafetyValidator::new(safety_config));
         let kernel_executor = SafeKernelExecutor::new(safety_validator.clone());
 
-        
         let node_size = std::mem::size_of::<TSNode>();
         let edge_size = std::mem::size_of::<TSEdge>();
         let layer_size = std::mem::size_of::<IsolationLayer>();
@@ -1013,7 +946,6 @@ impl VisualAnalyticsGPU {
                 max_allowed: usize::MAX / std::mem::size_of::<f32>(),
             })?;
 
-        
         bounds_checker.register_allocation(MemoryBounds::new(
             "safe_visual_analytics_nodes".to_string(),
             nodes_bytes,
@@ -1056,7 +988,6 @@ impl VisualAnalyticsGPU {
             std::mem::align_of::<f32>(),
         ))?;
 
-        
         let nodes =
             device
                 .alloc_zeros::<TSNode>(max_nodes)
@@ -1077,7 +1008,6 @@ impl VisualAnalyticsGPU {
                 message: format!("Failed to allocate layer memory: {}", e),
             })?;
 
-        
         let output_positions =
             device
                 .alloc_zeros::<f32>(max_nodes * 4)
@@ -1122,11 +1052,9 @@ impl VisualAnalyticsGPU {
         })
     }
 
-    
     pub async fn stream_nodes(&mut self, nodes: &[TSNode]) -> Result<(), GPUSafetyError> {
         let start = Instant::now();
 
-        
         if nodes.len() > self.max_nodes {
             return Err(GPUSafetyError::BufferBoundsExceeded {
                 index: nodes.len(),
@@ -1134,14 +1062,12 @@ impl VisualAnalyticsGPU {
             });
         }
 
-        
         for (i, node) in nodes.iter().enumerate() {
             node.validate().map_err(|e| GPUSafetyError::DeviceError {
                 message: format!("Node {} validation failed: {}", i, e),
             })?;
         }
 
-        
         let copy_operation = async {
             self.device
                 .htod_sync_copy_into(nodes, &mut self.nodes)
@@ -1165,7 +1091,6 @@ impl VisualAnalyticsGPU {
         Ok(())
     }
 
-    
     pub async fn stream_edges(&mut self, edges: &[TSEdge]) -> Result<(), GPUSafetyError> {
         if edges.len() > self.max_edges {
             return Err(GPUSafetyError::BufferBoundsExceeded {
@@ -1174,7 +1099,6 @@ impl VisualAnalyticsGPU {
             });
         }
 
-        
         for (i, edge) in edges.iter().enumerate() {
             edge.validate(self.max_nodes)
                 .map_err(|e| GPUSafetyError::DeviceError {
@@ -1198,7 +1122,6 @@ impl VisualAnalyticsGPU {
         Ok(())
     }
 
-    
     pub async fn update_layers(&mut self, layers: &[IsolationLayer]) -> Result<(), GPUSafetyError> {
         if layers.len() > self.max_layers {
             return Err(GPUSafetyError::BufferBoundsExceeded {
@@ -1207,7 +1130,6 @@ impl VisualAnalyticsGPU {
             });
         }
 
-        
         for (i, layer) in layers.iter().enumerate() {
             layer.validate().map_err(|e| GPUSafetyError::DeviceError {
                 message: format!("Layer {} validation failed: {}", i, e),
@@ -1230,7 +1152,6 @@ impl VisualAnalyticsGPU {
         Ok(())
     }
 
-    
     pub async fn execute(
         &mut self,
         params: &VisualAnalyticsParams,
@@ -1240,19 +1161,16 @@ impl VisualAnalyticsGPU {
     ) -> Result<(), GPUSafetyError> {
         let start = Instant::now();
 
-        
         params.validate()?;
 
-        
         self.safety_validator.validate_kernel_params(
             num_nodes as i32,
             num_edges as i32,
             num_layers as i32,
-            ((num_nodes + 255) / 256) as u32, 
-            256,                              
+            ((num_nodes + 255) / 256) as u32,
+            256,
         )?;
 
-        
         if self.safety_validator.should_use_cpu_fallback() {
             warn!("GPU failure threshold reached, skipping GPU execution");
             return Err(GPUSafetyError::DeviceError {
@@ -1260,13 +1178,7 @@ impl VisualAnalyticsGPU {
             });
         }
 
-        
         let kernel_operation = async {
-            
-            
-
-            
-            
             self.device
                 .synchronize()
                 .map_err(|e| GPUSafetyError::DeviceError {
@@ -1293,7 +1205,6 @@ impl VisualAnalyticsGPU {
         Ok(())
     }
 
-    
     pub async fn get_positions(&self) -> Result<Vec<f32>, GPUSafetyError> {
         let copy_operation = async {
             let mut positions = vec![0.0f32; self.max_nodes * 4];
@@ -1310,7 +1221,6 @@ impl VisualAnalyticsGPU {
             .await
     }
 
-    
     pub async fn get_colors(&self) -> Result<Vec<f32>, GPUSafetyError> {
         let copy_operation = async {
             let mut colors = vec![0.0f32; self.max_nodes * 4];
@@ -1327,7 +1237,6 @@ impl VisualAnalyticsGPU {
             .await
     }
 
-    
     pub async fn get_importance(&self) -> Result<Vec<f32>, GPUSafetyError> {
         let copy_operation = async {
             let mut importance = vec![0.0f32; self.max_nodes];
@@ -1344,7 +1253,6 @@ impl VisualAnalyticsGPU {
             .await
     }
 
-    
     pub fn get_performance_metrics(&self) -> PerformanceMetrics {
         let avg_kernel_time = if !self.kernel_times.is_empty() {
             self.kernel_times
@@ -1398,7 +1306,6 @@ impl VisualAnalyticsGPU {
         }
     }
 
-    
     pub fn get_safety_status(&self) -> SafetyStatus {
         let memory_usage = self.bounds_checker.get_usage_report();
         let memory_stats = self.safety_validator.get_memory_stats();
@@ -1433,7 +1340,7 @@ impl VisualAnalyticsGPU {
                 .as_ref()
                 .map(|stats| stats.0 as f32 / 1_048_576.0)
                 .unwrap_or(0.0),
-            max_memory_mb: memory_stats.as_ref().map(|_| 8192.0).unwrap_or(0.0), 
+            max_memory_mb: memory_stats.as_ref().map(|_| 8192.0).unwrap_or(0.0),
             frames_processed: self.current_frame,
             average_kernel_time_ms: if !self.kernel_times.is_empty() {
                 self.kernel_times
@@ -1506,7 +1413,7 @@ impl VisualAnalyticsBuilder {
                 force_scale: [1.0, 0.5, 0.25, 0.125],
                 damping: [0.9, 0.85, 0.8, 0.75],
                 temperature: [1.0; 4],
-                
+
                 rest_length: 50.0,
                 repulsion_cutoff: 50.0,
                 repulsion_softening_epsilon: 0.0001,
@@ -1597,7 +1504,6 @@ impl VisualAnalyticsEngine {
         })
     }
 
-    
     pub fn upsert_node(&mut self, id: usize, node: TSNode) {
         if id >= self.nodes.len() {
             self.nodes.resize(id + 1, TSNode::default());
@@ -1605,12 +1511,10 @@ impl VisualAnalyticsEngine {
         self.nodes[id] = node;
     }
 
-    
     pub fn add_edge(&mut self, edge: TSEdge) {
         self.edges.push(edge);
     }
 
-    
     pub fn focus_on(&mut self, node_id: i32, radius: f32) {
         self.params.primary_focus_node = node_id;
         if !self.layers.is_empty() {
@@ -1623,14 +1527,11 @@ impl VisualAnalyticsEngine {
         }
     }
 
-    
     pub async fn step(&mut self) -> Result<RenderData, GPUSafetyError> {
-        
         self.gpu.stream_nodes(&self.nodes).await?;
         self.gpu.stream_edges(&self.edges).await?;
         self.gpu.update_layers(&self.layers).await?;
 
-        
         self.gpu
             .execute(
                 &self.params,
@@ -1640,7 +1541,6 @@ impl VisualAnalyticsEngine {
             )
             .await?;
 
-        
         let positions = self.gpu.get_positions().await?;
         let colors = self.gpu.get_colors().await?;
         let importance = self.gpu.get_importance().await?;
@@ -1662,16 +1562,12 @@ mod tests {
 
     #[test]
     fn test_vec4_validation() {
-        
         assert!(Vec4::new(1.0, 2.0, 3.0, 4.0).is_ok());
 
-        
         assert!(Vec4::new(f32::NAN, 2.0, 3.0, 4.0).is_err());
 
-        
         assert!(Vec4::new(f32::INFINITY, 2.0, 3.0, 4.0).is_err());
 
-        
         assert!(Vec4::new(1e7, 2.0, 3.0, 4.0).is_err());
     }
 
@@ -1680,7 +1576,6 @@ mod tests {
         let mut node = TSNode::new();
         assert!(node.validate().is_ok());
 
-        
         node.position = Vec4 {
             x: f32::NAN,
             y: 0.0,
@@ -1689,12 +1584,10 @@ mod tests {
         };
         assert!(node.validate().is_err());
 
-        
         let mut node = TSNode::new();
         node.temporal_coherence = -0.5;
         assert!(node.validate().is_err());
 
-        
         let mut node = TSNode::new();
         node.hierarchy_level = -1;
         assert!(node.validate().is_err());
@@ -1702,19 +1595,15 @@ mod tests {
 
     #[test]
     fn test_ts_edge_validation() {
-        
         assert!(TSEdge::new(0, 1).is_ok());
 
-        
         assert!(TSEdge::new(-1, 1).is_err());
 
-        
         assert!(TSEdge::new(5, 5).is_err());
 
-        
         let edge = TSEdge::new(0, 1).unwrap();
-        assert!(edge.validate(10).is_ok()); 
-        assert!(edge.validate(1).is_err()); 
+        assert!(edge.validate(10).is_ok());
+        assert!(edge.validate(1).is_err());
     }
 
     #[test]
@@ -1723,15 +1612,15 @@ mod tests {
         assert!(layer.validate().is_ok());
 
         let mut layer = IsolationLayer::new(-1);
-        assert!(layer.validate().is_err()); 
+        assert!(layer.validate().is_err());
 
         let mut layer = IsolationLayer::new(0);
         layer.opacity = 1.5;
-        assert!(layer.validate().is_err()); 
+        assert!(layer.validate().is_err());
 
         let mut layer = IsolationLayer::new(0);
         layer.focus_radius = -10.0;
-        assert!(layer.validate().is_err()); 
+        assert!(layer.validate().is_err());
     }
 
     #[test]
@@ -1784,15 +1673,12 @@ mod tests {
 
         assert!(params.validate().is_ok());
 
-        
         params.total_nodes = -1;
         assert!(params.validate().is_err());
 
-        
         params.total_nodes = 20_000_000;
         assert!(params.validate().is_err());
 
-        
         params.total_nodes = 1000;
         params.time_step = -0.1;
         assert!(params.validate().is_err());

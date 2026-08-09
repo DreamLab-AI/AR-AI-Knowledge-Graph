@@ -36,7 +36,6 @@ impl QueryHandler<GetSetting, Option<SettingValue>> for GetSettingHandler {
         let repository = self.repository.clone();
         let key = query.key.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.get_setting(&key).await.map_err(|e| {
                 Hexserror::adapter("E_HEX_200", &format!("Failed to get setting: {}", e))
@@ -74,7 +73,6 @@ impl QueryHandler<GetSettingsBatch, HashMap<String, SettingValue>> for GetSettin
         let repository = self.repository.clone();
         let keys = query.keys.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.get_settings_batch(&keys).await.map_err(|e| {
                 Hexserror::adapter("E_HEX_200", &format!("Failed to get settings batch: {}", e))
@@ -106,7 +104,6 @@ impl QueryHandler<LoadAllSettings, Option<AppFullSettings>> for LoadAllSettingsH
 
         let repository = self.repository.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.load_all_settings().await.map_err(|e| {
                 Hexserror::adapter("E_HEX_200", &format!("Failed to load all settings: {}", e))
@@ -144,7 +141,6 @@ impl QueryHandler<GetPhysicsSettings, PhysicsSettings> for GetPhysicsSettingsHan
         let repository = self.repository.clone();
         let profile_name = query.profile_name.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository
                 .get_physics_settings(&profile_name)
@@ -182,7 +178,6 @@ impl QueryHandler<ListPhysicsProfiles, Vec<String>> for ListPhysicsProfilesHandl
 
         let repository = self.repository.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.list_physics_profiles().await.map_err(|e| {
                 Hexserror::adapter(

@@ -1,7 +1,7 @@
 use crate::actors::messages::{GetSettings, UpdateSettings};
 use crate::app_state::AppState;
 use crate::config::{ConstraintSystem, LegacyConstraintData};
-use crate::{ok_json, error_json, bad_request, service_unavailable};
+use crate::{bad_request, error_json, ok_json, service_unavailable};
 use actix_web::{web, HttpRequest, HttpResponse};
 use log::{debug, error, info, warn};
 use serde_json::{json, Value};
@@ -30,18 +30,16 @@ async fn define_constraints(
     info!("Constraint definition request received");
     debug!("Constraints: {:?}", constraints);
 
-    
     if let Err(e) = validate_constraint_system(&constraints) {
         return bad_request!("Invalid constraint system: {}", e);
     }
 
-    
     let settings_update = json!({
         "visualisation": {
             "graphs": {
                 "logseq": {
                     "physics": {
-                        "computeMode": 2  
+                        "computeMode": 2
                     }
                 },
                 "visionclaw": {
@@ -53,7 +51,6 @@ async fn define_constraints(
         }
     });
 
-    
     let mut app_settings = match state.settings_addr.send(GetSettings).await {
         Ok(Ok(s)) => s,
         Ok(Err(e)) => {
@@ -71,7 +68,6 @@ async fn define_constraints(
         return error_json!("Failed to update constraint settings: {}", e);
     }
 
-    
     match state
         .settings_addr
         .send(UpdateSettings {
@@ -82,11 +78,9 @@ async fn define_constraints(
         Ok(Ok(())) => {
             info!("Constraints defined successfully");
 
-
             if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
                 info!("Sending constraints to GPU compute actor");
 
-                
                 use crate::actors::messages::UpdateConstraints;
                 let gpu_constraints_json = serde_json::to_value(&constraints).unwrap_or_else(|e| {
                     error!("Failed to serialize constraints: {}", e);
@@ -104,11 +98,9 @@ async fn define_constraints(
                     }
                     Ok(Err(e)) => {
                         warn!("GPU compute actor failed to update constraints: {}", e);
-                        
                     }
                     Err(e) => {
                         warn!("Failed to communicate with GPU compute actor: {}", e);
-                        
                     }
                 }
             } else {
@@ -145,7 +137,6 @@ async fn apply_constraints(
         serde_json::to_string_pretty(&apply_request).unwrap_or_default()
     );
 
-    
     let constraint_type = apply_request
         .get("constraintType")
         .and_then(|v| v.as_str())
@@ -160,7 +151,6 @@ async fn apply_constraints(
         return bad_request!("constraintType must be separation, boundary, alignment, or cluster");
     }
 
-    
     let nodes: Result<Vec<u32>, _> = node_ids
         .iter()
         .map(|v| v.as_u64().map(|n| n as u32))
@@ -176,7 +166,6 @@ async fn apply_constraints(
         }
     };
 
-    
     let strength = apply_request
         .get("strength")
         .and_then(|v| v.as_f64())
@@ -219,7 +208,6 @@ async fn remove_constraints(
 
     let node_ids = remove_request.get("nodeIds").and_then(|v| v.as_array());
 
-    
     let removal_count = node_ids.map(|arr| arr.len()).unwrap_or(0);
 
     info!(
@@ -241,11 +229,9 @@ async fn list_constraints(
 ) -> Result<HttpResponse, actix_web::Error> {
     info!("Constraint list request received");
 
-
     if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
         use crate::actors::messages::GetConstraints;
-use crate::ok_json;
-
+        use crate::ok_json;
 
         match gpu_addr.send(GetConstraints).await {
             Ok(Ok(gpu_constraints)) => {
@@ -269,10 +255,8 @@ use crate::ok_json;
         }
     }
 
-    
     match state.settings_addr.send(GetSettings).await {
         Ok(Ok(settings)) => {
-            
             let constraints_list: Vec<serde_json::Value> = Vec::new();
 
             // Constraint activation is governed by the ENABLE_CONSTRAINTS GPU
@@ -328,37 +312,29 @@ fn validate_constraint_system(system: &ConstraintSystem) -> Result<(), String> {
 }
 
 fn validate_single_constraint(constraint: &LegacyConstraintData) -> Result<(), String> {
-    
     let constraint_json = serde_json::to_value(constraint).map_err(|e| e.to_string())?;
     validate_constraint(&constraint_json)?;
 
-    
-    
     if constraint.constraint_type < 0 || constraint.constraint_type > 4 {
         return Err("constraint_type must be between 0 and 4".to_string());
     }
 
-    
     if constraint.strength < 0.0 || constraint.strength > 10.0 {
         return Err("strength must be between 0.0 and 10.0".to_string());
     }
 
-    
     match constraint.constraint_type {
         1 => {
-            
             if constraint.param1 <= 0.0 {
                 return Err("separation distance (param1) must be positive".to_string());
             }
         }
         2 => {
-            
             if constraint.param1 <= 0.0 || constraint.param2 <= 0.0 {
                 return Err("boundary dimensions (param1, param2) must be positive".to_string());
             }
         }
         3 => {
-            
             if constraint.param1 < 0.0 || constraint.param1 > 360.0 {
                 return Err(
                     "alignment angle (param1) must be between 0 and 360 degrees".to_string()
@@ -366,14 +342,13 @@ fn validate_single_constraint(constraint: &LegacyConstraintData) -> Result<(), S
             }
         }
         4 => {
-            
             if constraint.param1.abs() > 1000.0 || constraint.param2.abs() > 1000.0 {
                 return Err(
                     "cluster center coordinates must be within reasonable bounds".to_string(),
                 );
             }
         }
-        _ => {} 
+        _ => {}
     }
 
     Ok(())

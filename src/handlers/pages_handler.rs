@@ -1,11 +1,11 @@
 use crate::actors::messages::{GetMetadata, GetSettings};
-use visionclaw_domain::models::metadata::Metadata;
-use crate::services::github::content_enhanced::ExtendedFileMetadata;
 use crate::ok_json;
+use crate::services::github::content_enhanced::ExtendedFileMetadata;
 use crate::AppState;
 use actix_web::{web, HttpResponse, Result};
 use futures::future::join_all;
 use serde::Serialize;
+use visionclaw_domain::models::metadata::Metadata;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

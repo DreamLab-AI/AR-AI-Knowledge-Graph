@@ -4,7 +4,6 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::fmt;
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum McpResponse<T> {
@@ -43,7 +42,7 @@ pub struct McpTextContent {
     #[serde(rename = "type")]
     pub content_type: String,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub text: Value, 
+    pub text: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,10 +65,18 @@ pub struct McpContentResult {
     pub content: Vec<McpContent>,
 }
 
-fn default_cpu_usage() -> f32 { 0.0 }
-fn default_health() -> f32 { 1.0 }
-fn default_workload() -> f32 { 0.0 }
-fn default_memory_usage() -> f32 { 0.0 }
+fn default_cpu_usage() -> f32 {
+    0.0
+}
+fn default_health() -> f32 {
+    1.0
+}
+fn default_workload() -> f32 {
+    0.0
+}
+fn default_memory_usage() -> f32 {
+    0.0
+}
 
 /// MCP agent record. Sourced from the bots-client wire protocol, mirrored
 /// here so the domain crate can describe agent-list responses without
@@ -162,7 +169,6 @@ impl From<serde_json::Error> for McpParseError {
 }
 
 impl<T> McpResponse<T> {
-    
     pub fn into_result(self) -> Result<T, McpError> {
         match self {
             McpResponse::Success(success) => Ok(success.result),
@@ -170,19 +176,16 @@ impl<T> McpResponse<T> {
         }
     }
 
-    
     pub fn is_success(&self) -> bool {
         matches!(self, McpResponse::Success(_))
     }
 
-    
     pub fn is_error(&self) -> bool {
         matches!(self, McpResponse::Error(_))
     }
 }
 
 impl McpContentResult {
-    
     pub fn extract_data<T>(&self) -> Result<T, McpParseError>
     where
         T: for<'a> Deserialize<'a>,
@@ -199,7 +202,6 @@ impl McpContentResult {
         }
     }
 
-    
     pub fn extract_all_data<T>(&self) -> Result<Vec<T>, McpParseError>
     where
         T: for<'a> Deserialize<'a>,
@@ -225,8 +227,8 @@ impl McpContentResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::json::{from_json, to_json};
     use serde_json::json;
-use crate::utils::json::{from_json, to_json};
 
     #[test]
     fn test_mcp_text_content_parsing() {
@@ -236,7 +238,10 @@ use crate::utils::json::{from_json, to_json};
         });
 
         let content: McpTextContent = serde_json::from_value(json).unwrap();
-        let agents_data = content.text.get("agents").expect("Missing required key: agents");
+        let agents_data = content
+            .text
+            .get("agents")
+            .expect("Missing required key: agents");
         assert!(agents_data.is_array());
     }
 

@@ -1,14 +1,14 @@
 //! Semantic Pathfinding Handler - API endpoints for intelligent graph traversal
 
 use actix_web::{web, Responder};
-use log::{info, debug};
+use log::{debug, info};
 use serde::Deserialize;
 use std::sync::Arc;
 
-use crate::services::semantic_pathfinding_service::SemanticPathfindingService;
 use crate::actors::graph_state_actor::GraphStateActor;
+use crate::services::semantic_pathfinding_service::SemanticPathfindingService;
+use crate::{error_json, ok_json};
 use actix::Addr;
-use crate::{ok_json, error_json};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +31,10 @@ pub async fn find_semantic_path(
     graph_state_actor: web::Data<Addr<GraphStateActor>>,
     request: web::Json<FindPathRequest>,
 ) -> impl Responder {
-    info!("Finding semantic path from {} to {}", request.start_id, request.end_id);
+    info!(
+        "Finding semantic path from {} to {}",
+        request.start_id, request.end_id
+    );
 
     let graph_result = graph_state_actor
         .send(crate::actors::messages::GetGraphData)
@@ -114,6 +117,6 @@ pub fn configure_pathfinding_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/pathfinding")
             .route("/semantic-path", web::post().to(find_semantic_path))
             .route("/query-traversal", web::post().to(query_traversal))
-            .route("/chunk-traversal", web::post().to(chunk_traversal))
+            .route("/chunk-traversal", web::post().to(chunk_traversal)),
     );
 }

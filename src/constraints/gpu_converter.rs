@@ -6,37 +6,19 @@ use super::physics_constraint::*;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ConstraintData {
-    
     pub kind: i32,
 
-    
     pub count: i32,
 
-    
-    
-    
     pub node_idx: [i32; 4],
 
-    
-    
-    
-    
-    
-    
-    
     pub params: [f32; 4],
 
-    
-    
     pub params2: [f32; 4],
 
-    
     pub weight: f32,
 
-    
-
     pub activation_frame: i32,
-
 
     _padding: [f32; 4],
 }
@@ -69,33 +51,38 @@ impl Default for ConstraintData {
 pub fn to_gpu_constraint_data(constraint: &PhysicsConstraint) -> ConstraintData {
     let mut data = ConstraintData::default();
 
-    
     data.count = constraint.nodes.len().min(4) as i32;
     for (i, &node_id) in constraint.nodes.iter().take(4).enumerate() {
         data.node_idx[i] = node_id as i32;
     }
 
-    
     data.weight = constraint.priority_weight();
 
-    
     data.activation_frame = constraint.activation_frame.unwrap_or(-1);
 
-    
     match &constraint.constraint_type {
-        PhysicsConstraintType::Separation { min_distance, strength } => {
+        PhysicsConstraintType::Separation {
+            min_distance,
+            strength,
+        } => {
             data.kind = gpu_constraint_kind::SEPARATION;
             data.params[0] = *min_distance;
             data.params[1] = *strength;
         }
 
-        PhysicsConstraintType::Clustering { ideal_distance, stiffness } => {
+        PhysicsConstraintType::Clustering {
+            ideal_distance,
+            stiffness,
+        } => {
             data.kind = gpu_constraint_kind::CLUSTERING;
             data.params[0] = *ideal_distance;
             data.params[1] = *stiffness;
         }
 
-        PhysicsConstraintType::Colocation { target_distance, strength } => {
+        PhysicsConstraintType::Colocation {
+            target_distance,
+            strength,
+        } => {
             data.kind = gpu_constraint_kind::COLOCATION;
             data.params[0] = *target_distance;
             data.params[1] = *strength;
@@ -103,12 +90,12 @@ pub fn to_gpu_constraint_data(constraint: &PhysicsConstraint) -> ConstraintData 
 
         PhysicsConstraintType::Boundary { bounds, strength } => {
             data.kind = gpu_constraint_kind::BOUNDARY;
-            data.params[0] = bounds[0]; 
-            data.params[1] = bounds[1]; 
-            data.params[2] = bounds[2]; 
-            data.params[3] = bounds[3]; 
-            data.params2[0] = bounds[4]; 
-            data.params2[1] = bounds[5]; 
+            data.params[0] = bounds[0];
+            data.params[1] = bounds[1];
+            data.params[2] = bounds[2];
+            data.params[3] = bounds[3];
+            data.params2[0] = bounds[4];
+            data.params2[1] = bounds[5];
             data.params2[2] = *strength;
         }
 
@@ -118,7 +105,11 @@ pub fn to_gpu_constraint_data(constraint: &PhysicsConstraint) -> ConstraintData 
             data.params[1] = *strength;
         }
 
-        PhysicsConstraintType::Containment { parent_node, radius, strength } => {
+        PhysicsConstraintType::Containment {
+            parent_node,
+            radius,
+            strength,
+        } => {
             data.kind = gpu_constraint_kind::CONTAINMENT;
             data.params[0] = *parent_node as f32;
             data.params[1] = *radius;
@@ -130,10 +121,7 @@ pub fn to_gpu_constraint_data(constraint: &PhysicsConstraint) -> ConstraintData 
 }
 
 pub fn to_gpu_constraint_batch(constraints: &[PhysicsConstraint]) -> Vec<ConstraintData> {
-    constraints
-        .iter()
-        .map(to_gpu_constraint_data)
-        .collect()
+    constraints.iter().map(to_gpu_constraint_data).collect()
 }
 
 /// Buffer for GPU constraint data with reusable allocation
@@ -190,7 +178,8 @@ impl GPUConstraintBuffer {
     /// The returned slice is valid until the next call to `convert_batch`.
     pub fn convert_batch(&mut self, batch: &[PhysicsConstraint]) -> &[ConstraintData] {
         self.conversion_buffer.clear();
-        self.conversion_buffer.extend(batch.iter().map(to_gpu_constraint_data));
+        self.conversion_buffer
+            .extend(batch.iter().map(to_gpu_constraint_data));
         &self.conversion_buffer
     }
 
@@ -200,22 +189,18 @@ impl GPUConstraintBuffer {
         self.count = 0;
     }
 
-    
     pub fn as_ptr(&self) -> *const ConstraintData {
         self.data.as_ptr()
     }
 
-    
     pub fn size_bytes(&self) -> usize {
         self.count * std::mem::size_of::<ConstraintData>()
     }
 
-    
     pub fn is_empty(&self) -> bool {
         self.count == 0
     }
 
-    
     pub fn len(&self) -> usize {
         self.count
     }
@@ -236,7 +221,6 @@ pub struct ConstraintStats {
 }
 
 impl ConstraintStats {
-    
     pub fn from_buffer(buffer: &GPUConstraintBuffer) -> Self {
         let mut stats = Self {
             total_constraints: buffer.count,
@@ -268,7 +252,6 @@ impl ConstraintStats {
                 stats.progressive_count += 1;
             }
 
-            
             if (constraint_data.weight - 1.0).abs() < 0.001 {
                 stats.user_defined_count += 1;
             }
@@ -315,13 +298,13 @@ mod tests {
         let gpu_data = to_gpu_constraint_data(&constraint);
 
         assert_eq!(gpu_data.kind, gpu_constraint_kind::BOUNDARY);
-        assert_eq!(gpu_data.params[0], -20.0); 
-        assert_eq!(gpu_data.params[1], 20.0);  
-        assert_eq!(gpu_data.params[2], -20.0); 
-        assert_eq!(gpu_data.params[3], 20.0);  
-        assert_eq!(gpu_data.params2[0], -20.0); 
-        assert_eq!(gpu_data.params2[1], 20.0);  
-        assert_eq!(gpu_data.params2[2], 0.7);   
+        assert_eq!(gpu_data.params[0], -20.0);
+        assert_eq!(gpu_data.params[1], 20.0);
+        assert_eq!(gpu_data.params[2], -20.0);
+        assert_eq!(gpu_data.params[3], 20.0);
+        assert_eq!(gpu_data.params2[0], -20.0);
+        assert_eq!(gpu_data.params2[1], 20.0);
+        assert_eq!(gpu_data.params2[2], 0.7);
     }
 
     #[test]
@@ -341,15 +324,15 @@ mod tests {
         let gpu_data = to_gpu_constraint_data(&constraint);
 
         assert_eq!(gpu_data.kind, gpu_constraint_kind::CONTAINMENT);
-        assert_eq!(gpu_data.params[0], 100.0); 
-        assert_eq!(gpu_data.params[1], 50.0);  
-        assert_eq!(gpu_data.params[2], 0.8);   
+        assert_eq!(gpu_data.params[0], 100.0);
+        assert_eq!(gpu_data.params[1], 50.0);
+        assert_eq!(gpu_data.params[2], 0.8);
     }
 
     #[test]
     fn test_activation_frame() {
-        let constraint = PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5)
-            .with_activation_frame(60);
+        let constraint =
+            PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 5).with_activation_frame(60);
 
         let gpu_data = to_gpu_constraint_data(&constraint);
         assert_eq!(gpu_data.activation_frame, 60);
@@ -440,10 +423,8 @@ mod tests {
 
     #[test]
     fn test_constraint_data_size() {
-        
         let size = std::mem::size_of::<ConstraintData>();
 
-        
         assert_eq!(size % 16, 0);
     }
 }

@@ -6,55 +6,46 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AxiomType {
-    
     SubClassOf {
         subclass: NodeId,
         superclass: NodeId,
     },
 
-    
     DisjointClasses {
         classes: Vec<NodeId>,
     },
 
-    
     EquivalentClasses {
         class1: NodeId,
         class2: NodeId,
     },
 
-    
     SameAs {
         individual1: NodeId,
         individual2: NodeId,
     },
 
-    
     DifferentFrom {
         individual1: NodeId,
         individual2: NodeId,
     },
 
-    
     PropertyDomainRange {
         property: NodeId,
         domain: NodeId,
         range: NodeId,
     },
 
-    
     FunctionalProperty {
         property: NodeId,
         nodes: Vec<NodeId>,
     },
 
-    
     DisjointUnion {
         union_class: NodeId,
         disjoint_classes: Vec<NodeId>,
     },
 
-    
     PartOf {
         part: NodeId,
         whole: NodeId,
@@ -65,12 +56,11 @@ pub enum AxiomType {
 pub struct OWLAxiom {
     pub id: Option<i64>,
     pub axiom_type: AxiomType,
-    pub inferred: bool, 
+    pub inferred: bool,
     pub user_defined: bool,
 }
 
 impl OWLAxiom {
-    
     pub fn asserted(axiom_type: AxiomType) -> Self {
         Self {
             id: None,
@@ -80,7 +70,6 @@ impl OWLAxiom {
         }
     }
 
-    
     pub fn inferred(axiom_type: AxiomType) -> Self {
         Self {
             id: None,
@@ -90,7 +79,6 @@ impl OWLAxiom {
         }
     }
 
-    
     pub fn user_defined(axiom_type: AxiomType) -> Self {
         Self {
             id: None,
@@ -100,7 +88,6 @@ impl OWLAxiom {
         }
     }
 
-    
     pub fn with_id(mut self, id: i64) -> Self {
         self.id = Some(id);
         self
@@ -109,27 +96,21 @@ impl OWLAxiom {
 
 #[derive(Debug, Clone)]
 pub struct TranslationConfig {
-    
     pub disjoint_separation_distance: f32,
     pub disjoint_separation_strength: f32,
 
-    
     pub subclass_clustering_distance: f32,
     pub subclass_clustering_stiffness: f32,
 
-    
     pub equivalent_colocation_distance: f32,
     pub equivalent_colocation_strength: f32,
 
-    
     pub hierarchical_layer_spacing: f32,
     pub hierarchical_layer_strength: f32,
 
-    
     pub containment_radius_multiplier: f32,
     pub containment_strength: f32,
 
-    
     pub boundary_size: f32,
     pub boundary_strength: f32,
 }
@@ -137,27 +118,21 @@ pub struct TranslationConfig {
 impl Default for TranslationConfig {
     fn default() -> Self {
         Self {
-            
             disjoint_separation_distance: 35.0,
             disjoint_separation_strength: 0.8,
 
-            
             subclass_clustering_distance: 20.0,
             subclass_clustering_stiffness: 0.6,
 
-            
             equivalent_colocation_distance: 2.0,
             equivalent_colocation_strength: 0.9,
 
-            
             hierarchical_layer_spacing: 50.0,
             hierarchical_layer_strength: 0.7,
 
-            
             containment_radius_multiplier: 1.5,
             containment_strength: 0.8,
 
-            
             boundary_size: 20.0,
             boundary_strength: 0.7,
         }
@@ -166,12 +141,11 @@ impl Default for TranslationConfig {
 
 pub struct AxiomMapper {
     config: TranslationConfig,
-    
+
     hierarchy_cache: HashMap<NodeId, Vec<NodeId>>,
 }
 
 impl AxiomMapper {
-    
     pub fn new() -> Self {
         Self {
             config: TranslationConfig::default(),
@@ -179,7 +153,6 @@ impl AxiomMapper {
         }
     }
 
-    
     pub fn with_config(config: TranslationConfig) -> Self {
         Self {
             config,
@@ -187,7 +160,6 @@ impl AxiomMapper {
         }
     }
 
-    
     pub fn update_hierarchy_cache(&mut self, subclass: NodeId, superclass: NodeId) {
         self.hierarchy_cache
             .entry(superclass)
@@ -195,7 +167,6 @@ impl AxiomMapper {
             .push(subclass);
     }
 
-    
     pub fn get_subclasses(&self, superclass: NodeId) -> Vec<NodeId> {
         self.hierarchy_cache
             .get(&superclass)
@@ -203,7 +174,6 @@ impl AxiomMapper {
             .unwrap_or_default()
     }
 
-    
     pub fn translate_axiom(&mut self, axiom: &OWLAxiom) -> Vec<PhysicsConstraint> {
         let priority = if axiom.user_defined {
             PRIORITY_USER_DEFINED
@@ -218,23 +188,30 @@ impl AxiomMapper {
                 self.translate_disjoint_classes(classes, priority, axiom.id)
             }
 
-            AxiomType::SubClassOf { subclass, superclass } => {
-                self.translate_subclass_of(*subclass, *superclass, priority, axiom.id)
-            }
+            AxiomType::SubClassOf {
+                subclass,
+                superclass,
+            } => self.translate_subclass_of(*subclass, *superclass, priority, axiom.id),
 
             AxiomType::EquivalentClasses { class1, class2 } => {
                 self.translate_equivalent_classes(*class1, *class2, priority, axiom.id)
             }
 
-            AxiomType::SameAs { individual1, individual2 } => {
-                self.translate_same_as(*individual1, *individual2, priority, axiom.id)
-            }
+            AxiomType::SameAs {
+                individual1,
+                individual2,
+            } => self.translate_same_as(*individual1, *individual2, priority, axiom.id),
 
-            AxiomType::DifferentFrom { individual1, individual2 } => {
-                self.translate_different_from(*individual1, *individual2, priority, axiom.id)
-            }
+            AxiomType::DifferentFrom {
+                individual1,
+                individual2,
+            } => self.translate_different_from(*individual1, *individual2, priority, axiom.id),
 
-            AxiomType::PropertyDomainRange { property, domain, range } => {
+            AxiomType::PropertyDomainRange {
+                property,
+                domain,
+                range,
+            } => {
                 self.translate_property_domain_range(*property, *domain, *range, priority, axiom.id)
             }
 
@@ -242,9 +219,10 @@ impl AxiomMapper {
                 self.translate_functional_property(*property, nodes, priority, axiom.id)
             }
 
-            AxiomType::DisjointUnion { union_class, disjoint_classes } => {
-                self.translate_disjoint_union(*union_class, disjoint_classes, priority, axiom.id)
-            }
+            AxiomType::DisjointUnion {
+                union_class,
+                disjoint_classes,
+            } => self.translate_disjoint_union(*union_class, disjoint_classes, priority, axiom.id),
 
             AxiomType::PartOf { part, whole } => {
                 self.translate_part_of(*part, *whole, priority, axiom.id)
@@ -252,7 +230,6 @@ impl AxiomMapper {
         }
     }
 
-    
     fn translate_disjoint_classes(
         &self,
         classes: &[NodeId],
@@ -261,7 +238,6 @@ impl AxiomMapper {
     ) -> Vec<PhysicsConstraint> {
         let mut constraints = Vec::new();
 
-        
         for i in 0..classes.len() {
             for j in (i + 1)..classes.len() {
                 let mut constraint = PhysicsConstraint::separation(
@@ -282,7 +258,6 @@ impl AxiomMapper {
         constraints
     }
 
-    
     fn translate_subclass_of(
         &mut self,
         subclass: NodeId,
@@ -290,10 +265,8 @@ impl AxiomMapper {
         priority: u8,
         axiom_id: Option<i64>,
     ) -> Vec<PhysicsConstraint> {
-        
         self.update_hierarchy_cache(subclass, superclass);
 
-        
         let mut constraint = PhysicsConstraint::clustering(
             vec![subclass, superclass],
             self.config.subclass_clustering_distance,
@@ -308,7 +281,6 @@ impl AxiomMapper {
         vec![constraint]
     }
 
-    
     fn translate_equivalent_classes(
         &self,
         class1: NodeId,
@@ -330,7 +302,6 @@ impl AxiomMapper {
         vec![constraint]
     }
 
-    
     fn translate_same_as(
         &self,
         individual1: NodeId,
@@ -352,7 +323,6 @@ impl AxiomMapper {
         vec![constraint]
     }
 
-    
     fn translate_different_from(
         &self,
         individual1: NodeId,
@@ -374,7 +344,6 @@ impl AxiomMapper {
         vec![constraint]
     }
 
-    
     fn translate_property_domain_range(
         &self,
         _property: NodeId,
@@ -415,7 +384,6 @@ impl AxiomMapper {
         constraints
     }
 
-    
     fn translate_functional_property(
         &self,
         _property: NodeId,
@@ -446,7 +414,6 @@ impl AxiomMapper {
         vec![constraint]
     }
 
-    
     fn translate_disjoint_union(
         &self,
         union_class: NodeId,
@@ -456,10 +423,8 @@ impl AxiomMapper {
     ) -> Vec<PhysicsConstraint> {
         let mut constraints = Vec::new();
 
-        
         constraints.extend(self.translate_disjoint_classes(disjoint_classes, priority, axiom_id));
 
-        
         for &disjoint_class in disjoint_classes {
             let mut constraint = PhysicsConstraint::clustering(
                 vec![disjoint_class, union_class],
@@ -478,7 +443,6 @@ impl AxiomMapper {
         constraints
     }
 
-    
     fn translate_part_of(
         &self,
         part: NodeId,
@@ -501,7 +465,6 @@ impl AxiomMapper {
         vec![constraint]
     }
 
-    
     pub fn translate_axioms(&mut self, axioms: &[OWLAxiom]) -> Vec<PhysicsConstraint> {
         axioms
             .iter()
@@ -527,16 +490,19 @@ mod tests {
             classes: vec![1, 2, 3],
         });
 
-        let constraints = mapper.translate_disjoint_classes(&vec![1, 2, 3], PRIORITY_ASSERTED, None);
+        let constraints =
+            mapper.translate_disjoint_classes(&vec![1, 2, 3], PRIORITY_ASSERTED, None);
 
-        
         assert_eq!(constraints.len(), 3);
 
         for constraint in &constraints {
             assert_eq!(constraint.nodes.len(), 2);
             assert_eq!(constraint.priority, PRIORITY_ASSERTED);
             match &constraint.constraint_type {
-                PhysicsConstraintType::Separation { min_distance, strength } => {
+                PhysicsConstraintType::Separation {
+                    min_distance,
+                    strength,
+                } => {
                     assert_eq!(*min_distance, 35.0);
                     assert_eq!(*strength, 0.8);
                 }
@@ -559,14 +525,16 @@ mod tests {
         assert_eq!(constraints[0].nodes, vec![10, 20]);
 
         match &constraints[0].constraint_type {
-            PhysicsConstraintType::Clustering { ideal_distance, stiffness } => {
+            PhysicsConstraintType::Clustering {
+                ideal_distance,
+                stiffness,
+            } => {
                 assert_eq!(*ideal_distance, 20.0);
                 assert_eq!(*stiffness, 0.6);
             }
             _ => panic!("Wrong constraint type"),
         }
 
-        
         assert_eq!(mapper.get_subclasses(20), vec![10]);
     }
 
@@ -584,7 +552,10 @@ mod tests {
         assert_eq!(constraints[0].nodes, vec![5, 6]);
 
         match &constraints[0].constraint_type {
-            PhysicsConstraintType::Colocation { target_distance, strength } => {
+            PhysicsConstraintType::Colocation {
+                target_distance,
+                strength,
+            } => {
                 assert_eq!(*target_distance, 2.0);
                 assert_eq!(*strength, 0.9);
             }
@@ -626,9 +597,9 @@ mod tests {
             disjoint_classes: vec![2, 3, 4],
         });
 
-        let constraints = mapper.translate_disjoint_union(1, &vec![2, 3, 4], PRIORITY_ASSERTED, None);
+        let constraints =
+            mapper.translate_disjoint_union(1, &vec![2, 3, 4], PRIORITY_ASSERTED, None);
 
-        
         assert_eq!(constraints.len(), 6);
     }
 
@@ -644,7 +615,11 @@ mod tests {
 
         assert_eq!(constraints.len(), 1);
         match &constraints[0].constraint_type {
-            PhysicsConstraintType::Containment { parent_node, radius, .. } => {
+            PhysicsConstraintType::Containment {
+                parent_node,
+                radius,
+                ..
+            } => {
                 assert_eq!(*parent_node, 20);
                 assert!(*radius > 0.0);
             }
@@ -667,7 +642,6 @@ mod tests {
 
         let constraints = mapper.translate_axioms(&axioms);
 
-        
         assert_eq!(constraints.len(), 2);
     }
 
@@ -683,7 +657,10 @@ mod tests {
         let constraints = mapper.translate_disjoint_classes(&vec![1, 2], PRIORITY_ASSERTED, None);
 
         match &constraints[0].constraint_type {
-            PhysicsConstraintType::Separation { min_distance, strength } => {
+            PhysicsConstraintType::Separation {
+                min_distance,
+                strength,
+            } => {
                 assert_eq!(*min_distance, 50.0);
                 assert_eq!(*strength, 0.9);
             }

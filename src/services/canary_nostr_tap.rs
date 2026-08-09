@@ -160,7 +160,10 @@ pub fn map_event_to_observation(ev: &TapEvent, allowed_pubkeys: &[String]) -> Ta
     }
     if ev.kind != LIVENESS_CANARY_KIND {
         return TapDecision::Rejected {
-            reason: format!("kind {} is not the fire kind {}", ev.kind, LIVENESS_CANARY_KIND),
+            reason: format!(
+                "kind {} is not the fire kind {}",
+                ev.kind, LIVENESS_CANARY_KIND
+            ),
         };
     }
     if !ev.has_tag("t", LIVENESS_CANARY_TAG) {
@@ -249,9 +252,8 @@ impl CanaryNostrTap {
             );
             return None;
         }
-        let allowed_pubkeys = parse_allowed_pubkeys(
-            &std::env::var("CANARY_TAP_ALLOWED_PUBKEYS").unwrap_or_default(),
-        );
+        let allowed_pubkeys =
+            parse_allowed_pubkeys(&std::env::var("CANARY_TAP_ALLOWED_PUBKEYS").unwrap_or_default());
         if allowed_pubkeys.is_empty() {
             warn!(
                 "[canary-tap] CANARY_TAP_RELAY_URL is set but CANARY_TAP_ALLOWED_PUBKEYS is empty \
@@ -357,24 +359,28 @@ impl CanaryNostrTap {
             }
         };
         match map_event_to_observation(&tap_event, &self.allowed_pubkeys) {
-            TapDecision::Accepted { canary_id, evidence } => {
-                match self.harness.observe(&canary_id, &evidence).await {
-                    Ok(fire_id) => info!(
-                        "[canary-tap] accepted fire: canary={canary_id} fire_id={fire_id} \
+            TapDecision::Accepted {
+                canary_id,
+                evidence,
+            } => match self.harness.observe(&canary_id, &evidence).await {
+                Ok(fire_id) => info!(
+                    "[canary-tap] accepted fire: canary={canary_id} fire_id={fire_id} \
                          pubkey={}",
-                        tap_event.pubkey
-                    ),
-                    Err(CanaryStoreError::NotFound(_)) => warn!(
-                        "[canary-tap] rejected fire: canary '{canary_id}' is not registered \
+                    tap_event.pubkey
+                ),
+                Err(CanaryStoreError::NotFound(_)) => warn!(
+                    "[canary-tap] rejected fire: canary '{canary_id}' is not registered \
                          (the tap registers nothing new)"
-                    ),
-                    Err(e) => warn!(
-                        "[canary-tap] rejected fire: observe failed for '{canary_id}': {e}"
-                    ),
+                ),
+                Err(e) => {
+                    warn!("[canary-tap] rejected fire: observe failed for '{canary_id}': {e}")
                 }
-            }
+            },
             TapDecision::Rejected { reason } => {
-                warn!("[canary-tap] rejected fire from {}: {reason}", tap_event.pubkey);
+                warn!(
+                    "[canary-tap] rejected fire from {}: {reason}",
+                    tap_event.pubkey
+                );
             }
         }
     }

@@ -39,7 +39,9 @@
 
 use oxigraph::model::{GraphName, Literal, NamedNode, Quad, Subject, Term};
 
-use super::expander::{ExpandedDocument, ExpandedNode, ExpandedValue, OWL_NS, PROV_NS, SKOS_NS, VC_NS};
+use super::expander::{
+    ExpandedDocument, ExpandedNode, ExpandedValue, OWL_NS, PROV_NS, SKOS_NS, VC_NS,
+};
 
 /// SKOS alignment predicates we capture+emit on nodes/axioms (ADR-100 D4).
 /// We only *record* alignments the source ontology already provides
@@ -152,7 +154,9 @@ fn expand_types(types: &[String]) -> Vec<String> {
     let owl_class = format!("{}Class", OWL_NS);
     let vc_ontology_class = format!("{}OntologyClass", VC_NS);
 
-    let is_ontology_class = types.iter().any(|t| t == &owl_class || t == &vc_ontology_class);
+    let is_ontology_class = types
+        .iter()
+        .any(|t| t == &owl_class || t == &vc_ontology_class);
     if is_ontology_class {
         out.push(owl_class.clone());
         out.push(vc_ontology_class.clone());
@@ -257,7 +261,11 @@ fn emit_value_for_predicate(
                 ));
             }
         }
-        ExpandedValue::Literal { value, datatype, language } => {
+        ExpandedValue::Literal {
+            value,
+            datatype,
+            language,
+        } => {
             let lit = build_literal(value, datatype.as_deref(), language.as_deref());
             out.push(Quad::new(
                 subject.clone(),
@@ -465,7 +473,11 @@ fn emit_repeated_literal(
     };
     for v in arr {
         match v {
-            ExpandedValue::Literal { value, datatype, language } => {
+            ExpandedValue::Literal {
+                value,
+                datatype,
+                language,
+            } => {
                 let lit = build_literal(&value, datatype.as_deref(), language.as_deref());
                 out.push(Quad::new(
                     subject.clone(),
@@ -521,11 +533,13 @@ mod tests {
         }"#;
         let doc = expand_block("test.md", 0, body).unwrap();
         let quads = emit_quads(&doc);
-        assert!(quads.iter().any(|q| q.graph_name == GraphName::NamedNode(
-            NamedNode::new_unchecked(GRAPH_KNOWLEDGE)
-        )));
+        assert!(quads.iter().any(
+            |q| q.graph_name == GraphName::NamedNode(NamedNode::new_unchecked(GRAPH_KNOWLEDGE))
+        ));
         // No generatedAtTime quad
-        assert!(!quads.iter().any(|q| q.predicate.as_str().contains("generatedAtTime")));
+        assert!(!quads
+            .iter()
+            .any(|q| q.predicate.as_str().contains("generatedAtTime")));
     }
 
     #[test]
@@ -550,13 +564,16 @@ mod tests {
         let exact = format!("{}{}", SKOS_NS, SKOS_EXACT_MATCH);
         let close = format!("{}{}", SKOS_NS, SKOS_CLOSE_MATCH);
         assert!(
-            quads.iter().any(|q| q.predicate.as_str() == exact
-                && q.object.to_string().contains("Q193974")),
+            quads
+                .iter()
+                .any(|q| q.predicate.as_str() == exact && q.object.to_string().contains("Q193974")),
             "exactMatch to Wikidata must be emitted"
         );
         assert!(
             quads.iter().any(|q| q.predicate.as_str() == close
-                && q.object.to_string().contains("dbpedia.org/resource/Cybernetics")),
+                && q.object
+                    .to_string()
+                    .contains("dbpedia.org/resource/Cybernetics")),
             "closeMatch to DBpedia must be emitted"
         );
     }

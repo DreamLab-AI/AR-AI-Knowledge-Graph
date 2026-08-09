@@ -11,14 +11,10 @@
 use crate::adapters::oxigraph_ontology_repository::{OxigraphOntologyRepository, GRAPH_ONTOLOGY};
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine;
 use crate::adapters::SqliteSettingsRepository;
-use visionclaw_domain::models::canonical_entity::{CanonicalEntity, EntityKind};
-use visionclaw_domain::models::edge::Edge;
-use visionclaw_domain::ports::inference_engine::InferenceEngine;
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
-use visionclaw_domain::ports::ontology_repository::{AxiomType, OntologyRepository, OwlAxiom};
+use crate::services::decision_elevation::{decision_page_quads_logged, DECISIONS_DIR};
 use crate::services::github::content_enhanced::EnhancedContentAPI;
 use crate::services::github::types::GitHubFileBasicMetadata;
-use crate::services::decision_elevation::{decision_page_quads_logged, DECISIONS_DIR};
 use crate::services::jsonld_ingest::{self, IngestOutcome, PageMetadata};
 use crate::services::parsers::KnowledgeGraphParser;
 use crate::services::semantic_type_registry::SEMANTIC_TYPE_REGISTRY;
@@ -28,6 +24,10 @@ use oxigraph::model::{Quad, Subject};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use visionclaw_domain::models::canonical_entity::{CanonicalEntity, EntityKind};
+use visionclaw_domain::models::edge::Edge;
+use visionclaw_domain::ports::inference_engine::InferenceEngine;
+use visionclaw_domain::ports::ontology_repository::{AxiomType, OntologyRepository, OwlAxiom};
 
 const BATCH_SIZE: usize = 50;
 
@@ -141,15 +141,15 @@ fn build_node_from_entity(
     node.metadata
         .insert("type".to_string(), node_type.to_string());
     if entity.public {
-        node.metadata.insert("public".to_string(), "true".to_string());
+        node.metadata
+            .insert("public".to_string(), "true".to_string());
     }
     if !entity.page_iri.is_empty() {
         node.metadata
             .insert("page_iri".to_string(), entity.page_iri.clone());
     }
     if let Some(ref iri) = entity.class_iri {
-        node.metadata
-            .insert("class_iri".to_string(), iri.clone());
+        node.metadata.insert("class_iri".to_string(), iri.clone());
     }
 
     // Position: reuse existing if present, else random. Going through the
@@ -193,13 +193,17 @@ fn ensure_stub_from_iri(
     stub_ids.insert(id);
     let node_type = kind.as_node_type();
     let local_name = iri.rsplit_once(':').map(|(_, r)| r).unwrap_or(iri);
-    let local_name = local_name.rsplit_once('/').map(|(_, r)| r).unwrap_or(local_name);
+    let local_name = local_name
+        .rsplit_once('/')
+        .map(|(_, r)| r)
+        .unwrap_or(local_name);
     let mut node = visionclaw_domain::models::node::Node::default();
     node.id = id;
     node.metadata_id = local_name.to_string();
     node.label = local_name.replace('-', " ");
     node.node_type = Some(node_type.to_string());
-    node.metadata.insert("type".to_string(), node_type.to_string());
+    node.metadata
+        .insert("type".to_string(), node_type.to_string());
     if matches!(kind, OwlKind::Class | OwlKind::Individual) {
         node.owl_class_iri = Some(iri.to_string());
     }
@@ -265,7 +269,10 @@ impl GitHubSyncService {
     /// regardless of the SHA1 filter and the `FORCE_FULL_SYNC` env var. Used
     /// by the admin endpoint (`POST /api/admin/sync?force_full=true`) to
     /// rebuild the store from scratch without a container restart.
-    pub async fn sync_graphs_with(&self, force_full_override: bool) -> Result<SyncStatistics, String> {
+    pub async fn sync_graphs_with(
+        &self,
+        force_full_override: bool,
+    ) -> Result<SyncStatistics, String> {
         info!("Starting GitHub sync (batch size: {})", BATCH_SIZE);
         let start_time = Instant::now();
 
@@ -403,10 +410,9 @@ impl GitHubSyncService {
                 .map(|g| g.nodes.iter().map(|n| n.id).collect())
                 .unwrap_or_default();
 
-            let (resolvable, dangling): (Vec<Edge>, Vec<Edge>) =
-                deferred_edges.drain(..).partition(|e| {
-                    existing.contains(&e.source) && existing.contains(&e.target)
-                });
+            let (resolvable, dangling): (Vec<Edge>, Vec<Edge>) = deferred_edges
+                .drain(..)
+                .partition(|e| existing.contains(&e.source) && existing.contains(&e.target));
 
             info!(
                 "Deferred edge resolution: {} resolvable, {} dangling (folded to weights)",
@@ -483,11 +489,17 @@ impl GitHubSyncService {
                     let n_cocite = cocite_edges.len();
                     match self.kg_repo.batch_add_edges(cocite_edges).await {
                         Ok(ids) => {
-                            info!("Wrote {} co-citation springs from dangling wikilinks", ids.len());
+                            info!(
+                                "Wrote {} co-citation springs from dangling wikilinks",
+                                ids.len()
+                            );
                             stats.total_edges += ids.len();
                         }
                         Err(e) => {
-                            warn!("Co-citation spring write failed (non-fatal, {} edges): {}", n_cocite, e);
+                            warn!(
+                                "Co-citation spring write failed (non-fatal, {} edges): {}",
+                                n_cocite, e
+                            );
                             stats.errors.push(format!("cocite_edges: {}", e));
                         }
                     }
@@ -647,7 +659,8 @@ impl GitHubSyncService {
 
         // Map each folded stub to the real nodes that referenced it, and gather
         // every star edge incident to a folded stub for removal.
-        let mut referrers: std::collections::HashMap<u32, Vec<u32>> = std::collections::HashMap::new();
+        let mut referrers: std::collections::HashMap<u32, Vec<u32>> =
+            std::collections::HashMap::new();
         let mut remove_edge_ids: Vec<String> = Vec::new();
         for edge in &graph.edges {
             let (stub, other) = if fold_ids.contains(&edge.target) {
@@ -668,8 +681,10 @@ impl GitHubSyncService {
         // (a) Mass nuance per referring page; (b) co-citation springs between
         // pages that shared a folded target. `refs` is tiny (< threshold), so
         // the pairwise expansion is bounded.
-        let mut weight_bonus: std::collections::HashMap<u32, f32> = std::collections::HashMap::new();
-        let mut cocite: std::collections::HashMap<(u32, u32), f32> = std::collections::HashMap::new();
+        let mut weight_bonus: std::collections::HashMap<u32, f32> =
+            std::collections::HashMap::new();
+        let mut cocite: std::collections::HashMap<(u32, u32), f32> =
+            std::collections::HashMap::new();
         for refs in referrers.values() {
             for &n in refs {
                 *weight_bonus.entry(n).or_insert(0.0) += WEIGHT_PER_FOLDED_LINK;
@@ -937,8 +952,7 @@ impl GitHubSyncService {
         // hasPart, requires, …) and drops KG-page bridges. save_ontology_graph
         // already skips edges whose endpoints aren't in the node set; we
         // pre-filter to keep the INSERT tight.
-        let onto_ids: std::collections::HashSet<u32> =
-            onto_nodes.iter().map(|n| n.id).collect();
+        let onto_ids: std::collections::HashSet<u32> = onto_nodes.iter().map(|n| n.id).collect();
         let onto_edges: Vec<Edge> = graph
             .edges
             .iter()
@@ -1023,7 +1037,10 @@ impl GitHubSyncService {
             let content = match self.content_api.fetch_file_content(&f.download_url).await {
                 Ok(c) => c,
                 Err(e) => {
-                    warn!("[DecisionElevation] fetch decision page '{}' failed: {}", f.path, e);
+                    warn!(
+                        "[DecisionElevation] fetch decision page '{}' failed: {}",
+                        f.path, e
+                    );
                     continue;
                 }
             };
@@ -1700,7 +1717,10 @@ impl GitHubSyncService {
         let parsed = match self.kg_parser.parse(content, &file.name) {
             Ok(p) => p,
             Err(e) => {
-                debug!("Plain logseq parse failed for {}: {} — skipping", file.name, e);
+                debug!(
+                    "Plain logseq parse failed for {}: {} — skipping",
+                    file.name, e
+                );
                 return;
             }
         };
@@ -2259,15 +2279,37 @@ fn predicate_to_edge_type(iri: &str) -> &'static str {
 const DOMAIN_TABLE: &[(&str, &[&str])] = &[
     (
         "spatial-computing",
-        &["spatial", "/xr", "ar-", "vr-", "webxr", "babylon", "render", "hologram", "godot"],
+        &[
+            "spatial", "/xr", "ar-", "vr-", "webxr", "babylon", "render", "hologram", "godot",
+        ],
     ),
     (
         "artificial-intelligence",
-        &["/ai", "ai-", "agent", "llm", "ml", "neural", "transformer", "rag", "embedding", "reason"],
+        &[
+            "/ai",
+            "ai-",
+            "agent",
+            "llm",
+            "ml",
+            "neural",
+            "transformer",
+            "rag",
+            "embedding",
+            "reason",
+        ],
     ),
     (
         "blockchain",
-        &["blockchain", "nostr", "did", "crypto", "ledger", "web3", "chain", "wallet"],
+        &[
+            "blockchain",
+            "nostr",
+            "did",
+            "crypto",
+            "ledger",
+            "web3",
+            "chain",
+            "wallet",
+        ],
     ),
     (
         "robotics",
@@ -2275,12 +2317,23 @@ const DOMAIN_TABLE: &[(&str, &[&str])] = &[
     ),
     (
         "distributed-collaboration",
-        &["collab", "federation", "mesh", "p2p", "sync", "forum", "social", "swarm"],
+        &[
+            "collab",
+            "federation",
+            "mesh",
+            "p2p",
+            "sync",
+            "forum",
+            "social",
+            "swarm",
+        ],
     ),
     // Infrastructure is the catch-all default, placed last.
     (
         "infrastructure",
-        &["infra", "deploy", "docker", "server", "network", "storage", "pipeline", "build"],
+        &[
+            "infra", "deploy", "docker", "server", "network", "storage", "pipeline", "build",
+        ],
     ),
 ];
 
@@ -2303,12 +2356,13 @@ pub fn derive_source_domain(file_path: &str, label: &str) -> &'static str {
 /// field the live 6-bucket GPU repulsion table reads) and a `source_domain`
 /// metadata entry (the MetadataStore key). Returns `true` if a value was
 /// applied here (used for coverage accounting).
-fn ensure_source_domain(
-    node: &mut visionclaw_domain::models::node::Node,
-    file_path: &str,
-) -> bool {
+fn ensure_source_domain(node: &mut visionclaw_domain::models::node::Node, file_path: &str) -> bool {
     // Already authoritatively domained (quad-sourced) — leave it.
-    if node.group.as_deref().map(|g| !g.is_empty()).unwrap_or(false)
+    if node
+        .group
+        .as_deref()
+        .map(|g| !g.is_empty())
+        .unwrap_or(false)
         && node.metadata.contains_key("source_domain")
     {
         return false;

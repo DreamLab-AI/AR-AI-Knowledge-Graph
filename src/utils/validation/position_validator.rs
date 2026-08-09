@@ -5,12 +5,10 @@ use serde_json::Value;
 pub struct PositionValidator;
 
 impl PositionValidator {
-    
     pub fn validate_position_value(value: &Value, field: &str) -> ValidationResult<f32> {
         match value {
             Value::Number(n) => {
                 if let Some(f) = n.as_f64() {
-                    
                     if f.is_nan() || f.is_infinite() {
                         return Err(DetailedValidationError::new(
                             field,
@@ -18,7 +16,7 @@ impl PositionValidator {
                             "INVALID_POSITION",
                         ));
                     }
-                    
+
                     if f.abs() > 1_000_000.0 {
                         return Err(DetailedValidationError::new(
                             field,
@@ -35,33 +33,30 @@ impl PositionValidator {
                     ))
                 }
             }
-            Value::String(s) => {
-                
-                match s.parse::<f64>() {
-                    Ok(f) => {
-                        if f.is_nan() || f.is_infinite() {
-                            return Err(DetailedValidationError::new(
-                                field,
-                                "Position value cannot be NaN or Infinity",
-                                "INVALID_POSITION",
-                            ));
-                        }
-                        if f.abs() > 1_000_000.0 {
-                            return Err(DetailedValidationError::new(
-                                field,
-                                "Position value exceeds reasonable bounds",
-                                "POSITION_OUT_OF_BOUNDS",
-                            ));
-                        }
-                        Ok(f as f32)
+            Value::String(s) => match s.parse::<f64>() {
+                Ok(f) => {
+                    if f.is_nan() || f.is_infinite() {
+                        return Err(DetailedValidationError::new(
+                            field,
+                            "Position value cannot be NaN or Infinity",
+                            "INVALID_POSITION",
+                        ));
                     }
-                    Err(_) => Err(DetailedValidationError::new(
-                        field,
-                        "Invalid numeric string",
-                        "INVALID_NUMBER_FORMAT",
-                    )),
+                    if f.abs() > 1_000_000.0 {
+                        return Err(DetailedValidationError::new(
+                            field,
+                            "Position value exceeds reasonable bounds",
+                            "POSITION_OUT_OF_BOUNDS",
+                        ));
+                    }
+                    Ok(f as f32)
                 }
-            }
+                Err(_) => Err(DetailedValidationError::new(
+                    field,
+                    "Invalid numeric string",
+                    "INVALID_NUMBER_FORMAT",
+                )),
+            },
             _ => Err(DetailedValidationError::new(
                 field,
                 "Position must be a number or numeric string",
@@ -70,7 +65,6 @@ impl PositionValidator {
         }
     }
 
-    
     pub fn validate_position_object(position: &Value) -> ValidationResult<(f32, f32, f32)> {
         let obj = position.as_object().ok_or_else(|| {
             DetailedValidationError::new("position", "Position must be an object", "INVALID_TYPE")
@@ -100,7 +94,6 @@ impl PositionValidator {
         Ok((x, y, z))
     }
 
-    
     pub fn validate_velocity_value(value: &Value, field: &str) -> ValidationResult<f32> {
         match value {
             Value::Number(n) => {
@@ -112,7 +105,7 @@ impl PositionValidator {
                             "INVALID_VELOCITY",
                         ));
                     }
-                    
+
                     if f.abs() > 10_000.0 {
                         return Err(DetailedValidationError::new(
                             field,
@@ -129,33 +122,30 @@ impl PositionValidator {
                     ))
                 }
             }
-            Value::String(s) => {
-                
-                match s.parse::<f64>() {
-                    Ok(f) => {
-                        if f.is_nan() || f.is_infinite() {
-                            return Err(DetailedValidationError::new(
-                                field,
-                                "Velocity value cannot be NaN or Infinity",
-                                "INVALID_VELOCITY",
-                            ));
-                        }
-                        if f.abs() > 10_000.0 {
-                            return Err(DetailedValidationError::new(
-                                field,
-                                "Velocity value exceeds reasonable bounds",
-                                "VELOCITY_OUT_OF_BOUNDS",
-                            ));
-                        }
-                        Ok(f as f32)
+            Value::String(s) => match s.parse::<f64>() {
+                Ok(f) => {
+                    if f.is_nan() || f.is_infinite() {
+                        return Err(DetailedValidationError::new(
+                            field,
+                            "Velocity value cannot be NaN or Infinity",
+                            "INVALID_VELOCITY",
+                        ));
                     }
-                    Err(_) => Err(DetailedValidationError::new(
-                        field,
-                        "Invalid numeric string",
-                        "INVALID_NUMBER_FORMAT",
-                    )),
+                    if f.abs() > 10_000.0 {
+                        return Err(DetailedValidationError::new(
+                            field,
+                            "Velocity value exceeds reasonable bounds",
+                            "VELOCITY_OUT_OF_BOUNDS",
+                        ));
+                    }
+                    Ok(f as f32)
                 }
-            }
+                Err(_) => Err(DetailedValidationError::new(
+                    field,
+                    "Invalid numeric string",
+                    "INVALID_NUMBER_FORMAT",
+                )),
+            },
             _ => Err(DetailedValidationError::new(
                 field,
                 "Velocity must be a number or numeric string",

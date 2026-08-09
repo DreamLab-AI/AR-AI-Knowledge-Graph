@@ -107,7 +107,10 @@ impl RateLimitState {
         let window_start = now - config.window;
 
         // Get or create request history for this identifier
-        let history = self.requests.entry(identifier.to_string()).or_insert_with(VecDeque::new);
+        let history = self
+            .requests
+            .entry(identifier.to_string())
+            .or_insert_with(VecDeque::new);
 
         // Pop expired entries from the front (oldest first)
         while let Some(&front) = history.front() {
@@ -146,7 +149,10 @@ impl RateLimitState {
 
         self.last_cleanup = now;
 
-        debug!("Rate limit cleanup: {} active identifiers", self.requests.len());
+        debug!(
+            "Rate limit cleanup: {} active identifiers",
+            self.requests.len()
+        );
     }
 }
 
@@ -166,7 +172,10 @@ impl RateLimit {
 
     /// Create a rate limiter allowing N requests per hour
     pub fn per_hour(max_requests: usize) -> Self {
-        Self::new(RateLimitConfig::new(max_requests, Duration::from_secs(3600)))
+        Self::new(RateLimitConfig::new(
+            max_requests,
+            Duration::from_secs(3600),
+        ))
     }
 
     /// Create a rate limiter allowing N requests per second (for very restrictive endpoints)
@@ -185,7 +194,10 @@ impl RateLimit {
     #[allow(dead_code)]
     fn extract_identifier(&self, req: &ServiceRequest) -> String {
         // Priority 1: Prefer authenticated user ID (most reliable)
-        if let Some(user) = req.extensions().get::<crate::middleware::AuthenticatedUser>() {
+        if let Some(user) = req
+            .extensions()
+            .get::<crate::middleware::AuthenticatedUser>()
+        {
             return format!("user:{}", user.pubkey);
         }
 
@@ -211,7 +223,8 @@ impl RateLimit {
         }
 
         // Priority 4: Fall back to IP address (least reliable due to proxies/NAT)
-        let ip = req.connection_info()
+        let ip = req
+            .connection_info()
             .realip_remote_addr()
             .unwrap_or("unknown")
             .to_string();
@@ -267,7 +280,10 @@ where
             // Extract identifier (IP or user ID)
             let identifier = {
                 if config.use_user_id {
-                    if let Some(user) = req.extensions().get::<crate::middleware::AuthenticatedUser>() {
+                    if let Some(user) = req
+                        .extensions()
+                        .get::<crate::middleware::AuthenticatedUser>()
+                    {
                         user.pubkey.clone()
                     } else {
                         req.connection_info()
@@ -331,7 +347,10 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .wrap(RateLimit::per_second(5)) // 5 requests per second
-                .route("/", web::get().to(|| async { HttpResponse::Ok().body("OK") })),
+                .route(
+                    "/",
+                    web::get().to(|| async { HttpResponse::Ok().body("OK") }),
+                ),
         )
         .await;
 
@@ -348,7 +367,10 @@ mod tests {
         let app = test::init_service(
             App::new()
                 .wrap(RateLimit::per_second(2)) // 2 requests per second
-                .route("/", web::get().to(|| async { HttpResponse::Ok().body("OK") })),
+                .route(
+                    "/",
+                    web::get().to(|| async { HttpResponse::Ok().body("OK") }),
+                ),
         )
         .await;
 
@@ -375,7 +397,10 @@ mod tests {
                     2,
                     Duration::from_millis(500),
                 )))
-                .route("/", web::get().to(|| async { HttpResponse::Ok().body("OK") })),
+                .route(
+                    "/",
+                    web::get().to(|| async { HttpResponse::Ok().body("OK") }),
+                ),
         )
         .await;
 
@@ -402,11 +427,10 @@ mod tests {
         let config = RateLimitConfig::new(1, Duration::from_secs(1))
             .with_message("Custom error message".to_string());
 
-        let app = test::init_service(
-            App::new()
-                .wrap(RateLimit::new(config))
-                .route("/", web::get().to(|| async { HttpResponse::Ok().body("OK") })),
-        )
+        let app = test::init_service(App::new().wrap(RateLimit::new(config)).route(
+            "/",
+            web::get().to(|| async { HttpResponse::Ok().body("OK") }),
+        ))
         .await;
 
         // First request succeeds

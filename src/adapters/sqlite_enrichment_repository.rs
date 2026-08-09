@@ -375,7 +375,15 @@ impl SqliteEnrichmentRepository {
             .map_err(map_db_err)?;
 
         match row {
-            Some((case_id, category, source_iri, proposal_json, status, created_at, updated_at)) => {
+            Some((
+                case_id,
+                category,
+                source_iri,
+                proposal_json,
+                status,
+                created_at,
+                updated_at,
+            )) => {
                 let proposal_json: serde_json::Value =
                     serde_json::from_str(&proposal_json).map_err(map_json_err)?;
                 Ok(Some(EnrichmentProposal {
@@ -567,10 +575,7 @@ impl SqliteEnrichmentRepository {
     /// count and the Trust-Variance dispersion is over the `outcome` column, both
     /// windowed on `decided_at_ms`. Returns `(outcome, activity_urn, decided_at_ms)`
     /// so the KPI lineage can trace a value back to each contributing decision.
-    pub async fn decisions_since(
-        &self,
-        cutoff_ms: i64,
-    ) -> Result<Vec<(String, String, i64)>> {
+    pub async fn decisions_since(&self, cutoff_ms: i64) -> Result<Vec<(String, String, i64)>> {
         self.conn
             .call(move |c| {
                 let mut stmt = c.prepare_cached(
@@ -859,7 +864,10 @@ mod tests {
     async fn record_decision_transitions_status_atomically() {
         let repo = temp_repo().await;
         repo.create_or_update(&proposal("case-2")).await.unwrap();
-        let id = repo.record_decision(&decision("case-2", false)).await.unwrap();
+        let id = repo
+            .record_decision(&decision("case-2", false))
+            .await
+            .unwrap();
         assert!(id > 0);
         let got = repo.get("case-2").await.unwrap().unwrap();
         assert_eq!(got.status, "approved", "approve outcome ⇒ approved status");
@@ -905,7 +913,11 @@ mod tests {
             .await
             .unwrap();
 
-        let row = repo.loop_trace_for("loop-1").await.unwrap().expect("present");
+        let row = repo
+            .loop_trace_for("loop-1")
+            .await
+            .unwrap()
+            .expect("present");
         assert_eq!(row.decision_outcome.as_deref(), Some("approve"));
         assert_eq!(row.decided_at_ms, Some(1_700_000_002_000));
         assert_eq!(row.writeback_committed, Some(true));
@@ -929,8 +941,14 @@ mod tests {
     #[tokio::test]
     async fn loop_trace_for_pending_proposal_has_no_decision() {
         let repo = temp_repo().await;
-        repo.create_or_update(&proposal("loop-pending")).await.unwrap();
-        let row = repo.loop_trace_for("loop-pending").await.unwrap().expect("present");
+        repo.create_or_update(&proposal("loop-pending"))
+            .await
+            .unwrap();
+        let row = repo
+            .loop_trace_for("loop-pending")
+            .await
+            .unwrap()
+            .expect("present");
         assert_eq!(row.status, "pending");
         assert!(row.decided_at_ms.is_none());
         assert!(row.writeback_committed_at_ms.is_none());
@@ -950,10 +968,16 @@ mod tests {
         let rows = repo.provenance_decisions_since(1_000).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].owner_did.as_deref(), Some("did:nostr:aaaa"));
-        assert!(rows[0].activity_urn.starts_with("urn:visionclaw:execution:"));
+        assert!(rows[0]
+            .activity_urn
+            .starts_with("urn:visionclaw:execution:"));
         assert!(rows[0].attributed);
         // A cutoff after the decision returns nothing.
-        assert!(repo.provenance_decisions_since(3_000).await.unwrap().is_empty());
+        assert!(repo
+            .provenance_decisions_since(3_000)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]
@@ -977,7 +1001,11 @@ mod tests {
         repo.record_decision(&d2).await.unwrap();
 
         let windowed = repo.decisions_since(1_000).await.unwrap();
-        assert_eq!(windowed.len(), 2, "only decisions at/after cutoff are returned");
+        assert_eq!(
+            windowed.len(),
+            2,
+            "only decisions at/after cutoff are returned"
+        );
         // Newest first.
         assert_eq!(windowed[0].0, "reject");
         assert_eq!(windowed[0].2, 3_000);
@@ -990,15 +1018,26 @@ mod tests {
         // lifecycle status directly (bypassing the outcome→status derivation).
         let repo = temp_repo().await;
         repo.create_or_update(&proposal("term-1")).await.unwrap();
-        repo.record_decision(&decision("term-1", false)).await.unwrap();
-        assert_eq!(repo.get("term-1").await.unwrap().unwrap().status, "approved");
+        repo.record_decision(&decision("term-1", false))
+            .await
+            .unwrap();
+        assert_eq!(
+            repo.get("term-1").await.unwrap().unwrap().status,
+            "approved"
+        );
 
         repo.set_status("term-1", "elevated").await.unwrap();
-        assert_eq!(repo.get("term-1").await.unwrap().unwrap().status, "elevated");
+        assert_eq!(
+            repo.get("term-1").await.unwrap().unwrap().status,
+            "elevated"
+        );
 
         repo.create_or_update(&proposal("term-2")).await.unwrap();
         repo.set_status("term-2", "abandoned").await.unwrap();
-        assert_eq!(repo.get("term-2").await.unwrap().unwrap().status, "abandoned");
+        assert_eq!(
+            repo.get("term-2").await.unwrap().unwrap().status,
+            "abandoned"
+        );
 
         // Unknown case id ⇒ no-op, not an error.
         repo.set_status("no-such-case", "elevated").await.unwrap();

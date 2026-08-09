@@ -15,7 +15,7 @@
  * What is GPU-gated (#[ignore]):
  *   - A live HTTP round-trip that drives a real clustering/anomaly pass and
  *     asserts the returned values match the CPU oracle. Requires the server +
- *     a CUDA device. Binds to the intended /api/analytics/* routes.
+ *     a CUDA device. Binds to the intended /api/analytics routes.
  */
 
 #[path = "analytics_fixtures.rs"]

@@ -168,7 +168,9 @@ fn is_closing_fence(line: &str, min_len: usize) -> bool {
 }
 
 fn strip_trailing_newline(line: &str) -> &str {
-    line.strip_suffix("\r\n").or_else(|| line.strip_suffix('\n')).unwrap_or(line)
+    line.strip_suffix("\r\n")
+        .or_else(|| line.strip_suffix('\n'))
+        .unwrap_or(line)
 }
 
 #[cfg(test)]

@@ -2,8 +2,8 @@
 //!
 //! Translates natural language queries to Cypher using LLM and schema context
 
-use crate::services::schema_service::SchemaService;
 use crate::services::perplexity_service::PerplexityService;
+use crate::services::schema_service::SchemaService;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -52,7 +52,8 @@ impl NaturalLanguageQueryService {
         let prompt = self.build_translation_prompt(query, &schema_context);
 
         // Call LLM service
-        let response = self.perplexity_service
+        let response = self
+            .perplexity_service
             .chat_completion(vec![
                 ("system".to_string(), self.get_system_prompt()),
                 ("user".to_string(), prompt),
@@ -74,7 +75,8 @@ impl NaturalLanguageQueryService {
             schema_context, query
         );
 
-        let response = self.perplexity_service
+        let response = self
+            .perplexity_service
             .chat_completion(vec![
                 ("system".to_string(), self.get_system_prompt()),
                 ("user".to_string(), prompt),
@@ -117,9 +119,13 @@ impl NaturalLanguageQueryService {
             cypher
         );
 
-        let response = self.perplexity_service
+        let response = self
+            .perplexity_service
             .chat_completion(vec![
-                ("system".to_string(), "You are a helpful assistant that explains graph database queries.".to_string()),
+                (
+                    "system".to_string(),
+                    "You are a helpful assistant that explains graph database queries.".to_string(),
+                ),
                 ("user".to_string(), prompt),
             ])
             .await
@@ -156,7 +162,8 @@ Explanation: <brief explanation>
 Confidence: <0.0-1.0>
 
 Warnings: <any warnings or limitations>
-"#.to_string()
+"#
+        .to_string()
     }
 
     fn build_translation_prompt(&self, query: &str, schema_context: &str) -> String {
@@ -166,12 +173,17 @@ Warnings: <any warnings or limitations>
         )
     }
 
-    fn parse_llm_response(&self, original_query: &str, response: &str) -> Result<QueryTranslation, String> {
+    fn parse_llm_response(
+        &self,
+        original_query: &str,
+        response: &str,
+    ) -> Result<QueryTranslation, String> {
         // Extract Cypher query from response
         let cypher_query = self.extract_cypher_block(response)?;
 
         // Extract explanation
-        let explanation = self.extract_after_marker(response, "Explanation:")
+        let explanation = self
+            .extract_after_marker(response, "Explanation:")
             .unwrap_or_else(|| "No explanation provided".to_string());
 
         // Extract confidence
@@ -195,7 +207,11 @@ Warnings: <any warnings or limitations>
         })
     }
 
-    fn parse_multiple_queries(&self, original_query: &str, response: &str) -> Result<Vec<QueryTranslation>, String> {
+    fn parse_multiple_queries(
+        &self,
+        original_query: &str,
+        response: &str,
+    ) -> Result<Vec<QueryTranslation>, String> {
         // Split response by code blocks
         let mut translations = Vec::new();
 
@@ -317,7 +333,9 @@ mod tests {
         let service = create_test_service();
 
         // Valid query
-        assert!(service.validate_cypher("MATCH (n:GraphNode) RETURN n").is_ok());
+        assert!(service
+            .validate_cypher("MATCH (n:GraphNode) RETURN n")
+            .is_ok());
 
         // Missing RETURN
         assert!(service.validate_cypher("MATCH (n:GraphNode)").is_err());

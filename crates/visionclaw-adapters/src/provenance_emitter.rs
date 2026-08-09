@@ -104,7 +104,12 @@ pub fn reify_activity(store: &Store, record: &ActivityRecord) -> Result<usize, P
     let p_action = make_named_node(&format!("{VC_NS}action"))?;
     let action_lit = Literal::new_simple_literal(&record.action);
     store
-        .insert(QuadRef::new(&subject, p_action.as_ref(), &action_lit, graph))
+        .insert(QuadRef::new(
+            &subject,
+            p_action.as_ref(),
+            &action_lit,
+            graph,
+        ))
         .map_err(|e| ProvenanceError::Store(e.to_string()))?;
     count += 1;
 
@@ -112,7 +117,12 @@ pub fn reify_activity(store: &Store, record: &ActivityRecord) -> Result<usize, P
     let p_derivation = make_named_node(&format!("{VC_NS}derivation"))?;
     let deriv_lit = Literal::new_simple_literal(&record.derivation);
     store
-        .insert(QuadRef::new(&subject, p_derivation.as_ref(), &deriv_lit, graph))
+        .insert(QuadRef::new(
+            &subject,
+            p_derivation.as_ref(),
+            &deriv_lit,
+            graph,
+        ))
         .map_err(|e| ProvenanceError::Store(e.to_string()))?;
     count += 1;
 
@@ -158,7 +168,11 @@ pub fn reify_activity(store: &Store, record: &ActivityRecord) -> Result<usize, P
 }
 
 /// Query the provenance graph for activities by a specific agent.
-pub fn query_agent_activities(store: &Store, agent_did: &str, limit: usize) -> Result<Vec<ActivityRecord>, ProvenanceError> {
+pub fn query_agent_activities(
+    store: &Store,
+    agent_did: &str,
+    limit: usize,
+) -> Result<Vec<ActivityRecord>, ProvenanceError> {
     let sparql = format!(
         r#"
         PREFIX prov: <http://www.w3.org/ns/prov#>
@@ -224,7 +238,10 @@ pub fn count_provenance_triples(store: &Store) -> Result<usize, ProvenanceError>
     if let oxigraph::sparql::QueryResults::Solutions(mut solutions) = results {
         if let Some(Ok(row)) = solutions.next() {
             if let Some(oxigraph::model::Term::Literal(lit)) = row.get("n") {
-                return lit.value().parse::<usize>().map_err(|e| ProvenanceError::Store(e.to_string()));
+                return lit
+                    .value()
+                    .parse::<usize>()
+                    .map_err(|e| ProvenanceError::Store(e.to_string()));
             }
         }
     }
@@ -243,7 +260,10 @@ pub fn count_shapes_loaded(store: &Store) -> Result<usize, ProvenanceError> {
     if let oxigraph::sparql::QueryResults::Solutions(mut solutions) = results {
         if let Some(Ok(row)) = solutions.next() {
             if let Some(oxigraph::model::Term::Literal(lit)) = row.get("n") {
-                return lit.value().parse::<usize>().map_err(|e| ProvenanceError::Store(e.to_string()));
+                return lit
+                    .value()
+                    .parse::<usize>()
+                    .map_err(|e| ProvenanceError::Store(e.to_string()));
             }
         }
     }
@@ -312,7 +332,8 @@ mod tests {
         let store = mem_store();
         let record = ActivityRecord {
             activity_urn: "urn:visionclaw:execution:sha256-12-minimal000".to_string(),
-            agent_did: "did:nostr:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            agent_did: "did:nostr:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                .to_string(),
             timestamp: "2026-06-21T15:00:00Z".to_string(),
             action: "ingest".to_string(),
             derivation: "asserted".to_string(),
@@ -330,11 +351,7 @@ mod tests {
         let record = test_record();
         reify_activity(&store, &record).expect("reify");
 
-        let results = query_agent_activities(
-            &store,
-            &record.agent_did,
-            10,
-        ).expect("query");
+        let results = query_agent_activities(&store, &record.agent_did, 10).expect("query");
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].activity_urn, record.activity_urn);
@@ -365,7 +382,8 @@ mod tests {
         // Reify a second record — total grows, never shrinks.
         let record2 = ActivityRecord {
             activity_urn: "urn:visionclaw:execution:sha256-12-second000000".to_string(),
-            agent_did: "did:nostr:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string(),
+            agent_did: "did:nostr:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                .to_string(),
             timestamp: "2026-06-21T16:00:00Z".to_string(),
             action: "enrich".to_string(),
             derivation: "proposed".to_string(),

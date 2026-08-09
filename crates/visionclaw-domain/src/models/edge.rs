@@ -232,29 +232,86 @@ mod tests {
 
     #[test]
     fn semantic_edge_type_from_relation_type_known_variants() {
-        assert_eq!(SemanticEdgeType::from_relation_type("is_subclass_of"), SemanticEdgeType::Hierarchical);
-        assert_eq!(SemanticEdgeType::from_relation_type("SUBCLASS_OF"), SemanticEdgeType::Hierarchical);
-        assert_eq!(SemanticEdgeType::from_relation_type("has_part"), SemanticEdgeType::Structural);
-        assert_eq!(SemanticEdgeType::from_relation_type("requires"), SemanticEdgeType::Dependency);
-        assert_eq!(SemanticEdgeType::from_relation_type("relates_to"), SemanticEdgeType::Associative);
-        assert_eq!(SemanticEdgeType::from_relation_type("bridges_to"), SemanticEdgeType::Bridge);
-        assert_eq!(SemanticEdgeType::from_relation_type("namespace"), SemanticEdgeType::Namespace);
-        assert_eq!(SemanticEdgeType::from_relation_type("inferred"), SemanticEdgeType::Inferred);
-        assert_eq!(SemanticEdgeType::from_relation_type("implements"), SemanticEdgeType::Implements);
-        assert_eq!(SemanticEdgeType::from_relation_type("enhances"), SemanticEdgeType::Enhancement);
-        assert_eq!(SemanticEdgeType::from_relation_type("secures"), SemanticEdgeType::Security);
-        assert_eq!(SemanticEdgeType::from_relation_type("goal"), SemanticEdgeType::Goal);
-        assert_eq!(SemanticEdgeType::from_relation_type("tracks"), SemanticEdgeType::Tracking);
-        assert_eq!(SemanticEdgeType::from_relation_type("similar_to"), SemanticEdgeType::Similarity);
-        assert_eq!(SemanticEdgeType::from_relation_type("provenance"), SemanticEdgeType::Provenance);
-        assert_eq!(SemanticEdgeType::from_relation_type("uses"), SemanticEdgeType::Utilisation);
-        assert_eq!(SemanticEdgeType::from_relation_type("standardized_by"), SemanticEdgeType::Standardisation);
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("is_subclass_of"),
+            SemanticEdgeType::Hierarchical
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("SUBCLASS_OF"),
+            SemanticEdgeType::Hierarchical
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("has_part"),
+            SemanticEdgeType::Structural
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("requires"),
+            SemanticEdgeType::Dependency
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("relates_to"),
+            SemanticEdgeType::Associative
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("bridges_to"),
+            SemanticEdgeType::Bridge
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("namespace"),
+            SemanticEdgeType::Namespace
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("inferred"),
+            SemanticEdgeType::Inferred
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("implements"),
+            SemanticEdgeType::Implements
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("enhances"),
+            SemanticEdgeType::Enhancement
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("secures"),
+            SemanticEdgeType::Security
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("goal"),
+            SemanticEdgeType::Goal
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("tracks"),
+            SemanticEdgeType::Tracking
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("similar_to"),
+            SemanticEdgeType::Similarity
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("provenance"),
+            SemanticEdgeType::Provenance
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("uses"),
+            SemanticEdgeType::Utilisation
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("standardized_by"),
+            SemanticEdgeType::Standardisation
+        );
     }
 
     #[test]
     fn semantic_edge_type_from_relation_type_unknown_falls_back_to_explicit_link() {
-        assert_eq!(SemanticEdgeType::from_relation_type(""), SemanticEdgeType::ExplicitLink);
-        assert_eq!(SemanticEdgeType::from_relation_type("unknown_type"), SemanticEdgeType::ExplicitLink);
+        assert_eq!(
+            SemanticEdgeType::from_relation_type(""),
+            SemanticEdgeType::ExplicitLink
+        );
+        assert_eq!(
+            SemanticEdgeType::from_relation_type("unknown_type"),
+            SemanticEdgeType::ExplicitLink
+        );
     }
 
     #[test]
@@ -282,13 +339,22 @@ mod tests {
             assert_eq!(SemanticEdgeType::from_u8(byte), expected, "byte {}", byte);
         }
         // out-of-range falls back
-        assert_eq!(SemanticEdgeType::from_u8(255), SemanticEdgeType::ExplicitLink);
+        assert_eq!(
+            SemanticEdgeType::from_u8(255),
+            SemanticEdgeType::ExplicitLink
+        );
     }
 
     #[test]
     fn semantic_edge_type_spring_multiplier_hierarchical_is_highest() {
-        assert!(SemanticEdgeType::Hierarchical.spring_multiplier() > SemanticEdgeType::ExplicitLink.spring_multiplier());
-        assert!(SemanticEdgeType::Hierarchical.spring_multiplier() > SemanticEdgeType::Bridge.spring_multiplier());
+        assert!(
+            SemanticEdgeType::Hierarchical.spring_multiplier()
+                > SemanticEdgeType::ExplicitLink.spring_multiplier()
+        );
+        assert!(
+            SemanticEdgeType::Hierarchical.spring_multiplier()
+                > SemanticEdgeType::Bridge.spring_multiplier()
+        );
         assert!(SemanticEdgeType::Provenance.spring_multiplier() < 1.0);
     }
 
@@ -296,7 +362,10 @@ mod tests {
     fn semantic_edge_type_display() {
         assert_eq!(SemanticEdgeType::ExplicitLink.to_string(), "explicit_link");
         assert_eq!(SemanticEdgeType::Hierarchical.to_string(), "hierarchical");
-        assert_eq!(SemanticEdgeType::Standardisation.to_string(), "standardisation");
+        assert_eq!(
+            SemanticEdgeType::Standardisation.to_string(),
+            "standardisation"
+        );
     }
 
     #[test]
@@ -332,7 +401,10 @@ mod tests {
             .with_metadata(meta);
 
         assert_eq!(e.edge_type.as_deref(), Some("hierarchical"));
-        assert_eq!(e.owl_property_iri.as_deref(), Some("http://example.org/prop"));
+        assert_eq!(
+            e.owl_property_iri.as_deref(),
+            Some("http://example.org/prop")
+        );
         assert!(e.metadata.as_ref().unwrap().contains_key("k"));
     }
 

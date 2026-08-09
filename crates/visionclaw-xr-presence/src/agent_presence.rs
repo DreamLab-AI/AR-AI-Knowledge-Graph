@@ -453,7 +453,11 @@ mod tests {
         assert_eq!(d.attention, Some(AttentionTarget::GraphNode(4242)));
         // gaze survives quantisation to within tolerance
         let g = d.gaze_dir.unwrap();
-        assert!((g[2] + 1.0).abs() < 1e-3, "gaze z should be ~ -1, got {}", g[2]);
+        assert!(
+            (g[2] + 1.0).abs() < 1e-3,
+            "gaze z should be ~ -1, got {}",
+            g[2]
+        );
     }
 
     #[test]
@@ -539,9 +543,17 @@ mod tests {
 
     #[test]
     fn between_elides_unchanged_fields() {
-        let prev = presence(AgentActivity::Working, [0.0, 0.0, -1.0], AttentionTarget::None);
+        let prev = presence(
+            AgentActivity::Working,
+            [0.0, 0.0, -1.0],
+            AttentionTarget::None,
+        );
         // only gaze moves, by more than one quantum
-        let next = presence(AgentActivity::Working, [0.2, 0.0, -1.0], AttentionTarget::None);
+        let next = presence(
+            AgentActivity::Working,
+            [0.2, 0.0, -1.0],
+            AttentionTarget::None,
+        );
         let d = AgentPresenceDelta::between(0, &prev, &next);
         assert!(d.state.is_none(), "state unchanged must elide");
         assert!(d.attention.is_none(), "attention unchanged must elide");
@@ -627,7 +639,11 @@ mod tests {
             3,
             &[AgentPresenceDelta::full(
                 1,
-                &presence(AgentActivity::Working, [0.0, 0.0, -1.0], AttentionTarget::User),
+                &presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::User,
+                ),
             )],
         )
         .unwrap();
@@ -666,6 +682,9 @@ mod tests {
 
     #[test]
     fn quantise_degenerate_falls_back_to_forward() {
-        assert_eq!(dequantise_dir(quantise_dir([0.0, 0.0, 0.0])), [0.0, 0.0, -1.0]);
+        assert_eq!(
+            dequantise_dir(quantise_dir([0.0, 0.0, 0.0])),
+            [0.0, 0.0, -1.0]
+        );
     }
 }

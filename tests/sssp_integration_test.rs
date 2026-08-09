@@ -83,7 +83,11 @@ fn sssp_cpu_reference_known_answer() {
     let (dist, parent) = dijkstra(&g, 0);
     assert_eq!(dist[0], Some(0.0), "source distance is 0");
     assert_eq!(dist[1], Some(1.0), "0->1 = 1.0");
-    assert_eq!(dist[2], Some(3.0), "0->1->2 = 3.0 (optimal over 0->3->2 = 4.0)");
+    assert_eq!(
+        dist[2],
+        Some(3.0),
+        "0->1->2 = 3.0 (optimal over 0->3->2 = 4.0)"
+    );
     assert_eq!(dist[3], Some(3.0), "0->3 = 3.0");
     assert_eq!(dist[4], None, "node 4 is unreachable");
     // parent pointers reach the wire's sssp_parent@32 slot.
@@ -99,7 +103,10 @@ fn sssp_unreachable_encodes_as_infinity_minus_one() {
     let g = SsspGraph::simple();
     let (dist, parent) = dijkstra(&g, 0);
     let wire_dist = dist[4].unwrap_or(f32::INFINITY);
-    assert!(wire_dist.is_infinite(), "unreachable distance -> +inf on wire");
+    assert!(
+        wire_dist.is_infinite(),
+        "unreachable distance -> +inf on wire"
+    );
     assert_eq!(parent[4], -1, "unreachable parent -> -1 on wire");
 }
 
@@ -190,7 +197,10 @@ fn sssp_encoder_feed_reaches_wire_slot_28() {
                     "node {i} distance@28 must equal oracle {d}, got {}",
                     pos.sssp_distance
                 );
-                assert_eq!(pos.sssp_parent, parent[i], "node {i} parent@32 must equal oracle");
+                assert_eq!(
+                    pos.sssp_parent, parent[i],
+                    "node {i} parent@32 must equal oracle"
+                );
             }
             None => {
                 assert!(
@@ -198,7 +208,10 @@ fn sssp_encoder_feed_reaches_wire_slot_28() {
                     "unreachable node {i} distance@28 must be +inf, got {}",
                     pos.sssp_distance
                 );
-                assert_eq!(pos.sssp_parent, -1, "unreachable node {i} parent@32 must be -1");
+                assert_eq!(
+                    pos.sssp_parent, -1,
+                    "unreachable node {i} parent@32 must be -1"
+                );
             }
         }
     }

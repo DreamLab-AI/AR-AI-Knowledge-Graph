@@ -27,18 +27,63 @@ struct VoiceLine(String);
 
 /// Verbs that signal the user wants to CHANGE something.
 const CONFIG_VERBS: &[&str] = &[
-    "set ", "increase ", "decrease ", "reduce ", "raise ", "lower ", "show ", "hide ",
-    "turn on", "turn off", "enable ", "disable ", "switch to", "change ", "dim ",
-    "brighten ", "bigger", "smaller", "speed up", "slow down", "reset ",
+    "set ",
+    "increase ",
+    "decrease ",
+    "reduce ",
+    "raise ",
+    "lower ",
+    "show ",
+    "hide ",
+    "turn on",
+    "turn off",
+    "enable ",
+    "disable ",
+    "switch to",
+    "change ",
+    "dim ",
+    "brighten ",
+    "bigger",
+    "smaller",
+    "speed up",
+    "slow down",
+    "reset ",
 ];
 
 /// Interface nouns the verbs must act on. Keeps "increase the budget" or
 /// "show me the door" out of the settings assistant.
 const INTERFACE_NOUNS: &[&str] = &[
-    "node", "edge", "label", "graph", "physics", "spring", "repulsion", "gravity",
-    "damping", "layout", "bloom", "glow", "colour", "color", "background", "camera",
-    "ontology", "knowledge", "agent", "hologram", "light", "ambient", "opacity",
-    "size", "separation", "cluster", "hull", "view", "interface", "panel", "setting",
+    "node",
+    "edge",
+    "label",
+    "graph",
+    "physics",
+    "spring",
+    "repulsion",
+    "gravity",
+    "damping",
+    "layout",
+    "bloom",
+    "glow",
+    "colour",
+    "color",
+    "background",
+    "camera",
+    "ontology",
+    "knowledge",
+    "agent",
+    "hologram",
+    "light",
+    "ambient",
+    "opacity",
+    "size",
+    "separation",
+    "cluster",
+    "hull",
+    "view",
+    "interface",
+    "panel",
+    "setting",
 ];
 
 /// Detect a spoken interface-configuration command. Returns the command text
@@ -113,8 +158,7 @@ impl Handler<VoiceLine> for VoiceInterfaceActor {
         info!("[VoiceInterface] spoken configuration request: \"{command}\"");
         let settings_base = std::env::var("VISIONCLAW_INTERNAL_URL")
             .unwrap_or_else(|_| "http://visionclaw_container:4000".to_string());
-        let provider =
-            std::env::var("PRIMARY_PROVIDER").unwrap_or_else(|_| "gemini".to_string());
+        let provider = std::env::var("PRIMARY_PROVIDER").unwrap_or_else(|_| "gemini".to_string());
         let task = settings_assistant_task(&command, "", &settings_base);
         let orchestrator = self.orchestrator.clone();
 

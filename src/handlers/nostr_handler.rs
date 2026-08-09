@@ -2,14 +2,10 @@ use crate::app_state::AppState;
 use crate::config::feature_access::FeatureAccess;
 use crate::models::protected_settings::ApiKeys;
 use crate::services::nostr_service::{AuthEvent, NostrError, NostrService};
+use crate::{bad_request, error_json, not_found, ok_json};
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use crate::{
-    ok_json, error_json, bad_request, not_found,
-};
-
-
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,7 +50,7 @@ pub struct ValidateRequest {
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::scope("/auth/nostr") 
+        web::scope("/auth/nostr")
             .route("", web::post().to(login))
             .route("", web::delete().to(logout))
             .route("/verify", web::post().to(verify))
@@ -140,10 +136,8 @@ async fn login(
                     .parse::<i64>()
                     .unwrap_or(3600);
 
-            
             let features = feature_access.get_available_features(&user.pubkey);
 
-            
             let user_dto = UserResponseDTO {
                 pubkey: user.pubkey.clone(),
                 npub: Some(user.npub.clone()),
@@ -168,7 +162,6 @@ async fn logout(
     req: web::Json<ValidateRequest>,
     nostr_service: web::Data<NostrService>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    
     if !nostr_service
         .validate_session(&req.pubkey, &req.token)
         .await
@@ -207,7 +200,6 @@ async fn verify(
         None
     };
 
-    
     let features = if is_valid {
         feature_access.get_available_features(&req.pubkey)
     } else {
@@ -226,7 +218,6 @@ async fn refresh(
     nostr_service: web::Data<NostrService>,
     feature_access: web::Data<FeatureAccess>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    
     if !nostr_service
         .validate_session(&req.pubkey, &req.token)
         .await
@@ -244,7 +235,7 @@ async fn refresh(
                         .unwrap_or_else(|_| "3600".to_string())
                         .parse::<i64>()
                         .unwrap_or(3600);
-                
+
                 let features = feature_access.get_available_features(&req.pubkey);
 
                 ok_json!(AuthResponse {
@@ -337,7 +328,10 @@ pub async fn init_nostr_service(app_state: &mut AppState) {
     match nostr_service.initialize().await {
         Ok(count) => {
             if count > 0 {
-                log::info!("[NostrService] Restored {} sessions from persistent storage", count);
+                log::info!(
+                    "[NostrService] Restored {} sessions from persistent storage",
+                    count
+                );
             }
             if nostr_service.has_redis() {
                 log::info!("[NostrService] Redis session persistence enabled");

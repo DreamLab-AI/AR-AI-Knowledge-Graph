@@ -150,23 +150,26 @@ impl Handler<GetUser> for ProtectedSettingsActor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use visionclaw_domain::models::protected_settings::{ApiKeys, NostrUser, ProtectedSettings};
     use tempfile::TempDir;
+    use visionclaw_domain::models::protected_settings::{ApiKeys, NostrUser, ProtectedSettings};
 
     fn settings_with_user(pubkey: &str, is_power_user: bool) -> ProtectedSettings {
         let mut s = ProtectedSettings::default();
-        s.users.insert(pubkey.to_string(), NostrUser {
-            pubkey: pubkey.to_string(),
-            npub: "npub1test".to_string(),
-            is_power_user,
-            api_keys: ApiKeys {
-                perplexity: Some("pplx-key".to_string()),
-                openai: Some("openai-key".to_string()),
-                ragflow: None,
+        s.users.insert(
+            pubkey.to_string(),
+            NostrUser {
+                pubkey: pubkey.to_string(),
+                npub: "npub1test".to_string(),
+                is_power_user,
+                api_keys: ApiKeys {
+                    perplexity: Some("pplx-key".to_string()),
+                    openai: Some("openai-key".to_string()),
+                    ragflow: None,
+                },
+                last_seen: 0,
+                session_token: None,
             },
-            last_seen: 0,
-            session_token: None,
-        });
+        );
         s
     }
 
@@ -175,7 +178,12 @@ mod tests {
         let settings = settings_with_user("pubkey1", false);
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let keys = actor.send(GetApiKeys { pubkey: "pubkey1".to_string() }).await.unwrap();
+        let keys = actor
+            .send(GetApiKeys {
+                pubkey: "pubkey1".to_string(),
+            })
+            .await
+            .unwrap();
         assert_eq!(keys.openai.as_deref(), Some("openai-key"));
         assert_eq!(keys.perplexity.as_deref(), Some("pplx-key"));
     }
@@ -190,7 +198,12 @@ mod tests {
         };
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let keys = actor.send(GetApiKeys { pubkey: "nobody".to_string() }).await.unwrap();
+        let keys = actor
+            .send(GetApiKeys {
+                pubkey: "nobody".to_string(),
+            })
+            .await
+            .unwrap();
         assert_eq!(keys.openai.as_deref(), Some("default-key"));
     }
 
@@ -200,10 +213,13 @@ mod tests {
         settings.users.get_mut("pk2").unwrap().session_token = Some("tok123".to_string());
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let valid = actor.send(ValidateClientToken {
-            pubkey: "pk2".to_string(),
-            token: "tok123".to_string(),
-        }).await.unwrap();
+        let valid = actor
+            .send(ValidateClientToken {
+                pubkey: "pk2".to_string(),
+                token: "tok123".to_string(),
+            })
+            .await
+            .unwrap();
         assert!(valid);
     }
 
@@ -213,10 +229,13 @@ mod tests {
         settings.users.get_mut("pk3").unwrap().session_token = Some("right".to_string());
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let valid = actor.send(ValidateClientToken {
-            pubkey: "pk3".to_string(),
-            token: "wrong".to_string(),
-        }).await.unwrap();
+        let valid = actor
+            .send(ValidateClientToken {
+                pubkey: "pk3".to_string(),
+                token: "wrong".to_string(),
+            })
+            .await
+            .unwrap();
         assert!(!valid);
     }
 
@@ -225,15 +244,21 @@ mod tests {
         let settings = settings_with_user("pk4", false);
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        actor.send(StoreClientToken {
-            pubkey: "pk4".to_string(),
-            token: "newtoken".to_string(),
-        }).await.unwrap();
+        actor
+            .send(StoreClientToken {
+                pubkey: "pk4".to_string(),
+                token: "newtoken".to_string(),
+            })
+            .await
+            .unwrap();
 
-        let valid = actor.send(ValidateClientToken {
-            pubkey: "pk4".to_string(),
-            token: "newtoken".to_string(),
-        }).await.unwrap();
+        let valid = actor
+            .send(ValidateClientToken {
+                pubkey: "pk4".to_string(),
+                token: "newtoken".to_string(),
+            })
+            .await
+            .unwrap();
         assert!(valid);
     }
 
@@ -247,13 +272,21 @@ mod tests {
             openai: None,
             ragflow: None,
         };
-        let result = actor.send(UpdateUserApiKeys {
-            pubkey: "pk5".to_string(),
-            api_keys: new_keys,
-        }).await.unwrap();
+        let result = actor
+            .send(UpdateUserApiKeys {
+                pubkey: "pk5".to_string(),
+                api_keys: new_keys,
+            })
+            .await
+            .unwrap();
         assert!(result.is_ok());
 
-        let fetched = actor.send(GetApiKeys { pubkey: "pk5".to_string() }).await.unwrap();
+        let fetched = actor
+            .send(GetApiKeys {
+                pubkey: "pk5".to_string(),
+            })
+            .await
+            .unwrap();
         assert_eq!(fetched.perplexity.as_deref(), Some("new-pplx"));
         assert!(fetched.openai.is_none());
     }
@@ -263,10 +296,13 @@ mod tests {
         let settings = settings_with_user("pk6", true);
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let result = actor.send(UpdateUserApiKeys {
-            pubkey: "pk6".to_string(),
-            api_keys: ApiKeys::default(),
-        }).await.unwrap();
+        let result = actor
+            .send(UpdateUserApiKeys {
+                pubkey: "pk6".to_string(),
+                api_keys: ApiKeys::default(),
+            })
+            .await
+            .unwrap();
         assert!(result.is_err());
     }
 
@@ -275,7 +311,12 @@ mod tests {
         let settings = ProtectedSettings::default();
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let user = actor.send(GetUser { pubkey: "ghost".to_string() }).await.unwrap();
+        let user = actor
+            .send(GetUser {
+                pubkey: "ghost".to_string(),
+            })
+            .await
+            .unwrap();
         assert!(user.is_none());
     }
 
@@ -288,12 +329,19 @@ mod tests {
         let settings = ProtectedSettings::default();
         let actor = ProtectedSettingsActor::new(settings).start();
 
-        let result = actor.send(SaveSettings { path: path_str.clone() }).await.unwrap();
+        let result = actor
+            .send(SaveSettings {
+                path: path_str.clone(),
+            })
+            .await
+            .unwrap();
         assert!(result.is_ok(), "SaveSettings failed: {:?}", result);
         assert!(path.exists(), "settings.json was not created");
 
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(content.contains("bindAddress") || content.contains("bind_address"),
-            "Expected network field in serialised output");
+        assert!(
+            content.contains("bindAddress") || content.contains("bind_address"),
+            "Expected network field in serialised output"
+        );
     }
 }

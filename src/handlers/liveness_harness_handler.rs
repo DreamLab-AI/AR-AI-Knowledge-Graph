@@ -104,10 +104,12 @@ pub async fn observe(
             "fire_id": fire_id,
             "sha": current_sha(),
         })),
-        Err(CanaryStoreError::NotFound(_)) => Ok(HttpResponse::NotFound().json(serde_json::json!({
-            "fired": false,
-            "error": format!("unknown canary: {canary_id}"),
-        }))),
+        Err(CanaryStoreError::NotFound(_)) => {
+            Ok(HttpResponse::NotFound().json(serde_json::json!({
+                "fired": false,
+                "error": format!("unknown canary: {canary_id}"),
+            })))
+        }
         Err(e) => Ok(HttpResponse::InternalServerError().json(store_error_body(&e))),
     }
 }

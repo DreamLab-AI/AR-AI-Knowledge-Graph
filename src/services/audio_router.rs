@@ -79,11 +79,41 @@ pub struct VoicePreset {
 /// Default voice presets for different agent types
 fn default_agent_voice_presets() -> HashMap<String, VoicePreset> {
     let mut presets = HashMap::new();
-    presets.insert("researcher".to_string(), VoicePreset { voice_id: "af_sarah".to_string(), speed: 1.0 });
-    presets.insert("coder".to_string(), VoicePreset { voice_id: "am_adam".to_string(), speed: 1.1 });
-    presets.insert("analyst".to_string(), VoicePreset { voice_id: "bf_emma".to_string(), speed: 1.0 });
-    presets.insert("optimizer".to_string(), VoicePreset { voice_id: "am_michael".to_string(), speed: 0.95 });
-    presets.insert("coordinator".to_string(), VoicePreset { voice_id: "af_heart".to_string(), speed: 1.0 });
+    presets.insert(
+        "researcher".to_string(),
+        VoicePreset {
+            voice_id: "af_sarah".to_string(),
+            speed: 1.0,
+        },
+    );
+    presets.insert(
+        "coder".to_string(),
+        VoicePreset {
+            voice_id: "am_adam".to_string(),
+            speed: 1.1,
+        },
+    );
+    presets.insert(
+        "analyst".to_string(),
+        VoicePreset {
+            voice_id: "bf_emma".to_string(),
+            speed: 1.0,
+        },
+    );
+    presets.insert(
+        "optimizer".to_string(),
+        VoicePreset {
+            voice_id: "am_michael".to_string(),
+            speed: 0.95,
+        },
+    );
+    presets.insert(
+        "coordinator".to_string(),
+        VoicePreset {
+            voice_id: "af_heart".to_string(),
+            speed: 1.0,
+        },
+    );
     presets
 }
 
@@ -100,11 +130,17 @@ impl AudioRouter {
     }
 
     /// Register a new user voice session
-    pub async fn register_user(&self, user_id: &str) -> (broadcast::Receiver<Vec<u8>>, broadcast::Receiver<String>) {
+    pub async fn register_user(
+        &self,
+        user_id: &str,
+    ) -> (broadcast::Receiver<Vec<u8>>, broadcast::Receiver<String>) {
         let mut sessions = self.sessions.write().await;
 
         if let Some(existing) = sessions.get(user_id) {
-            info!("User {} already registered, returning existing channels", user_id);
+            info!(
+                "User {} already registered, returning existing channels",
+                user_id
+            );
             return (
                 existing.private_audio_tx.subscribe(),
                 existing.transcription_tx.subscribe(),
@@ -149,7 +185,11 @@ impl AudioRouter {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(user_id) {
             session.ptt_active = active;
-            debug!("User {} PTT: {}", user_id, if active { "ACTIVE" } else { "RELEASED" });
+            debug!(
+                "User {} PTT: {}",
+                user_id,
+                if active { "ACTIVE" } else { "RELEASED" }
+            );
         }
     }
 
@@ -243,8 +283,14 @@ impl AudioRouter {
             }
         }
 
-        self.agent_voices.write().await.insert(agent_id.to_string(), identity);
-        info!("Registered agent {} (type={}) for user {}", agent_id, agent_type, owner_user_id);
+        self.agent_voices
+            .write()
+            .await
+            .insert(agent_id.to_string(), identity);
+        info!(
+            "Registered agent {} (type={}) for user {}",
+            agent_id, agent_type, owner_user_id
+        );
     }
 
     /// Update an agent's spatial position
@@ -267,7 +313,9 @@ impl AudioRouter {
         audio_data: Vec<u8>,
     ) -> Result<(), String> {
         let agents = self.agent_voices.read().await;
-        let agent = agents.get(agent_id).ok_or_else(|| format!("Unknown agent: {}", agent_id))?;
+        let agent = agents
+            .get(agent_id)
+            .ok_or_else(|| format!("Unknown agent: {}", agent_id))?;
 
         if agent.public_voice {
             // Plane 4: spatial audio — send to global broadcast AND private channel
@@ -284,11 +332,20 @@ impl AudioRouter {
             let sessions = self.sessions.read().await;
             if let Some(session) = sessions.get(&agent.owner_user_id) {
                 session.private_audio_tx.send(audio_data).map_err(|e| {
-                    format!("Failed to send private audio to user {}: {}", agent.owner_user_id, e)
+                    format!(
+                        "Failed to send private audio to user {}: {}",
+                        agent.owner_user_id, e
+                    )
                 })?;
-                debug!("Routed private audio for agent {} to user {}", agent_id, agent.owner_user_id);
+                debug!(
+                    "Routed private audio for agent {} to user {}",
+                    agent_id, agent.owner_user_id
+                );
             } else {
-                warn!("No session for agent {} owner {}", agent_id, agent.owner_user_id);
+                warn!(
+                    "No session for agent {} owner {}",
+                    agent_id, agent.owner_user_id
+                );
             }
         }
 
@@ -296,16 +353,13 @@ impl AudioRouter {
     }
 
     /// Route transcription text to the correct user
-    pub async fn route_transcription(
-        &self,
-        user_id: &str,
-        text: String,
-    ) -> Result<(), String> {
+    pub async fn route_transcription(&self, user_id: &str, text: String) -> Result<(), String> {
         let sessions = self.sessions.read().await;
         if let Some(session) = sessions.get(user_id) {
-            session.transcription_tx.send(text).map_err(|e| {
-                format!("Failed to send transcription to user {}: {}", user_id, e)
-            })?;
+            session
+                .transcription_tx
+                .send(text)
+                .map_err(|e| format!("Failed to send transcription to user {}: {}", user_id, e))?;
         } else {
             warn!("No session for user {} — transcription dropped", user_id);
         }
@@ -313,15 +367,25 @@ impl AudioRouter {
     }
 
     /// Get a subscriber for a specific user's private audio channel
-    pub async fn subscribe_user_audio(&self, user_id: &str) -> Option<broadcast::Receiver<Vec<u8>>> {
+    pub async fn subscribe_user_audio(
+        &self,
+        user_id: &str,
+    ) -> Option<broadcast::Receiver<Vec<u8>>> {
         let sessions = self.sessions.read().await;
-        sessions.get(user_id).map(|s| s.private_audio_tx.subscribe())
+        sessions
+            .get(user_id)
+            .map(|s| s.private_audio_tx.subscribe())
     }
 
     /// Get a subscriber for a specific user's transcription channel
-    pub async fn subscribe_user_transcriptions(&self, user_id: &str) -> Option<broadcast::Receiver<String>> {
+    pub async fn subscribe_user_transcriptions(
+        &self,
+        user_id: &str,
+    ) -> Option<broadcast::Receiver<String>> {
         let sessions = self.sessions.read().await;
-        sessions.get(user_id).map(|s| s.transcription_tx.subscribe())
+        sessions
+            .get(user_id)
+            .map(|s| s.transcription_tx.subscribe())
     }
 
     /// Get the global audio broadcast for legacy (non-user-scoped) clients
@@ -410,8 +474,10 @@ pub struct AudioRouterStatus {
 mod tests {
     use super::*;
 
-    const DID_A: &str = "did:nostr:1111111111111111111111111111111111111111111111111111111111111111";
-    const DID_B: &str = "did:nostr:2222222222222222222222222222222222222222222222222222222222222222";
+    const DID_A: &str =
+        "did:nostr:1111111111111111111111111111111111111111111111111111111111111111";
+    const DID_B: &str =
+        "did:nostr:2222222222222222222222222222222222222222222222222222222222222222";
 
     /// COM-15 / D6 AC1: the PTT-start message binds the selected agent's
     /// did:nostr onto the session; a spoken command now has a verifiable target.
@@ -425,7 +491,10 @@ mod tests {
             .await;
 
         assert!(router.is_ptt_active("alice").await);
-        assert_eq!(router.selected_agent_did("alice").await.as_deref(), Some(DID_A));
+        assert_eq!(
+            router.selected_agent_did("alice").await.as_deref(),
+            Some(DID_A)
+        );
     }
 
     /// The register's open finding — PTT globally scoped — is refuted: two users
@@ -437,14 +506,27 @@ mod tests {
         let _ = router.register_user("alice").await;
         let _ = router.register_user("bob").await;
 
-        router.bind_selected_agent("alice", Some(DID_A.to_string())).await;
-        router.bind_selected_agent("bob", Some(DID_B.to_string())).await;
+        router
+            .bind_selected_agent("alice", Some(DID_A.to_string()))
+            .await;
+        router
+            .bind_selected_agent("bob", Some(DID_B.to_string()))
+            .await;
 
-        assert_eq!(router.selected_agent_did("alice").await.as_deref(), Some(DID_A));
-        assert_eq!(router.selected_agent_did("bob").await.as_deref(), Some(DID_B));
+        assert_eq!(
+            router.selected_agent_did("alice").await.as_deref(),
+            Some(DID_A)
+        );
+        assert_eq!(
+            router.selected_agent_did("bob").await.as_deref(),
+            Some(DID_B)
+        );
 
         let status = router.get_status().await;
-        assert_eq!(status.ptt_bound_to_agent, 2, "both sessions bound to an agent");
+        assert_eq!(
+            status.ptt_bound_to_agent, 2,
+            "both sessions bound to an agent"
+        );
     }
 
     /// Verify before trust: a hashed nickname / free-text label is refused as a
@@ -459,7 +541,10 @@ mod tests {
             .set_ptt_with_target("alice", true, Some("researcher-7".to_string()))
             .await;
 
-        assert!(router.is_ptt_active("alice").await, "PTT toggles regardless");
+        assert!(
+            router.is_ptt_active("alice").await,
+            "PTT toggles regardless"
+        );
         assert_eq!(
             router.selected_agent_did("alice").await,
             None,
@@ -474,10 +559,15 @@ mod tests {
         let router = AudioRouter::new();
         let _ = router.register_user("alice").await;
 
-        router.bind_selected_agent("alice", Some(DID_A.to_string())).await;
+        router
+            .bind_selected_agent("alice", Some(DID_A.to_string()))
+            .await;
         // Bare toggle (None target) preserves the binding.
         router.set_ptt_with_target("alice", false, None).await;
-        assert_eq!(router.selected_agent_did("alice").await.as_deref(), Some(DID_A));
+        assert_eq!(
+            router.selected_agent_did("alice").await.as_deref(),
+            Some(DID_A)
+        );
 
         // Deselect clears it.
         router.bind_selected_agent("alice", None).await;

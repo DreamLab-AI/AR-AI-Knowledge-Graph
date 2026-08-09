@@ -18,14 +18,13 @@ pub type ActorTimeoutResult<T> = Result<T, ActorTimeoutError>;
 
 #[derive(Debug)]
 pub enum ActorTimeoutError {
-    
     Timeout {
         duration: Duration,
         actor_type: &'static str,
     },
-    
+
     ActorError(String),
-    
+
     MailboxError(String),
 }
 

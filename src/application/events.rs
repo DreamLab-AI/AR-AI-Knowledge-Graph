@@ -12,7 +12,6 @@ use crate::ports::settings_repository::SettingValue;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DomainEvent {
-    
     SettingUpdated {
         key: String,
         value: SettingValue,
@@ -27,7 +26,6 @@ pub enum DomainEvent {
         timestamp: i64,
     },
 
-    
     NodeAdded {
         node_id: String,
         node_type: String,
@@ -62,7 +60,6 @@ pub enum DomainEvent {
         timestamp: i64,
     },
 
-    
     OntologyClassAdded {
         class_uri: String,
         timestamp: i64,
@@ -87,7 +84,6 @@ pub enum DomainEvent {
         timestamp: i64,
     },
 
-    
     SimulationStarted {
         graph_name: String,
         timestamp: i64,
@@ -105,7 +101,6 @@ pub enum DomainEvent {
         timestamp: i64,
     },
 
-    
     CacheInvalidated {
         cache_key: String,
         timestamp: i64,
@@ -118,7 +113,6 @@ pub enum DomainEvent {
 }
 
 impl DomainEvent {
-    
     pub fn timestamp(&self) -> i64 {
         match self {
             DomainEvent::SettingUpdated { timestamp, .. }
@@ -145,7 +139,6 @@ impl DomainEvent {
         }
     }
 
-    
     pub fn event_name(&self) -> &'static str {
         match self {
             DomainEvent::SettingUpdated { .. } => "setting_updated",
@@ -172,7 +165,6 @@ impl DomainEvent {
         }
     }
 
-    
     pub fn now() -> i64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -190,7 +182,7 @@ impl fmt::Display for DomainEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
-use crate::utils::json::{from_json, to_json};
+    use crate::utils::json::{from_json, to_json};
 
     #[test]
     fn test_event_timestamp() {

@@ -218,11 +218,8 @@ impl WebSocketConnection {
     }
 
     /// Send welcome/connected message
-    pub fn send_welcome<A>(
-        &mut self,
-        ctx: &mut ws::WebsocketContext<A>,
-        features: Vec<&str>,
-    ) where
+    pub fn send_welcome<A>(&mut self, ctx: &mut ws::WebsocketContext<A>, features: Vec<&str>)
+    where
         A: Actor<Context = ws::WebsocketContext<A>>,
     {
         let welcome = serde_json::json!({
@@ -300,9 +297,7 @@ pub fn parse_message<T: DeserializeOwned>(text: &str) -> Result<T, String> {
 }
 
 /// Parse typed WebSocket message
-pub fn parse_typed_message<T: DeserializeOwned>(
-    text: &str,
-) -> Result<WebSocketMessage<T>, String> {
+pub fn parse_typed_message<T: DeserializeOwned>(text: &str) -> Result<WebSocketMessage<T>, String> {
     serde_json::from_str(text).map_err(|e| format!("Failed to parse typed message: {}", e))
 }
 
@@ -315,11 +310,8 @@ pub fn current_timestamp() -> u64 {
 }
 
 /// Close WebSocket with error message
-pub fn close_with_error<A>(
-    ctx: &mut ws::WebsocketContext<A>,
-    error_message: &str,
-    client_id: &str,
-) where
+pub fn close_with_error<A>(ctx: &mut ws::WebsocketContext<A>, error_message: &str, client_id: &str)
+where
     A: Actor<Context = ws::WebsocketContext<A>>,
 {
     error!(

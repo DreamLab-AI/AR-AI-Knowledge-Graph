@@ -4,7 +4,9 @@
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use visionclaw_server::adapters::{OxigraphGraphRepository, OxigraphOntologyRepository, SqliteSettingsRepository};
+use visionclaw_server::adapters::{
+    OxigraphGraphRepository, OxigraphOntologyRepository, SqliteSettingsRepository,
+};
 use visionclaw_server::config::AppFullSettings;
 use visionclaw_server::services::github::api::GitHubClient;
 use visionclaw_server::services::github::config::GitHubConfig;
@@ -28,7 +30,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|e| format!("Failed to open Oxigraph store: {}", e))?,
     );
-    let kg_repo = Arc::new(OxigraphGraphRepository::from_store(onto_repo.store().clone()));
+    let kg_repo = Arc::new(OxigraphGraphRepository::from_store(
+        onto_repo.store().clone(),
+    ));
     log::info!("Oxigraph store opened successfully");
 
     // SQLite settings repository (shared with sync metadata)
@@ -48,7 +52,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create sync service
     let sync_service = GitHubSyncService::new(
         content_api,
-        kg_repo as Arc<dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
+        kg_repo
+            as Arc<
+                dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository,
+            >,
         onto_repo,
         sqlite_settings_repo,
     );
@@ -61,7 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(50));
     println!("  Total files found:        {}", stats.total_files);
     println!("  KG files processed:       {}", stats.kg_files_processed);
-    println!("  Ontology files processed: {}", stats.ontology_files_processed);
+    println!(
+        "  Ontology files processed: {}",
+        stats.ontology_files_processed
+    );
     println!("  Skipped (unchanged):      {}", stats.skipped_files);
     println!("  Total nodes:              {}", stats.total_nodes);
     println!("  Total edges:              {}", stats.total_edges);

@@ -1,5 +1,3 @@
-
-
 use actix::prelude::*;
 use actix_web_actors::ws;
 use log::{debug, error, info, warn};
@@ -89,7 +87,7 @@ impl Default for SubscriptionPreferences {
             anomaly_alerts: true,
             insights_updates: true,
             performance_monitoring: true,
-            update_interval_ms: 5000, 
+            update_interval_ms: 5000,
         }
     }
 }
@@ -132,7 +130,6 @@ impl GpuAnalyticsWebSocket {
         let client_id = self.client_id.clone();
 
         let fut = async move {
-
             // GPU compute address is now Arc<RwLock<Option<...>>> - use async accessor
             if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
                 match gpu_addr
@@ -141,15 +138,15 @@ impl GpuAnalyticsWebSocket {
                 {
                     Ok(Ok(stats)) => {
                         let metrics = GpuMetricsUpdate {
-                            gpu_utilization: 75.0, 
-                            memory_usage_percent: (1000 as f32 * 0.5) / 8192.0 * 100.0, 
+                            gpu_utilization: 75.0,
+                            memory_usage_percent: (1000 as f32 * 0.5) / 8192.0 * 100.0,
                             temperature: 68.0,
                             power_draw: 120.0,
-                            active_kernels: 3, 
-                            compute_nodes: 1000, 
+                            active_kernels: 3,
+                            compute_nodes: 1000,
                             compute_edges: stats.num_edges,
-                            fps: None,           
-                            frame_time_ms: None, 
+                            fps: None,
+                            frame_time_ms: None,
                         };
 
                         Some(metrics)
@@ -236,7 +233,6 @@ impl GpuAnalyticsWebSocket {
             let state = ANOMALY_STATE.lock().await;
             let mut alerts = Vec::new();
 
-            
             for anomaly in state.anomalies.iter().rev().take(5) {
                 if anomaly.severity == "critical" || anomaly.severity == "high" {
                     let alert = AnomalyAlert {
@@ -279,12 +275,10 @@ impl GpuAnalyticsWebSocket {
         let client_id = self.client_id.clone();
 
         let fut = async move {
-            
             let mut insights = Vec::new();
             let mut performance_warnings = Vec::new();
             let mut recommendations = Vec::new();
             let mut urgency_level = "low";
-
 
             // GPU compute address is now Arc<RwLock<Option<...>>> - use async accessor
             if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
@@ -302,7 +296,6 @@ impl GpuAnalyticsWebSocket {
                     }
 
                     if stats.total_force_calculations > 500000 {
-                        
                         insights.push(format!(
                             "Processing large graph with {} force calculations",
                             stats.total_force_calculations
@@ -314,7 +307,6 @@ impl GpuAnalyticsWebSocket {
                 }
             }
 
-            
             {
                 let tasks = CLUSTERING_TASKS.lock().await;
                 let running_tasks = tasks.values().filter(|t| t.status == "running").count();
@@ -323,7 +315,6 @@ impl GpuAnalyticsWebSocket {
                 }
             }
 
-            
             {
                 let state = ANOMALY_STATE.lock().await;
                 if state.stats.critical > 0 {
@@ -364,7 +355,9 @@ impl GpuAnalyticsWebSocket {
     }
 
     fn start_periodic_updates(&self, ctx: &mut ws::WebsocketContext<Self>) {
-        let clamped_ms = self.subscription_prefs.update_interval_ms
+        let clamped_ms = self
+            .subscription_prefs
+            .update_interval_ms
             .max(MIN_UPDATE_INTERVAL_MS)
             .min(MAX_UPDATE_INTERVAL_MS);
         let interval = std::time::Duration::from_millis(clamped_ms);
@@ -378,7 +371,6 @@ impl GpuAnalyticsWebSocket {
                 return;
             }
 
-            
             act.send_gpu_metrics(ctx);
             act.send_clustering_progress(ctx);
             act.send_anomaly_alerts(ctx);
@@ -396,7 +388,6 @@ impl Actor for GpuAnalyticsWebSocket {
             self.client_id
         );
 
-        
         let welcome = AnalyticsWebSocketMessage {
             message_type: "connected".to_string(),
             data: serde_json::json!({
@@ -416,7 +407,6 @@ impl Actor for GpuAnalyticsWebSocket {
 
         self.send_message(ctx, welcome);
 
-        
         self.start_periodic_updates(ctx);
     }
 
@@ -443,7 +433,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for GpuAnalyticsWebSo
                                 if let Ok(mut prefs) =
                                     serde_json::from_value::<SubscriptionPreferences>(ws_msg.data)
                                 {
-                                    prefs.update_interval_ms = prefs.update_interval_ms
+                                    prefs.update_interval_ms = prefs
+                                        .update_interval_ms
                                         .max(MIN_UPDATE_INTERVAL_MS)
                                         .min(MAX_UPDATE_INTERVAL_MS);
                                     self.subscription_prefs = prefs;
@@ -463,7 +454,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for GpuAnalyticsWebSo
                                 }
                             }
                             "requestImmediateUpdate" => {
-                                
                                 self.send_gpu_metrics(ctx);
                                 self.send_clustering_progress(ctx);
                                 self.send_anomaly_alerts(ctx);
@@ -519,7 +509,9 @@ pub async fn gpu_analytics_websocket(
 
     // SECURITY: Require authentication before WebSocket upgrade
     {
-        let token = req.headers().get("Authorization")
+        let token = req
+            .headers()
+            .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
             .map(|s| s.to_string())
@@ -531,12 +523,16 @@ pub async fn gpu_analytics_websocket(
             });
 
         if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req.peer_addr().map(|a| a.to_string()).unwrap_or_else(|| "unknown".to_string());
+            let client_ip = req
+                .peer_addr()
+                .map(|a| a.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
             log::warn!(
                 "SECURITY: Rejected unauthenticated WebSocket upgrade on /analytics/ws from {}",
                 client_ip
             );
-            return Ok(actix_web::HttpResponse::Unauthorized().json(serde_json::json!({"error": "Authentication required"})));
+            return Ok(actix_web::HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Authentication required"})));
         }
     }
 

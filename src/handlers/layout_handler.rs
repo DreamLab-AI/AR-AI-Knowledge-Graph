@@ -1,8 +1,8 @@
-use actix_web::{web, HttpResponse, Result};
-use crate::layout::types::*;
 use crate::layout::engines::compute_layout;
-use crate::AppState;
+use crate::layout::types::*;
 use crate::ok_json;
+use crate::AppState;
+use actix_web::{web, HttpResponse, Result};
 
 pub async fn get_layout_modes(_data: web::Data<AppState>) -> Result<HttpResponse> {
     ok_json!(serde_json::json!({
@@ -16,13 +16,20 @@ pub async fn set_layout_mode(
     data: web::Data<AppState>,
     body: web::Json<serde_json::Value>,
 ) -> Result<HttpResponse> {
-    let mode_str = body.get("mode").and_then(|m| m.as_str()).unwrap_or("forceDirected");
-    let transition_ms = body.get("transitionMs").and_then(|t| t.as_u64()).unwrap_or(500);
+    let mode_str = body
+        .get("mode")
+        .and_then(|m| m.as_str())
+        .unwrap_or("forceDirected");
+    let transition_ms = body
+        .get("transitionMs")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(500);
 
-    let mode: LayoutMode = match serde_json::from_value(serde_json::Value::String(mode_str.to_string())) {
-        Ok(m) => m,
-        Err(_) => LayoutMode::ForceDirected,
-    };
+    let mode: LayoutMode =
+        match serde_json::from_value(serde_json::Value::String(mode_str.to_string())) {
+            Ok(m) => m,
+            Err(_) => LayoutMode::ForceDirected,
+        };
 
     // ForceDirected is handled by the GPU physics engine; no CPU layout needed.
     if mode == LayoutMode::ForceDirected {
@@ -80,9 +87,7 @@ pub async fn set_layout_mode(
     let positions: Vec<serde_json::Value> = nodes
         .iter()
         .zip(raw_positions.iter())
-        .map(|((id, _label), &(x, y, z))| {
-            serde_json::json!({ "id": id, "x": x, "y": y, "z": z })
-        })
+        .map(|((id, _label), &(x, y, z))| serde_json::json!({ "id": id, "x": x, "y": y, "z": z }))
         .collect();
 
     ok_json!(serde_json::json!({
@@ -169,6 +174,6 @@ pub fn configure_layout_routes(cfg: &mut web::ServiceConfig) {
             .route("/status", web::get().to(get_layout_status))
             .route("/zones", web::post().to(set_zones))
             .route("/zones", web::get().to(get_zones))
-            .route("/reset", web::post().to(reset_layout))
+            .route("/reset", web::post().to(reset_layout)),
     );
 }

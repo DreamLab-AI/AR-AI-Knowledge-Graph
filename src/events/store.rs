@@ -13,25 +13,18 @@ use crate::utils::time;
 
 #[async_trait]
 pub trait EventRepository: Send + Sync {
-    
     async fn append(&self, event: StoredEvent) -> EventResult<()>;
 
-    
     async fn get_events(&self, aggregate_id: &str) -> EventResult<Vec<StoredEvent>>;
 
-    
     async fn get_events_after(&self, sequence: i64) -> EventResult<Vec<StoredEvent>>;
 
-    
     async fn get_events_by_type(&self, event_type: &str) -> EventResult<Vec<StoredEvent>>;
 
-    
     async fn save_snapshot(&self, snapshot: EventSnapshot) -> EventResult<()>;
 
-    
     async fn get_snapshot(&self, aggregate_id: &str) -> EventResult<Option<EventSnapshot>>;
 
-    
     async fn get_event_count(&self, aggregate_id: &str) -> EventResult<usize>;
 }
 
@@ -149,8 +142,8 @@ impl EventRepository for FileEventRepository {
                 .await
                 .map_err(|e| EventError::Storage(format!("Failed to create directory: {}", e)))?;
         }
-        let mut line = serde_json::to_string(&event)
-            .map_err(|e| EventError::Serialization(e.to_string()))?;
+        let mut line =
+            serde_json::to_string(&event).map_err(|e| EventError::Serialization(e.to_string()))?;
         line.push('\n');
         tokio::fs::OpenOptions::new()
             .create(true)
@@ -183,8 +176,9 @@ impl EventRepository for FileEventRepository {
                     if line.trim().is_empty() {
                         continue;
                     }
-                    let event: StoredEvent = serde_json::from_str(line)
-                        .map_err(|e| EventError::Serialization(format!("Failed to parse event: {}", e)))?;
+                    let event: StoredEvent = serde_json::from_str(line).map_err(|e| {
+                        EventError::Serialization(format!("Failed to parse event: {}", e))
+                    })?;
                     results.push(event);
                 }
             }
@@ -220,8 +214,9 @@ impl EventRepository for FileEventRepository {
                         if line.trim().is_empty() {
                             continue;
                         }
-                        let event: StoredEvent = serde_json::from_str(line)
-                            .map_err(|e| EventError::Serialization(format!("Failed to parse event: {}", e)))?;
+                        let event: StoredEvent = serde_json::from_str(line).map_err(|e| {
+                            EventError::Serialization(format!("Failed to parse event: {}", e))
+                        })?;
                         if event.sequence > sequence {
                             results.push(event);
                         }
@@ -244,9 +239,9 @@ impl EventRepository for FileEventRepository {
     async fn save_snapshot(&self, snapshot: EventSnapshot) -> EventResult<()> {
         let path = self.snapshot_path(&snapshot.aggregate_id);
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| EventError::Storage(format!("Failed to create snapshots dir: {}", e)))?;
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
+                EventError::Storage(format!("Failed to create snapshots dir: {}", e))
+            })?;
         }
         let data = serde_json::to_string_pretty(&snapshot)
             .map_err(|e| EventError::Serialization(e.to_string()))?;
@@ -260,12 +255,16 @@ impl EventRepository for FileEventRepository {
         let path = self.snapshot_path(aggregate_id);
         match tokio::fs::read_to_string(&path).await {
             Ok(contents) => {
-                let snapshot: EventSnapshot = serde_json::from_str(&contents)
-                    .map_err(|e| EventError::Serialization(format!("Failed to parse snapshot: {}", e)))?;
+                let snapshot: EventSnapshot = serde_json::from_str(&contents).map_err(|e| {
+                    EventError::Serialization(format!("Failed to parse snapshot: {}", e))
+                })?;
                 Ok(Some(snapshot))
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(EventError::Storage(format!("Failed to read snapshot: {}", e))),
+            Err(e) => Err(EventError::Storage(format!(
+                "Failed to read snapshot: {}",
+                e
+            ))),
         }
     }
 
@@ -281,7 +280,6 @@ pub struct EventStore {
 }
 
 impl EventStore {
-    
     pub fn new(repo: Arc<dyn EventRepository>) -> Self {
         Self {
             repo,
@@ -296,13 +294,11 @@ impl EventStore {
         }
     }
 
-    
     pub fn with_snapshot_threshold(mut self, threshold: usize) -> Self {
         self.snapshot_threshold = threshold;
         self
     }
 
-    
     pub async fn append(&self, event: &dyn DomainEvent) -> EventResult<()> {
         let metadata = EventMetadata::new(
             event.aggregate_id().to_string(),
@@ -310,17 +306,18 @@ impl EventStore {
             event.event_type().to_string(),
         );
 
-        let data = event.to_json_string().map_err(|e| EventError::Serialization(e.to_string()))?;
+        let data = event
+            .to_json_string()
+            .map_err(|e| EventError::Serialization(e.to_string()))?;
 
         let stored_event = StoredEvent {
             metadata,
             data,
-            sequence: 0, 
+            sequence: 0,
         };
 
         self.repo.append(stored_event).await?;
 
-        
         let count = self.repo.get_event_count(event.aggregate_id()).await?;
         if count % self.snapshot_threshold == 0 {
             let events = self.repo.get_events(event.aggregate_id()).await?;
@@ -331,8 +328,7 @@ impl EventStore {
                 aggregate_type: event.aggregate_type().to_string(),
                 sequence: last_sequence,
                 timestamp: time::now(),
-                state: serde_json::to_string(&state_data)
-                    .unwrap_or_else(|_| "[]".to_string()),
+                state: serde_json::to_string(&state_data).unwrap_or_else(|_| "[]".to_string()),
             };
             self.repo.save_snapshot(snapshot).await?;
             info!(
@@ -347,38 +343,30 @@ impl EventStore {
         Ok(())
     }
 
-    
     pub async fn get_events(&self, aggregate_id: &str) -> EventResult<Vec<StoredEvent>> {
         self.repo.get_events(aggregate_id).await
     }
 
-    
     pub async fn get_events_after(&self, sequence: i64) -> EventResult<Vec<StoredEvent>> {
         self.repo.get_events_after(sequence).await
     }
 
-    
     pub async fn get_events_by_type(&self, event_type: &str) -> EventResult<Vec<StoredEvent>> {
         self.repo.get_events_by_type(event_type).await
     }
 
-    
     pub async fn replay_events(&self, aggregate_id: &str) -> EventResult<Vec<StoredEvent>> {
-        
         if let Some(snapshot) = self.repo.get_snapshot(aggregate_id).await? {
-            
             let events = self.get_events(aggregate_id).await?;
             Ok(events
                 .into_iter()
                 .filter(|e| e.sequence > snapshot.sequence)
                 .collect())
         } else {
-            
             self.get_events(aggregate_id).await
         }
     }
 
-    
     pub async fn get_event_count(&self, aggregate_id: &str) -> EventResult<usize> {
         self.repo.get_event_count(aggregate_id).await
     }
@@ -387,10 +375,10 @@ impl EventStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
     use crate::events::domain_events::NodeAddedEvent;
+    use crate::utils::time;
+    use chrono::Utc;
     use std::collections::HashMap;
-use crate::utils::time;
 
     #[tokio::test]
     async fn test_in_memory_repository() {
@@ -437,7 +425,6 @@ use crate::utils::time;
         let repo = Arc::new(InMemoryEventRepository::new());
         let store = EventStore::new(repo.clone());
 
-        
         for i in 0..5 {
             let event = NodeAddedEvent {
                 node_id: format!("node-{}", i),

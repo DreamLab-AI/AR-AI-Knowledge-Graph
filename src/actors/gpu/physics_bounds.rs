@@ -107,30 +107,109 @@ mod tests {
     fn canonical_defaults_are_within_bounds() {
         let d = PhysicsSettings::default();
 
-        assert!(within(d.spring_k, SPRING_K), "spring_k {} outside {:?}", d.spring_k, SPRING_K);
-        assert!(within(d.repel_k, REPEL_K), "repel_k {} outside {:?}", d.repel_k, REPEL_K);
-        assert!(within(d.max_velocity, MAX_VELOCITY), "max_velocity {} outside {:?}", d.max_velocity, MAX_VELOCITY);
-        assert!(within(d.max_force, MAX_FORCE), "max_force {} outside {:?}", d.max_force, MAX_FORCE);
-        assert!(within(d.damping, DAMPING), "damping {} outside {:?}", d.damping, DAMPING);
+        assert!(
+            within(d.spring_k, SPRING_K),
+            "spring_k {} outside {:?}",
+            d.spring_k,
+            SPRING_K
+        );
+        assert!(
+            within(d.repel_k, REPEL_K),
+            "repel_k {} outside {:?}",
+            d.repel_k,
+            REPEL_K
+        );
+        assert!(
+            within(d.max_velocity, MAX_VELOCITY),
+            "max_velocity {} outside {:?}",
+            d.max_velocity,
+            MAX_VELOCITY
+        );
+        assert!(
+            within(d.max_force, MAX_FORCE),
+            "max_force {} outside {:?}",
+            d.max_force,
+            MAX_FORCE
+        );
+        assert!(
+            within(d.damping, DAMPING),
+            "damping {} outside {:?}",
+            d.damping,
+            DAMPING
+        );
         assert!(within(d.dt, DT), "dt {} outside {:?}", d.dt, DT);
-        assert!(within(d.cooling_rate, COOLING_RATE), "cooling_rate {} outside {:?}", d.cooling_rate, COOLING_RATE);
-        assert!(within(d.boundary_damping, BOUNDARY_DAMPING), "boundary_damping {} outside {:?}", d.boundary_damping, BOUNDARY_DAMPING);
-        assert!(within(d.gravity, GRAVITY), "gravity {} outside {:?}", d.gravity, GRAVITY);
-        assert!(within(d.temperature, TEMPERATURE), "temperature {} outside {:?}", d.temperature, TEMPERATURE);
-        assert!(within(d.bounds_size, BOUNDS_SIZE), "bounds_size {} outside {:?}", d.bounds_size, BOUNDS_SIZE);
-        assert!(within(d.max_repulsion_dist, MAX_REPULSION_DIST), "max_repulsion_dist {} outside {:?}", d.max_repulsion_dist, MAX_REPULSION_DIST);
-        assert!(within(d.cluster_strength, CLUSTER_STRENGTH), "cluster_strength {} outside {:?}", d.cluster_strength, CLUSTER_STRENGTH);
-        assert!(within(d.sssp_alpha, SSSP_ALPHA), "sssp_alpha {} outside {:?}", d.sssp_alpha, SSSP_ALPHA);
-        assert!(within(d.iterations as f32, ITERATIONS), "iterations {} outside {:?}", d.iterations, ITERATIONS);
+        assert!(
+            within(d.cooling_rate, COOLING_RATE),
+            "cooling_rate {} outside {:?}",
+            d.cooling_rate,
+            COOLING_RATE
+        );
+        assert!(
+            within(d.boundary_damping, BOUNDARY_DAMPING),
+            "boundary_damping {} outside {:?}",
+            d.boundary_damping,
+            BOUNDARY_DAMPING
+        );
+        assert!(
+            within(d.gravity, GRAVITY),
+            "gravity {} outside {:?}",
+            d.gravity,
+            GRAVITY
+        );
+        assert!(
+            within(d.temperature, TEMPERATURE),
+            "temperature {} outside {:?}",
+            d.temperature,
+            TEMPERATURE
+        );
+        assert!(
+            within(d.bounds_size, BOUNDS_SIZE),
+            "bounds_size {} outside {:?}",
+            d.bounds_size,
+            BOUNDS_SIZE
+        );
+        assert!(
+            within(d.max_repulsion_dist, MAX_REPULSION_DIST),
+            "max_repulsion_dist {} outside {:?}",
+            d.max_repulsion_dist,
+            MAX_REPULSION_DIST
+        );
+        assert!(
+            within(d.cluster_strength, CLUSTER_STRENGTH),
+            "cluster_strength {} outside {:?}",
+            d.cluster_strength,
+            CLUSTER_STRENGTH
+        );
+        assert!(
+            within(d.sssp_alpha, SSSP_ALPHA),
+            "sssp_alpha {} outside {:?}",
+            d.sssp_alpha,
+            SSSP_ALPHA
+        );
+        assert!(
+            within(d.iterations as f32, ITERATIONS),
+            "iterations {} outside {:?}",
+            d.iterations,
+            ITERATIONS
+        );
     }
 
     /// Specifically guard the three fields that previously diverged: their MAX
     /// must accept the canonical defaults rather than clamp them.
     #[test]
     fn divergent_fields_accept_canonical_defaults() {
-        assert!(REPEL_K.1 >= 120.0, "repel_k MAX must accept canonical default 120");
-        assert!(MAX_VELOCITY.1 >= 100.0, "max_velocity MAX must accept canonical default 100");
-        assert!(SPRING_K.1 >= 12.0, "spring_k MAX must accept canonical default 12");
+        assert!(
+            REPEL_K.1 >= 120.0,
+            "repel_k MAX must accept canonical default 120"
+        );
+        assert!(
+            MAX_VELOCITY.1 >= 100.0,
+            "max_velocity MAX must accept canonical default 100"
+        );
+        assert!(
+            SPRING_K.1 >= 12.0,
+            "spring_k MAX must accept canonical default 12"
+        );
     }
 
     /// MIN must never exceed MAX for any bound.

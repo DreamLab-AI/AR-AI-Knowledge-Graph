@@ -11,7 +11,11 @@ fn test_settings_save_returns_ok() {
 
     // save() is a no-op (legacy YAML removed) — should return Ok
     let result = settings.save();
-    assert!(result.is_ok(), "save() should return Ok: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "save() should return Ok: {:?}",
+        result.err()
+    );
 }
 
 #[test]
@@ -43,11 +47,19 @@ fn test_settings_merge_update() {
     });
 
     let merge_result = settings.merge_update(update);
-    assert!(merge_result.is_ok(), "Failed to merge update: {:?}", merge_result.err());
+    assert!(
+        merge_result.is_ok(),
+        "Failed to merge update: {:?}",
+        merge_result.err()
+    );
 
     // save() is a no-op but should still succeed
     let save_result = settings.save();
-    assert!(save_result.is_ok(), "Failed to save merged settings: {:?}", save_result.err());
+    assert!(
+        save_result.is_ok(),
+        "Failed to save merged settings: {:?}",
+        save_result.err()
+    );
 }
 
 #[test]

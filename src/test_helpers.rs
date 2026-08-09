@@ -13,8 +13,8 @@ use tokio::sync::RwLock;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::ports::ontology_repository::{
     AxiomType, InferenceResults, OntologyMetrics, OntologyRepository, OntologyRepositoryError,
-    OwlAxiom, OwlClass, OwlProperty, PathfindingCacheEntry, PropertyType, ValidationReport,
-    Result as OntResult,
+    OwlAxiom, OwlClass, OwlProperty, PathfindingCacheEntry, PropertyType, Result as OntResult,
+    ValidationReport,
 };
 
 // ---------------------------------------------------------------------------
@@ -231,7 +231,10 @@ pub fn create_test_ontology_repo() -> Arc<MockOntologyRepository> {
 
     // Use try_write since this may be called from within a tokio runtime (e.g. #[tokio::test])
     // where blocking_write() would panic with "Cannot block the current thread"
-    let mut class_map = repo.classes.try_write().expect("RwLock should be available in test setup");
+    let mut class_map = repo
+        .classes
+        .try_write()
+        .expect("RwLock should be available in test setup");
     for (iri, label) in classes {
         class_map.insert(
             iri.to_string(),
@@ -256,14 +259,18 @@ pub fn create_test_reasoner() -> crate::services::ontology_reasoner::OntologyRea
 }
 
 /// Create an `OntologyEnrichmentService` backed by mock implementations for unit testing.
-pub fn create_test_enrichment_service() -> crate::services::ontology_enrichment_service::OntologyEnrichmentService {
+pub fn create_test_enrichment_service(
+) -> crate::services::ontology_enrichment_service::OntologyEnrichmentService {
     let reasoner = Arc::new(create_test_reasoner());
     let classifier = Arc::new(crate::services::edge_classifier::EdgeClassifier::new());
-    crate::services::ontology_enrichment_service::OntologyEnrichmentService::new(reasoner, classifier)
+    crate::services::ontology_enrichment_service::OntologyEnrichmentService::new(
+        reasoner, classifier,
+    )
 }
 
 /// Create an `OntologyReasoningService` backed by a mock repository for unit testing.
-pub fn create_test_reasoning_service() -> crate::services::ontology_reasoning_service::OntologyReasoningService {
+pub fn create_test_reasoning_service(
+) -> crate::services::ontology_reasoning_service::OntologyReasoningService {
     let engine = Arc::new(crate::adapters::whelk_inference_engine::WhelkInferenceEngine::new());
     let repo = create_test_ontology_repo();
     crate::services::ontology_reasoning_service::OntologyReasoningService::new(engine, repo)

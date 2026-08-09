@@ -44,8 +44,7 @@ pub async fn unified_trace(state: web::Data<AppState>, q: web::Query<TraceQuery>
     let trace = match service.query(window, q.agent.as_deref()).await {
         Ok(t) => t,
         Err(e) => {
-            return HttpResponse::InternalServerError()
-                .json(serde_json::json!({ "error": e }));
+            return HttpResponse::InternalServerError().json(serde_json::json!({ "error": e }));
         }
     };
 
@@ -61,7 +60,11 @@ pub async fn unified_trace(state: web::Data<AppState>, q: web::Query<TraceQuery>
             trace.total_records,
             trace.joins.len(),
         );
-        if let Err(e) = state.liveness_harness.observe(CANARY_REC11_TRACE, &evidence).await {
+        if let Err(e) = state
+            .liveness_harness
+            .observe(CANARY_REC11_TRACE, &evidence)
+            .await
+        {
             debug!("[trace] REC-11 canary observe skipped: {e}");
         }
     }

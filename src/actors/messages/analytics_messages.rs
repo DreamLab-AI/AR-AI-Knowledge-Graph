@@ -12,9 +12,9 @@
 pub use visionclaw_actors::messages::analytics_messages::{
     AnomalyDetectionMethod, AnomalyDetectionParams, AnomalyDetectionStats, AnomalyMethod,
     AnomalyParams, ClearPageRankCache, CommunityDetectionAlgorithm, CommunityDetectionParams,
-    ComputeAllPairsShortestPaths, ComputeSSSP, DBSCANParams, DBSCANStats,
-    ExportClusterAssignments, GetClusteringResults, GetClusteringStatus, KMeansParams,
-    SetNodeAnalytics, SetNodeSSSP, StartGPUClustering, UpdateComponentEdges,
+    ComputeAllPairsShortestPaths, ComputeSSSP, DBSCANParams, DBSCANStats, ExportClusterAssignments,
+    GetClusteringResults, GetClusteringStatus, KMeansParams, SetNodeAnalytics, SetNodeSSSP,
+    StartGPUClustering, UpdateComponentEdges,
 };
 
 // ---------------------------------------------------------------------------

@@ -1,24 +1,26 @@
-use visionclaw_domain::models::metadata::Metadata;
-use visionclaw_domain::models::node::Node;
 use crate::services::file_service::FileService;
 use crate::types::vec3::Vec3Data;
-use crate::{ok_json, error_json, bad_request};
 use crate::AppState;
+use crate::{bad_request, error_json, ok_json};
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use visionclaw_domain::models::metadata::Metadata;
+use visionclaw_domain::models::node::Node;
 // GraphService direct import is no longer needed as we use actors
 // use crate::services::graph_service::GraphService;
-use crate::actors::messages::{AddNodesFromMetadata, GetSettings, GetSettlementState, SettlementSnapshot};
+use crate::actors::graph_actor::PhysicsState;
+use crate::actors::messages::{
+    AddNodesFromMetadata, GetSettings, GetSettlementState, SettlementSnapshot,
+};
 use crate::application::graph::queries::{
     GetAutoBalanceNotifications, GetGraphData, GetNodeMap, GetPhysicsState,
 };
-use crate::actors::graph_actor::PhysicsState;
-use visionclaw_domain::models::graph::GraphData;
 use crate::handlers::utils::execute_in_thread;
 use hexser::{Hexserror, QueryHandler};
+use visionclaw_domain::models::graph::GraphData;
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +33,6 @@ pub struct SettlementState {
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct NodeWithPosition {
-
     pub id: u32,
     pub metadata_id: String,
     pub label: String,
@@ -39,10 +40,8 @@ pub struct NodeWithPosition {
     pub position: Vec3Data,
     pub velocity: Vec3Data,
 
-
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, String>,
-
 
     #[serde(rename = "type")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -189,14 +188,15 @@ pub async fn get_graph_data(
     query: web::Query<GraphQuery>,
     _req: HttpRequest,
 ) -> impl Responder {
-    info!("Received request for graph data (CQRS Phase 1D), graph_type={:?}", query.graph_type);
+    info!(
+        "Received request for graph data (CQRS Phase 1D), graph_type={:?}",
+        query.graph_type
+    );
 
-    
     let graph_handler = state.graph_query_handlers.get_graph_data.clone();
     let node_map_handler = state.graph_query_handlers.get_node_map.clone();
     let physics_handler = state.graph_query_handlers.get_physics_state.clone();
 
-    
     let graph_future = execute_in_thread(move || graph_handler.handle(GetGraphData));
     let node_map_future = execute_in_thread(move || node_map_handler.handle(GetNodeMap));
     let physics_future = execute_in_thread(move || physics_handler.handle(GetPhysicsState));
@@ -210,7 +210,12 @@ pub async fn get_graph_data(
         Result<Result<Arc<HashMap<u32, Node>>, Hexserror>, String>,
         Result<Result<PhysicsState, Hexserror>, String>,
         Option<SettlementSnapshot>,
-    ) = tokio::join!(graph_future, node_map_future, physics_future, settlement_future);
+    ) = tokio::join!(
+        graph_future,
+        node_map_future,
+        physics_future,
+        settlement_future
+    );
 
     match (graph_result, node_map_result, physics_result) {
         (Ok(Ok(graph_data)), Ok(Ok(_node_map)), Ok(Ok(physics_state))) => {
@@ -220,7 +225,6 @@ pub async fn get_graph_data(
                 graph_data.edges.len(),
                 physics_state
             );
-
 
             let nodes_with_positions: Vec<NodeWithPosition> = graph_data
                 .nodes
@@ -283,8 +287,7 @@ pub async fn get_graph_data(
                 .edges
                 .iter()
                 .filter(|e| {
-                    filtered_node_ids.contains(&e.source)
-                        && filtered_node_ids.contains(&e.target)
+                    filtered_node_ids.contains(&e.source) && filtered_node_ids.contains(&e.target)
                 })
                 .cloned()
                 .collect();
@@ -310,8 +313,10 @@ pub async fn get_graph_data(
         }
         (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
             error!("Thread execution error: {}", e);
-            Ok::<HttpResponse, actix_web::Error>(HttpResponse::InternalServerError()
-                .json(serde_json::json!({"error": "Internal server error"})))
+            Ok::<HttpResponse, actix_web::Error>(
+                HttpResponse::InternalServerError()
+                    .json(serde_json::json!({"error": "Internal server error"})),
+            )
         }
         (Ok(Err(e)), _, _) | (_, Ok(Err(e)), _) | (_, _, Ok(Err(e))) => {
             error!("Failed to fetch graph data (CQRS): {}", e);
@@ -338,7 +343,6 @@ pub async fn get_paginated_graph_data(
         return bad_request!("Page size must be greater than 0");
     }
 
-    
     let graph_handler = state.graph_query_handlers.get_graph_data.clone();
     let graph_result = execute_in_thread(move || graph_handler.handle(GetGraphData)).await;
 
@@ -379,7 +383,11 @@ pub async fn get_paginated_graph_data(
             page + 1,
             total_pages
         );
-        return bad_request!("Page {} exceeds total available pages {}", page + 1, total_pages);
+        return bad_request!(
+            "Page {} exceeds total available pages {}",
+            page + 1,
+            total_pages
+        );
     }
 
     let start = page * page_size;
@@ -423,7 +431,6 @@ pub async fn get_paginated_graph_data(
 pub async fn refresh_graph(state: web::Data<AppState>) -> impl Responder {
     info!("Received request to refresh graph (CQRS Phase 1D)");
 
-    
     let graph_handler = state.graph_query_handlers.get_graph_data.clone();
     let graph_result = execute_in_thread(move || graph_handler.handle(GetGraphData)).await;
 
@@ -498,7 +505,6 @@ pub async fn update_graph(state: web::Data<AppState>) -> impl Responder {
             debug!("Processing {} new files", processed_files.len());
 
             {
-                
                 if let Err(e) = state
                     .metadata_addr
                     .send(crate::actors::messages::UpdateMetadata {
@@ -507,18 +513,15 @@ pub async fn update_graph(state: web::Data<AppState>) -> impl Responder {
                     .await
                 {
                     error!("Failed to send UpdateMetadata to MetadataActor: {}", e);
-                    
                 }
             }
 
-            
             match state
                 .graph_service_addr
                 .send(AddNodesFromMetadata { metadata })
                 .await
             {
                 Ok(Ok(())) => {
-                    
                     debug!(
                         "Graph updated successfully via GraphServiceActor after file processing"
                     );
@@ -565,7 +568,6 @@ pub async fn get_auto_balance_notifications(
 
     info!("Fetching auto-balance notifications (CQRS Phase 1D)");
 
-    
     let handler = state
         .graph_query_handlers
         .get_auto_balance_notifications
@@ -593,9 +595,7 @@ pub async fn get_auto_balance_notifications(
 /// Return the current GPU-computed node positions (not the initial loaded zeros).
 ///
 /// `GET /api/graph/positions`
-pub async fn get_graph_positions(
-    state: web::Data<AppState>,
-) -> impl Responder {
+pub async fn get_graph_positions(state: web::Data<AppState>) -> impl Responder {
     // Acquire ForceComputeActor address
     let gpu_addr = match state.get_gpu_compute_addr().await {
         Some(addr) => addr,
@@ -676,7 +676,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     // prefix must therefore live in a SINGLE scope with per-resource `.wrap()`.
     cfg.service(
         web::scope("/graph")
-            .wrap(RateLimit::per_minute(600))  // Rate limit: 600 requests/min (10/sec) for public reads
+            .wrap(RateLimit::per_minute(600)) // Rate limit: 600 requests/min (10/sec) for public reads
             // Read operations - public with rate limiting
             .route("/data", web::get().to(get_graph_data))
             .route("/data/paginated", web::get().to(get_paginated_graph_data))
@@ -693,14 +693,14 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             // longer trigger a global rebuild.
             .service(
                 web::resource("/update")
-                    .wrap(RequireAuth::power_user())  // Bulk reload requires power-user
+                    .wrap(RequireAuth::power_user()) // Bulk reload requires power-user
                     .route(web::post().to(update_graph)),
             )
             // `/refresh` only reads the current graph state (GetGraphData) and returns
             // it; it mutates nothing, so any authenticated user may call it.
             .service(
                 web::resource("/refresh")
-                    .wrap(RequireAuth::authenticated())  // Read-back, any authed user
+                    .wrap(RequireAuth::authenticated()) // Read-back, any authed user
                     .route(web::post().to(refresh_graph)),
             ),
     );
@@ -712,7 +712,10 @@ mod population_filter_tests {
     use std::collections::HashMap;
 
     fn md(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]

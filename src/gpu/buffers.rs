@@ -191,13 +191,12 @@ impl PhysicsGpuBuffers {
         // fails, `?` propagates the error and the temporaries are dropped
         // before any field of `self` is touched. This is the atomicity
         // guarantee: partial failure leaves `self` unchanged.
-        let staged = Staged::allocate(target_capacity, new_aabb_blocks)
-            .with_context(|| {
-                format!(
-                    "PhysicsGpuBuffers::resize allocation failed (target_capacity={}, aabb_blocks={})",
-                    target_capacity, new_aabb_blocks,
-                )
-            })?;
+        let staged = Staged::allocate(target_capacity, new_aabb_blocks).with_context(|| {
+            format!(
+                "PhysicsGpuBuffers::resize allocation failed (target_capacity={}, aabb_blocks={})",
+                target_capacity, new_aabb_blocks,
+            )
+        })?;
 
         // All allocations succeeded — commit by moving every replacement into
         // `self` in one synchronous block. No `?` past this point.
@@ -269,11 +268,7 @@ impl PhysicsGpuBuffers {
     }
 
     /// Upload unified per-node class metadata (ids + mass overrides) atomically.
-    pub fn upload_class_metadata(
-        &mut self,
-        class_ids: &[i32],
-        class_masses: &[f32],
-    ) -> Result<()> {
+    pub fn upload_class_metadata(&mut self, class_ids: &[i32], class_masses: &[f32]) -> Result<()> {
         if class_ids.len() != class_masses.len() {
             return Err(anyhow!(
                 "upload_class_metadata: length mismatch (ids={}, masses={})",

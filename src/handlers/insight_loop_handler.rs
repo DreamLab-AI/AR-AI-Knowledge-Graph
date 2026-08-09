@@ -39,7 +39,11 @@ async fn maybe_fire_canary(state: &AppState, traces: &[InsightLoopTrace]) {
              stages=propose→queued→decision→merged (amplification planned)",
             t.case_id, t.mesh_velocity_ms
         );
-        if let Err(e) = state.liveness_harness.observe(CANARY_REC10_LOOP, &evidence).await {
+        if let Err(e) = state
+            .liveness_harness
+            .observe(CANARY_REC10_LOOP, &evidence)
+            .await
+        {
             debug!("[insight-loop] REC-10 canary observe skipped: {e}");
         }
     }
@@ -61,12 +65,13 @@ pub async fn traces(state: web::Data<AppState>, q: web::Query<TraceQuery>) -> Ht
 }
 
 /// `GET /api/insight-loop/trace/{case_id}`
-pub async fn trace_by_case(
-    state: web::Data<AppState>,
-    path: web::Path<String>,
-) -> HttpResponse {
+pub async fn trace_by_case(state: web::Data<AppState>, path: web::Path<String>) -> HttpResponse {
     let case_id = path.into_inner();
-    match state.sqlite_enrichment_repository.loop_trace_for(&case_id).await {
+    match state
+        .sqlite_enrichment_repository
+        .loop_trace_for(&case_id)
+        .await
+    {
         Ok(Some(row)) => {
             let trace = insight_loop::build_trace(&row);
             maybe_fire_canary(&state, std::slice::from_ref(&trace)).await;

@@ -134,7 +134,9 @@ impl std::error::Error for UriError {}
 
 /// True iff `s` is a 64-char lowercase-hex BIP-340 x-only pubkey.
 pub fn is_pubkey_hex(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 /// `sha256-12-<12 lowercase hex>` content address over `input` bytes.
@@ -332,7 +334,9 @@ impl ParsedUri {
                 format!("{NS}:{}:{domain}:{slug}", Kind::Concept)
             }
             ParsedUri::Kg { pubkey, address } => format!("{NS}:{}:{pubkey}:{address}", Kind::Kg),
-            ParsedUri::Bead { pubkey, address } => format!("{NS}:{}:{pubkey}:{address}", Kind::Bead),
+            ParsedUri::Bead { pubkey, address } => {
+                format!("{NS}:{}:{pubkey}:{address}", Kind::Bead)
+            }
             ParsedUri::Execution { address } => format!("{NS}:{}:{address}", Kind::Execution),
             ParsedUri::Group { team } => format!("{NS}:{}:{team}#members", Kind::Group),
             ParsedUri::Room { address } => format!("{NS}:{}:{address}", Kind::Room),
@@ -368,7 +372,8 @@ pub fn parse(input: &str) -> Result<ParsedUri, UriError> {
     let (kind_tok, tail) = rest
         .split_once(':')
         .ok_or_else(|| UriError::Malformed(input.to_string()))?;
-    let kind = Kind::from_token(kind_tok).ok_or_else(|| UriError::UnknownKind(kind_tok.to_string()))?;
+    let kind =
+        Kind::from_token(kind_tok).ok_or_else(|| UriError::UnknownKind(kind_tok.to_string()))?;
 
     match kind {
         Kind::Concept => {
@@ -568,7 +573,9 @@ mod tests {
         assert!(a.starts_with(CONTENT_ADDR_PREFIX));
         let hex = a.strip_prefix(CONTENT_ADDR_PREFIX).unwrap();
         assert_eq!(hex.len(), 12);
-        assert!(hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+        assert!(hex
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
         // deterministic
         assert_eq!(a, content_address(b"hello world"));
         // matches a hand-computed sha256-12 of "hello world".
@@ -589,7 +596,12 @@ mod tests {
         let id = did_nostr(PK_A).unwrap();
         assert_eq!(id, format!("did:nostr:{PK_A}"));
         let p = parse(&id).unwrap();
-        assert_eq!(p, ParsedUri::DidNostr { pubkey: PK_A.into() });
+        assert_eq!(
+            p,
+            ParsedUri::DidNostr {
+                pubkey: PK_A.into()
+            }
+        );
         assert_eq!(p.to_uri(), id);
         assert_eq!(p.kind(), None);
         assert_eq!(p.owner_pubkey(), Some(PK_A));
@@ -599,7 +611,10 @@ mod tests {
     #[test]
     fn concept_shape_and_roundtrip() {
         let id = concept("Knowledge Graph", "Spreading Activation").unwrap();
-        assert_eq!(id, "urn:visionclaw:concept:knowledge-graph:spreading-activation");
+        assert_eq!(
+            id,
+            "urn:visionclaw:concept:knowledge-graph:spreading-activation"
+        );
         let p = parse(&id).unwrap();
         assert_eq!(p.kind(), Some(Kind::Concept));
         assert_eq!(p.to_uri(), id);
@@ -625,7 +640,13 @@ mod tests {
         let addr = content_address(b"crossing-value");
         let id = kg_with_address(PK_B, &addr).unwrap();
         let p = parse(&id).unwrap();
-        assert_eq!(p, ParsedUri::Kg { pubkey: PK_B.into(), address: addr });
+        assert_eq!(
+            p,
+            ParsedUri::Kg {
+                pubkey: PK_B.into(),
+                address: addr
+            }
+        );
         assert_eq!(p.to_uri(), id);
         assert!(kg_with_address(PK_B, "not-an-addr").is_err());
     }
@@ -658,7 +679,12 @@ mod tests {
         let id = group_members("Dream Lab").unwrap();
         assert_eq!(id, "urn:visionclaw:group:dream-lab#members");
         let p = parse(&id).unwrap();
-        assert_eq!(p, ParsedUri::Group { team: "dream-lab".into() });
+        assert_eq!(
+            p,
+            ParsedUri::Group {
+                team: "dream-lab".into()
+            }
+        );
         assert_eq!(p.to_uri(), id);
         assert!(group_members("   ").is_err());
     }
@@ -682,7 +708,12 @@ mod tests {
         let id = avatar(PK_A).unwrap();
         assert_eq!(id, format!("urn:visionclaw:avatar:{PK_A}"));
         let p = parse(&id).unwrap();
-        assert_eq!(p, ParsedUri::Avatar { pubkey: PK_A.into() });
+        assert_eq!(
+            p,
+            ParsedUri::Avatar {
+                pubkey: PK_A.into()
+            }
+        );
         assert_eq!(p.kind(), Some(Kind::Avatar));
         assert_eq!(p.owner_pubkey(), Some(PK_A));
         assert_eq!(p.to_uri(), id);
@@ -692,8 +723,14 @@ mod tests {
 
     #[test]
     fn rejects_other_namespaces_including_legacy_ngm() {
-        assert!(matches!(parse("urn:ngm:node:42"), Err(UriError::NotVisionclaw(_))));
-        assert!(matches!(parse("urn:agentbox:thing:x:y"), Err(UriError::NotVisionclaw(_))));
+        assert!(matches!(
+            parse("urn:ngm:node:42"),
+            Err(UriError::NotVisionclaw(_))
+        ));
+        assert!(matches!(
+            parse("urn:agentbox:thing:x:y"),
+            Err(UriError::NotVisionclaw(_))
+        ));
         assert!(matches!(
             parse("urn:visionclaw:bogus:whatever"),
             Err(UriError::UnknownKind(_))
@@ -723,7 +760,10 @@ mod tests {
         }
 
         // Strict parse still rejects legacy (mint path is converged-only).
-        assert!(matches!(parse("urn:ngm:node:42"), Err(UriError::NotVisionclaw(_))));
+        assert!(matches!(
+            parse("urn:ngm:node:42"),
+            Err(UriError::NotVisionclaw(_))
+        ));
         // Neither reader accepts an empty legacy sub or a foreign namespace.
         assert!(parse_dual("urn:ngm:").is_err());
         assert!(matches!(
@@ -746,12 +786,16 @@ mod tests {
 
         // thing → kg (owner-scoped, content-addressed)
         let c = cross_from_agentbox(&format!("urn:agentbox:thing:{PK_A}:proposal-7")).unwrap();
-        assert!(c.visionclaw_id.starts_with(&format!("urn:visionclaw:kg:{PK_A}:sha256-12-")));
+        assert!(c
+            .visionclaw_id
+            .starts_with(&format!("urn:visionclaw:kg:{PK_A}:sha256-12-")));
         assert!(parse(&c.visionclaw_id).is_ok());
 
         // activity → execution (unscoped)
         let c = cross_from_agentbox(&format!("urn:agentbox:activity:{PK_A}:run-3")).unwrap();
-        assert!(c.visionclaw_id.starts_with("urn:visionclaw:execution:sha256-12-"));
+        assert!(c
+            .visionclaw_id
+            .starts_with("urn:visionclaw:execution:sha256-12-"));
         assert_eq!(c.owner_did.as_deref(), Some(&*format!("did:nostr:{PK_A}")));
 
         // already-converged did:nostr passes through unchanged

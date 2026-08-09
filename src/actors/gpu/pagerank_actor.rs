@@ -210,10 +210,7 @@ impl PageRankActor {
             Some(m) => m.clone(),
             None => return,
         };
-        let max_pr = pagerank_values
-            .iter()
-            .cloned()
-            .fold(0.0f32, f32::max);
+        let max_pr = pagerank_values.iter().cloned().fold(0.0f32, f32::max);
         let inv_max = if max_pr > 0.0 { 1.0 / max_pr } else { 0.0 };
 
         // Resolve (masked node_id, normalised centrality) pairs before taking the
@@ -246,10 +243,7 @@ impl PageRankActor {
 
     /// Perform PageRank computation on GPU
     #[allow(dead_code)]
-    async fn compute_pagerank(
-        &mut self,
-        params: PageRankParams,
-    ) -> Result<PageRankResult, String> {
+    async fn compute_pagerank(&mut self, params: PageRankParams) -> Result<PageRankResult, String> {
         info!("PageRankActor: Starting PageRank computation");
 
         let mut unified_compute = match &self.shared_context {
@@ -390,7 +384,8 @@ impl PageRankActor {
             .collect();
 
         // Sort by PageRank descending
-        nodes_with_values.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        nodes_with_values
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Take top K
         nodes_with_values
@@ -448,8 +443,7 @@ impl Handler<ComputePageRank> for PageRankActor {
             Some(ctx) => Arc::clone(ctx),
             None => {
                 return Box::pin(
-                    async { Err("GPU context not initialized".to_string()) }
-                        .into_actor(self)
+                    async { Err("GPU context not initialized".to_string()) }.into_actor(self),
                 );
             }
         };
@@ -501,8 +495,15 @@ impl Handler<ComputePageRank> for PageRankActor {
                 let (pagerank_values, iterations, converged, convergence_value) = gpu_result;
                 let iterations = iterations as u32;
 
-                Ok((pagerank_values, iterations, converged, convergence_value, computation_time))
-            }).await;
+                Ok((
+                    pagerank_values,
+                    iterations,
+                    converged,
+                    convergence_value,
+                    computation_time,
+                ))
+            })
+            .await;
 
             // Handle spawn_blocking join result
             match blocking_result {
@@ -512,45 +513,47 @@ impl Handler<ComputePageRank> for PageRankActor {
         };
 
         // Use into_actor to re-enter actor context and finish processing
-        Box::pin(
-            future
-                .into_actor(self)
-                .map(|result, actor, _ctx| {
-                    match result {
-                        Ok((pagerank_values, iterations, converged, convergence_value, computation_time)) => {
-                            // Compute statistics in actor context
-                            let stats = actor.calculate_statistics(
-                                &pagerank_values,
-                                iterations,
-                                converged,
-                                computation_time.as_millis() as u64,
-                            );
+        Box::pin(future.into_actor(self).map(|result, actor, _ctx| {
+            match result {
+                Ok((
+                    pagerank_values,
+                    iterations,
+                    converged,
+                    convergence_value,
+                    computation_time,
+                )) => {
+                    // Compute statistics in actor context
+                    let stats = actor.calculate_statistics(
+                        &pagerank_values,
+                        iterations,
+                        converged,
+                        computation_time.as_millis() as u64,
+                    );
 
-                            // Extract top K nodes (top 10 by default)
-                            let top_nodes = actor.extract_top_nodes(&pagerank_values, 10);
+                    // Extract top K nodes (top 10 by default)
+                    let top_nodes = actor.extract_top_nodes(&pagerank_values, 10);
 
-                            let result = PageRankResult {
-                                pagerank_values,
-                                iterations,
-                                converged,
-                                convergence_value,
-                                top_nodes,
-                                stats,
-                            };
+                    let result = PageRankResult {
+                        pagerank_values,
+                        iterations,
+                        converged,
+                        convergence_value,
+                        top_nodes,
+                        stats,
+                    };
 
-                            // Cache the result
-                            actor.last_result = Some(result.clone());
-                            actor.gpu_state.record_utilization(0.8);
+                    // Cache the result
+                    actor.last_result = Some(result.clone());
+                    actor.gpu_state.record_utilization(0.8);
 
-                            // ADR-031 D3: PageRank is the single writer of centrality@48.
-                            actor.publish_centrality(&result.pagerank_values);
+                    // ADR-031 D3: PageRank is the single writer of centrality@48.
+                    actor.publish_centrality(&result.pagerank_values);
 
-                            Ok(result)
-                        }
-                        Err(e) => Err(e),
-                    }
-                })
-        )
+                    Ok(result)
+                }
+                Err(e) => Err(e),
+            }
+        }))
     }
 }
 
@@ -656,8 +659,20 @@ mod tests {
         // Seed: node 99 is absent from this run (its stale centrality must reset to
         // 0), and node 0 carries a stale value that must be overwritten.
         let mut seed: HashMap<u32, NodeAnalytics> = HashMap::new();
-        seed.insert(0, NodeAnalytics { centrality: 0.9, ..Default::default() });
-        seed.insert(99, NodeAnalytics { centrality: 0.7, ..Default::default() });
+        seed.insert(
+            0,
+            NodeAnalytics {
+                centrality: 0.9,
+                ..Default::default()
+            },
+        );
+        seed.insert(
+            99,
+            NodeAnalytics {
+                centrality: 0.7,
+                ..Default::default()
+            },
+        );
         let shared = Arc::new(RwLock::new(seed));
         actor.node_analytics = Some(shared.clone());
 
@@ -680,7 +695,13 @@ mod tests {
 
         let mut actor = PageRankActor::new();
         let mut seed: HashMap<u32, NodeAnalytics> = HashMap::new();
-        seed.insert(0, NodeAnalytics { centrality: 0.5, ..Default::default() });
+        seed.insert(
+            0,
+            NodeAnalytics {
+                centrality: 0.5,
+                ..Default::default()
+            },
+        );
         let shared = Arc::new(RwLock::new(seed));
         actor.node_analytics = Some(shared.clone());
 

@@ -77,7 +77,10 @@ fn byte_cap_truncation_is_flagged() {
     assert!(rows.len() < ROW_CAP, "fixture must stay under the row cap");
 
     let (capped, truncated) = cap_result_rows(rows);
-    assert!(truncated, "an over-byte-cap result set must set the truncated flag");
+    assert!(
+        truncated,
+        "an over-byte-cap result set must set the truncated flag"
+    );
     assert!(
         capped.len() < 5_000,
         "rows must actually be dropped by the byte cap, kept {}",
@@ -98,7 +101,10 @@ fn row_count_cap_is_flagged() {
         .collect();
 
     let (capped, truncated) = cap_result_rows(rows);
-    assert!(truncated, "more than the row cap must set the truncated flag");
+    assert!(
+        truncated,
+        "more than the row cap must set the truncated flag"
+    );
     assert_eq!(
         capped.len(),
         ROW_CAP,
@@ -117,6 +123,13 @@ fn under_cap_result_is_not_flagged() {
         .collect();
 
     let (capped, truncated) = cap_result_rows(rows);
-    assert!(!truncated, "a small result set must not be flagged truncated");
-    assert_eq!(capped.len(), 100, "a small result set must pass through intact");
+    assert!(
+        !truncated,
+        "a small result set must not be flagged truncated"
+    );
+    assert_eq!(
+        capped.len(),
+        100,
+        "a small result set must pass through intact"
+    );
 }

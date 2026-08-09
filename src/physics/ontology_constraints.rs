@@ -31,10 +31,10 @@
 //!
 //! let translator = OntologyConstraintTranslator::new();
 //!
-//! 
+//!
 //! let constraints = translator.axioms_to_constraints(&axioms, &nodes)?;
 //!
-//! 
+//!
 //! let constraint_set = translator.apply_ontology_constraints(&graph, &reasoning_report)?;
 //! ```
 
@@ -50,25 +50,24 @@ use crate::models::{
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OWLAxiomType {
-    
     DisjointClasses,
-    
+
     SubClassOf,
-    
+
     EquivalentClasses,
-    
+
     SameAs,
-    
+
     DifferentFrom,
-    
+
     InverseOf,
-    
+
     FunctionalProperty,
-    
+
     InverseFunctionalProperty,
-    
+
     TransitiveProperty,
-    
+
     SymmetricProperty,
 }
 
@@ -78,34 +77,33 @@ pub struct OWLAxiom {
     pub subject: String,
     pub object: Option<String>,
     pub property: Option<String>,
-    pub confidence: f32, 
+    pub confidence: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OntologyInference {
     pub inferred_axiom: OWLAxiom,
-    pub premise_axioms: Vec<String>, 
+    pub premise_axioms: Vec<String>,
     pub reasoning_confidence: f32,
     pub is_derived: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OntologyConstraintConfig {
-    
     pub disjoint_separation_strength: f32,
-    
+
     pub hierarchy_alignment_strength: f32,
-    
+
     pub sameas_colocation_strength: f32,
-    
+
     pub cardinality_boundary_strength: f32,
-    
+
     pub max_separation_distance: f32,
-    
+
     pub min_colocation_distance: f32,
-    
+
     pub enable_constraint_caching: bool,
-    
+
     pub cache_invalidation_enabled: bool,
 }
 
@@ -126,13 +124,12 @@ impl Default for OntologyConstraintConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum OntologyConstraintGroup {
-    
     OntologySeparation,
-    
+
     OntologyAlignment,
-    
+
     OntologyBoundaries,
-    
+
     OntologyIdentity,
 }
 
@@ -148,16 +145,14 @@ struct ConstraintCacheEntry {
 pub struct OntologyConstraintTranslator {
     config: OntologyConstraintConfig,
     constraint_cache: HashMap<String, ConstraintCacheEntry>,
-    node_type_cache: HashMap<u32, HashSet<String>>, 
+    node_type_cache: HashMap<u32, HashSet<String>>,
 }
 
 impl OntologyConstraintTranslator {
-    
     pub fn new() -> Self {
         Self::with_config(OntologyConstraintConfig::default())
     }
 
-    
     pub fn with_config(config: OntologyConstraintConfig) -> Self {
         Self {
             config,
@@ -166,7 +161,6 @@ impl OntologyConstraintTranslator {
         }
     }
 
-    
     pub fn axioms_to_constraints(
         &mut self,
         axioms: &[OWLAxiom],
@@ -177,7 +171,6 @@ impl OntologyConstraintTranslator {
             axioms.len()
         );
 
-        
         let node_by_id: HashMap<String, &Node> = nodes
             .iter()
             .map(|node| (node.metadata_id.clone(), node))
@@ -208,7 +201,6 @@ impl OntologyConstraintTranslator {
         Ok(constraints)
     }
 
-    
     pub fn inferences_to_constraints(
         &mut self,
         inferences: &[OntologyInference],
@@ -221,14 +213,12 @@ impl OntologyConstraintTranslator {
 
         let mut constraints = Vec::new();
 
-        
         let mut inference_constraints = Vec::new();
 
         for inference in inferences {
             let mut single_inference_constraints =
                 self.axioms_to_constraints(&[inference.inferred_axiom.clone()], &graph.nodes)?;
 
-            
             for constraint in &mut single_inference_constraints {
                 constraint.weight *= inference.reasoning_confidence;
             }
@@ -248,7 +238,6 @@ impl OntologyConstraintTranslator {
         Ok(constraints)
     }
 
-    
     pub fn apply_ontology_constraints(
         &mut self,
         graph: &GraphData,
@@ -261,23 +250,19 @@ impl OntologyConstraintTranslator {
 
         let mut all_constraints = Vec::new();
 
-        
         let mut axiom_constraints =
             self.axioms_to_constraints(&reasoning_report.axioms, &graph.nodes)?;
         all_constraints.append(&mut axiom_constraints);
 
-        
         let mut inference_constraints =
             self.inferences_to_constraints(&reasoning_report.inferences, graph)?;
         all_constraints.append(&mut inference_constraints);
 
-        
         let mut constraint_set = ConstraintSet {
             constraints: all_constraints,
             groups: std::collections::HashMap::new(),
         };
 
-        
         let grouped_constraints = self.group_constraints_by_category(&constraint_set.constraints);
         for (group, indices) in grouped_constraints {
             let group_name = match group {
@@ -298,7 +283,6 @@ impl OntologyConstraintTranslator {
         Ok(constraint_set)
     }
 
-    
     pub fn get_constraint_strength(&self, axiom_type: &OWLAxiomType) -> f32 {
         match axiom_type {
             OWLAxiomType::DisjointClasses | OWLAxiomType::DifferentFrom => {
@@ -311,18 +295,16 @@ impl OntologyConstraintTranslator {
             OWLAxiomType::FunctionalProperty | OWLAxiomType::InverseFunctionalProperty => {
                 self.config.cardinality_boundary_strength
             }
-            _ => 0.5, 
+            _ => 0.5,
         }
     }
 
-    
     pub fn clear_cache(&mut self) {
         self.constraint_cache.clear();
         self.node_type_cache.clear();
         debug!("Cleared ontology constraint cache");
     }
 
-    
     pub fn get_cache_stats(&self) -> OntologyConstraintCacheStats {
         let total_entries = self.constraint_cache.len();
         let total_cached_constraints: usize = self
@@ -338,14 +320,10 @@ impl OntologyConstraintTranslator {
         }
     }
 
-    
-
-    
     pub fn update_node_type_cache(&mut self, nodes: &[Node]) {
         for node in nodes {
             let mut types = HashSet::new();
 
-            
             if let Some(node_type) = &node.node_type {
                 types.insert(node_type.clone());
             }
@@ -354,7 +332,6 @@ impl OntologyConstraintTranslator {
                 types.insert(group.clone());
             }
 
-            
             for (key, value) in &node.metadata {
                 if key.contains("type") || key.contains("class") || key.contains("category") {
                     types.insert(value.clone());
@@ -365,7 +342,6 @@ impl OntologyConstraintTranslator {
         }
     }
 
-    
     fn translate_single_axiom(
         &self,
         axiom: &OWLAxiom,
@@ -399,7 +375,6 @@ impl OntologyConstraintTranslator {
         }
     }
 
-    
     fn create_disjoint_class_constraints(
         &self,
         axiom: &OWLAxiom,
@@ -411,19 +386,17 @@ impl OntologyConstraintTranslator {
             .as_ref()
             .ok_or("DisjointClasses axiom missing object")?;
 
-        
         let class_a_nodes = self.find_nodes_of_type(&axiom.subject, node_lookup);
         let class_b_nodes = self.find_nodes_of_type(object, node_lookup);
 
         let mut constraints = Vec::new();
 
-        
         for &node_a in &class_a_nodes {
             for &node_b in &class_b_nodes {
                 constraints.push(Constraint {
                     kind: ConstraintKind::Separation,
                     node_indices: vec![node_a.id, node_b.id],
-                    params: vec![self.config.max_separation_distance * 0.7], 
+                    params: vec![self.config.max_separation_distance * 0.7],
                     weight: strength,
                     active: true,
                 });
@@ -440,7 +413,6 @@ impl OntologyConstraintTranslator {
         Ok(constraints)
     }
 
-    
     fn create_subclass_constraints(
         &self,
         axiom: &OWLAxiom,
@@ -458,20 +430,18 @@ impl OntologyConstraintTranslator {
         let mut constraints = Vec::new();
 
         if !superclass_nodes.is_empty() {
-            
             let superclass_centroid = self.calculate_node_centroid(&superclass_nodes);
 
-            
             for &node in &subclass_nodes {
                 constraints.push(Constraint {
                     kind: ConstraintKind::Clustering,
                     node_indices: vec![node.id],
                     params: vec![
-                        0.0, 
+                        0.0,
                         strength,
-                        superclass_centroid.0, 
-                        superclass_centroid.1, 
-                        superclass_centroid.2, 
+                        superclass_centroid.0,
+                        superclass_centroid.1,
+                        superclass_centroid.2,
                     ],
                     weight: strength,
                     active: true,
@@ -486,7 +456,6 @@ impl OntologyConstraintTranslator {
         Ok(constraints)
     }
 
-    
     fn create_sameas_constraints(
         &self,
         axiom: &OWLAxiom,
@@ -498,15 +467,10 @@ impl OntologyConstraintTranslator {
         if let (Some(&node_a), Some(&node_b)) =
             (node_lookup.get(&axiom.subject), node_lookup.get(object))
         {
-            
             Ok(vec![Constraint {
                 kind: ConstraintKind::Clustering,
                 node_indices: vec![node_a.id, node_b.id],
-                params: vec![
-                    0.0, 
-                    strength,
-                    self.config.min_colocation_distance, 
-                ],
+                params: vec![0.0, strength, self.config.min_colocation_distance],
                 weight: strength,
                 active: true,
             }])
@@ -516,7 +480,6 @@ impl OntologyConstraintTranslator {
         }
     }
 
-    
     fn create_different_from_constraints(
         &self,
         axiom: &OWLAxiom,
@@ -542,22 +505,16 @@ impl OntologyConstraintTranslator {
         }
     }
 
-    
     fn create_functional_property_constraints(
         &self,
         axiom: &OWLAxiom,
         node_lookup: &HashMap<String, &Node>,
         strength: f32,
     ) -> Result<Vec<Constraint>, Box<dyn std::error::Error>> {
-        
-        
-        
-
         let property_name = &axiom.subject;
         let affected_nodes: Vec<&Node> = node_lookup
             .values()
             .filter(|node| {
-                
                 node.metadata.contains_key(property_name)
                     || node.metadata.values().any(|v| v.contains(property_name))
             })
@@ -566,16 +523,11 @@ impl OntologyConstraintTranslator {
 
         let mut constraints = Vec::new();
 
-        
         for &node in &affected_nodes {
             constraints.push(Constraint {
                 kind: ConstraintKind::Boundary,
                 node_indices: vec![node.id],
-                params: vec![
-                    -20.0, 20.0, 
-                    -20.0, 20.0, 
-                    -10.0, 10.0, 
-                ],
+                params: vec![-20.0, 20.0, -20.0, 20.0, -10.0, 10.0],
                 weight: strength,
                 active: true,
             });
@@ -588,22 +540,16 @@ impl OntologyConstraintTranslator {
         Ok(constraints)
     }
 
-    
     fn create_inverse_property_constraints(
         &self,
         _axiom: &OWLAxiom,
         _node_lookup: &HashMap<String, &Node>,
         _strength: f32,
     ) -> Result<Vec<Constraint>, Box<dyn std::error::Error>> {
-        
-        
-        
-
         debug!("Inverse property constraints not fully implemented yet");
         Ok(Vec::new())
     }
 
-    
     fn find_nodes_of_type<'a>(
         &self,
         type_name: &str,
@@ -612,7 +558,6 @@ impl OntologyConstraintTranslator {
         node_lookup
             .values()
             .filter(|node| {
-                
                 node.node_type.as_ref().map_or(false, |t| t == type_name)
                     || node.group.as_ref().map_or(false, |g| g == type_name)
                     || node.metadata.values().any(|v| v == type_name)
@@ -622,7 +567,6 @@ impl OntologyConstraintTranslator {
             .collect()
     }
 
-    
     fn calculate_node_centroid(&self, nodes: &[&Node]) -> (f32, f32, f32) {
         if nodes.is_empty() {
             return (0.0, 0.0, 0.0);
@@ -637,7 +581,6 @@ impl OntologyConstraintTranslator {
         (sum.0 / count, sum.1 / count, sum.2 / count)
     }
 
-    
     fn group_constraints_by_category(
         &self,
         constraints: &[Constraint],
@@ -650,7 +593,7 @@ impl OntologyConstraintTranslator {
                 ConstraintKind::Clustering => OntologyConstraintGroup::OntologyAlignment,
                 ConstraintKind::Boundary => OntologyConstraintGroup::OntologyBoundaries,
                 ConstraintKind::FixedPosition => OntologyConstraintGroup::OntologyIdentity,
-                _ => OntologyConstraintGroup::OntologyAlignment, 
+                _ => OntologyConstraintGroup::OntologyAlignment,
             };
 
             groups.entry(group).or_insert_with(Vec::new).push(idx);
@@ -696,8 +639,8 @@ pub struct OntologyConstraintCacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use visionclaw_domain::models::node::Node;
     use crate::types::vec3::Vec3Data;
+    use visionclaw_domain::models::node::Node;
     // ADR-090: Node.data is domain's BinaryNodeData, not webxr's BinaryNodeDataClient.
     use visionclaw_domain::types::vec3::BinaryNodeData;
 
@@ -754,7 +697,6 @@ mod tests {
 
         let constraints = translator.axioms_to_constraints(&[axiom], &nodes).unwrap();
 
-        
         assert!(!constraints.is_empty());
         assert!(constraints
             .iter()
@@ -780,7 +722,6 @@ mod tests {
 
         let constraints = translator.axioms_to_constraints(&[axiom], &nodes).unwrap();
 
-        
         assert_eq!(constraints.len(), 1);
         assert_eq!(constraints[0].kind, ConstraintKind::Clustering);
     }
@@ -794,7 +735,7 @@ mod tests {
 
         assert!(disjoint_strength > 0.0);
         assert!(sameas_strength > 0.0);
-        assert!(sameas_strength > disjoint_strength); 
+        assert!(sameas_strength > disjoint_strength);
     }
 
     #[test]

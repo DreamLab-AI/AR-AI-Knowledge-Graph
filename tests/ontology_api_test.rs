@@ -231,9 +231,7 @@ mod integration_tests {
     async fn test_get_ontology_graph() {
         let app = test::init_service(create_test_app()).await;
 
-        let req = test::TestRequest::get()
-            .uri("/ontology/graph")
-            .to_request();
+        let req = test::TestRequest::get().uri("/ontology/graph").to_request();
 
         let resp = test::call_service(&app, req).await;
         assert_eq!(resp.status().as_u16(), 200);

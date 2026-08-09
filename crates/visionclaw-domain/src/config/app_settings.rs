@@ -4,7 +4,9 @@ use specta::Type;
 use std::collections::HashMap;
 use validator::{Validate, ValidationError};
 
-use super::field_mappings::{convert_empty_strings_to_null, merge_json_values, normalize_field_names_to_camel_case};
+use super::field_mappings::{
+    convert_empty_strings_to_null, merge_json_values, normalize_field_names_to_camel_case,
+};
 use super::services::{
     AuthSettings, KokoroSettings, OntologyAgentSettings, OpenAISettings, PerplexitySettings,
     RagFlowSettings, VoiceRoutingSettings, WhisperSettings,
@@ -142,7 +144,9 @@ impl AppFullSettings {
     pub fn new() -> Result<Self, String> {
         debug!("Initializing AppFullSettings with defaults (database-first architecture)");
         info!("IMPORTANT: Settings should be loaded from database via DatabaseService");
-        info!("Legacy YAML file loading has been removed — all settings are now in SQLite (ADR-11)");
+        info!(
+            "Legacy YAML file loading has been removed — all settings are now in SQLite (ADR-11)"
+        );
         Ok(Self::default())
     }
 
@@ -300,7 +304,9 @@ mod partial_persistence_tests {
             .expect("settings doc missing the visualisation category must load with defaults");
         assert_eq!(
             settings.visualisation.rendering.ambient_light_intensity,
-            VisualisationSettings::default().rendering.ambient_light_intensity
+            VisualisationSettings::default()
+                .rendering
+                .ambient_light_intensity
         );
     }
 

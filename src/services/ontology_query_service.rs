@@ -9,15 +9,15 @@
 //! subsumption reasoning, and relationship fan-out (has-part, requires, enables, bridges-to).
 
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine;
-use visionclaw_domain::ports::inference_engine::InferenceEngine;
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
-use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 use crate::services::schema_service::SchemaService;
 use crate::types::ontology_tools::*;
 use log::info;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use visionclaw_domain::ports::inference_engine::InferenceEngine;
+use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 
 pub struct OntologyQueryService {
     ontology_repo: Arc<dyn OntologyRepository>,
@@ -54,7 +54,10 @@ impl OntologyQueryService {
         limit: usize,
         domain_filter: Option<&str>,
     ) -> Result<Vec<DiscoveryResult>, String> {
-        info!("Ontology discover: query='{}', limit={}, domain={:?}", query, limit, domain_filter);
+        info!(
+            "Ontology discover: query='{}', limit={}, domain={:?}",
+            query, limit, domain_filter
+        );
 
         // Step 1: Get all OWL classes
         let classes = self
@@ -234,7 +237,11 @@ impl OntologyQueryService {
         }
 
         // Fetch related notes (classes connected via relationships)
-        let all_classes = self.ontology_repo.list_owl_classes().await.unwrap_or_default();
+        let all_classes = self
+            .ontology_repo
+            .list_owl_classes()
+            .await
+            .unwrap_or_default();
         let related_notes: Vec<RelatedNote> = all_classes
             .iter()
             .filter(|c| {
@@ -298,13 +305,20 @@ impl OntologyQueryService {
         &self,
         cypher: &str,
     ) -> Result<CypherValidationResult, String> {
-        info!("Ontology validate_cypher: '{}'", &cypher[..cypher.len().min(100)]);
+        info!(
+            "Ontology validate_cypher: '{}'",
+            &cypher[..cypher.len().min(100)]
+        );
 
         let mut errors = Vec::new();
         let mut hints = Vec::new();
 
         // Get known classes and properties for validation
-        let classes = self.ontology_repo.list_owl_classes().await.unwrap_or_default();
+        let classes = self
+            .ontology_repo
+            .list_owl_classes()
+            .await
+            .unwrap_or_default();
         let known_iris: HashSet<String> = classes.iter().map(|c| c.iri.clone()).collect();
         let known_terms: HashMap<String, String> = classes
             .iter()
@@ -332,7 +346,10 @@ impl OntologyQueryService {
                     || label_str == "Node";
 
                 if !is_known {
-                    errors.push(format!("Unknown label '{}' — not found in ontology", label_str));
+                    errors.push(format!(
+                        "Unknown label '{}' — not found in ontology",
+                        label_str
+                    ));
 
                     // Find closest match for hint
                     let closest = known_terms

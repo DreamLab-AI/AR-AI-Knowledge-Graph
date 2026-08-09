@@ -45,7 +45,11 @@ mod tests {
             session_id: "sess-abc".to_string(),
         };
         let json = serde_json::to_string(&resp).unwrap();
-        assert!(json.contains("sessionId"), "expected camelCase key, got: {}", json);
+        assert!(
+            json.contains("sessionId"),
+            "expected camelCase key, got: {}",
+            json
+        );
         assert!(json.contains("\"42\""));
     }
 }

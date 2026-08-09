@@ -8,17 +8,17 @@ use crate::utils::validation::rate_limit::{
     extract_client_id, EndpointRateLimits, RateLimitConfig, RateLimiter,
 };
 use crate::utils::validation::MAX_REQUEST_SIZE;
+use crate::{error_json, ok_json, payload_too_large, service_unavailable, too_many_requests};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use log::{debug, error, info, warn};
-use tracing::info as trace_info;
-use uuid::Uuid;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use crate::{ok_json, error_json, service_unavailable, too_many_requests, payload_too_large};
+use tracing::info as trace_info;
+use uuid::Uuid;
 
-use super::types::SettingsResponseDTO;
-use super::physics::propagate_physics_to_gpu;
 use super::helpers::extract_physics_updates;
+use super::physics::propagate_physics_to_gpu;
+use super::types::SettingsResponseDTO;
 
 pub struct EnhancedSettingsHandler {
     validation_service: ValidationService,
@@ -36,21 +36,18 @@ impl EnhancedSettingsHandler {
         }
     }
 
-
     pub async fn update_settings_enhanced(
         &self,
         req: HttpRequest,
         state: web::Data<AppState>,
         payload: web::Json<Value>,
     ) -> Result<HttpResponse, Error> {
-
         let request_id = req
             .headers()
             .get("X-Request-ID")
             .and_then(|v| v.to_str().ok())
             .unwrap_or(&Uuid::new_v4().to_string())
             .to_string();
-
 
         let pubkey = req
             .headers()
@@ -67,23 +64,24 @@ impl EnhancedSettingsHandler {
 
         let client_id = extract_client_id(&req);
 
-
         if !self.rate_limiter.is_allowed(&client_id) {
             warn!(
                 "Rate limit exceeded for settings update from client: {}",
                 client_id
             );
-            return too_many_requests!("Too many settings update requests. Please wait before retrying.");
+            return too_many_requests!(
+                "Too many settings update requests. Please wait before retrying."
+            );
         }
-
 
         let payload_size = serde_json::to_vec(&*payload).unwrap_or_default().len();
         if payload_size > MAX_REQUEST_SIZE {
             error!("Settings update payload too large: {} bytes", payload_size);
-            return payload_too_large!(format!("Payload size {} bytes exceeds limit of {} bytes", payload_size, MAX_REQUEST_SIZE));
+            return payload_too_large!(format!(
+                "Payload size {} bytes exceeds limit of {} bytes",
+                payload_size, MAX_REQUEST_SIZE
+            ));
         }
-
-
 
         let validated_payload = match self.validation_service.validate_settings_update(&payload) {
             Ok(sanitized) => sanitized,
@@ -96,11 +94,7 @@ impl EnhancedSettingsHandler {
             }
         };
 
-
-
         let update = validated_payload;
-
-
 
         let mut app_settings = match state.settings_addr.send(GetSettings).await {
             Ok(Ok(s)) => s,
@@ -113,7 +107,6 @@ impl EnhancedSettingsHandler {
                 return service_unavailable!("Settings service unavailable");
             }
         };
-
 
         let mut modified_update = update.clone();
         let auto_balance_update = update
@@ -137,9 +130,7 @@ impl EnhancedSettingsHandler {
                 None
             });
 
-
         if let Some(ref auto_balance_value) = auto_balance_update {
-
             let vis_obj = modified_update
                 .as_object_mut()
                 .and_then(|o| {
@@ -182,7 +173,6 @@ impl EnhancedSettingsHandler {
             }
         }
 
-
         if let Err(e) = app_settings.merge_update(modified_update.clone()) {
             error!("Failed to merge settings: {}", e);
             if crate::utils::logging::is_debug_enabled() {
@@ -195,11 +185,9 @@ impl EnhancedSettingsHandler {
             return error_json!("Failed to merge settings: {}", e);
         }
 
-
         let _updated_graphs = if auto_balance_update.is_some() {
             vec!["logseq", "visionclaw"]
         } else {
-
             let _physics_updates = extract_physics_updates(&modified_update);
             modified_update
                 .get("visualisation")
@@ -231,7 +219,6 @@ impl EnhancedSettingsHandler {
                 .physics
                 .auto_balance;
 
-
         match state
             .settings_addr
             .send(UpdateSettings {
@@ -240,18 +227,12 @@ impl EnhancedSettingsHandler {
             .await
         {
             Ok(Ok(())) => {
-
                 let is_auto_balance_change = auto_balance_update.is_some();
 
                 if is_auto_balance_change || !auto_balance_active {
-
-
                     propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
-                    if is_auto_balance_change {
-
-                    }
+                    if is_auto_balance_change {}
                 } else {
-
                 }
 
                 let response_dto: SettingsResponseDTO = (&app_settings).into();
@@ -275,20 +256,17 @@ impl EnhancedSettingsHandler {
         }
     }
 
-
     pub async fn get_settings_enhanced(
         &self,
         req: HttpRequest,
         state: web::Data<AppState>,
     ) -> Result<HttpResponse, Error> {
-
         let request_id = req
             .headers()
             .get("X-Request-ID")
             .and_then(|v| v.to_str().ok())
             .unwrap_or(&Uuid::new_v4().to_string())
             .to_string();
-
 
         let pubkey = req
             .headers()
@@ -305,7 +283,6 @@ impl EnhancedSettingsHandler {
 
         let client_id = extract_client_id(&req);
 
-
         let get_rate_limiter = Arc::new(RateLimiter::new(RateLimitConfig {
             requests_per_minute: 120,
             burst_size: 20,
@@ -315,8 +292,6 @@ impl EnhancedSettingsHandler {
         if !get_rate_limiter.is_allowed(&client_id) {
             return too_many_requests!("Too many get settings requests");
         }
-
-
 
         let app_settings = match state.settings_addr.send(GetSettings).await {
             Ok(Ok(settings)) => settings,
@@ -345,14 +320,12 @@ impl EnhancedSettingsHandler {
         }))
     }
 
-
     pub async fn reset_settings_enhanced(
         &self,
         req: HttpRequest,
         state: web::Data<AppState>,
     ) -> Result<HttpResponse, Error> {
         let client_id = extract_client_id(&req);
-
 
         let reset_rate_limiter = Arc::new(RateLimiter::new(RateLimitConfig {
             requests_per_minute: 10,
@@ -365,10 +338,10 @@ impl EnhancedSettingsHandler {
                 "Rate limit exceeded for settings reset from client: {}",
                 client_id
             );
-            return too_many_requests!("Too many reset requests. This is a destructive operation with strict limits.");
+            return too_many_requests!(
+                "Too many reset requests. This is a destructive operation with strict limits."
+            );
         }
-
-
 
         let default_settings = match AppFullSettings::new() {
             Ok(settings) => settings,
@@ -377,7 +350,6 @@ impl EnhancedSettingsHandler {
                 return error_json!("Failed to load default settings");
             }
         };
-
 
         match state
             .settings_addr
@@ -410,7 +382,6 @@ impl EnhancedSettingsHandler {
         }
     }
 
-
     pub async fn settings_health(
         &self,
         req: HttpRequest,
@@ -428,17 +399,10 @@ impl EnhancedSettingsHandler {
             "Settings health check requested"
         );
 
-
         let (cache_entries, cache_ages) =
             crate::models::user_settings::UserSettings::get_cache_stats();
 
-
-        let cache_hit_rate = if cache_entries > 0 {
-
-            0.85
-        } else {
-            0.0
-        };
+        let cache_hit_rate = if cache_entries > 0 { 0.85 } else { 0.0 };
 
         let oldest_cache_entry = cache_ages
             .iter()
@@ -451,7 +415,6 @@ impl EnhancedSettingsHandler {
         } else {
             0
         };
-
 
         let settings_healthy = match state.settings_addr.send(GetSettings).await {
             Ok(Ok(_)) => true,
@@ -477,7 +440,6 @@ impl EnhancedSettingsHandler {
             "timestamp": chrono::Utc::now().to_rfc3339()
         }))
     }
-
 
     pub async fn get_validation_stats(&self, req: HttpRequest) -> Result<HttpResponse, Error> {
         let client_id = extract_client_id(&req);
@@ -514,7 +476,6 @@ impl EnhancedSettingsHandler {
         }))
     }
 
-
     #[allow(dead_code)]
     async fn propagate_physics_updates(
         &self,
@@ -522,7 +483,6 @@ impl EnhancedSettingsHandler {
         settings: &AppFullSettings,
         update: &Value,
     ) {
-
         let has_physics_update = update
             .get("visualisation")
             .and_then(|v| v.get("graphs"))

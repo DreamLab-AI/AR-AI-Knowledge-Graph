@@ -38,21 +38,15 @@ pub struct StressMajorizationStats {
 }
 
 pub struct StressMajorizationActor {
-
     gpu_state: GPUState,
-
 
     shared_context: Option<Arc<SharedGPUContext>>,
 
-
     safety: StressMajorizationSafety,
-
 
     stress_majorization_interval: u32,
 
-
     last_stress_majorization: u32,
-
 
     config: StressMajorizationRuntimeConfig,
 }
@@ -74,7 +68,6 @@ impl StressMajorizationActor {
         }
     }
 
-    
     fn perform_stress_majorization(&mut self) -> Result<(), String> {
         info!("StressMajorizationActor: Performing GPU stress majorization");
 
@@ -137,9 +130,9 @@ impl StressMajorizationActor {
                 .lock()
                 .map_err(|e| format!("Failed to acquire GPU lock for stress calc: {}", e))?;
 
-            unified_compute.compute_stress_gpu().map_err(|e| {
-                format!("GPU stress computation failed: {}", e)
-            })?
+            unified_compute
+                .compute_stress_gpu()
+                .map_err(|e| format!("GPU stress computation failed: {}", e))?
         };
 
         let max_displacement =
@@ -165,7 +158,6 @@ impl StressMajorizationActor {
         Ok(())
     }
 
-    
     fn apply_position_safety_clamping(&self) -> Result<(), String> {
         let mut unified_compute = match &self.shared_context {
             Some(ctx) => ctx
@@ -177,12 +169,10 @@ impl StressMajorizationActor {
             }
         };
 
-        
         let (positions_x, positions_y, positions_z) = unified_compute
             .get_node_positions()
             .map_err(|e| format!("Failed to get positions for clamping: {}", e))?;
 
-        
         let mut clamping_needed = false;
         let mut clamped_x = positions_x.clone();
         let mut clamped_y = positions_y.clone();
@@ -204,7 +194,6 @@ impl StressMajorizationActor {
             }
         }
 
-        
         if clamping_needed {
             warn!("StressMajorizationActor: Position clamping applied to prevent numerical instability");
             unified_compute
@@ -215,7 +204,6 @@ impl StressMajorizationActor {
         Ok(())
     }
 
-    
     fn should_run_stress_majorization(&self) -> bool {
         if !self.safety.is_safe_to_run() {
             return false;
@@ -228,17 +216,14 @@ impl StressMajorizationActor {
         iterations_since_last >= self.stress_majorization_interval
     }
 
-    
     fn update_stress_majorization_params(&mut self, params: StressMajorizationParams) {
         info!("StressMajorizationActor: Updating stress majorization parameters");
 
-        
         if let Some(interval) = params.interval_frames {
             self.stress_majorization_interval = interval;
             info!("  Updated interval to {} frames", interval);
         }
 
-        
         if let Some(max_displacement) = params.max_displacement_threshold {
             self.safety.max_displacement_threshold = max_displacement;
             info!(
@@ -258,19 +243,16 @@ impl StressMajorizationActor {
         }
     }
 
-    
     #[allow(dead_code)]
     fn get_stress_majorization_stats(&self) -> StressMajorizationStats {
         self.safety.get_stats()
     }
 
-    
     fn reset_safety_state(&mut self) {
         self.safety.reset_safety_state();
         info!("StressMajorizationActor: Safety state has been reset");
     }
 
-    
     #[allow(dead_code)]
     fn should_disable_stress_majorization(&self) -> bool {
         self.safety.should_disable()
@@ -280,14 +262,12 @@ impl StressMajorizationActor {
     // unified_compute.compute_stress_gpu() which launches compute_stress_kernel.
     // The CPU BFS + O(n^2) stress loop has been removed.
 
-    
     fn calculate_max_displacement(
         &self,
         pos_x: &[f32],
         pos_y: &[f32],
         pos_z: &[f32],
     ) -> Result<f32, String> {
-        
         let mut unified_compute = match &self.shared_context {
             Some(ctx) => ctx.unified_compute.lock().map_err(|e| {
                 format!(
@@ -351,7 +331,6 @@ impl Handler<TriggerStressMajorization> for StressMajorizationActor {
     }
 }
 
-
 impl Handler<ResetStressMajorizationSafety> for StressMajorizationActor {
     type Result = Result<(), String>;
 
@@ -373,15 +352,14 @@ impl Handler<UpdateStressMajorizationParams> for StressMajorizationActor {
         msg: UpdateStressMajorizationParams,
         _ctx: &mut Self::Context,
     ) -> Self::Result {
-        
         let stress_params = StressMajorizationParams {
-            max_iterations: 100, 
-            tolerance: 0.001,    
-            learning_rate: 0.1,  
+            max_iterations: 100,
+            tolerance: 0.001,
+            learning_rate: 0.1,
             interval_frames: Some(msg.params.stress_step_interval_frames),
-            max_displacement_threshold: None, 
-            max_position_magnitude: None,     
-            convergence_threshold: None,      
+            max_displacement_threshold: None,
+            max_position_magnitude: None,
+            convergence_threshold: None,
         };
         self.update_stress_majorization_params(stress_params);
         Ok(())
@@ -401,7 +379,7 @@ impl Handler<CheckStressMajorization> for StressMajorizationActor {
                         "StressMajorizationActor: Automatic stress majorization failed: {}",
                         e
                     );
-                    Ok(false) 
+                    Ok(false)
                 }
             }
         } else {
@@ -432,13 +410,20 @@ impl Handler<SetSharedGPUContext> for StressMajorizationActor {
 impl Handler<ConfigureStressMajorization> for StressMajorizationActor {
     type Result = Result<(), String>;
 
-    fn handle(&mut self, msg: ConfigureStressMajorization, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        msg: ConfigureStressMajorization,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         info!("StressMajorizationActor: Received configuration update");
 
         // Validate and apply learning_rate
         if let Some(lr) = msg.learning_rate {
             if lr < 0.01 || lr > 0.5 {
-                return Err(format!("Invalid learning_rate: {}. Must be between 0.01 and 0.5", lr));
+                return Err(format!(
+                    "Invalid learning_rate: {}. Must be between 0.01 and 0.5",
+                    lr
+                ));
             }
             self.config.learning_rate = lr;
             info!("  Updated learning_rate to {:.3}", lr);
@@ -447,7 +432,10 @@ impl Handler<ConfigureStressMajorization> for StressMajorizationActor {
         // Validate and apply momentum
         if let Some(m) = msg.momentum {
             if m < 0.0 || m > 0.99 {
-                return Err(format!("Invalid momentum: {}. Must be between 0.0 and 0.99", m));
+                return Err(format!(
+                    "Invalid momentum: {}. Must be between 0.0 and 0.99",
+                    m
+                ));
             }
             self.config.momentum = m;
             info!("  Updated momentum to {:.3}", m);
@@ -456,7 +444,10 @@ impl Handler<ConfigureStressMajorization> for StressMajorizationActor {
         // Validate and apply max_iterations
         if let Some(mi) = msg.max_iterations {
             if mi < 10 || mi > 1000 {
-                return Err(format!("Invalid max_iterations: {}. Must be between 10 and 1000", mi));
+                return Err(format!(
+                    "Invalid max_iterations: {}. Must be between 10 and 1000",
+                    mi
+                ));
             }
             self.config.max_iterations = mi;
             info!("  Updated max_iterations to {}", mi);
@@ -465,7 +456,10 @@ impl Handler<ConfigureStressMajorization> for StressMajorizationActor {
         // Validate and apply auto_run_interval
         if let Some(interval) = msg.auto_run_interval {
             if interval < 30 || interval > 600 {
-                return Err(format!("Invalid auto_run_interval: {}. Must be between 30 and 600 frames", interval));
+                return Err(format!(
+                    "Invalid auto_run_interval: {}. Must be between 30 and 600 frames",
+                    interval
+                ));
             }
             self.config.auto_run_interval = interval;
             self.stress_majorization_interval = interval as u32;
@@ -481,7 +475,11 @@ impl Handler<ConfigureStressMajorization> for StressMajorizationActor {
 impl Handler<GetStressMajorizationConfig> for StressMajorizationActor {
     type Result = Result<StressMajorizationConfig, String>;
 
-    fn handle(&mut self, _msg: GetStressMajorizationConfig, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        _msg: GetStressMajorizationConfig,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         let stats = self.safety.get_stats();
 
         Ok(StressMajorizationConfig {

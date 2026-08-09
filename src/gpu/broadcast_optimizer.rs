@@ -134,9 +134,12 @@ impl SpatialCuller {
 
         for (idx, pos) in positions.iter().enumerate() {
             // Simple AABB test
-            if pos.x >= min.x && pos.x <= max.x
-                && pos.y >= min.y && pos.y <= max.y
-                && pos.z >= min.z && pos.z <= max.z
+            if pos.x >= min.x
+                && pos.x <= max.x
+                && pos.y >= min.y
+                && pos.y <= max.y
+                && pos.z >= min.z
+                && pos.z <= max.z
             {
                 visible_indices.push(idx);
             }
@@ -208,7 +211,8 @@ impl BroadcastOptimizer {
     pub fn get_performance_stats(&self) -> BroadcastPerformanceStats {
         let avg_reduction = if self.total_nodes_processed > 0 {
             ((self.total_nodes_processed - self.total_nodes_sent) as f64
-                / self.total_nodes_processed as f64) * 100.0
+                / self.total_nodes_processed as f64)
+                * 100.0
         } else {
             0.0
         };
@@ -225,7 +229,10 @@ impl BroadcastOptimizer {
     /// Update configuration at runtime
     pub fn update_config(&mut self, config: BroadcastConfig) {
         info!("BroadcastOptimizer: Updating configuration");
-        info!("  Target FPS: {} -> {}", self.config.target_fps, config.target_fps);
+        info!(
+            "  Target FPS: {} -> {}",
+            self.config.target_fps, config.target_fps
+        );
 
         self.config = config;
         self.rate_limiter = BroadcastRateLimiter::new(&self.config);
@@ -235,7 +242,10 @@ impl BroadcastOptimizer {
     /// Update camera bounds for spatial culling
     pub fn update_camera_bounds(&mut self, min: Vec3, max: Vec3) {
         self.spatial_culler.update_camera_bounds(min, max);
-        debug!("BroadcastOptimizer: Camera bounds updated to [{:?}, {:?}]", min, max);
+        debug!(
+            "BroadcastOptimizer: Camera bounds updated to [{:?}, {:?}]",
+            min, max
+        );
     }
 
     /// Reset the broadcast rate-limit timer so the next frame broadcasts
@@ -272,10 +282,10 @@ mod tests {
         let culler = SpatialCuller::new(&config);
 
         let positions = vec![
-            Vec3::new(0.0, 0.0, 0.0),    // Inside
-            Vec3::new(15.0, 0.0, 0.0),   // Outside
-            Vec3::new(5.0, 5.0, 5.0),    // Inside
-            Vec3::new(0.0, 20.0, 0.0),   // Outside
+            Vec3::new(0.0, 0.0, 0.0),  // Inside
+            Vec3::new(15.0, 0.0, 0.0), // Outside
+            Vec3::new(5.0, 5.0, 5.0),  // Inside
+            Vec3::new(0.0, 20.0, 0.0), // Outside
         ];
         let node_ids = vec![0, 1, 2, 3];
 
@@ -311,14 +321,20 @@ mod tests {
         // A frame taken immediately afterwards is inside the rate-limit interval
         // and must be gated out (no broadcast, no indices).
         let (should_broadcast, indices) = optimizer.process_frame(&positions, &node_ids);
-        assert!(!should_broadcast, "Frame inside interval should be rate-limited");
+        assert!(
+            !should_broadcast,
+            "Frame inside interval should be rate-limited"
+        );
         assert!(indices.is_empty(), "Rate-limited frame returns no indices");
 
         // After the interval elapses again the full snapshot is emitted — every
         // node, never a delta-filtered subset.
         std::thread::sleep(Duration::from_millis(20));
         let (should_broadcast, indices) = optimizer.process_frame(&positions, &node_ids);
-        assert!(should_broadcast, "Frame after interval should broadcast again");
+        assert!(
+            should_broadcast,
+            "Frame after interval should broadcast again"
+        );
         assert_eq!(indices.len(), 2, "Full snapshot always returns all nodes");
     }
 }

@@ -89,10 +89,7 @@ async fn class_count_is_shadowed_when_registered_after_broad_scope() {
 async fn class_count_route_alone_reaches_its_handler() {
     // Sanity control: with ONLY the class-count scope mounted, the path matches
     // its route (→ non-404). Isolates the routing from the shadowing question.
-    let app = test::init_service(
-        App::new().configure(configure_ontology_class_count_routes),
-    )
-    .await;
+    let app = test::init_service(App::new().configure(configure_ontology_class_count_routes)).await;
 
     let req = test::TestRequest::get()
         .uri("/ontology/class-count")

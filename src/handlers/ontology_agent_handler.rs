@@ -10,16 +10,16 @@
 //!   POST /ontology-agent/validate
 //!   GET  /ontology-agent/status
 
-use crate::services::ontology_query_service::OntologyQueryService;
+use crate::middleware::{RateLimit, RequireAuth};
 use crate::services::ontology_mutation_service::{
     OntologyMutationService, CONFLICT_BLOCKED_PREFIX, ENVELOPE_REJECTED_PREFIX,
     IDEMPOTENCY_CONFLICT_PREFIX,
 };
-use crate::types::ontology_tools::*;
+use crate::services::ontology_query_service::OntologyQueryService;
 use crate::settings::auth_extractor::AuthenticatedUser;
-use crate::middleware::{RequireAuth, RateLimit};
-use crate::{ok_json, error_json};
-use actix_web::{web, HttpResponse, Error};
+use crate::types::ontology_tools::*;
+use crate::{error_json, ok_json};
+use actix_web::{web, Error, HttpResponse};
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -35,7 +35,9 @@ pub struct DiscoverRequest {
     pub domain: Option<String>,
 }
 
-fn default_limit() -> usize { 20 }
+fn default_limit() -> usize {
+    20
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,7 +60,9 @@ pub struct TraverseRequest {
     pub relationship_types: Option<Vec<String>>,
 }
 
-fn default_depth() -> usize { 3 }
+fn default_depth() -> usize {
+    3
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -103,7 +107,10 @@ pub async fn discover(
     let req = request.into_inner();
     info!("ontology-agent/discover: query='{}'", req.query);
 
-    match query_service.discover(&req.query, req.limit, req.domain.as_deref()).await {
+    match query_service
+        .discover(&req.query, req.limit, req.domain.as_deref())
+        .await
+    {
         Ok(results) => {
             ok_json!(serde_json::json!({
                 "success": true,
@@ -146,7 +153,10 @@ pub async fn query(
     request: web::Json<QueryRequest>,
 ) -> Result<HttpResponse, Error> {
     let req = request.into_inner();
-    info!("ontology-agent/query: cypher='{}'", &req.cypher[..req.cypher.len().min(80)]);
+    info!(
+        "ontology-agent/query: cypher='{}'",
+        &req.cypher[..req.cypher.len().min(80)]
+    );
 
     match query_service.validate_and_execute_cypher(&req.cypher).await {
         Ok(validation) => {
@@ -168,10 +178,19 @@ pub async fn traverse(
     request: web::Json<TraverseRequest>,
 ) -> Result<HttpResponse, Error> {
     let req = request.into_inner();
-    info!("ontology-agent/traverse: start='{}', depth={}", req.start_iri, req.depth);
+    info!(
+        "ontology-agent/traverse: start='{}', depth={}",
+        req.start_iri, req.depth
+    );
 
     // Traverse by reading the start note and following relationships
-    let result = build_traversal(&query_service, &req.start_iri, req.depth, req.relationship_types.as_deref()).await;
+    let result = build_traversal(
+        &query_service,
+        &req.start_iri,
+        req.depth,
+        req.relationship_types.as_deref(),
+    )
+    .await;
 
     match result {
         Ok(traversal) => {
@@ -215,9 +234,18 @@ pub async fn propose(
                 .propose_create(proposal, req.agent_context, idempotency_key, signature)
                 .await
         }
-        ProposeInput::Amend { target_iri, amendment } => {
+        ProposeInput::Amend {
+            target_iri,
+            amendment,
+        } => {
             mutation_service
-                .propose_amend(&target_iri, amendment, req.agent_context, idempotency_key, signature)
+                .propose_amend(
+                    &target_iri,
+                    amendment,
+                    req.agent_context,
+                    idempotency_key,
+                    signature,
+                )
                 .await
         }
     };
@@ -282,8 +310,14 @@ pub async fn validate(
 
     for axiom in &req.axioms {
         // Validate subject exists
-        let subject_check = format!("MATCH (n:{}) RETURN n", axiom.subject.split(':').last().unwrap_or(&axiom.subject));
-        if let Ok(validation) = query_service.validate_and_execute_cypher(&subject_check).await {
+        let subject_check = format!(
+            "MATCH (n:{}) RETURN n",
+            axiom.subject.split(':').last().unwrap_or(&axiom.subject)
+        );
+        if let Ok(validation) = query_service
+            .validate_and_execute_cypher(&subject_check)
+            .await
+        {
             all_errors.extend(validation.errors);
             all_hints.extend(validation.hints);
         }

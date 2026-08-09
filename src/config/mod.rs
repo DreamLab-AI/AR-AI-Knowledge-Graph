@@ -1,6 +1,6 @@
 pub mod dev_config;
-pub mod path_access;
 pub mod feature_access;
+pub mod path_access;
 mod path_accessible_impls;
 
 /// Canonical default for max_velocity across the entire codebase.
@@ -23,9 +23,9 @@ pub use visionclaw_domain::config::validation::{
 };
 
 pub use visionclaw_domain::config::visualisation::{
-    AnimationSettings, BloomSettings, CameraSettings, EdgeSettings, GlowSettings,
-    GraphSettings, GraphsSettings, HologramSettings, LabelSettings, NodeSettings, Position,
-    RenderingSettings, Sensitivity, SpacePilotSettings, VisualisationSettings,
+    AnimationSettings, BloomSettings, CameraSettings, EdgeSettings, GlowSettings, GraphSettings,
+    GraphsSettings, HologramSettings, LabelSettings, NodeSettings, Position, RenderingSettings,
+    Sensitivity, SpacePilotSettings, VisualisationSettings,
 };
 
 pub use visionclaw_domain::config::system::{

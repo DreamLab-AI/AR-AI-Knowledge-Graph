@@ -6,36 +6,35 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn, instrument};
+use tracing::{debug, info, instrument, warn};
 
 use crate::application::inference_service::InferenceService;
-use crate::events::EventBus;
+use crate::events::domain_events::{
+    AxiomAddedEvent as DomainAxiomAddedEvent, ClassAddedEvent as DomainClassAddedEvent,
+    OntologyImportedEvent as DomainOntologyImportedEvent,
+};
 use crate::events::types::{EventError, EventHandler, EventResult, StoredEvent};
+use crate::events::EventBus;
 use crate::utils::json::from_json;
-use crate::events::domain_events::{OntologyImportedEvent as DomainOntologyImportedEvent, ClassAddedEvent as DomainClassAddedEvent, AxiomAddedEvent as DomainAxiomAddedEvent};
 
 #[derive(Debug, Clone)]
 pub enum OntologyEvent {
-    
     OntologyImported {
         ontology_id: String,
         class_count: usize,
         axiom_count: usize,
     },
 
-    
     ClassAdded {
         ontology_id: String,
         class_iri: String,
     },
 
-    
     AxiomAdded {
         ontology_id: String,
         axiom_id: String,
     },
 
-    
     OntologyModified {
         ontology_id: String,
         change_type: String,
@@ -44,19 +43,14 @@ pub enum OntologyEvent {
 
 #[derive(Debug, Clone)]
 pub struct AutoInferenceConfig {
-    
     pub auto_on_import: bool,
 
-    
     pub auto_on_class_add: bool,
 
-    
     pub auto_on_axiom_add: bool,
 
-    
     pub min_delay_ms: u64,
 
-    
     pub batch_changes: bool,
 }
 
@@ -64,27 +58,23 @@ impl Default for AutoInferenceConfig {
     fn default() -> Self {
         Self {
             auto_on_import: true,
-            auto_on_class_add: false, 
-            auto_on_axiom_add: false, 
-            min_delay_ms: 1000,       
+            auto_on_class_add: false,
+            auto_on_axiom_add: false,
+            min_delay_ms: 1000,
             batch_changes: true,
         }
     }
 }
 
 pub struct InferenceTriggerHandler {
-    
     inference_service: Arc<RwLock<InferenceService>>,
 
-    
     config: AutoInferenceConfig,
 
-    
     last_inference: Arc<RwLock<std::collections::HashMap<String, std::time::Instant>>>,
 }
 
 impl InferenceTriggerHandler {
-    
     pub fn new(
         inference_service: Arc<RwLock<InferenceService>>,
         config: AutoInferenceConfig,
@@ -96,27 +86,35 @@ impl InferenceTriggerHandler {
         }
     }
 
-    
     #[instrument(skip(self), level = "debug")]
     pub async fn handle_event(&self, event: OntologyEvent) {
         match event {
             OntologyEvent::OntologyImported { ontology_id, .. } => {
                 if self.config.auto_on_import {
-                    info!("Auto-triggering inference for imported ontology: {}", ontology_id);
+                    info!(
+                        "Auto-triggering inference for imported ontology: {}",
+                        ontology_id
+                    );
                     self.trigger_inference(&ontology_id).await;
                 }
             }
 
             OntologyEvent::ClassAdded { ontology_id, .. } => {
                 if self.config.auto_on_class_add {
-                    debug!("Auto-triggering inference for class addition: {}", ontology_id);
+                    debug!(
+                        "Auto-triggering inference for class addition: {}",
+                        ontology_id
+                    );
                     self.trigger_incremental_inference(&ontology_id).await;
                 }
             }
 
             OntologyEvent::AxiomAdded { ontology_id, .. } => {
                 if self.config.auto_on_axiom_add {
-                    debug!("Auto-triggering inference for axiom addition: {}", ontology_id);
+                    debug!(
+                        "Auto-triggering inference for axiom addition: {}",
+                        ontology_id
+                    );
                     self.trigger_incremental_inference(&ontology_id).await;
                 }
             }
@@ -129,7 +127,7 @@ impl InferenceTriggerHandler {
     }
 
     /// Trigger full inference for an ontology.
-        /// DEADLOCK FIX: RwLock guard is now dropped before awaiting run_inference()
+    /// DEADLOCK FIX: RwLock guard is now dropped before awaiting run_inference()
     /// and update_last_inference() to prevent holding guard across await points.
     async fn trigger_inference(&self, ontology_id: &str) {
         if !self.should_run_inference(ontology_id).await {
@@ -162,19 +160,14 @@ impl InferenceTriggerHandler {
         }
     }
 
-    
     async fn trigger_incremental_inference(&self, ontology_id: &str) {
-        
-        
         if self.config.batch_changes {
             debug!("Batching changes for: {}", ontology_id);
-            
         } else {
             self.trigger_inference(ontology_id).await;
         }
     }
 
-    
     async fn should_run_inference(&self, ontology_id: &str) -> bool {
         let last_inference = self.last_inference.read().await;
 
@@ -182,11 +175,10 @@ impl InferenceTriggerHandler {
             let elapsed = last_time.elapsed().as_millis() as u64;
             elapsed >= self.config.min_delay_ms
         } else {
-            true 
+            true
         }
     }
 
-    
     async fn update_last_inference(&self, ontology_id: &str) {
         let mut last_inference = self.last_inference.write().await;
         last_inference.insert(ontology_id.to_string(), std::time::Instant::now());
@@ -206,8 +198,9 @@ impl EventHandler for InferenceTriggerHandler {
     async fn handle(&self, event: &StoredEvent) -> EventResult<()> {
         let ontology_event = match event.metadata.event_type.as_str() {
             "OntologyImported" => {
-                let data: DomainOntologyImportedEvent = from_json(&event.data)
-                    .map_err(|e| EventError::Handler(format!("Failed to parse OntologyImportedEvent: {}", e)))?;
+                let data: DomainOntologyImportedEvent = from_json(&event.data).map_err(|e| {
+                    EventError::Handler(format!("Failed to parse OntologyImportedEvent: {}", e))
+                })?;
                 Some(OntologyEvent::OntologyImported {
                     ontology_id: data.ontology_id,
                     class_count: data.class_count,
@@ -215,16 +208,18 @@ impl EventHandler for InferenceTriggerHandler {
                 })
             }
             "ClassAdded" => {
-                let data: DomainClassAddedEvent = from_json(&event.data)
-                    .map_err(|e| EventError::Handler(format!("Failed to parse ClassAddedEvent: {}", e)))?;
+                let data: DomainClassAddedEvent = from_json(&event.data).map_err(|e| {
+                    EventError::Handler(format!("Failed to parse ClassAddedEvent: {}", e))
+                })?;
                 Some(OntologyEvent::ClassAdded {
                     ontology_id: event.metadata.aggregate_id.clone(),
                     class_iri: data.class_iri,
                 })
             }
             "AxiomAdded" => {
-                let data: DomainAxiomAddedEvent = from_json(&event.data)
-                    .map_err(|e| EventError::Handler(format!("Failed to parse AxiomAddedEvent: {}", e)))?;
+                let data: DomainAxiomAddedEvent = from_json(&event.data).map_err(|e| {
+                    EventError::Handler(format!("Failed to parse AxiomAddedEvent: {}", e))
+                })?;
                 Some(OntologyEvent::AxiomAdded {
                     ontology_id: event.metadata.aggregate_id.clone(),
                     axiom_id: data.axiom_id,
@@ -276,8 +271,5 @@ mod tests {
             min_delay_ms: 100,
             ..Default::default()
         };
-
-        
-        
     }
 }

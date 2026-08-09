@@ -12,19 +12,18 @@ pub struct RateLimitInfo {
 
 #[derive(Debug)]
 pub enum GitHubError {
-    
     ApiError(String),
-    
+
     NetworkError(reqwest::Error),
-    
+
     SerializationError(serde_json::Error),
-    
+
     ValidationError(String),
-    
+
     Base64Error(base64::DecodeError),
-    
+
     RateLimitExceeded(RateLimitInfo),
-    
+
     NotFound(String),
 }
 
@@ -72,40 +71,38 @@ impl From<base64::DecodeError> for GitHubError {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GitHubFile {
-    
     pub name: String,
-    
+
     pub path: String,
-    
+
     pub sha: String,
-    
+
     pub size: usize,
-    
+
     pub url: String,
-    
+
     pub download_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct GitHubFileMetadata {
-    
     pub name: String,
-    
+
     pub sha: String,
-    
+
     pub download_url: String,
-    
+
     pub etag: Option<String>,
-    
+
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub last_checked: Option<DateTime<Utc>>,
-    
+
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub last_modified: Option<DateTime<Utc>>,
-    
+
     #[serde(with = "chrono::serde::ts_seconds_option")]
     pub last_content_change: Option<DateTime<Utc>>,
-    
+
     pub file_blob_sha: Option<String>,
 }
 

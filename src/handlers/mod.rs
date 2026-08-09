@@ -5,16 +5,16 @@ pub mod bots_visualization_handler;
 pub mod client_log_handler;
 pub mod client_messages_handler;
 pub mod consolidated_health_handler;
-pub mod metrics_handler;
 pub mod constraints_handler;
 pub mod graph_export_handler;
 pub mod graph_state_handler;
 pub mod mcp_relay_handler;
+pub mod metrics_handler;
 pub mod multi_mcp_websocket_handler;
 pub mod natural_language_query_handler;
 pub mod nostr_handler;
-pub mod ontology_handler;
 pub mod ontology_agent_handler;
+pub mod ontology_handler;
 pub use ontology_agent_handler::configure_ontology_agent_routes;
 // W-B (PRD-022 / ADR-048): governed decision record + bounded trace surface.
 pub mod decision_handler;
@@ -45,9 +45,9 @@ pub mod inference_handler;
 
 pub use inference_handler::configure_routes as configure_inference_routes;
 
+pub mod semantic_pathfinding_handler;
 #[cfg(test)]
 pub mod tests;
-pub mod semantic_pathfinding_handler;
 pub use semantic_pathfinding_handler::configure_pathfinding_routes;
 
 // Briefing workflow handler
@@ -102,8 +102,8 @@ pub mod layout_handler;
 pub use layout_handler::configure_layout_routes;
 
 // High-Performance Networking (QUIC/WebTransport + fastwebsockets)
-pub mod quic_transport_handler;
 pub mod fastwebsockets_handler;
+pub mod quic_transport_handler;
 
 // Solid Pod (embedded solid-pod-rs)
 pub mod solid_proxy_handler;
@@ -125,15 +125,12 @@ pub use pay_handler::configure_pay_routes;
 pub mod presence_handler;
 
 pub use quic_transport_handler::{
-    QuicTransportServer, QuicServerConfig,
-    PostcardNodeUpdate, PostcardBatchUpdate, PostcardDeltaUpdate,
-    ControlMessage, TopologyNode, TopologyEdge,
-    encode_postcard_batch, decode_postcard_batch, calculate_deltas,
+    calculate_deltas, decode_postcard_batch, encode_postcard_batch, ControlMessage,
+    PostcardBatchUpdate, PostcardDeltaUpdate, PostcardNodeUpdate, QuicServerConfig,
+    QuicTransportServer, TopologyEdge, TopologyNode,
 };
 
 pub use fastwebsockets_handler::{
-    FastWebSocketServer, FastWebSocketConfig,
-    StandaloneFastWsHandler,
-    TransportProtocol, SerializationFormat, NegotiatedProtocol,
-    negotiate_protocol,
+    negotiate_protocol, FastWebSocketConfig, FastWebSocketServer, NegotiatedProtocol,
+    SerializationFormat, StandaloneFastWsHandler, TransportProtocol,
 };

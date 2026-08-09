@@ -21,38 +21,25 @@ impl MetadataActor {
 
     pub fn update_metadata(&mut self, new_metadata: MetadataStore) {
         self.metadata = new_metadata;
-        debug!("Metadata updated with {} files", self.metadata.len()); 
+        debug!("Metadata updated with {} files", self.metadata.len());
     }
 
     pub fn refresh_metadata(&mut self) -> Result<(), String> {
-        
-        
         info!("Metadata refresh requested");
-
-        
-        
-        
-        
-        
 
         Ok(())
     }
 
     pub fn get_file_count(&self) -> usize {
-        self.metadata.len() 
+        self.metadata.len()
     }
-
-    
-    
-    
-    
 }
 
 impl Actor for MetadataActor {
     type Context = Context<Self>;
 
     fn started(&mut self, _ctx: &mut Self::Context) {
-        info!("MetadataActor started with {} files", self.metadata.len()); 
+        info!("MetadataActor started with {} files", self.metadata.len());
     }
 
     fn stopped(&mut self, _ctx: &mut Self::Context) {

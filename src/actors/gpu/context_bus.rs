@@ -94,7 +94,11 @@ impl GPUContextBus {
     }
 
     /// Publish GPU context with device ordinal for multi-GPU systems
-    pub fn publish_with_device(&self, context: Arc<SharedGPUContext>, device_ordinal: u32) -> usize {
+    pub fn publish_with_device(
+        &self,
+        context: Arc<SharedGPUContext>,
+        device_ordinal: u32,
+    ) -> usize {
         let event = GPUContextReady::new(context, device_ordinal);
         match self.sender.send(event) {
             Ok(count) => count,

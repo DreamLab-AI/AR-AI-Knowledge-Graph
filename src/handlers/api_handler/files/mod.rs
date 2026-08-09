@@ -1,7 +1,7 @@
 use crate::actors::messages::{
     AddNodesFromMetadata, GetNodeData as GetGpuNodeData, GetSettings, UpdateMetadata,
 };
-use crate::{ok_json, error_json};
+use crate::{error_json, ok_json};
 use actix_web::{web, Error as ActixError, HttpResponse, Responder, Result};
 use log::{debug, error, info};
 use serde_json::json;
@@ -57,7 +57,6 @@ pub async fn fetch_and_process_files(state: web::Data<AppState>) -> Result<impl 
             );
 
             {
-                
                 if let Err(e) = state
                     .metadata_addr
                     .send(UpdateMetadata {
@@ -69,13 +68,9 @@ pub async fn fetch_and_process_files(state: web::Data<AppState>) -> Result<impl 
                         "Failed to send UpdateMetadata message to MetadataActor: {}",
                         e
                     );
-                    
                 }
             }
 
-            
-            
-            
             if let Err(e) = FileService::save_metadata(&metadata_store) {
                 error!("Failed to save metadata: {}", e);
                 return Ok(HttpResponse::InternalServerError().json(json!({
@@ -84,7 +79,6 @@ pub async fn fetch_and_process_files(state: web::Data<AppState>) -> Result<impl 
                 })));
             }
 
-            
             match state
                 .graph_service_addr
                 .send(AddNodesFromMetadata {
@@ -95,13 +89,8 @@ pub async fn fetch_and_process_files(state: web::Data<AppState>) -> Result<impl 
                 Ok(Ok(())) => {
                     info!("Graph data structure updated successfully via GraphServiceActor");
 
-
                     #[cfg(feature = "gpu")]
-    if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
-                        
-                        
-                        
-                        
+                    if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
                         match gpu_addr.send(GetGpuNodeData).await {
                             Ok(Ok(_nodes)) => {
                                 debug!("GPU node data fetched successfully after graph update");
@@ -155,7 +144,10 @@ pub async fn get_file_content(
 ) -> HttpResponse {
     // SECURITY: Reject path traversal attempts
     if file_name.contains("..") || file_name.starts_with('/') || file_name.contains('\0') {
-        error!("Path traversal attempt blocked for file_name: {}", file_name);
+        error!(
+            "Path traversal attempt blocked for file_name: {}",
+            file_name
+        );
         return HttpResponse::BadRequest().json(json!({
             "status": "error",
             "message": "Invalid file name"
@@ -187,7 +179,10 @@ pub async fn get_file_content(
 
     // SECURITY: Verify the resolved path is within MARKDOWN_DIR
     if !canonical_path.starts_with(&base_dir) {
-        error!("Path traversal attempt blocked: resolved path escapes MARKDOWN_DIR for file_name: {}", file_name);
+        error!(
+            "Path traversal attempt blocked: resolved path escapes MARKDOWN_DIR for file_name: {}",
+            file_name
+        );
         return HttpResponse::BadRequest().json(json!({
             "status": "error",
             "message": "Invalid file name"
@@ -208,7 +203,6 @@ pub async fn get_file_content(
 
 pub async fn refresh_graph(state: web::Data<AppState>) -> Result<impl Responder> {
     info!("Manually triggering graph refresh - returning current state");
-
 
     match state
         .graph_service_addr
@@ -271,7 +265,7 @@ pub async fn update_graph(state: web::Data<AppState>) -> Result<HttpResponse, Ac
             );
 
             #[cfg(feature = "gpu")]
-    if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
+            if let Some(gpu_addr) = state.get_gpu_compute_addr().await {
                 match gpu_addr.send(GetGpuNodeData).await {
                     Ok(Ok(_nodes)) => {
                         debug!(

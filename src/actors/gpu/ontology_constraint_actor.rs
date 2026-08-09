@@ -19,14 +19,16 @@ use std::time::Instant;
 
 use super::shared::{GPUState, SharedGPUContext};
 use crate::actors::messages::*;
-use visionclaw_domain::models::constraints::{Constraint, ConstraintSet};
-use visionclaw_domain::ports::owl_types::{AxiomType as DomainAxiomType, OwlAxiom as DomainOwlAxiom};
-use visionclaw_ontology::services::iri_node_resolver::IriNodeResolver;
 use crate::models::constraints::{ConstraintData, ConstraintSetGpuExt};
 use crate::physics::ontology_constraint_mapper::map_axioms_to_constraints;
 use crate::physics::ontology_constraints::{
     OWLAxiom, OWLAxiomType, OntologyConstraintTranslator, OntologyReasoningReport,
 };
+use visionclaw_domain::models::constraints::{Constraint, ConstraintSet};
+use visionclaw_domain::ports::owl_types::{
+    AxiomType as DomainAxiomType, OwlAxiom as DomainOwlAxiom,
+};
+use visionclaw_ontology::services::iri_node_resolver::IriNodeResolver;
 
 /// Default global force strength applied to the mapper output at dispatch.
 /// Full mapper weight (1.0) collapses the 18k+ mostly-attractive constraints
@@ -77,15 +79,11 @@ impl Default for OntologyConstraintStats {
 }
 
 pub struct OntologyConstraintActor {
-
     shared_context: Option<Arc<SharedGPUContext>>,
-
 
     translator: OntologyConstraintTranslator,
 
-
     ontology_constraints: Vec<Constraint>,
-
 
     constraint_buffer: Vec<ConstraintData>,
 
@@ -100,16 +98,11 @@ pub struct OntologyConstraintActor {
     /// rather than collapsed into one dense blob at full mapper weight.
     global_strength: f32,
 
-
     gpu_state: GPUState,
-
 
     stats: OntologyConstraintStats,
 
-
-    
     last_update: Instant,
-
 
     gpu_initialized: bool,
 
@@ -118,7 +111,6 @@ pub struct OntologyConstraintActor {
 }
 
 impl OntologyConstraintActor {
-    
     pub fn new() -> Self {
         info!("Creating new OntologyConstraintActor");
 
@@ -137,7 +129,6 @@ impl OntologyConstraintActor {
         }
     }
 
-    
     fn initialize_gpu(&mut self) -> Result<(), String> {
         if self.shared_context.is_none() {
             return Err("GPU context not available".to_string());
@@ -148,8 +139,6 @@ impl OntologyConstraintActor {
         Ok(())
     }
 
-    
-    
     fn apply_ontology_constraints(
         &mut self,
         reasoning_report: &OntologyReasoningReport,
@@ -263,10 +252,11 @@ impl OntologyConstraintActor {
                 constraint_buffer: self.constraint_buffer.clone(),
             });
         } else {
-            debug!("OntologyConstraintActor: ForceComputeActor address not set, skipping notification");
+            debug!(
+                "OntologyConstraintActor: ForceComputeActor address not set, skipping notification"
+            );
         }
     }
-
 
     fn update_constraints(&mut self, axioms: &[OWLAxiom]) -> Result<(), String> {
         info!(
@@ -274,8 +264,6 @@ impl OntologyConstraintActor {
             axioms.len()
         );
 
-        
-        
         warn!("OntologyConstraintActor: Dynamic constraint updates require graph context");
         warn!("Consider using ApplyOntologyConstraints message with full context");
 
@@ -290,12 +278,10 @@ impl OntologyConstraintActor {
             .as_ref()
             .ok_or("GPU context not available")?;
 
-        
         let mut unified_compute = shared_context
             .unified_compute
             .lock()
             .map_err(|e| format!("Failed to acquire GPU compute lock: {}", e))?;
-
 
         if self.constraint_buffer.is_empty() {
             debug!("OntologyConstraintActor: No constraints to upload, clearing GPU constraints");
@@ -361,20 +347,16 @@ impl OntologyConstraintActor {
         out
     }
 
-    
     fn get_ontology_stats(&self) -> OntologyConstraintStats {
         self.stats.clone()
     }
 
-    
     fn cleanup(&mut self) -> Result<(), String> {
         info!("OntologyConstraintActor: Cleaning up resources");
 
-        
         self.ontology_constraints.clear();
         self.constraint_buffer.clear();
 
-        
         if let Some(ref shared_context) = self.shared_context {
             if let Ok(mut unified_compute) = shared_context.unified_compute.lock() {
                 if let Err(e) = unified_compute.clear_constraints() {
@@ -383,7 +365,6 @@ impl OntologyConstraintActor {
             }
         }
 
-        
         self.translator.clear_cache();
 
         info!("OntologyConstraintActor: Cleanup completed");
@@ -415,11 +396,9 @@ impl Handler<ApplyOntologyConstraints> for OntologyConstraintActor {
             msg.graph_id
         );
 
-        
         let constraint_count = msg.constraint_set.constraints.len();
         match msg.merge_mode {
             ConstraintMergeMode::Replace => {
-                
                 self.ontology_constraints = msg.constraint_set.constraints.clone();
                 info!(
                     "OntologyConstraintActor: Replaced all constraints with {} new constraints",
@@ -427,7 +406,6 @@ impl Handler<ApplyOntologyConstraints> for OntologyConstraintActor {
                 );
             }
             ConstraintMergeMode::Merge => {
-                
                 let existing_count = self.ontology_constraints.len();
                 self.ontology_constraints
                     .extend(msg.constraint_set.constraints.clone());
@@ -435,10 +413,8 @@ impl Handler<ApplyOntologyConstraints> for OntologyConstraintActor {
                       constraint_count, existing_count, self.ontology_constraints.len());
             }
             ConstraintMergeMode::AddIfNoConflict => {
-                
                 let initial_count = self.ontology_constraints.len();
                 for constraint in msg.constraint_set.constraints.clone() {
-                    
                     let has_conflict = self.ontology_constraints.iter().any(|existing| {
                         existing.node_indices == constraint.node_indices
                             && existing.kind == constraint.kind
@@ -465,7 +441,6 @@ impl Handler<ApplyOntologyConstraints> for OntologyConstraintActor {
             .filter(|c| c.active)
             .count() as u32;
 
-        
         if self.gpu_initialized && self.shared_context.is_some() {
             match self.upload_constraints_to_gpu() {
                 Ok(_) => {
@@ -536,7 +511,6 @@ impl Handler<GetOntologyConstraintStats> for OntologyConstraintActor {
     ) -> Self::Result {
         info!("OntologyConstraintActor: Received GetOntologyConstraintStats message");
 
-        
         let stats = crate::actors::messages::OntologyConstraintStats {
             total_axioms_processed: self.stats.total_axioms_processed,
             active_ontology_constraints: self.stats.active_ontology_constraints,
@@ -580,7 +554,7 @@ impl Handler<SetSharedGPUContext> for OntologyConstraintActor {
             }
             Err(e) => {
                 warn!("OntologyConstraintActor: GPU initialization failed: {}", e);
-                
+
                 Ok(())
             }
         }
@@ -591,7 +565,6 @@ impl Handler<GetConstraintStats> for OntologyConstraintActor {
     type Result = Result<ConstraintStats, String>;
 
     fn handle(&mut self, _msg: GetConstraintStats, _ctx: &mut Self::Context) -> Self::Result {
-
         let mut stats = ConstraintStats {
             total_constraints: self.ontology_constraints.len(),
             active_constraints: self.stats.active_ontology_constraints as usize,
@@ -599,7 +572,6 @@ impl Handler<GetConstraintStats> for OntologyConstraintActor {
             ontology_constraints: self.ontology_constraints.len(),
             user_constraints: 0,
         };
-
 
         stats.constraint_groups.insert(
             "ontology_derived".to_string(),
@@ -616,9 +588,15 @@ impl Handler<GetConstraintStats> for OntologyConstraintActor {
 impl Handler<crate::actors::messages::GetConstraintBuffer> for OntologyConstraintActor {
     type Result = Result<Vec<ConstraintData>, String>;
 
-    fn handle(&mut self, _msg: crate::actors::messages::GetConstraintBuffer, _ctx: &mut Self::Context) -> Self::Result {
-        debug!("OntologyConstraintActor: Providing constraint buffer for GPU upload ({} constraints)",
-               self.constraint_buffer.len());
+    fn handle(
+        &mut self,
+        _msg: crate::actors::messages::GetConstraintBuffer,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
+        debug!(
+            "OntologyConstraintActor: Providing constraint buffer for GPU upload ({} constraints)",
+            self.constraint_buffer.len()
+        );
 
         // Return a clone of the constraint buffer for GPU upload
         // This buffer contains ConstraintData structs ready for GPU processing
@@ -632,23 +610,19 @@ impl Handler<UpdateConstraints> for OntologyConstraintActor {
     fn handle(&mut self, msg: UpdateConstraints, _ctx: &mut Self::Context) -> Self::Result {
         info!("OntologyConstraintActor: Received UpdateConstraints message");
 
-        
         let constraints =
             match serde_json::from_value::<Vec<Constraint>>(msg.constraint_data.clone()) {
                 Ok(constraints) => constraints,
-                Err(e) => {
-                    
-                    match serde_json::from_value::<ConstraintSet>(msg.constraint_data) {
-                        Ok(constraint_set) => constraint_set.constraints,
-                        Err(_) => {
-                            error!(
-                                "OntologyConstraintActor: Failed to parse constraint_data: {}",
-                                e
-                            );
-                            return Err(format!("Failed to parse constraints: {}", e));
-                        }
+                Err(e) => match serde_json::from_value::<ConstraintSet>(msg.constraint_data) {
+                    Ok(constraint_set) => constraint_set.constraints,
+                    Err(_) => {
+                        error!(
+                            "OntologyConstraintActor: Failed to parse constraint_data: {}",
+                            e
+                        );
+                        return Err(format!("Failed to parse constraints: {}", e));
                     }
-                }
+                },
             };
 
         self.ontology_constraints = constraints;
@@ -672,7 +646,6 @@ impl Handler<InitializeGPU> for OntologyConstraintActor {
 
     fn handle(&mut self, msg: InitializeGPU, _ctx: &mut Self::Context) -> Self::Result {
         info!("OntologyConstraintActor: InitializeGPU received");
-
 
         self.gpu_state.num_nodes = msg.graph.nodes.len() as u32;
         self.gpu_state.num_edges = msg.graph.edges.len() as u32;
@@ -711,7 +684,10 @@ impl Handler<AdjustConstraintWeights> for OntologyConstraintActor {
         // Re-upload to GPU if initialized
         if self.gpu_initialized && self.shared_context.is_some() {
             if let Err(e) = self.upload_constraints_to_gpu() {
-                warn!("OntologyConstraintActor: GPU re-upload after weight adjustment failed: {}", e);
+                warn!(
+                    "OntologyConstraintActor: GPU re-upload after weight adjustment failed: {}",
+                    e
+                );
                 self.stats.gpu_failure_count += 1;
             }
         }

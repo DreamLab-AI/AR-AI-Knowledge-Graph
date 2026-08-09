@@ -391,7 +391,11 @@ impl SqliteKpiRepository {
                     "SELECT COUNT(*) FROM kpi_agent_events WHERE observed_at_ms >= ?1",
                 )?;
                 let mut rows = stmt.query(rusqlite::params![cutoff_ms])?;
-                let n: i64 = if let Some(r) = rows.next()? { r.get(0)? } else { 0 };
+                let n: i64 = if let Some(r) = rows.next()? {
+                    r.get(0)?
+                } else {
+                    0
+                };
                 Ok(n)
             })
             .await
@@ -513,7 +517,11 @@ impl SqliteKpiRepository {
                 let mut stmt =
                     c.prepare_cached("SELECT COUNT(*) FROM kpi_snapshots WHERE kpi = ?1")?;
                 let mut rows = stmt.query(rusqlite::params![&kpi])?;
-                let n: i64 = if let Some(r) = rows.next()? { r.get(0)? } else { 0 };
+                let n: i64 = if let Some(r) = rows.next()? {
+                    r.get(0)?
+                } else {
+                    0
+                };
                 Ok(n)
             })
             .await
@@ -582,17 +590,28 @@ mod tests {
             sha: "abc123".into(),
         };
         let lineage = vec![
-            ("agent_event_volume".to_string(), "window_count".to_string(), Some(42.0)),
+            (
+                "agent_event_volume".to_string(),
+                "window_count".to_string(),
+                Some(42.0),
+            ),
             (
                 "acsp_escalation".to_string(),
                 "enrichment_decisions_window_count".to_string(),
                 Some(12.0),
             ),
         ];
-        let id = repo.insert_snapshot_with_lineage(&snap, &lineage).await.unwrap();
+        let id = repo
+            .insert_snapshot_with_lineage(&snap, &lineage)
+            .await
+            .unwrap();
         assert!(id > 0);
 
-        let latest = repo.latest_snapshot("augmentation_ratio").await.unwrap().unwrap();
+        let latest = repo
+            .latest_snapshot("augmentation_ratio")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(latest.value, 3.5);
         assert_eq!(latest.numerator, Some(42.0));
 

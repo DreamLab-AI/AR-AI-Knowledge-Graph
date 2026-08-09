@@ -16,10 +16,10 @@ use std::time::Duration;
 
 use crate::actors::messages::*;
 use crate::services::management_api_client::{ManagementApiClient, TaskInfo};
+use crate::utils::time;
 use visionclaw_domain::types::claude_flow::{
     AgentProfile, AgentStatus, AgentType, ClaudeFlowClient, PerformanceMetrics, TokenUsage,
 };
-use crate::utils::time;
 
 /// Container telemetry metrics from Management API /v1/status
 #[derive(Debug, Clone, Default)]
@@ -251,10 +251,8 @@ impl AgentMonitorActor {
         ctx.spawn(
             async move {
                 // Fetch tasks and system status concurrently
-                let (tasks_result, status_result) = tokio::join!(
-                    api_client.list_tasks(),
-                    api_client.get_system_status()
-                );
+                let (tasks_result, status_result) =
+                    tokio::join!(api_client.list_tasks(), api_client.get_system_status());
 
                 // Extract container telemetry from system status
                 let telemetry = match &status_result {
@@ -302,10 +300,7 @@ impl AgentMonitorActor {
                             .map(|task| task_to_agent_status(task, &telemetry))
                             .collect();
 
-                        ctx_addr.do_send(ProcessAgentStatuses {
-                            agents,
-                            telemetry,
-                        });
+                        ctx_addr.do_send(ProcessAgentStatuses { agents, telemetry });
                     }
                     Err(e) => {
                         error!("[AgentMonitorActor] Management API query failed: {}", e);
@@ -393,11 +388,41 @@ fn build_mock_swarm_agents() -> Vec<AgentStatus> {
     use crate::utils::time;
 
     let mock_defs: Vec<(&str, &str, &str, &str, &str)> = vec![
-        ("mock-coordinator", "Claude Opus 4.6 (Coordinator)", "coordinator", "active", "Orchestrating swarm topology and task routing"),
-        ("mock-coder-1", "Coder Agent", "coder", "active", "Implementing feature branch with TDD"),
-        ("mock-reviewer-1", "QE Reviewer", "reviewer", "active", "Reviewing PR #42 for security and correctness"),
-        ("mock-researcher-1", "Research Agent", "researcher", "active", "Searching RuVector memory for related patterns"),
-        ("mock-memory-1", "RuVector Memory Specialist", "memory", "idle", "Indexing 384-dim embeddings into HNSW graph"),
+        (
+            "mock-coordinator",
+            "Claude Opus 4.6 (Coordinator)",
+            "coordinator",
+            "active",
+            "Orchestrating swarm topology and task routing",
+        ),
+        (
+            "mock-coder-1",
+            "Coder Agent",
+            "coder",
+            "active",
+            "Implementing feature branch with TDD",
+        ),
+        (
+            "mock-reviewer-1",
+            "QE Reviewer",
+            "reviewer",
+            "active",
+            "Reviewing PR #42 for security and correctness",
+        ),
+        (
+            "mock-researcher-1",
+            "Research Agent",
+            "researcher",
+            "active",
+            "Searching RuVector memory for related patterns",
+        ),
+        (
+            "mock-memory-1",
+            "RuVector Memory Specialist",
+            "memory",
+            "idle",
+            "Indexing 384-dim embeddings into HNSW graph",
+        ),
     ];
 
     mock_defs
@@ -471,7 +496,9 @@ impl Handler<ProcessAgentStatuses> for AgentMonitorActor {
                 .map(|v| v == "true" || v == "1")
                 .unwrap_or(false)
         {
-            info!("[AgentMonitorActor] No real agents found, MOCK_AGENTS=true — injecting mock swarm");
+            info!(
+                "[AgentMonitorActor] No real agents found, MOCK_AGENTS=true — injecting mock swarm"
+            );
             build_mock_swarm_agents()
         } else {
             msg.agents
@@ -544,8 +571,9 @@ impl Handler<ProcessAgentStatuses> for AgentMonitorActor {
                 "[AgentMonitorActor] Sending graph update with {} agents",
                 agents_list.len()
             );
-            self.graph_service_addr
-                .do_send(UpdateBotsGraph { agents: agents_list });
+            self.graph_service_addr.do_send(UpdateBotsGraph {
+                agents: agents_list,
+            });
         } else {
             debug!(
                 "[AgentMonitorActor] Suppressing empty UpdateBotsGraph (no information; \
@@ -632,7 +660,10 @@ mod tests {
             let d = decide_bots_graph_emit(3, last_nonempty, empties);
             assert!(d.send, "≥1 agent must emit");
             assert!(d.next_last_emit_nonempty);
-            assert_eq!(d.next_consecutive_empty, 0, "debounce resets on a populated roster");
+            assert_eq!(
+                d.next_consecutive_empty, 0,
+                "debounce resets on a populated roster"
+            );
         }
     }
 
@@ -642,7 +673,10 @@ mod tests {
     fn first_empty_after_nonempty_is_suppressed() {
         let d = decide_bots_graph_emit(0, true, 0);
         assert!(!d.send, "first empty poll must NOT clobber the roster");
-        assert!(d.next_last_emit_nonempty, "still treated as populated pending confirmation");
+        assert!(
+            d.next_last_emit_nonempty,
+            "still treated as populated pending confirmation"
+        );
         assert_eq!(d.next_consecutive_empty, 1);
     }
 
@@ -668,7 +702,10 @@ mod tests {
     fn empties_after_confirmed_clear_are_suppressed() {
         // Already-empty steady state (last emit was empty).
         let d = decide_bots_graph_emit(0, false, 0);
-        assert!(!d.send, "empty poll with a known-empty roster carries no new info");
+        assert!(
+            !d.send,
+            "empty poll with a known-empty roster carries no new info"
+        );
         assert!(!d.next_last_emit_nonempty);
         assert_eq!(d.next_consecutive_empty, 1);
 

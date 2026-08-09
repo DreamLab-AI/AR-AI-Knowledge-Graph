@@ -6,10 +6,10 @@
 use hexser::{Directive, DirectiveHandler, HexResult, Hexserror};
 use std::sync::Arc;
 
+use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::node::Node;
-use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 
 // ============================================================================
 // ADD NODE
@@ -313,7 +313,6 @@ pub struct SaveGraph {
 
 impl Directive for SaveGraph {
     fn validate(&self) -> HexResult<()> {
-        
         Ok(())
     }
 }
@@ -356,7 +355,7 @@ impl<R: KnowledgeGraphRepository + Send + Sync + 'static> DirectiveHandler<SaveG
 
 #[derive(Debug, Clone)]
 pub struct BatchUpdatePositions {
-    pub positions: Vec<(u32, f32, f32, f32)>, 
+    pub positions: Vec<(u32, f32, f32, f32)>,
 }
 
 impl Directive for BatchUpdatePositions {

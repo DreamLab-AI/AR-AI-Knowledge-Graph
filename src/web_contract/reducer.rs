@@ -39,7 +39,10 @@ pub struct ReducerError {
 impl ReducerError {
     /// Construct a finding.
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
-        Self { code: code.into(), message: message.into() }
+        Self {
+            code: code.into(),
+            message: message.into(),
+        }
     }
 }
 
@@ -134,7 +137,11 @@ mod tests {
         type Event = PoolEvent;
 
         fn genesis(&self) -> PoolState {
-            PoolState { pot_sats: 0, entries: 0, owner_did: self.owner_did.clone() }
+            PoolState {
+                pot_sats: 0,
+                entries: 0,
+                owner_did: self.owner_did.clone(),
+            }
         }
 
         fn validate(&self, state: &PoolState) -> Vec<ReducerError> {
@@ -159,7 +166,11 @@ mod tests {
                             message: "pot overflow".into(),
                         }
                     })?;
-                    Ok(PoolState { pot_sats, entries: state.entries + 1, ..state.clone() })
+                    Ok(PoolState {
+                        pot_sats,
+                        entries: state.entries + 1,
+                        ..state.clone()
+                    })
                 }
                 PoolEvent::Close => Ok(state.clone()),
             }
@@ -168,7 +179,9 @@ mod tests {
 
     #[test]
     fn replay_is_deterministic_and_byte_stable() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
         let log = vec![
             PoolEvent::Stake { sats: 1000 },
             PoolEvent::Stake { sats: 2000 },
@@ -190,16 +203,30 @@ mod tests {
 
     #[test]
     fn transition_rejects_overflow_without_panicking() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
-        let state = PoolState { pot_sats: u64::MAX, entries: 0, owner_did: "did:nostr:aa".into() };
-        let err = pool.transition(&state, &PoolEvent::Stake { sats: 1 }).unwrap_err();
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
+        let state = PoolState {
+            pot_sats: u64::MAX,
+            entries: 0,
+            owner_did: "did:nostr:aa".into(),
+        };
+        let err = pool
+            .transition(&state, &PoolEvent::Stake { sats: 1 })
+            .unwrap_err();
         assert!(matches!(err, TransitionError::Rejected { .. }));
     }
 
     #[test]
     fn validate_flags_owner_drift_i1_guard() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
-        let drifted = PoolState { pot_sats: 0, entries: 0, owner_did: "did:nostr:bb".into() };
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
+        let drifted = PoolState {
+            pot_sats: 0,
+            entries: 0,
+            owner_did: "did:nostr:bb".into(),
+        };
         let errs = pool.validate(&drifted);
         assert_eq!(errs.len(), 1);
         assert_eq!(errs[0].code, "owner_drift");

@@ -133,10 +133,7 @@ pub struct JsonLdIngestPipeline {
 }
 
 impl JsonLdIngestPipeline {
-    pub fn new(
-        ontology: Arc<dyn OntologyRepository>,
-        graph: Arc<dyn GraphRepository>,
-    ) -> Self {
+    pub fn new(ontology: Arc<dyn OntologyRepository>, graph: Arc<dyn GraphRepository>) -> Self {
         Self { ontology, graph }
     }
 
@@ -157,10 +154,7 @@ impl JsonLdIngestPipeline {
 /// Free-function entry point matching the worktree-plan signature.
 /// Equivalent to `parse_and_emit`; adapter writes are handled by
 /// `JsonLdIngestPipeline::ingest_page` when port injection is needed.
-pub async fn ingest_page(
-    markdown: &str,
-    metadata: &PageMetadata,
-) -> Result<IngestOutcome> {
+pub async fn ingest_page(markdown: &str, metadata: &PageMetadata) -> Result<IngestOutcome> {
     parse_and_emit(markdown, metadata)
 }
 
@@ -225,7 +219,11 @@ mod tests {
 ```"#;
         let meta = PageMetadata::new("cyber.md");
         let outcome = parse_and_emit(markdown, &meta).unwrap();
-        assert!(outcome.shacl_report.is_valid(), "{:?}", outcome.shacl_report);
+        assert!(
+            outcome.shacl_report.is_valid(),
+            "{:?}",
+            outcome.shacl_report
+        );
     }
 
     #[test]

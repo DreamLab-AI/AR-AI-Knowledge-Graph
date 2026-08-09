@@ -170,7 +170,9 @@ fn query_cuda_version_isa() -> Option<(u32, u32)> {
     let cuda_marker = "CUDA Version: ";
     let pos = stdout.find(cuda_marker)?;
     let after = &stdout[pos + cuda_marker.len()..];
-    let end = after.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(after.len());
+    let end = after
+        .find(|c: char| !c.is_ascii_digit() && c != '.')
+        .unwrap_or(after.len());
     let ver_str = &after[..end];
     let parts: Vec<&str> = ver_str.split('.').collect();
     if parts.len() >= 2 {
@@ -315,7 +317,9 @@ pub fn downgrade_ptx_isa_if_needed(ptx: String) -> String {
     if let Some(ver_start) = ptx.find(".version ") {
         let after = &ptx[ver_start + 9..];
         // Extract the version string (e.g. "9.2")
-        let ver_end = after.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(after.len());
+        let ver_end = after
+            .find(|c: char| !c.is_ascii_digit() && c != '.')
+            .unwrap_or(after.len());
         let ver_str = &after[..ver_end];
         let parts: Vec<&str> = ver_str.split('.').collect();
         if parts.len() == 2 {
@@ -437,7 +441,10 @@ fn load_precompiled_ptx(module: PTXModule) -> Result<String, String> {
     //    build outputs newest-first so the freshest compile always wins.
     let mut build_outputs: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
     for profile in &["release", "debug"] {
-        let build_dir = PathBuf::from(manifest_dir).join("target").join(profile).join("build");
+        let build_dir = PathBuf::from(manifest_dir)
+            .join("target")
+            .join(profile)
+            .join("build");
         if let Ok(entries) = std::fs::read_dir(&build_dir) {
             for entry in entries.flatten() {
                 let candidate = entry.path().join("out").join(&ptx_file);
@@ -458,7 +465,9 @@ fn load_precompiled_ptx(module: PTXModule) -> Result<String, String> {
     // Legacy paths kept as fallback for Docker images that haven't rebuilt yet.
     ptx_paths.extend([
         PathBuf::from(manifest_dir).join("src/ptx").join(&ptx_file),
-        PathBuf::from(manifest_dir).join("../visionclaw-gpu/src/ptx").join(&ptx_file),
+        PathBuf::from(manifest_dir)
+            .join("../visionclaw-gpu/src/ptx")
+            .join(&ptx_file),
         PathBuf::from("/app/crates/visionclaw-gpu/src/ptx").join(&ptx_file),
         // Legacy paths — keep until Docker images are fully rebuilt
         PathBuf::from("/app/src/utils/ptx").join(&ptx_file),
@@ -522,8 +531,6 @@ pub fn load_all_ptx_modules_sync() -> Result<HashMap<PTXModule, String>, String>
 }
 
 pub async fn load_ptx() -> Result<String, String> {
-    
-    
     load_ptx_sync()
 }
 
@@ -535,7 +542,6 @@ pub fn compile_ptx_fallback_sync_module(module: PTXModule) -> Result<String, Str
     let arch = effective_cuda_arch();
     info!("Using CUDA architecture: sm_{}", arch);
 
-    
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let cu_path = Path::new(manifest_dir)
         .join("src")
@@ -651,7 +657,12 @@ mod tests {
         for module in PTXModule::all_modules() {
             let var = module.env_var();
             assert!(!var.is_empty());
-            assert_eq!(var, var.to_uppercase(), "env_var not uppercase for {:?}", module);
+            assert_eq!(
+                var,
+                var.to_uppercase(),
+                "env_var not uppercase for {:?}",
+                module
+            );
         }
     }
 
@@ -687,21 +698,33 @@ mod tests {
     fn ptx_missing_version_fails() {
         let ptx = ".target sm_89\n.entry my_kernel() { ret; }";
         let err = validate_ptx(ptx).unwrap_err();
-        assert!(err.contains(".version"), "error should mention .version: {}", err);
+        assert!(
+            err.contains(".version"),
+            "error should mention .version: {}",
+            err
+        );
     }
 
     #[test]
     fn ptx_missing_target_fails() {
         let ptx = ".version 9.0\n.entry my_kernel() { ret; }";
         let err = validate_ptx(ptx).unwrap_err();
-        assert!(err.contains(".target"), "error should mention .target: {}", err);
+        assert!(
+            err.contains(".target"),
+            "error should mention .target: {}",
+            err
+        );
     }
 
     #[test]
     fn ptx_missing_entry_fails() {
         let ptx = ".version 9.0\n.target sm_89\n";
         let err = validate_ptx(ptx).unwrap_err();
-        assert!(err.contains(".entry"), "error should mention .entry: {}", err);
+        assert!(
+            err.contains(".entry"),
+            "error should mention .entry: {}",
+            err
+        );
     }
 
     #[test]
@@ -812,7 +835,11 @@ mod tests {
         let arch = effective_cuda_arch();
         assert!(!arch.is_empty());
         // Must be numeric (sm_XX where XX is digits).
-        assert!(arch.chars().all(|c| c.is_ascii_digit()), "arch not numeric: {}", arch);
+        assert!(
+            arch.chars().all(|c| c.is_ascii_digit()),
+            "arch not numeric: {}",
+            arch
+        );
     }
 
     // ── get_compiled_ptx_path (env-var lookup, no FS access) ──────────────

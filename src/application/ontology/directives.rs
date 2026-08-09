@@ -94,7 +94,6 @@ impl DirectiveHandler<UpdateOwlClass> for UpdateOwlClassHandler {
                 directive.class.iri
             );
 
-            
             let existing = self
                 .repository
                 .get_owl_class(&directive.class.iri)
@@ -105,7 +104,6 @@ impl DirectiveHandler<UpdateOwlClass> for UpdateOwlClassHandler {
                 return Err(Hexserror::not_found("OWL class", &directive.class.iri));
             }
 
-            
             self.repository
                 .add_owl_class(&directive.class)
                 .await
@@ -153,7 +151,6 @@ impl DirectiveHandler<RemoveOwlClass> for RemoveOwlClassHandler {
         tokio::runtime::Handle::current().block_on(async {
             log::info!("Executing RemoveOwlClass directive: iri={}", directive.iri);
 
-            
             let existing = self
                 .repository
                 .get_owl_class(&directive.iri)
@@ -261,7 +258,6 @@ impl DirectiveHandler<UpdateOwlProperty> for UpdateOwlPropertyHandler {
                 directive.property.iri
             );
 
-            
             let existing = self
                 .repository
                 .get_owl_property(&directive.property.iri)
@@ -275,7 +271,6 @@ impl DirectiveHandler<UpdateOwlProperty> for UpdateOwlPropertyHandler {
                 ));
             }
 
-            
             self.repository
                 .add_owl_property(&directive.property)
                 .await
@@ -397,7 +392,6 @@ pub struct StoreInferenceResults {
 
 impl Directive for StoreInferenceResults {
     fn validate(&self) -> HexResult<()> {
-        
         Ok(())
     }
 }
@@ -442,7 +436,6 @@ pub struct SaveOntologyGraph {
 
 impl Directive for SaveOntologyGraph {
     fn validate(&self) -> HexResult<()> {
-        
         Ok(())
     }
 }

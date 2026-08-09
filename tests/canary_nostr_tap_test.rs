@@ -32,15 +32,31 @@ fn fire(pubkey: &str, canary_id: &str, evidence: &str) -> TapEvent {
 
 #[test]
 fn accepts_a_valid_signed_allow_listed_fire() {
-    let ev = fire(ALICE, "CANARY-VC-REC2-CASE", "broker:new_case then broker:case_decided");
+    let ev = fire(
+        ALICE,
+        "CANARY-VC-REC2-CASE",
+        "broker:new_case then broker:case_decided",
+    );
     match map_event_to_observation(&ev, &allow(&[ALICE])) {
-        TapDecision::Accepted { canary_id, evidence } => {
+        TapDecision::Accepted {
+            canary_id,
+            evidence,
+        } => {
             assert_eq!(canary_id, "CANARY-VC-REC2-CASE");
             // Evidence discloses provenance (source pubkey + event id) so the
             // fire log is honest that this fire arrived over the Nostr tap.
-            assert!(evidence.contains(ALICE), "evidence must name the source pubkey");
-            assert!(evidence.contains("eventid00"), "evidence must name the event id");
-            assert!(evidence.contains("broker:new_case"), "evidence must carry the repo payload");
+            assert!(
+                evidence.contains(ALICE),
+                "evidence must name the source pubkey"
+            );
+            assert!(
+                evidence.contains("eventid00"),
+                "evidence must name the event id"
+            );
+            assert!(
+                evidence.contains("broker:new_case"),
+                "evidence must carry the repo payload"
+            );
         }
         other => panic!("expected Accepted, got {other:?}"),
     }
@@ -119,7 +135,10 @@ fn evidence_falls_back_when_the_repo_supplies_none() {
     // content with canary_id but no evidence field at all
     ev.content = json!({ "canary_id": "CANARY-VC-RESA-KG" }).to_string();
     match map_event_to_observation(&ev, &allow(&[ALICE])) {
-        TapDecision::Accepted { canary_id, evidence } => {
+        TapDecision::Accepted {
+            canary_id,
+            evidence,
+        } => {
             assert_eq!(canary_id, "CANARY-VC-RESA-KG");
             assert!(evidence.contains("(no evidence provided)"));
         }
@@ -154,7 +173,10 @@ fn from_value_parses_a_raw_relay_event_object() {
     let ev = TapEvent::from_value(&obj, true).expect("well-formed event parses");
     assert_eq!(ev.pubkey, ALICE);
     assert_eq!(ev.kind, 1);
-    assert!(ev.tags.iter().any(|t| t == &vec!["t".to_string(), LIVENESS_CANARY_TAG.to_string()]));
+    assert!(ev
+        .tags
+        .iter()
+        .any(|t| t == &vec!["t".to_string(), LIVENESS_CANARY_TAG.to_string()]));
     match map_event_to_observation(&ev, &allow(&[ALICE])) {
         TapDecision::Accepted { canary_id, .. } => assert_eq!(canary_id, "CANARY-VC-REC11-TRACE"),
         other => panic!("expected Accepted, got {other:?}"),

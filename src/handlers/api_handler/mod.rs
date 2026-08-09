@@ -6,19 +6,21 @@ pub mod ontology;
 pub mod ontology_physics;
 pub mod quest3;
 // pub mod sessions;
-pub mod visualisation;
 pub mod semantic_forces;
+pub mod visualisation;
 
 // Re-export specific types and functions
 // Re-export specific types and functions
 pub use files::{fetch_and_process_files, get_file_content};
 
-pub use graph::{get_graph_data, get_graph_positions, get_paginated_graph_data, refresh_graph, update_graph};
+pub use graph::{
+    get_graph_data, get_graph_positions, get_paginated_graph_data, refresh_graph, update_graph,
+};
 
 pub use visualisation::get_visualisation_settings;
 
 use crate::handlers::utils::execute_in_thread;
-use crate::{ok_json, error_json};
+use crate::{error_json, ok_json};
 use actix_web::{web, HttpResponse, Responder};
 use log::{error, info};
 use serde_json::json;
@@ -35,13 +37,11 @@ async fn health_check() -> Result<HttpResponse, actix_web::Error> {
 async fn get_app_config(state: web::Data<crate::AppState>) -> impl Responder {
     info!("App config requested via CQRS");
 
-    
     use crate::application::settings::{LoadAllSettings, LoadAllSettingsHandler};
     use hexser::QueryHandler;
 
     let handler = LoadAllSettingsHandler::new(state.settings_repository.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(LoadAllSettings)).await;
 
     match result {
@@ -74,7 +74,7 @@ async fn get_app_config(state: web::Data<crate::AppState>) -> impl Responder {
         Ok(Ok(None)) => {
             log::warn!("No settings found, using defaults");
             use crate::config::AppFullSettings;
-use crate::ok_json;
+            use crate::ok_json;
 
             let settings = AppFullSettings::default();
             ok_json!(json!({
@@ -119,10 +119,8 @@ use crate::ok_json;
 // NOTE: Do NOT wrap in web::scope("") — it acts as a catch-all that shadows
 // every .configure() registered after api_handler::config on the parent scope.
 pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg
-        .route("/health", web::get().to(health_check))
+    cfg.route("/health", web::get().to(health_check))
         .route("/config", web::get().to(get_app_config))
-
         .configure(files::config)
         .configure(graph::config)
         .configure(crate::handlers::graph_state_handler::config)
@@ -131,13 +129,11 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         // ontology_handler::config — collapsed; the read/mutate handlers from
         // ontology_handler are now imported into ontology::config).
         .configure(bots::config)
-
         .configure(analytics::config)
         .configure(quest3::config)
         .configure(crate::handlers::nostr_handler::config)
         // OLD settings_handler disabled - using new SettingsActor routes from visionclaw_server::settings::api
         // .configure(crate::handlers::settings_handler::config)
-
         .configure(crate::handlers::ragflow_handler::config)
         .configure(crate::handlers::constraints_handler::config)
         // Ontology routes (previously orphaned outside scope)

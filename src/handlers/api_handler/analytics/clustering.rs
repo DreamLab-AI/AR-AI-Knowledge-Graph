@@ -1,27 +1,33 @@
-
-
 use log::{error, info};
 
+use super::{Cluster, ClusteringParams, ClusteringRequest};
 use crate::AppState;
-use super::{Cluster, ClusteringRequest, ClusteringParams};
 
 pub async fn perform_clustering(
     app_state: &actix_web::web::Data<AppState>,
     request: &ClusteringRequest,
     task_id: &str,
 ) -> Result<Vec<Cluster>, String> {
-    info!("Performing {} clustering for task {}", request.method, task_id);
+    info!(
+        "Performing {} clustering for task {}",
+        request.method, task_id
+    );
 
     // Route through GPUManagerActor -> AnalyticsSupervisor -> ClusteringActor
     // (not ForceComputeActor which only stubs clustering)
     if let Some(gpu_manager) = app_state.gpu_manager_addr.as_ref() {
-
         use crate::actors::messages::PerformGPUClustering;
 
-        info!("Using GPU-accelerated clustering via GPUManager for method: {}", request.method);
+        info!(
+            "Using GPU-accelerated clustering via GPUManager for method: {}",
+            request.method
+        );
 
         if let Err(validation_error) = validate_clustering_params(request) {
-            error!("Clustering parameter validation failed: {}", validation_error);
+            error!(
+                "Clustering parameter validation failed: {}",
+                validation_error
+            );
             return Err(validation_error);
         }
 
@@ -33,7 +39,10 @@ pub async fn perform_clustering(
 
         match gpu_manager.send(msg).await {
             Ok(Ok(clusters)) => {
-                info!("GPU clustering completed successfully: {} clusters found", clusters.len());
+                info!(
+                    "GPU clustering completed successfully: {} clusters found",
+                    clusters.len()
+                );
                 // ADR-031 D3 single-writer: ClusteringActor populates node_analytics
                 // (masked key, 1-based id, stale reset) while running the kernels. This
                 // path no longer writes node_analytics — the previous 0-based unmasked
@@ -52,14 +61,31 @@ pub async fn perform_clustering(
     }
 
     // No GPU manager available -- GPU is required for all clustering methods
-    error!("GPU compute not available. GPU is required for clustering; CPU fallback not available.");
-    Err("GPU compute not available. GPU is required for clustering; CPU fallback not available.".to_string())
+    error!(
+        "GPU compute not available. GPU is required for clustering; CPU fallback not available."
+    );
+    Err(
+        "GPU compute not available. GPU is required for clustering; CPU fallback not available."
+            .to_string(),
+    )
 }
 
 fn validate_clustering_params(request: &ClusteringRequest) -> Result<(), String> {
-    let valid_methods = ["spectral", "hierarchical", "dbscan", "kmeans", "louvain", "leiden", "communities", "affinity"];
+    let valid_methods = [
+        "spectral",
+        "hierarchical",
+        "dbscan",
+        "kmeans",
+        "louvain",
+        "leiden",
+        "communities",
+        "affinity",
+    ];
     if !valid_methods.contains(&request.method.as_str()) {
-        return Err(format!("Unsupported clustering method: {}. Valid methods: {:?}", request.method, valid_methods));
+        return Err(format!(
+            "Unsupported clustering method: {}. Valid methods: {:?}",
+            request.method, valid_methods
+        ));
     }
 
     match request.method.as_str() {

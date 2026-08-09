@@ -2,38 +2,22 @@
 // Uses Knowledge Graph application layer for all graph operations
 
 use crate::handlers::utils::execute_in_thread;
-use crate::{ok_json, error_json, not_found};
 use crate::AppState;
+use crate::{error_json, not_found, ok_json};
 use actix_web::{web, Responder};
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
 // Import CQRS handlers
 use crate::application::knowledge_graph::{
-    AddEdge,
-    AddEdgeHandler,
-    
-    AddNode,
-    AddNodeHandler,
-    BatchUpdatePositions,
-    BatchUpdatePositionsHandler,
-    GetGraphStatistics,
-    GetGraphStatisticsHandler,
-    GetNode,
-    GetNodeHandler,
-    
-    LoadGraph,
-    LoadGraphHandler,
-    RemoveNode,
-    RemoveNodeHandler,
-    UpdateEdge,
-    UpdateEdgeHandler,
-    UpdateNode,
-    UpdateNodeHandler,
+    AddEdge, AddEdgeHandler, AddNode, AddNodeHandler, BatchUpdatePositions,
+    BatchUpdatePositionsHandler, GetGraphStatistics, GetGraphStatisticsHandler, GetNode,
+    GetNodeHandler, LoadGraph, LoadGraphHandler, RemoveNode, RemoveNodeHandler, UpdateEdge,
+    UpdateEdgeHandler, UpdateNode, UpdateNodeHandler,
 };
+use hexser::{DirectiveHandler, QueryHandler};
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::node::Node;
-use hexser::{DirectiveHandler, QueryHandler};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,15 +66,12 @@ pub struct BatchPositionsRequest {
 pub async fn get_graph_state(state: web::Data<AppState>) -> impl Responder {
     info!("Received request for complete graph state via CQRS");
 
-    
     let load_handler = LoadGraphHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || load_handler.handle(LoadGraph)).await;
 
     match result {
         Ok(Ok(query_result)) => {
-            
             let graph_data = match query_result {
                 crate::application::knowledge_graph::QueryResult::Graph(graph_arc) => graph_arc,
                 _ => {
@@ -99,7 +80,6 @@ pub async fn get_graph_state(state: web::Data<AppState>) -> impl Responder {
                 }
             };
 
-            
             let graph_ref = graph_data.as_ref();
             let positions: Vec<NodePosition> = graph_ref
                 .nodes
@@ -117,7 +97,7 @@ pub async fn get_graph_state(state: web::Data<AppState>) -> impl Responder {
                 edges_count: graph_ref.edges.len(),
                 metadata_count: graph_ref.metadata.len(),
                 positions,
-                settings_version: "1.0.0".to_string(), 
+                settings_version: "1.0.0".to_string(),
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
@@ -145,15 +125,12 @@ pub async fn get_graph_state(state: web::Data<AppState>) -> impl Responder {
 pub async fn get_graph_statistics(state: web::Data<AppState>) -> impl Responder {
     info!("Received request for graph statistics via CQRS");
 
-    
     let handler = GetGraphStatisticsHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(GetGraphStatistics)).await;
 
     match result {
         Ok(Ok(query_result)) => {
-            
             let statistics = match query_result {
                 crate::application::knowledge_graph::QueryResult::Statistics(stats) => stats,
                 _ => {
@@ -188,10 +165,8 @@ pub async fn add_node(
         node.metadata_id
     );
 
-    
     let handler = AddNodeHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(AddNode { node })).await;
 
     match result {
@@ -221,10 +196,8 @@ pub async fn update_node(
     let node = request.into_inner().node;
     info!("Updating node via CQRS directive: id={}", node.id);
 
-    
     let handler = UpdateNodeHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(UpdateNode { node })).await;
 
     match result {
@@ -245,14 +218,16 @@ pub async fn update_node(
     }
 }
 
-pub async fn remove_node(_auth: crate::settings::auth_extractor::AuthenticatedUser, state: web::Data<AppState>, node_id: web::Path<u32>) -> impl Responder {
+pub async fn remove_node(
+    _auth: crate::settings::auth_extractor::AuthenticatedUser,
+    state: web::Data<AppState>,
+    node_id: web::Path<u32>,
+) -> impl Responder {
     let id = node_id.into_inner();
     info!("Removing node via CQRS directive: id={}", id);
 
-    
     let handler = RemoveNodeHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(RemoveNode { node_id: id })).await;
 
     match result {
@@ -277,15 +252,12 @@ pub async fn get_node(state: web::Data<AppState>, node_id: web::Path<u32>) -> im
     let id = node_id.into_inner();
     info!("Getting node via CQRS query: id={}", id);
 
-    
     let handler = GetNodeHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(GetNode { node_id: id })).await;
 
     match result {
         Ok(Ok(query_result)) => {
-            
             let node_opt = match query_result {
                 crate::application::knowledge_graph::QueryResult::Node(node) => node,
                 _ => {
@@ -330,10 +302,8 @@ pub async fn add_edge(
         edge_source, edge_target
     );
 
-    
     let handler = AddEdgeHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(AddEdge { edge })).await;
 
     match result {
@@ -355,14 +325,16 @@ pub async fn add_edge(
     }
 }
 
-pub async fn update_edge(_auth: crate::settings::auth_extractor::AuthenticatedUser, state: web::Data<AppState>, request: web::Json<Edge>) -> impl Responder {
+pub async fn update_edge(
+    _auth: crate::settings::auth_extractor::AuthenticatedUser,
+    state: web::Data<AppState>,
+    request: web::Json<Edge>,
+) -> impl Responder {
     let edge = request.into_inner();
     info!("Updating edge via CQRS directive: id={}", edge.id);
 
-    
     let handler = UpdateEdgeHandler::new(state.graph_adapter.clone());
 
-    
     let result = execute_in_thread(move || handler.handle(UpdateEdge { edge })).await;
 
     match result {
@@ -394,10 +366,8 @@ pub async fn batch_update_positions(
         positions.len()
     );
 
-    
     let handler = BatchUpdatePositionsHandler::new(state.graph_adapter.clone());
 
-    
     let result =
         execute_in_thread(move || handler.handle(BatchUpdatePositions { positions })).await;
 

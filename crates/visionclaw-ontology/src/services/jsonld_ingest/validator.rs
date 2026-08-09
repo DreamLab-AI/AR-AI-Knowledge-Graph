@@ -34,8 +34,8 @@ use std::collections::HashSet;
 
 use super::errors::{JsonLdIngestError, Result};
 use super::expander::{
-    ExpandedDocument, ExpandedNode, ExpandedValue, NodeOrigin, V11Feature,
-    ACCEPTED_CONTEXT_V1, ACCEPTED_CONTEXT_V2, OWL_NS, PROV_NS, VC_NS,
+    ExpandedDocument, ExpandedNode, ExpandedValue, NodeOrigin, V11Feature, ACCEPTED_CONTEXT_V1,
+    ACCEPTED_CONTEXT_V2, OWL_NS, PROV_NS, VC_NS,
 };
 
 /// The declared root of the ontology class hierarchy (D-08 §C3 / fixture 103).
@@ -48,14 +48,29 @@ pub const ONTOLOGY_ROOT_IRI_NGM: &str = "urn:ngm:class:built-environment";
 const OWL_OUT_OF_PROFILE: &[(&str, &str)] = &[
     ("unionOf", "OWL 2 EL §3, Table 1 — no disjunction"),
     ("complementOf", "OWL 2 EL §3, Table 1 — no negation"),
-    ("allValuesFrom", "OWL 2 EL §3, Table 1 — no universal restrictions"),
+    (
+        "allValuesFrom",
+        "OWL 2 EL §3, Table 1 — no universal restrictions",
+    ),
     ("disjointWith", "OWL 2 EL §3, Table 1 — no disjoint classes"),
-    ("AllDisjointClasses", "OWL 2 EL §3, Table 1 — no disjoint classes"),
+    (
+        "AllDisjointClasses",
+        "OWL 2 EL §3, Table 1 — no disjoint classes",
+    ),
     ("hasValue", "OWL 2 EL §3, Table 1"),
     ("hasSelf", "OWL 2 EL §3, Table 1"),
-    ("minCardinality", "OWL 2 EL §3, Table 1 — no cardinality restrictions"),
-    ("maxCardinality", "OWL 2 EL §3, Table 1 — no cardinality restrictions"),
-    ("cardinality", "OWL 2 EL §3, Table 1 — no cardinality restrictions"),
+    (
+        "minCardinality",
+        "OWL 2 EL §3, Table 1 — no cardinality restrictions",
+    ),
+    (
+        "maxCardinality",
+        "OWL 2 EL §3, Table 1 — no cardinality restrictions",
+    ),
+    (
+        "cardinality",
+        "OWL 2 EL §3, Table 1 — no cardinality restrictions",
+    ),
     ("AsymmetricProperty", "OWL 2 EL §3, Table 1"),
     ("IrreflexiveProperty", "OWL 2 EL §3, Table 1"),
 ];
@@ -148,7 +163,10 @@ fn type_display_name(types: &[String]) -> String {
 
 /// Permitted `@context` URLs. Currently only v1 (D11).
 pub fn accepted_contexts() -> Vec<String> {
-    vec![ACCEPTED_CONTEXT_V1.to_string(), ACCEPTED_CONTEXT_V2.to_string()]
+    vec![
+        ACCEPTED_CONTEXT_V1.to_string(),
+        ACCEPTED_CONTEXT_V2.to_string(),
+    ]
 }
 
 /// Run every check from the inventory. Returns the first error encountered
@@ -297,7 +315,10 @@ fn check_node(
     }
 
     // G.2 Bridge target must be concrete (not a urn:visionclaw:linked:*).
-    let is_bridge = node.types.iter().any(|t| t == &format!("{}BridgeRecord", VC_NS));
+    let is_bridge = node
+        .types
+        .iter()
+        .any(|t| t == &format!("{}BridgeRecord", VC_NS));
     if is_bridge {
         for (p, v) in &node.fields {
             if p == &format!("{}bridgeTo", VC_NS) {
@@ -492,7 +513,10 @@ fn is_valid_iri(s: &str) -> bool {
         return false;
     }
     // Cheap scheme check — first char must be ASCII alpha.
-    s.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+    s.chars()
+        .next()
+        .map(|c| c.is_ascii_alphabetic())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -501,12 +525,30 @@ mod tests {
 
     #[test]
     fn iri_scheme_bits() {
-        assert_eq!(iri_scheme_class_bit("urn:visionclaw:page:abc"), Some("0x40000000"));
-        assert_eq!(iri_scheme_class_bit("urn:visionclaw:agent:run-x:step-0"), Some("0x80000000"));
-        assert_eq!(iri_scheme_class_bit("urn:visionclaw:linked:foo"), Some("0x08000000"));
-        assert_eq!(iri_scheme_class_bit("urn:visionclaw:owl:class:cybernetics"), Some("0x04000000"));
-        assert_eq!(iri_scheme_class_bit("urn:visionclaw:owl:axiom:abc"), Some("0x0C000000"));
-        assert_eq!(iri_scheme_class_bit("urn:visionclaw:owl:property:p"), Some("0x10000000"));
+        assert_eq!(
+            iri_scheme_class_bit("urn:visionclaw:page:abc"),
+            Some("0x40000000")
+        );
+        assert_eq!(
+            iri_scheme_class_bit("urn:visionclaw:agent:run-x:step-0"),
+            Some("0x80000000")
+        );
+        assert_eq!(
+            iri_scheme_class_bit("urn:visionclaw:linked:foo"),
+            Some("0x08000000")
+        );
+        assert_eq!(
+            iri_scheme_class_bit("urn:visionclaw:owl:class:cybernetics"),
+            Some("0x04000000")
+        );
+        assert_eq!(
+            iri_scheme_class_bit("urn:visionclaw:owl:axiom:abc"),
+            Some("0x0C000000")
+        );
+        assert_eq!(
+            iri_scheme_class_bit("urn:visionclaw:owl:property:p"),
+            Some("0x10000000")
+        );
     }
 
     #[test]

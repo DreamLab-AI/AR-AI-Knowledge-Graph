@@ -149,7 +149,10 @@ pub struct AgentRecord {
     pub last_activity_ms: Option<i64>,
     /// Opaque agentbox metadata, passed through unmodified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(feature = "typescript-export", ts(type = "Record<string, unknown> | null"))]
+    #[cfg_attr(
+        feature = "typescript-export",
+        ts(type = "Record<string, unknown> | null")
+    )]
     pub metadata: Option<serde_json::Value>,
 }
 

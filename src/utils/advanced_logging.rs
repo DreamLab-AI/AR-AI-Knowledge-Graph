@@ -14,8 +14,8 @@ use std::{
     },
 };
 
-use crate::utils::time;
 use crate::utils::json::to_json;
+use crate::utils::time;
 
 // Structured log entry for JSON logging
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,7 +181,6 @@ impl AdvancedLogger {
         memory_allocated_mb: f64,
         memory_peak_mb: f64,
     ) {
-        
         let gpu_error_count = self.gpu_error_count.lock().unwrap_or_else(|poisoned| {
             warn!("GPU error count mutex was poisoned, recovering");
             poisoned.into_inner()
@@ -195,31 +194,26 @@ impl AdvancedLogger {
             poisoned.into_inner()
         });
 
-        
         let current_error_count = *gpu_error_count;
         let current_recovery_attempts = *recovery_attempts;
 
-        
         let performance_anomaly = self.detect_performance_anomaly_with_metrics(
             kernel_name,
             execution_time_us,
             &metrics_guard,
         );
 
-        
         metrics_guard
             .entry(kernel_name.to_string())
             .or_insert_with(Vec::new)
             .push(execution_time_us);
 
-        
         if let Some(kernel_metrics) = metrics_guard.get_mut(kernel_name) {
             if kernel_metrics.len() > 100 {
                 kernel_metrics.remove(0);
             }
         }
 
-        
         drop(metrics_guard);
 
         let gpu_metrics = GPULogMetrics {
@@ -233,7 +227,6 @@ impl AdvancedLogger {
             performance_anomaly: Some(performance_anomaly),
         };
 
-        
         drop(gpu_error_count);
         drop(recovery_attempts);
 
@@ -255,7 +248,6 @@ impl AdvancedLogger {
     }
 
     pub fn log_gpu_error(&self, error_msg: &str, recovery_attempted: bool) {
-        
         let mut gpu_error_count_guard = self.gpu_error_count.lock().unwrap_or_else(|poisoned| {
             warn!("GPU error count mutex was poisoned, recovering");
             poisoned.into_inner()
@@ -266,17 +258,14 @@ impl AdvancedLogger {
                 poisoned.into_inner()
             });
 
-        
         *gpu_error_count_guard += 1;
         if recovery_attempted {
             *recovery_attempts_guard += 1;
         }
 
-        
         let current_error_count = *gpu_error_count_guard;
         let current_recovery_attempts = *recovery_attempts_guard;
 
-        
         drop(gpu_error_count_guard);
         drop(recovery_attempts_guard);
 
@@ -359,8 +348,7 @@ impl AdvancedLogger {
     }
 
     fn write_log_entry(&self, component: LogComponent, entry: &LogEntry) {
-        let json_line =
-            to_json(entry).unwrap_or_else(|_| "Invalid log entry".to_string());
+        let json_line = to_json(entry).unwrap_or_else(|_| "Invalid log entry".to_string());
 
         if let Some(writer_mutex) = self.log_writers.get(&component) {
             // Try non-blocking first for the fast path
@@ -485,7 +473,6 @@ impl AdvancedLogger {
                     a_time.cmp(&b_time)
                 });
 
-                
                 for file_entry in log_files
                     .iter()
                     .take(log_files.len() - self.rotation_config.max_files)
@@ -501,7 +488,6 @@ impl AdvancedLogger {
         if let Ok(metrics) = self.performance_metrics.try_lock() {
             self.detect_performance_anomaly_with_metrics(kernel_name, execution_time_us, &metrics)
         } else {
-            
             false
         }
     }
@@ -522,7 +508,6 @@ impl AdvancedLogger {
                     / kernel_metrics.len() as f64;
                 let std_dev = variance.sqrt();
 
-                
                 execution_time_us > avg + (3.0 * std_dev)
             } else {
                 false
@@ -535,12 +520,10 @@ impl AdvancedLogger {
     pub fn get_performance_summary(&self) -> HashMap<String, serde_json::Value> {
         let mut summary = HashMap::new();
 
-        
         let metrics_result = self.performance_metrics.try_lock();
         let gpu_error_result = self.gpu_error_count.try_lock();
         let recovery_result = self.recovery_attempts.try_lock();
 
-        
         if let Ok(metrics) = metrics_result {
             for (kernel_name, times) in metrics.iter() {
                 if !times.is_empty() {
@@ -567,7 +550,6 @@ impl AdvancedLogger {
             );
         }
 
-        
         if let Ok(gpu_errors) = gpu_error_result {
             summary.insert("gpu_errors".to_string(), json!(*gpu_errors));
         }

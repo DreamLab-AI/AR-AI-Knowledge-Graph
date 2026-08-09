@@ -12,15 +12,12 @@ use log::info;
 use std::collections::HashMap;
 
 impl UnifiedGPUCompute {
-
     pub fn record_kernel_time(&mut self, kernel_name: &str, execution_time_ms: f32) {
-
         *self
             .performance_metrics
             .total_kernel_calls
             .entry(kernel_name.to_string())
             .or_insert(0) += 1;
-
 
         let times = self
             .performance_metrics
@@ -31,7 +28,6 @@ impl UnifiedGPUCompute {
         if times.len() > 100 {
             times.remove(0);
         }
-
 
         let avg_time = times.iter().sum::<f32>() / times.len() as f32;
         match kernel_name {
@@ -55,7 +51,6 @@ impl UnifiedGPUCompute {
             _ => {}
         }
 
-
         let execution_time_us = execution_time_ms * 1000.0;
         let memory_mb = self.performance_metrics.current_memory_usage as f64 / (1024.0 * 1024.0);
         let peak_memory_mb = self.performance_metrics.peak_memory_usage as f64 / (1024.0 * 1024.0);
@@ -66,7 +61,6 @@ impl UnifiedGPUCompute {
             peak_memory_mb,
         );
     }
-
 
     pub fn execute_kernel_with_timing<F>(
         &mut self,
@@ -79,38 +73,29 @@ impl UnifiedGPUCompute {
         let start_event = Event::new(EventFlags::DEFAULT)?;
         let stop_event = Event::new(EventFlags::DEFAULT)?;
 
-
         start_event.record(&self.stream)?;
-
 
         kernel_func()?;
 
-
         stop_event.record(&self.stream)?;
-
 
         self.stream.synchronize()?;
         let elapsed_ms = start_event.elapsed_time_f32(&stop_event)?;
-
 
         self.record_kernel_time(kernel_name, elapsed_ms);
 
         Ok(())
     }
 
-
     pub fn get_performance_metrics(&self) -> &GPUPerformanceMetrics {
         &self.performance_metrics
     }
-
 
     pub fn get_performance_metrics_mut(&mut self) -> &mut GPUPerformanceMetrics {
         &mut self.performance_metrics
     }
 
-
     pub fn update_memory_usage(&mut self) {
-
         let node_memory = self.allocated_nodes * std::mem::size_of::<f32>() * 12;
         let edge_memory =
             self.allocated_edges * (std::mem::size_of::<i32>() * 2 + std::mem::size_of::<f32>());
@@ -128,9 +113,7 @@ impl UnifiedGPUCompute {
         }
         self.performance_metrics.total_memory_allocated = self.total_memory_allocated;
 
-
         if (current_usage as f64 - previous_usage as f64).abs() > (1024.0 * 1024.0) {
-
             let event_type = if current_usage > previous_usage {
                 "allocation"
             } else {
@@ -142,11 +125,9 @@ impl UnifiedGPUCompute {
         }
     }
 
-
     pub fn log_gpu_error(&self, error_msg: &str, recovery_attempted: bool) {
         log_gpu_error(error_msg, recovery_attempted);
     }
-
 
     pub fn reset_performance_metrics(&mut self) {
         let peak_memory = self.performance_metrics.peak_memory_usage;
@@ -174,21 +155,15 @@ impl UnifiedGPUCompute {
                 let mut kernel_stats = HashMap::new();
                 kernel_stats.insert(
                     "avg_time_ms".to_string(),
-                    serde_json::Value::Number(
-                        safe_json_number(avg_time as f64),
-                    ),
+                    serde_json::Value::Number(safe_json_number(avg_time as f64)),
                 );
                 kernel_stats.insert(
                     "min_time_ms".to_string(),
-                    serde_json::Value::Number(
-                        safe_json_number(min_time as f64),
-                    ),
+                    serde_json::Value::Number(safe_json_number(min_time as f64)),
                 );
                 kernel_stats.insert(
                     "max_time_ms".to_string(),
-                    serde_json::Value::Number(
-                        safe_json_number(max_time as f64),
-                    ),
+                    serde_json::Value::Number(safe_json_number(max_time as f64)),
                 );
                 kernel_stats.insert(
                     "total_calls".to_string(),
@@ -227,7 +202,11 @@ impl UnifiedGPUCompute {
         let use_landmarks = n > 2000;
         let sources: Vec<usize> = if use_landmarks {
             let num_landmarks = (n as f64).sqrt().ceil() as usize;
-            let step = if num_landmarks > 0 { n / num_landmarks } else { 1 };
+            let step = if num_landmarks > 0 {
+                n / num_landmarks
+            } else {
+                1
+            };
             (0..num_landmarks).map(|i| (i * step).min(n - 1)).collect()
         } else {
             (0..n).collect()
@@ -709,10 +688,7 @@ impl UnifiedGPUCompute {
     /// - `max_iterations`: Maximum iterations for label propagation convergence
     /// # Returns
     /// Tuple of (labels per node, number of components)
-    pub fn run_connected_components_gpu(
-        &mut self,
-        max_iterations: i32,
-    ) -> Result<(Vec<i32>, i32)> {
+    pub fn run_connected_components_gpu(&mut self, max_iterations: i32) -> Result<(Vec<i32>, i32)> {
         let num_nodes = self.get_num_nodes();
         if num_nodes == 0 {
             return Ok((vec![], 0));

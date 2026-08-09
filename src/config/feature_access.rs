@@ -2,38 +2,30 @@ use log::info;
 use std::env;
 
 pub struct FeatureAccess {
-    
     pub approved_pubkeys: Vec<String>,
 
-    
     pub perplexity_enabled: Vec<String>,
     pub openai_enabled: Vec<String>,
     pub ragflow_enabled: Vec<String>,
 
-    
     pub power_users: Vec<String>,
     pub settings_sync_enabled: Vec<String>,
 }
 
 impl FeatureAccess {
-    
     pub fn from_env() -> Self {
         Self {
-            
             approved_pubkeys: Self::load_pubkeys_from_env("APPROVED_PUBKEYS"),
 
-            
             perplexity_enabled: Self::load_pubkeys_from_env("PERPLEXITY_ENABLED_PUBKEYS"),
             openai_enabled: Self::load_pubkeys_from_env("OPENAI_ENABLED_PUBKEYS"),
             ragflow_enabled: Self::load_pubkeys_from_env("RAGFLOW_ENABLED_PUBKEYS"),
 
-            
             power_users: Self::load_pubkeys_from_env("POWER_USER_PUBKEYS"),
             settings_sync_enabled: Self::load_pubkeys_from_env("SETTINGS_SYNC_ENABLED_PUBKEYS"),
         }
     }
 
-    
     fn load_pubkeys_from_env(var_name: &str) -> Vec<String> {
         env::var(var_name)
             .unwrap_or_default()
@@ -43,22 +35,17 @@ impl FeatureAccess {
             .collect()
     }
 
-    
     pub fn register_new_user(&mut self, pubkey: &str) -> bool {
         let pubkey = pubkey.to_string();
 
-        
         if self.approved_pubkeys.contains(&pubkey) {
             return false;
         }
 
-        
         self.approved_pubkeys.push(pubkey.clone());
 
-        
         self.ragflow_enabled.push(pubkey.clone());
 
-        
         self.openai_enabled.push(pubkey.clone());
 
         // Feature access persisted in-memory only. Use database for production persistence.
@@ -67,38 +54,30 @@ impl FeatureAccess {
         true
     }
 
-    
     pub fn has_access(&self, pubkey: &str) -> bool {
         self.approved_pubkeys.contains(&pubkey.to_string())
     }
 
-    
     pub fn has_perplexity_access(&self, pubkey: &str) -> bool {
         self.perplexity_enabled.contains(&pubkey.to_string())
     }
 
-    
     pub fn has_openai_access(&self, pubkey: &str) -> bool {
         self.openai_enabled.contains(&pubkey.to_string())
     }
 
-    
     pub fn has_ragflow_access(&self, pubkey: &str) -> bool {
         self.ragflow_enabled.contains(&pubkey.to_string())
     }
 
-    
     pub fn is_power_user(&self, pubkey: &str) -> bool {
         self.power_users.contains(&pubkey.to_string())
     }
 
-    
     pub fn can_sync_settings(&self, pubkey: &str) -> bool {
-        
         self.is_power_user(pubkey) || self.settings_sync_enabled.contains(&pubkey.to_string())
     }
 
-    
     pub fn has_feature_access(&self, pubkey: &str, feature: &str) -> bool {
         match feature {
             "perplexity" => self.has_perplexity_access(pubkey),
@@ -109,7 +88,6 @@ impl FeatureAccess {
         }
     }
 
-    
     pub fn get_available_features(&self, pubkey: &str) -> Vec<String> {
         let mut features = Vec::new();
 
@@ -170,15 +148,13 @@ mod tests {
         setup_test_env();
         let access = FeatureAccess::from_env();
 
-        
         assert!(access.has_perplexity_access("pub1"));
         assert!(access.has_openai_access("pub1"));
-        assert!(access.can_sync_settings("pub1")); 
+        assert!(access.can_sync_settings("pub1"));
 
-        
         assert!(access.has_perplexity_access("pub2"));
         assert!(!access.has_openai_access("pub2"));
-        assert!(access.can_sync_settings("pub2")); 
+        assert!(access.can_sync_settings("pub2"));
     }
 
     #[test]

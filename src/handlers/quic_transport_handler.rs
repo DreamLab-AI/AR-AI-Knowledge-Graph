@@ -19,9 +19,7 @@ use std::time::{Duration, Instant};
 use bytes::Bytes;
 use log::{debug, error, info, trace, warn};
 use postcard;
-use quinn::{
-    Connection, Endpoint, RecvStream, SendStream, ServerConfig, TransportConfig, VarInt,
-};
+use quinn::{Connection, Endpoint, RecvStream, SendStream, ServerConfig, TransportConfig, VarInt};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc, RwLock};
@@ -142,12 +140,22 @@ pub enum ControlMessage {
         iterations: u32,
     },
     /// Ping/Pong for latency measurement
-    Ping { timestamp_ms: u64 },
-    Pong { timestamp_ms: u64, server_timestamp_ms: u64 },
+    Ping {
+        timestamp_ms: u64,
+    },
+    Pong {
+        timestamp_ms: u64,
+        server_timestamp_ms: u64,
+    },
     /// Error notification
-    Error { code: u32, message: String },
+    Error {
+        code: u32,
+        message: String,
+    },
     /// Graceful disconnect
-    Disconnect { reason: String },
+    Disconnect {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,7 +263,10 @@ impl QuicTransportServer {
     }
 
     /// Generate self-signed certificate for development
-    fn generate_self_signed_cert() -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), Box<dyn std::error::Error + Send + Sync>> {
+    fn generate_self_signed_cert() -> Result<
+        (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>),
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
         let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
         let cert_der = CertificateDer::from(cert.cert);
         let key_der = PrivateKeyDer::try_from(cert.key_pair.serialize_der())?;
@@ -286,7 +297,9 @@ impl QuicTransportServer {
     }
 
     /// Build QUIC server configuration
-    fn build_server_config(&self) -> Result<ServerConfig, Box<dyn std::error::Error + Send + Sync>> {
+    fn build_server_config(
+        &self,
+    ) -> Result<ServerConfig, Box<dyn std::error::Error + Send + Sync>> {
         let (certs, key) = Self::generate_self_signed_cert()?;
 
         let crypto = rustls::ServerConfig::builder()
@@ -294,7 +307,7 @@ impl QuicTransportServer {
             .with_single_cert(certs, key)?;
 
         let mut server_config = ServerConfig::with_crypto(Arc::new(
-            quinn::crypto::rustls::QuicServerConfig::try_from(crypto)?
+            quinn::crypto::rustls::QuicServerConfig::try_from(crypto)?,
         ));
 
         server_config.transport_config(Arc::new(Self::configure_transport(&self.config)));
@@ -378,7 +391,10 @@ impl QuicTransportServer {
             bytes_received: 0,
         }));
 
-        sessions.write().await.insert(session_id.clone(), session.clone());
+        sessions
+            .write()
+            .await
+            .insert(session_id.clone(), session.clone());
 
         // Subscribe to position broadcasts
         let mut position_sub = position_broadcast.subscribe();
@@ -399,7 +415,9 @@ impl QuicTransportServer {
         };
 
         let welcome_bytes = postcard::to_stdvec(&welcome)?;
-        control_send.write_all(&(welcome_bytes.len() as u32).to_le_bytes()).await?;
+        control_send
+            .write_all(&(welcome_bytes.len() as u32).to_le_bytes())
+            .await?;
         control_send.write_all(&welcome_bytes).await?;
 
         let session_for_recv = session.clone();
@@ -485,14 +503,26 @@ impl QuicTransportServer {
                     session.read().await.control_tx.send(pong).await?;
                 }
                 ControlMessage::Subscribe { channel, filter } => {
-                    debug!("Client subscribed to channel: {} (filter: {:?})", channel, filter);
+                    debug!(
+                        "Client subscribed to channel: {} (filter: {:?})",
+                        channel, filter
+                    );
                     session.write().await.subscriptions.push(channel);
                 }
                 ControlMessage::Unsubscribe { channel } => {
                     debug!("Client unsubscribed from channel: {}", channel);
-                    session.write().await.subscriptions.retain(|c| c != &channel);
+                    session
+                        .write()
+                        .await
+                        .subscriptions
+                        .retain(|c| c != &channel);
                 }
-                ControlMessage::PhysicsParams { spring_k, repel_k, damping, iterations } => {
+                ControlMessage::PhysicsParams {
+                    spring_k,
+                    repel_k,
+                    damping,
+                    iterations,
+                } => {
                     info!("Received physics params: spring_k={}, repel_k={}, damping={}, iterations={}",
                           spring_k, repel_k, damping, iterations);
                     // Forward to physics engine via app_state
@@ -547,8 +577,11 @@ impl QuicTransportServer {
                     let mut session = session.write().await;
                     session.bytes_sent += bytes.len() as u64;
                     session.frame_counter += 1;
-                    trace!("Sent position datagram: {} nodes, {} bytes",
-                           batch.nodes.len(), bytes.len());
+                    trace!(
+                        "Sent position datagram: {} nodes, {} bytes",
+                        batch.nodes.len(),
+                        bytes.len()
+                    );
                 }
                 Err(e) => {
                     // Datagram send can fail if buffer full or path MTU exceeded
@@ -575,7 +608,10 @@ impl QuicTransportServer {
 
             // Decode client position update
             if let Ok(update) = postcard::from_bytes::<PostcardBatchUpdate>(&datagram) {
-                trace!("Received client position update: {} nodes", update.nodes.len());
+                trace!(
+                    "Received client position update: {} nodes",
+                    update.nodes.len()
+                );
                 // Process client-side position updates if needed
             }
         }
@@ -653,7 +689,8 @@ pub fn encode_postcard_batch(nodes: &[(u32, BinaryNodeData)]) -> Result<Vec<u8>,
 pub fn decode_postcard_batch(data: &[u8]) -> Result<Vec<(u32, BinaryNodeData)>, postcard::Error> {
     let batch: PostcardBatchUpdate = postcard::from_bytes(data)?;
 
-    Ok(batch.nodes
+    Ok(batch
+        .nodes
         .into_iter()
         .map(|update| (update.id, BinaryNodeData::from(update)))
         .collect())
@@ -680,8 +717,12 @@ pub fn calculate_deltas(
                 if dx != 0 || dy != 0 || dz != 0 || dvx != 0 || dvy != 0 || dvz != 0 {
                     Some(PostcardDeltaUpdate {
                         id: *id,
-                        dx, dy, dz,
-                        dvx, dvy, dvz,
+                        dx,
+                        dy,
+                        dz,
+                        dvx,
+                        dvy,
+                        dvz,
                     })
                 } else {
                     None
@@ -726,8 +767,9 @@ mod tests {
 
     #[test]
     fn test_delta_calculation() {
-        let current = vec![
-            (1u32, BinaryNodeData {
+        let current = vec![(
+            1u32,
+            BinaryNodeData {
                 node_id: 1,
                 x: 10.5,
                 y: 20.5,
@@ -735,22 +777,25 @@ mod tests {
                 vx: 0.0,
                 vy: 0.0,
                 vz: 0.0,
-            }),
-        ];
+            },
+        )];
 
         let mut previous = HashMap::new();
-        previous.insert(1, PostcardNodeUpdate {
-            id: 1,
-            x: 10.0,
-            y: 20.0,
-            z: 30.0,
-            vx: 0.0,
-            vy: 0.0,
-            vz: 0.0,
-            cluster_id: 0,
-            anomaly_score: 0.0,
-            community_id: 0,
-        });
+        previous.insert(
+            1,
+            PostcardNodeUpdate {
+                id: 1,
+                x: 10.0,
+                y: 20.0,
+                z: 30.0,
+                vx: 0.0,
+                vy: 0.0,
+                vz: 0.0,
+                cluster_id: 0,
+                anomaly_score: 0.0,
+                community_id: 0,
+            },
+        );
 
         let deltas = calculate_deltas(&current, &previous, 100.0);
         assert_eq!(deltas.len(), 1);

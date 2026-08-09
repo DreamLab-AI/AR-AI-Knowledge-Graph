@@ -38,6 +38,7 @@ pub mod analytics_telemetry;
 // Child actors
 pub mod anomaly_detection_actor;
 pub mod clustering_actor;
+pub mod connected_components_actor;
 pub mod constraint_actor;
 pub mod context_bus;
 pub mod cuda_stream_wrapper;
@@ -48,43 +49,43 @@ pub mod ontology_constraint_actor;
 pub mod pagerank_actor;
 /// Single source of truth for physics validation bounds (T4 fix, 2026-06-03).
 pub mod physics_bounds;
-pub mod shortest_path_actor;
-pub mod connected_components_actor;
-pub mod shared;
-pub mod stress_majorization_actor;
 pub mod semantic_forces_actor;
+pub mod shared;
+pub mod shortest_path_actor;
+pub mod stress_majorization_actor;
 
 // Supervisor actors
-pub mod supervisor_messages;
-pub mod physics_supervisor;
 pub mod analytics_supervisor;
 pub mod graph_analytics_supervisor;
+pub mod physics_supervisor;
 pub mod resource_supervisor;
+pub mod supervisor_messages;
 
 // Child actor exports
 pub use anomaly_detection_actor::AnomalyDetectionActor;
 pub use clustering_actor::ClusteringActor;
+pub use connected_components_actor::ConnectedComponentsActor;
 pub use constraint_actor::ConstraintActor;
-pub use context_bus::{GPUContextBus, GPUContextReady, GPUContextSubscriber, GPUContextSubscription};
+pub use context_bus::{
+    GPUContextBus, GPUContextReady, GPUContextSubscriber, GPUContextSubscription,
+};
 pub use force_compute_actor::ForceComputeActor;
 pub use gpu_manager_actor::GPUManagerActor;
 pub use gpu_resource_actor::GPUResourceActor;
 pub use ontology_constraint_actor::OntologyConstraintActor;
 pub use pagerank_actor::PageRankActor;
-pub use shortest_path_actor::ShortestPathActor;
-pub use connected_components_actor::ConnectedComponentsActor;
-pub use shared::{GPUContext, SharedGPUContext, UnifiedGPUCompute};
-pub use stress_majorization_actor::StressMajorizationActor;
 pub use semantic_forces_actor::SemanticForcesActor;
+pub use shared::{GPUContext, SharedGPUContext, UnifiedGPUCompute};
+pub use shortest_path_actor::ShortestPathActor;
+pub use stress_majorization_actor::StressMajorizationActor;
 
 // Supervisor exports
-pub use supervisor_messages::{
-    ActorFailure, ActorHealthState, ActorRecovered, GetSubsystemHealth,
-    InitializationTimeouts, InitializeSubsystem, RestartActor, RestartSubsystem,
-    RouteMessage, SubsystemHealth, SubsystemInitialized, SubsystemStatus,
-    SubsystemType, SupervisionPolicy,
-};
-pub use physics_supervisor::PhysicsSupervisor;
 pub use analytics_supervisor::AnalyticsSupervisor;
 pub use graph_analytics_supervisor::GraphAnalyticsSupervisor;
-pub use resource_supervisor::{ResourceSupervisor, GetContextBus, SetSubsystemSupervisors};
+pub use physics_supervisor::PhysicsSupervisor;
+pub use resource_supervisor::{GetContextBus, ResourceSupervisor, SetSubsystemSupervisors};
+pub use supervisor_messages::{
+    ActorFailure, ActorHealthState, ActorRecovered, GetSubsystemHealth, InitializationTimeouts,
+    InitializeSubsystem, RestartActor, RestartSubsystem, RouteMessage, SubsystemHealth,
+    SubsystemInitialized, SubsystemStatus, SubsystemType, SupervisionPolicy,
+};

@@ -49,21 +49,15 @@ pub enum ConstraintType {
 
 #[async_trait]
 pub trait PhysicsSimulator: Send + Sync {
-    
     async fn run_simulation_step(&self, graph: &GraphData) -> Result<Vec<(u32, BinaryNodeData)>>;
 
-    
     async fn update_params(&self, params: SimulationParams) -> Result<()>;
 
-    
     async fn apply_constraints(&self, constraints: Vec<Constraint>) -> Result<()>;
 
-    
     async fn start_simulation(&self) -> Result<()>;
 
-    
     async fn stop_simulation(&self) -> Result<()>;
 
-    
     async fn is_running(&self) -> Result<bool>;
 }

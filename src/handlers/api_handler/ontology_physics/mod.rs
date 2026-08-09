@@ -10,19 +10,19 @@
 //! - OntologyActor -> OntologyConstraintActor -> ForceComputeActor
 //! - Constraints are uploaded to GPU and applied during physics simulation
 
+use crate::{bad_request, error_json, ok_json, service_unavailable};
 use actix_web::{web, HttpResponse, Responder};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use crate::{ok_json, error_json, bad_request, service_unavailable};
 
 use crate::actors::messages::{
     AdjustConstraintWeights, ApplyOntologyConstraints, ConstraintMergeMode,
     GetOntologyConstraintStats,
 };
-use visionclaw_domain::models::constraints::ConstraintSet;
-use visionclaw_adapters::provenance_emitter;
 use crate::AppState;
+use visionclaw_adapters::provenance_emitter;
+use visionclaw_domain::models::constraints::ConstraintSet;
 
 // ============================================================================
 // REQUEST/RESPONSE DTOs
@@ -109,7 +109,10 @@ pub async fn enable_ontology_physics(
     state: web::Data<AppState>,
     req: web::Json<EnableOntologyPhysicsRequest>,
 ) -> impl Responder {
-    info!("POST /api/ontology-physics/enable - Ontology: {}", req.ontology_id);
+    info!(
+        "POST /api/ontology-physics/enable - Ontology: {}",
+        req.ontology_id
+    );
 
     check_ontology_feature().await?;
 
@@ -145,7 +148,10 @@ pub async fn enable_ontology_physics(
 
     match report_result {
         Ok(Ok(Some(report))) => {
-            info!("Retrieved validation report with {} constraints", report.constraint_summary.total_constraints);
+            info!(
+                "Retrieved validation report with {} constraints",
+                report.constraint_summary.total_constraints
+            );
 
             // Convert the report's reasoning constraints into a ConstraintSet
             // The report contains ontology axioms and inferences that were validated
@@ -177,9 +183,13 @@ pub async fn enable_ontology_physics(
                 constraint_set.add_to_group(&violation.rule, constraint);
             }
             // Also use constraint_summary counts as semantic constraints when no violations
-            if constraint_set.constraints.is_empty() && report.constraint_summary.total_constraints > 0 {
-                info!("No violations but {} constraints in summary, creating semantic constraints",
-                      report.constraint_summary.total_constraints);
+            if constraint_set.constraints.is_empty()
+                && report.constraint_summary.total_constraints > 0
+            {
+                info!(
+                    "No violations but {} constraints in summary, creating semantic constraints",
+                    report.constraint_summary.total_constraints
+                );
                 for _ in 0..report.constraint_summary.semantic_constraints {
                     constraint_set.add(visionclaw_domain::models::constraints::Constraint {
                         kind: visionclaw_domain::models::constraints::ConstraintKind::Semantic,
@@ -231,7 +241,10 @@ pub async fn enable_ontology_physics(
             }
         }
         Ok(Ok(None)) => {
-            warn!("No validation report found for ontology: {}", req.ontology_id);
+            warn!(
+                "No validation report found for ontology: {}",
+                req.ontology_id
+            );
             bad_request!(json!({
                 "error": "Ontology not found",
                 "message": "Run validation first to generate constraints",
@@ -347,10 +360,11 @@ pub async fn adjust_weights(
         })));
     };
 
-    match gpu_manager_addr.send(AdjustConstraintWeights { global_strength }).await {
-        Ok(Ok(result)) => {
-            Ok(HttpResponse::Ok().json(result))
-        }
+    match gpu_manager_addr
+        .send(AdjustConstraintWeights { global_strength })
+        .await
+    {
+        Ok(Ok(result)) => Ok(HttpResponse::Ok().json(result)),
         Ok(Err(e)) => {
             error!("Failed to adjust constraint weights: {}", e);
             Ok(HttpResponse::InternalServerError().json(json!({
@@ -429,15 +443,17 @@ pub async fn get_trust_status(state: web::Data<AppState>) -> impl Responder {
 
     let store = state.ontology_repository.store();
 
-    let shapes_loaded = provenance_emitter::count_shapes_loaded(store)
-        .unwrap_or(0);
-    let provenance_triples = provenance_emitter::count_provenance_triples(store)
-        .unwrap_or(0);
+    let shapes_loaded = provenance_emitter::count_shapes_loaded(store).unwrap_or(0);
+    let provenance_triples = provenance_emitter::count_provenance_triples(store).unwrap_or(0);
 
     let shapes_healthy = shapes_loaded > 0;
     let provenance_healthy = true;
 
-    let status = if shapes_healthy { "healthy" } else { "degraded" };
+    let status = if shapes_healthy {
+        "healthy"
+    } else {
+        "degraded"
+    };
 
     ok_json!(json!({
         "status": status,
@@ -493,10 +509,7 @@ mod tests {
     fn test_merge_mode_parsing() {
         let modes = vec!["replace", "merge", "add_if_no_conflict"];
         for mode in modes {
-            assert!(matches!(
-                mode,
-                "replace" | "merge" | "add_if_no_conflict"
-            ));
+            assert!(matches!(mode, "replace" | "merge" | "add_if_no_conflict"));
         }
     }
 

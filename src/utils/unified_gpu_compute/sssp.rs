@@ -81,7 +81,8 @@ impl UnifiedGPUCompute {
 
                             // Compact the frontier
                             let d_frontier_counter = DeviceBuffer::from_slice(&[0i32])?;
-                            let compact_func = self._module.get_function("compact_frontier_kernel")?;
+                            let compact_func =
+                                self._module.get_function("compact_frontier_kernel")?;
                             let compact_grid = ((self.num_nodes as u32 + 255) / 256, 1, 1);
                             let compact_block = (256, 1, 1);
 

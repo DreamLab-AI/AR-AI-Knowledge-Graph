@@ -1,14 +1,11 @@
 use super::github::{ContentAPI, GitHubClient, GitHubConfig};
 use crate::config::AppFullSettings;
-use visionclaw_domain::models::graph::GraphData;
-use visionclaw_domain::models::node::Node as AppNode; // Use an alias to avoid confusion
-use visionclaw_domain::models::edge::Edge as AppEdge;
-use visionclaw_domain::models::metadata::{Metadata, MetadataOps, MetadataStore};
 use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use crate::time;
 use actix_web::web;
 use chrono::Utc;
 use log::{debug, error, info, warn};
+use rand::Rng;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -22,7 +19,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
-use rand::Rng;
+use visionclaw_domain::models::edge::Edge as AppEdge;
+use visionclaw_domain::models::graph::GraphData;
+use visionclaw_domain::models::metadata::{Metadata, MetadataOps, MetadataStore};
+use visionclaw_domain::models::node::Node as AppNode; // Use an alias to avoid confusion
 
 // Constants
 const METADATA_PATH: &str = "/workspace/ext/data/metadata/metadata.json";
@@ -57,25 +57,21 @@ struct OntologyData {
 }
 
 pub struct FileService {
-    _settings: Arc<RwLock<AppFullSettings>>, 
-    
+    _settings: Arc<RwLock<AppFullSettings>>,
+
     node_id_counter: AtomicU32,
 }
 
 impl FileService {
     pub fn new(_settings: Arc<RwLock<AppFullSettings>>) -> Self {
-        
-        
         let service = Self {
-            _settings, 
+            _settings,
             node_id_counter: AtomicU32::new(1),
         };
 
-        
         if let Ok(metadata) = Self::load_or_create_metadata() {
             let max_id = metadata.get_max_node_id();
             if max_id > 0 {
-                
                 service.node_id_counter.store(max_id + 1, Ordering::SeqCst);
                 info!(
                     "Initialized node ID counter to {} based on existing metadata",
@@ -87,12 +83,10 @@ impl FileService {
         service
     }
 
-    
     fn get_next_node_id(&self) -> u32 {
         self.node_id_counter.fetch_add(1, Ordering::SeqCst)
     }
 
-    
     fn update_node_ids(&self, processed_files: &mut Vec<ProcessedFile>) {
         for processed_file in processed_files {
             if processed_file.metadata.node_id == "0" {
@@ -101,7 +95,6 @@ impl FileService {
         }
     }
 
-    
     pub async fn process_file_upload(&self, payload: web::Bytes) -> Result<GraphData, Error> {
         let content = String::from_utf8(payload.to_vec())
             .map_err(|e| Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
@@ -109,14 +102,12 @@ impl FileService {
             .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
         let mut graph_data = GraphData::new();
 
-        
         let temp_filename = format!("temp_{}.md", time::timestamp_seconds());
         let temp_path = format!("{}/{}", MARKDOWN_DIR, temp_filename);
         if let Err(e) = fs::write(&temp_path, &content) {
             return Err(Error::new(std::io::ErrorKind::Other, e.to_string()));
         }
 
-        
         let valid_nodes: Vec<String> = metadata
             .keys()
             .map(|name| name.trim_end_matches(".md").to_string())
@@ -136,12 +127,10 @@ impl FileService {
         file_metadata.topic_counts = topic_counts;
         file_metadata.change_count = Some(1);
 
-        
         graph_data
             .metadata
             .insert(temp_filename.clone(), file_metadata);
 
-        
         if let Err(e) = fs::remove_file(&temp_path) {
             error!("Failed to remove temporary file: {}", e);
         }
@@ -149,14 +138,12 @@ impl FileService {
         Ok(graph_data)
     }
 
-    
     pub async fn list_files(&self) -> Result<Vec<String>, Error> {
         let metadata = Self::load_or_create_metadata()
             .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
         Ok(metadata.keys().cloned().collect())
     }
 
-    
     pub async fn load_file(&self, filename: &str) -> Result<GraphData, Error> {
         let file_path = format!("{}/{}", MARKDOWN_DIR, filename);
         if !Path::new(&file_path).exists() {
@@ -172,7 +159,6 @@ impl FileService {
             .map_err(|e| Error::new(std::io::ErrorKind::Other, e))?;
         let mut graph_data = GraphData::new();
 
-        
         let valid_nodes: Vec<String> = metadata
             .keys()
             .map(|name| name.trim_end_matches(".md").to_string())
@@ -191,7 +177,6 @@ impl FileService {
         );
         file_metadata.topic_counts = topic_counts;
 
-        
         graph_data
             .metadata
             .insert(filename.to_string(), file_metadata);
@@ -199,10 +184,11 @@ impl FileService {
         Ok(graph_data)
     }
 
-    
     pub fn load_or_create_metadata() -> Result<MetadataStore, String> {
         // Use the correct metadata path constant
-        let metadata_dir = Path::new(METADATA_PATH).parent().unwrap_or(Path::new("/workspace/ext/data/metadata"));
+        let metadata_dir = Path::new(METADATA_PATH)
+            .parent()
+            .unwrap_or(Path::new("/workspace/ext/data/metadata"));
         std::fs::create_dir_all(metadata_dir)
             .map_err(|e| format!("Failed to create metadata directory: {}", e))?;
 
@@ -223,7 +209,6 @@ impl FileService {
                 serde_json::to_writer_pretty(file, &empty_store)
                     .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
-                
                 let metadata = std::fs::metadata(metadata_path)
                     .map_err(|e| format!("Failed to verify metadata file: {}", e))?;
 
@@ -236,10 +221,11 @@ impl FileService {
         }
     }
 
-    
     pub fn load_graph_data() -> Result<Option<GraphData>, String> {
         // Use metadata directory path for graph.json
-        let metadata_dir = Path::new(METADATA_PATH).parent().unwrap_or(Path::new("/workspace/ext/data/metadata"));
+        let metadata_dir = Path::new(METADATA_PATH)
+            .parent()
+            .unwrap_or(Path::new("/workspace/ext/data/metadata"));
         let graph_path = metadata_dir.join("graph.json");
 
         match File::open(&graph_path) {
@@ -266,17 +252,15 @@ impl FileService {
         }
     }
 
-    
     fn calculate_node_size(file_size: usize) -> f64 {
-        const BASE_SIZE: f64 = 1000.0; 
-        const MIN_SIZE: f64 = 5.0; 
-        const MAX_SIZE: f64 = 50.0; 
+        const BASE_SIZE: f64 = 1000.0;
+        const MIN_SIZE: f64 = 5.0;
+        const MAX_SIZE: f64 = 50.0;
 
         let size = (file_size as f64 / BASE_SIZE).min(5.0);
         MIN_SIZE + (size * (MAX_SIZE - MIN_SIZE) / 5.0)
     }
 
-    
     fn extract_references(content: &str, valid_nodes: &[String]) -> Vec<String> {
         let mut references = Vec::new();
         let content_lower = content.to_lowercase();
@@ -284,16 +268,13 @@ impl FileService {
         for node_name in valid_nodes {
             let node_name_lower = node_name.to_lowercase();
 
-            
             let pattern = format!(r"\b{}\b", regex::escape(&node_name_lower));
             if let Ok(re) = Regex::new(&pattern) {
-                
                 let count = re.find_iter(&content_lower).count();
 
-                
                 if count > 0 {
                     debug!("Found {} references to {} in content", count, node_name);
-                    
+
                     for _ in 0..count {
                         references.push(node_name.clone());
                     }
@@ -312,11 +293,9 @@ impl FileService {
         topic_counts
     }
 
-    
     pub async fn initialize_local_storage(
         settings: Arc<RwLock<AppFullSettings>>,
     ) -> Result<(), Box<dyn StdError + Send + Sync>> {
-
         let github_config =
             GitHubConfig::from_env().map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)?;
 
@@ -324,14 +303,16 @@ impl FileService {
         // Key on the full path set so adding/removing a source dir is detected.
         let current_base_path = github_config.base_paths.join(",");
         if Self::base_path_changed(&current_base_path) {
-            info!("GITHUB ingest paths changed to '{}' — clearing local file cache for fresh ingest", current_base_path);
+            info!(
+                "GITHUB ingest paths changed to '{}' — clearing local file cache for fresh ingest",
+                current_base_path
+            );
             Self::clear_local_cache();
             Self::save_base_path_marker(&current_base_path);
         }
 
         let github = GitHubClient::new(github_config, Arc::clone(&settings)).await?;
         let content_api = ContentAPI::new(Arc::new(github));
-
 
         if Self::has_valid_local_setup() {
             info!("Valid local setup found, skipping initialization");
@@ -340,10 +321,8 @@ impl FileService {
 
         info!("Initializing local storage with files from GitHub");
 
-        
         Self::ensure_directories()?;
 
-        
         let basic_github_files = content_api.list_markdown_files("").await?;
         info!(
             "Found {} markdown files in GitHub",
@@ -352,7 +331,6 @@ impl FileService {
 
         let mut metadata_store = MetadataStore::new();
 
-        
         const BATCH_SIZE: usize = 5;
         for chunk in basic_github_files.chunks(BATCH_SIZE) {
             let mut futures = Vec::new();
@@ -362,7 +340,6 @@ impl FileService {
                 let content_api = content_api.clone();
 
                 futures.push(async move {
-                    
                     let file_extended_meta = match content_api
                         .get_file_metadata_extended(&file_basic_meta.path)
                         .await
@@ -377,7 +354,6 @@ impl FileService {
                         }
                     };
 
-                    
                     match content_api
                         .fetch_file_content(&file_extended_meta.download_url)
                         .await
@@ -418,7 +394,6 @@ impl FileService {
                 });
             }
 
-            
             let results = futures::future::join_all(futures).await;
 
             for result in results {
@@ -435,7 +410,7 @@ impl FileService {
 
                         metadata_store.insert(file_extended_meta.name, metadata);
                     }
-                    Ok(None) => continue, 
+                    Ok(None) => continue,
                     Err(e) => {
                         error!("Failed to process file in batch: {}", e);
                     }
@@ -445,10 +420,8 @@ impl FileService {
             sleep(GITHUB_API_DELAY).await;
         }
 
-        
         Self::update_topic_counts(&mut metadata_store)?;
 
-        
         info!("Saving metadata for {} public files", metadata_store.len());
         Self::save_metadata(&metadata_store)?;
 
@@ -462,7 +435,6 @@ impl FileService {
         Ok(())
     }
 
-    
     fn update_topic_counts(metadata_store: &mut MetadataStore) -> Result<(), Error> {
         let valid_nodes: Vec<String> = metadata_store
             .keys()
@@ -484,7 +456,6 @@ impl FileService {
         Ok(())
     }
 
-    
     fn has_valid_local_setup() -> bool {
         if let Ok(metadata_content) = fs::read_to_string(METADATA_PATH) {
             if metadata_content.trim().is_empty() {
@@ -539,14 +510,21 @@ impl FileService {
         info!("Local file cache cleared (metadata.json + markdown files)");
     }
 
-    
     fn ensure_directories() -> Result<(), Error> {
         let markdown_dir = Path::new(MARKDOWN_DIR);
         let metadata_path = Path::new(METADATA_PATH);
 
         info!("Ensuring directories exist...");
-        info!("MARKDOWN_DIR (absolute): {:?}", fs::canonicalize(markdown_dir.parent().unwrap_or(Path::new("/"))).unwrap_or_else(|_| markdown_dir.to_path_buf()));
-        info!("METADATA_PATH (absolute): {:?}", fs::canonicalize(metadata_path.parent().unwrap_or(Path::new("/"))).unwrap_or_else(|_| metadata_path.to_path_buf()));
+        info!(
+            "MARKDOWN_DIR (absolute): {:?}",
+            fs::canonicalize(markdown_dir.parent().unwrap_or(Path::new("/")))
+                .unwrap_or_else(|_| markdown_dir.to_path_buf())
+        );
+        info!(
+            "METADATA_PATH (absolute): {:?}",
+            fs::canonicalize(metadata_path.parent().unwrap_or(Path::new("/")))
+                .unwrap_or_else(|_| metadata_path.to_path_buf())
+        );
 
         if !markdown_dir.exists() {
             info!("Creating markdown directory at {:?}", markdown_dir);
@@ -556,7 +534,7 @@ impl FileService {
                     format!("Failed to create markdown directory: {}", e),
                 )
             })?;
-            
+
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -571,8 +549,8 @@ impl FileService {
             }
         }
 
-        
-        let metadata_dir = Path::new(METADATA_PATH).parent()
+        let metadata_dir = Path::new(METADATA_PATH)
+            .parent()
             .expect("METADATA_PATH constant has a known parent directory");
         if !metadata_dir.exists() {
             info!("Creating metadata directory at {:?}", metadata_dir);
@@ -596,7 +574,6 @@ impl FileService {
             }
         }
 
-        
         let test_file = format!("{}/test_permissions", MARKDOWN_DIR);
         match fs::write(&test_file, "test") {
             Ok(_) => {
@@ -627,7 +604,6 @@ impl FileService {
         }
     }
 
-    
     pub fn save_metadata(metadata: &MetadataStore) -> Result<(), Error> {
         let json = crate::utils::json::to_json_pretty(metadata)
             .map_err(|e| Error::new(std::io::ErrorKind::Other, e.to_string()))?;
@@ -643,7 +619,10 @@ impl FileService {
 
         let markdown_dir = Path::new(MARKDOWN_DIR);
         if !markdown_dir.exists() {
-            return Err(format!("Markdown directory does not exist: {}", MARKDOWN_DIR));
+            return Err(format!(
+                "Markdown directory does not exist: {}",
+                MARKDOWN_DIR
+            ));
         }
 
         let mut metadata_store = MetadataStore::new();
@@ -724,14 +703,12 @@ impl FileService {
         Ok(metadata_store)
     }
 
-
     fn calculate_sha1(content: &str) -> String {
         use sha1::{Digest, Sha1};
         let mut hasher = Sha1::new();
         hasher.update(content.as_bytes());
         format!("{:x}", hasher.finalize())
     }
-
 
     fn count_hyperlinks(content: &str) -> usize {
         let re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("Invalid regex pattern");
@@ -801,14 +778,23 @@ impl FileService {
                         // Parse [[Domain1]], [[Domain2]] format
                         let domains: Vec<String> = value
                             .split(',')
-                            .map(|s| s.trim().trim_start_matches("[[").trim_end_matches("]]").to_string())
+                            .map(|s| {
+                                s.trim()
+                                    .trim_start_matches("[[")
+                                    .trim_end_matches("]]")
+                                    .to_string()
+                            })
                             .filter(|s| !s.is_empty())
                             .collect();
                         data.belongs_to_domain = domains;
                     }
                     "is-subclass-of" => {
                         // Parse [[Class]] format, accumulate multiple
-                        let class = value.trim().trim_start_matches("[[").trim_end_matches("]]").to_string();
+                        let class = value
+                            .trim()
+                            .trim_start_matches("[[")
+                            .trim_end_matches("]]")
+                            .to_string();
                         if !class.is_empty() {
                             data.is_subclass_of.push(class);
                         }
@@ -865,7 +851,6 @@ impl FileService {
         }
     }
 
-    
     #[allow(dead_code)]
     async fn should_process_file(
         &self,
@@ -875,9 +860,7 @@ impl FileService {
         download_url: &str,
         metadata_store: &MetadataStore,
     ) -> Result<bool, Box<dyn StdError + Send + Sync>> {
-        
         if let Some(existing_metadata) = metadata_store.get(file_name) {
-            
             if let Some(stored_sha) = &existing_metadata.file_blob_sha {
                 if stored_sha == github_blob_sha {
                     info!(
@@ -904,7 +887,6 @@ impl FileService {
             );
         }
 
-        
         info!(
             "should_process_file: Downloading content for {} to check public tag",
             file_name
@@ -914,7 +896,10 @@ impl FileService {
                 // Check for public-access:: true (new) or public:: true (legacy)
                 let is_public = Self::is_public_file(&content);
                 if !is_public {
-                    info!("should_process_file: File {} does not have public marker, skipping", file_name);
+                    info!(
+                        "should_process_file: File {} does not have public marker, skipping",
+                        file_name
+                    );
                 } else {
                     info!(
                         "should_process_file: File {} has public marker, will process",
@@ -930,18 +915,16 @@ impl FileService {
         }
     }
 
-    
     pub async fn fetch_and_process_files(
         &self,
         content_api: Arc<ContentAPI>,
-        _settings: Arc<RwLock<AppFullSettings>>, 
+        _settings: Arc<RwLock<AppFullSettings>>,
         metadata_store: &mut MetadataStore,
     ) -> Result<Vec<ProcessedFile>, Box<dyn StdError + Send + Sync>> {
         info!("fetch_and_process_files: Starting GitHub file fetch process");
         debug!("Attempting to fetch and process files from GitHub repository.");
         let mut processed_files = Vec::new();
 
-        
         info!("fetch_and_process_files: Calling list_markdown_files...");
         let basic_github_files = match content_api.list_markdown_files("").await {
             Ok(files) => {
@@ -973,7 +956,6 @@ impl FileService {
             basic_github_files.len()
         );
 
-        
         const BATCH_SIZE: usize = 5;
         let total_batches = (basic_github_files.len() + BATCH_SIZE - 1) / BATCH_SIZE;
         info!(
@@ -1001,7 +983,7 @@ impl FileService {
                 );
 
                 futures.push(async move {
-                    
+
                     let file_extended_meta = match content_api.get_file_metadata_extended(&file_basic_meta.path).await {
                         Ok(meta) => meta,
                         Err(e) => {
@@ -1010,7 +992,7 @@ impl FileService {
                         }
                     };
 
-                    
+
                     let needs_download = if let Some(existing_metadata) = metadata_store_clone.get(&file_extended_meta.name) {
                         if let Some(stored_sha) = &existing_metadata.file_blob_sha {
                             if stored_sha == &file_extended_meta.sha {
@@ -1034,7 +1016,7 @@ impl FileService {
                         return Ok(None);
                     }
 
-                    
+
                     match content_api.fetch_file_content(&file_extended_meta.download_url).await {
                         Ok(content) => {
                             // Check for public-access:: true (new) or public:: true (legacy)
@@ -1080,7 +1062,6 @@ impl FileService {
                 });
             }
 
-            
             let results = futures::future::join_all(futures).await;
 
             for result in results {
@@ -1088,7 +1069,7 @@ impl FileService {
                     Ok(Some(processed_file)) => {
                         processed_files.push(processed_file);
                     }
-                    Ok(None) => continue, 
+                    Ok(None) => continue,
                     Err(e) => {
                         error!("Failed to process file in batch: {}", e);
                     }
@@ -1098,10 +1079,8 @@ impl FileService {
             sleep(GITHUB_API_DELAY).await;
         }
 
-        
         self.update_node_ids(&mut processed_files);
 
-        
         for processed_file in &processed_files {
             metadata_store.insert(
                 processed_file.file_name.clone(),
@@ -1109,7 +1088,6 @@ impl FileService {
             );
         }
 
-        
         Self::update_topic_counts(metadata_store)?;
 
         Ok(processed_files)
@@ -1175,7 +1153,11 @@ impl FileService {
             let content = match fs::read_to_string(&file_path) {
                 Ok(c) => c,
                 Err(e) => {
-                    error!("Failed to read file {}: {}. Skipping.", file_path.display(), e);
+                    error!(
+                        "Failed to read file {}: {}. Skipping.",
+                        file_path.display(),
+                        e
+                    );
                     continue;
                 }
             };
@@ -1193,10 +1175,10 @@ impl FileService {
             if owl_class_iri.is_some() {
                 node.node_type = Some("ontology_node".to_string());
                 node.owl_class_iri = owl_class_iri;
-                node.color = Some("#B91C7B".to_string());  // magenta for ontology
+                node.color = Some("#B91C7B".to_string()); // magenta for ontology
             } else {
                 node.node_type = Some("page".to_string());
-                node.color = Some("#4A90E2".to_string());  // blue for knowledge
+                node.color = Some("#4A90E2".to_string()); // blue for knowledge
             }
 
             let mut rng = rand::thread_rng();
@@ -1215,12 +1197,13 @@ impl FileService {
 
         info!(
             "Phase 1: Created {} nodes, preferred_term mapping has {} entries",
-            graph_data.nodes.len(), term_to_id.len()
+            graph_data.nodes.len(),
+            term_to_id.len()
         );
 
         // Phase 2: Extract edges from wikilinks.
-        let wikilink_re = Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]")
-            .expect("Invalid wikilink regex");
+        let wikilink_re =
+            Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").expect("Invalid wikilink regex");
         let mut seen_edges = std::collections::HashSet::new();
 
         for (content, source_id) in &file_contents {
@@ -1230,7 +1213,9 @@ impl FileService {
                     if let Some(&target_id) = term_to_id.get(&target) {
                         let edge_key = (*source_id, target_id);
                         if target_id != *source_id && seen_edges.insert(edge_key) {
-                            graph_data.edges.push(AppEdge::new(*source_id, target_id, 1.0));
+                            graph_data
+                                .edges
+                                .push(AppEdge::new(*source_id, target_id, 1.0));
                         }
                     }
                 }
@@ -1239,12 +1224,16 @@ impl FileService {
 
         info!(
             "Total: {} nodes and {} edges ready for Oxigraph store.",
-            graph_data.nodes.len(), graph_data.edges.len()
+            graph_data.nodes.len(),
+            graph_data.edges.len()
         );
 
         // Persist via KnowledgeGraphRepository port (OxigraphGraphRepository).
         // todo!("Phase 2: implement stale-node pruning via SPARQL DELETE WHERE")
-        info!("Upserting {} nodes into Oxigraph store...", graph_data.nodes.len());
+        info!(
+            "Upserting {} nodes into Oxigraph store...",
+            graph_data.nodes.len()
+        );
         if let Err(e) = graph_repo.save_graph(&graph_data).await {
             return Err(format!("Failed to save graph to Oxigraph store: {}", e));
         }

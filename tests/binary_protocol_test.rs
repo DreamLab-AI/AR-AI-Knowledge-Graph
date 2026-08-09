@@ -17,8 +17,8 @@ use std::time::Duration;
 use actix::prelude::*;
 use visionclaw_server::actors::messages::{
     BroadcastState, GetBroadcastActorStatus, GetPositionFrameSnapshot, OnLayoutDestabilised,
-    OnLayoutSettled, OnLayoutStarted, PositionFrameSnapshot, PositionRow,
-    RegisterBroadcastClient, SendToClientBinary,
+    OnLayoutSettled, OnLayoutStarted, PositionFrameSnapshot, PositionRow, RegisterBroadcastClient,
+    SendToClientBinary,
 };
 use visionclaw_server::actors::{BroadcastActor, BroadcastConfig};
 use visionclaw_server::protocol::v3_frame::{BinaryV3Frame, NodeRow, V3DecodeError, V3_MAGIC};
@@ -48,11 +48,7 @@ impl Actor for StubSnapshotSource {
 
 impl Handler<GetPositionFrameSnapshot> for StubSnapshotSource {
     type Result = Result<Arc<PositionFrameSnapshot>, String>;
-    fn handle(
-        &mut self,
-        _msg: GetPositionFrameSnapshot,
-        _ctx: &mut Self::Context,
-    ) -> Self::Result {
+    fn handle(&mut self, _msg: GetPositionFrameSnapshot, _ctx: &mut Self::Context) -> Self::Result {
         Ok(Arc::clone(&self.snapshot.lock().unwrap()))
     }
 }
@@ -310,7 +306,10 @@ async fn layout_started_resets_frame_ids_and_transitions() {
     actix_rt::time::sleep(Duration::from_millis(300)).await;
     let pre_reset = client.send(DumpFrames).await.unwrap();
     let pre_count = pre_reset.len();
-    assert!(pre_count >= 2, "need ≥2 frames before reset, got {pre_count}");
+    assert!(
+        pre_count >= 2,
+        "need ≥2 frames before reset, got {pre_count}"
+    );
 
     bcast.send(OnLayoutStarted).await.unwrap();
     actix_rt::time::sleep(Duration::from_millis(200)).await;

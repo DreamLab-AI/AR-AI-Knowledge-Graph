@@ -3,81 +3,45 @@
 
 use log::warn;
 
-pub mod physics_constraint;
 pub mod axiom_mapper;
-pub mod priority_resolver;
 pub mod constraint_blender;
-pub mod gpu_converter;
 pub mod constraint_lod;
+pub mod gpu_converter;
+pub mod physics_constraint;
+pub mod priority_resolver;
 
 // Semantic physics extensions
-pub mod semantic_physics_types;
 pub mod semantic_axiom_translator;
 pub mod semantic_gpu_buffer;
+pub mod semantic_physics_types;
 
 // Re-export main types
 pub use physics_constraint::{
-    PhysicsConstraint,
-    PhysicsConstraintType,
-    NodeId,
-    PRIORITY_USER_DEFINED,
-    PRIORITY_INFERRED,
-    PRIORITY_ASSERTED,
-    PRIORITY_DEFAULT,
+    NodeId, PhysicsConstraint, PhysicsConstraintType, PRIORITY_ASSERTED, PRIORITY_DEFAULT,
+    PRIORITY_INFERRED, PRIORITY_USER_DEFINED,
 };
 
-pub use axiom_mapper::{
-    AxiomMapper,
-    AxiomType,
-    OWLAxiom,
-    TranslationConfig,
-};
+pub use axiom_mapper::{AxiomMapper, AxiomType, OWLAxiom, TranslationConfig};
 
-pub use priority_resolver::{
-    PriorityResolver,
-    NodePair,
-    ConstraintGroup,
-};
+pub use priority_resolver::{ConstraintGroup, NodePair, PriorityResolver};
 
-pub use constraint_blender::{
-    ConstraintBlender,
-    BlendingStrategy,
-    BlenderConfig,
-};
+pub use constraint_blender::{BlenderConfig, BlendingStrategy, ConstraintBlender};
 
 pub use gpu_converter::{
-    ConstraintData,
-    GPUConstraintBuffer,
-    ConstraintStats,
-    to_gpu_constraint_data,
-    to_gpu_constraint_batch,
-    gpu_constraint_kind,
+    gpu_constraint_kind, to_gpu_constraint_batch, to_gpu_constraint_data, ConstraintData,
+    ConstraintStats, GPUConstraintBuffer,
 };
 
-pub use constraint_lod::{
-    ConstraintLOD,
-    LODLevel,
-    LODConfig,
-    LODStats,
-};
+pub use constraint_lod::{ConstraintLOD, LODConfig, LODLevel, LODStats};
 
-pub use semantic_physics_types::{
-    SemanticPhysicsConstraint,
-    Axis,
-    SemanticConstraintBuilder,
-};
+pub use semantic_physics_types::{Axis, SemanticConstraintBuilder, SemanticPhysicsConstraint};
 
 pub use semantic_axiom_translator::{
-    SemanticAxiomTranslator,
-    SemanticPhysicsConfig,
-    PriorityBlendingStrategy,
+    PriorityBlendingStrategy, SemanticAxiomTranslator, SemanticPhysicsConfig,
 };
 
 pub use semantic_gpu_buffer::{
-    SemanticGPUConstraintBuffer,
-    SemanticGPUConstraint,
-    SemanticConstraintStats,
-    gpu_semantic_types,
+    gpu_semantic_types, SemanticConstraintStats, SemanticGPUConstraint, SemanticGPUConstraintBuffer,
 };
 
 pub struct ConstraintPipeline {
@@ -88,7 +52,6 @@ pub struct ConstraintPipeline {
 }
 
 impl ConstraintPipeline {
-    
     pub fn new() -> Self {
         Self {
             mapper: AxiomMapper::new(),
@@ -98,7 +61,6 @@ impl ConstraintPipeline {
         }
     }
 
-    
     pub fn with_configs(
         translation_config: TranslationConfig,
         blender_config: BlenderConfig,
@@ -112,66 +74,47 @@ impl ConstraintPipeline {
         }
     }
 
-    
-    
-    
-    
-    
-    
-    
-    
-    pub fn process(
-        &mut self,
-        axioms: &[OWLAxiom],
-        zoom_level: f32,
-    ) -> GPUConstraintBuffer {
-        
+    pub fn process(&mut self, axioms: &[OWLAxiom], zoom_level: f32) -> GPUConstraintBuffer {
         let constraints = self.mapper.translate_axioms(axioms);
 
-        
         self.resolver.clear();
         self.resolver.add_constraints(constraints);
         let _resolved = self.resolver.resolve();
 
-        
-        let blended: Vec<PhysicsConstraint> = self.resolver
+        let blended: Vec<PhysicsConstraint> = self
+            .resolver
             .get_groups()
             .iter()
-            .filter_map(|group| {
-                self.blender.blend_constraints(&group.constraints)
-            })
+            .filter_map(|group| self.blender.blend_constraints(&group.constraints))
             .collect();
 
-        
         self.lod.set_constraints(blended);
         self.lod.update_zoom(zoom_level);
         let active = self.lod.get_active_constraints();
 
-        
         let mut buffer = GPUConstraintBuffer::new(active.len());
         if let Err(e) = buffer.add_constraints(active) {
-            warn!("Failed to add constraints to GPU buffer: {}. Returning empty buffer.", e);
+            warn!(
+                "Failed to add constraints to GPU buffer: {}. Returning empty buffer.",
+                e
+            );
         }
 
         buffer
     }
 
-    
     pub fn update_frame_time(&mut self, frame_time_ms: f32) {
         self.lod.update_frame_time(frame_time_ms);
     }
 
-    
     pub fn get_lod_stats(&self) -> LODStats {
         self.lod.get_stats()
     }
 
-    
     pub fn get_constraint_stats(&self, buffer: &GPUConstraintBuffer) -> ConstraintStats {
         ConstraintStats::from_buffer(buffer)
     }
 
-    
     pub fn get_lod_level(&self) -> LODLevel {
         self.lod.get_current_level()
     }
@@ -205,7 +148,6 @@ mod tests {
             }),
         ];
 
-        
         let buffer = pipeline.process(&axioms, 5.0);
 
         assert!(buffer.len() > 0);
@@ -226,15 +168,12 @@ mod tests {
             }),
         ];
 
-        
         let buffer_far = pipeline.process(&axioms, 2000.0);
         assert_eq!(pipeline.get_lod_level(), LODLevel::Far);
 
-        
         let buffer_close = pipeline.process(&axioms, 5.0);
         assert_eq!(pipeline.get_lod_level(), LODLevel::Close);
 
-        
         assert!(buffer_far.len() <= buffer_close.len());
     }
 
@@ -242,16 +181,13 @@ mod tests {
     fn test_adaptive_lod() {
         let mut pipeline = ConstraintPipeline::new();
 
-        let axioms = vec![
-            OWLAxiom::asserted(AxiomType::SubClassOf {
-                subclass: 1,
-                superclass: 2,
-            }),
-        ];
+        let axioms = vec![OWLAxiom::asserted(AxiomType::SubClassOf {
+            subclass: 1,
+            superclass: 2,
+        })];
 
         pipeline.process(&axioms, 5.0);
 
-        
         pipeline.update_frame_time(30.0);
 
         let stats = pipeline.get_lod_stats();

@@ -204,8 +204,7 @@ fn v4_no_runtime_env_reads_of_bypass_vars() {
                 let path = entry.path();
                 if path.is_dir() {
                     walk(&path, hits, in_scope);
-                } else if path.extension().and_then(|s| s.to_str()) == Some("rs")
-                    && in_scope(&path)
+                } else if path.extension().and_then(|s| s.to_str()) == Some("rs") && in_scope(&path)
                 {
                     let content = match std::fs::read_to_string(&path) {
                         Ok(c) => c,
@@ -223,7 +222,8 @@ fn v4_no_runtime_env_reads_of_bypass_vars() {
                         // Naive cfg-block tracking — a line starting with
                         // `#[cfg(any(debug_assertions, feature = "dev-auth"))]`
                         // opens a dev-only block until the matching brace closes.
-                        if trimmed.starts_with("#[cfg(any(debug_assertions, feature = \"dev-auth\"))]")
+                        if trimmed
+                            .starts_with("#[cfg(any(debug_assertions, feature = \"dev-auth\"))]")
                         {
                             in_dev_cfg_block = true;
                             brace_depth_at_cfg = brace_depth;

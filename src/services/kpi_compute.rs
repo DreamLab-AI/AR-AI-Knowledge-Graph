@@ -111,7 +111,11 @@ pub fn trust_variance(outcomes: &[String]) -> (f64, f64, u64) {
     } else {
         gini / (1.0 - 1.0 / k as f64)
     };
-    (normalised.clamp(0.0, 1.0), sample_confidence(n as u64), n as u64)
+    (
+        normalised.clamp(0.0, 1.0),
+        sample_confidence(n as u64),
+        n as u64,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +219,11 @@ impl KpiComputeService {
         let sha = crate::services::liveness_harness::current_sha();
 
         // --- source reads --------------------------------------------------
-        let agent_volume = self
-            .kpi_repo
-            .count_agent_events_since(window_start)
-            .await
-            .map_err(|e| format!("agent-event volume read failed: {e}"))?
-            as u64;
+        let agent_volume =
+            self.kpi_repo
+                .count_agent_events_since(window_start)
+                .await
+                .map_err(|e| format!("agent-event volume read failed: {e}"))? as u64;
 
         let decisions = self
             .enrichment_repo
@@ -443,7 +446,10 @@ mod tests {
         // 42 agent actions, 12 escalations ⇒ 3.5.
         let (value, conf) = augmentation_ratio(42, 12);
         assert!((value - 3.5).abs() < 1e-9);
-        assert!((conf - 1.0).abs() < 1e-9, "54 samples ≥ 30 ⇒ full confidence");
+        assert!(
+            (conf - 1.0).abs() < 1e-9,
+            "54 samples ≥ 30 ⇒ full confidence"
+        );
     }
 
     #[test]
@@ -457,7 +463,10 @@ mod tests {
     fn augmentation_ratio_low_sample_scales_confidence() {
         let (value, conf) = augmentation_ratio(3, 3);
         assert!((value - 1.0).abs() < 1e-9);
-        assert!((conf - 6.0 / 30.0).abs() < 1e-9, "6 samples ⇒ 0.2 confidence");
+        assert!(
+            (conf - 6.0 / 30.0).abs() < 1e-9,
+            "6 samples ⇒ 0.2 confidence"
+        );
     }
 
     #[test]
@@ -473,7 +482,10 @@ mod tests {
         let mut outcomes = vec!["approve".to_string(); 5];
         outcomes.extend(vec!["reject".to_string(); 5]);
         let (value, _conf, sample) = trust_variance(&outcomes);
-        assert!((value - 1.0).abs() < 1e-9, "even 50/50 split ⇒ normalised 1.0");
+        assert!(
+            (value - 1.0).abs() < 1e-9,
+            "even 50/50 split ⇒ normalised 1.0"
+        );
         assert_eq!(sample, 10);
     }
 
@@ -494,7 +506,10 @@ mod tests {
         let mut outcomes = vec!["approve".to_string(); 9];
         outcomes.push("reject".to_string());
         let (value, _conf, _sample) = trust_variance(&outcomes);
-        assert!(value > 0.0 && value < 0.5, "skewed split ⇒ low dispersion, got {value}");
+        assert!(
+            value > 0.0 && value < 0.5,
+            "skewed split ⇒ low dispersion, got {value}"
+        );
     }
 
     #[test]

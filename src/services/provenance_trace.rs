@@ -64,13 +64,21 @@ impl PodProvenanceMark {
     pub fn from_contract_json(v: &serde_json::Value) -> Option<Self> {
         let commit = v.get("commit")?;
         Some(Self {
-            resource: v.get("resource").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+            resource: v
+                .get("resource")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string(),
             agent_did: commit
                 .get("agent_did")
                 .and_then(|s| s.as_str())
                 .filter(|s| s.starts_with("did:nostr:"))
                 .map(|s| s.to_string()),
-            commit_sha: commit.get("sha").and_then(|s| s.as_str()).unwrap_or("").to_string(),
+            commit_sha: commit
+                .get("sha")
+                .and_then(|s| s.as_str())
+                .unwrap_or("")
+                .to_string(),
             committed_at: commit
                 .get("committed_at")
                 .and_then(|s| s.as_str())
@@ -232,7 +240,9 @@ pub fn build_trace(
         let Some(did) = r.agent_did.as_ref() else {
             continue;
         };
-        let entry = by_agent.entry(did.clone()).or_insert_with(|| (Vec::new(), 0));
+        let entry = by_agent
+            .entry(did.clone())
+            .or_insert_with(|| (Vec::new(), 0));
         if !entry.0.contains(&r.source) {
             entry.0.push(r.source);
         }
@@ -366,8 +376,16 @@ mod tests {
         // A shared did:nostr appears in BOTH the agent-events and the broker-
         // decision source ⇒ a real cross-source join spanning two live kinds.
         let did = "did:nostr:aaaa";
-        let traj = vec![trajectory(Some(did), 2_000, Some("urn:agentbox:activity:chain-1"))];
-        let dec = vec![decision(Some(did), 3_000, "urn:visionclaw:execution:sha256-12-abc")];
+        let traj = vec![trajectory(
+            Some(did),
+            2_000,
+            Some("urn:agentbox:activity:chain-1"),
+        )];
+        let dec = vec![decision(
+            Some(did),
+            3_000,
+            "urn:visionclaw:execution:sha256-12-abc",
+        )];
         let trace = build_trace(&traj, &dec, &[], false, None);
 
         assert!(trace.sources_present.contains(&SOURCE_AGENT_EVENT));
@@ -375,7 +393,10 @@ mod tests {
         // Pod is default-off ⇒ absent, tolerated, and reported.
         assert!(trace.sources_absent.contains(&SOURCE_POD_GIT_MARK));
         assert_eq!(trace.distinct_source_kinds, 2);
-        assert!(trace.joins_multiple_source_kinds(), "did:nostr joins ≥2 kinds");
+        assert!(
+            trace.joins_multiple_source_kinds(),
+            "did:nostr joins ≥2 kinds"
+        );
         assert_eq!(trace.joins.len(), 1);
         assert_eq!(trace.joins[0].agent_did, did);
         assert_eq!(trace.joins[0].sources.len(), 2);
@@ -399,7 +420,11 @@ mod tests {
     fn anonymous_records_never_join() {
         // Records with no did:nostr are surfaced but cannot join (no shared key).
         let traj = vec![trajectory(None, 1_000, None)];
-        let dec = vec![decision(None, 2_000, "urn:visionclaw:execution:sha256-12-xyz")];
+        let dec = vec![decision(
+            None,
+            2_000,
+            "urn:visionclaw:execution:sha256-12-xyz",
+        )];
         let trace = build_trace(&traj, &dec, &[], false, None);
         assert_eq!(trace.total_records, 2);
         assert!(trace.joins.is_empty());
@@ -412,7 +437,11 @@ mod tests {
         // a shared did:nostr can span all three sources.
         let did = "did:nostr:cccc";
         let traj = vec![trajectory(Some(did), 1_000, None)];
-        let dec = vec![decision(Some(did), 2_000, "urn:visionclaw:execution:sha256-12-c")];
+        let dec = vec![decision(
+            Some(did),
+            2_000,
+            "urn:visionclaw:execution:sha256-12-c",
+        )];
         let pod = vec![PodProvenanceMark {
             resource: "/npub1x/alice/notes/foo.ttl".into(),
             agent_did: Some(did.into()),

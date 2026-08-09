@@ -12,9 +12,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 // Re-export pure-data types so existing callers `use crate::telemetry::*` keep working.
-pub use visionclaw_domain::telemetry::{
-    CorrelationId, LogLevel, Position3D, TelemetryEvent,
-};
+pub use visionclaw_domain::telemetry::{CorrelationId, LogLevel, Position3D, TelemetryEvent};
 
 // ── AgentTelemetryLogger ────────────────────────────────────────────────────────
 
@@ -335,15 +333,16 @@ static GLOBAL_TELEMETRY_LOGGER: once_cell::sync::OnceCell<AgentTelemetryLogger> 
     once_cell::sync::OnceCell::new();
 
 pub fn init_telemetry_logger(log_dir: &str, buffer_size: usize) -> Result<(), std::io::Error> {
-    GLOBAL_TELEMETRY_LOGGER
-        .get_or_try_init(|| -> Result<AgentTelemetryLogger, std::io::Error> {
+    GLOBAL_TELEMETRY_LOGGER.get_or_try_init(
+        || -> Result<AgentTelemetryLogger, std::io::Error> {
             let logger = AgentTelemetryLogger::new(log_dir, buffer_size)?;
             info!(
                 "Telemetry logger initialized with log directory: {}",
                 log_dir
             );
             Ok(logger)
-        })?;
+        },
+    )?;
     Ok(())
 }
 

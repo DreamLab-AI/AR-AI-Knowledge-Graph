@@ -10,19 +10,18 @@ use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::actors::gpu::shortest_path_actor::{
-    ComputeSSP, ComputeAPSP, GetShortestPathStats, SSSPResult, APSPResult,
-};
 use crate::actors::gpu::connected_components_actor::{
-    ComputeConnectedComponents, GetConnectedComponentsStats,
-    ConnectedComponentsResult,
+    ComputeConnectedComponents, ConnectedComponentsResult, GetConnectedComponentsStats,
 };
+use crate::actors::gpu::shortest_path_actor::{
+    APSPResult, ComputeAPSP, ComputeSSP, GetShortestPathStats, SSSPResult,
+};
+use crate::ports::graph_repository::GraphRepository;
 use crate::services::pathfinding::{
     AStarPathfinder, BidirectionalDijkstra, JaccardEmbedding, PathAlgorithm,
     PathResult as PfPathResult, SemanticPathfinder,
 };
-use crate::ports::graph_repository::GraphRepository;
-use crate::{ok_json, error_json, AppState};
+use crate::{error_json, ok_json, AppState};
 
 /// SSSP request payload
 #[derive(Debug, Deserialize)]
@@ -110,7 +109,11 @@ impl std::fmt::Display for ConnectedComponentsResponse {
         if self.success {
             write!(f, "Connected components computation successful")
         } else {
-            write!(f, "Connected components computation failed: {:?}", self.error)
+            write!(
+                f,
+                "Connected components computation failed: {:?}",
+                self.error
+            )
         }
     }
 }
@@ -136,45 +139,48 @@ pub async fn compute_sssp(
     info!("API: Computing SSSP from node {}", payload.source_idx);
 
     if let Some(ref shortest_path_actor) = data.shortest_path_actor {
-            let msg = ComputeSSP {
-                source_idx: payload.source_idx,
-                max_distance: payload.max_distance,
-                delta: payload.delta,
-            };
+        let msg = ComputeSSP {
+            source_idx: payload.source_idx,
+            max_distance: payload.max_distance,
+            delta: payload.delta,
+        };
 
-            match shortest_path_actor.send(msg).await {
-                Ok(Ok(result)) => {
-                    info!("SSSP computed successfully: {} nodes reached", result.nodes_reached);
-                    ok_json!(SSSPResponse {
-                        success: true,
-                        result: Some(result),
-                        error: None,
-                    })
-                }
-                Ok(Err(e)) => {
-                    error!("SSSP computation failed: {}", e);
-                    error_json!(SSSPResponse {
-                        success: false,
-                        result: None,
-                        error: Some(e),
-                    })
-                }
-                Err(e) => {
-                    error!("Failed to send message to shortest path actor: {}", e);
-                    error_json!(SSSPResponse {
-                        success: false,
-                        result: None,
-                        error: Some(format!("Actor communication error: {}", e)),
-                    })
-                }
+        match shortest_path_actor.send(msg).await {
+            Ok(Ok(result)) => {
+                info!(
+                    "SSSP computed successfully: {} nodes reached",
+                    result.nodes_reached
+                );
+                ok_json!(SSSPResponse {
+                    success: true,
+                    result: Some(result),
+                    error: None,
+                })
             }
-        } else {
-            error_json!(SSSPResponse {
-                success: false,
-                result: None,
-                error: Some("Shortest path actor not available".to_string()),
-            })
+            Ok(Err(e)) => {
+                error!("SSSP computation failed: {}", e);
+                error_json!(SSSPResponse {
+                    success: false,
+                    result: None,
+                    error: Some(e),
+                })
+            }
+            Err(e) => {
+                error!("Failed to send message to shortest path actor: {}", e);
+                error_json!(SSSPResponse {
+                    success: false,
+                    result: None,
+                    error: Some(format!("Actor communication error: {}", e)),
+                })
+            }
         }
+    } else {
+        error_json!(SSSPResponse {
+            success: false,
+            result: None,
+            error: Some("Shortest path actor not available".to_string()),
+        })
+    }
 }
 
 /// Compute approximate all-pairs shortest paths using landmark-based method
@@ -198,47 +204,50 @@ pub async fn compute_apsp(
     info!("API: Computing APSP");
 
     if let Some(ref shortest_path_actor) = data.shortest_path_actor {
-            // Default to sqrt(n) landmarks if not specified
-            let num_landmarks = payload.num_landmarks.unwrap_or(0);
+        // Default to sqrt(n) landmarks if not specified
+        let num_landmarks = payload.num_landmarks.unwrap_or(0);
 
-            let msg = ComputeAPSP {
-                num_landmarks,
-                seed: payload.seed,
-            };
+        let msg = ComputeAPSP {
+            num_landmarks,
+            seed: payload.seed,
+        };
 
-            match shortest_path_actor.send(msg).await {
-                Ok(Ok(result)) => {
-                    info!("APSP computed successfully with {} landmarks", result.num_landmarks);
-                    ok_json!(APSPResponse {
-                        success: true,
-                        result: Some(result),
-                        error: None,
-                    })
-                }
-                Ok(Err(e)) => {
-                    error!("APSP computation failed: {}", e);
-                    error_json!(APSPResponse {
-                        success: false,
-                        result: None,
-                        error: Some(e),
-                    })
-                }
-                Err(e) => {
-                    error!("Failed to send message to shortest path actor: {}", e);
-                    error_json!(APSPResponse {
-                        success: false,
-                        result: None,
-                        error: Some(format!("Actor communication error: {}", e)),
-                    })
-                }
+        match shortest_path_actor.send(msg).await {
+            Ok(Ok(result)) => {
+                info!(
+                    "APSP computed successfully with {} landmarks",
+                    result.num_landmarks
+                );
+                ok_json!(APSPResponse {
+                    success: true,
+                    result: Some(result),
+                    error: None,
+                })
             }
-        } else {
-            error_json!(APSPResponse {
-                success: false,
-                result: None,
-                error: Some("Shortest path actor not available".to_string()),
-            })
+            Ok(Err(e)) => {
+                error!("APSP computation failed: {}", e);
+                error_json!(APSPResponse {
+                    success: false,
+                    result: None,
+                    error: Some(e),
+                })
+            }
+            Err(e) => {
+                error!("Failed to send message to shortest path actor: {}", e);
+                error_json!(APSPResponse {
+                    success: false,
+                    result: None,
+                    error: Some(format!("Actor communication error: {}", e)),
+                })
+            }
         }
+    } else {
+        error_json!(APSPResponse {
+            success: false,
+            result: None,
+            error: Some("Shortest path actor not available".to_string()),
+        })
+    }
 }
 
 /// Compute connected components of the graph
@@ -261,78 +270,83 @@ pub async fn compute_connected_components(
     info!("API: Computing connected components");
 
     if let Some(ref connected_components_actor) = data.connected_components_actor {
-            let msg = ComputeConnectedComponents {
-                max_iterations: payload.max_iterations,
-                convergence_threshold: payload.convergence_threshold,
-            };
+        let msg = ComputeConnectedComponents {
+            max_iterations: payload.max_iterations,
+            convergence_threshold: payload.convergence_threshold,
+        };
 
-            match connected_components_actor.send(msg).await {
-                Ok(Ok(result)) => {
-                    info!("Connected components computed: {} components found", result.num_components);
-                    ok_json!(ConnectedComponentsResponse {
-                        success: true,
-                        result: Some(result),
-                        error: None,
-                    })
-                }
-                Ok(Err(e)) => {
-                    error!("Connected components computation failed: {}", e);
-                    error_json!(ConnectedComponentsResponse {
-                        success: false,
-                        result: None,
-                        error: Some(e),
-                    })
-                }
-                Err(e) => {
-                    error!("Failed to send message to connected components actor: {}", e);
-                    error_json!(ConnectedComponentsResponse {
-                        success: false,
-                        result: None,
-                        error: Some(format!("Actor communication error: {}", e)),
-                    })
-                }
+        match connected_components_actor.send(msg).await {
+            Ok(Ok(result)) => {
+                info!(
+                    "Connected components computed: {} components found",
+                    result.num_components
+                );
+                ok_json!(ConnectedComponentsResponse {
+                    success: true,
+                    result: Some(result),
+                    error: None,
+                })
             }
-        } else {
-            error_json!(ConnectedComponentsResponse {
-                success: false,
-                result: None,
-                error: Some("Connected components actor not available".to_string()),
-            })
+            Ok(Err(e)) => {
+                error!("Connected components computation failed: {}", e);
+                error_json!(ConnectedComponentsResponse {
+                    success: false,
+                    result: None,
+                    error: Some(e),
+                })
+            }
+            Err(e) => {
+                error!(
+                    "Failed to send message to connected components actor: {}",
+                    e
+                );
+                error_json!(ConnectedComponentsResponse {
+                    success: false,
+                    result: None,
+                    error: Some(format!("Actor communication error: {}", e)),
+                })
+            }
         }
+    } else {
+        error_json!(ConnectedComponentsResponse {
+            success: false,
+            result: None,
+            error: Some("Connected components actor not available".to_string()),
+        })
+    }
 }
 
 /// Get shortest path statistics
-pub async fn get_shortest_path_stats(
-    data: web::Data<AppState>,
-) -> Result<HttpResponse> {
+pub async fn get_shortest_path_stats(data: web::Data<AppState>) -> Result<HttpResponse> {
     if let Some(ref shortest_path_actor) = data.shortest_path_actor {
-            match shortest_path_actor.send(GetShortestPathStats).await {
-                Ok(stats) => ok_json!(stats),
-                Err(e) => {
-                    error!("Failed to get shortest path stats: {}", e);
-                    error_json!(format!("Failed to get stats: {}", e))
-                }
+        match shortest_path_actor.send(GetShortestPathStats).await {
+            Ok(stats) => ok_json!(stats),
+            Err(e) => {
+                error!("Failed to get shortest path stats: {}", e);
+                error_json!(format!("Failed to get stats: {}", e))
             }
-        } else {
-            error_json!("Shortest path actor not available")
         }
+    } else {
+        error_json!("Shortest path actor not available")
+    }
 }
 
 /// Get connected components statistics
-pub async fn get_connected_components_stats(
-    data: web::Data<AppState>,
-) -> Result<HttpResponse> {
+pub async fn get_connected_components_stats(data: web::Data<AppState>) -> Result<HttpResponse> {
     if let Some(ref connected_components_actor) = data.connected_components_actor {
-            match connected_components_actor.send(GetConnectedComponentsStats).await {
-                Ok(stats) => ok_json!(stats),
-                Err(e) => {
-                    error!("Failed to get connected components stats: {}", e);
-                    error_json!(format!("Failed to get stats: {}", e))
-                }
+        match connected_components_actor
+            .send(GetConnectedComponentsStats)
+            .await
+        {
+            Ok(stats) => ok_json!(stats),
+            Err(e) => {
+                error!("Failed to get connected components stats: {}", e);
+                error_json!(format!("Failed to get stats: {}", e))
             }
-        } else {
-            error_json!("Connected components actor not available")
         }
+    } else {
+        error_json!("Connected components actor not available")
+    }
 }
 
 /// Point-to-point pathfinding request
@@ -480,12 +494,7 @@ pub async fn compute_point_to_point(
             let alpha = payload.semantic_alpha.unwrap_or(0.5);
             let pathfinder = SemanticPathfinder::new(embedding).with_alpha(alpha);
 
-            match pathfinder.find_path(
-                &graph_data,
-                payload.source_id,
-                payload.target_id,
-                &query,
-            ) {
+            match pathfinder.find_path(&graph_data, payload.source_id, payload.target_id, &query) {
                 Ok(result) => {
                     info!(
                         "Semantic path found: {} nodes, distance {:.3}, relevance {:.3}",

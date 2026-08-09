@@ -18,16 +18,17 @@
 
 use ts_rs::TS;
 use visionclaw_contracts::{
-    agent_action::{ActionKind, AgentAction, AgentActionEnvelope, ModifierKeys, NodeClass, WorldPosition},
+    agent_action::{
+        ActionKind, AgentAction, AgentActionEnvelope, ModifierKeys, NodeClass, WorldPosition,
+    },
     enterprise::{
         EnterpriseEventEnvelope, EnterpriseEventKind, EnterpriseRole, MembershipAction,
         MembershipChangePayload, RoleChangePayload, SessionRevokedPayload,
     },
     github_adapter::{ParseErrorKind, ParseErrorReport, ParsedMarkdown},
     telemetry::{
-        AgentRecord, AgentRemovedPayload, AgentStatus, AgentTelemetryEnvelope,
-        AgentTelemetryEvent, CommunicationPayload, DeltaPayload, HeartbeatPayload,
-        SnapshotPayload,
+        AgentRecord, AgentRemovedPayload, AgentStatus, AgentTelemetryEnvelope, AgentTelemetryEvent,
+        CommunicationPayload, DeltaPayload, HeartbeatPayload, SnapshotPayload,
     },
 };
 

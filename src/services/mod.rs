@@ -3,25 +3,25 @@
 pub mod acsp;
 pub mod agent_visualization_processor;
 pub mod agent_visualization_protocol;
+pub mod audio_router;
 pub mod bots_client;
 pub mod file_service;
 pub mod github;
 pub mod github_sync_service;
+pub mod graph_serialization;
 pub mod local_file_sync_service;
 pub mod management_api_client;
+pub mod mcp_relay_manager;
 pub mod multi_mcp_agent_discovery;
 pub mod natural_language_query_service;
-pub mod parsers;
-pub mod graph_serialization;
-pub mod mcp_relay_manager;
 pub mod nostr_service;
 pub mod owl_validator;
+pub mod parsers;
 pub mod perplexity_service;
 pub mod ragflow_service;
 pub mod schema_service;
 pub mod semantic_analyzer;
 pub mod semantic_pathfinding_service;
-pub mod audio_router;
 // COM-15 / V1 / D6 / M5 (PRD-023 WP-5): the governed voice loop's consumer —
 // signs a kind-31402 targeted at the selected agent's did:nostr and POSTs it to
 // the agentbox `/v1/voice-intent` producer (ADR-037 D7).
@@ -29,27 +29,27 @@ pub mod voice_intent_client;
 // V3 (PRD-023 WP-10): the conversational-grounding confidence gate that holds a
 // low-confidence / under-specified spoken command for a clarification turn
 // instead of dispatching it.
-pub mod voice_clarification;
-pub mod speech_service;
-pub mod speech_voice_integration;
-pub mod voice_context_manager;
-pub mod voice_tag_manager;
-pub mod ontology_converter;
 pub mod edge_classifier;
-pub mod ontology_reasoner;
-pub mod ontology_enrichment_service;
-pub mod ontology_reasoning_service;
-pub mod ontology_pipeline_service;
 pub mod ontology_content_analyzer;
+pub mod ontology_converter;
+pub mod ontology_enrichment_service;
 pub mod ontology_file_cache;
+pub mod ontology_mutation_service;
+pub mod ontology_pipeline_service;
+pub mod ontology_query_service;
+pub mod ontology_reasoner;
+pub mod ontology_reasoning_service;
 pub mod pathfinding;
 pub mod semantic_type_registry;
-pub mod ontology_query_service;
-pub mod ontology_mutation_service;
+pub mod speech_service;
+pub mod speech_voice_integration;
+pub mod voice_clarification;
+pub mod voice_context_manager;
+pub mod voice_tag_manager;
 // W-E transaction spine (ADR-049 / DDD-020): idempotency store, write-ahead
 // intent log, deterministic receipt builder. Pure/in-memory, store-agnostic.
-pub mod proposal_spine;
 pub mod ontology_conflict_gate;
+pub mod proposal_spine;
 // T3 (W-C/W-D, ADR-049): pure portable-reification provenance quad builders +
 // bi-temporal projection. Executed inside the spine's single commit transaction.
 pub mod provenance_writer;
@@ -58,9 +58,9 @@ pub mod provenance_writer;
 pub mod decision_service;
 // ADR-050 — decision elevation (the inverse corpus path): pure page draft/parse,
 // significance predicate, and the fire-and-forget sink the write door calls.
+pub mod briefing_service;
 pub mod decision_elevation;
 pub mod github_pr_service;
-pub mod briefing_service;
 pub mod nostr_bead_publisher;
 pub mod nostr_bridge;
 // PRD-008 §5.3 — Schnorr identity verifier for the XR presence handshake
@@ -102,6 +102,5 @@ pub mod jsonld_ingest;
 
 // Re-export semantic type registry types for convenience
 pub use semantic_type_registry::{
-    DynamicForceConfigGPU, RelationshipForceConfig, SemanticTypeRegistry,
-    SEMANTIC_TYPE_REGISTRY,
+    DynamicForceConfigGPU, RelationshipForceConfig, SemanticTypeRegistry, SEMANTIC_TYPE_REGISTRY,
 };

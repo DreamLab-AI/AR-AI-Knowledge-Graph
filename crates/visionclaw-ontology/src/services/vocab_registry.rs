@@ -189,14 +189,16 @@ pub fn resolve_import_target(target: &str) -> Option<&'static VocabularyRegistra
     // Tolerate a trailing fragment/slash mismatch between the imports IRI and
     // the registered namespace (e.g. `…/prov-o#` vs `…/prov-o`).
     let trimmed = target.trim_end_matches(['#', '/']);
-    by_purl(trimmed).or_else(|| by_namespace_iri(trimmed)).or_else(|| {
-        // Or the import names the namespace authority; match by namespace
-        // prefix membership.
-        REGISTRY.iter().find(|r| {
-            let ns = r.namespace_iri.trim_end_matches(['#', '/']);
-            ns == trimmed || target.starts_with(r.namespace_iri)
+    by_purl(trimmed)
+        .or_else(|| by_namespace_iri(trimmed))
+        .or_else(|| {
+            // Or the import names the namespace authority; match by namespace
+            // prefix membership.
+            REGISTRY.iter().find(|r| {
+                let ns = r.namespace_iri.trim_end_matches(['#', '/']);
+                ns == trimmed || target.starts_with(r.namespace_iri)
+            })
         })
-    })
 }
 
 /// The full registry, for callers that want to enumerate (e.g. a `/vocab`
@@ -212,7 +214,9 @@ mod tests {
 
     #[test]
     fn registry_covers_adr100_minimum_set() {
-        for p in ["rdf", "rdfs", "owl", "xsd", "skos", "prov", "foaf", "bfo", "obo", "dcterms"] {
+        for p in [
+            "rdf", "rdfs", "owl", "xsd", "skos", "prov", "foaf", "bfo", "obo", "dcterms",
+        ] {
             assert!(by_prefix(p).is_some(), "missing required vocab prefix {p}");
         }
     }

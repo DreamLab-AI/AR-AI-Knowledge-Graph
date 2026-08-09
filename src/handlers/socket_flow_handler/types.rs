@@ -332,31 +332,39 @@ impl SocketFlowServer {
 
                     // Send new InitialGraphLoad message with LIMITED node set for fast initial render
                     if !graph_data.nodes.is_empty() || !graph_data.edges.is_empty() {
-                        use crate::utils::socket_flow_messages::{InitialNodeData, InitialEdgeData};
+                        use crate::utils::socket_flow_messages::{
+                            InitialEdgeData, InitialNodeData,
+                        };
                         use std::collections::HashSet;
 
-                        let mut sorted_nodes: Vec<&visionclaw_domain::models::node::Node> = graph_data
-                            .nodes
-                            .iter()
-                            .collect();
+                        let mut sorted_nodes: Vec<&visionclaw_domain::models::node::Node> =
+                            graph_data.nodes.iter().collect();
 
                         // Sort by quality_score descending
                         sorted_nodes.sort_by(|a, b| {
-                            let quality_a = graph_data.metadata.get(&a.metadata_id)
+                            let quality_a = graph_data
+                                .metadata
+                                .get(&a.metadata_id)
                                 .and_then(|m| m.quality_score)
                                 .unwrap_or(0.0);
-                            let quality_b = graph_data.metadata.get(&b.metadata_id)
+                            let quality_b = graph_data
+                                .metadata
+                                .get(&b.metadata_id)
                                 .and_then(|m| m.quality_score)
                                 .unwrap_or(0.0);
-                            quality_b.partial_cmp(&quality_a).unwrap_or(std::cmp::Ordering::Equal)
+                            quality_b
+                                .partial_cmp(&quality_a)
+                                .unwrap_or(std::cmp::Ordering::Equal)
                         });
 
-                        let filtered_nodes: Vec<&visionclaw_domain::models::node::Node> = sorted_nodes
-                            .into_iter()
-                            .take(DEFAULT_INITIAL_NODE_LIMIT)
-                            .collect();
+                        let filtered_nodes: Vec<&visionclaw_domain::models::node::Node> =
+                            sorted_nodes
+                                .into_iter()
+                                .take(DEFAULT_INITIAL_NODE_LIMIT)
+                                .collect();
 
-                        let filtered_node_ids: HashSet<u32> = filtered_nodes.iter().map(|n| n.id).collect();
+                        let filtered_node_ids: HashSet<u32> =
+                            filtered_nodes.iter().map(|n| n.id).collect();
 
                         let nodes: Vec<InitialNodeData> = filtered_nodes
                             .iter()
@@ -381,7 +389,8 @@ impl SocketFlowServer {
                             .edges
                             .iter()
                             .filter(|edge| {
-                                filtered_node_ids.contains(&edge.source) && filtered_node_ids.contains(&edge.target)
+                                filtered_node_ids.contains(&edge.source)
+                                    && filtered_node_ids.contains(&edge.target)
                             })
                             .map(|edge| InitialEdgeData {
                                 id: edge.id.clone(),
@@ -392,18 +401,24 @@ impl SocketFlowServer {
                             })
                             .collect();
 
-                        addr.do_send(crate::actors::messages::SendInitialGraphLoad { nodes: nodes.clone(), edges: edges.clone() });
+                        addr.do_send(crate::actors::messages::SendInitialGraphLoad {
+                            nodes: nodes.clone(),
+                            edges: edges.clone(),
+                        });
                         info!("Sent InitialGraphLoad: {} nodes (sparse from {} total), {} edges [limit: {}]",
                               nodes.len(), graph_data.nodes.len(),
                               edges.len(), DEFAULT_INITIAL_NODE_LIMIT);
 
                         // Fetch node type arrays for binary protocol flags
-                        let nta = app_state.graph_service_addr
+                        let nta = app_state
+                            .graph_service_addr
                             .send(crate::actors::messages::GetNodeTypeArrays)
                             .await
                             .unwrap_or_default();
-                        let agent_set: std::collections::HashSet<u32> = nta.agent_ids.iter().copied().collect();
-                        let knowledge_set: std::collections::HashSet<u32> = nta.knowledge_ids.iter().copied().collect();
+                        let agent_set: std::collections::HashSet<u32> =
+                            nta.agent_ids.iter().copied().collect();
+                        let knowledge_set: std::collections::HashSet<u32> =
+                            nta.knowledge_ids.iter().copied().collect();
 
                         // Also send binary position data for SAME limited nodes only,
                         // with node type flags applied for client-side rendering
@@ -434,8 +449,13 @@ impl SocketFlowServer {
                             })
                             .collect();
 
-                        addr.do_send(super::actor_messages::BroadcastPositionUpdate(node_data.clone()));
-                        debug!("Sent initial node positions for {} limited nodes (binary)", node_data.len());
+                        addr.do_send(super::actor_messages::BroadcastPositionUpdate(
+                            node_data.clone(),
+                        ));
+                        debug!(
+                            "Sent initial node positions for {} limited nodes (binary)",
+                            node_data.len()
+                        );
                     }
                 }
             }

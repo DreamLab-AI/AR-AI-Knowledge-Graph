@@ -1,28 +1,27 @@
 //! Advanced semantic analysis service for knowledge graph enhancement
 
-use visionclaw_domain::models::metadata::Metadata;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use visionclaw_domain::models::metadata::Metadata;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticFeatures {
-    
     pub id: String,
-    
+
     pub topics: HashMap<String, f32>,
-    
+
     pub domains: Vec<KnowledgeDomain>,
-    
+
     pub temporal: TemporalFeatures,
-    
+
     pub structural: StructuralFeatures,
-    
+
     pub content: ContentFeatures,
-    
+
     pub agent_patterns: Option<AgentCommunicationPatterns>,
-    
+
     pub importance_score: f32,
 }
 
@@ -52,87 +51,82 @@ pub enum KnowledgeDomain {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemporalFeatures {
-    
     pub created_at: Option<DateTime<Utc>>,
-    
+
     pub modified_at: Option<DateTime<Utc>>,
-    
+
     pub modification_frequency: f32,
-    
+
     pub co_evolution_score: f32,
-    
+
     pub temporal_cluster: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructuralFeatures {
-    
     pub file_type: String,
-    
+
     pub directory_depth: u32,
-    
+
     pub dependency_count: u32,
-    
+
     pub complexity_score: f32,
-    
+
     pub loc: Option<u32>,
-    
+
     pub module_path: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentFeatures {
-    
     pub language: String,
-    
+
     pub key_terms: Vec<String>,
-    
+
     pub embeddings: Option<Vec<f32>>,
-    
+
     pub content_hash: String,
-    
+
     pub documentation_score: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentCommunicationPatterns {
-    
     pub send_frequency: f32,
-    
+
     pub receive_frequency: f32,
-    
+
     pub communication_partners: HashMap<String, f32>,
-    
+
     pub message_types: HashSet<String>,
-    
+
     pub clustering_coefficient: f32,
-    
+
     pub network_role: NetworkRole,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NetworkRole {
-    Hub,        
-    Bridge,     
-    Peripheral, 
-    Isolated,   
+    Hub,
+    Bridge,
+    Peripheral,
+    Isolated,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SemanticAnalyzerConfig {
-    
     pub enable_topics: bool,
-    
+
     pub num_topics: usize,
-    
+
     pub enable_temporal: bool,
-    
+
     pub enable_agent_patterns: bool,
-    
+
     pub min_term_frequency: f32,
-    
+
     pub max_features: usize,
-    
+
     pub enable_caching: bool,
 }
 
@@ -167,7 +161,6 @@ impl Clone for SemanticAnalyzer {
 }
 
 impl SemanticAnalyzer {
-    
     pub fn new(config: SemanticAnalyzerConfig) -> Self {
         let mut analyzer = Self {
             config,
@@ -178,7 +171,6 @@ impl SemanticAnalyzer {
         analyzer
     }
 
-    
     fn initialize_domain_patterns(&mut self) {
         self.domain_patterns.insert(
             KnowledgeDomain::Mathematics,
@@ -266,19 +258,15 @@ impl SemanticAnalyzer {
         );
     }
 
-    
     pub fn analyze_metadata(&mut self, metadata: &Metadata) -> SemanticFeatures {
-        
         let id = metadata.file_name.trim_end_matches(".md").to_string();
 
-        
         if self.config.enable_caching {
             if let Some(cached) = self.feature_cache.get(&id) {
                 return cached.clone();
             }
         }
 
-        
         let topics = self.extract_topics(metadata);
         let domains = self.classify_domains(&topics, &metadata.file_name);
         let temporal = self.extract_temporal_features(metadata);
@@ -297,7 +285,6 @@ impl SemanticAnalyzer {
             importance_score,
         };
 
-        
         if self.config.enable_caching {
             self.feature_cache.insert(id, features.clone());
         }
@@ -305,7 +292,6 @@ impl SemanticAnalyzer {
         features
     }
 
-    
     fn extract_topics(&self, metadata: &Metadata) -> HashMap<String, f32> {
         let mut topics = HashMap::new();
 
@@ -313,13 +299,11 @@ impl SemanticAnalyzer {
             return topics;
         }
 
-        
         for (topic, &count) in &metadata.topic_counts {
             let weight = (count as f32).ln() + 1.0;
             topics.insert(topic.clone(), weight);
         }
 
-        
         let total: f32 = topics.values().sum();
         if total > 0.0 {
             for weight in topics.values_mut() {
@@ -330,12 +314,10 @@ impl SemanticAnalyzer {
         topics
     }
 
-    
     fn classify_domains(&self, topics: &HashMap<String, f32>, path: &str) -> Vec<KnowledgeDomain> {
         let mut domains = Vec::new();
         let mut domain_scores: HashMap<KnowledgeDomain, f32> = HashMap::new();
 
-        
         let extension = Path::new(path)
             .extension()
             .and_then(|e| e.to_str())
@@ -352,7 +334,6 @@ impl SemanticAnalyzer {
             _ => None,
         };
 
-        
         for (domain, patterns) in &self.domain_patterns {
             let mut score = 0.0;
             for pattern in patterns {
@@ -365,7 +346,6 @@ impl SemanticAnalyzer {
             }
         }
 
-        
         let mut scored_domains: Vec<_> = domain_scores.into_iter().collect();
         scored_domains.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -382,18 +362,16 @@ impl SemanticAnalyzer {
         domains
     }
 
-    
     fn extract_temporal_features(&self, _metadata: &Metadata) -> TemporalFeatures {
         TemporalFeatures {
-            created_at: None,            
-            modified_at: None,           
-            modification_frequency: 1.0, 
-            co_evolution_score: 0.0,     
+            created_at: None,
+            modified_at: None,
+            modification_frequency: 1.0,
+            co_evolution_score: 0.0,
             temporal_cluster: None,
         }
     }
 
-    
     fn extract_structural_features(&self, metadata: &Metadata) -> StructuralFeatures {
         let path = Path::new(&metadata.file_name);
         let directory_depth = path.components().count() as u32;
@@ -406,7 +384,7 @@ impl SemanticAnalyzer {
         StructuralFeatures {
             file_type,
             directory_depth,
-            dependency_count: 0, 
+            dependency_count: 0,
             complexity_score: (metadata.topic_counts.len() as f32).ln() + 1.0,
             loc: Some(metadata.file_size as u32),
             module_path: path
@@ -416,7 +394,6 @@ impl SemanticAnalyzer {
         }
     }
 
-    
     fn extract_content_features(&self, metadata: &Metadata) -> ContentFeatures {
         let mut key_terms: Vec<_> = metadata.topic_counts.keys().cloned().collect();
         key_terms.sort_by_key(|k| std::cmp::Reverse(metadata.topic_counts[k]));
@@ -425,13 +402,12 @@ impl SemanticAnalyzer {
         ContentFeatures {
             language: self.detect_language(&metadata.file_name),
             key_terms,
-            embeddings: None, 
-            content_hash: metadata.sha1.clone(), 
+            embeddings: None,
+            content_hash: metadata.sha1.clone(),
             documentation_score: self.calculate_documentation_score(metadata),
         }
     }
 
-    
     fn detect_language(&self, path: &str) -> String {
         let extension = Path::new(path)
             .extension()
@@ -469,11 +445,9 @@ impl SemanticAnalyzer {
         .to_string()
     }
 
-    
     fn calculate_documentation_score(&self, metadata: &Metadata) -> f32 {
         let mut score: f32 = 0.0;
 
-        
         let doc_terms = [
             "readme",
             "doc",
@@ -489,7 +463,6 @@ impl SemanticAnalyzer {
             }
         }
 
-        
         if metadata.file_name.ends_with(".md") {
             score += 0.3;
         }
@@ -497,7 +470,6 @@ impl SemanticAnalyzer {
         score.min(1.0)
     }
 
-    
     fn calculate_importance_score(
         &self,
         topics: &HashMap<String, f32>,
@@ -506,7 +478,6 @@ impl SemanticAnalyzer {
     ) -> f32 {
         let mut score = 0.0;
 
-        
         let topic_entropy = -topics
             .values()
             .filter(|&&v| v > 0.0)
@@ -514,23 +485,19 @@ impl SemanticAnalyzer {
             .sum::<f32>();
         score += topic_entropy.min(1.0) * 0.3;
 
-        
         score += temporal.modification_frequency.min(1.0) * 0.2;
 
-        
         score += (structural.dependency_count as f32 / 10.0).min(1.0) * 0.3;
 
-        
         score += (structural.complexity_score / 5.0).min(1.0) * 0.2;
 
         score.min(1.0)
     }
 
-    
     pub fn analyze_agent_patterns(
         &mut self,
         agent_id: &str,
-        messages: &[(String, String, DateTime<Utc>)], 
+        messages: &[(String, String, DateTime<Utc>)],
     ) -> AgentCommunicationPatterns {
         let mut send_count = 0;
         let mut receive_count = 0;
@@ -546,7 +513,7 @@ impl SemanticAnalyzer {
                 receive_count += 1;
                 *partners.entry(from.clone()).or_insert(0.0) += 1.0;
             }
-            
+
             message_types.insert("default".to_string());
         }
 
@@ -554,7 +521,6 @@ impl SemanticAnalyzer {
         let send_frequency = send_count as f32 / total_messages.max(1.0);
         let receive_frequency = receive_count as f32 / total_messages.max(1.0);
 
-        
         let degree = partners.len();
         let network_role = if degree == 0 {
             NetworkRole::Isolated
@@ -571,12 +537,11 @@ impl SemanticAnalyzer {
             receive_frequency,
             communication_partners: partners,
             message_types,
-            clustering_coefficient: 0.0, 
+            clustering_coefficient: 0.0,
             network_role,
         }
     }
 
-    
     pub fn compute_similarity(
         &self,
         features1: &SemanticFeatures,
@@ -584,11 +549,9 @@ impl SemanticAnalyzer {
     ) -> f32 {
         let mut similarity = 0.0;
 
-        
         let topic_sim = self.cosine_similarity(&features1.topics, &features2.topics);
         similarity += topic_sim * 0.4;
 
-        
         let domain_overlap = features1
             .domains
             .iter()
@@ -598,7 +561,6 @@ impl SemanticAnalyzer {
             domain_overlap / (features1.domains.len().max(features2.domains.len()) as f32).max(1.0);
         similarity += domain_sim * 0.2;
 
-        
         if features1.structural.file_type == features2.structural.file_type {
             similarity += 0.1;
         }
@@ -608,7 +570,6 @@ impl SemanticAnalyzer {
             .abs();
         similarity += (1.0 / (1.0 + depth_diff)) * 0.1;
 
-        
         let temporal_sim = 1.0
             / (1.0
                 + (features1.temporal.modification_frequency
@@ -616,14 +577,12 @@ impl SemanticAnalyzer {
                     .abs());
         similarity += temporal_sim * 0.1;
 
-        
         let importance_diff = (features1.importance_score - features2.importance_score).abs();
         similarity += (1.0 - importance_diff) * 0.1;
 
         similarity.min(1.0)
     }
 
-    
     fn cosine_similarity(
         &self,
         topics1: &HashMap<String, f32>,
@@ -651,12 +610,10 @@ impl SemanticAnalyzer {
         }
     }
 
-    
     pub fn get_cached_features(&self) -> &HashMap<String, SemanticFeatures> {
         &self.feature_cache
     }
 
-    
     pub fn clear_cache(&mut self) {
         self.feature_cache.clear();
     }

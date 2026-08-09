@@ -16,13 +16,13 @@
 //! - GPU actors using `shared::SharedGPUContext` (depends on webxr `gpu::memory_manager`)
 
 pub mod messages;
+pub mod protected_settings_actor;
 pub mod supervisor;
 pub mod voice_commands;
-pub mod protected_settings_actor;
 
 // Re-export key types
+pub use protected_settings_actor::ProtectedSettingsActor;
 pub use supervisor::{
     ActorFactory, SupervisedActorInfo, SupervisedActorTrait, SupervisionStrategy, SupervisorActor,
 };
 pub use voice_commands::{SwarmIntent, SwarmVoiceResponse, VoiceCommand, VoicePreamble};
-pub use protected_settings_actor::ProtectedSettingsActor;

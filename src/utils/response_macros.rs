@@ -20,20 +20,18 @@
 /// ```
 #[macro_export]
 macro_rules! ok_json {
-    ($data:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use crate::utils::handler_commons::StandardResponse;
+    ($data:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
 
-            Ok::<HttpResponse, Error>(HttpResponse::Ok().json(StandardResponse {
-                success: true,
-                data: Some($data),
-                error: None,
-                timestamp: crate::time::now(),
-                request_id: None,
-            }))
-        }
-    };
+        Ok::<HttpResponse, Error>(HttpResponse::Ok().json(StandardResponse {
+            success: true,
+            data: Some($data),
+            error: None,
+            timestamp: crate::time::now(),
+            request_id: None,
+        }))
+    }};
 }
 
 /// Created response with JSON data (201 Created)
@@ -45,20 +43,18 @@ macro_rules! ok_json {
 /// ```
 #[macro_export]
 macro_rules! created_json {
-    ($data:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use crate::utils::handler_commons::StandardResponse;
+    ($data:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
 
-            Ok::<HttpResponse, Error>(HttpResponse::Created().json(StandardResponse {
-                success: true,
-                data: Some($data),
-                error: None,
-                timestamp: crate::time::now(),
-                request_id: None,
-            }))
-        }
-    };
+        Ok::<HttpResponse, Error>(HttpResponse::Created().json(StandardResponse {
+            success: true,
+            data: Some($data),
+            error: None,
+            timestamp: crate::time::now(),
+            request_id: None,
+        }))
+    }};
 }
 
 /// Internal server error response (500)
@@ -176,20 +172,18 @@ macro_rules! not_found {
 /// ```
 #[macro_export]
 macro_rules! success_msg {
-    ($data:expr, $msg:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use crate::utils::handler_commons::StandardResponse;
+    ($data:expr, $msg:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
 
-            Ok::<HttpResponse, Error>(HttpResponse::Ok().json(StandardResponse {
-                success: true,
-                data: Some($data),
-                error: None,
-                timestamp: crate::time::now(),
-                request_id: None,
-            }))
-        }
-    };
+        Ok::<HttpResponse, Error>(HttpResponse::Ok().json(StandardResponse {
+            success: true,
+            data: Some($data),
+            error: None,
+            timestamp: crate::time::now(),
+            request_id: None,
+        }))
+    }};
 }
 
 /// Unauthorized error response (401)
@@ -243,22 +237,20 @@ macro_rules! unauthorized {
 /// ```
 #[macro_export]
 macro_rules! forbidden {
-    ($msg:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use log::warn;
-            use crate::utils::handler_commons::StandardResponse;
+    ($msg:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
+        use log::warn;
 
-            warn!("Forbidden access: {}", $msg);
-            Ok::<HttpResponse, Error>(HttpResponse::Forbidden().json(StandardResponse::<()> {
-                success: false,
-                data: None,
-                error: Some($msg.to_string()),
-                timestamp: crate::time::now(),
-                request_id: None,
-            }))
-        }
-    };
+        warn!("Forbidden access: {}", $msg);
+        Ok::<HttpResponse, Error>(HttpResponse::Forbidden().json(StandardResponse::<()> {
+            success: false,
+            data: None,
+            error: Some($msg.to_string()),
+            timestamp: crate::time::now(),
+            request_id: None,
+        }))
+    }};
 }
 
 /// Conflict error response (409)
@@ -269,22 +261,20 @@ macro_rules! forbidden {
 /// ```
 #[macro_export]
 macro_rules! conflict {
-    ($msg:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use log::warn;
-            use crate::utils::handler_commons::StandardResponse;
+    ($msg:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
+        use log::warn;
 
-            warn!("Conflict: {}", $msg);
-            Ok::<HttpResponse, Error>(HttpResponse::Conflict().json(StandardResponse::<()> {
-                success: false,
-                data: None,
-                error: Some($msg.to_string()),
-                timestamp: crate::time::now(),
-                request_id: None,
-            }))
-        }
-    };
+        warn!("Conflict: {}", $msg);
+        Ok::<HttpResponse, Error>(HttpResponse::Conflict().json(StandardResponse::<()> {
+            success: false,
+            data: None,
+            error: Some($msg.to_string()),
+            timestamp: crate::time::now(),
+            request_id: None,
+        }))
+    }};
 }
 
 /// No content response (204)
@@ -295,12 +285,10 @@ macro_rules! conflict {
 /// ```
 #[macro_export]
 macro_rules! no_content {
-    () => {
-        {
-            use actix_web::{HttpResponse, Error};
-            Ok::<HttpResponse, Error>(HttpResponse::NoContent().finish())
-        }
-    };
+    () => {{
+        use actix_web::{Error, HttpResponse};
+        Ok::<HttpResponse, Error>(HttpResponse::NoContent().finish())
+    }};
 }
 
 /// Too Many Requests error response (429)
@@ -311,22 +299,22 @@ macro_rules! no_content {
 /// ```
 #[macro_export]
 macro_rules! too_many_requests {
-    ($msg:expr) => {
-        {
-            use actix_web::HttpResponse;
-            use log::warn;
-            use crate::utils::handler_commons::StandardResponse;
+    ($msg:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::HttpResponse;
+        use log::warn;
 
-            warn!("Too many requests: {}", $msg);
-            Ok::<HttpResponse, actix_web::Error>(HttpResponse::TooManyRequests().json(StandardResponse::<()> {
+        warn!("Too many requests: {}", $msg);
+        Ok::<HttpResponse, actix_web::Error>(HttpResponse::TooManyRequests().json(
+            StandardResponse::<()> {
                 success: false,
                 data: None,
                 error: Some($msg.to_string()),
                 timestamp: crate::utils::time::now(),
                 request_id: None,
-            }))
-        }
-    };
+            },
+        ))
+    }};
 }
 
 /// Service Unavailable error response (503)
@@ -337,22 +325,22 @@ macro_rules! too_many_requests {
 /// ```
 #[macro_export]
 macro_rules! service_unavailable {
-    ($msg:expr) => {
-        {
-            use actix_web::HttpResponse;
-            use log::warn;
-            use crate::utils::handler_commons::StandardResponse;
+    ($msg:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::HttpResponse;
+        use log::warn;
 
-            warn!("Service unavailable: {}", $msg);
-            Ok::<HttpResponse, actix_web::Error>(HttpResponse::ServiceUnavailable().json(StandardResponse::<()> {
+        warn!("Service unavailable: {}", $msg);
+        Ok::<HttpResponse, actix_web::Error>(HttpResponse::ServiceUnavailable().json(
+            StandardResponse::<()> {
                 success: false,
                 data: None,
                 error: Some($msg.to_string()),
                 timestamp: crate::utils::time::now(),
                 request_id: None,
-            }))
-        }
-    };
+            },
+        ))
+    }};
 }
 
 /// Payload Too Large error response (413)
@@ -363,22 +351,22 @@ macro_rules! service_unavailable {
 /// ```
 #[macro_export]
 macro_rules! payload_too_large {
-    ($msg:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use log::warn;
-            use crate::utils::handler_commons::StandardResponse;
+    ($msg:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
+        use log::warn;
 
-            warn!("Payload too large: {}", $msg);
-            Ok::<HttpResponse, Error>(HttpResponse::PayloadTooLarge().json(StandardResponse::<()> {
+        warn!("Payload too large: {}", $msg);
+        Ok::<HttpResponse, Error>(
+            HttpResponse::PayloadTooLarge().json(StandardResponse::<()> {
                 success: false,
                 data: None,
                 error: Some($msg.to_string()),
                 timestamp: crate::utils::time::now(),
                 request_id: None,
-            }))
-        }
-    };
+            }),
+        )
+    }};
 }
 
 /// Accepted response (202)
@@ -389,28 +377,26 @@ macro_rules! payload_too_large {
 /// ```
 #[macro_export]
 macro_rules! accepted {
-    ($data:expr) => {
-        {
-            use actix_web::{HttpResponse, Error};
-            use crate::utils::handler_commons::StandardResponse;
+    ($data:expr) => {{
+        use crate::utils::handler_commons::StandardResponse;
+        use actix_web::{Error, HttpResponse};
 
-            Ok::<HttpResponse, Error>(HttpResponse::Accepted().json(StandardResponse {
-                success: true,
-                data: Some($data),
-                error: None,
-                timestamp: crate::utils::time::now(),
-                request_id: None,
-            }))
-        }
-    };
+        Ok::<HttpResponse, Error>(HttpResponse::Accepted().json(StandardResponse {
+            success: true,
+            data: Some($data),
+            error: None,
+            timestamp: crate::utils::time::now(),
+            request_id: None,
+        }))
+    }};
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::time;
     use actix_web::http::StatusCode;
     use serde::{Deserialize, Serialize};
-use crate::utils::time;
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     struct TestData {

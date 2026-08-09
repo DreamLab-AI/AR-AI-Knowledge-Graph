@@ -63,7 +63,6 @@ pub struct TaskOrchestratorActor {
 }
 
 impl TaskOrchestratorActor {
-
     pub fn new(api_client: ManagementApiClient) -> Self {
         info!("[TaskOrchestratorActor] Initializing");
         let max_concurrent_tasks = std::env::var("MAX_CONCURRENT_TASKS")
@@ -100,7 +99,10 @@ async fn create_task_with_retry(
     let mut attempts = 0u32;
 
     loop {
-        match client.create_task(agent, task, provider, claude_flow_agent_id).await {
+        match client
+            .create_task(agent, task, provider, claude_flow_agent_id)
+            .await
+        {
             Ok(response) => {
                 info!(
                     "[TaskOrchestratorActor] Task created successfully: {}",
@@ -134,7 +136,6 @@ impl Actor for TaskOrchestratorActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("[TaskOrchestratorActor] Actor started");
 
-        
         ctx.address()
             .do_send(crate::actors::messages::InitializeActor);
     }
@@ -154,13 +155,11 @@ impl Handler<crate::actors::messages::InitializeActor> for TaskOrchestratorActor
     ) -> Self::Result {
         info!("[TaskOrchestratorActor] Initializing periodic cleanup (deferred from started)");
 
-        
         ctx.run_interval(Duration::from_secs(300), |act, _ctx| {
             let now = time::now();
             let mut to_remove = Vec::new();
 
             for (task_id, task) in &act.active_tasks {
-                
                 if (task.status == ApiTaskState::Completed || task.status == ApiTaskState::Failed)
                     && (now - task.last_updated).num_minutes() > 5
                 {
@@ -248,7 +247,9 @@ pub enum InterruptError {
 impl std::fmt::Display for InterruptError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InterruptError::Unresolved(m) | InterruptError::Transport(m) | InterruptError::Stop(m) => {
+            InterruptError::Unresolved(m)
+            | InterruptError::Transport(m)
+            | InterruptError::Stop(m) => {
                 write!(f, "{m}")
             }
         }
@@ -384,9 +385,7 @@ impl Handler<CreateTask> for TaskOrchestratorActor {
                         let running = act
                             .active_tasks
                             .values()
-                            .filter(|t| {
-                                t.status == ApiTaskState::Running && t.agent == agent_type
-                            })
+                            .filter(|t| t.status == ApiTaskState::Running && t.agent == agent_type)
                             .count();
                         if let Some(ref addr) = act.agent_monitor_addr {
                             addr.do_send(crate::actors::messages::TaskStatusChanged {
@@ -443,7 +442,10 @@ impl Handler<InterruptAgentTask> for TaskOrchestratorActor {
 
     fn handle(&mut self, msg: InterruptAgentTask, _ctx: &mut Self::Context) -> Self::Result {
         let id = msg.id.clone();
-        info!("[TaskOrchestratorActor] Received InterruptAgentTask: {}", id);
+        info!(
+            "[TaskOrchestratorActor] Received InterruptAgentTask: {}",
+            id
+        );
 
         // Fast path: the id is already a known Management-API task_id held in the
         // local registry (e.g. a task this orchestrator itself created). No
@@ -460,7 +462,9 @@ impl Handler<InterruptAgentTask> for TaskOrchestratorActor {
                 // live task list. Fail honestly when nothing maps — the caller
                 // surfaces a typed error instead of the wrong stop.
                 let list = client.list_tasks().await.map_err(|e| {
-                    InterruptError::Transport(format!("interrupt resolve: task list unavailable: {e}"))
+                    InterruptError::Transport(format!(
+                        "interrupt resolve: task list unavailable: {e}"
+                    ))
                 })?;
                 // Resolution order:
                 //   1. the id IS a Management-API `task_id`;
@@ -637,8 +641,7 @@ impl Handler<DrainTasksBeforeShutdown> for TaskOrchestratorActor {
         );
         self.accepting_tasks = false;
 
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_secs(msg.timeout_secs);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(msg.timeout_secs);
 
         ctx.run_interval(std::time::Duration::from_secs(1), move |act, ctx| {
             let remaining = act

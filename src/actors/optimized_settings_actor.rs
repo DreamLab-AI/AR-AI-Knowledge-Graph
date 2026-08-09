@@ -27,18 +27,17 @@ use tokio::sync::RwLock;
 // Ports (hexagonal architecture)
 use crate::ports::settings_repository::SettingsRepository;
 
-#[cfg(feature = "redis")]
-use redis::{AsyncCommands, Client as RedisClient};
 use crate::utils::json::to_json;
 use crate::utils::result_helpers::safe_json_number;
+#[cfg(feature = "redis")]
+use redis::{AsyncCommands, Client as RedisClient};
 
 // Cache configuration constants
 const CACHE_SIZE: usize = 1000;
 
 pub struct OptimizedSettingsActor {
-    
     repository: Arc<dyn SettingsRepository>,
-    
+
     settings: Arc<RwLock<AppFullSettings>>,
     #[cfg(feature = "redis")]
     redis_client: Option<RedisClient>,
@@ -121,7 +120,6 @@ impl PerformanceMetrics {
         if self.total_requests == 0 {
             0.0
         } else {
-            
             let full_size = 50_000 * self.total_requests;
             let _actual_size = full_size - self.bandwidth_saved_bytes;
             (self.bandwidth_saved_bytes as f64 / full_size as f64) * 100.0
@@ -129,15 +127,13 @@ impl PerformanceMetrics {
     }
 }
 
-const CACHE_TTL: Duration = Duration::from_secs(300); 
-const REDIS_TTL: usize = 3600; 
-const EXPECTED_FULL_SETTINGS_SIZE: u64 = 50_000; 
-const EXPECTED_PATH_SIZE: u64 = 500; 
+const CACHE_TTL: Duration = Duration::from_secs(300);
+const REDIS_TTL: usize = 3600;
+const EXPECTED_FULL_SETTINGS_SIZE: u64 = 50_000;
+const EXPECTED_PATH_SIZE: u64 = 500;
 
 impl OptimizedSettingsActor {
-    
     pub fn new(repository: Arc<dyn SettingsRepository>) -> VisionClawResult<Self> {
-        
         let settings = AppFullSettings::new().map_err(|e| {
             error!("Failed to load settings from file: {}", e);
             VisionClawError::Settings(SettingsError::ParseError {
@@ -146,7 +142,6 @@ impl OptimizedSettingsActor {
             })
         })?;
 
-        
         #[cfg(feature = "redis")]
         let redis_client = match std::env::var("REDIS_URL") {
             Ok(url) => match RedisClient::open(url) {
@@ -165,12 +160,10 @@ impl OptimizedSettingsActor {
             }
         };
 
-        
         let path_cache = Arc::new(RwLock::new(LruCache::new(
             NonZeroUsize::new(CACHE_SIZE).expect("NonZeroUsize: value is zero"),
         )));
 
-        
         let mut path_lookup = HashMap::new();
         Self::initialize_path_patterns(&mut path_lookup);
 
@@ -311,14 +304,13 @@ impl OptimizedSettingsActor {
 
         if was_cached {
             metrics.cache_hits += 1;
-            
+
             let savings = EXPECTED_FULL_SETTINGS_SIZE - EXPECTED_PATH_SIZE;
             metrics.bandwidth_saved_bytes += savings;
         } else {
             metrics.cache_misses += 1;
         }
 
-        
         let total = metrics.total_requests as f64;
         let prev_avg_ms = metrics.avg_response_time_ms;
         let new_time_ms = response_time.as_millis() as f64;
@@ -326,7 +318,6 @@ impl OptimizedSettingsActor {
     }
 
     async fn get_cached_value(&self, path: &str) -> Option<Value> {
-        
         {
             let mut cache = self.path_cache.write().await;
             if let Some(cached) = cache.get(path) {
@@ -334,14 +325,12 @@ impl OptimizedSettingsActor {
                     debug!("Local cache hit for path: {}", path);
                     return Some(cached.value.clone());
                 } else {
-                    
                     cache.pop(path);
                     debug!("Expired cache entry removed for path: {}", path);
                 }
             }
         }
 
-        
         #[cfg(feature = "redis")]
         if let Some(redis_client) = &self.redis_client {
             if let Ok(mut conn) = redis_client.get_async_connection().await {
@@ -356,7 +345,6 @@ impl OptimizedSettingsActor {
                         if let Ok(value) = serde_json::from_str::<Value>(&json_str) {
                             debug!("Redis hit for path: {}", path);
 
-                            
                             let cached_value = CachedValue {
                                 value: value.clone(),
                                 hash: self.calculate_hash(&value).await,
@@ -383,7 +371,6 @@ impl OptimizedSettingsActor {
     async fn set_cached_value(&self, path: &str, value: &Value) {
         let hash = self.calculate_hash(value).await;
 
-        
         let cached_value = CachedValue {
             value: value.clone(),
             hash: hash.clone(),
@@ -396,7 +383,6 @@ impl OptimizedSettingsActor {
             cache.put(path.to_string(), cached_value);
         }
 
-        
         #[cfg(feature = "redis")]
         if let Some(redis_client) = &self.redis_client {
             let redis_client = redis_client.clone();
@@ -406,15 +392,15 @@ impl OptimizedSettingsActor {
             actix::spawn(async move {
                 if let Ok(mut conn) = redis_client.get_async_connection().await {
                     if let Ok(json_str) = to_json(&value) {
-                        
                         let mut compressor = Compress::new(Compression::default(), false);
                         let json_bytes = json_str.as_bytes();
 
-
                         let mut output = vec![0; json_bytes.len() * 2];
-                        let status = match compressor
-                            .compress_vec(json_bytes, &mut output, FlushCompress::Finish)
-                        {
+                        let status = match compressor.compress_vec(
+                            json_bytes,
+                            &mut output,
+                            FlushCompress::Finish,
+                        ) {
                             Ok(s) => s,
                             Err(e) => {
                                 warn!("Failed to compress settings for Redis cache: {}", e);
@@ -458,7 +444,7 @@ impl OptimizedSettingsActor {
         let mut decompressor = self.decompressor.write().await;
         let mut output = Vec::new();
 
-        let mut buffer = vec![0; compressed.len() * 4]; 
+        let mut buffer = vec![0; compressed.len() * 4];
         let status = decompressor
             .decompress_vec(compressed, &mut buffer, FlushDecompress::Finish)
             .map_err(|e| format!("Decompression error: {}", e))?;
@@ -476,13 +462,11 @@ impl OptimizedSettingsActor {
     async fn get_optimized_path_value(&self, path: &str) -> VisionClawResult<Value> {
         let start_time = Instant::now();
 
-        
         if let Some(cached_value) = self.get_cached_value(path).await {
             self.update_metrics(start_time, true, true).await;
             return Ok(cached_value);
         }
 
-        
         let pattern = {
             let lookup = self.path_lookup.read().await;
             lookup.get(path).cloned()
@@ -490,10 +474,8 @@ impl OptimizedSettingsActor {
 
         let current = self.settings.read().await;
         let result = if let Some(pattern) = pattern {
-            
             self.traverse_compiled_path(&current, &pattern.compiled_path)
         } else {
-            
             let json = serde_json::to_value(&*current)
                 .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
@@ -528,14 +510,12 @@ impl OptimizedSettingsActor {
         settings: &AppFullSettings,
         compiled_path: &[String],
     ) -> VisionClawResult<Value> {
-        
         if compiled_path.len() == 4
             && compiled_path[0] == "visualisation"
             && compiled_path[1] == "graphs"
             && compiled_path[2] == "logseq"
             && compiled_path[3] == "physics"
         {
-            
             let physics = &settings.visualisation.graphs.logseq.physics;
             return Ok(serde_json::to_value(physics)
                 .map_err(|e| format!("Failed to serialize physics: {}", e))?);
@@ -551,27 +531,19 @@ impl OptimizedSettingsActor {
             let field = &compiled_path[4];
 
             let value = match field.as_str() {
-                "damping" => serde_json::Value::Number(
-                    safe_json_number(physics.damping as f64),
-                ),
-                "spring_k" => serde_json::Value::Number(
-                    safe_json_number(physics.spring_k as f64),
-                ),
-                "repel_k" => serde_json::Value::Number(
-                    safe_json_number(physics.repel_k as f64),
-                ),
-                "max_velocity" => serde_json::Value::Number(
-                    safe_json_number(physics.max_velocity as f64),
-                ),
-                "gravity" => serde_json::Value::Number(
-                    safe_json_number(physics.gravity as f64),
-                ),
-                "temperature" => serde_json::Value::Number(
-                    safe_json_number(physics.temperature as f64),
-                ),
-                "bounds_size" => serde_json::Value::Number(
-                    safe_json_number(physics.bounds_size as f64),
-                ),
+                "damping" => serde_json::Value::Number(safe_json_number(physics.damping as f64)),
+                "spring_k" => serde_json::Value::Number(safe_json_number(physics.spring_k as f64)),
+                "repel_k" => serde_json::Value::Number(safe_json_number(physics.repel_k as f64)),
+                "max_velocity" => {
+                    serde_json::Value::Number(safe_json_number(physics.max_velocity as f64))
+                }
+                "gravity" => serde_json::Value::Number(safe_json_number(physics.gravity as f64)),
+                "temperature" => {
+                    serde_json::Value::Number(safe_json_number(physics.temperature as f64))
+                }
+                "bounds_size" => {
+                    serde_json::Value::Number(safe_json_number(physics.bounds_size as f64))
+                }
                 "iterations" => {
                     serde_json::Value::Number(serde_json::Number::from(physics.iterations))
                 }
@@ -597,13 +569,11 @@ impl OptimizedSettingsActor {
         let mut settings = self.settings.write().await;
         *settings = new_settings;
 
-        
         {
             let mut cache = self.path_cache.write().await;
             cache.clear();
         }
 
-        
         settings.save().map_err(|e| {
             error!("Failed to save settings to file: {}", e);
             VisionClawError::Settings(SettingsError::SaveFailed {
@@ -616,32 +586,25 @@ impl OptimizedSettingsActor {
         Ok(())
     }
 
-    
     pub async fn get_performance_metrics(&self) -> PerformanceMetrics {
         let mut metrics = self.metrics.read().await.clone();
 
-        
         let cache = self.path_cache.read().await;
-        metrics.memory_usage_bytes = cache.len() as u64 * 1024; 
+        metrics.memory_usage_bytes = cache.len() as u64 * 1024;
 
         metrics
     }
 
-    
     pub async fn clear_caches(&self) {
-        
         {
             let mut cache = self.path_cache.write().await;
             cache.clear();
         }
 
-        
         #[cfg(feature = "redis")]
         if let Some(redis_client) = &self.redis_client {
             if let Ok(mut conn) = redis_client.get_async_connection().await {
-                let result: Result<(), _> = redis::cmd("FLUSHDB")
-                    .query_async(&mut conn)
-                    .await;
+                let result: Result<(), _> = redis::cmd("FLUSHDB").query_async(&mut conn).await;
 
                 if let Err(e) = result {
                     warn!("Failed to clear Redis cache: {}", e);
@@ -649,7 +612,6 @@ impl OptimizedSettingsActor {
             }
         }
 
-        
         {
             let mut metrics = self.metrics.write().await;
             *metrics = PerformanceMetrics::default();
@@ -658,7 +620,6 @@ impl OptimizedSettingsActor {
         info!("All caches and metrics cleared");
     }
 
-    
     pub async fn warm_cache(&self) {
         let common_paths = vec![
             "visualisation.graphs.logseq.physics",
@@ -825,7 +786,6 @@ impl Handler<GetSettings> for OptimizedSettingsActor {
             let start_time = Instant::now();
             let result = Ok(settings.read().await.clone());
 
-            
             {
                 let mut metrics = metrics.write().await;
                 metrics.total_requests += 1;
@@ -897,7 +857,6 @@ impl Handler<GetSettingsByPaths> for OptimizedSettingsActor {
             let mut cache_hits = 0;
             let mut cache_misses = 0;
 
-            
             let futures: Vec<_> = paths
                 .into_iter()
                 .map(|path| {
@@ -924,7 +883,6 @@ impl Handler<GetSettingsByPaths> for OptimizedSettingsActor {
                 }
             }
 
-            
             {
                 let mut metrics = actor.metrics.write().await;
                 metrics.batch_operations += 1;
@@ -963,7 +921,6 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
             let mut validation_needed = false;
             let mut cache_invalidations = Vec::new();
 
-            
             {
                 let lookup = path_lookup.read().await;
                 for (path, value) in &updates {
@@ -978,7 +935,6 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                 }
             }
 
-            
             for (path, value) in updates {
                 if path.starts_with("visualisation.graphs.logseq.physics.") {
                     validation_needed = true;
@@ -993,7 +949,6 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                         other => other,
                     };
 
-                    
                     let physics = &mut current.visualisation.graphs.logseq.physics;
 
                     match internal_field {
@@ -1058,18 +1013,15 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                 }
             }
 
-            
             {
                 let mut cache = path_cache.write().await;
                 for path in &cache_invalidations {
                     cache.pop(path);
                 }
 
-                
                 cache.pop("visualisation.graphs.logseq.physics");
             }
 
-            
             #[cfg(feature = "redis")]
             if let Some(redis_client) = redis_client {
                 actix::spawn(async move {
@@ -1089,7 +1041,6 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                 });
             }
 
-            
             if validation_needed {
                 current.validate_config_camel_case().map_err(|e| {
                     error!("Validation failed after batch update: {:?}", e);
@@ -1099,7 +1050,6 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                     })
                 })?;
 
-                
                 if current.system.persist_settings {
                     current.save().map_err(|e| {
                         error!("Failed to save settings after batch update: {}", e);
@@ -1111,7 +1061,6 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                 }
             }
 
-            
             {
                 let mut metrics = metrics.write().await;
                 metrics.batch_operations += 1;
@@ -1144,13 +1093,11 @@ impl Handler<UpdatePhysicsFromAutoBalance> for OptimizedSettingsActor {
             Box::pin(async move {
                 let mut current = settings.write().await;
 
-                
                 {
                     let mut cache = path_cache.write().await;
-                    cache.clear(); 
+                    cache.clear();
                 }
 
-                
                 if let Err(e) = current.merge_update(msg.physics_update.clone()) {
                     error!("[AUTO-BALANCE] Failed to merge physics update: {}", e);
                     return;
@@ -1158,7 +1105,6 @@ impl Handler<UpdatePhysicsFromAutoBalance> for OptimizedSettingsActor {
 
                 debug!("[AUTO-BALANCE] Physics parameters updated in settings from auto-tuning");
 
-                
                 if let Some(physics) = msg
                     .physics_update
                     .get("visualisation")
@@ -1179,7 +1125,6 @@ impl Handler<UpdatePhysicsFromAutoBalance> for OptimizedSettingsActor {
                     }
                 }
 
-                
                 if current.system.persist_settings {
                     if let Err(e) = current.save() {
                         error!(
@@ -1242,28 +1187,23 @@ impl Handler<ReloadSettings> for OptimizedSettingsActor {
         let path_cache = self.path_cache.clone();
         let metrics = self.metrics.clone();
 
-        
         ctx.spawn(
             Box::pin(async move {
-                
                 {
                     let mut cache = path_cache.write().await;
                     cache.clear();
                     debug!("Cleared path cache for hot-reload");
                 }
 
-                
                 match repository.load_all_settings().await {
                     Ok(Some(new_settings)) => {
-                        
                         let mut current = settings.write().await;
                         *current = new_settings;
                         drop(current);
 
-                        
                         {
                             let mut m = metrics.write().await;
-                            m.cache_misses += 1; 
+                            m.cache_misses += 1;
                         }
 
                         info!("Settings hot-reloaded successfully from database");

@@ -113,12 +113,20 @@ async fn write_derived(
 /// from a SELECT over `:assert`/`:inferred` is the WS-0 LIMIT-clamp follow-on;
 /// it is deliberately NOT run unbounded here.
 async fn regenerate(_auth: AuthenticatedUser, state: web::Data<AppState>) -> HttpResponse {
-    if let Err(e) = state.ontology_repository.clear_derived_graph("summary").await {
+    if let Err(e) = state
+        .ontology_repository
+        .clear_derived_graph("summary")
+        .await
+    {
         warn!("[ontology-derived] clear summary failed: {e}");
         return HttpResponse::InternalServerError()
             .json(json!({ "success": false, "error": e.to_string() }));
     }
-    if let Err(e) = state.ontology_repository.clear_derived_graph("observed").await {
+    if let Err(e) = state
+        .ontology_repository
+        .clear_derived_graph("observed")
+        .await
+    {
         warn!("[ontology-derived] clear observed failed: {e}");
         return HttpResponse::InternalServerError()
             .json(json!({ "success": false, "error": e.to_string() }));

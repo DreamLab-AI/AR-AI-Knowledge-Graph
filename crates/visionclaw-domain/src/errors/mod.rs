@@ -18,7 +18,6 @@ where
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum VisionClawError {
-
     Actor(ActorError),
 
     GPU(GPUError),
@@ -59,10 +58,15 @@ pub enum VisionClawError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ActorError {
+    StartupFailed {
+        actor_name: String,
+        reason: String,
+    },
 
-    StartupFailed { actor_name: String, reason: String },
-
-    RuntimeFailure { actor_name: String, reason: String },
+    RuntimeFailure {
+        actor_name: String,
+        reason: String,
+    },
 
     MessageHandlingFailed {
         message_type: String,
@@ -75,14 +79,16 @@ pub enum ActorError {
         reason: String,
     },
 
-    MailboxError { actor_name: String, reason: String },
+    MailboxError {
+        actor_name: String,
+        reason: String,
+    },
 
     ActorNotAvailable(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum GPUError {
-
     DeviceInitializationFailed(String),
 
     MemoryAllocationFailed {
@@ -90,14 +96,19 @@ pub enum GPUError {
         reason: String,
     },
 
-    KernelExecutionFailed { kernel_name: String, reason: String },
+    KernelExecutionFailed {
+        kernel_name: String,
+        reason: String,
+    },
 
     DataTransferFailed {
         direction: DataTransferDirection,
         reason: String,
     },
 
-    FallbackToCPU { reason: String },
+    FallbackToCPU {
+        reason: String,
+    },
 
     DriverError(String),
 }
@@ -110,24 +121,28 @@ pub enum DataTransferDirection {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum SettingsError {
-
     FileNotFound(String),
 
-    ParseError { file_path: String, reason: String },
+    ParseError {
+        file_path: String,
+        reason: String,
+    },
 
     ValidationFailed {
         setting_path: String,
         reason: String,
     },
 
-    SaveFailed { file_path: String, reason: String },
+    SaveFailed {
+        file_path: String,
+        reason: String,
+    },
 
     CacheError(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum NetworkError {
-
     ConnectionFailed {
         host: String,
         port: u16,
@@ -136,7 +151,10 @@ pub enum NetworkError {
 
     WebSocketError(String),
 
-    MCPError { method: String, reason: String },
+    MCPError {
+        method: String,
+        reason: String,
+    },
 
     HTTPError {
         url: String,
@@ -144,14 +162,19 @@ pub enum NetworkError {
         reason: String,
     },
 
-    RequestFailed { url: String, reason: String },
+    RequestFailed {
+        url: String,
+        reason: String,
+    },
 
-    Timeout { operation: String, timeout_ms: u64 },
+    Timeout {
+        operation: String,
+        timeout_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum SpeechError {
-
     InitializationFailed(String),
 
     TTSFailed { text: String, reason: String },
@@ -165,7 +188,6 @@ pub enum SpeechError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum GitHubError {
-
     APIRequestFailed {
         url: String,
         status: Option<u16>,
@@ -180,14 +202,18 @@ pub enum GitHubError {
         reason: String,
     },
 
-    BranchOperationFailed { branch: String, reason: String },
+    BranchOperationFailed {
+        branch: String,
+        reason: String,
+    },
 
-    PullRequestFailed { reason: String },
+    PullRequestFailed {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum AudioError {
-
     FormatValidationFailed { format: String, reason: String },
 
     WAVHeaderValidationFailed(String),
@@ -199,7 +225,6 @@ pub enum AudioError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ResourceError {
-
     MonitoringFailed(String),
 
     AvailabilityCheckFailed(String),
@@ -213,7 +238,6 @@ pub enum ResourceError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum PerformanceError {
-
     BenchmarkFailed {
         benchmark_name: String,
         reason: String,
@@ -221,14 +245,16 @@ pub enum PerformanceError {
 
     ReportGenerationFailed(String),
 
-    MetricCollectionFailed { metric: String, reason: String },
+    MetricCollectionFailed {
+        metric: String,
+        reason: String,
+    },
 
     ComparisonFailed(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ProtocolError {
-
     EncodingFailed { data_type: String, reason: String },
 
     DecodingFailed { data_type: String, reason: String },
@@ -240,7 +266,6 @@ pub enum ProtocolError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum DatabaseError {
-
     ConnectionFailed { database: String, reason: String },
 
     QueryFailed { query: String, reason: String },
@@ -256,40 +281,84 @@ pub enum DatabaseError {
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ValidationError {
+    FieldValidation {
+        field: String,
+        reason: String,
+    },
 
-    FieldValidation { field: String, reason: String },
+    RequiredField {
+        field: String,
+    },
 
-    RequiredField { field: String },
+    InvalidFormat {
+        field: String,
+        expected: String,
+        actual: String,
+    },
 
-    InvalidFormat { field: String, expected: String, actual: String },
+    OutOfRange {
+        field: String,
+        min: String,
+        max: String,
+        actual: String,
+    },
 
-    OutOfRange { field: String, min: String, max: String, actual: String },
-
-    InvalidLength { field: String, min: Option<usize>, max: Option<usize>, actual: usize },
+    InvalidLength {
+        field: String,
+        min: Option<usize>,
+        max: Option<usize>,
+        actual: usize,
+    },
 
     Custom(String),
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub enum ParseError {
+    JSON {
+        input: String,
+        reason: String,
+    },
 
-    JSON { input: String, reason: String },
+    TOML {
+        input: String,
+        reason: String,
+    },
 
-    TOML { input: String, reason: String },
+    YAML {
+        input: String,
+        reason: String,
+    },
 
-    YAML { input: String, reason: String },
+    Integer {
+        input: String,
+        reason: String,
+    },
 
-    Integer { input: String, reason: String },
+    Float {
+        input: String,
+        reason: String,
+    },
 
-    Float { input: String, reason: String },
+    Boolean {
+        input: String,
+    },
 
-    Boolean { input: String },
+    URL {
+        input: String,
+        reason: String,
+    },
 
-    URL { input: String, reason: String },
+    DateTime {
+        input: String,
+        reason: String,
+    },
 
-    DateTime { input: String, reason: String },
-
-    Custom { format: String, input: String, reason: String },
+    Custom {
+        format: String,
+        input: String,
+        reason: String,
+    },
 }
 
 impl fmt::Display for VisionClawError {
@@ -587,7 +656,11 @@ impl fmt::Display for DatabaseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             DatabaseError::ConnectionFailed { database, reason } => {
-                write!(f, "Database connection to '{}' failed: {}", database, reason)
+                write!(
+                    f,
+                    "Database connection to '{}' failed: {}",
+                    database, reason
+                )
             }
             DatabaseError::QueryFailed { query, reason } => {
                 write!(f, "Database query failed: {} (query: {})", reason, query)
@@ -617,24 +690,42 @@ impl fmt::Display for ValidationError {
             ValidationError::RequiredField { field } => {
                 write!(f, "Required field '{}' is missing", field)
             }
-            ValidationError::InvalidFormat { field, expected, actual } => write!(
+            ValidationError::InvalidFormat {
+                field,
+                expected,
+                actual,
+            } => write!(
                 f,
                 "Field '{}' has invalid format: expected {}, got {}",
                 field, expected, actual
             ),
-            ValidationError::OutOfRange { field, min, max, actual } => write!(
+            ValidationError::OutOfRange {
+                field,
+                min,
+                max,
+                actual,
+            } => write!(
                 f,
                 "Field '{}' out of range: expected {}-{}, got {}",
                 field, min, max, actual
             ),
-            ValidationError::InvalidLength { field, min, max, actual } => {
+            ValidationError::InvalidLength {
+                field,
+                min,
+                max,
+                actual,
+            } => {
                 let range = match (min, max) {
                     (Some(min), Some(max)) => format!("{}-{}", min, max),
                     (Some(min), None) => format!(">= {}", min),
                     (None, Some(max)) => format!("<= {}", max),
                     (None, None) => "unknown".to_string(),
                 };
-                write!(f, "Field '{}' invalid length: expected {}, got {}", field, range, actual)
+                write!(
+                    f,
+                    "Field '{}' invalid length: expected {}, got {}",
+                    field, range, actual
+                )
             }
             ValidationError::Custom(msg) => write!(f, "Validation failed: {}", msg),
         }
@@ -668,11 +759,11 @@ impl fmt::Display for ParseError {
             ParseError::DateTime { input, reason } => {
                 write!(f, "DateTime parse error: {} (input: {})", reason, input)
             }
-            ParseError::Custom { format, input, reason } => write!(
-                f,
-                "{} parse error: {} (input: {})",
-                format, reason, input
-            ),
+            ParseError::Custom {
+                format,
+                input,
+                reason,
+            } => write!(f, "{} parse error: {} (input: {})", format, reason, input),
         }
     }
 }
@@ -867,10 +958,12 @@ where
 #[macro_export]
 macro_rules! validation_error {
     ($field:expr, $reason:expr) => {
-        $crate::errors::VisionClawError::Validation($crate::errors::ValidationError::FieldValidation {
-            field: $field.to_string(),
-            reason: $reason.to_string(),
-        })
+        $crate::errors::VisionClawError::Validation(
+            $crate::errors::ValidationError::FieldValidation {
+                field: $field.to_string(),
+                reason: $reason.to_string(),
+            },
+        )
     };
 }
 
@@ -917,7 +1010,11 @@ pub trait OptionExt<T> {
     fn ok_or_validation(self, field: impl Into<String>) -> VisionClawResult<T>;
 
     /// Convert Option to Result with a not found error
-    fn ok_or_not_found(self, entity: impl Into<String>, id: impl Into<String>) -> VisionClawResult<T>;
+    fn ok_or_not_found(
+        self,
+        entity: impl Into<String>,
+        id: impl Into<String>,
+    ) -> VisionClawResult<T>;
 }
 
 impl<T> OptionExt<T> for Option<T> {
@@ -936,7 +1033,11 @@ impl<T> OptionExt<T> for Option<T> {
         })
     }
 
-    fn ok_or_not_found(self, entity: impl Into<String>, id: impl Into<String>) -> VisionClawResult<T> {
+    fn ok_or_not_found(
+        self,
+        entity: impl Into<String>,
+        id: impl Into<String>,
+    ) -> VisionClawResult<T> {
         self.ok_or_else(|| {
             VisionClawError::Database(DatabaseError::NotFound {
                 entity: entity.into(),
@@ -996,11 +1097,16 @@ mod tests {
         let vf: VisionClawError = val_err.into();
         assert!(matches!(vf, VisionClawError::Validation(_)));
 
-        let parse_err = ParseError::Boolean { input: "maybe".to_string() };
+        let parse_err = ParseError::Boolean {
+            input: "maybe".to_string(),
+        };
         let vf: VisionClawError = parse_err.into();
         assert!(matches!(vf, VisionClawError::Parse(_)));
 
-        let db_err = DatabaseError::NotFound { entity: "Node".to_string(), id: "42".to_string() };
+        let db_err = DatabaseError::NotFound {
+            entity: "Node".to_string(),
+            id: "42".to_string(),
+        };
         let vf: VisionClawError = db_err.into();
         assert!(matches!(vf, VisionClawError::Database(_)));
     }
@@ -1020,7 +1126,10 @@ mod tests {
         let bad: Result<serde_json::Value, _> = serde_json::from_str("{bad json}");
         let serde_err = bad.unwrap_err();
         let vf: VisionClawError = serde_err.into();
-        assert!(matches!(vf, VisionClawError::Parse(ParseError::JSON { .. })));
+        assert!(matches!(
+            vf,
+            VisionClawError::Parse(ParseError::JSON { .. })
+        ));
     }
 
     #[test]
@@ -1037,7 +1146,10 @@ mod tests {
     fn test_option_ext_ok_or_validation() {
         let none: Option<String> = None;
         let err = none.ok_or_validation("username").unwrap_err();
-        assert!(matches!(err, VisionClawError::Validation(ValidationError::RequiredField { .. })));
+        assert!(matches!(
+            err,
+            VisionClawError::Validation(ValidationError::RequiredField { .. })
+        ));
         assert!(err.to_string().contains("username"));
     }
 
@@ -1045,23 +1157,30 @@ mod tests {
     fn test_option_ext_ok_or_not_found() {
         let none: Option<String> = None;
         let err = none.ok_or_not_found("Node", "99").unwrap_err();
-        assert!(matches!(err, VisionClawError::Database(DatabaseError::NotFound { .. })));
+        assert!(matches!(
+            err,
+            VisionClawError::Database(DatabaseError::NotFound { .. })
+        ));
         assert!(err.to_string().contains("99"));
     }
 
     #[test]
     fn test_error_context_actor_and_gpu() {
-        let io_result: Result<(), std::io::Error> = Err(std::io::Error::new(
-            std::io::ErrorKind::Other, "gpu fail",
-        ));
+        let io_result: Result<(), std::io::Error> =
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "gpu fail"));
         let vf = io_result.with_gpu_context("test_kernel").unwrap_err();
-        assert!(matches!(vf, VisionClawError::GPU(GPUError::KernelExecutionFailed { .. })));
-
-        let io_result2: Result<(), std::io::Error> = Err(std::io::Error::new(
-            std::io::ErrorKind::Other, "actor fail",
+        assert!(matches!(
+            vf,
+            VisionClawError::GPU(GPUError::KernelExecutionFailed { .. })
         ));
+
+        let io_result2: Result<(), std::io::Error> =
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "actor fail"));
         let vf2 = io_result2.with_actor_context("MyActor").unwrap_err();
-        assert!(matches!(vf2, VisionClawError::Actor(ActorError::RuntimeFailure { .. })));
+        assert!(matches!(
+            vf2,
+            VisionClawError::Actor(ActorError::RuntimeFailure { .. })
+        ));
     }
 
     #[test]
@@ -1092,10 +1211,17 @@ mod tests {
 
     #[test]
     fn test_parse_error_display_variants() {
-        let p = ParseError::URL { input: "bad-url".to_string(), reason: "no scheme".to_string() };
+        let p = ParseError::URL {
+            input: "bad-url".to_string(),
+            reason: "no scheme".to_string(),
+        };
         assert!(p.to_string().contains("bad-url"));
 
-        let p2 = ParseError::Custom { format: "CSV".to_string(), input: "a,b".to_string(), reason: "wrong cols".to_string() };
+        let p2 = ParseError::Custom {
+            format: "CSV".to_string(),
+            input: "a,b".to_string(),
+            reason: "wrong cols".to_string(),
+        };
         assert!(p2.to_string().contains("CSV"));
     }
 
@@ -1123,7 +1249,10 @@ mod tests {
         };
         assert!(n.to_string().contains("5432"));
 
-        let n2 = NetworkError::Timeout { operation: "sync".to_string(), timeout_ms: 5000 };
+        let n2 = NetworkError::Timeout {
+            operation: "sync".to_string(),
+            timeout_ms: 5000,
+        };
         assert!(n2.to_string().contains("5000"));
     }
 }

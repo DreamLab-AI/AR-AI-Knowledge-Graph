@@ -9,23 +9,20 @@ use tokio::time::timeout;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HealthStatus {
-    
     Healthy,
-    
+
     Degraded,
-    
+
     Unhealthy,
-    
+
     Unknown,
 }
 
 impl HealthStatus {
-    
     pub fn is_usable(&self) -> bool {
         matches!(self, HealthStatus::Healthy | HealthStatus::Degraded)
     }
 
-    
     pub fn is_critical(&self) -> bool {
         matches!(self, HealthStatus::Unhealthy)
     }
@@ -33,21 +30,20 @@ impl HealthStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthCheckConfig {
-    
     pub check_interval: Duration,
-    
+
     pub check_timeout: Duration,
-    
+
     pub healthy_threshold: usize,
-    
+
     pub unhealthy_threshold: usize,
-    
+
     pub enable_tcp_check: bool,
-    
+
     pub enable_http_check: bool,
-    
+
     pub http_health_path: Option<String>,
-    
+
     pub startup_grace_period: Duration,
 }
 
@@ -67,7 +63,6 @@ impl Default for HealthCheckConfig {
 }
 
 impl HealthCheckConfig {
-    
     pub fn critical_service() -> Self {
         Self {
             check_interval: Duration::from_secs(10),
@@ -81,7 +76,6 @@ impl HealthCheckConfig {
         }
     }
 
-    
     pub fn background_service() -> Self {
         Self {
             check_interval: Duration::from_secs(60),
@@ -167,7 +161,7 @@ pub struct ServiceEndpoint {
     pub host: String,
     pub port: u16,
     pub config: HealthCheckConfig,
-    pub additional_endpoints: Vec<String>, 
+    pub additional_endpoints: Vec<String>,
 }
 
 impl ServiceEndpoint {
@@ -213,7 +207,6 @@ impl HealthCheckManager {
         }
     }
 
-    
     pub async fn register_service(&self, endpoint: ServiceEndpoint) {
         let service_name = endpoint.name.clone();
         info!(
@@ -221,13 +214,11 @@ impl HealthCheckManager {
             service_name
         );
 
-        
         self.services
             .write()
             .await
             .insert(service_name.clone(), endpoint.clone());
 
-        
         let health_info = ServiceHealthInfo {
             service_name: service_name.clone(),
             current_status: HealthStatus::Unknown,
@@ -250,39 +241,32 @@ impl HealthCheckManager {
             .await
             .insert(service_name.clone(), health_info);
 
-        
         self.start_health_check_task(service_name, endpoint).await;
     }
 
-    
     pub async fn unregister_service(&self, service_name: &str) {
         info!(
             "Unregistering service from health monitoring: {}",
             service_name
         );
 
-        
         self.services.write().await.remove(service_name);
         self.health_info.write().await.remove(service_name);
 
-        
         let mut handles = self.check_handles.lock().await;
         if let Some(handle) = handles.remove(service_name) {
             handle.abort();
         }
     }
 
-    
     pub async fn get_service_health(&self, service_name: &str) -> Option<ServiceHealthInfo> {
         self.health_info.read().await.get(service_name).cloned()
     }
 
-    
     pub async fn get_all_health(&self) -> HashMap<String, ServiceHealthInfo> {
         self.health_info.read().await.clone()
     }
 
-    
     pub async fn get_unhealthy_services(&self) -> Vec<ServiceHealthInfo> {
         self.health_info
             .read()
@@ -293,7 +277,6 @@ impl HealthCheckManager {
             .collect()
     }
 
-    
     pub async fn check_service_now(&self, service_name: &str) -> Option<HealthCheckResult> {
         let services = self.services.read().await;
         let endpoint = services.get(service_name)?;
@@ -304,18 +287,14 @@ impl HealthCheckManager {
         Some(result)
     }
 
-    
     pub async fn are_critical_services_healthy(&self) -> bool {
         let health_info = self.health_info.read().await;
 
-        
-        
         health_info
             .values()
             .all(|info| info.current_status.is_usable())
     }
 
-    
     pub async fn get_system_health_summary(&self) -> SystemHealthSummary {
         let health_info = self.health_info.read().await;
 
@@ -354,7 +333,6 @@ impl HealthCheckManager {
         }
     }
 
-    
     pub async fn shutdown(&self) {
         info!("Shutting down health check manager");
 
@@ -365,15 +343,12 @@ impl HealthCheckManager {
         }
     }
 
-    
-
     async fn start_health_check_task(&self, service_name: String, endpoint: ServiceEndpoint) {
         let services = self.services.clone();
         let health_info = self.health_info.clone();
         let service_name_clone = service_name.clone();
 
         let handle = tokio::spawn(async move {
-            
             tokio::time::sleep(endpoint.config.startup_grace_period).await;
 
             let mut interval = tokio::time::interval(endpoint.config.check_interval);
@@ -381,18 +356,15 @@ impl HealthCheckManager {
             loop {
                 interval.tick().await;
 
-                
                 let current_endpoint = {
                     let services_guard = services.read().await;
                     if let Some(ep) = services_guard.get(&service_name_clone) {
                         ep.clone()
                     } else {
-                        
                         break;
                     }
                 };
 
-                
                 let manager = HealthCheckManager {
                     services: services.clone(),
                     health_info: health_info.clone(),
@@ -412,7 +384,6 @@ impl HealthCheckManager {
         let start_time = Instant::now();
         let service_name = endpoint.name.clone();
 
-        
         if endpoint.config.enable_tcp_check {
             match self.tcp_health_check(endpoint).await {
                 Ok(response_time) => {
@@ -433,7 +404,6 @@ impl HealthCheckManager {
             }
         }
 
-        
         if endpoint.config.enable_http_check {
             match self.http_health_check(endpoint).await {
                 Ok(response_time) => {
@@ -454,7 +424,6 @@ impl HealthCheckManager {
             }
         }
 
-        
         HealthCheckResult::unhealthy(
             service_name,
             "none".to_string(),
@@ -492,8 +461,6 @@ impl HealthCheckManager {
     async fn http_health_check(&self, endpoint: &ServiceEndpoint) -> Result<Duration, String> {
         let _start_time = Instant::now();
 
-        
-        
         let health_path = endpoint
             .config
             .http_health_path
@@ -506,10 +473,8 @@ impl HealthCheckManager {
             format!("{}{}", endpoint.additional_endpoints[0], health_path)
         };
 
-        
         debug!("HTTP health check would connect to: {}", url);
 
-        
         self.tcp_health_check(endpoint).await
     }
 
@@ -527,7 +492,6 @@ impl HealthCheckManager {
                     info.consecutive_failures = 0;
                     info.last_success = Some(result.timestamp);
 
-                    
                     if info.consecutive_successes >= info.consecutive_successes.max(1) {
                         if info.current_status != HealthStatus::Healthy {
                             info!("Service {} is now healthy", result.service_name);
@@ -541,7 +505,6 @@ impl HealthCheckManager {
                     info.consecutive_successes = 0;
                     info.last_failure = Some(result.timestamp);
 
-                    
                     let services = self.services.read().await;
                     if let Some(endpoint) = services.get(&result.service_name) {
                         if info.consecutive_failures >= endpoint.config.unhealthy_threshold {
@@ -558,7 +521,6 @@ impl HealthCheckManager {
                 _ => {}
             }
 
-            
             if info.total_checks > 0 {
                 let total_time =
                     info.average_response_time.as_millis() as u64 * (info.total_checks - 1);
@@ -566,7 +528,6 @@ impl HealthCheckManager {
                 info.average_response_time = Duration::from_millis(new_total / info.total_checks);
             }
 
-            
             info.uptime_percentage = if info.total_checks > 0 {
                 (info.successful_checks as f64 / info.total_checks as f64) * 100.0
             } else {

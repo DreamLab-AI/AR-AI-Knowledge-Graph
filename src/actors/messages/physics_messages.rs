@@ -9,11 +9,11 @@ use crate::actors::gpu::force_compute_actor::PhysicsStats;
 use crate::actors::messaging::MessageId;
 use crate::errors::VisionClawError;
 use crate::gpu::visual_analytics::{IsolationLayer, VisualAnalyticsParams};
-use visionclaw_domain::models::constraints::{AdvancedParams, ConstraintSet};
-use visionclaw_domain::models::graph::GraphData as ModelsGraphData;
 use crate::models::simulation_params::SimulationParams;
 use crate::utils::socket_flow_messages::BinaryNodeData;
 use crate::utils::unified_gpu_compute::ComputeMode;
+use visionclaw_domain::models::constraints::{AdvancedParams, ConstraintSet};
+use visionclaw_domain::models::graph::GraphData as ModelsGraphData;
 
 // ---------------------------------------------------------------------------
 // Simulation lifecycle
@@ -84,7 +84,9 @@ pub struct StoreGPUComputeAddress {
 pub struct GetForceComputeActor;
 
 #[derive(Message)]
-#[rtype(result = "Result<Addr<crate::actors::physics_orchestrator_actor::PhysicsOrchestratorActor>, String>")]
+#[rtype(
+    result = "Result<Addr<crate::actors::physics_orchestrator_actor::PhysicsOrchestratorActor>, String>"
+)]
 pub struct GetPhysicsOrchestratorActor;
 
 #[derive(Message)]
@@ -98,7 +100,8 @@ pub struct InitializeGPUConnection {
 #[derive(Message)]
 #[rtype(result = "()")]
 pub struct SetAppGpuComputeAddr {
-    pub addr: std::sync::Arc<tokio::sync::RwLock<Option<Addr<crate::actors::gpu::ForceComputeActor>>>>,
+    pub addr:
+        std::sync::Arc<tokio::sync::RwLock<Option<Addr<crate::actors::gpu::ForceComputeActor>>>>,
 }
 
 #[derive(Message)]
@@ -712,23 +715,14 @@ pub enum PhysicsEvent {
     },
     /// Emitted when RMS velocity has stayed below the settlement threshold
     /// for `PhysicsConfig::settlement_window` consecutive ticks.
-    LayoutSettled {
-        iteration: u64,
-        rms_velocity: f32,
-    },
+    LayoutSettled { iteration: u64, rms_velocity: f32 },
     /// Emitted when RMS velocity crosses back above the settlement threshold
     /// after a previous `LayoutSettled` — typically following parameter
     /// changes, a `ResetPositions`, or an engine switch.
-    LayoutDestabilised {
-        iteration: u64,
-        rms_velocity: f32,
-    },
+    LayoutDestabilised { iteration: u64, rms_velocity: f32 },
     /// Emitted (at most once per kind per tick) when the `numerical_safety`
     /// kernel clamps positions or velocities.
-    PhysicsClamped {
-        kind: ClampKind,
-        count: u32,
-    },
+    PhysicsClamped { kind: ClampKind, count: u32 },
 }
 
 /// Actor message wrapping a `PhysicsEvent` for delivery to the broadcast

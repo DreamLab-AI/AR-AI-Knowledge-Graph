@@ -6,36 +6,25 @@ use visionclaw_server::actors::messages::ReloadGraphFromDatabase;
 use visionclaw_server::{
     config::AppFullSettings,
     handlers::{
-        admin_sync_handler,
-        api_handler,
-        bots_visualization_handler,
-        client_log_handler,
-        client_messages_handler,
-        consolidated_health_handler,
-        graph_export_handler,
+        admin_sync_handler, api_handler, bots_visualization_handler, client_log_handler,
+        client_messages_handler, consolidated_health_handler, graph_export_handler,
         mcp_relay_handler::mcp_relay_handler,
-        metrics_handler,
-        multi_mcp_websocket_handler,
-        nostr_handler,
-        pages_handler,
+        metrics_handler, multi_mcp_websocket_handler, nostr_handler, pages_handler,
         presence_handler::{new_room_registry, ws_presence, PresenceHandlerState},
         socket_flow_handler::{socket_flow_handler, PreReadSocketSettings},
         speech_socket_handler::speech_socket_handler,
-        validation_handler,
-        workspace_handler,
+        validation_handler, workspace_handler,
     },
-    services::speech_service::SpeechService,
     services::briefing_service::BriefingService,
     services::management_api_client::ManagementApiClient,
     services::nostr_bead_publisher::NostrBeadPublisher,
     services::nostr_bridge::NostrBridge,
+    services::speech_service::SpeechService,
     services::{
-
         github::{content_enhanced::EnhancedContentAPI, ContentAPI, GitHubClient, GitHubConfig},
         github_sync_service::GitHubSyncService,
         ragflow_service::RAGFlowService,
     },
-
     AppState,
 };
 
@@ -54,7 +43,7 @@ use std::time::Instant;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::RwLock;
 use tokio::time::Duration;
-use tracing_subscriber::{fmt, EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use visionclaw_server::middleware::{RateLimit, TimeoutMiddleware};
 use visionclaw_server::telemetry::agent_telemetry::init_telemetry_logger;
 use visionclaw_server::utils::advanced_logging::init_advanced_logging;
@@ -68,20 +57,14 @@ use visionclaw_server::utils::json::to_json;
 /// In dev mode, missing required vars emit warnings and the server continues with defaults.
 fn validate_required_env_vars() -> Result<(), String> {
     let mut missing = Vec::new();
-    let required = [
-        "SYSTEM_NETWORK_PORT",
-    ];
+    let required = ["SYSTEM_NETWORK_PORT"];
     for var in &required {
         if std::env::var(var).is_err() {
             missing.push(*var);
         }
     }
     // Warn about optional but recommended vars
-    let recommended = [
-        "MANAGEMENT_API_KEY",
-        "JWT_SECRET",
-        "CORS_ALLOWED_ORIGINS",
-    ];
+    let recommended = ["MANAGEMENT_API_KEY", "JWT_SECRET", "CORS_ALLOWED_ORIGINS"];
     for var in &recommended {
         if std::env::var(var).is_err() {
             log::warn!("Recommended env var {} is not set", var);
@@ -96,7 +79,9 @@ fn validate_required_env_vars() -> Result<(), String> {
     // `is_production` is still derived for the "missing required env vars" check
     // below, but it is NOT a security toggle — it only controls whether missing
     // required vars warn-and-default (dev) or hard-fail (prod).
-    let is_production = std::env::var("APP_ENV").map(|v| v == "production").unwrap_or(false);
+    let is_production = std::env::var("APP_ENV")
+        .map(|v| v == "production")
+        .unwrap_or(false);
     if missing.is_empty() {
         Ok(())
     } else {
@@ -105,7 +90,10 @@ fn validate_required_env_vars() -> Result<(), String> {
             Err(format!("Missing required env vars: {}", missing.join(", ")))
         } else {
             for var in &missing {
-                log::warn!("Required env var {} is not set — using defaults (dev mode)", var);
+                log::warn!(
+                    "Required env var {} is not set — using defaults (dev mode)",
+                    var
+                );
             }
             Ok(())
         }
@@ -207,8 +195,9 @@ async fn main() -> std::io::Result<()> {
     // This replaces env_logger and bridges to the `log` crate, so existing log::info! etc. still work.
     // RUST_LOG env var controls filtering (e.g. RUST_LOG=debug or RUST_LOG=webxr=debug,actix_web=info).
     tracing_subscriber::registry()
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(
-            "info,\
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            EnvFilter::new(
+                "info,\
              actix_web=warn,\
              actix_server=warn,\
              actix_http=warn,\
@@ -223,30 +212,30 @@ async fn main() -> std::io::Result<()> {
              visionclaw_server::actors::gpu::force_compute_actor=warn,\
              visionclaw_server::actors::physics_orchestrator_actor=info,\
              visionclaw_server::actors::client_coordinator_actor=info,\
-             visionclaw_server::handlers::socket_flow_handler=warn"
-        )))
-        .with(
-            fmt::layer()
-                .with_target(true)
-                .with_thread_ids(true),
-        )
+             visionclaw_server::handlers::socket_flow_handler=warn",
+            )
+        }))
+        .with(fmt::layer().with_target(true).with_thread_ids(true))
         .init();
 
     // Validate required environment variables (after tracing init so log macros work)
     if let Err(e) = validate_required_env_vars() {
         error!("Environment validation failed: {}", e);
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            e,
-        ));
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, e));
     }
 
     // Record process start time for uptime reporting via /api/metrics
     let process_start_time = Instant::now();
 
     info!("--- Configuration Verification ---");
-    info!("MARKDOWN_DIR: {}", visionclaw_server::services::file_service::MARKDOWN_DIR);
-    info!("METADATA_PATH: {}", "/workspace/ext/data/metadata/metadata.json");
+    info!(
+        "MARKDOWN_DIR: {}",
+        visionclaw_server::services::file_service::MARKDOWN_DIR
+    );
+    info!(
+        "METADATA_PATH: {}",
+        "/workspace/ext/data/metadata/metadata.json"
+    );
     info!("---------------------------------");
 
     // REMOVED: init_logging()? call - using advanced_logging instead
@@ -260,14 +249,11 @@ async fn main() -> std::io::Result<()> {
         info!("Advanced logging system initialized successfully");
     }
 
-    
-    
     let log_dir = if std::path::Path::new("/app/logs").exists() {
         "/app/logs".to_string()
     } else if std::path::Path::new("/workspace/ext/logs").exists() {
         "/workspace/ext/logs".to_string()
     } else {
-        
         std::env::temp_dir()
             .join("webxr_telemetry")
             .to_string_lossy()
@@ -282,7 +268,6 @@ async fn main() -> std::io::Result<()> {
         info!("Telemetry logger initialized with directory: {}", log_dir);
     }
 
-    
     let settings = match AppFullSettings::new() {
         Ok(s) => {
             info!(
@@ -291,7 +276,6 @@ async fn main() -> std::io::Result<()> {
                     .unwrap_or_else(|_| "/app/settings.yaml".to_string())
             );
 
-            
             match to_json(&s.visualisation.rendering) {
                 Ok(json_output) => {
                     info!(
@@ -299,14 +283,14 @@ async fn main() -> std::io::Result<()> {
                         json_output
                     );
 
-                    
                     if json_output.contains("ambientLightIntensity")
                         && !json_output.contains("ambient_light_intensity")
                     {
-                        debug!("CONFIRMED: JSON uses camelCase field names for REST API compatibility");
+                        debug!(
+                            "CONFIRMED: JSON uses camelCase field names for REST API compatibility"
+                        );
                     }
 
-                    
                     debug!("CONFIRMED: Values loaded from snake_case YAML:");
                     info!(
                         "   - ambient_light_intensity -> {}",
@@ -327,7 +311,7 @@ async fn main() -> std::io::Result<()> {
                 }
             }
 
-            Arc::new(RwLock::new(s)) 
+            Arc::new(RwLock::new(s))
         }
         Err(e) => {
             error!("❌ Failed to load AppFullSettings: {:?}", e);
@@ -338,7 +322,6 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-    
     info!("GPU compute will be initialized by GPUComputeActor when needed");
 
     debug!("Successfully loaded AppFullSettings");
@@ -351,7 +334,11 @@ async fn main() -> std::io::Result<()> {
     info!("Initializing SQLite settings repository for routes");
     let data_dir = std::env::var("DATA_DIR").unwrap_or_else(|_| "./data".to_string());
     let settings_db_path = std::path::Path::new(&data_dir).join("settings.sqlite3");
-    let settings_repository = match visionclaw_server::adapters::SqliteSettingsRepository::open(&settings_db_path).await {
+    let settings_repository = match visionclaw_server::adapters::SqliteSettingsRepository::open(
+        &settings_db_path,
+    )
+    .await
+    {
         Ok(repo) => Arc::new(repo),
         Err(e) => {
             error!("Failed to open SQLite settings repository: {}", e);
@@ -364,11 +351,8 @@ async fn main() -> std::io::Result<()> {
     let settings_repo_data = web::Data::new(settings_repository.clone());
     info!("SQLite settings repository initialized successfully");
 
-
-
     let settings_data = web::Data::new(settings.clone());
 
-    
     let github_config = match GitHubConfig::from_env() {
         Ok(config) => {
             info!("[main] GitHub config loaded from environment");
@@ -379,8 +363,6 @@ async fn main() -> std::io::Result<()> {
             GitHubConfig::disabled()
         }
     };
-
-
 
     let github_client = match GitHubClient::new(github_config, settings.clone()).await {
         Ok(client) => Arc::new(client),
@@ -394,14 +376,11 @@ async fn main() -> std::io::Result<()> {
 
     let content_api = Arc::new(ContentAPI::new(github_client.clone()));
 
-    
-    
     let speech_service = {
         let service = SpeechService::new(settings.clone());
         Some(Arc::new(service))
     };
 
-    
     info!("[main] Attempting to initialize RAGFlowService...");
     let ragflow_service_option = match RAGFlowService::new(settings.clone()).await {
         Ok(service) => {
@@ -420,8 +399,6 @@ async fn main() -> std::io::Result<()> {
         error!("[main] ragflow_service_option is None after RAGFlowService::new attempt. Chat functionality will be unavailable.");
     }
 
-    
-    
     let settings_value = {
         let settings_read = settings.read().await;
         settings_read.clone()
@@ -431,10 +408,10 @@ async fn main() -> std::io::Result<()> {
         settings_value,
         github_client.clone(),
         content_api.clone(),
-        None,                   
-        ragflow_service_option, 
+        None,
+        ragflow_service_option,
         speech_service,
-        "default_session".to_string(), 
+        "default_session".to_string(),
     )
     .await
     {
@@ -454,12 +431,14 @@ async fn main() -> std::io::Result<()> {
     nostr_handler::init_nostr_service(&mut app_state).await;
     debug!("[main] Nostr service initialized");
 
-    
     info!("[main] Initializing GitHub Sync Service...");
     let enhanced_content_api = Arc::new(EnhancedContentAPI::new(github_client.clone()));
     let github_sync_service = Arc::new(GitHubSyncService::new(
         enhanced_content_api,
-        app_state.graph_adapter.clone() as Arc<dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
+        app_state.graph_adapter.clone()
+            as Arc<
+                dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository,
+            >,
         app_state.ontology_repository.clone(),
         app_state.sqlite_settings_repository.clone(),
     ));
@@ -478,11 +457,13 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize SchemaService for natural language query support
     info!("[main] Initializing Schema Service...");
-    let schema_service = Arc::new(visionclaw_server::services::schema_service::SchemaService::new());
+    let schema_service =
+        Arc::new(visionclaw_server::services::schema_service::SchemaService::new());
     debug!("[main] Schema Service initialized");
     // Initialize Natural Language Query Service
     info!("[main] Initializing Natural Language Query Service...");
-    let perplexity_service = Arc::new(visionclaw_server::services::perplexity_service::PerplexityService::new());
+    let perplexity_service =
+        Arc::new(visionclaw_server::services::perplexity_service::PerplexityService::new());
     let nl_query_service = Arc::new(visionclaw_server::services::natural_language_query_service::NaturalLanguageQueryService::new(
         schema_service.clone(),
         perplexity_service.clone(),
@@ -499,7 +480,8 @@ async fn main() -> std::io::Result<()> {
     let whelk_engine = Arc::new(tokio::sync::RwLock::new(
         visionclaw_server::adapters::whelk_inference_engine::WhelkInferenceEngine::new(),
     ));
-    let github_pr_service = Arc::new(visionclaw_server::services::github_pr_service::GitHubPRService::new());
+    let github_pr_service =
+        Arc::new(visionclaw_server::services::github_pr_service::GitHubPRService::new());
     let ontology_query_service = Arc::new(visionclaw_server::services::ontology_query_service::OntologyQueryService::new(
         app_state.ontology_repository.clone(),
         app_state.graph_adapter.clone() as Arc<dyn visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository>,
@@ -509,19 +491,19 @@ async fn main() -> std::io::Result<()> {
     // W-E transaction spine (ADR-049): idempotency store + write-ahead intent log.
     // In-memory by default (real, thread-safe); a durable SQLite-backed impl can
     // drop in behind the same traits without touching the propose pipeline.
-    let proposal_idempotency = Arc::new(
-        visionclaw_server::services::proposal_spine::InMemoryIdempotencyStore::new(),
+    let proposal_idempotency =
+        Arc::new(visionclaw_server::services::proposal_spine::InMemoryIdempotencyStore::new());
+    let proposal_intents =
+        Arc::new(visionclaw_server::services::proposal_spine::InMemoryIntentLog::new());
+    let ontology_mutation_service = Arc::new(
+        visionclaw_server::services::ontology_mutation_service::OntologyMutationService::new(
+            app_state.ontology_repository.clone(),
+            whelk_engine.clone(),
+            github_pr_service.clone(),
+            proposal_idempotency,
+            proposal_intents,
+        ),
     );
-    let proposal_intents = Arc::new(
-        visionclaw_server::services::proposal_spine::InMemoryIntentLog::new(),
-    );
-    let ontology_mutation_service = Arc::new(visionclaw_server::services::ontology_mutation_service::OntologyMutationService::new(
-        app_state.ontology_repository.clone(),
-        whelk_engine.clone(),
-        github_pr_service.clone(),
-        proposal_idempotency,
-        proposal_intents,
-    ));
 
     // W-B (PRD-022 / ADR-048/049): governed decision write door. Shares the same
     // Oxigraph store as the ontology adapter (single-writer, ADR-11 §D1) and its
@@ -567,8 +549,16 @@ async fn main() -> std::io::Result<()> {
 
     // Step 1: Sync Files from GitHub.
     info!("[Startup] Step 1: Syncing files from GitHub to local storage...");
-    let github_sync_failed = if let Err(e) = visionclaw_server::services::file_service::FileService::initialize_local_storage(settings.clone()).await {
-        error!("[Startup] FAILED to sync from GitHub: {}. Will try local files.", e);
+    let github_sync_failed = if let Err(e) =
+        visionclaw_server::services::file_service::FileService::initialize_local_storage(
+            settings.clone(),
+        )
+        .await
+    {
+        error!(
+            "[Startup] FAILED to sync from GitHub: {}. Will try local files.",
+            e
+        );
         true
     } else {
         info!("[Startup] SUCCESS: Local file storage is synchronized with GitHub.");
@@ -576,12 +566,18 @@ async fn main() -> std::io::Result<()> {
     };
 
     // Step 1b: If GitHub sync failed or metadata is empty, scan local files
-    let metadata = visionclaw_server::services::file_service::FileService::load_or_create_metadata().unwrap_or_default();
+    let metadata =
+        visionclaw_server::services::file_service::FileService::load_or_create_metadata()
+            .unwrap_or_default();
     if github_sync_failed || metadata.is_empty() {
         info!("[Startup] Step 1b: Scanning local markdown files as fallback...");
-        match visionclaw_server::services::file_service::FileService::scan_local_files_to_metadata() {
+        match visionclaw_server::services::file_service::FileService::scan_local_files_to_metadata()
+        {
             Ok(local_metadata) => {
-                info!("[Startup] SUCCESS: Scanned {} public files from local storage.", local_metadata.len());
+                info!(
+                    "[Startup] SUCCESS: Scanned {} public files from local storage.",
+                    local_metadata.len()
+                );
             }
             Err(e) => {
                 error!("[Startup] FAILED to scan local files: {}", e);
@@ -593,8 +589,12 @@ async fn main() -> std::io::Result<()> {
     info!("[Startup] Step 2: Populating Oxigraph store from local files...");
     {
         use visionclaw_server::ports::knowledge_graph_repository::KnowledgeGraphRepository;
-        let kg_repo: Arc<dyn KnowledgeGraphRepository> = app_state.graph_adapter.clone() as Arc<dyn KnowledgeGraphRepository>;
-        if let Err(e) = visionclaw_server::services::file_service::FileService::load_graph_from_files(&kg_repo).await {
+        let kg_repo: Arc<dyn KnowledgeGraphRepository> =
+            app_state.graph_adapter.clone() as Arc<dyn KnowledgeGraphRepository>;
+        if let Err(e) =
+            visionclaw_server::services::file_service::FileService::load_graph_from_files(&kg_repo)
+                .await
+        {
             error!("[Startup] FATAL: Failed to populate Oxigraph store: {}. Application is in DEGRADED state.", e);
             app_state.set_degraded(format!("Oxigraph init failed: {}", e));
         } else {
@@ -604,21 +604,13 @@ async fn main() -> std::io::Result<()> {
 
     // Step 3: Notify Actors.
     info!("[Startup] Step 3: Notifying actors to reload graph state from database...");
-    app_state.graph_service_addr.do_send(ReloadGraphFromDatabase);
+    app_state
+        .graph_service_addr
+        .do_send(ReloadGraphFromDatabase);
     info!("[Startup] SUCCESS: Actors notified.");
     info!("--- Data Orchestration Sequence Complete ---");
 
-
-
-
-
-
-
-
-
-
     info!("Skipping bots orchestrator connection during startup (will connect on-demand)");
-
 
     info!("Loading ontology graph from Oxigraph store (ADR-11)...");
 
@@ -646,7 +638,6 @@ async fn main() -> std::io::Result<()> {
         }
     };
 
-
     // CRITICAL FIX: Do NOT send ontology graph via UpdateGraphData!
     // This would overwrite the KG nodes that should be loaded via ReloadGraphFromDatabase.
     // The architecture is: KG nodes (from GitHub sync) with owl_class_iri links to ontology.
@@ -665,16 +656,8 @@ async fn main() -> std::io::Result<()> {
 
     info!("Starting HTTP server...");
 
-    
-    
-    
-    
-    
-    
-    
     info!("Skipping redundant StartSimulation message to GraphServiceSupervisor for debugging stack overflow. Simulation should already be running from supervisor's started() method.");
 
-    
     // --- Briefing + Nostr services ---
     let management_api_client = ManagementApiClient::new(
         std::env::var("MANAGEMENT_API_HOST").unwrap_or_else(|_| "agentic-workstation".to_string()),
@@ -688,16 +671,16 @@ async fn main() -> std::io::Result<()> {
 
     // Oxigraph provenance for NostrBeadPublisher deferred to Phase 2 (ADR-11).
     // todo!("Phase 2: wire OxigraphOntologyRepository into NostrBeadPublisher for provenance triples")
-    let nostr_publisher = web::Data::new(
-        NostrBeadPublisher::from_env(),
-    );
+    let nostr_publisher = web::Data::new(NostrBeadPublisher::from_env());
 
     // Spawn bridge as background task (no-op if FORUM_RELAY_URL is not set).
     if let Some(bridge) = NostrBridge::from_env() {
         tokio::spawn(bridge.run());
         info!("[main] NostrBridge spawned");
     } else {
-        info!("[main] NostrBridge not started (VISIONCLAW_NOSTR_PRIVKEY or FORUM_RELAY_URL not set)");
+        info!(
+            "[main] NostrBridge not started (VISIONCLAW_NOSTR_PRIVKEY or FORUM_RELAY_URL not set)"
+        );
     }
 
     let app_state_data = web::Data::new(app_state);
@@ -714,9 +697,7 @@ async fn main() -> std::io::Result<()> {
         let event_bus = Arc::new(tokio::sync::RwLock::new(EventBus::new()));
         web::Data::new(Arc::new(PhysicsService::new(adapter, event_bus)))
     };
-    
 
-    
     let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("SYSTEM_NETWORK_PORT")
         .ok()
@@ -724,7 +705,6 @@ async fn main() -> std::io::Result<()> {
         .unwrap_or(4000);
     let bind_address = format!("{}:{}", bind_address, port);
 
-    
     let pre_read_ws_settings = {
         let s = settings.read().await;
         PreReadSocketSettings {
@@ -732,8 +712,8 @@ async fn main() -> std::io::Result<()> {
             max_update_rate: s.system.websocket.max_update_rate,
             motion_threshold: s.system.websocket.motion_threshold,
             motion_damping: s.system.websocket.motion_damping,
-            heartbeat_interval_ms: s.system.websocket.heartbeat_interval, 
-            heartbeat_timeout_ms: s.system.websocket.heartbeat_timeout,   
+            heartbeat_interval_ms: s.system.websocket.heartbeat_interval,
+            heartbeat_timeout_ms: s.system.websocket.heartbeat_timeout,
         }
     };
     let pre_read_ws_settings_data = web::Data::new(pre_read_ws_settings);
@@ -770,10 +750,8 @@ async fn main() -> std::io::Result<()> {
         };
         let cfg = VcPayConfig::from_env();
         let ledger_dir = cfg.ledger_dir.clone();
-        let ledger =
-            Arc::new(FsPaymentStore::new(&ledger_dir).expect("init payment ledger store"));
-        let exchange =
-            Arc::new(FsExchangeStore::new(&ledger_dir).expect("init exchange store"));
+        let ledger = Arc::new(FsPaymentStore::new(&ledger_dir).expect("init payment ledger store"));
+        let exchange = Arc::new(FsExchangeStore::new(&ledger_dir).expect("init exchange store"));
         (
             web::Data::new(cfg),
             web::Data::new(ledger),
@@ -930,7 +908,7 @@ async fn main() -> std::io::Result<()> {
             .route("/wss/agent-events", web::get().to(visionclaw_server::agent_events::agent_events_ws))
             .route("/ws/speech", web::get().to(speech_socket_handler))
             .route("/ws/mcp-relay", web::get().to(mcp_relay_handler))
-            
+
             .route("/ws/client-messages", web::get().to(client_messages_handler::websocket_client_messages))
             // PRD-008 §5.3: XR presence WebSocket — Quest 3 native APK multi-user sync
             .route("/ws/presence", web::get().to(ws_presence))
@@ -1054,7 +1032,7 @@ async fn main() -> std::io::Result<()> {
             app
         })
         .bind(&bind_address)?
-        .workers(4) 
+        .workers(4)
         .run();
 
     let server_handle = server.handle();
@@ -1070,11 +1048,13 @@ async fn main() -> std::io::Result<()> {
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(30);
-        tokio::spawn(visionclaw_server::services::liveness_harness::run_kg_watchdog(
-            harness,
-            self_url,
-            std::time::Duration::from_secs(watchdog_secs),
-        ));
+        tokio::spawn(
+            visionclaw_server::services::liveness_harness::run_kg_watchdog(
+                harness,
+                self_url,
+                std::time::Duration::from_secs(watchdog_secs),
+            ),
+        );
     }
 
     // REC-4 (ADR-130 D5): the agent-event volume tap. Subscribes to the
@@ -1084,9 +1064,7 @@ async fn main() -> std::io::Result<()> {
     // instrumentation. Detached; fail-open on a lagged/closed channel.
     {
         let kpi_repo = tap_kpi_repo.clone();
-        tokio::spawn(visionclaw_server::services::kpi_compute::run_agent_event_tap(
-            kpi_repo,
-        ));
+        tokio::spawn(visionclaw_server::services::kpi_compute::run_agent_event_tap(kpi_repo));
         info!("[main] KPI agent-event volume tap spawned");
     }
 
@@ -1102,7 +1080,6 @@ async fn main() -> std::io::Result<()> {
     } else {
         info!("[main] canary Nostr tap not started (CANARY_TAP_RELAY_URL not set)");
     }
-
 
     let mut sigterm = signal(SignalKind::terminate())?;
     let mut sigint = signal(SignalKind::interrupt())?;

@@ -44,7 +44,6 @@ impl UserSettings {
     pub fn load(pubkey: &str) -> Option<Self> {
         let request_id = Uuid::new_v4();
 
-        
         {
             let cache = match USER_SETTINGS_CACHE.read() {
                 Ok(cache) => cache,
@@ -54,7 +53,6 @@ impl UserSettings {
                 }
             };
             if let Some(cached) = cache.get(pubkey) {
-                
                 if cached.timestamp.elapsed() < CACHE_EXPIRATION {
                     debug!("Using cached settings for user {}", pubkey);
                     trace_debug!(
@@ -66,7 +64,7 @@ impl UserSettings {
                     );
                     return Some(cached.settings.clone());
                 }
-                
+
                 debug!("Cache expired for user {}, reloading from disk", pubkey);
                 trace_debug!(
                     request_id = %request_id,
@@ -87,40 +85,36 @@ impl UserSettings {
             }
         }
 
-        
         let path = Self::get_settings_path(pubkey);
         match fs::read_to_string(&path) {
-            Ok(content) => {
-                match serde_yaml::from_str::<UserSettings>(&content) {
-                    Ok(settings) => {
-                        
-                        let settings_clone = settings.clone();
-                        {
-                            let mut cache = match USER_SETTINGS_CACHE.write() {
-                                Ok(cache) => cache,
-                                Err(e) => {
-                                    error!("Failed to write to user settings cache: {}", e);
-                                    
-                                    return Some(settings);
-                                }
-                            };
-                            cache.insert(
-                                pubkey.to_string(),
-                                CachedUserSettings {
-                                    settings: settings_clone,
-                                    timestamp: Instant::now(),
-                                },
-                            );
-                        }
-                        info!("Loaded settings for user {} and added to cache", pubkey);
-                        Some(settings)
+            Ok(content) => match serde_yaml::from_str::<UserSettings>(&content) {
+                Ok(settings) => {
+                    let settings_clone = settings.clone();
+                    {
+                        let mut cache = match USER_SETTINGS_CACHE.write() {
+                            Ok(cache) => cache,
+                            Err(e) => {
+                                error!("Failed to write to user settings cache: {}", e);
+
+                                return Some(settings);
+                            }
+                        };
+                        cache.insert(
+                            pubkey.to_string(),
+                            CachedUserSettings {
+                                settings: settings_clone,
+                                timestamp: Instant::now(),
+                            },
+                        );
                     }
-                    Err(e) => {
-                        error!("Failed to parse settings for user {}: {}", pubkey, e);
-                        None
-                    }
+                    info!("Loaded settings for user {} and added to cache", pubkey);
+                    Some(settings)
                 }
-            }
+                Err(e) => {
+                    error!("Failed to parse settings for user {}: {}", pubkey, e);
+                    None
+                }
+            },
             Err(e) => {
                 debug!("No settings file found for user {}: {}", pubkey, e);
                 None
@@ -157,14 +151,12 @@ impl UserSettings {
     fn save_to_disk(&self) -> Result<(), String> {
         let path = Self::get_settings_path(&self.pubkey);
 
-        
         if let Some(parent) = path.parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 return Err(format!("Failed to create settings directory: {}", e));
             }
         }
 
-        
         match serde_yaml::to_string(self) {
             Ok(content) => match std::fs::write(&path, content) {
                 Ok(_) => {
@@ -181,7 +173,6 @@ impl UserSettings {
         PathBuf::from("/app/user_settings").join(format!("{}.yaml", pubkey))
     }
 
-    
     pub fn clear_cache(pubkey: &str) {
         let mut cache = match USER_SETTINGS_CACHE.write() {
             Ok(cache) => cache,
@@ -202,7 +193,6 @@ impl UserSettings {
         }
     }
 
-    
     pub fn clear_all_cache() {
         let mut cache = match USER_SETTINGS_CACHE.write() {
             Ok(cache) => cache,
@@ -217,7 +207,6 @@ impl UserSettings {
         trace_info!(entries_cleared = count, "All user settings cache cleared");
     }
 
-    
     pub fn invalidate_user_cache(pubkey: &str) {
         Self::clear_cache(pubkey);
         trace_info!(
@@ -226,7 +215,6 @@ impl UserSettings {
         );
     }
 
-    
     pub fn get_cache_stats() -> (usize, Vec<(String, Duration)>) {
         let cache = match USER_SETTINGS_CACHE.read() {
             Ok(cache) => cache,

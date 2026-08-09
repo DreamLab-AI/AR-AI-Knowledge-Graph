@@ -87,7 +87,11 @@ impl WebContract {
         trust_level: TrustLevel,
     ) -> Result<Self, &'static str> {
         trust_level.gate()?;
-        Ok(Self { gitmark, trail, trust_level })
+        Ok(Self {
+            gitmark,
+            trail,
+            trust_level,
+        })
     }
 
     /// The `gitmark:<sha>:<vout>` `@id` of this contract's trail head.

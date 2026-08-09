@@ -1,10 +1,10 @@
+use crate::utils::json::{from_json, to_json};
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use crate::utils::json::{to_json, from_json};
 
 #[derive(Debug, Clone)]
 pub struct McpTelemetryClient {
@@ -15,7 +15,6 @@ pub struct McpTelemetryClient {
 }
 
 impl McpTelemetryClient {
-    
     pub fn new(host: String, port: u16) -> Self {
         Self {
             host,
@@ -25,18 +24,15 @@ impl McpTelemetryClient {
         }
     }
 
-    
     pub fn for_multi_agent_container() -> Self {
         Self::new("multi-agent-container".to_string(), 9500)
     }
 
-    
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.request_timeout = timeout;
         self
     }
 
-    
     async fn connect(&self) -> Result<TcpStream, Box<dyn std::error::Error + Send + Sync>> {
         let addr = format!("{}:{}", self.host, self.port);
         debug!("Connecting to MCP TCP server at {}", addr);
@@ -48,7 +44,6 @@ impl McpTelemetryClient {
         Ok(stream)
     }
 
-    
     async fn send_request(
         &mut self,
         method: &str,
@@ -56,7 +51,6 @@ impl McpTelemetryClient {
     ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
         let mut stream = self.connect().await?;
 
-        
         let request_id = self.next_request_id;
         self.next_request_id += 1;
 
@@ -70,12 +64,10 @@ impl McpTelemetryClient {
         let request_str = to_json(&request)?;
         debug!("Sending MCP request: {}", request_str);
 
-        
         stream.write_all(request_str.as_bytes()).await?;
         stream.write_all(b"\n").await?;
         stream.flush().await?;
 
-        
         let mut reader = BufReader::new(stream);
         let mut response_line = String::new();
 
@@ -83,7 +75,6 @@ impl McpTelemetryClient {
 
         debug!("Received MCP response: {}", response_line);
 
-        
         let response: Value = from_json(&response_line)?;
 
         if let Some(error) = response.get("error") {
@@ -93,7 +84,6 @@ impl McpTelemetryClient {
         Ok(response["result"].clone())
     }
 
-    
     pub async fn list_tools(
         &mut self,
     ) -> Result<Vec<McpTool>, Box<dyn std::error::Error + Send + Sync>> {
@@ -105,7 +95,6 @@ impl McpTelemetryClient {
         Ok(tools)
     }
 
-    
     pub async fn call_tool(
         &mut self,
         tool_name: &str,
@@ -119,7 +108,6 @@ impl McpTelemetryClient {
         self.send_request("tools/call", params).await
     }
 
-    
     pub async fn query_session_status(
         &mut self,
         session_uuid: &str,
@@ -133,7 +121,6 @@ impl McpTelemetryClient {
         Ok(serde_json::from_value(result)?)
     }
 
-    
     pub async fn query_session_agents(
         &mut self,
         session_uuid: &str,
@@ -150,7 +137,6 @@ impl McpTelemetryClient {
         Ok(agents)
     }
 
-    
     pub async fn query_session_metrics(
         &mut self,
         session_uuid: &str,
@@ -164,7 +150,6 @@ impl McpTelemetryClient {
         Ok(serde_json::from_value(result)?)
     }
 
-    
     pub async fn query_swarm_list(
         &mut self,
     ) -> Result<Vec<SwarmInfo>, Box<dyn std::error::Error + Send + Sync>> {
@@ -178,7 +163,6 @@ impl McpTelemetryClient {
         Ok(swarms)
     }
 
-    
     pub async fn query_swarm_metrics(
         &mut self,
         swarm_id: &str,
@@ -192,7 +176,6 @@ impl McpTelemetryClient {
         Ok(serde_json::from_value(result)?)
     }
 
-    
     pub async fn query_agent_metrics(
         &mut self,
         agent_id: &str,
@@ -206,7 +189,6 @@ impl McpTelemetryClient {
         Ok(serde_json::from_value(result)?)
     }
 
-    
     pub async fn query_performance_summary(
         &mut self,
     ) -> Result<PerformanceSummary, Box<dyn std::error::Error + Send + Sync>> {
@@ -217,7 +199,6 @@ impl McpTelemetryClient {
         Ok(serde_json::from_value(result)?)
     }
 
-    
     pub async fn ping(&mut self) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         match self.send_request("ping", json!({})).await {
             Ok(_) => Ok(true),
@@ -352,7 +333,7 @@ pub struct PerformanceSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-use crate::utils::json::{from_json, to_json};
+    use crate::utils::json::{from_json, to_json};
 
     #[tokio::test]
     async fn test_mcp_client_creation() {

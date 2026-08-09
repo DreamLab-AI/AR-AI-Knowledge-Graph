@@ -58,9 +58,9 @@ fn golden_node() -> (WirePosFx, NodeAnalyticsFx) {
         sssp_parent: 13,
     };
     let an = NodeAnalyticsFx {
-        cluster_id: 3,    // 1-based
-        community_id: 9,  // DISTINCT from cluster_id (dup-write regression guard)
-        anomaly: 1.75,    // real LOF ratio
+        cluster_id: 3,     // 1-based
+        community_id: 9,   // DISTINCT from cluster_id (dup-write regression guard)
+        anomaly: 1.75,     // real LOF ratio
         centrality: 0.125, // normalised PageRank
     };
     (pos, an)
@@ -76,22 +76,16 @@ fn golden_wire_snapshot_52_bytes() {
     // makes any offset/order/endianness regression fail CI.
     let expected: [u8; 52] = [
         // id@0  = 42
-        0x2A, 0x00, 0x00, 0x00,
-        // pos@4 = 1.0, 2.0, 3.0
+        0x2A, 0x00, 0x00, 0x00, // pos@4 = 1.0, 2.0, 3.0
         0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x40, 0x40,
         // vel@16 = 0.5, -0.5, 0.25
         0x00, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0xBF, 0x00, 0x00, 0x80, 0x3E,
         // sssp_distance@28 = 7.5
-        0x00, 0x00, 0xF0, 0x40,
-        // sssp_parent@32 = 13
-        0x0D, 0x00, 0x00, 0x00,
-        // cluster_id@36 = 3
-        0x03, 0x00, 0x00, 0x00,
-        // anomaly@40 = 1.75
-        0x00, 0x00, 0xE0, 0x3F,
-        // community@44 = 9
-        0x09, 0x00, 0x00, 0x00,
-        // centrality@48 = 0.125
+        0x00, 0x00, 0xF0, 0x40, // sssp_parent@32 = 13
+        0x0D, 0x00, 0x00, 0x00, // cluster_id@36 = 3
+        0x03, 0x00, 0x00, 0x00, // anomaly@40 = 1.75
+        0x00, 0x00, 0xE0, 0x3F, // community@44 = 9
+        0x09, 0x00, 0x00, 0x00, // centrality@48 = 0.125
         0x00, 0x00, 0x00, 0x3E,
     ];
     assert_eq!(

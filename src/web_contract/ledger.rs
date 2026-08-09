@@ -55,7 +55,10 @@ impl Ledger {
     /// same bytes (required for the `verify` replay equality assertion).
     pub fn from_balances(mut entries: Vec<LedgerEntry>) -> Self {
         entries.sort_by(|a, b| a.account.cmp(&b.account));
-        Self { context: Self::CONTEXT.to_string(), balances: entries }
+        Self {
+            context: Self::CONTEXT.to_string(),
+            balances: entries,
+        }
     }
 
     /// Convert a share count to integer sats (1 share = [`SATS_PER_SHARE`]).
@@ -87,8 +90,14 @@ mod tests {
     #[test]
     fn ledger_emits_webledgers_context_and_sorted_balances() {
         let ledger = Ledger::from_balances(vec![
-            LedgerEntry { account: "did:nostr:bb".into(), balance_sats: 2000 },
-            LedgerEntry { account: "did:nostr:aa".into(), balance_sats: 1000 },
+            LedgerEntry {
+                account: "did:nostr:bb".into(),
+                balance_sats: 2000,
+            },
+            LedgerEntry {
+                account: "did:nostr:aa".into(),
+                balance_sats: 1000,
+            },
         ]);
 
         // Sorted canonical order (aa before bb).
@@ -113,13 +122,28 @@ mod tests {
         // Same balances built in different input order must serialise identically
         // (the verify replay equality check depends on this).
         let a = Ledger::from_balances(vec![
-            LedgerEntry { account: "did:nostr:bb".into(), balance_sats: 2000 },
-            LedgerEntry { account: "did:nostr:aa".into(), balance_sats: 1000 },
+            LedgerEntry {
+                account: "did:nostr:bb".into(),
+                balance_sats: 2000,
+            },
+            LedgerEntry {
+                account: "did:nostr:aa".into(),
+                balance_sats: 1000,
+            },
         ]);
         let b = Ledger::from_balances(vec![
-            LedgerEntry { account: "did:nostr:aa".into(), balance_sats: 1000 },
-            LedgerEntry { account: "did:nostr:bb".into(), balance_sats: 2000 },
+            LedgerEntry {
+                account: "did:nostr:aa".into(),
+                balance_sats: 1000,
+            },
+            LedgerEntry {
+                account: "did:nostr:bb".into(),
+                balance_sats: 2000,
+            },
         ]);
-        assert_eq!(serde_json::to_vec(&a).unwrap(), serde_json::to_vec(&b).unwrap());
+        assert_eq!(
+            serde_json::to_vec(&a).unwrap(),
+            serde_json::to_vec(&b).unwrap()
+        );
     }
 }

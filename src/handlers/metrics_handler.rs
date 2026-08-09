@@ -5,8 +5,8 @@ use std::sync::atomic::Ordering;
 use std::time::Instant;
 
 use crate::ok_json;
-use crate::AppState;
 use crate::utils::network::CircuitBreakerStats;
+use crate::AppState;
 
 /// Wrapper around `Instant` so it can be registered as Actix app data.
 #[derive(Clone)]

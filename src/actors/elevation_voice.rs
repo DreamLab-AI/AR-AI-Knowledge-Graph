@@ -133,13 +133,16 @@ impl VoiceDemandLedger {
     /// Record a mention. `speaker` is the attributed identity when the voice
     /// path provides one (XR room member did), empty otherwise.
     pub fn note(&mut self, label: &str, excerpt: &str, speaker: &str, now: Instant) {
-        let d = self.demands.entry(label.to_string()).or_insert(VoiceDemand {
-            mentions: 0,
-            score: 0.0,
-            last_seen: now,
-            speakers: Vec::new(),
-            excerpts: Vec::new(),
-        });
+        let d = self
+            .demands
+            .entry(label.to_string())
+            .or_insert(VoiceDemand {
+                mentions: 0,
+                score: 0.0,
+                last_seen: now,
+                speakers: Vec::new(),
+                excerpts: Vec::new(),
+            });
         // Decay the running score to `now`, then add this mention.
         d.score = d.score * Self::decay_factor(now.duration_since(d.last_seen)) + 1.0;
         d.mentions += 1;
@@ -278,7 +281,10 @@ mod tests {
         );
         assert_eq!(
             found,
-            vec!["finality mechanism".to_string(), "Gaussian Splatting".to_string()]
+            vec![
+                "finality mechanism".to_string(),
+                "Gaussian Splatting".to_string()
+            ]
         );
     }
 

@@ -17,9 +17,7 @@ use std::sync::Arc;
 use visionclaw_server::adapters::sqlite_enrichment_repository::{
     EnrichmentProposal, SqliteEnrichmentRepository, StoredDecision,
 };
-use visionclaw_server::adapters::sqlite_kpi_repository::{
-    NewAgentTrajectory, SqliteKpiRepository,
-};
+use visionclaw_server::adapters::sqlite_kpi_repository::{NewAgentTrajectory, SqliteKpiRepository};
 use visionclaw_server::services::insight_loop;
 use visionclaw_server::services::provenance_trace::{
     ProvenanceTraceService, SOURCE_AGENT_EVENT, SOURCE_BROKER_DECISION, SOURCE_POD_GIT_MARK,
@@ -113,12 +111,11 @@ async fn rec10_insight_loop_closes_end_to_end_with_monotonic_stamps() {
     assert_eq!(trace.stages[4].status, "planned");
 
     // Every completed stage carries a non-decreasing timestamp.
-    let stamps: Vec<i64> = trace
-        .stages
-        .iter()
-        .filter_map(|s| s.at_ms)
-        .collect();
-    assert!(stamps.windows(2).all(|w| w[0] <= w[1]), "stage stamps monotonic");
+    let stamps: Vec<i64> = trace.stages.iter().filter_map(|s| s.at_ms).collect();
+    assert!(
+        stamps.windows(2).all(|w| w[0] <= w[1]),
+        "stage stamps monotonic"
+    );
 }
 
 /// REC-11: the unified trace joins two LIVE source kinds (agent-events + broker

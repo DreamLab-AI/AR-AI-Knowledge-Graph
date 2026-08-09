@@ -3,9 +3,9 @@
 //! Provides graph schema information to LLMs for natural language to Cypher translation.
 //! Extracts node types, edge types, properties, and relationships from the knowledge graph.
 
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 use visionclaw_domain::models::graph::GraphData;
 
 /// Graph schema metadata for LLM context
@@ -70,7 +70,12 @@ impl GraphSchema {
 
         context.push_str("## Available Node Properties\n");
         for (prop, examples) in &self.node_properties {
-            let example_str = examples.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+            let example_str = examples
+                .iter()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
             context.push_str(&format!("- {} (examples: {})\n", prop, example_str));
         }
         context.push_str("\n");
@@ -91,7 +96,8 @@ impl GraphSchema {
         context.push_str("// Find all nodes of a specific type\n");
         context.push_str("MATCH (n:GraphNode {node_type: 'person'}) RETURN n\n\n");
         context.push_str("// Find relationships of a specific type\n");
-        context.push_str("MATCH (a)-[r:EDGE {relation_type: 'dependency'}]->(b) RETURN a, r, b\n\n");
+        context
+            .push_str("MATCH (a)-[r:EDGE {relation_type: 'dependency'}]->(b) RETURN a, r, b\n\n");
         context.push_str("// Find paths between nodes\n");
         context.push_str("MATCH path = (a:GraphNode)-[*1..3]->(b:GraphNode) WHERE a.label = 'Start' AND b.label = 'End' RETURN path\n");
         context.push_str("```\n");
@@ -129,7 +135,9 @@ impl SchemaService {
         // Extract node types
         let mut node_type_counts: HashMap<String, usize> = HashMap::new();
         for node in &graph.nodes {
-            let node_type = node.node_type.as_ref()
+            let node_type = node
+                .node_type
+                .as_ref()
                 .map(|s| s.clone())
                 .unwrap_or_else(|| "generic".to_string());
             *node_type_counts.entry(node_type).or_insert(0) += 1;
@@ -149,7 +157,9 @@ impl SchemaService {
         // Extract edge types
         let mut edge_type_counts: HashMap<String, usize> = HashMap::new();
         for edge in &graph.edges {
-            let edge_type = edge.edge_type.as_ref()
+            let edge_type = edge
+                .edge_type
+                .as_ref()
                 .map(|s| s.clone())
                 .unwrap_or_else(|| "generic".to_string());
             *edge_type_counts.entry(edge_type).or_insert(0) += 1;
@@ -163,39 +173,53 @@ impl SchemaService {
 
         // Extract node properties
         let mut node_props: HashMap<String, HashSet<String>> = HashMap::new();
-        for node in graph.nodes.iter().take(100) {  // Sample first 100 nodes
+        for node in graph.nodes.iter().take(100) {
+            // Sample first 100 nodes
             if !node.label.is_empty() {
-                node_props.entry("label".to_string())
+                node_props
+                    .entry("label".to_string())
                     .or_insert_with(HashSet::new)
                     .insert(node.label.clone());
             }
             if let Some(ref color) = node.color {
-                node_props.entry("color".to_string())
+                node_props
+                    .entry("color".to_string())
                     .or_insert_with(HashSet::new)
                     .insert(color.clone());
             }
             if let Some(ref group) = node.group {
-                node_props.entry("group".to_string())
+                node_props
+                    .entry("group".to_string())
                     .or_insert_with(HashSet::new)
                     .insert(group.clone());
             }
             for (key, value) in &node.metadata {
-                node_props.entry(key.clone())
+                node_props
+                    .entry(key.clone())
                     .or_insert_with(HashSet::new)
                     .insert(value.clone());
             }
         }
 
         // Convert to Vec for easier serialization
-        schema.node_properties = node_props.into_iter()
+        schema.node_properties = node_props
+            .into_iter()
             .map(|(k, v)| (k, v.into_iter().take(5).collect()))
             .collect();
 
         // Extract edge properties (weight is common)
         let mut edge_props: HashMap<String, HashSet<String>> = HashMap::new();
-        edge_props.insert("weight".to_string(),
-            graph.edges.iter().take(5).map(|e| e.weight.to_string()).collect());
-        schema.edge_properties = edge_props.into_iter()
+        edge_props.insert(
+            "weight".to_string(),
+            graph
+                .edges
+                .iter()
+                .take(5)
+                .map(|e| e.weight.to_string())
+                .collect(),
+        );
+        schema.edge_properties = edge_props
+            .into_iter()
             .map(|(k, v)| (k, v.into_iter().collect()))
             .collect();
 
@@ -254,8 +278,8 @@ impl Default for SchemaService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use visionclaw_domain::models::node::Node;
     use visionclaw_domain::models::edge::Edge;
+    use visionclaw_domain::models::node::Node;
 
     #[tokio::test]
     async fn test_schema_extraction() {

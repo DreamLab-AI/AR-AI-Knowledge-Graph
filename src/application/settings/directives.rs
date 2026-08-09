@@ -128,7 +128,6 @@ pub struct SaveAllSettings {
 
 impl Directive for SaveAllSettings {
     fn validate(&self) -> HexResult<()> {
-        
         Ok(())
     }
 }
@@ -287,7 +286,6 @@ pub struct ClearSettingsCache;
 
 impl Directive for ClearSettingsCache {
     fn validate(&self) -> HexResult<()> {
-        
         Ok(())
     }
 }

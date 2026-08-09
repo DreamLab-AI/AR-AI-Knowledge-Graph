@@ -23,23 +23,16 @@
 
 // ── Re-exports from visionclaw-protocol ──────────────────────────────────────
 pub use visionclaw_protocol::socket_flow_messages::{
-    array_to_vec3data,
-    BinaryNodeData,
-    BinaryNodeDataClient,
-    InitialEdgeData,
-    InitialNodeData,
-    Message,
-    PingMessage,
-    PongMessage,
-    vec3data_to_array,
+    array_to_vec3data, vec3data_to_array, BinaryNodeData, BinaryNodeDataClient, InitialEdgeData,
+    InitialNodeData, Message, PingMessage, PongMessage,
 };
 
 // ── GPU-only types (stay in webxr) ───────────────────────────────────────────
+use crate::types::vec3::Vec3Data;
 use bytemuck::{Pod, Zeroable};
 #[cfg(feature = "gpu")]
 use cudarc::driver::{DeviceRepr, ValidAsZeroBits};
 use glam::Vec3;
-use crate::types::vec3::Vec3Data;
 
 /// Extended node record for server-side GPU computations (48 bytes).
 ///

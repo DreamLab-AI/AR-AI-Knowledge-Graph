@@ -57,7 +57,6 @@ pub struct NetworkResilienceManager {
 }
 
 impl NetworkResilienceManager {
-    
     pub fn new() -> Self {
         Self {
             circuit_breaker_registry: CircuitBreakerRegistry::new(),
@@ -68,7 +67,6 @@ impl NetworkResilienceManager {
         }
     }
 
-    
     pub fn high_performance() -> Self {
         Self {
             circuit_breaker_registry: CircuitBreakerRegistry::new(),
@@ -86,12 +84,10 @@ impl NetworkResilienceManager {
         }
     }
 
-    
     pub fn get_default_timeout_config(&self) -> &TimeoutConfig {
         &self.default_timeout_config
     }
 
-    
     pub async fn register_service(
         &self,
         service_config: ServiceResilienceConfig,
@@ -102,19 +98,16 @@ impl NetworkResilienceManager {
             service_name
         );
 
-        
         self.circuit_breaker_registry
             .get_or_create(service_name, service_config.circuit_breaker_config.clone())
             .await;
 
-        
         if let Some(pool_config) = service_config.connection_pool_config {
             self.connection_pool_registry
                 .get_or_create_pool(service_name, pool_config)
                 .await;
         }
 
-        
         if let Some(endpoint) = service_config.health_check_endpoint {
             self.health_check_manager.register_service(endpoint).await;
         }
@@ -126,14 +119,12 @@ impl NetworkResilienceManager {
         Ok(())
     }
 
-    
     pub async fn unregister_service(&self, service_name: &str) {
         info!(
             "Unregistering service from resilience patterns: {}",
             service_name
         );
 
-        
         self.health_check_manager
             .unregister_service(service_name)
             .await;
@@ -144,7 +135,6 @@ impl NetworkResilienceManager {
         );
     }
 
-    
     pub async fn execute_with_resilience<F, T, E>(
         &self,
         service_name: &str,
@@ -158,13 +148,11 @@ impl NetworkResilienceManager {
         E: RetryableError + std::fmt::Debug + Clone + Send + Sync + 'static,
         T: Send,
     {
-        
         let circuit_breaker = self
             .circuit_breaker_registry
             .get_or_create(service_name, CircuitBreakerConfig::network())
             .await;
 
-        
         let retry_operation = {
             let circuit_breaker = circuit_breaker.clone();
             let operation = operation.clone();
@@ -206,7 +194,6 @@ impl NetworkResilienceManager {
         }
     }
 
-    
     pub async fn get_resilience_stats(&self) -> ResilienceStats {
         let circuit_breaker_stats = self.circuit_breaker_registry.get_all_stats().await;
         let connection_pool_stats = self.connection_pool_registry.get_all_stats().await;
@@ -221,7 +208,6 @@ impl NetworkResilienceManager {
         }
     }
 
-    
     pub async fn shutdown(&self) {
         info!("Shutting down network resilience manager");
 
@@ -232,14 +218,12 @@ impl NetworkResilienceManager {
         info!("Network resilience manager shutdown complete");
     }
 
-    
     pub async fn get_circuit_breaker(&self, service_name: &str) -> Arc<CircuitBreaker> {
         self.circuit_breaker_registry
             .get_or_create(service_name, CircuitBreakerConfig::network())
             .await
     }
 
-    
     pub async fn get_connection_pool(
         &self,
         service_name: &str,
@@ -249,7 +233,6 @@ impl NetworkResilienceManager {
             .await
     }
 
-    
     pub async fn check_service_health(&self, service_name: &str) -> Option<ServiceHealthInfo> {
         self.health_check_manager
             .get_service_health(service_name)
@@ -274,7 +257,6 @@ pub struct ServiceResilienceConfig {
 }
 
 impl ServiceResilienceConfig {
-    
     pub fn new(service_name: String, host: String, port: u16) -> Self {
         let endpoint = ServiceEndpoint::new(service_name.clone(), host, port);
 
@@ -288,7 +270,6 @@ impl ServiceResilienceConfig {
         }
     }
 
-    
     pub fn critical_service(service_name: String, host: String, port: u16) -> Self {
         let endpoint = ServiceEndpoint::new(service_name.clone(), host, port)
             .with_config(HealthCheckConfig::critical_service());
@@ -303,7 +284,6 @@ impl ServiceResilienceConfig {
         }
     }
 
-    
     pub fn background_service(service_name: String, host: String, port: u16) -> Self {
         let endpoint = ServiceEndpoint::new(service_name.clone(), host, port)
             .with_config(HealthCheckConfig::background_service());

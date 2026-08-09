@@ -9,11 +9,11 @@
 // ---------------------------------------------------------------------------
 
 pub use visionclaw_actors::messages::ontology_messages::{
-    ApplyOntologyConstraints, CachedOntologyInfo, ClearOntologyCaches,
-    ConstraintMergeMode, ConstraintStats, GetCachedOntologies, GetConstraintStats,
-    GetOntologyConstraintStats, GetOntologyHealth, GetOntologyHealthLegacy, GetValidationReport,
-    LoadOntologyAxioms, OntologyConstraintStats, OntologyHealth,
-    SetConstraintGroupActive, ValidateGraph, ValidationMode,
+    ApplyOntologyConstraints, CachedOntologyInfo, ClearOntologyCaches, ConstraintMergeMode,
+    ConstraintStats, GetCachedOntologies, GetConstraintStats, GetOntologyConstraintStats,
+    GetOntologyHealth, GetOntologyHealthLegacy, GetValidationReport, LoadOntologyAxioms,
+    OntologyConstraintStats, OntologyHealth, SetConstraintGroupActive, ValidateGraph,
+    ValidationMode,
 };
 
 // ---------------------------------------------------------------------------

@@ -129,19 +129,19 @@
 //! - **GPU streams**: Dedicated transfer stream prevents interference with compute kernels
 
 // Submodules
-mod types;
-mod construction;
-mod memory;
-mod execution;
-mod sssp;
+mod async_transfer;
 mod clustering;
 mod community;
+mod construction;
+mod execution;
 mod leiden;
-mod async_transfer;
+mod memory;
 mod metrics;
+mod sssp;
+mod types;
 
 // Re-export all public types from types module
-pub use types::{ComputeMode, GPUPerformanceMetrics, curandState};
+pub use types::{curandState, ComputeMode, GPUPerformanceMetrics};
 
 // Re-export the main struct from construction
 pub use construction::UnifiedGPUCompute;

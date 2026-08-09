@@ -4,28 +4,24 @@
 //! LRU cache for inference results with TTL support and database persistence.
 //! Automatically invalidates cache on ontology changes.
 
+use chrono::{DateTime, Duration, Utc};
+use lru::LruCache;
+use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use lru::LruCache;
-use std::num::NonZeroUsize;
-use chrono::{DateTime, Utc, Duration};
-use serde::{Deserialize, Serialize};
 
-use visionclaw_domain::ports::ontology_repository::InferenceResults;
 use crate::utils::time;
+use visionclaw_domain::ports::ontology_repository::InferenceResults;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheConfig {
-    
     pub max_entries: usize,
 
-    
     pub ttl_seconds: i64,
 
-    
     pub persist_to_db: bool,
 
-    
     pub enable_stats: bool,
 }
 
@@ -33,7 +29,7 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             max_entries: 1000,
-            ttl_seconds: 3600, 
+            ttl_seconds: 3600,
             persist_to_db: true,
             enable_stats: true,
         }
@@ -42,34 +38,26 @@ impl Default for CacheConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheEntry {
-    
     pub results: InferenceResults,
 
-    
     pub ontology_checksum: String,
 
-    
     pub created_at: DateTime<Utc>,
 
-    
     pub accessed_at: DateTime<Utc>,
 
-    
     pub access_count: u64,
 }
 
 impl CacheEntry {
-    
     pub fn is_expired(&self, ttl: Duration) -> bool {
         time::now() - self.created_at > ttl
     }
 
-    
     pub fn is_valid_for(&self, checksum: &str) -> bool {
         self.ontology_checksum == checksum
     }
 
-    
     pub fn touch(&mut self) {
         self.accessed_at = time::now();
         self.access_count += 1;
@@ -87,7 +75,6 @@ pub struct CacheStatistics {
 }
 
 impl CacheStatistics {
-    
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
         if total == 0 {
@@ -99,21 +86,17 @@ impl CacheStatistics {
 }
 
 pub struct InferenceCache {
-    
     cache: Arc<RwLock<LruCache<String, CacheEntry>>>,
 
-    
     config: CacheConfig,
 
-    
     stats: Arc<RwLock<CacheStatistics>>,
 }
 
 impl InferenceCache {
-    
     pub fn new(config: CacheConfig) -> Self {
-        let capacity = NonZeroUsize::new(config.max_entries.max(1))
-            .expect("max(1) guarantees non-zero");
+        let capacity =
+            NonZeroUsize::new(config.max_entries.max(1)).expect("max(1) guarantees non-zero");
         let cache = Arc::new(RwLock::new(LruCache::new(capacity)));
 
         let stats = Arc::new(RwLock::new(CacheStatistics {
@@ -128,13 +111,11 @@ impl InferenceCache {
         }
     }
 
-    
     pub async fn get(&self, ontology_id: &str, checksum: &str) -> Option<InferenceResults> {
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
 
         if let Some(entry) = cache.get_mut(ontology_id) {
-            
             let ttl = Duration::seconds(self.config.ttl_seconds);
 
             if entry.is_valid_for(checksum) && !entry.is_expired(ttl) {
@@ -142,7 +123,6 @@ impl InferenceCache {
                 stats.hits += 1;
                 return Some(entry.results.clone());
             } else {
-                
                 cache.pop(ontology_id);
                 stats.invalidations += 1;
             }
@@ -152,13 +132,7 @@ impl InferenceCache {
         None
     }
 
-    
-    pub async fn put(
-        &self,
-        ontology_id: String,
-        checksum: String,
-        results: InferenceResults,
-    ) {
+    pub async fn put(&self, ontology_id: String, checksum: String, results: InferenceResults) {
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
 
@@ -170,7 +144,6 @@ impl InferenceCache {
             access_count: 0,
         };
 
-        
         if cache.len() >= self.config.max_entries && !cache.contains(&ontology_id) {
             stats.evictions += 1;
         }
@@ -179,7 +152,6 @@ impl InferenceCache {
         stats.current_size = cache.len();
     }
 
-    
     pub async fn invalidate(&self, ontology_id: &str) {
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
@@ -190,7 +162,6 @@ impl InferenceCache {
         }
     }
 
-    
     pub async fn clear(&self) {
         let mut cache = self.cache.write().await;
         let mut stats = self.stats.write().await;
@@ -200,12 +171,10 @@ impl InferenceCache {
         stats.invalidations += cache.len() as u64;
     }
 
-    
     pub async fn get_statistics(&self) -> CacheStatistics {
         self.stats.read().await.clone()
     }
 
-    
     pub async fn cleanup_expired(&self) {
         let mut cache = self.cache.write().await;
         let ttl = Duration::seconds(self.config.ttl_seconds);
@@ -225,7 +194,6 @@ impl InferenceCache {
         stats.current_size = cache.len();
     }
 
-    
     pub async fn get_cached_ids(&self) -> Vec<String> {
         let cache = self.cache.read().await;
         cache.iter().map(|(key, _)| key.clone()).collect()
@@ -281,11 +249,9 @@ mod tests {
             .put("ont1".to_string(), "checksum1".to_string(), results.clone())
             .await;
 
-        
         let retrieved = cache.get("ont1", "checksum2").await;
         assert!(retrieved.is_none());
 
-        
         let stats = cache.get_statistics().await;
         assert_eq!(stats.invalidations, 1);
     }
@@ -332,10 +298,8 @@ mod tests {
             .put("ont1".to_string(), "checksum1".to_string(), results.clone())
             .await;
 
-        
         cache.get("ont1", "checksum1").await;
 
-        
         cache.get("ont2", "checksum2").await;
 
         let stats = cache.get_statistics().await;
@@ -361,7 +325,6 @@ mod tests {
             .put("ont2".to_string(), "checksum2".to_string(), results.clone())
             .await;
 
-        
         cache
             .put("ont3".to_string(), "checksum3".to_string(), results.clone())
             .await;

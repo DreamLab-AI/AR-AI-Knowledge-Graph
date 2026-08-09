@@ -268,12 +268,14 @@ fn arb_delta() -> impl Strategy<Value = AgentPresenceDelta> {
         proptest::option::of(arb_dir()),
         proptest::option::of(arb_attention()),
     )
-        .prop_map(|(local_id, state, gaze_dir, attention)| AgentPresenceDelta {
-            local_id,
-            state,
-            gaze_dir,
-            attention,
-        })
+        .prop_map(
+            |(local_id, state, gaze_dir, attention)| AgentPresenceDelta {
+                local_id,
+                state,
+                gaze_dir,
+                attention,
+            },
+        )
 }
 
 fn dir_dot(a: [f32; 3], b: [f32; 3]) -> f32 {

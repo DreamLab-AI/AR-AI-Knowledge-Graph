@@ -616,14 +616,9 @@ mod tests {
         //   mint({kind:'event', pubkey:'a'*64, payload:{subject,predicate,object,validFrom}})
         //   => urn:agentbox:event:<a*64>:sha256-12-8c3913fd05a9
         // valid_from 2026-08-07T00:00:00Z canonicalises to that exact string.
-        let urn = mint_assertion_version_urn(
-            SUBJECT,
-            PREDICATE,
-            OBJECT,
-            &t(2026, 8, 7, 0, 0, 0),
-            AGENT,
-        )
-        .expect("mint");
+        let urn =
+            mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), AGENT)
+                .expect("mint");
         assert_eq!(
             urn,
             "urn:agentbox:event:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:sha256-12-8c3913fd05a9"
@@ -634,23 +629,39 @@ mod tests {
     fn content_address_is_deterministic_and_agent_independent_in_hash() {
         // Same fact + validFrom by a DIFFERENT agent → SAME sha256-12 local
         // (agent lives only in the scope segment), DIFFERENT scope.
-        let agent_b =
-            "did:nostr:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-        let a = mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), AGENT).unwrap();
-        let b = mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), agent_b).unwrap();
+        let agent_b = "did:nostr:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let a =
+            mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), AGENT)
+                .unwrap();
+        let b = mint_assertion_version_urn(
+            SUBJECT,
+            PREDICATE,
+            OBJECT,
+            &t(2026, 8, 7, 0, 0, 0),
+            agent_b,
+        )
+        .unwrap();
         let local_a = a.rsplit(':').next().unwrap();
         let local_b = b.rsplit(':').next().unwrap();
         assert_eq!(local_a, local_b, "content hash independent of agent");
         assert_ne!(a, b, "scope segment differs by agent");
         // And re-minting the same inputs is stable.
-        let a2 = mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), AGENT).unwrap();
+        let a2 =
+            mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), AGENT)
+                .unwrap();
         assert_eq!(a, a2);
     }
 
     #[test]
     fn mint_rejects_non_pubkey_agent() {
-        let err = mint_assertion_version_urn(SUBJECT, PREDICATE, OBJECT, &t(2026, 8, 7, 0, 0, 0), "did:nostr:not-hex")
-            .unwrap_err();
+        let err = mint_assertion_version_urn(
+            SUBJECT,
+            PREDICATE,
+            OBJECT,
+            &t(2026, 8, 7, 0, 0, 0),
+            "did:nostr:not-hex",
+        )
+        .unwrap_err();
         assert!(matches!(err, ProvenanceWriteError::InvalidAgent(_)));
     }
 
@@ -741,7 +752,10 @@ mod tests {
                 "no signature predicate: {p}"
             );
             // Subjects/objects are plain named nodes or literals — never triple terms.
-            assert!(!matches!(quad.object, Term::Triple(_)), "no RDF-star object");
+            assert!(
+                !matches!(quad.object, Term::Triple(_)),
+                "no RDF-star object"
+            );
         }
     }
 
@@ -762,9 +776,10 @@ mod tests {
         input.valid_to = Some(t(2026, 9, 1, 0, 0, 0));
         let q = build_assertion_version(&input).expect("build");
         assert_eq!(
-            object_of(&q.provenance_quads, &q.entity_iri, DL_VALID_TO)
-                .map(|o| o.to_string()),
-            Some("\"2026-09-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>".to_string())
+            object_of(&q.provenance_quads, &q.entity_iri, DL_VALID_TO).map(|o| o.to_string()),
+            Some(
+                "\"2026-09-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>".to_string()
+            )
         );
         assert_eq!(q.provenance_quads.len(), 11);
     }
@@ -772,7 +787,10 @@ mod tests {
     #[test]
     fn asserted_triple_lands_in_assert_graph_only() {
         let q = build_assertion_version(&input_open()).expect("build");
-        assert_eq!(q.asserted_quad.graph_name.to_string(), format!("<{GRAPH_ASSERT}>"));
+        assert_eq!(
+            q.asserted_quad.graph_name.to_string(),
+            format!("<{GRAPH_ASSERT}>")
+        );
         assert_eq!(q.asserted_quad.subject.to_string(), format!("<{SUBJECT}>"));
         assert_eq!(q.asserted_quad.object.to_string(), format!("<{OBJECT}>"));
         // Every provenance quad lands in the provenance graph, never the assert graph.
@@ -789,18 +807,22 @@ mod tests {
         input.valid_from = t(2026, 8, 1, 0, 0, 0);
         input.generated_at = t(2026, 8, 7, 12, 0, 0);
         let q = build_assertion_version(&input).expect("build");
-        let vf = object_of(&q.provenance_quads, &q.entity_iri, DL_VALID_FROM)
-            .map(|o| o.to_string());
+        let vf =
+            object_of(&q.provenance_quads, &q.entity_iri, DL_VALID_FROM).map(|o| o.to_string());
         let gen = object_of(&q.provenance_quads, &q.entity_iri, PROV_GENERATED_AT_TIME)
             .map(|o| o.to_string());
         assert_ne!(vf, gen, "recorded time differs from valid time");
         assert_eq!(
             vf,
-            Some("\"2026-08-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>".to_string())
+            Some(
+                "\"2026-08-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>".to_string()
+            )
         );
         assert_eq!(
             gen,
-            Some("\"2026-08-07T12:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>".to_string())
+            Some(
+                "\"2026-08-07T12:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>".to_string()
+            )
         );
     }
 
@@ -809,19 +831,29 @@ mod tests {
     #[test]
     fn retraction_closes_interval_without_deleting_history() {
         let entity = "urn:agentbox:event:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:sha256-12-8c3913fd05a9";
-        let r = build_retraction_update(entity, SUBJECT, PREDICATE, OBJECT, &t(2026, 9, 1, 0, 0, 0))
-            .expect("retract");
+        let r =
+            build_retraction_update(entity, SUBJECT, PREDICATE, OBJECT, &t(2026, 9, 1, 0, 0, 0))
+                .expect("retract");
         // The ONLY provenance mutation is an ADD of dl:validTo (append-only).
         assert_eq!(r.closing_quad.predicate.as_str(), DL_VALID_TO);
         assert_eq!(r.closing_quad.subject.to_string(), format!("<{entity}>"));
-        assert_eq!(r.closing_quad.graph_name.to_string(), format!("<{GRAPH_PROVENANCE}>"));
+        assert_eq!(
+            r.closing_quad.graph_name.to_string(),
+            format!("<{GRAPH_PROVENANCE}>")
+        );
         assert_eq!(
             r.closing_quad.object.to_string(),
             "\"2026-09-01T00:00:00Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"
         );
         // The DELETE targets ONLY the current asserted triple in the assert graph.
-        assert_eq!(r.asserted_delete.graph_name.to_string(), format!("<{GRAPH_ASSERT}>"));
-        assert_eq!(r.asserted_delete.subject.to_string(), format!("<{SUBJECT}>"));
+        assert_eq!(
+            r.asserted_delete.graph_name.to_string(),
+            format!("<{GRAPH_ASSERT}>")
+        );
+        assert_eq!(
+            r.asserted_delete.subject.to_string(),
+            format!("<{SUBJECT}>")
+        );
         assert_eq!(r.asserted_delete.predicate.as_str(), PREDICATE);
         assert_eq!(r.asserted_delete.object.to_string(), format!("<{OBJECT}>"));
     }
@@ -830,9 +862,21 @@ mod tests {
 
     #[test]
     fn state_at_open_interval() {
-        let v = vec![version("urn:e:1", t(2026, 8, 7, 0, 0, 0), None, t(2026, 8, 7, 0, 0, 0))];
-        assert_eq!(state_at(&v, t(2026, 12, 1, 0, 0, 0)).len(), 1, "open interval valid forever after start");
-        assert!(state_at(&v, t(2026, 8, 6, 23, 59, 59)).is_empty(), "not valid before start");
+        let v = vec![version(
+            "urn:e:1",
+            t(2026, 8, 7, 0, 0, 0),
+            None,
+            t(2026, 8, 7, 0, 0, 0),
+        )];
+        assert_eq!(
+            state_at(&v, t(2026, 12, 1, 0, 0, 0)).len(),
+            1,
+            "open interval valid forever after start"
+        );
+        assert!(
+            state_at(&v, t(2026, 8, 6, 23, 59, 59)).is_empty(),
+            "not valid before start"
+        );
     }
 
     #[test]
@@ -842,7 +886,11 @@ mod tests {
         let v = vec![version("urn:e:1", vf, Some(vt), vf)];
         assert_eq!(state_at(&v, vf).len(), 1, "t == validFrom is INCLUDED");
         assert!(state_at(&v, vt).is_empty(), "t == validTo is EXCLUDED");
-        assert_eq!(state_at(&v, t(2026, 8, 15, 0, 0, 0)).len(), 1, "mid-interval valid");
+        assert_eq!(
+            state_at(&v, t(2026, 8, 15, 0, 0, 0)).len(),
+            1,
+            "mid-interval valid"
+        );
     }
 
     #[test]
@@ -850,7 +898,12 @@ mod tests {
         // A correction: version 1 closed at T, version 2 opens at T. History has
         // BOTH; the projection at now shows only the latest (open) version.
         let cut = t(2026, 9, 1, 0, 0, 0);
-        let v1 = version("urn:e:1", t(2026, 8, 7, 0, 0, 0), Some(cut), t(2026, 8, 7, 0, 0, 0));
+        let v1 = version(
+            "urn:e:1",
+            t(2026, 8, 7, 0, 0, 0),
+            Some(cut),
+            t(2026, 8, 7, 0, 0, 0),
+        );
         let v2 = version("urn:e:2", cut, None, cut);
         let history = vec![v1.clone(), v2.clone()];
 
@@ -878,8 +931,18 @@ mod tests {
         // Two open, overlapping versions are both in the projection (the store
         // may hold competing claims; state_at reports all valid ones).
         let v = vec![
-            version("urn:e:1", t(2026, 8, 1, 0, 0, 0), None, t(2026, 8, 1, 0, 0, 0)),
-            version("urn:e:2", t(2026, 8, 5, 0, 0, 0), None, t(2026, 8, 5, 0, 0, 0)),
+            version(
+                "urn:e:1",
+                t(2026, 8, 1, 0, 0, 0),
+                None,
+                t(2026, 8, 1, 0, 0, 0),
+            ),
+            version(
+                "urn:e:2",
+                t(2026, 8, 5, 0, 0, 0),
+                None,
+                t(2026, 8, 5, 0, 0, 0),
+            ),
         ];
         assert_eq!(state_at(&v, t(2026, 8, 10, 0, 0, 0)).len(), 2);
     }
@@ -891,7 +954,8 @@ mod tests {
         assert!(sparql.contains("dl:validFrom ?validFrom"));
         // Half-open predicate: start inclusive (<=), end exclusive (<) with unbound tolerance.
         assert!(sparql.contains(r#"?validFrom <= "2026-08-07T00:00:00Z"^^xsd:dateTime"#));
-        assert!(sparql.contains(r#"!BOUND(?validTo) || "2026-08-07T00:00:00Z"^^xsd:dateTime < ?validTo"#));
+        assert!(sparql
+            .contains(r#"!BOUND(?validTo) || "2026-08-07T00:00:00Z"^^xsd:dateTime < ?validTo"#));
         // It is a read (SELECT) — never a mutation of the classified graph.
         assert!(sparql.trim_start().contains("SELECT"));
         assert!(!sparql.to_uppercase().contains("INSERT"));

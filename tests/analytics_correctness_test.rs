@@ -94,26 +94,35 @@ mod louvain {
         let unified = match load_ptx_module_sync(PTXModule::VisionflowUnified) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("SKIP gpu_louvain_clears_gate_on_canonical: unified PTX unavailable: {e}");
+                eprintln!(
+                    "SKIP gpu_louvain_clears_gate_on_canonical: unified PTX unavailable: {e}"
+                );
                 return;
             }
         };
         let clustering = match load_ptx_module_sync(PTXModule::GpuClusteringKernels) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("SKIP gpu_louvain_clears_gate_on_canonical: clustering PTX unavailable: {e}");
+                eprintln!(
+                    "SKIP gpu_louvain_clears_gate_on_canonical: clustering PTX unavailable: {e}"
+                );
                 return;
             }
         };
 
-        let mut gpu =
-            match UnifiedGPUCompute::new_with_modules(n, num_edges, &unified, Some(&clustering), None) {
-                Ok(g) => g,
-                Err(e) => {
-                    eprintln!("SKIP gpu_louvain_clears_gate_on_canonical: no CUDA device: {e}");
-                    return;
-                }
-            };
+        let mut gpu = match UnifiedGPUCompute::new_with_modules(
+            n,
+            num_edges,
+            &unified,
+            Some(&clustering),
+            None,
+        ) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("SKIP gpu_louvain_clears_gate_on_canonical: no CUDA device: {e}");
+                return;
+            }
+        };
 
         gpu.upload_edges_csr(&offsets, &indices, &weights)
             .expect("upload_edges_csr");
@@ -126,7 +135,10 @@ mod louvain {
             converged,
             "Louvain must converge on the canonical fixture (16 planted communities)"
         );
-        assert!(num_comm >= 2, "must resolve multiple communities, got {num_comm}");
+        assert!(
+            num_comm >= 2,
+            "must resolve multiple communities, got {num_comm}"
+        );
         assert!(
             gpu_modularity >= 0.3,
             "kernel-reported modularity {gpu_modularity:.4} must clear the D1 gate (>= 0.3)"
@@ -206,18 +218,12 @@ mod dbscan_tests {
     #[test]
     fn dbscan_border_point_assigned_not_noise_cpu_reference() {
         // Core blob of 5 points at the origin (min_pts=4 => these are cores).
-        let mut pts: Vec<Pt> = vec![
-            [0.0, 0.0],
-            [0.1, 0.0],
-            [0.0, 0.1],
-            [-0.1, 0.0],
-            [0.0, -0.1],
-        ];
+        let mut pts: Vec<Pt> = vec![[0.0, 0.0], [0.1, 0.0], [0.0, 0.1], [-0.1, 0.0], [0.0, -0.1]];
         // Border point: within eps of a core but with too few neighbours to be
         // a core itself.
         let border_idx = pts.len();
         pts.push([0.9, 0.0]); // within eps=1.0 of the core at origin
-        // Far isolated noise point.
+                              // Far isolated noise point.
         let noise_idx = pts.len();
         pts.push([50.0, 50.0]);
 
@@ -559,9 +565,7 @@ mod writer_invariants {
 
         // At least some clustered node must have cluster_id != community_id;
         // the dup-write bug made this impossible.
-        let any_distinct = nodes
-            .iter()
-            .any(|a| a.cluster_id != a.community_id);
+        let any_distinct = nodes.iter().any(|a| a.cluster_id != a.community_id);
         assert!(
             any_distinct,
             "post-fix, cluster_id and community_id must be independently sourced (dup-write regression)"

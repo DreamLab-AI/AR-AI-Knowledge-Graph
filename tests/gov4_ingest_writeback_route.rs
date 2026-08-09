@@ -18,8 +18,7 @@ use visionclaw_server::handlers::configure_ingest_writeback_routes;
 #[actix_web::test]
 async fn ingest_writeback_route_is_reachable() {
     let app = test::init_service(
-        App::new()
-            .service(web::scope("/api").configure(configure_ingest_writeback_routes)),
+        App::new().service(web::scope("/api").configure(configure_ingest_writeback_routes)),
     )
     .await;
 
@@ -56,8 +55,7 @@ async fn ingest_writeback_rejects_get() {
     // The route is POST-only; a GET must not match it (405/404 both acceptable —
     // the assertion is only that GET does not reach the POST handler).
     let app = test::init_service(
-        App::new()
-            .service(web::scope("/api").configure(configure_ingest_writeback_routes)),
+        App::new().service(web::scope("/api").configure(configure_ingest_writeback_routes)),
     )
     .await;
     let req = test::TestRequest::get()

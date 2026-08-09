@@ -137,7 +137,11 @@ pub enum NodeIdResolution {
     Existing(u32),
     /// A DIFFERENT slug hashed to an already-owned ID. Rejected: the caller
     /// MUST NOT create a node, to avoid silently merging two entities.
-    Collision { id: u32, existing: String, attempted: String },
+    Collision {
+        id: u32,
+        existing: String,
+        attempted: String,
+    },
 }
 
 impl NodeIdHasher {
@@ -158,7 +162,11 @@ impl NodeIdHasher {
         bytes.copy_from_slice(&digest[..4]);
         // Mask to 31 bits, then map 0 → 1 so the sentinel is never produced.
         let raw = u32::from_be_bytes(bytes) & 0x7FFF_FFFF;
-        if raw == 0 { 1 } else { raw }
+        if raw == 0 {
+            1
+        } else {
+            raw
+        }
     }
 
     /// Resolve a *page name / label* to its node ID. The input is slugified
@@ -214,7 +222,10 @@ mod tests {
 
     #[test]
     fn slugify_ascii_basic() {
-        assert_eq!(slugify("Renaissance Architecture"), "renaissance-architecture");
+        assert_eq!(
+            slugify("Renaissance Architecture"),
+            "renaissance-architecture"
+        );
         assert_eq!(slugify("OWL 2 EL!"), "owl-2-el");
         assert_eq!(slugify("---weird---"), "weird");
         assert_eq!(slugify(""), "unnamed");
@@ -313,13 +324,21 @@ mod tests {
         h.owners.insert(id, "a-different-prior-entity".to_string());
 
         match h.resolve(target) {
-            NodeIdResolution::Collision { id: cid, existing, attempted } => {
+            NodeIdResolution::Collision {
+                id: cid,
+                existing,
+                attempted,
+            } => {
                 assert_eq!(cid, id);
                 assert_eq!(existing, "a-different-prior-entity");
                 assert_eq!(attempted, target);
             }
             other => panic!("expected Collision, got {other:?}"),
         }
-        assert_eq!(h.collision_count(), 1, "collision must be counted, not merged");
+        assert_eq!(
+            h.collision_count(),
+            1,
+            "collision must be counted, not merged"
+        );
     }
 }

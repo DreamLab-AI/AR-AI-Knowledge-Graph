@@ -70,7 +70,6 @@ where
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let max_size = self.max_size;
 
-        
         if let Some(content_length) = req.headers().get("content-length") {
             if let Ok(length_str) = content_length.to_str() {
                 if let Ok(length) = length_str.parse::<usize>() {
@@ -144,7 +143,6 @@ where
         Box::pin(async move {
             let mut res = fut.await?;
 
-            
             let headers = CSPUtils::security_headers();
             for (name, value) in headers {
                 let header_name = match actix_web::http::header::HeaderName::from_bytes(
@@ -158,7 +156,6 @@ where
                 }
             }
 
-            
             res.headers_mut().insert(
                 actix_web::http::header::CONTENT_SECURITY_POLICY,
                 actix_web::http::header::HeaderValue::from_str(&CSPUtils::generate_csp_header())
@@ -240,16 +237,18 @@ where
         Box::pin(async move {
             let mut res = fut.await?;
 
-            
             let remaining = limiter.remaining_tokens(&client_id);
             let reset_time = limiter.reset_time(&client_id);
 
             res.headers_mut().insert(
                 actix_web::http::header::HeaderName::from_static("x-ratelimit-remaining"),
-                actix_web::http::header::HeaderValue::from_str(&remaining.to_string()).expect("Invalid header value"),
+                actix_web::http::header::HeaderValue::from_str(&remaining.to_string())
+                    .expect("Invalid header value"),
             );
 
-            if let Ok(reset_val) = actix_web::http::header::HeaderValue::from_str(&reset_time.as_secs().to_string()) {
+            if let Ok(reset_val) =
+                actix_web::http::header::HeaderValue::from_str(&reset_time.as_secs().to_string())
+            {
                 res.headers_mut().insert(
                     actix_web::http::header::HeaderName::from_static("x-ratelimit-reset"),
                     reset_val,
@@ -297,7 +296,6 @@ where
     forward_ready!(service);
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
-        
         let is_json = req
             .headers()
             .get("content-type")
@@ -312,62 +310,46 @@ where
 
         let service = self.service.clone();
         Box::pin(async move {
-            
             let payload = req.extract::<Bytes>().await;
 
             match payload {
-                Ok(bytes) => {
-                    
-                    match serde_json::from_slice::<serde_json::Value>(&bytes) {
-                        Ok(mut json_value) => {
-                            
-                            match Sanitizer::sanitize_json(&mut json_value) {
-                                Ok(()) => {
-                                    
-                                    match serde_json::to_vec(&json_value) {
-                                        Ok(sanitized_bytes) => {
-                                            
-                                            let new_payload =
-                                                actix_web::dev::Payload::from(sanitized_bytes);
-                                            req.set_payload(new_payload.into());
+                Ok(bytes) => match serde_json::from_slice::<serde_json::Value>(&bytes) {
+                    Ok(mut json_value) => match Sanitizer::sanitize_json(&mut json_value) {
+                        Ok(()) => match serde_json::to_vec(&json_value) {
+                            Ok(sanitized_bytes) => {
+                                let new_payload = actix_web::dev::Payload::from(sanitized_bytes);
+                                req.set_payload(new_payload.into());
 
-                                            debug!("Request payload sanitized successfully");
-                                        }
-                                        Err(e) => {
-                                            warn!("Failed to re-serialize sanitized JSON: {}", e);
-                                            let response = HttpResponse::BadRequest().json(
-                                                ValidationError::new(
-                                                    "payload",
-                                                    "Failed to process request payload",
-                                                    "SERIALIZATION_ERROR",
-                                                ),
-                                            );
-                                            return Ok(req.into_response(response));
-                                        }
-                                    }
-                                }
-                                Err(validation_error) => {
-                                    warn!("Input sanitization failed: {}", validation_error);
-                                    return Ok(
-                                        req.into_response(validation_error.to_http_response())
-                                    );
-                                }
+                                debug!("Request payload sanitized successfully");
                             }
+                            Err(e) => {
+                                warn!("Failed to re-serialize sanitized JSON: {}", e);
+                                let response =
+                                    HttpResponse::BadRequest().json(ValidationError::new(
+                                        "payload",
+                                        "Failed to process request payload",
+                                        "SERIALIZATION_ERROR",
+                                    ));
+                                return Ok(req.into_response(response));
+                            }
+                        },
+                        Err(validation_error) => {
+                            warn!("Input sanitization failed: {}", validation_error);
+                            return Ok(req.into_response(validation_error.to_http_response()));
                         }
-                        Err(e) => {
-                            debug!(
-                                "Request payload is not valid JSON ({}), skipping sanitization",
-                                e
-                            );
-                        }
+                    },
+                    Err(e) => {
+                        debug!(
+                            "Request payload is not valid JSON ({}), skipping sanitization",
+                            e
+                        );
                     }
-                }
+                },
                 Err(e) => {
                     warn!("Failed to extract request payload: {}", e);
                 }
             }
 
-            
             service.call(req).await.map(|res| res.map_into_boxed_body())
         })
     }
@@ -376,19 +358,16 @@ where
 pub struct ValidationMiddlewareFactory;
 
 impl ValidationMiddlewareFactory {
-    
     pub fn create_api_middleware() -> RequestSizeLimit {
         RequestSizeLimit::default()
     }
 
-    
     pub fn create_settings_middleware() -> RateLimit {
         use crate::utils::validation::rate_limit::EndpointRateLimits;
 
         RateLimit::new(EndpointRateLimits::settings_update())
     }
 
-    
     pub fn create_ragflow_middleware() -> RateLimit {
         use crate::utils::validation::rate_limit::EndpointRateLimits;
 

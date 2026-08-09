@@ -56,8 +56,9 @@ impl OntologyEventHandler {
     }
 
     async fn handle_property_added(&self, event: &StoredEvent) -> EventResult<()> {
-        let _data: PropertyAddedEvent = from_json(&event.data)
-            .map_err(|e| EventError::Handler(format!("Failed to parse PropertyAddedEvent: {}", e)))?;
+        let _data: PropertyAddedEvent = from_json(&event.data).map_err(|e| {
+            EventError::Handler(format!("Failed to parse PropertyAddedEvent: {}", e))
+        })?;
 
         let mut state = self.state.write().await;
         state.property_count += 1;
@@ -79,8 +80,9 @@ impl OntologyEventHandler {
     }
 
     async fn handle_ontology_imported(&self, event: &StoredEvent) -> EventResult<()> {
-        let data: OntologyImportedEvent = from_json(&event.data)
-            .map_err(|e| EventError::Handler(format!("Failed to parse OntologyImportedEvent: {}", e)))?;
+        let data: OntologyImportedEvent = from_json(&event.data).map_err(|e| {
+            EventError::Handler(format!("Failed to parse OntologyImportedEvent: {}", e))
+        })?;
 
         let mut state = self.state.write().await;
         state.class_count += data.class_count;
@@ -89,14 +91,16 @@ impl OntologyEventHandler {
 
         log::info!(
             "[OntologyHandler] Ontology imported: {} classes, {} properties",
-            data.class_count, data.property_count
+            data.class_count,
+            data.property_count
         );
         Ok(())
     }
 
     async fn handle_inference_completed(&self, event: &StoredEvent) -> EventResult<()> {
-        let data: InferenceCompletedEvent = from_json(&event.data)
-            .map_err(|e| EventError::Handler(format!("Failed to parse InferenceCompletedEvent: {}", e)))?;
+        let data: InferenceCompletedEvent = from_json(&event.data).map_err(|e| {
+            EventError::Handler(format!("Failed to parse InferenceCompletedEvent: {}", e))
+        })?;
 
         let mut state = self.state.write().await;
         state.inference_pending = false;
@@ -104,7 +108,8 @@ impl OntologyEventHandler {
 
         log::info!(
             "[OntologyHandler] Inference completed: {} axioms in {}ms",
-            data.inferred_axioms, data.duration_ms
+            data.inferred_axioms,
+            data.duration_ms
         );
         Ok(())
     }

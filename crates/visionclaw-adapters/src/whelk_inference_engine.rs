@@ -248,8 +248,7 @@ impl WhelkInferenceEngine {
             .map(|(sub, sup)| (sub.id.clone(), sup.id.clone()))
             .collect();
 
-        let directed: std::collections::HashSet<(String, String)> =
-            pairs.iter().cloned().collect();
+        let directed: std::collections::HashSet<(String, String)> = pairs.iter().cloned().collect();
 
         let mut out: Vec<OwlAxiom> = pairs
             .iter()
@@ -644,7 +643,10 @@ mod tests {
         let classes = vec![cls("urn:test:A"), cls("urn:test:B"), cls("urn:test:D")];
         let axioms = vec![sub_axiom("urn:test:D", "urn:test:A")];
         let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
-        assert!(outcome.consistent, "no contradiction ⇒ consistent: {outcome:?}");
+        assert!(
+            outcome.consistent,
+            "no contradiction ⇒ consistent: {outcome:?}"
+        );
         assert!(outcome.unsatisfiable_classes.is_empty());
     }
 
@@ -659,9 +661,14 @@ mod tests {
             disjoint_axiom("urn:test:A", "urn:test:B"),
         ];
         let outcome = WhelkInferenceEngine::check_axiom_set(&classes, &axioms);
-        assert!(!outcome.consistent, "disjoint parents ⇒ inconsistent: {outcome:?}");
         assert!(
-            outcome.unsatisfiable_classes.contains(&"urn:test:D".to_string()),
+            !outcome.consistent,
+            "disjoint parents ⇒ inconsistent: {outcome:?}"
+        );
+        assert!(
+            outcome
+                .unsatisfiable_classes
+                .contains(&"urn:test:D".to_string()),
             "D must be unsatisfiable: {outcome:?}"
         );
         assert!(outcome.explanation().contains("inconsistency"));
@@ -681,19 +688,21 @@ mod tests {
 
         // Both subsumption directions are entailed (the equivalence, not a
         // single SubClassOf).
-        let a_sub_b = results
-            .inferred_axioms
-            .iter()
-            .any(|ax| ax.axiom_type == AxiomType::SubClassOf
+        let a_sub_b = results.inferred_axioms.iter().any(|ax| {
+            ax.axiom_type == AxiomType::SubClassOf
                 && ax.subject == "urn:test:A"
-                && ax.object == "urn:test:B");
-        let b_sub_a = results
-            .inferred_axioms
-            .iter()
-            .any(|ax| ax.axiom_type == AxiomType::SubClassOf
+                && ax.object == "urn:test:B"
+        });
+        let b_sub_a = results.inferred_axioms.iter().any(|ax| {
+            ax.axiom_type == AxiomType::SubClassOf
                 && ax.subject == "urn:test:B"
-                && ax.object == "urn:test:A");
-        assert!(a_sub_b && b_sub_a, "both directions must be entailed: {:?}", results.inferred_axioms);
+                && ax.object == "urn:test:A"
+        });
+        assert!(
+            a_sub_b && b_sub_a,
+            "both directions must be entailed: {:?}",
+            results.inferred_axioms
+        );
 
         // A canonical EquivalentClass axiom is materialised (lossless marker).
         let equiv = results
@@ -701,7 +710,11 @@ mod tests {
             .iter()
             .filter(|ax| ax.axiom_type == AxiomType::EquivalentClass)
             .count();
-        assert_eq!(equiv, 1, "exactly one canonical EquivalentClass expected: {:?}", results.inferred_axioms);
+        assert_eq!(
+            equiv, 1,
+            "exactly one canonical EquivalentClass expected: {:?}",
+            results.inferred_axioms
+        );
     }
 
     #[tokio::test]
@@ -726,11 +739,7 @@ mod tests {
     #[tokio::test]
     async fn load_ontology_small_fixture_succeeds() {
         let mut engine = WhelkInferenceEngine::new();
-        let classes = vec![
-            cls("urn:test:A"),
-            cls("urn:test:B"),
-            cls("urn:test:C"),
-        ];
+        let classes = vec![cls("urn:test:A"), cls("urn:test:B"), cls("urn:test:C")];
         let axioms = vec![sub_axiom("urn:test:A", "urn:test:B")];
         let result = engine.load_ontology(classes, axioms).await;
         assert!(result.is_ok());
@@ -754,7 +763,11 @@ mod tests {
             .inferred_axioms
             .iter()
             .any(|ax| ax.subject == "urn:test:A" && ax.object == "urn:test:C");
-        assert!(has_transitive, "Expected A ⊑ C to be inferred; got {:?}", results.inferred_axioms);
+        assert!(
+            has_transitive,
+            "Expected A ⊑ C to be inferred; got {:?}",
+            results.inferred_axioms
+        );
     }
 
     #[tokio::test]
@@ -796,13 +809,20 @@ mod tests {
         let contains_pair = hierarchy
             .iter()
             .any(|(sub, sup)| sub == "urn:test:Dog" && sup == "urn:test:Animal");
-        assert!(contains_pair, "Expected (Dog, Animal) in hierarchy; got {:?}", hierarchy);
+        assert!(
+            contains_pair,
+            "Expected (Dog, Animal) in hierarchy; got {:?}",
+            hierarchy
+        );
     }
 
     #[tokio::test]
     async fn clear_resets_state() {
         let mut engine = WhelkInferenceEngine::new();
-        engine.load_ontology(vec![cls("urn:test:A")], vec![]).await.unwrap();
+        engine
+            .load_ontology(vec![cls("urn:test:A")], vec![])
+            .await
+            .unwrap();
         engine.infer().await.unwrap();
         engine.clear().await.unwrap();
         let stats = engine.get_statistics().await.unwrap();
@@ -817,7 +837,10 @@ mod tests {
         let mut engine = WhelkInferenceEngine::new();
         let classes = vec![cls("urn:test:A"), cls("urn:test:B")];
         let axioms = vec![sub_axiom("urn:test:A", "urn:test:B")];
-        engine.load_ontology(classes.clone(), axioms.clone()).await.unwrap();
+        engine
+            .load_ontology(classes.clone(), axioms.clone())
+            .await
+            .unwrap();
         let first = engine.infer().await.unwrap();
         // Reload identical content — checksum matches, cache must be reused.
         engine.load_ontology(classes, axioms).await.unwrap();

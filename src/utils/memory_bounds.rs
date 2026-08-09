@@ -27,7 +27,7 @@ impl MemoryBounds {
         };
 
         Self {
-            base_address: 0, 
+            base_address: 0,
             size,
             element_size,
             element_count,
@@ -47,17 +47,14 @@ impl MemoryBounds {
         self
     }
 
-    
     pub fn is_element_in_bounds(&self, element_index: usize) -> bool {
         element_index < self.element_count
     }
 
-    
     pub fn is_byte_in_bounds(&self, byte_offset: usize) -> bool {
         byte_offset < self.size
     }
 
-    
     pub fn element_to_byte_offset(&self, element_index: usize) -> Option<usize> {
         if self.is_element_in_bounds(element_index) {
             Some(element_index * self.element_size)
@@ -66,7 +63,6 @@ impl MemoryBounds {
         }
     }
 
-    
     pub fn is_range_valid(&self, start_element: usize, element_count: usize) -> bool {
         if start_element >= self.element_count {
             return false;
@@ -75,7 +71,6 @@ impl MemoryBounds {
         start_element.saturating_add(element_count) <= self.element_count
     }
 
-    
     pub fn is_properly_aligned(&self, address: usize) -> bool {
         address % self.alignment == 0
     }
@@ -143,9 +138,7 @@ impl MemoryBoundsRegistry {
         }
     }
 
-    
     pub fn register_allocation(&mut self, bounds: MemoryBounds) -> Result<(), MemoryBoundsError> {
-        
         if self.total_allocated.saturating_add(bounds.size) > self.max_allocation_size {
             return Err(MemoryBoundsError::IntegerOverflow {
                 name: bounds.name.clone(),
@@ -156,7 +149,6 @@ impl MemoryBoundsRegistry {
             });
         }
 
-        
         if bounds.element_size == 0 {
             return Err(MemoryBoundsError::InvalidElementSize {
                 element_size: bounds.element_size,
@@ -174,7 +166,6 @@ impl MemoryBoundsRegistry {
         Ok(())
     }
 
-    
     pub fn unregister_allocation(&mut self, name: &str) -> Result<(), MemoryBoundsError> {
         if let Some(bounds) = self.bounds.remove(name) {
             self.total_allocated = self.total_allocated.saturating_sub(bounds.size);
@@ -190,7 +181,6 @@ impl MemoryBoundsRegistry {
         }
     }
 
-    
     pub fn get_bounds(&self, name: &str) -> Result<&MemoryBounds, MemoryBoundsError> {
         self.bounds
             .get(name)
@@ -199,7 +189,6 @@ impl MemoryBoundsRegistry {
             })
     }
 
-    
     pub fn check_element_access(
         &self,
         buffer_name: &str,
@@ -225,7 +214,6 @@ impl MemoryBoundsRegistry {
         Ok(())
     }
 
-    
     pub fn check_byte_access(
         &self,
         buffer_name: &str,
@@ -251,7 +239,6 @@ impl MemoryBoundsRegistry {
         Ok(())
     }
 
-    
     pub fn check_range_access(
         &self,
         buffer_name: &str,
@@ -280,7 +267,6 @@ impl MemoryBoundsRegistry {
         Ok(())
     }
 
-    
     pub fn check_alignment(
         &self,
         buffer_name: &str,
@@ -299,17 +285,14 @@ impl MemoryBoundsRegistry {
         Ok(())
     }
 
-    
     pub fn total_allocated(&self) -> usize {
         self.total_allocated
     }
 
-    
     pub fn allocation_count(&self) -> usize {
         self.bounds.len()
     }
 
-    
     pub fn get_usage_report(&self) -> MemoryUsageReport {
         let mut largest_allocation = 0;
         let mut buffer_types = HashMap::new();
@@ -568,7 +551,7 @@ mod tests {
         let bounds = MemoryBounds::new("test_buffer".to_string(), 1000, 4, 4);
 
         assert!(bounds.is_element_in_bounds(0));
-        assert!(bounds.is_element_in_bounds(249)); 
+        assert!(bounds.is_element_in_bounds(249));
         assert!(!bounds.is_element_in_bounds(250));
 
         assert!(bounds.is_byte_in_bounds(0));
@@ -577,7 +560,7 @@ mod tests {
 
         assert!(bounds.is_range_valid(0, 100));
         assert!(bounds.is_range_valid(200, 50));
-        assert!(!bounds.is_range_valid(200, 100)); 
+        assert!(!bounds.is_range_valid(200, 100));
     }
 
     #[test]
@@ -609,7 +592,7 @@ mod tests {
         let slice = safe_array.slice(1, 3).unwrap();
         assert_eq!(slice, &[2, 3, 4]);
 
-        assert!(safe_array.slice(3, 5).is_err()); 
+        assert!(safe_array.slice(3, 5).is_err());
     }
 
     #[test]
@@ -643,8 +626,8 @@ mod tests {
         checker.register_allocation(bounds).unwrap();
 
         let data = vec![0.0f32; 5];
-        let mut safe_array = SafeArrayAccess::new(data, "checked_copy".to_string())
-            .with_bounds_checker(checker);
+        let mut safe_array =
+            SafeArrayAccess::new(data, "checked_copy".to_string()).with_bounds_checker(checker);
 
         let src = vec![1.0, 2.0, 3.0];
         assert!(safe_array.copy_from_slice(&src).is_ok());

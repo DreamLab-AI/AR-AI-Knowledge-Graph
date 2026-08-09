@@ -114,24 +114,27 @@ impl SemanticAxiomTranslator {
             AxiomType::DisjointClasses { classes } => {
                 self.translate_disjoint_classes(classes, priority)
             }
-            AxiomType::SubClassOf { subclass, superclass } => {
-                self.translate_subclass_of(*subclass, *superclass, priority)
-            }
+            AxiomType::SubClassOf {
+                subclass,
+                superclass,
+            } => self.translate_subclass_of(*subclass, *superclass, priority),
             AxiomType::EquivalentClasses { class1, class2 } => {
                 self.translate_equivalent_classes(*class1, *class2, priority)
             }
-            AxiomType::SameAs { individual1, individual2 } => {
-                self.translate_same_as(*individual1, *individual2, priority)
-            }
-            AxiomType::DifferentFrom { individual1, individual2 } => {
-                self.translate_different_from(*individual1, *individual2, priority)
-            }
-            AxiomType::PropertyDomainRange { property, domain, range } => {
-                self.translate_property_domain_range(*property, *domain, *range, priority)
-            }
-            AxiomType::PartOf { part, whole } => {
-                self.translate_part_of(*part, *whole, priority)
-            }
+            AxiomType::SameAs {
+                individual1,
+                individual2,
+            } => self.translate_same_as(*individual1, *individual2, priority),
+            AxiomType::DifferentFrom {
+                individual1,
+                individual2,
+            } => self.translate_different_from(*individual1, *individual2, priority),
+            AxiomType::PropertyDomainRange {
+                property,
+                domain,
+                range,
+            } => self.translate_property_domain_range(*property, *domain, *range, priority),
+            AxiomType::PartOf { part, whole } => self.translate_part_of(*part, *whole, priority),
             _ => vec![],
         }
     }
@@ -362,7 +365,10 @@ impl SemanticAxiomTranslator {
     }
 
     /// Convert single semantic constraint to physics constraint
-    fn semantic_to_physics(&self, semantic: &SemanticPhysicsConstraint) -> Option<PhysicsConstraint> {
+    fn semantic_to_physics(
+        &self,
+        semantic: &SemanticPhysicsConstraint,
+    ) -> Option<PhysicsConstraint> {
         match semantic {
             SemanticPhysicsConstraint::Separation {
                 class_a,
@@ -484,7 +490,11 @@ mod tests {
 
         for constraint in &constraints {
             match constraint {
-                SemanticPhysicsConstraint::Separation { min_distance, strength, .. } => {
+                SemanticPhysicsConstraint::Separation {
+                    min_distance,
+                    strength,
+                    ..
+                } => {
                     // Check multiplier is applied (2.0x)
                     assert!(*min_distance > 35.0);
                     assert_eq!(*strength, 0.8);
@@ -507,9 +517,9 @@ mod tests {
         // Should create hierarchical attraction + alignment
         assert!(!constraints.is_empty());
 
-        let has_attraction = constraints.iter().any(|c| {
-            matches!(c, SemanticPhysicsConstraint::HierarchicalAttraction { .. })
-        });
+        let has_attraction = constraints
+            .iter()
+            .any(|c| matches!(c, SemanticPhysicsConstraint::HierarchicalAttraction { .. }));
         assert!(has_attraction);
     }
 
@@ -549,12 +559,12 @@ mod tests {
         // Should have colocation + bidirectional edge
         assert_eq!(constraints.len(), 2);
 
-        let has_colocation = constraints.iter().any(|c| {
-            matches!(c, SemanticPhysicsConstraint::Colocation { .. })
-        });
-        let has_bidirectional = constraints.iter().any(|c| {
-            matches!(c, SemanticPhysicsConstraint::BidirectionalEdge { .. })
-        });
+        let has_colocation = constraints
+            .iter()
+            .any(|c| matches!(c, SemanticPhysicsConstraint::Colocation { .. }));
+        let has_bidirectional = constraints
+            .iter()
+            .any(|c| matches!(c, SemanticPhysicsConstraint::BidirectionalEdge { .. }));
 
         assert!(has_colocation);
         assert!(has_bidirectional);
@@ -572,7 +582,9 @@ mod tests {
 
         assert_eq!(constraints.len(), 1);
         match &constraints[0] {
-            SemanticPhysicsConstraint::Containment { radius, strength, .. } => {
+            SemanticPhysicsConstraint::Containment {
+                radius, strength, ..
+            } => {
                 assert!(*radius > 0.0);
                 assert_eq!(*strength, 0.8);
             }

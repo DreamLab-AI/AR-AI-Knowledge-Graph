@@ -4,35 +4,29 @@
 //! Parses OWL ontologies in various formats (OWL/XML, Manchester, RDF/XML, Turtle).
 //! Uses horned-owl library for OWL parsing and supports multiple serialization formats.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
-use serde::{Deserialize, Serialize};
 
 use horned_owl::io::owx::reader::read as read_owx;
 use horned_owl::model::ArcStr;
 use horned_owl::ontology::set::SetOntology;
 
-use visionclaw_domain::ports::ontology_repository::{OwlClass, OwlAxiom, AxiomType};
+use visionclaw_domain::ports::ontology_repository::{AxiomType, OwlAxiom, OwlClass};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OWLFormat {
-    
     OwlXml,
 
-    
     Manchester,
 
-    
     RdfXml,
 
-    
     Turtle,
 
-    
     NTriples,
 
-    
     Functional,
 }
 
@@ -69,22 +63,16 @@ pub enum ParseError {
 
 #[derive(Debug, Clone)]
 pub struct ParseResult {
-    
     pub classes: Vec<OwlClass>,
 
-    
     pub axioms: Vec<OwlAxiom>,
 
-    
     pub ontology_iri: Option<String>,
 
-    
     pub version_iri: Option<String>,
 
-    
     pub imports: Vec<String>,
 
-    
     pub stats: ParseStatistics,
 }
 
@@ -99,13 +87,11 @@ pub struct ParseStatistics {
 pub struct OWLParser;
 
 impl OWLParser {
-    
     pub fn parse(content: &str) -> Result<ParseResult, ParseError> {
         let format = Self::detect_format(content);
         Self::parse_with_format(content, format)
     }
 
-    
     pub fn parse_with_format(content: &str, format: OWLFormat) -> Result<ParseResult, ParseError> {
         let start = std::time::Instant::now();
 
@@ -115,7 +101,10 @@ impl OWLParser {
                 OWLFormat::RdfXml => Self::parse_rdf_xml(content)?,
                 OWLFormat::Turtle => Self::parse_turtle(content)?,
                 OWLFormat::Manchester | OWLFormat::Functional | OWLFormat::NTriples => {
-                    return Err(ParseError::UnsupportedFormat(format!("{} parsing not yet implemented", format)));
+                    return Err(ParseError::UnsupportedFormat(format!(
+                        "{} parsing not yet implemented",
+                        format
+                    )));
                 }
             };
 
@@ -134,12 +123,14 @@ impl OWLParser {
         }
     }
 
-
     pub fn detect_format(content: &str) -> OWLFormat {
         let trimmed = content.trim();
 
         // Check for XML-based formats
-        if trimmed.starts_with("<?xml") || trimmed.starts_with("<rdf:RDF") || trimmed.starts_with("<Ontology") {
+        if trimmed.starts_with("<?xml")
+            || trimmed.starts_with("<rdf:RDF")
+            || trimmed.starts_with("<Ontology")
+        {
             // OWL/XML has <Ontology> as root element (after XML declaration)
             // RDF/XML has <rdf:RDF> as root element and may contain owl:Ontology elements
             if trimmed.contains("<Ontology ") || trimmed.contains("<Ontology>") {
@@ -149,26 +140,21 @@ impl OWLParser {
             return OWLFormat::RdfXml;
         }
 
-        
         if trimmed.starts_with("@prefix") || trimmed.starts_with("@base") {
             return OWLFormat::Turtle;
         }
 
-        
         if trimmed.contains("Ontology:") || trimmed.contains("Class:") {
             return OWLFormat::Manchester;
         }
 
-        
         if trimmed.starts_with("Ontology(") {
             return OWLFormat::Functional;
         }
 
-        
         OWLFormat::OwlXml
     }
 
-    
     fn parse_owl_xml(content: &str) -> Result<SetOntology<ArcStr>, ParseError> {
         let cursor = std::io::Cursor::new(content.as_bytes());
         let mut buf_reader = std::io::BufReader::new(cursor);
@@ -190,13 +176,12 @@ impl OWLParser {
     fn parse_turtle(_content: &str) -> Result<SetOntology<ArcStr>, ParseError> {
         // Turtle parsing not yet implemented - return error instead of empty
         Err(ParseError::UnsupportedFormat(
-            "Turtle parsing not yet implemented. Use OWL/XML format instead.".into()
+            "Turtle parsing not yet implemented. Use OWL/XML format instead.".into(),
         ))
     }
 
-    
     fn extract_ontology_components(ontology: &SetOntology<ArcStr>) -> ParseResult {
-        use horned_owl::model::{Component, Class};
+        use horned_owl::model::{Class, Component};
 
         let mut classes = Vec::new();
         let mut axioms = Vec::new();
@@ -214,7 +199,6 @@ impl OWLParser {
                 }
 
                 Component::SubClassOf(axiom) => {
-                    
                     if let (
                         horned_owl::model::ClassExpression::Class(Class(sub_iri)),
                         horned_owl::model::ClassExpression::Class(Class(sup_iri)),
@@ -231,7 +215,6 @@ impl OWLParser {
                 }
 
                 Component::EquivalentClasses(equiv) => {
-                    
                     let class_iris: Vec<String> = equiv
                         .0
                         .iter()
@@ -244,7 +227,6 @@ impl OWLParser {
                         })
                         .collect();
 
-                    
                     for i in 0..class_iris.len() {
                         for j in (i + 1)..class_iris.len() {
                             axioms.push(OwlAxiom {
@@ -258,23 +240,15 @@ impl OWLParser {
                     }
                 }
 
-                Component::OntologyAnnotation(_) => {
-                    
-                }
+                Component::OntologyAnnotation(_) => {}
 
                 Component::Import(import) => {
                     imports.push(import.0.to_string());
                 }
 
-                _ => {
-                    
-                }
+                _ => {}
             }
         }
-
-        
-        
-        
 
         ParseResult {
             classes,
@@ -346,7 +320,13 @@ mod tests {
         assert!(result.is_ok(), "Parse failed: {:?}", result.err());
 
         let parsed = result.unwrap();
-        assert!(parsed.classes.len() >= 1, "Expected at least 1 class, got {}", parsed.classes.len());
-        assert!(parsed.stats.parse_time_ms >= 0);
+        assert!(
+            parsed.classes.len() >= 1,
+            "Expected at least 1 class, got {}",
+            parsed.classes.len()
+        );
+        // parse_time_ms is u64 (`>= 0` would be a tautology); assert a real
+        // upper sanity bound instead — guards against a parser hang/blowup.
+        assert!(parsed.stats.parse_time_ms < 60_000);
     }
 }

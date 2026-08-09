@@ -25,8 +25,7 @@ use crate::services::kpi_compute::KpiComputeService;
 pub async fn summary(service: web::Data<KpiComputeService>) -> Result<HttpResponse> {
     match service.compute_and_persist().await {
         Ok(summary) => ok_json!(summary),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": e }))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(serde_json::json!({ "error": e }))),
     }
 }
 
@@ -41,8 +40,7 @@ pub async fn lineage(
             "snapshot_id": snapshot_id,
             "lineage": rows,
         })),
-        Err(e) => Ok(HttpResponse::InternalServerError()
-            .json(serde_json::json!({ "error": e }))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(serde_json::json!({ "error": e }))),
     }
 }
 

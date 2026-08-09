@@ -10,7 +10,7 @@
 //! - Defaults are better than panics
 
 use crate::errors::{VisionClawError, VisionClawResult};
-use tracing::{warn, error};
+use tracing::{error, warn};
 
 /// Safely converts f64 to serde_json::Number, replacing NaN/Infinity with 0.0
 /// This is a common pattern when building JSON responses with numeric data.
@@ -32,7 +32,10 @@ pub fn safe_json_number(value: f64) -> serde_json::Number {
         Number::from_f64(value).unwrap_or(zero)
     } else {
         // NaN or Infinity - replace with 0.0
-        warn!("safe_json_number: Replacing non-finite value ({}) with 0.0", value);
+        warn!(
+            "safe_json_number: Replacing non-finite value ({}) with 0.0",
+            value
+        );
         zero
     }
 }

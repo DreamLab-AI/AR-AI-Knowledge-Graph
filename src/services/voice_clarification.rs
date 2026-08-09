@@ -284,7 +284,9 @@ fn prompt_for(slot: AmbiguousSlot, heard: &str) -> String {
     let heard = heard.trim();
     match slot {
         AmbiguousSlot::LowConfidence => {
-            format!("I heard \"{heard}\", but I'm not confident I caught that. Could you say it again?")
+            format!(
+                "I heard \"{heard}\", but I'm not confident I caught that. Could you say it again?"
+            )
         }
         AmbiguousSlot::AgentType => {
             format!("I heard \"{heard}\", but not which agent to spawn. Which agent type — for example researcher or coder?")
@@ -416,7 +418,10 @@ mod tests {
         match repair {
             GateOutcome::Dispatch { transcript } => {
                 assert!(transcript.contains("spawn"), "keeps the verb: {transcript}");
-                assert!(transcript.contains("researcher"), "fills the slot: {transcript}");
+                assert!(
+                    transcript.contains("researcher"),
+                    "fills the slot: {transcript}"
+                );
             }
             other => panic!("expected Dispatch after repair, got {other:?}"),
         }
@@ -464,7 +469,9 @@ mod tests {
         // crash or a mis-decoded slot.
         assert!(PendingClarification::from_token("some old free text").is_none());
         assert!(PendingClarification::from_token("").is_none());
-        assert!(PendingClarification::from_token(&format!("V3{TOKEN_SEP}bogus{TOKEN_SEP}x")).is_none());
+        assert!(
+            PendingClarification::from_token(&format!("V3{TOKEN_SEP}bogus{TOKEN_SEP}x")).is_none()
+        );
     }
 
     // ---- configurable threshold ---------------------------------------------
@@ -487,6 +494,9 @@ mod tests {
     fn threshold_is_clamped() {
         assert_eq!(ClarificationGate::new(5.0).threshold(), 1.0);
         assert_eq!(ClarificationGate::new(-2.0).threshold(), 0.0);
-        assert_eq!(ClarificationGate::new(f32::NAN).threshold(), DEFAULT_CONFIDENCE_THRESHOLD);
+        assert_eq!(
+            ClarificationGate::new(f32::NAN).threshold(),
+            DEFAULT_CONFIDENCE_THRESHOLD
+        );
     }
 }

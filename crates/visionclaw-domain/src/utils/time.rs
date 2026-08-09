@@ -182,12 +182,7 @@ mod tests {
 
     #[test]
     fn test_parse_iso8601_invalid() {
-        let test_cases = vec![
-            "invalid",
-            "2025-11-03",
-            "19:45:30",
-            "not a timestamp",
-        ];
+        let test_cases = vec!["invalid", "2025-11-03", "19:45:30", "not a timestamp"];
 
         for input in test_cases {
             assert!(

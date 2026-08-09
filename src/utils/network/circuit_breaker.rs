@@ -7,29 +7,27 @@ use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CircuitBreakerState {
-    
     Closed,
-    
+
     Open,
-    
+
     HalfOpen,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerConfig {
-    
     pub failure_threshold: usize,
-    
+
     pub failure_rate_threshold: f64,
-    
+
     pub time_window: Duration,
-    
+
     pub recovery_timeout: Duration,
-    
+
     pub success_threshold: usize,
-    
+
     pub half_open_max_requests: usize,
-    
+
     pub minimum_request_threshold: usize,
 }
 
@@ -48,7 +46,6 @@ impl Default for CircuitBreakerConfig {
 }
 
 impl CircuitBreakerConfig {
-    
     pub fn network() -> Self {
         Self {
             failure_threshold: 3,
@@ -61,7 +58,6 @@ impl CircuitBreakerConfig {
         }
     }
 
-    
     pub fn tcp_connection() -> Self {
         Self {
             failure_threshold: 5,
@@ -74,7 +70,6 @@ impl CircuitBreakerConfig {
         }
     }
 
-    
     pub fn websocket() -> Self {
         Self {
             failure_threshold: 4,
@@ -87,7 +82,6 @@ impl CircuitBreakerConfig {
         }
     }
 
-    
     pub fn mcp_operations() -> Self {
         Self {
             failure_threshold: 3,
@@ -145,7 +139,6 @@ pub struct CircuitBreaker {
 }
 
 impl CircuitBreaker {
-    
     pub fn new(config: CircuitBreakerConfig) -> Self {
         let now = Instant::now();
         Self {
@@ -164,39 +157,32 @@ impl CircuitBreaker {
         }
     }
 
-    
     pub fn default() -> Self {
         Self::new(CircuitBreakerConfig::default())
     }
 
-    
     pub fn network() -> Self {
         Self::new(CircuitBreakerConfig::network())
     }
 
-    
     pub fn tcp_connection() -> Self {
         Self::new(CircuitBreakerConfig::tcp_connection())
     }
 
-    
     pub fn websocket() -> Self {
         Self::new(CircuitBreakerConfig::websocket())
     }
 
-    
     pub fn mcp_operations() -> Self {
         Self::new(CircuitBreakerConfig::mcp_operations())
     }
 
-    
     pub async fn can_execute(&self) -> bool {
         let state = *self.state.read().await;
 
         match state {
             CircuitBreakerState::Closed => true,
             CircuitBreakerState::Open => {
-                
                 if let Some(last_failure) = *self.last_failure_time.read().await {
                     if last_failure.elapsed() >= self.config.recovery_timeout {
                         self.transition_to_half_open().await;
@@ -212,7 +198,6 @@ impl CircuitBreaker {
         }
     }
 
-    
     pub async fn record_request(&self, outcome: RequestOutcome) {
         let now = Instant::now();
         let state = *self.state.read().await;
@@ -224,7 +209,6 @@ impl CircuitBreaker {
                 self.successful_requests.fetch_add(1, Ordering::Release);
                 self.consecutive_failures.store(0, Ordering::Release);
 
-                
                 self.add_to_history(now, true).await;
 
                 if state == CircuitBreakerState::HalfOpen {
@@ -240,10 +224,8 @@ impl CircuitBreaker {
                 self.failed_requests.fetch_add(1, Ordering::Release);
                 let consecutive = self.consecutive_failures.fetch_add(1, Ordering::Release) + 1;
 
-                
                 *self.last_failure_time.write().await = Some(now);
 
-                
                 self.add_to_history(now, false).await;
 
                 warn!(
@@ -251,7 +233,6 @@ impl CircuitBreaker {
                     consecutive
                 );
 
-                
                 if state != CircuitBreakerState::Open {
                     if self.should_open_circuit().await {
                         self.transition_to_open().await;
@@ -265,7 +246,6 @@ impl CircuitBreaker {
         }
     }
 
-    
     pub async fn execute<F, T, E>(&self, operation: F) -> Result<T, CircuitBreakerError<E>>
     where
         F: std::future::Future<Output = Result<T, E>>,
@@ -292,7 +272,6 @@ impl CircuitBreaker {
         }
     }
 
-    
     pub async fn stats(&self) -> CircuitBreakerStats {
         let state = *self.state.read().await;
         let state_changed_at = *self.state_changed_at.read().await;
@@ -316,7 +295,6 @@ impl CircuitBreaker {
         }
     }
 
-    
     pub async fn reset(&self) {
         info!("Resetting circuit breaker");
         *self.state.write().await = CircuitBreakerState::Closed;
@@ -327,8 +305,6 @@ impl CircuitBreaker {
         *self.state_changed_at.write().await = Instant::now();
         self.request_history.write().await.clear();
     }
-
-    
 
     async fn should_open_circuit(&self) -> bool {
         let consecutive = self.consecutive_failures.load(Ordering::Acquire);
@@ -388,7 +364,6 @@ impl CircuitBreaker {
         let mut history = self.request_history.write().await;
         history.push(RequestRecord { timestamp, success });
 
-        
         let cutoff = timestamp - self.config.time_window;
         history.retain(|record| record.timestamp > cutoff);
     }
@@ -428,7 +403,6 @@ impl CircuitBreakerRegistry {
         }
     }
 
-    
     pub async fn get_or_create(
         &self,
         name: &str,
@@ -446,7 +420,6 @@ impl CircuitBreakerRegistry {
         }
     }
 
-    
     pub async fn get_all_stats(&self) -> std::collections::HashMap<String, CircuitBreakerStats> {
         let breakers = self.breakers.read().await;
         let mut stats = std::collections::HashMap::new();
@@ -458,7 +431,6 @@ impl CircuitBreakerRegistry {
         stats
     }
 
-    
     pub async fn reset_all(&self) {
         let breakers = self.breakers.read().await;
         for breaker in breakers.values() {
@@ -488,7 +460,6 @@ mod tests {
 
         assert!(breaker.can_execute().await);
 
-        
         breaker.record_request(RequestOutcome::Success).await;
         let stats = breaker.stats().await;
         assert_eq!(stats.state, CircuitBreakerState::Closed);
@@ -503,11 +474,9 @@ mod tests {
             ..Default::default()
         });
 
-        
         breaker.record_request(RequestOutcome::Failure).await;
         assert_eq!(breaker.stats().await.state, CircuitBreakerState::Closed);
 
-        
         breaker.record_request(RequestOutcome::Failure).await;
         assert_eq!(breaker.stats().await.state, CircuitBreakerState::Open);
         assert!(!breaker.can_execute().await);
@@ -522,18 +491,14 @@ mod tests {
             ..Default::default()
         });
 
-        
         breaker.record_request(RequestOutcome::Failure).await;
         assert_eq!(breaker.stats().await.state, CircuitBreakerState::Open);
 
-        
         sleep(Duration::from_millis(60)).await;
 
-        
         assert!(breaker.can_execute().await);
         assert_eq!(breaker.stats().await.state, CircuitBreakerState::HalfOpen);
 
-        
         breaker.record_request(RequestOutcome::Success).await;
         assert_eq!(breaker.stats().await.state, CircuitBreakerState::Closed);
     }
@@ -545,12 +510,10 @@ mod tests {
             ..Default::default()
         });
 
-        
         let result = breaker.execute(async { Ok::<i32, &'static str>(42) }).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 42);
 
-        
         let result = breaker
             .execute(async { Err::<i32, &'static str>("error") })
             .await;
@@ -559,7 +522,6 @@ mod tests {
             Err(CircuitBreakerError::OperationFailed(_))
         ));
 
-        
         let result = breaker.execute(async { Ok::<i32, &'static str>(42) }).await;
         assert!(matches!(result, Err(CircuitBreakerError::CircuitOpen)));
     }

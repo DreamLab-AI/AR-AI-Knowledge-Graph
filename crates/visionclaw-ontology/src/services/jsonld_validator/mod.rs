@@ -39,7 +39,6 @@ pub use errors::{ErrorCategory, Severity};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-
 use oxigraph::model::Quad;
 
 /// Source-location reference attached to every [`ValidationIssue`]. The
@@ -132,9 +131,9 @@ fn suggest(c: &ErrorCategory) -> Option<String> {
              a string `@context` URL that already declares it."
                 .to_string(),
         ),
-        ErrorCategory::ContextMissing => {
-            Some("Add `\"@context\": \"https://narrativegoldmine.com/context/v1.jsonld\"`".to_string())
-        }
+        ErrorCategory::ContextMissing => Some(
+            "Add `\"@context\": \"https://narrativegoldmine.com/context/v1.jsonld\"`".to_string(),
+        ),
         ErrorCategory::ContextVersionUnknown { found: _ } => Some(format!(
             "Replace the `@context` URL with one of the accepted versions: {:?}",
             frame::ACCEPTED_CONTEXT_URLS
@@ -167,9 +166,9 @@ fn suggest(c: &ErrorCategory) -> Option<String> {
              URN to use the scheme implied by the declared type."
                 .to_string(),
         ),
-        ErrorCategory::ProvAttributionMissing => Some(
-            "Add `\"prov:wasAttributedTo\": {\"@id\": \"did:nostr:<pubkey>\"}`".to_string(),
-        ),
+        ErrorCategory::ProvAttributionMissing => {
+            Some("Add `\"prov:wasAttributedTo\": {\"@id\": \"did:nostr:<pubkey>\"}`".to_string())
+        }
         ErrorCategory::ProvTimestampMissing => Some(
             "Add `\"prov:generatedAtTime\": {\"@value\": \"<iso8601>\", \
              \"@type\": \"xsd:dateTime\"}`"
@@ -262,11 +261,7 @@ impl Validator {
 
     /// Validate already-loaded markdown source. Used by the binary and
     /// by tests that want to avoid disk IO.
-    pub fn validate_markdown_source(
-        &self,
-        markdown: &str,
-        path: &Path,
-    ) -> Vec<ValidationIssue> {
+    pub fn validate_markdown_source(&self, markdown: &str, path: &Path) -> Vec<ValidationIssue> {
         let mut issues = Vec::new();
         let blocks = extract_jsonld_blocks(markdown);
 
@@ -296,10 +291,8 @@ impl Validator {
                     // a parser-detail suggestion. (No invalid fixture
                     // covers this exact path; pre-commit catches it
                     // anyway because Error-severity.)
-                    let mut issue = ValidationIssue::error(
-                        ErrorCategory::ContextMissing,
-                        source_ref,
-                    );
+                    let mut issue =
+                        ValidationIssue::error(ErrorCategory::ContextMissing, source_ref);
                     issue.message = format!("invalid JSON in fenced block: {}", e);
                     issues.push(issue);
                 }
@@ -310,11 +303,7 @@ impl Validator {
 
     /// Validate a single parsed JSON-LD block. Composable; this is
     /// the entry the parser pipeline calls.
-    pub fn validate_jsonld_block(
-        &self,
-        block: &Value,
-        source: SourceRef,
-    ) -> Vec<ValidationIssue> {
+    pub fn validate_jsonld_block(&self, block: &Value, source: SourceRef) -> Vec<ValidationIssue> {
         let mut issues = Vec::new();
         // Frame-level checks (context / id / version / prov).
         let frame_result = frame::validate_block_frame(block);
@@ -341,7 +330,7 @@ impl Validator {
     ///
     /// Gated behind `persistence-oxigraph` since `Quad` is an Oxigraph
     /// type and the pre-commit binary does not need it.
-    
+
     pub fn validate_quads(&self, quads: &[Quad]) -> Vec<ValidationIssue> {
         let mut issues = Vec::new();
         for q in quads {

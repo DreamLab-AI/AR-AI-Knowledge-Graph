@@ -5,9 +5,7 @@
 //! creating briefs, spawning role-specific agents, and consolidating debriefs.
 
 use crate::services::management_api_client::ManagementApiClient;
-use crate::types::user_context::{
-    BriefingRequest, BriefingResponse, RoleTask, UserContext,
-};
+use crate::types::user_context::{BriefingRequest, BriefingResponse, RoleTask, UserContext};
 use log::info;
 
 pub struct BriefingService {
@@ -96,10 +94,7 @@ impl BriefingService {
             .await
             .map_err(|e| BriefingError::ApiError(format!("Failed to create debrief: {}", e)))?;
 
-        info!(
-            "[BriefingService] Debrief created at {}",
-            debrief_path
-        );
+        info!("[BriefingService] Debrief created at {}", debrief_path);
 
         Ok(debrief_path)
     }

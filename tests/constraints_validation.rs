@@ -72,7 +72,10 @@ mod constraint_system_tests {
 
         println!("\n✓ Level of Detail (LOD) system:");
         for (level, zoom, priorities, reduction) in lod_levels {
-            println!("  {}: zoom {} → {} ({})", level, zoom, priorities, reduction);
+            println!(
+                "  {}: zoom {} → {} ({})",
+                level, zoom, priorities, reduction
+            );
         }
 
         // Test blending strategies
@@ -92,9 +95,9 @@ mod constraint_system_tests {
     fn test_priority_weight_calculation() {
         // Priority weight formula: 10^(-(priority-1)/9)
         let test_cases = vec![
-            (1, 1.0),      // User-defined: 10^0 = 1.0
-            (5, 0.3594),   // Asserted: 10^(-4/9) ≈ 0.3594
-            (10, 0.1),     // Default: 10^(-1) = 0.1
+            (1, 1.0),    // User-defined: 10^0 = 1.0
+            (5, 0.3594), // Asserted: 10^(-4/9) ≈ 0.3594
+            (10, 0.1),   // Default: 10^(-1) = 0.1
         ];
 
         for (priority, expected_weight) in test_cases {
@@ -149,17 +152,20 @@ mod constraint_system_tests {
     #[test]
     fn test_gpu_data_structure_alignment() {
         // GPU constraint data must be 16-byte aligned for optimal memory access
-        let constraint_size =
-            4 +  // kind: i32
+        let constraint_size = 4 +  // kind: i32
             4 +  // count: i32
             16 + // node_idx: [i32; 4]
             16 + // params: [f32; 4]
             16 + // params2: [f32; 4]
             4 +  // weight: f32
             4 +  // activation_frame: i32
-            16;  // padding: [f32; 4] — pad to 80 bytes (16-byte aligned)
+            16; // padding: [f32; 4] — pad to 80 bytes (16-byte aligned)
 
-        assert_eq!(constraint_size % 16, 0, "Constraint size must be 16-byte aligned");
+        assert_eq!(
+            constraint_size % 16,
+            0,
+            "Constraint size must be 16-byte aligned"
+        );
     }
 
     #[test]

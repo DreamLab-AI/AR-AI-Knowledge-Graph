@@ -23,8 +23,8 @@ pub mod visual_analytics;
 pub mod conversion_utils;
 
 // Unified GPU memory management
-pub mod memory_manager;
-pub mod dynamic_buffer_manager; // Legacy - use memory_manager instead
+pub mod dynamic_buffer_manager;
+pub mod memory_manager; // Legacy - use memory_manager instead
 
 // Canonical type exports (AUTHORITATIVE SOURCE)
 pub use types::{BinaryNodeData, RenderData};
@@ -44,24 +44,27 @@ pub use streaming_pipeline::{
 
 // GPU conversion utilities exports
 pub use conversion_utils::{
-    allocate_gpu_buffer, calculate_buffer_size, calculate_memory_footprint,
-    extract_position_3d, extract_position_vec4, from_gpu_buffer, get_element_count,
-    gpu_buffer_to_nodes, gpu_to_positions, gpu_to_positions_4d, nodes_to_gpu_buffer,
-    positions_4d_to_gpu, positions_to_gpu, to_gpu_buffer, validate_buffer_size,
-    validate_buffer_stride, validate_render_data, ConversionError, GpuNode,
+    allocate_gpu_buffer, calculate_buffer_size, calculate_memory_footprint, extract_position_3d,
+    extract_position_vec4, from_gpu_buffer, get_element_count, gpu_buffer_to_nodes,
+    gpu_to_positions, gpu_to_positions_4d, nodes_to_gpu_buffer, positions_4d_to_gpu,
+    positions_to_gpu, to_gpu_buffer, validate_buffer_size, validate_buffer_stride,
+    validate_render_data, ConversionError, GpuNode,
 };
 
 // Unified memory management exports (NEW - recommended)
-pub use memory_manager::{
-    BufferConfig, BufferStats, GpuBuffer, GpuMemoryManager, MemoryStats,
-};
+pub use memory_manager::{BufferConfig, BufferStats, GpuBuffer, GpuMemoryManager, MemoryStats};
 
 // Semantic forces exports
 pub use semantic_forces::{
-    AttributeSpringConfig, CollisionConfig, DAGConfig, SemanticConfig,
-    SemanticForcesEngine, TypeClusterConfig,
+    AttributeSpringConfig,
+    CollisionConfig,
+    DAGConfig,
     // Dynamic relationship buffer management (schema-code decoupling)
-    DynamicForceConfigGPU, DynamicRelationshipBufferManager,
+    DynamicForceConfigGPU,
+    DynamicRelationshipBufferManager,
+    SemanticConfig,
+    SemanticForcesEngine,
+    TypeClusterConfig,
 };
 
 // CUDA kernel bridge (safe wrappers with CPU fallback)
@@ -70,12 +73,9 @@ pub mod kernel_bridge;
 // Broadcast optimization module
 pub mod broadcast_optimizer;
 pub use broadcast_optimizer::{
-    BroadcastConfig, BroadcastOptimizer, BroadcastPerformanceStats,
-    CompressionStats, SpatialCuller,
+    BroadcastConfig, BroadcastOptimizer, BroadcastPerformanceStats, CompressionStats, SpatialCuller,
 };
 
 // Network backpressure control module
 pub mod backpressure;
-pub use backpressure::{
-    BackpressureConfig, BackpressureMetrics, NetworkBackpressure, TokenBucket,
-};
+pub use backpressure::{BackpressureConfig, BackpressureMetrics, NetworkBackpressure, TokenBucket};

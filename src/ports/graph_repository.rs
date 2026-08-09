@@ -9,11 +9,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::actors::graph_actor::{AutoBalanceNotification, PhysicsState};
+use glam::Vec3;
 use visionclaw_domain::models::constraints::ConstraintSet;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::node::Node;
-use glam::Vec3;
 
 /// Binary node data with position and velocity (6-DOF)
 /// Format: (x, y, z, vx, vy, vz)
@@ -58,49 +58,31 @@ pub struct PathfindingResult {
 
 #[async_trait]
 pub trait GraphRepository: Send + Sync {
-    
-
-    
     async fn add_nodes(&self, nodes: Vec<Node>) -> Result<Vec<u32>>;
 
-    
     async fn add_edges(&self, edges: Vec<Edge>) -> Result<Vec<String>>;
 
-    
     async fn update_positions(&self, updates: Vec<(u32, BinaryNodeData)>) -> Result<()>;
 
-    
     async fn clear_dirty_nodes(&self) -> Result<()>;
 
-    
-
-    
     async fn get_graph(&self) -> Result<Arc<GraphData>>;
 
-    
     async fn get_node_map(&self) -> Result<Arc<HashMap<u32, Node>>>;
 
-    
     async fn get_physics_state(&self) -> Result<PhysicsState>;
 
-    
     async fn get_node_positions(&self) -> Result<Vec<(u32, Vec3)>>;
 
-    
     async fn get_bots_graph(&self) -> Result<Arc<GraphData>>;
 
-    
     async fn get_constraints(&self) -> Result<ConstraintSet>;
 
-    
     async fn get_auto_balance_notifications(&self) -> Result<Vec<AutoBalanceNotification>>;
 
-    
     async fn get_equilibrium_status(&self) -> Result<bool>;
 
-    
     async fn compute_shortest_paths(&self, params: PathfindingParams) -> Result<PathfindingResult>;
 
-    
     async fn get_dirty_nodes(&self) -> Result<HashSet<u32>>;
 }

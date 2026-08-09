@@ -144,7 +144,11 @@ fn slugify(s: &str) -> String {
 /// hash tail guarantees uniqueness even when two decisions share a summary.
 pub fn decision_slug(decision_urn: &str, summary: &str) -> String {
     let base = slugify(summary);
-    let base = if base.is_empty() { "decision".to_string() } else { base };
+    let base = if base.is_empty() {
+        "decision".to_string()
+    } else {
+        base
+    };
     // Bound the summary component so paths stay sane.
     let base: String = base.chars().take(64).collect();
     let base = base.trim_end_matches('-');
@@ -196,8 +200,7 @@ pub fn draft_decision_page(dec: &ElevatedDecision) -> (String, String) {
         "prov:generatedAtTime": { "@value": dec.generated_at, "@type": "xsd:dateTime" },
     });
 
-    let block = serde_json::to_string_pretty(&jsonld)
-        .unwrap_or_else(|_| "{}".to_string());
+    let block = serde_json::to_string_pretty(&jsonld).unwrap_or_else(|_| "{}".to_string());
 
     let heading = if dec.input.summary.trim().is_empty() {
         "Decision".to_string()
@@ -261,7 +264,9 @@ fn is_decision_record_type(types: &Value) -> bool {
     let matches_one = |s: &str| s == "dl:DecisionRecord" || s == full;
     match types {
         Value::String(s) => matches_one(s),
-        Value::Array(arr) => arr.iter().any(|v| v.as_str().map(matches_one).unwrap_or(false)),
+        Value::Array(arr) => arr
+            .iter()
+            .any(|v| v.as_str().map(matches_one).unwrap_or(false)),
         _ => false,
     }
 }
@@ -285,12 +290,7 @@ pub fn parse_decision_page(markdown: &str) -> Option<ParsedDecision> {
     }
     let decision_urn = value.get("@id").and_then(|v| v.as_str())?.to_string();
 
-    let edges = |key: &str| {
-        value
-            .get(key)
-            .map(jsonld_iri_list)
-            .unwrap_or_default()
-    };
+    let edges = |key: &str| value.get(key).map(jsonld_iri_list).unwrap_or_default();
 
     let input = DecisionInput {
         summary: value
@@ -386,7 +386,7 @@ mod tests {
             rationale: "nothing structural".into(),
             proposal_urn: None,
             considered_inputs: vec!["urn:agentbox:activity:src".into()], // input alone ≠ significant
-            governed_by: vec!["urn:agentbox:decision:policy".into()],    // cited policy alone ≠ significant
+            governed_by: vec!["urn:agentbox:decision:policy".into()], // cited policy alone ≠ significant
             ..Default::default()
         };
         assert!(!is_significant(&routine, false));
@@ -447,7 +447,10 @@ mod tests {
         let (path2, _) = draft_decision_page(&dec);
         assert_eq!(path, path2);
         // Slug carries the URN hash tail for collision-safety.
-        assert!(path.contains("9ec3d090ff23"), "path lacks URN hash tail: {path}");
+        assert!(
+            path.contains("9ec3d090ff23"),
+            "path lacks URN hash tail: {path}"
+        );
     }
 
     #[test]
@@ -478,7 +481,10 @@ mod tests {
         assert_eq!(parsed.input.governed_by, input.governed_by);
         assert_eq!(parsed.input.summary, input.summary);
         assert_eq!(parsed.input.rationale, input.rationale);
-        assert_eq!(parsed.input.proposal_urn, None, "proposal_urn is not on the corpus page");
+        assert_eq!(
+            parsed.input.proposal_urn, None,
+            "proposal_urn is not on the corpus page"
+        );
 
         // Raw json-ld carries the exact dl: @type (both memberships).
         assert!(markdown.contains("\"dl:DecisionRecord\""));
@@ -505,7 +511,10 @@ mod tests {
         // Two type quads + caused(1) + influenced(1) + governedBy(1) = 5.
         assert_eq!(quads.len(), 5, "re-materialised quad count");
 
-        let preds: Vec<String> = quads.iter().map(|q| q.predicate.as_str().to_string()).collect();
+        let preds: Vec<String> = quads
+            .iter()
+            .map(|q| q.predicate.as_str().to_string())
+            .collect();
         assert_eq!(preds.iter().filter(|p| *p == RDF_TYPE).count(), 2);
         assert_eq!(preds.iter().filter(|p| **p == p_caused()).count(), 1);
         assert_eq!(preds.iter().filter(|p| **p == p_influenced()).count(), 1);
@@ -547,6 +556,9 @@ mod tests {
         );
         let parsed = parse_decision_page(&md).expect("parses");
         assert_eq!(parsed.input.caused, vec!["urn:agentbox:decision:bare"]);
-        assert_eq!(parsed.input.precedent_for, vec!["urn:agentbox:decision:obj"]);
+        assert_eq!(
+            parsed.input.precedent_for,
+            vec!["urn:agentbox:decision:obj"]
+        );
     }
 }

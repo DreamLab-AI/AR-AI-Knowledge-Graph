@@ -55,7 +55,10 @@ pub struct GitMarkId {
 impl GitMarkId {
     /// Construct from a commit SHA and a `vout`.
     pub fn new(commit_sha: impl Into<String>, vout: u32) -> Self {
-        Self { commit_sha: commit_sha.into(), vout }
+        Self {
+            commit_sha: commit_sha.into(),
+            vout,
+        }
     }
 
     /// Render the `gitmark:<commit_sha>:<vout>` string used as `@id`/`genesis`.
@@ -226,7 +229,10 @@ mod tests {
 
         // The four invented fields MUST be absent.
         for forbidden in ["@context", "@type", "commit", "parent"] {
-            assert!(!obj.contains_key(forbidden), "forbidden key {forbidden} present");
+            assert!(
+                !obj.contains_key(forbidden),
+                "forbidden key {forbidden} present"
+            );
         }
     }
 
@@ -252,11 +258,19 @@ mod tests {
         let mut trail = Blocktrails::new("tbtc4", "02abcd");
         trail.push_link(
             SHA0,
-            TxOut { txid: "aa".into(), vout: 0, address: "bc1p0".into() },
+            TxOut {
+                txid: "aa".into(),
+                vout: 0,
+                address: "bc1p0".into(),
+            },
         );
         trail.push_link(
             SHA1,
-            TxOut { txid: "bb".into(), vout: 0, address: "bc1p1".into() },
+            TxOut {
+                txid: "bb".into(),
+                vout: 0,
+                address: "bc1p1".into(),
+            },
         );
 
         assert!(trail.is_well_formed());

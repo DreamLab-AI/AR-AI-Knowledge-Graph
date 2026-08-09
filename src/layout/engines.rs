@@ -1,5 +1,5 @@
-use std::collections::{HashMap, VecDeque};
 use log::info;
+use std::collections::{HashMap, VecDeque};
 
 use super::types::{LayoutMode, LayoutModeConfig};
 
@@ -58,7 +58,11 @@ fn hierarchical_layout(
     info!("Computing hierarchical layout for {} nodes", nodes.len());
     let n = nodes.len();
 
-    let id_to_idx: HashMap<u32, usize> = nodes.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
+    let id_to_idx: HashMap<u32, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
 
     // Build directed in-degree count to find roots
     let mut in_degree = vec![0u32; n];
@@ -110,7 +114,12 @@ fn hierarchical_layout(
     }
 
     // Assign unreachable nodes to the next layer after the deepest reached
-    let max_depth = depth.iter().filter(|&&d| d != usize::MAX).max().copied().unwrap_or(0);
+    let max_depth = depth
+        .iter()
+        .filter(|&&d| d != usize::MAX)
+        .max()
+        .copied()
+        .unwrap_or(0);
     for d in depth.iter_mut() {
         if *d == usize::MAX {
             *d = max_depth + 1;
@@ -159,18 +168,30 @@ fn radial_layout(
 ) -> Vec<(f32, f32, f32)> {
     info!("Computing radial layout for {} nodes", nodes.len());
     let n = nodes.len();
-    let id_to_idx: HashMap<u32, usize> = nodes.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
+    let id_to_idx: HashMap<u32, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
 
     // Degree centrality: count edges per node (weighted)
     let mut degree = vec![0.0f32; n];
     for &(src, tgt, w) in edges {
-        if let Some(&si) = id_to_idx.get(&src) { degree[si] += w; }
-        if let Some(&ti) = id_to_idx.get(&tgt) { degree[ti] += w; }
+        if let Some(&si) = id_to_idx.get(&src) {
+            degree[si] += w;
+        }
+        if let Some(&ti) = id_to_idx.get(&tgt) {
+            degree[ti] += w;
+        }
     }
 
     // Sort node indices by descending degree
     let mut sorted_indices: Vec<usize> = (0..n).collect();
-    sorted_indices.sort_by(|&a, &b| degree[b].partial_cmp(&degree[a]).unwrap_or(std::cmp::Ordering::Equal));
+    sorted_indices.sort_by(|&a, &b| {
+        degree[b]
+            .partial_cmp(&degree[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let ring_count = config.ring_count.max(1) as usize;
     let base_radius = config.node_spacing * 2.0;
@@ -239,7 +260,11 @@ fn spectral_layout(
         return radial_layout(nodes, edges, config);
     }
 
-    let id_to_idx: HashMap<u32, usize> = nodes.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
+    let id_to_idx: HashMap<u32, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
 
     // Build weighted adjacency and degree vectors
     let mut adj: Vec<Vec<(usize, f32)>> = vec![vec![]; n];
@@ -259,7 +284,9 @@ fn spectral_layout(
 
     // Isolated nodes: assign degree = 1 to avoid division by zero
     for d in degree.iter_mut() {
-        if *d < 1e-9 { *d = 1.0; }
+        if *d < 1e-9 {
+            *d = 1.0;
+        }
     }
 
     // Random-walk transition matrix multiplication: v -> D^{-1} A v
@@ -280,18 +307,26 @@ fn spectral_layout(
 
     let dot = |a: &[f32], b: &[f32]| -> f32 { a.iter().zip(b.iter()).map(|(x, y)| x * y).sum() };
     let norm = |v: &[f32]| -> f32 { dot(v, v).sqrt() };
-    let scale = |v: &mut Vec<f32>, s: f32| { for x in v.iter_mut() { *x *= s; } };
+    let scale = |v: &mut Vec<f32>, s: f32| {
+        for x in v.iter_mut() {
+            *x *= s;
+        }
+    };
     let _axpy = |v: &mut Vec<f32>, alpha: f32, u: &[f32]| {
-        for (x, &y) in v.iter_mut().zip(u.iter()) { *x += alpha * y; }
+        for (x, &y) in v.iter_mut().zip(u.iter()) {
+            *x += alpha * y;
+        }
     };
 
     // Seed vectors using deterministic pseudo-random (golden-ratio hash)
     let seed_vec = |seed: u64, len: usize| -> Vec<f32> {
-        (0..len).map(|i| {
-            let h = (i as u64).wrapping_mul(2654435761u64).wrapping_add(seed);
-            let f = (h & 0xFFFF) as f32 / 65535.0;
-            f * 2.0 - 1.0
-        }).collect()
+        (0..len)
+            .map(|i| {
+                let h = (i as u64).wrapping_mul(2654435761u64).wrapping_add(seed);
+                let f = (h & 0xFFFF) as f32 / 65535.0;
+                f * 2.0 - 1.0
+            })
+            .collect()
     };
 
     // Deflate against found eigenvectors (Gram-Schmidt)
@@ -322,7 +357,9 @@ fn spectral_layout(
             deflate(&mut v, &eigenvecs);
         }
         let n_v = norm(&v);
-        if n_v > 1e-9 { scale(&mut v, 1.0 / n_v); }
+        if n_v > 1e-9 {
+            scale(&mut v, 1.0 / n_v);
+        }
 
         for _ in 0..iters {
             let mut mv = matvec(&v);
@@ -330,14 +367,18 @@ fn spectral_layout(
             deflate(&mut mv, &[constant_vec.clone()]);
             deflate(&mut mv, &eigenvecs);
             let n_mv = norm(&mv);
-            if n_mv < 1e-9 { break; }
+            if n_mv < 1e-9 {
+                break;
+            }
             scale(&mut mv, 1.0 / n_mv);
             v = mv;
         }
 
         // Rayleigh quotient sign normalization: make first nonzero component positive
         if let Some(&first_nonzero) = v.iter().find(|&&x| x.abs() > 1e-9) {
-            if first_nonzero < 0.0 { scale(&mut v, -1.0); }
+            if first_nonzero < 0.0 {
+                scale(&mut v, -1.0);
+            }
         }
 
         eigenvecs.push(v);
@@ -347,7 +388,9 @@ fn spectral_layout(
     let scale_factor = config.layer_spacing * 2.0;
     let rescale = |ev: &[f32]| -> Vec<f32> {
         let max_abs = ev.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
-        if max_abs < 1e-9 { return ev.to_vec(); }
+        if max_abs < 1e-9 {
+            return ev.to_vec();
+        }
         ev.iter().map(|x| x / max_abs * scale_factor).collect()
     };
 
@@ -370,15 +413,25 @@ fn temporal_layout(
     info!("Computing temporal layout for {} nodes", nodes.len());
     let n = nodes.len();
 
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
 
-    let id_to_idx: HashMap<u32, usize> = nodes.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
+    let id_to_idx: HashMap<u32, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
 
     // Degree centrality for XY spread
     let mut degree = vec![0.0f32; n];
     for &(src, tgt, w) in edges {
-        if let Some(&si) = id_to_idx.get(&src) { degree[si] += w; }
-        if let Some(&ti) = id_to_idx.get(&tgt) { degree[ti] += w; }
+        if let Some(&si) = id_to_idx.get(&src) {
+            degree[si] += w;
+        }
+        if let Some(&ti) = id_to_idx.get(&tgt) {
+            degree[ti] += w;
+        }
     }
 
     let max_degree = degree.iter().copied().fold(0.0f32, f32::max).max(1.0);
@@ -422,9 +475,15 @@ fn clustered_layout(
     info!("Computing clustered layout for {} nodes", nodes.len());
     let n = nodes.len();
 
-    if n == 0 { return vec![]; }
+    if n == 0 {
+        return vec![];
+    }
 
-    let id_to_idx: HashMap<u32, usize> = nodes.iter().enumerate().map(|(i, (id, _))| (*id, i)).collect();
+    let id_to_idx: HashMap<u32, usize> = nodes
+        .iter()
+        .enumerate()
+        .map(|(i, (id, _))| (*id, i))
+        .collect();
     let adj = build_adj(n, &id_to_idx, edges);
 
     // --- Label Propagation ---
@@ -437,13 +496,17 @@ fn clustered_layout(
         let mut order: Vec<usize> = (0..n).collect();
         let mut rng_state: u64 = 0xDEADBEEF;
         for i in (1..n).rev() {
-            rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            rng_state = rng_state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let j = (rng_state >> 33) as usize % (i + 1);
             order.swap(i, j);
         }
 
         for &node in &order {
-            if adj[node].is_empty() { continue; }
+            if adj[node].is_empty() {
+                continue;
+            }
 
             // Count neighbor labels (weighted)
             let mut label_counts: HashMap<usize, f32> = HashMap::new();
@@ -452,9 +515,10 @@ fn clustered_layout(
             }
 
             // Adopt the most frequent neighbor label
-            if let Some((&best_label, _)) = label_counts.iter().max_by(|a, b| {
-                a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal)
-            }) {
+            if let Some((&best_label, _)) = label_counts
+                .iter()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+            {
                 if labels[node] != best_label {
                     labels[node] = best_label;
                     changed = true;
@@ -462,7 +526,9 @@ fn clustered_layout(
             }
         }
 
-        if !changed { break; }
+        if !changed {
+            break;
+        }
     }
 
     // Collect clusters
@@ -481,7 +547,9 @@ fn clustered_layout(
     let golden_ratio = (1.0 + 5.0f32.sqrt()) / 2.0;
 
     let fibonacci_sphere_point = |i: usize, total: usize| -> (f32, f32, f32) {
-        if total == 1 { return (0.0, 0.0, 0.0); }
+        if total == 1 {
+            return (0.0, 0.0, 0.0);
+        }
         let theta = 2.0 * std::f32::consts::PI * i as f32 / golden_ratio;
         let phi = (1.0 - 2.0 * (i as f32 + 0.5) / total as f32).acos();
         (

@@ -64,7 +64,6 @@ pub enum EdgeType {
     Custom(String),
 }
 
-
 impl std::fmt::Display for GraphType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -93,7 +92,6 @@ impl std::str::FromStr for GraphType {
         }
     }
 }
-
 
 impl std::fmt::Display for NodeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -128,7 +126,6 @@ impl std::str::FromStr for NodeType {
         }
     }
 }
-
 
 impl std::fmt::Display for EdgeType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -186,11 +183,26 @@ mod tests {
 
     #[test]
     fn graph_type_from_str_valid() {
-        assert_eq!(GraphType::from_str("standard").unwrap(), GraphType::Standard);
-        assert_eq!(GraphType::from_str("multi-agent").unwrap(), GraphType::MultiAgent);
-        assert_eq!(GraphType::from_str("multiagent").unwrap(), GraphType::MultiAgent);
-        assert_eq!(GraphType::from_str("force-directed").unwrap(), GraphType::ForceDirected);
-        assert_eq!(GraphType::from_str("ontology").unwrap(), GraphType::Ontology);
+        assert_eq!(
+            GraphType::from_str("standard").unwrap(),
+            GraphType::Standard
+        );
+        assert_eq!(
+            GraphType::from_str("multi-agent").unwrap(),
+            GraphType::MultiAgent
+        );
+        assert_eq!(
+            GraphType::from_str("multiagent").unwrap(),
+            GraphType::MultiAgent
+        );
+        assert_eq!(
+            GraphType::from_str("force-directed").unwrap(),
+            GraphType::ForceDirected
+        );
+        assert_eq!(
+            GraphType::from_str("ontology").unwrap(),
+            GraphType::Ontology
+        );
     }
 
     #[test]
@@ -223,7 +235,10 @@ mod tests {
         assert_eq!(NodeType::Concept.to_string(), "concept");
         assert_eq!(NodeType::Class.to_string(), "class");
         assert_eq!(NodeType::Individual.to_string(), "individual");
-        assert_eq!(NodeType::Custom("my-type".to_string()).to_string(), "my-type");
+        assert_eq!(
+            NodeType::Custom("my-type".to_string()).to_string(),
+            "my-type"
+        );
     }
 
     #[test]
@@ -231,7 +246,10 @@ mod tests {
         assert_eq!(NodeType::from_str("org").unwrap(), NodeType::Organization);
         assert_eq!(NodeType::from_str("person").unwrap(), NodeType::Person);
         // Unknown strings become Custom, never an error
-        assert!(matches!(NodeType::from_str("unknown_xyz").unwrap(), NodeType::Custom(_)));
+        assert!(matches!(
+            NodeType::from_str("unknown_xyz").unwrap(),
+            NodeType::Custom(_)
+        ));
     }
 
     #[test]
@@ -264,13 +282,25 @@ mod tests {
     #[test]
     fn edge_type_from_str_aliases() {
         assert_eq!(EdgeType::from_str("depends").unwrap(), EdgeType::Dependency);
-        assert_eq!(EdgeType::from_str("parent-child").unwrap(), EdgeType::Hierarchy);
+        assert_eq!(
+            EdgeType::from_str("parent-child").unwrap(),
+            EdgeType::Hierarchy
+        );
         assert_eq!(EdgeType::from_str("assoc").unwrap(), EdgeType::Association);
         assert_eq!(EdgeType::from_str("seq").unwrap(), EdgeType::Sequence);
-        assert_eq!(EdgeType::from_str("subclassof").unwrap(), EdgeType::SubClassOf);
-        assert_eq!(EdgeType::from_str("instance").unwrap(), EdgeType::InstanceOf);
+        assert_eq!(
+            EdgeType::from_str("subclassof").unwrap(),
+            EdgeType::SubClassOf
+        );
+        assert_eq!(
+            EdgeType::from_str("instance").unwrap(),
+            EdgeType::InstanceOf
+        );
         // Unknown becomes Custom
-        assert!(matches!(EdgeType::from_str("weird").unwrap(), EdgeType::Custom(_)));
+        assert!(matches!(
+            EdgeType::from_str("weird").unwrap(),
+            EdgeType::Custom(_)
+        ));
     }
 
     #[test]

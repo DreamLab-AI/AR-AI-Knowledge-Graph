@@ -91,7 +91,10 @@ pub(crate) static FIELD_MAPPINGS: std::sync::LazyLock<
     field_mappings.insert("enable_instancing", "enableInstancing");
     field_mappings.insert("enable_hologram", "enableHologram");
     field_mappings.insert("enable_metadata_shape", "enableMetadataShape");
-    field_mappings.insert("enable_metadata_visualisation", "enableMetadataVisualisation");
+    field_mappings.insert(
+        "enable_metadata_visualisation",
+        "enableMetadataVisualisation",
+    );
     field_mappings.insert("arrow_size", "arrowSize");
     field_mappings.insert("base_width", "baseWidth");
     field_mappings.insert("edge_color", "color");
@@ -112,14 +115,20 @@ pub(crate) static FIELD_MAPPINGS: std::sync::LazyLock<
     field_mappings.insert("enable_node_animations", "enableNodeAnimations");
     field_mappings.insert("motion_blur_strength", "motionBlurStrength");
     field_mappings.insert("animation_speed", "animationSpeed");
-    field_mappings.insert("equilibrium_velocity_threshold", "equilibriumVelocityThreshold");
+    field_mappings.insert(
+        "equilibrium_velocity_threshold",
+        "equilibriumVelocityThreshold",
+    );
     field_mappings.insert("equilibrium_check_frames", "equilibriumCheckFrames");
     field_mappings.insert("equilibrium_energy_threshold", "equilibriumEnergyThreshold");
     field_mappings.insert("pause_on_equilibrium", "pauseOnEquilibrium");
     field_mappings.insert("resume_on_interaction", "resumeOnInteraction");
     field_mappings.insert("stability_variance_threshold", "stabilityVarianceThreshold");
     field_mappings.insert("stability_frame_count", "stabilityFrameCount");
-    field_mappings.insert("clustering_distance_threshold", "clusteringDistanceThreshold");
+    field_mappings.insert(
+        "clustering_distance_threshold",
+        "clusteringDistanceThreshold",
+    );
     field_mappings.insert("clustering_hysteresis_buffer", "clusteringHysteresisBuffer");
     field_mappings.insert("bouncing_node_percentage", "bouncingNodePercentage");
     field_mappings.insert("boundary_min_distance", "boundaryMinDistance");
@@ -146,9 +155,15 @@ pub(crate) static FIELD_MAPPINGS: std::sync::LazyLock<
     field_mappings.insert("repulsion_softening_max", "repulsionSofteningMax");
     field_mappings.insert("center_gravity_min", "centerGravityMin");
     field_mappings.insert("center_gravity_max", "centerGravityMax");
-    field_mappings.insert("spatial_hash_efficiency_threshold", "spatialHashEfficiencyThreshold");
+    field_mappings.insert(
+        "spatial_hash_efficiency_threshold",
+        "spatialHashEfficiencyThreshold",
+    );
     field_mappings.insert("cluster_density_threshold", "clusterDensityThreshold");
-    field_mappings.insert("numerical_instability_threshold", "numericalInstabilityThreshold");
+    field_mappings.insert(
+        "numerical_instability_threshold",
+        "numericalInstabilityThreshold",
+    );
     field_mappings.insert("bounds_size", "boundsSize");
     field_mappings.insert("separation_radius", "separationRadius");
     field_mappings.insert("enable_bounds", "enableBounds");
@@ -168,7 +183,10 @@ pub(crate) static FIELD_MAPPINGS: std::sync::LazyLock<
     field_mappings.insert("warmup_iterations", "warmupIterations");
     field_mappings.insert("cooling_rate", "coolingRate");
     field_mappings.insert("boundary_extreme_multiplier", "boundaryExtremeMultiplier");
-    field_mappings.insert("boundary_extreme_force_multiplier", "boundaryExtremeForceMultiplier");
+    field_mappings.insert(
+        "boundary_extreme_force_multiplier",
+        "boundaryExtremeForceMultiplier",
+    );
     field_mappings.insert("boundary_velocity_damping", "boundaryVelocityDamping");
     field_mappings.insert("min_distance", "minDistance");
     field_mappings.insert("max_repulsion_dist", "maxRepulsionDist");

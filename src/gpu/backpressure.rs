@@ -155,7 +155,12 @@ impl TokenBucket {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    trace!("TokenBucket: Restored {} tokens, now {}/{}", amount, new_value, self.max_tokens);
+                    trace!(
+                        "TokenBucket: Restored {} tokens, now {}/{}",
+                        amount,
+                        new_value,
+                        self.max_tokens
+                    );
                     return;
                 }
                 Err(_) => continue,
@@ -285,8 +290,11 @@ impl NetworkBackpressure {
         if let Ok(mut congestion_start) = self.congestion_start.lock() {
             if congestion_start.is_none() {
                 *congestion_start = Some(Instant::now());
-                debug!("NetworkBackpressure: Congestion started (tokens: {}/{})",
-                       self.bucket.available(), self.config.max_tokens);
+                debug!(
+                    "NetworkBackpressure: Congestion started (tokens: {}/{})",
+                    self.bucket.available(),
+                    self.config.max_tokens
+                );
             }
         }
 
@@ -455,7 +463,11 @@ mod tests {
 
         // Should have gained ~15 tokens (100 * 0.15)
         let available = bucket.available();
-        assert!(available >= 10 && available <= 20, "Got {} tokens", available);
+        assert!(
+            available >= 10 && available <= 20,
+            "Got {} tokens",
+            available
+        );
     }
 
     #[test]
@@ -474,7 +486,11 @@ mod tests {
 
         // Use all tokens
         for i in 0..5 {
-            assert!(bp.try_acquire().is_some(), "Should acquire at iteration {}", i);
+            assert!(
+                bp.try_acquire().is_some(),
+                "Should acquire at iteration {}",
+                i
+            );
         }
 
         // Now congested

@@ -3,21 +3,19 @@
 //!
 //! REST API endpoints for ontology inference operations.
 
+use crate::ok_json;
 use actix_web::{web, HttpResponse};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
-use crate::ok_json;
 
 use crate::application::inference_service::InferenceService;
 
 #[derive(Debug, Deserialize)]
 pub struct RunInferenceRequest {
-    
     pub ontology_id: String,
 
-    
     #[serde(default)]
     pub force: bool,
 }
@@ -36,10 +34,8 @@ pub struct RunInferenceResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct BatchInferenceRequest {
-    
     pub ontology_ids: Vec<String>,
 
-    
     #[serde(default = "default_max_parallel")]
     pub max_parallel: usize,
 }
@@ -77,7 +73,6 @@ pub async fn run_inference(
     info!("Inference request for ontology: {}", req.ontology_id);
 
     let service_lock = service.read().await;
-
 
     if req.force {
         service_lock.invalidate_cache(&req.ontology_id).await;
@@ -117,7 +112,10 @@ pub async fn batch_inference(
     service: web::Data<Arc<RwLock<InferenceService>>>,
     req: web::Json<BatchInferenceRequest>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    info!("Batch inference request for {} ontologies", req.ontology_ids.len());
+    info!(
+        "Batch inference request for {} ontologies",
+        req.ontology_ids.len()
+    );
     let start = std::time::Instant::now();
 
     let service_lock = service.read().await;
@@ -199,7 +197,6 @@ pub async fn get_inference_results(
 
     let service_lock = service.read().await;
 
-
     match service_lock.run_inference(&ontology_id).await {
         Ok(results) => ok_json!(results),
         Err(e) => {
@@ -276,9 +273,15 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/run", web::post().to(run_inference))
             .route("/batch", web::post().to(batch_inference))
             .route("/validate", web::post().to(validate_ontology))
-            .route("/results/{ontology_id}", web::get().to(get_inference_results))
+            .route(
+                "/results/{ontology_id}",
+                web::get().to(get_inference_results),
+            )
             .route("/classify/{ontology_id}", web::get().to(classify_ontology))
-            .route("/consistency/{ontology_id}", web::get().to(get_consistency_report))
+            .route(
+                "/consistency/{ontology_id}",
+                web::get().to(get_consistency_report),
+            )
             .route("/cache/{ontology_id}", web::delete().to(invalidate_cache)),
     );
 }
@@ -287,6 +290,4 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
 mod tests {
     use super::*;
     use actix_web::{test, App};
-
-    
 }

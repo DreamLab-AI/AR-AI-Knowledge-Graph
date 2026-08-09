@@ -1,8 +1,8 @@
+use crate::utils::time;
 use actix_web::{HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use log::{error, warn};
 use serde::{Deserialize, Serialize};
-use crate::utils::time;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StandardResponse<T> {
@@ -29,7 +29,6 @@ pub struct SuccessResponse<T> {
 }
 
 pub trait HandlerResponse<T: Serialize> {
-    
     fn success(data: T) -> Result<HttpResponse> {
         Ok(HttpResponse::Ok().json(StandardResponse {
             success: true,
@@ -40,7 +39,6 @@ pub trait HandlerResponse<T: Serialize> {
         }))
     }
 
-    
     fn success_with_message(data: T, message: String) -> Result<HttpResponse> {
         Ok(HttpResponse::Ok().json(SuccessResponse {
             data,
@@ -49,7 +47,6 @@ pub trait HandlerResponse<T: Serialize> {
         }))
     }
 
-    
     fn internal_error(message: String) -> Result<HttpResponse> {
         error!("Internal server error: {}", message);
         Ok(
@@ -63,7 +60,6 @@ pub trait HandlerResponse<T: Serialize> {
         )
     }
 
-    
     fn bad_request(message: String) -> Result<HttpResponse> {
         warn!("Bad request: {}", message);
         Ok(HttpResponse::BadRequest().json(StandardResponse::<()> {
@@ -75,7 +71,6 @@ pub trait HandlerResponse<T: Serialize> {
         }))
     }
 
-    
     fn not_found(message: String) -> Result<HttpResponse> {
         warn!("Not found: {}", message);
         Ok(HttpResponse::NotFound().json(StandardResponse::<()> {
@@ -87,12 +82,10 @@ pub trait HandlerResponse<T: Serialize> {
         }))
     }
 
-    
     fn from_error(error: Box<dyn std::error::Error>) -> Result<HttpResponse> {
         Self::internal_error(error.to_string())
     }
 
-    
     fn from_str_error(error: &str) -> Result<HttpResponse> {
         Self::internal_error(error.to_string())
     }
@@ -129,7 +122,7 @@ impl PaginationParams {
     }
 
     pub fn get_limit(&self) -> u32 {
-        self.limit.unwrap_or(50).min(100) 
+        self.limit.unwrap_or(50).min(100)
     }
 }
 
@@ -148,7 +141,7 @@ impl<T> PaginatedResponse<T> {
     pub fn new(items: Vec<T>, total_count: u32, params: &PaginationParams) -> Self {
         let limit = params.get_limit();
         let current_page = params.page.unwrap_or(1);
-        let total_pages = (total_count + limit - 1) / limit; 
+        let total_pages = (total_count + limit - 1) / limit;
 
         Self {
             items,
@@ -164,7 +157,7 @@ impl<T> PaginatedResponse<T> {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HealthCheckResponse {
-    pub status: String, 
+    pub status: String,
     pub timestamp: DateTime<Utc>,
     pub version: Option<String>,
     pub uptime_seconds: Option<u64>,
@@ -174,7 +167,7 @@ pub struct HealthCheckResponse {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ComponentHealth {
     pub name: String,
-    pub status: String, 
+    pub status: String,
     pub details: Option<String>,
     pub last_check: DateTime<Utc>,
     pub metrics: Option<serde_json::Value>,
@@ -231,10 +224,8 @@ pub enum StandardWebSocketMessage<T> {
 pub trait Validate {
     type ValidationError;
 
-    
     fn validate(&self) -> std::result::Result<(), Self::ValidationError>;
 
-    
     fn validate_for_handler(&self) -> Option<Result<HttpResponse>>
     where
         Self::ValidationError: std::fmt::Display,

@@ -1,5 +1,5 @@
 use super::config::GitHubConfig;
-use crate::config::AppFullSettings; 
+use crate::config::AppFullSettings;
 use crate::errors::VisionClawResult;
 use log::{debug, info};
 use reqwest::Client;
@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 
-// const GITHUB_API_DELAY: Duration = Duration::from_millis(500); 
-// const MAX_RETRIES: u32 = 3; 
-// const RETRY_DELAY: Duration = Duration::from_secs(2); 
+// const GITHUB_API_DELAY: Duration = Duration::from_millis(500);
+// const MAX_RETRIES: u32 = 3;
+// const RETRY_DELAY: Duration = Duration::from_secs(2);
 
 pub struct GitHubClient {
     client: Client,
@@ -23,10 +23,9 @@ pub struct GitHubClient {
 }
 
 impl GitHubClient {
-    
     pub async fn new(
         config: GitHubConfig,
-        settings: Arc<RwLock<AppFullSettings>>, 
+        settings: Arc<RwLock<AppFullSettings>>,
     ) -> VisionClawResult<Self> {
         let debug_enabled = crate::utils::logging::is_debug_enabled();
 
@@ -37,7 +36,6 @@ impl GitHubClient {
             );
         }
 
-        
         if debug_enabled {
             debug!("Configuring HTTP client - Timeout: 30s, User-Agent: github-api-client");
         }
@@ -51,7 +49,6 @@ impl GitHubClient {
             debug!("HTTP client configured successfully");
         }
 
-        
         let decoded_path = urlencoding::decode(&config.base_path)
             .unwrap_or(std::borrow::Cow::Owned(config.base_path.clone()))
             .into_owned();
@@ -59,7 +56,6 @@ impl GitHubClient {
         if debug_enabled {
             debug!("Decoded base path: '{}'", decoded_path);
         }
-
 
         let base_path = decoded_path
             .trim_matches('/')
@@ -109,9 +105,6 @@ impl GitHubClient {
         })
     }
 
-    
-
-    
     pub async fn get_full_path(&self, path: &str) -> String {
         let settings = self.settings.read().await;
         let debug_enabled = crate::utils::logging::is_debug_enabled();
@@ -131,7 +124,6 @@ impl GitHubClient {
             log::debug!("Trimmed paths - Base: '{}', Path: '{}'", base, path);
         }
 
-        
         let decoded_path = urlencoding::decode(path)
             .unwrap_or(std::borrow::Cow::Owned(path.to_string()))
             .into_owned();
@@ -162,7 +154,6 @@ impl GitHubClient {
                 }
                 decoded_base
             } else if decoded_path.starts_with(&decoded_base) {
-                
                 if debug_enabled {
                     log::debug!(
                         "Path already contains base path, using as-is: '{}'",
@@ -189,7 +180,6 @@ impl GitHubClient {
         full_path
     }
 
-
     pub async fn get_contents_url(&self, path: &str) -> String {
         let settings = self.settings.read().await;
         let _debug_enabled = crate::utils::logging::is_debug_enabled();
@@ -215,26 +205,21 @@ impl GitHubClient {
         url
     }
 
-    
     pub fn client(&self) -> &Client {
         &self.client
     }
 
-    
     pub(crate) fn token(&self) -> &str {
         &self.token
     }
 
-    
     pub(crate) fn owner(&self) -> &str {
         &self.owner
     }
 
-    
     pub(crate) fn repo(&self) -> &str {
         &self.repo
     }
-
 
     pub(crate) fn base_path(&self) -> &str {
         &self.base_path
@@ -248,5 +233,4 @@ impl GitHubClient {
     pub(crate) fn branch(&self) -> &str {
         &self.branch
     }
-
 }

@@ -72,14 +72,12 @@ pub struct LODConfig {
 impl Default for LODConfig {
     fn default() -> Self {
         Self {
-            
             zoom_thresholds: [1000.0, 100.0, 10.0],
 
-            
             priority_thresholds: [3, 5, 7, 10],
 
             adaptive: true,
-            target_frame_time: 16.67, 
+            target_frame_time: 16.67,
             current_frame_time: 10.0,
         }
     }
@@ -93,7 +91,6 @@ pub struct ConstraintLOD {
 }
 
 impl ConstraintLOD {
-    
     pub fn new() -> Self {
         Self {
             config: LODConfig::default(),
@@ -103,7 +100,6 @@ impl ConstraintLOD {
         }
     }
 
-    
     pub fn with_config(config: LODConfig) -> Self {
         Self {
             config,
@@ -113,13 +109,11 @@ impl ConstraintLOD {
         }
     }
 
-    
     pub fn set_constraints(&mut self, constraints: Vec<PhysicsConstraint>) {
         self.all_constraints = constraints;
         self.update_active_constraints();
     }
 
-    
     pub fn update_zoom(&mut self, zoom_distance: f32) {
         let new_level = self.calculate_lod_level(zoom_distance);
 
@@ -129,7 +123,6 @@ impl ConstraintLOD {
         }
     }
 
-    
     pub fn update_frame_time(&mut self, frame_time_ms: f32) {
         if !self.config.adaptive {
             return;
@@ -137,17 +130,13 @@ impl ConstraintLOD {
 
         self.config.current_frame_time = frame_time_ms;
 
-        
         if frame_time_ms > self.config.target_frame_time * 1.2 {
             self.reduce_lod_level();
-        }
-        
-        else if frame_time_ms < self.config.target_frame_time * 0.8 {
+        } else if frame_time_ms < self.config.target_frame_time * 0.8 {
             self.increase_lod_level();
         }
     }
 
-    
     fn calculate_lod_level(&self, zoom_distance: f32) -> LODLevel {
         if zoom_distance > self.config.zoom_thresholds[0] {
             LODLevel::Far
@@ -160,29 +149,32 @@ impl ConstraintLOD {
         }
     }
 
-    
     fn update_active_constraints(&mut self) {
         let priority_threshold = self.config.priority_thresholds[self.current_level as usize];
 
-        self.active_constraints = self.all_constraints
+        self.active_constraints = self
+            .all_constraints
             .iter()
             .filter(|c| self.should_activate_constraint(c, priority_threshold))
             .cloned()
             .collect();
     }
 
-    
-    fn should_activate_constraint(&self, constraint: &PhysicsConstraint, priority_threshold: u8) -> bool {
-
+    fn should_activate_constraint(
+        &self,
+        constraint: &PhysicsConstraint,
+        priority_threshold: u8,
+    ) -> bool {
         if constraint.user_defined {
             return true;
         }
 
-
-        if matches!(constraint.constraint_type, PhysicsConstraintType::HierarchicalLayer { .. }) {
+        if matches!(
+            constraint.constraint_type,
+            PhysicsConstraintType::HierarchicalLayer { .. }
+        ) {
             return true;
         }
-
 
         if constraint.priority > priority_threshold {
             return false;
@@ -191,7 +183,6 @@ impl ConstraintLOD {
         true
     }
 
-    
     fn reduce_lod_level(&mut self) {
         self.current_level = match self.current_level {
             LODLevel::Close => LODLevel::Near,
@@ -203,7 +194,6 @@ impl ConstraintLOD {
         self.update_active_constraints();
     }
 
-    
     fn increase_lod_level(&mut self) {
         self.current_level = match self.current_level {
             LODLevel::Far => LODLevel::Medium,
@@ -215,32 +205,28 @@ impl ConstraintLOD {
         self.update_active_constraints();
     }
 
-    
     pub fn get_active_constraints(&self) -> &[PhysicsConstraint] {
         &self.active_constraints
     }
 
-    
     pub fn get_all_constraints(&self) -> &[PhysicsConstraint] {
         &self.all_constraints
     }
 
-    
     pub fn get_current_level(&self) -> LODLevel {
         self.current_level
     }
 
-    
     pub fn get_reduction_percentage(&self) -> f32 {
         if self.all_constraints.is_empty() {
             return 0.0;
         }
 
-        let reduction = 1.0 - (self.active_constraints.len() as f32 / self.all_constraints.len() as f32);
+        let reduction =
+            1.0 - (self.active_constraints.len() as f32 / self.all_constraints.len() as f32);
         reduction * 100.0
     }
 
-    
     pub fn get_stats(&self) -> LODStats {
         LODStats {
             lod_level: self.current_level,
@@ -252,7 +238,6 @@ impl ConstraintLOD {
         }
     }
 
-    
     pub fn set_lod_level(&mut self, level: LODLevel) {
         self.current_level = level;
         self.update_active_constraints();
@@ -296,11 +281,11 @@ mod tests {
 
     fn create_test_constraints() -> Vec<PhysicsConstraint> {
         vec![
-            PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 1), 
-            PhysicsConstraint::separation(vec![2, 3], 15.0, 0.6, 3), 
-            PhysicsConstraint::clustering(vec![3, 4], 20.0, 0.6, 5), 
-            PhysicsConstraint::clustering(vec![4, 5], 25.0, 0.7, 7), 
-            PhysicsConstraint::colocation(vec![5, 6], 2.0, 0.9, 10), 
+            PhysicsConstraint::separation(vec![1, 2], 10.0, 0.5, 1),
+            PhysicsConstraint::separation(vec![2, 3], 15.0, 0.6, 3),
+            PhysicsConstraint::clustering(vec![3, 4], 20.0, 0.6, 5),
+            PhysicsConstraint::clustering(vec![4, 5], 25.0, 0.7, 7),
+            PhysicsConstraint::colocation(vec![5, 6], 2.0, 0.9, 10),
         ]
     }
 
@@ -319,11 +304,10 @@ mod tests {
         let mut lod = ConstraintLOD::new();
         lod.set_constraints(create_test_constraints());
 
-        lod.update_zoom(2000.0); 
+        lod.update_zoom(2000.0);
 
         let active = lod.get_active_constraints();
 
-        
         assert!(active.len() <= 2);
         assert!(active.iter().all(|c| c.priority <= 3));
     }
@@ -333,11 +317,10 @@ mod tests {
         let mut lod = ConstraintLOD::new();
         lod.set_constraints(create_test_constraints());
 
-        lod.update_zoom(500.0); 
+        lod.update_zoom(500.0);
 
         let active = lod.get_active_constraints();
 
-        
         assert!(active.len() <= 3);
         assert!(active.iter().all(|c| c.priority <= 5));
     }
@@ -347,11 +330,10 @@ mod tests {
         let mut lod = ConstraintLOD::new();
         lod.set_constraints(create_test_constraints());
 
-        lod.update_zoom(50.0); 
+        lod.update_zoom(50.0);
 
         let active = lod.get_active_constraints();
 
-        
         assert!(active.len() <= 4);
         assert!(active.iter().all(|c| c.priority <= 7));
     }
@@ -362,11 +344,10 @@ mod tests {
         let constraints = create_test_constraints();
         lod.set_constraints(constraints.clone());
 
-        lod.update_zoom(5.0); 
+        lod.update_zoom(5.0);
 
         let active = lod.get_active_constraints();
 
-        
         assert_eq!(active.len(), constraints.len());
     }
 
@@ -375,17 +356,14 @@ mod tests {
         let mut lod = ConstraintLOD::new();
 
         let mut constraints = create_test_constraints();
-        constraints.push(
-            PhysicsConstraint::separation(vec![10, 11], 30.0, 0.9, 10)
-                .mark_user_defined()
-        );
+        constraints
+            .push(PhysicsConstraint::separation(vec![10, 11], 30.0, 0.9, 10).mark_user_defined());
 
         lod.set_constraints(constraints);
-        lod.update_zoom(2000.0); 
+        lod.update_zoom(2000.0);
 
         let active = lod.get_active_constraints();
 
-        
         assert!(active.iter().any(|c| c.user_defined));
     }
 
@@ -394,14 +372,11 @@ mod tests {
         let mut lod = ConstraintLOD::new();
         lod.set_constraints(create_test_constraints());
 
-        
         lod.set_lod_level(LODLevel::Close);
         assert_eq!(lod.get_current_level(), LODLevel::Close);
 
-        
-        lod.update_frame_time(25.0); 
+        lod.update_frame_time(25.0);
 
-        
         assert!(lod.get_current_level() < LODLevel::Close);
     }
 
@@ -410,11 +385,10 @@ mod tests {
         let mut lod = ConstraintLOD::new();
         lod.set_constraints(create_test_constraints());
 
-        lod.update_zoom(2000.0); 
+        lod.update_zoom(2000.0);
 
         let reduction = lod.get_reduction_percentage();
 
-        
         assert!(reduction > 40.0);
         assert!(reduction <= 100.0);
     }
@@ -445,11 +419,10 @@ mod tests {
         ];
 
         lod.set_constraints(constraints);
-        lod.update_zoom(2000.0); 
+        lod.update_zoom(2000.0);
 
         let active = lod.get_active_constraints();
 
-        
         assert!(active.iter().any(|c| matches!(
             c.constraint_type,
             PhysicsConstraintType::HierarchicalLayer { .. }
@@ -462,14 +435,14 @@ mod tests {
             zoom_thresholds: [500.0, 100.0, 20.0],
             priority_thresholds: [2, 4, 6, 10],
             adaptive: false,
-            target_frame_time: 33.33, 
+            target_frame_time: 33.33,
             current_frame_time: 20.0,
         };
 
         let mut lod = ConstraintLOD::with_config(config);
         lod.set_constraints(create_test_constraints());
 
-        lod.update_zoom(600.0); 
+        lod.update_zoom(600.0);
         assert_eq!(lod.get_current_level(), LODLevel::Far);
     }
 

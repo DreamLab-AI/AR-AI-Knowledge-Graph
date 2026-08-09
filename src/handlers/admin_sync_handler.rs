@@ -1,11 +1,11 @@
 // src/handlers/admin_sync_handler.rs
 //! Admin endpoint for triggering GitHub synchronization
 
-use std::sync::Arc;
+use crate::{error_json, ok_json};
 use actix_web::{web, Responder, Result};
 use log::{error, info};
 use serde::Serialize;
-use crate::{ok_json, error_json};
+use std::sync::Arc;
 
 use crate::services::github_sync_service::{GitHubSyncService, SyncStatistics};
 use crate::AppState;
@@ -84,7 +84,9 @@ pub async fn trigger_sync(
 
             // Notify graph actor to reload from database
             info!("Notifying GraphServiceActor to reload data from database...");
-            app_state.graph_service_addr.do_send(crate::actors::messages::ReloadGraphFromDatabase);
+            app_state
+                .graph_service_addr
+                .do_send(crate::actors::messages::ReloadGraphFromDatabase);
             info!("Reload notification sent to GraphServiceActor");
 
             ok_json!(SyncResponse {
@@ -110,8 +112,5 @@ pub async fn trigger_sync(
 /// SECURITY: Admin sync endpoints require power user authentication
 /// Auth is enforced by the AuthenticatedUser extractor + require_power_user() in the handler.
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("/admin")
-            .route("/sync", web::post().to(trigger_sync))
-    );
+    cfg.service(web::scope("/admin").route("/sync", web::post().to(trigger_sync)));
 }

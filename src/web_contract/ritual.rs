@@ -299,13 +299,19 @@ mod tests {
         type State = PoolState;
         type Event = Stake;
         fn genesis(&self) -> PoolState {
-            PoolState { pot_sats: 0, owner_did: self.owner_did.clone() }
+            PoolState {
+                pot_sats: 0,
+                owner_did: self.owner_did.clone(),
+            }
         }
         fn validate(&self, _s: &PoolState) -> Vec<ReducerError> {
             Vec::new()
         }
         fn transition(&self, s: &PoolState, e: &Stake) -> Result<PoolState, TransitionError> {
-            Ok(PoolState { pot_sats: s.pot_sats + e.sats, owner_did: s.owner_did.clone() })
+            Ok(PoolState {
+                pot_sats: s.pot_sats + e.sats,
+                owner_did: s.owner_did.clone(),
+            })
         }
     }
 
@@ -337,13 +343,22 @@ mod tests {
 
     fn trail_with_tip() -> Blocktrails {
         let mut t = Blocktrails::new("tbtc4", "02abcd");
-        t.push_link("aa", TxOut { txid: "tip".into(), vout: 0, address: "bc1p".into() });
+        t.push_link(
+            "aa",
+            TxOut {
+                txid: "tip".into(),
+                vout: 0,
+                address: "bc1p".into(),
+            },
+        );
         t
     }
 
     #[test]
     fn full_verify_passes_at_l0() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
         let events = vec![Stake { sats: 1000 }, Stake { sats: 2000 }];
         let final_state = pool.replay(&events).unwrap();
         let stored_hash = CanonicalState::from_state(&final_state).unwrap().state_hash;
@@ -369,7 +384,9 @@ mod tests {
 
     #[test]
     fn l1_requires_single_use_seal_close() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
         let events = vec![Stake { sats: 1000 }];
         let final_state = pool.replay(&events).unwrap();
         let stored_hash = CanonicalState::from_state(&final_state).unwrap().state_hash;
@@ -397,7 +414,9 @@ mod tests {
 
     #[test]
     fn tampered_state_hash_fails_reducer_replay() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
         let events = vec![Stake { sats: 1000 }];
         let final_state = pool.replay(&events).unwrap();
         let stored_ledger = project_ledger(&final_state);
@@ -449,7 +468,9 @@ mod tests {
 
     #[test]
     fn three_gate_checks_agree_when_deterministic() {
-        let pool = Pool { owner_did: "did:nostr:aa".into() };
+        let pool = Pool {
+            owner_did: "did:nostr:aa".into(),
+        };
         let findings = Checks::run_all(&pool, &pool.genesis()).unwrap();
         assert!(findings.is_empty());
     }

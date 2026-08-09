@@ -42,21 +42,19 @@ use oxigraph::sparql::QueryResults;
 use oxigraph::store::{StorageError, Store};
 
 use crate::actors::graph_actor::{AutoBalanceNotification, PhysicsState};
+use crate::ports::graph_repository::{
+    BinaryNodeData, GraphRepository, GraphRepositoryError, PathfindingParams, PathfindingResult,
+    Result as RepoResult,
+};
+use crate::utils::socket_flow_messages::BinaryNodeData as RtBinaryNodeData;
 use visionclaw_domain::models::constraints::ConstraintSet;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::node::Node;
-use crate::ports::graph_repository::{
-    BinaryNodeData, GraphRepository, GraphRepositoryError, PathfindingParams,
-    PathfindingResult, Result as RepoResult,
-};
-use crate::utils::socket_flow_messages::BinaryNodeData as RtBinaryNodeData;
 
 // Re-use the named-graph constants from the ontology adapter; both modules
 // live in the same crate and the IRIs are dataset-wide.
-use crate::adapters::oxigraph_ontology_repository::{
-    GRAPH_AGENT, GRAPH_KNOWLEDGE,
-};
+use crate::adapters::oxigraph_ontology_repository::{GRAPH_AGENT, GRAPH_KNOWLEDGE};
 
 // ----------------------------------------------------------------------
 // Class-bit routing (T1-class-bits.md). The wire flag bits are reproduced
@@ -96,10 +94,7 @@ fn node_iri(id: u32) -> String {
 /// chose). Distinct from the node IRI scheme on purpose.
 #[inline]
 fn edge_iri(edge: &Edge) -> String {
-    format!(
-        "urn:ngm:edge:{}:{}:{}",
-        edge.source, edge.target, edge.id
-    )
+    format!("urn:ngm:edge:{}:{}:{}", edge.source, edge.target, edge.id)
 }
 
 /// Escape a string literal for embedding in a SPARQL literal. Backslash
@@ -528,9 +523,7 @@ impl GraphRepository for OxigraphGraphRepository {
             let iri = edge_iri(edge);
             let src = node_iri(edge.source);
             let tgt = node_iri(edge.target);
-            let etype = escape_literal(
-                edge.edge_type.as_deref().unwrap_or("default"),
-            );
+            let etype = escape_literal(edge.edge_type.as_deref().unwrap_or("default"));
 
             update.push_str("  GRAPH <");
             update.push_str(graph);
@@ -560,9 +553,7 @@ impl GraphRepository for OxigraphGraphRepository {
             let iri = edge_iri(edge);
             let src = node_iri(edge.source);
             let tgt = node_iri(edge.target);
-            let etype = escape_literal(
-                edge.edge_type.as_deref().unwrap_or("bridge_to"),
-            );
+            let etype = escape_literal(edge.edge_type.as_deref().unwrap_or("bridge_to"));
             update.push_str(&format!("  <{iri}> a vc:BridgeEdge .\n"));
             update.push_str(&format!("  <{iri}> vc:source <{src}> .\n"));
             update.push_str(&format!("  <{iri}> vc:target <{tgt}> .\n"));
@@ -594,10 +585,7 @@ impl GraphRepository for OxigraphGraphRepository {
         Ok(returned)
     }
 
-    async fn update_positions(
-        &self,
-        updates: Vec<(u32, BinaryNodeData)>,
-    ) -> RepoResult<()> {
+    async fn update_positions(&self, updates: Vec<(u32, BinaryNodeData)>) -> RepoResult<()> {
         if updates.is_empty() {
             return Ok(());
         }
@@ -658,24 +646,18 @@ impl GraphRepository for OxigraphGraphRepository {
                             insert.push_str("  GRAPH <");
                             insert.push_str(graph);
                             insert.push_str("> {\n");
-                            insert.push_str(&format!(
-                                "    <{iri}> vc:hasX \"{x}\"^^xsd:float .\n",
-                            ));
-                            insert.push_str(&format!(
-                                "    <{iri}> vc:hasY \"{y}\"^^xsd:float .\n",
-                            ));
-                            insert.push_str(&format!(
-                                "    <{iri}> vc:hasZ \"{z}\"^^xsd:float .\n",
-                            ));
-                            insert.push_str(&format!(
-                                "    <{iri}> vc:velX \"{vx}\"^^xsd:float .\n",
-                            ));
-                            insert.push_str(&format!(
-                                "    <{iri}> vc:velY \"{vy}\"^^xsd:float .\n",
-                            ));
-                            insert.push_str(&format!(
-                                "    <{iri}> vc:velZ \"{vz}\"^^xsd:float .\n",
-                            ));
+                            insert
+                                .push_str(&format!("    <{iri}> vc:hasX \"{x}\"^^xsd:float .\n",));
+                            insert
+                                .push_str(&format!("    <{iri}> vc:hasY \"{y}\"^^xsd:float .\n",));
+                            insert
+                                .push_str(&format!("    <{iri}> vc:hasZ \"{z}\"^^xsd:float .\n",));
+                            insert
+                                .push_str(&format!("    <{iri}> vc:velX \"{vx}\"^^xsd:float .\n",));
+                            insert
+                                .push_str(&format!("    <{iri}> vc:velY \"{vy}\"^^xsd:float .\n",));
+                            insert
+                                .push_str(&format!("    <{iri}> vc:velZ \"{vz}\"^^xsd:float .\n",));
                             insert.push_str("  }\n");
                         }
                         insert.push_str("}\n");
@@ -742,8 +724,7 @@ impl GraphRepository for OxigraphGraphRepository {
 
     async fn get_node_map(&self) -> RepoResult<Arc<HashMap<u32, Node>>> {
         let graph = self.get_graph().await?;
-        let map: HashMap<u32, Node> =
-            graph.nodes.iter().map(|n| (n.id, n.clone())).collect();
+        let map: HashMap<u32, Node> = graph.nodes.iter().map(|n| (n.id, n.clone())).collect();
         Ok(Arc::new(map))
     }
 
@@ -775,14 +756,11 @@ impl GraphRepository for OxigraphGraphRepository {
                     QueryResults::Solutions(iter) => {
                         for sol in iter {
                             let sol = sol.map_err(access)?;
-                            let id = sol
-                                .get("id")
-                                .and_then(term_to_u32)
-                                .ok_or_else(|| {
-                                    GraphRepositoryError::DeserializationError(
-                                        "missing or non-integer ?id".to_string(),
-                                    )
-                                })?;
+                            let id = sol.get("id").and_then(term_to_u32).ok_or_else(|| {
+                                GraphRepositoryError::DeserializationError(
+                                    "missing or non-integer ?id".to_string(),
+                                )
+                            })?;
                             let x = sol.get("x").and_then(term_to_f32).unwrap_or(0.0);
                             let y = sol.get("y").and_then(term_to_f32).unwrap_or(0.0);
                             let z = sol.get("z").and_then(term_to_f32).unwrap_or(0.0);
@@ -867,9 +845,7 @@ impl GraphRepository for OxigraphGraphRepository {
 // ----------------------------------------------------------------------
 
 use crate::ports::knowledge_graph_repository::{
-    GraphStatistics, KnowledgeGraphRepository,
-    KnowledgeGraphRepositoryError,
-    Result as KgResult,
+    GraphStatistics, KnowledgeGraphRepository, KnowledgeGraphRepositoryError, Result as KgResult,
 };
 
 fn kg_err(e: GraphRepositoryError) -> KnowledgeGraphRepositoryError {
@@ -909,7 +885,9 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
     }
 
     async fn batch_add_nodes(&self, nodes: Vec<Node>) -> KgResult<Vec<u32>> {
-        GraphRepository::add_nodes(self, nodes).await.map_err(kg_err)
+        GraphRepository::add_nodes(self, nodes)
+            .await
+            .map_err(kg_err)
     }
 
     async fn batch_add_nodes_if_absent(&self, nodes: Vec<Node>) -> KgResult<Vec<u32>> {
@@ -954,7 +932,11 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
                 Ok(found)
             })
             .await
-            .map_err(|e| kg_err(GraphRepositoryError::AccessError(format!("join error: {e}"))))?
+            .map_err(|e| {
+                kg_err(GraphRepositoryError::AccessError(format!(
+                    "join error: {e}"
+                )))
+            })?
             .map_err(kg_err)?;
 
         let absent: Vec<Node> = nodes
@@ -964,7 +946,9 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
         if absent.is_empty() {
             return Ok(Vec::new());
         }
-        GraphRepository::add_nodes(self, absent).await.map_err(kg_err)
+        GraphRepository::add_nodes(self, absent)
+            .await
+            .map_err(kg_err)
     }
 
     async fn update_node(&self, node: &Node) -> KgResult<()> {
@@ -991,12 +975,10 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
             graph = graph,
             iri = iri,
         );
-        tokio::task::spawn_blocking(move || {
-            store.update(update.as_str()).map_err(access)
-        })
-        .await
-        .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
-        .map_err(kg_err)
+        tokio::task::spawn_blocking(move || store.update(update.as_str()).map_err(access))
+            .await
+            .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
+            .map_err(kg_err)
     }
 
     async fn batch_remove_nodes(&self, node_ids: Vec<u32>) -> KgResult<()> {
@@ -1020,7 +1002,12 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
     async fn get_nodes(&self, node_ids: Vec<u32>) -> KgResult<Vec<Node>> {
         let graph = self.load_graph().await?;
         let id_set: HashSet<u32> = node_ids.into_iter().collect();
-        Ok(graph.nodes.iter().filter(|n| id_set.contains(&n.id)).cloned().collect())
+        Ok(graph
+            .nodes
+            .iter()
+            .filter(|n| id_set.contains(&n.id))
+            .cloned()
+            .collect())
     }
 
     async fn get_nodes_by_metadata_id(&self, metadata_id: &str) -> KgResult<Vec<Node>> {
@@ -1088,7 +1075,9 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
     }
 
     async fn batch_add_edges(&self, edges: Vec<Edge>) -> KgResult<Vec<String>> {
-        GraphRepository::add_edges(self, edges).await.map_err(kg_err)
+        GraphRepository::add_edges(self, edges)
+            .await
+            .map_err(kg_err)
     }
 
     async fn update_edge(&self, edge: &Edge) -> KgResult<()> {
@@ -1103,28 +1092,21 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
 
         // Delete from default graph (bridge edges)
         let store = self.store.clone();
-        let del_default = format!(
-            "{prologue}DELETE WHERE {{ <{iri}> ?p ?o }}",
-        );
-        tokio::task::spawn_blocking(move || {
-            store.update(del_default.as_str()).map_err(access)
-        })
-        .await
-        .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
-        .map_err(kg_err)?;
+        let del_default = format!("{prologue}DELETE WHERE {{ <{iri}> ?p ?o }}",);
+        tokio::task::spawn_blocking(move || store.update(del_default.as_str()).map_err(access))
+            .await
+            .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
+            .map_err(kg_err)?;
 
         // Delete from named graphs
         for graph_iri in [GRAPH_KNOWLEDGE, GRAPH_AGENT] {
             let s = self.store.clone();
-            let del = format!(
-                "{prologue}DELETE WHERE {{ GRAPH <{graph_iri}> {{ <{iri}> ?p ?o }} }}",
-            );
-            tokio::task::spawn_blocking(move || {
-                s.update(del.as_str()).map_err(access)
-            })
-            .await
-            .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
-            .map_err(kg_err)?;
+            let del =
+                format!("{prologue}DELETE WHERE {{ GRAPH <{graph_iri}> {{ <{iri}> ?p ?o }} }}",);
+            tokio::task::spawn_blocking(move || s.update(del.as_str()).map_err(access))
+                .await
+                .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
+                .map_err(kg_err)?;
         }
         Ok(())
     }
@@ -1430,7 +1412,8 @@ fn load_nodes_in_graph(store: &Store, graph_iri: &str) -> RepoResult<Vec<Node>> 
                 vx,
                 vy,
                 vz,
-            }.into(),
+            }
+            .into(),
             x: Some(x),
             y: Some(y),
             z: Some(z),
@@ -1498,10 +1481,7 @@ fn load_edges_in_graph(store: &Store, graph_iri: &str) -> RepoResult<Vec<Edge>> 
         };
         let source = iri_to_node_id(&src).unwrap_or(0);
         let target = iri_to_node_id(&tgt).unwrap_or(0);
-        let weight = sol
-            .get("weight")
-            .and_then(term_to_f32)
-            .unwrap_or(1.0);
+        let weight = sol.get("weight").and_then(term_to_f32).unwrap_or(1.0);
         let etype = sol.get("etype").and_then(term_to_string);
 
         out.push(Edge {
@@ -1649,7 +1629,10 @@ mod upsert_tests {
             .iter()
             .find(|n| n.id == 42)
             .expect("node present");
-        assert_eq!(node.metadata.get("type").map(String::as_str), Some("ontology_node"));
+        assert_eq!(
+            node.metadata.get("type").map(String::as_str),
+            Some("ontology_node")
+        );
         assert_eq!(node.node_type.as_deref(), Some("ontology_node"));
     }
 
@@ -1663,7 +1646,10 @@ mod upsert_tests {
             .await
             .expect("authored add");
         let written = repo
-            .batch_add_nodes_if_absent(vec![test_node(7, "linked_page"), test_node(8, "linked_page")])
+            .batch_add_nodes_if_absent(vec![
+                test_node(7, "linked_page"),
+                test_node(8, "linked_page"),
+            ])
             .await
             .expect("if-absent add");
 

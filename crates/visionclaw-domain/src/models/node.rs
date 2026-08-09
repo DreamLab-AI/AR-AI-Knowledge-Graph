@@ -95,8 +95,8 @@ impl Node {
         let phi = (rng.gen::<f32>() * 2.0 - 1.0).acos(); // polar: acos(uniform(-1,1)) for uniform sphere surface
 
         // cbrt gives uniform distribution within the volume (not just on the surface)
-        let radius = DEFAULT_INITIAL_RADIUS_MIN
-            + rng.gen::<f32>().cbrt() * DEFAULT_INITIAL_RADIUS_RANGE;
+        let radius =
+            DEFAULT_INITIAL_RADIUS_MIN + rng.gen::<f32>().cbrt() * DEFAULT_INITIAL_RADIUS_RANGE;
 
         let pos_x = radius * phi.sin() * theta.cos();
         let pos_y = radius * phi.sin() * theta.sin();
@@ -446,12 +446,18 @@ mod tests {
     fn test_calculate_mass_boundary_cases() {
         // Zero bytes: (0+1) as f32 = 1.0, log10(1.0)/4 = 0; clamps to 0.1
         let mass_zero = Node::calculate_mass(0);
-        assert!(mass_zero < 50, "zero-byte mass should be small: {}", mass_zero);
+        assert!(
+            mass_zero < 50,
+            "zero-byte mass should be small: {}",
+            mass_zero
+        );
 
         // Large but safe: u64::MAX would overflow (file_size + 1), use a large safe value
         let mass_large = Node::calculate_mass(1_000_000_000_000u64); // 1 TB
         assert!(mass_large > 0);
-        assert!(mass_large <= 255);
+        // 1 TB → log10(1e12)/4 = 3.0 → mass 3.0 → 76.5 → 76: bounded well below
+        // the u8 saturation ceiling. (`<= 255` would be a u8 tautology.)
+        assert!(mass_large < 255);
 
         // 1 MiB → log10(1048577)/4 ≈ 1.5 → mass ≈ 0.375 → clamps min 0.1 → * 25.5 ≈ 9
         let mass_1mib = Node::calculate_mass(1024 * 1024);
@@ -467,7 +473,10 @@ mod tests {
         let mut node = Node::new("test".to_string());
         node.set_file_size(2048);
         assert_eq!(node.file_size, 2048);
-        assert_eq!(node.metadata.get("fileSize").map(String::as_str), Some("2048"));
+        assert_eq!(
+            node.metadata.get("fileSize").map(String::as_str),
+            Some("2048")
+        );
     }
 
     #[test]
@@ -529,13 +538,16 @@ mod tests {
     fn test_with_owl_class_iri() {
         let node = Node::new("meta".to_string())
             .with_owl_class_iri("http://example.org/Class".to_string());
-        assert_eq!(node.owl_class_iri.as_deref(), Some("http://example.org/Class"));
+        assert_eq!(
+            node.owl_class_iri.as_deref(),
+            Some("http://example.org/Class")
+        );
     }
 
     #[test]
     fn test_with_metadata_inserts_key_value() {
-        let node = Node::new("meta".to_string())
-            .with_metadata("foo".to_string(), "bar".to_string());
+        let node =
+            Node::new("meta".to_string()).with_metadata("foo".to_string(), "bar".to_string());
         assert_eq!(node.metadata.get("foo").map(String::as_str), Some("bar"));
     }
 
@@ -544,7 +556,11 @@ mod tests {
         let node = Node::new_with_stored_id("meta".to_string(), Some(1));
         let json = serde_json::to_string(&node).unwrap();
         // owl_class_iri is None — must not appear
-        assert!(!json.contains("owlClassIri"), "none fields should be omitted: {}", json);
+        assert!(
+            !json.contains("owlClassIri"),
+            "none fields should be omitted: {}",
+            json
+        );
     }
 
     #[test]

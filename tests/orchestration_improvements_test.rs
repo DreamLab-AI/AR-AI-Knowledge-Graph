@@ -19,21 +19,35 @@ mod heartbeat_directive_tests {
     fn reload_config_serialises_correctly() {
         let d = HeartbeatDirective::ReloadConfig;
         let json = serde_json::to_string(&d).unwrap();
-        assert!(json.contains("\"directive\":\"reload_config\""), "got: {}", json);
+        assert!(
+            json.contains("\"directive\":\"reload_config\""),
+            "got: {}",
+            json
+        );
     }
 
     #[test]
     fn force_full_sync_serialises_correctly() {
         let d = HeartbeatDirective::ForceFullSync;
         let json = serde_json::to_string(&d).unwrap();
-        assert!(json.contains("\"directive\":\"force_full_sync\""), "got: {}", json);
+        assert!(
+            json.contains("\"directive\":\"force_full_sync\""),
+            "got: {}",
+            json
+        );
     }
 
     #[test]
     fn update_available_serialises_with_version() {
-        let d = HeartbeatDirective::UpdateAvailable { version: "1.2.3".to_string() };
+        let d = HeartbeatDirective::UpdateAvailable {
+            version: "1.2.3".to_string(),
+        };
         let json = serde_json::to_string(&d).unwrap();
-        assert!(json.contains("\"directive\":\"update_available\""), "got: {}", json);
+        assert!(
+            json.contains("\"directive\":\"update_available\""),
+            "got: {}",
+            json
+        );
         assert!(json.contains("\"version\":\"1.2.3\""), "got: {}", json);
     }
 
@@ -47,7 +61,9 @@ mod heartbeat_directive_tests {
 
     #[test]
     fn update_available_round_trips() {
-        let original = HeartbeatDirective::UpdateAvailable { version: "2.0.0".to_string() };
+        let original = HeartbeatDirective::UpdateAvailable {
+            version: "2.0.0".to_string(),
+        };
         let json = serde_json::to_string(&original).unwrap();
         let decoded: HeartbeatDirective = serde_json::from_str(&json).unwrap();
         match decoded {
@@ -83,8 +99,8 @@ mod broadcast_result_tests {
 // ─── Item 2 & 7: TaskOrchestratorActor drain + defaults ─────────────────────
 
 mod task_orchestrator_tests {
-    use std::time::Duration;
     use actix::prelude::*;
+    use std::time::Duration;
     use visionclaw_server::actors::task_orchestrator_actor::{
         CreateTask, DrainTasksBeforeShutdown, TaskOrchestratorActor,
     };
@@ -118,7 +134,11 @@ mod task_orchestrator_tests {
             .await
             .expect("mailbox send ok");
 
-        assert!(result.is_err(), "expected Err during drain, got {:?}", result);
+        assert!(
+            result.is_err(),
+            "expected Err during drain, got {:?}",
+            result
+        );
         let msg = result.unwrap_err();
         assert!(
             msg.contains("draining"),
@@ -158,21 +178,25 @@ mod task_orchestrator_tests {
 // ─── Item 6: Panic isolation in EventBus ────────────────────────────────────
 
 mod event_bus_panic_isolation_tests {
-    use std::collections::HashMap;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use async_trait::async_trait;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use visionclaw_server::events::bus::EventBus;
-    use visionclaw_server::events::types::{EventError, EventHandler, StoredEvent};
     use visionclaw_server::events::domain_events::NodeAddedEvent;
+    use visionclaw_server::events::types::{EventError, EventHandler, StoredEvent};
     use visionclaw_server::utils::time;
 
     struct PanicHandler;
 
     #[async_trait]
     impl EventHandler for PanicHandler {
-        fn event_type(&self) -> &'static str { "NodeAdded" }
-        fn handler_id(&self) -> &str { "panic-handler" }
+        fn event_type(&self) -> &'static str {
+            "NodeAdded"
+        }
+        fn handler_id(&self) -> &str {
+            "panic-handler"
+        }
         async fn handle(&self, _event: &StoredEvent) -> Result<(), EventError> {
             panic!("intentional test panic");
         }
@@ -184,8 +208,12 @@ mod event_bus_panic_isolation_tests {
 
     #[async_trait]
     impl EventHandler for CountingHandler {
-        fn event_type(&self) -> &'static str { "NodeAdded" }
-        fn handler_id(&self) -> &str { "counting-handler" }
+        fn event_type(&self) -> &'static str {
+            "NodeAdded"
+        }
+        fn handler_id(&self) -> &str {
+            "counting-handler"
+        }
         async fn handle(&self, _event: &StoredEvent) -> Result<(), EventError> {
             self.count.fetch_add(1, Ordering::SeqCst);
             Ok(())
@@ -208,13 +236,17 @@ mod event_bus_panic_isolation_tests {
         let count = Arc::new(AtomicUsize::new(0));
 
         bus.subscribe(Arc::new(PanicHandler)).await;
-        bus.subscribe(Arc::new(CountingHandler { count: count.clone() })).await;
+        bus.subscribe(Arc::new(CountingHandler {
+            count: count.clone(),
+        }))
+        .await;
 
         // publish should not itself panic
         let _ = bus.publish(make_event()).await;
 
         assert_eq!(
-            count.load(Ordering::SeqCst), 1,
+            count.load(Ordering::SeqCst),
+            1,
             "counting handler should run even when another handler panics"
         );
     }
@@ -238,10 +270,10 @@ mod event_bus_panic_isolation_tests {
 // ─── Item 7: SupervisorActor graceful drain ─────────────────────────────────
 
 mod supervisor_drain_tests {
-    use std::time::Duration;
     use actix::prelude::*;
+    use std::time::Duration;
     use visionclaw_server::actors::supervisor::{
-        InitiateGracefulShutdown, RegisterActor, SupervisorActor, SupervisionStrategy,
+        InitiateGracefulShutdown, RegisterActor, SupervisionStrategy, SupervisorActor,
     };
 
     #[actix::test]
@@ -275,7 +307,10 @@ mod supervisor_drain_tests {
             .await
             .unwrap();
 
-        assert!(result.is_err(), "registration after drain should be rejected");
+        assert!(
+            result.is_err(),
+            "registration after drain should be rejected"
+        );
     }
 }
 
@@ -304,7 +339,8 @@ mod poll_offset_tests {
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(
-            sorted.len(), n,
+            sorted.len(),
+            n,
             "every agent should be first-polled once across n rotations; got: {:?}",
             seen_first
         );

@@ -21,12 +21,12 @@ pub struct AnomalyNode {
 }
 
 /// Type alias for the shared node analytics map: node_id -> NodeAnalytics
-type NodeAnalyticsMap = Arc<std::sync::RwLock<std::collections::HashMap<u32, crate::utils::binary_protocol::NodeAnalytics>>>;
+type NodeAnalyticsMap = Arc<
+    std::sync::RwLock<std::collections::HashMap<u32, crate::utils::binary_protocol::NodeAnalytics>>,
+>;
 
 pub struct AnomalyDetectionActor {
-
     gpu_state: GPUState,
-
 
     shared_context: Option<Arc<SharedGPUContext>>,
 
@@ -118,7 +118,6 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
             msg.params.method
         );
 
-        
         if self.shared_context.is_none() {
             error!("AnomalyDetectionActor: GPU not initialized for anomaly detection");
             return Box::pin(
@@ -136,7 +135,6 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
 
         let params = msg.params;
 
-        
         let num_nodes = self.gpu_state.num_nodes;
         let k_neighbors = params.k_neighbors;
         if k_neighbors as u32 >= num_nodes {
@@ -147,7 +145,6 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
             return Box::pin(async move { Err(error_msg) }.into_actor(self));
         }
 
-        
         let internal_params = AnomalyDetectionParams {
             method: match params.method {
                 crate::actors::messages::AnomalyMethod::LocalOutlierFactor => {
@@ -157,7 +154,7 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
             },
             threshold: Some(params.threshold),
             k_neighbors: Some(params.k_neighbors),
-            window_size: Some(100), 
+            window_size: Some(100),
             feature_data: None,
         };
 
@@ -167,7 +164,12 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
         let shared_ctx = match self.shared_context.as_ref() {
             Some(ctx) => Arc::clone(ctx),
             None => {
-                return Box::pin(async move { Err("Shared context not initialized for anomaly detection".to_string()) }.into_actor(self));
+                return Box::pin(
+                    async move {
+                        Err("Shared context not initialized for anomaly detection".to_string())
+                    }
+                    .into_actor(self),
+                );
             }
         };
         let num_nodes = self.gpu_state.num_nodes;
@@ -298,7 +300,8 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
             }).await;
 
             // Handle spawn_blocking join result
-            let result: Result<(Option<Vec<f32>>, Vec<AnomalyNode>), String> = match blocking_result {
+            let result: Result<(Option<Vec<f32>>, Vec<AnomalyNode>), String> = match blocking_result
+            {
                 Ok(inner_result) => inner_result,
                 Err(join_err) => Err(format!("GPU blocking task panicked: {}", join_err)),
             };
@@ -309,7 +312,8 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
                 Ok((scores, anomalies)) => {
                     let anomalies_count = anomalies.len();
                     let avg_score = if !anomalies.is_empty() {
-                        anomalies.iter().map(|a| a.anomaly_score).sum::<f32>() / anomalies.len() as f32
+                        anomalies.iter().map(|a| a.anomaly_score).sum::<f32>()
+                            / anomalies.len() as f32
                     } else {
                         0.0
                     };
@@ -326,7 +330,8 @@ impl Handler<RunAnomalyDetection> for AnomalyDetectionActor {
                               internal_params_method, computation_time, anomalies_count);
 
                     Ok(AnomalyResult {
-                        lof_scores: if matches!(internal_params_method, AnomalyDetectionMethod::LOF) {
+                        lof_scores: if matches!(internal_params_method, AnomalyDetectionMethod::LOF)
+                        {
                             scores.clone()
                         } else {
                             None

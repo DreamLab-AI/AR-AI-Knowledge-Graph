@@ -23,7 +23,9 @@ impl EventMiddleware for LoggingMiddleware {
         if self.verbose {
             log::info!(
                 "[EventBus] Publishing: {} (seq: {}, agg: {})",
-                event.metadata.event_type, event.sequence, event.metadata.aggregate_id
+                event.metadata.event_type,
+                event.sequence,
+                event.metadata.aggregate_id
             );
         }
         Ok(())
@@ -43,7 +45,8 @@ impl EventMiddleware for LoggingMiddleware {
         if self.verbose {
             log::info!(
                 "[EventBus] Handler {} processing {}",
-                handler_id, event.metadata.event_type
+                handler_id,
+                event.metadata.event_type
             );
         }
         Ok(())
@@ -194,7 +197,6 @@ impl Default for ValidationMiddleware {
 #[async_trait]
 impl EventMiddleware for ValidationMiddleware {
     async fn before_publish(&self, event: &mut StoredEvent) -> EventResult<()> {
-        
         if event.metadata.aggregate_id.is_empty() {
             return Err(EventError::Validation(
                 "Aggregate ID cannot be empty".to_string(),
@@ -212,7 +214,6 @@ impl EventMiddleware for ValidationMiddleware {
                 "Event data cannot be empty".to_string(),
             ));
         }
-
 
         from_json::<serde_json::Value>(&event.data)
             .map_err(|e| EventError::Validation(format!("Invalid JSON: {}", e)))?;
@@ -345,12 +346,10 @@ impl Default for EnrichmentMiddleware {
 #[async_trait]
 impl EventMiddleware for EnrichmentMiddleware {
     async fn before_publish(&self, event: &mut StoredEvent) -> EventResult<()> {
-        
         if let Some(ref user_id) = self.user_id {
             event.metadata.user_id = Some(user_id.clone());
         }
 
-        
         if let Some(ref correlation_id) = self.correlation_id {
             event.metadata.correlation_id = Some(correlation_id.clone());
         }
@@ -423,7 +422,6 @@ mod tests {
     async fn test_validation_middleware() {
         let middleware = ValidationMiddleware::new();
 
-        
         let mut valid_event = StoredEvent {
             metadata: EventMetadata::new(
                 "node-1".to_string(),
@@ -436,7 +434,6 @@ mod tests {
 
         assert!(middleware.before_publish(&mut valid_event).await.is_ok());
 
-        
         let mut invalid_event = StoredEvent {
             metadata: EventMetadata::new(
                 "".to_string(),

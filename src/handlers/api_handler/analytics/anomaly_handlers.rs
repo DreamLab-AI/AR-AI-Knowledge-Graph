@@ -2,14 +2,12 @@ use actix_web::{web, HttpResponse, Result};
 use log::{info, warn};
 use uuid::Uuid;
 
+use crate::ok_json;
 use crate::services::agent_visualization_protocol::McpServerType;
 use crate::utils::mcp_tcp_client::create_mcp_client;
-use crate::ok_json;
 
 use super::state::ANOMALY_STATE;
-use super::types::{
-    Anomaly, AnomalyDetectionConfig, AnomalyResponse, AnomalyStats,
-};
+use super::types::{Anomaly, AnomalyDetectionConfig, AnomalyResponse, AnomalyStats};
 
 /// Agent-health anomaly heuristic. Scores live agent telemetry (CPU/memory/health/
 /// success-rate) from the MCP server into `ANOMALY_STATE`. This is DISTINCT from
@@ -31,10 +29,8 @@ pub async fn toggle_anomaly_detection(
     state.update_interval = request.update_interval;
 
     if request.enabled {
-
         start_anomaly_detection().await;
     } else {
-
         state.anomalies.clear();
         state.stats = AnomalyStats::default();
     }
@@ -102,7 +98,6 @@ pub(crate) async fn start_anomaly_detection() {
     tokio::spawn(async move {
         info!("Starting real anomaly detection using MCP agent data");
 
-
         let host = std::env::var("MCP_HOST").unwrap_or_else(|_| "localhost".to_string());
         let port = std::env::var("MCP_TCP_PORT")
             .unwrap_or_else(|_| "9500".to_string())
@@ -128,9 +123,7 @@ pub(crate) async fn start_anomaly_detection() {
         let mut state = ANOMALY_STATE.lock().await;
         let mut detected_anomalies = Vec::new();
 
-
         for agent in &agents {
-
             if agent.performance.cpu_usage > 90.0 {
                 detected_anomalies.push(Anomaly {
                     id: Uuid::new_v4().to_string(),
@@ -229,7 +222,6 @@ pub(crate) async fn start_anomaly_detection() {
         }
 
         state.anomalies = detected_anomalies;
-
 
         state.stats = AnomalyStats {
             total: state.anomalies.len() as u32,

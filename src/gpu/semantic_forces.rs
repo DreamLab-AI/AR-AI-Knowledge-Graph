@@ -3,12 +3,12 @@
 //! GPU-accelerated semantic physics forces for knowledge graph layout.
 //! Implements DAG layout, type clustering, collision detection, and attribute-weighted springs.
 
-use visionclaw_domain::models::graph::GraphData;
-use crate::services::semantic_type_registry::{SemanticTypeRegistry, RelationshipForceConfig};
+use crate::services::semantic_type_registry::{RelationshipForceConfig, SemanticTypeRegistry};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use visionclaw_domain::models::graph::GraphData;
 
 // =============================================================================
 // Configuration Structures
@@ -362,24 +362,35 @@ impl SemanticForcesEngine {
 
     /// Initialize engine with graph data
     pub fn initialize(&mut self, graph: &GraphData) -> Result<(), String> {
-        info!("Initializing SemanticForcesEngine with {} nodes, {} edges",
-              graph.nodes.len(), graph.edges.len());
+        info!(
+            "Initializing SemanticForcesEngine with {} nodes, {} edges",
+            graph.nodes.len(),
+            graph.edges.len()
+        );
 
         // Extract node types
-        self.node_types = graph.nodes.iter()
+        self.node_types = graph
+            .nodes
+            .iter()
             .map(|node| self.node_type_to_int(&node.node_type))
             .collect();
 
         // Extract ontology-based properties
-        self.node_physicality = graph.nodes.iter()
+        self.node_physicality = graph
+            .nodes
+            .iter()
             .map(|node| self.extract_physicality(node))
             .collect();
 
-        self.node_role = graph.nodes.iter()
+        self.node_role = graph
+            .nodes
+            .iter()
             .map(|node| self.extract_role(node))
             .collect();
 
-        self.node_maturity = graph.nodes.iter()
+        self.node_maturity = graph
+            .nodes
+            .iter()
             .map(|node| self.extract_maturity(node))
             .collect();
 
@@ -387,7 +398,9 @@ impl SemanticForcesEngine {
         self.node_cross_domain_count = self.calculate_cross_domain_counts(graph);
 
         // Extract edge types
-        self.edge_types = graph.edges.iter()
+        self.edge_types = graph
+            .edges
+            .iter()
             .map(|edge| self.edge_type_to_int(&edge.edge_type))
             .collect();
 
@@ -477,7 +490,9 @@ impl SemanticForcesEngine {
     /// Extract physicality classification from node metadata
     fn extract_physicality(&self, node: &visionclaw_domain::models::node::Node) -> i32 {
         // Check owl:physicality metadata
-        if let Some(physicality) = node.metadata.get("owl:physicality")
+        if let Some(physicality) = node
+            .metadata
+            .get("owl:physicality")
             .or_else(|| node.metadata.get("physicality"))
         {
             return match physicality.as_str() {
@@ -493,7 +508,9 @@ impl SemanticForcesEngine {
     /// Extract role classification from node metadata
     fn extract_role(&self, node: &visionclaw_domain::models::node::Node) -> i32 {
         // Check owl:role metadata
-        if let Some(role) = node.metadata.get("owl:role")
+        if let Some(role) = node
+            .metadata
+            .get("owl:role")
             .or_else(|| node.metadata.get("role"))
         {
             return match role.as_str() {
@@ -526,7 +543,9 @@ impl SemanticForcesEngine {
         let mut counts = vec![0; graph.nodes.len()];
 
         // Build node ID to index map
-        let node_id_to_idx: HashMap<u32, usize> = graph.nodes.iter()
+        let node_id_to_idx: HashMap<u32, usize> = graph
+            .nodes
+            .iter()
             .enumerate()
             .map(|(idx, node)| (node.id, idx))
             .collect();
@@ -555,7 +574,10 @@ impl SemanticForcesEngine {
     }
 
     fn calculate_hierarchy_levels(&mut self, graph: &GraphData) -> Result<(), String> {
-        debug!("Calculating hierarchy levels for {} nodes", graph.nodes.len());
+        debug!(
+            "Calculating hierarchy levels for {} nodes",
+            graph.nodes.len()
+        );
 
         // Initialize all levels to -1 (not in DAG)
         self.node_hierarchy_levels = vec![-1; graph.nodes.len()];
@@ -566,7 +588,10 @@ impl SemanticForcesEngine {
 
         for edge in &graph.edges {
             if edge.edge_type.as_deref() == Some("hierarchy") {
-                children.entry(edge.source).or_insert_with(Vec::new).push(edge.target);
+                children
+                    .entry(edge.source)
+                    .or_insert_with(Vec::new)
+                    .push(edge.target);
                 has_parent.insert(edge.target, true);
             }
         }
@@ -599,7 +624,8 @@ impl SemanticForcesEngine {
                 if let Some(child_ids) = children.get(&node_id) {
                     for child_id in child_ids {
                         // Find child index
-                        if let Some(child_idx) = graph.nodes.iter().position(|n| n.id == *child_id) {
+                        if let Some(child_idx) = graph.nodes.iter().position(|n| n.id == *child_id)
+                        {
                             let new_level = current_level + 1;
                             if self.node_hierarchy_levels[child_idx] < new_level {
                                 self.node_hierarchy_levels[child_idx] = new_level;
@@ -614,7 +640,11 @@ impl SemanticForcesEngine {
             processed += 1;
         }
 
-        let nodes_in_dag = self.node_hierarchy_levels.iter().filter(|&&l| l >= 0).count();
+        let nodes_in_dag = self
+            .node_hierarchy_levels
+            .iter()
+            .filter(|&&l| l >= 0)
+            .count();
         info!("Hierarchy levels calculated: {} nodes in DAG", nodes_in_dag);
 
         Ok(())
@@ -628,29 +658,30 @@ impl SemanticForcesEngine {
 
         for (i, node) in graph.nodes.iter().enumerate() {
             let node_type = self.node_types[i];
-            let pos = (
-                node.data.x,
-                node.data.y,
-                node.data.z,
-            );
-            type_positions.entry(node_type).or_insert_with(Vec::new).push(pos);
+            let pos = (node.data.x, node.data.y, node.data.z);
+            type_positions
+                .entry(node_type)
+                .or_insert_with(Vec::new)
+                .push(pos);
         }
 
         // Calculate centroids
         self.type_centroids.clear();
         for (node_type, positions) in type_positions {
             if !positions.is_empty() {
-                let sum: (f32, f32, f32) = positions.iter()
-                    .fold((0.0, 0.0, 0.0), |acc, &pos| {
-                        (acc.0 + pos.0, acc.1 + pos.1, acc.2 + pos.2)
-                    });
+                let sum: (f32, f32, f32) = positions.iter().fold((0.0, 0.0, 0.0), |acc, &pos| {
+                    (acc.0 + pos.0, acc.1 + pos.1, acc.2 + pos.2)
+                });
                 let count = positions.len() as f32;
                 let centroid = (sum.0 / count, sum.1 / count, sum.2 / count);
                 self.type_centroids.insert(node_type, centroid);
             }
         }
 
-        info!("Calculated centroids for {} node types", self.type_centroids.len());
+        info!(
+            "Calculated centroids for {} node types",
+            self.type_centroids.len()
+        );
         Ok(())
     }
 
@@ -664,7 +695,10 @@ impl SemanticForcesEngine {
             let physicality = self.node_physicality[i];
             if physicality > 0 {
                 let pos = (node.data.x, node.data.y, node.data.z);
-                physicality_positions.entry(physicality).or_insert_with(Vec::new).push(pos);
+                physicality_positions
+                    .entry(physicality)
+                    .or_insert_with(Vec::new)
+                    .push(pos);
             }
         }
 
@@ -672,17 +706,19 @@ impl SemanticForcesEngine {
         self.physicality_centroids.clear();
         for (physicality, positions) in physicality_positions {
             if !positions.is_empty() {
-                let sum: (f32, f32, f32) = positions.iter()
-                    .fold((0.0, 0.0, 0.0), |acc, &pos| {
-                        (acc.0 + pos.0, acc.1 + pos.1, acc.2 + pos.2)
-                    });
+                let sum: (f32, f32, f32) = positions.iter().fold((0.0, 0.0, 0.0), |acc, &pos| {
+                    (acc.0 + pos.0, acc.1 + pos.1, acc.2 + pos.2)
+                });
                 let count = positions.len() as f32;
                 let centroid = (sum.0 / count, sum.1 / count, sum.2 / count);
                 self.physicality_centroids.insert(physicality, centroid);
             }
         }
 
-        info!("Calculated centroids for {} physicality types", self.physicality_centroids.len());
+        info!(
+            "Calculated centroids for {} physicality types",
+            self.physicality_centroids.len()
+        );
         Ok(())
     }
 
@@ -696,7 +732,10 @@ impl SemanticForcesEngine {
             let role = self.node_role[i];
             if role > 0 {
                 let pos = (node.data.x, node.data.y, node.data.z);
-                role_positions.entry(role).or_insert_with(Vec::new).push(pos);
+                role_positions
+                    .entry(role)
+                    .or_insert_with(Vec::new)
+                    .push(pos);
             }
         }
 
@@ -704,26 +743,25 @@ impl SemanticForcesEngine {
         self.role_centroids.clear();
         for (role, positions) in role_positions {
             if !positions.is_empty() {
-                let sum: (f32, f32, f32) = positions.iter()
-                    .fold((0.0, 0.0, 0.0), |acc, &pos| {
-                        (acc.0 + pos.0, acc.1 + pos.1, acc.2 + pos.2)
-                    });
+                let sum: (f32, f32, f32) = positions.iter().fold((0.0, 0.0, 0.0), |acc, &pos| {
+                    (acc.0 + pos.0, acc.1 + pos.1, acc.2 + pos.2)
+                });
                 let count = positions.len() as f32;
                 let centroid = (sum.0 / count, sum.1 / count, sum.2 / count);
                 self.role_centroids.insert(role, centroid);
             }
         }
 
-        info!("Calculated centroids for {} role types", self.role_centroids.len());
+        info!(
+            "Calculated centroids for {} role types",
+            self.role_centroids.len()
+        );
         Ok(())
     }
 
     /// Apply semantic forces to graph (CPU fallback implementation)
     /// In production, this would call CUDA kernels
-    pub fn apply_semantic_forces(
-        &self,
-        graph: &mut GraphData,
-    ) -> Result<(), String> {
+    pub fn apply_semantic_forces(&self, graph: &mut GraphData) -> Result<(), String> {
         if !self.initialized {
             return Err("Engine not initialized".to_string());
         }
@@ -836,9 +874,11 @@ impl SemanticForcesEngine {
                 let dz = graph.nodes[i].data.z - graph.nodes[j].data.z;
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-                let min_dist = 2.0 * self.config.collision.node_radius + self.config.collision.min_distance;
+                let min_dist =
+                    2.0 * self.config.collision.node_radius + self.config.collision.min_distance;
                 if dist < min_dist && dist > 0.001 {
-                    let force = self.config.collision.collision_strength * (min_dist - dist) / dist * 0.01;
+                    let force =
+                        self.config.collision.collision_strength * (min_dist - dist) / dist * 0.01;
                     graph.nodes[i].data.vx += dx * force;
                     graph.nodes[i].data.vy += dy * force;
                     graph.nodes[i].data.vz += dz * force;
@@ -868,12 +908,13 @@ impl SemanticForcesEngine {
 
                 if dist > 0.001 {
                     let weight = edge.weight;
-                    let spring_k = self.config.attribute_spring.base_spring_k *
-                                  (1.0 + weight * self.config.attribute_spring.weight_multiplier);
+                    let spring_k = self.config.attribute_spring.base_spring_k
+                        * (1.0 + weight * self.config.attribute_spring.weight_multiplier);
 
-                    let rest_length = self.config.attribute_spring.rest_length_max -
-                                    (weight * (self.config.attribute_spring.rest_length_max -
-                                             self.config.attribute_spring.rest_length_min));
+                    let rest_length = self.config.attribute_spring.rest_length_max
+                        - (weight
+                            * (self.config.attribute_spring.rest_length_max
+                                - self.config.attribute_spring.rest_length_min));
 
                     let displacement = dist - rest_length;
                     let force_mag = spring_k * displacement / dist * 0.01;
@@ -903,7 +944,9 @@ impl SemanticForcesEngine {
     /// Gated by `config.ontology_relationship.enabled` feature toggle.
     fn apply_ontology_relationship_forces_cpu(&self, graph: &mut GraphData) {
         // Build node ID to index map
-        let node_id_to_idx: HashMap<u32, usize> = graph.nodes.iter()
+        let node_id_to_idx: HashMap<u32, usize> = graph
+            .nodes
+            .iter()
             .enumerate()
             .map(|(idx, node)| (node.id, idx))
             .collect();
@@ -924,7 +967,7 @@ impl SemanticForcesEngine {
 
             let (src_idx, tgt_idx) = match (
                 node_id_to_idx.get(&edge.source),
-                node_id_to_idx.get(&edge.target)
+                node_id_to_idx.get(&edge.target),
             ) {
                 (Some(&src), Some(&tgt)) => (src, tgt),
                 _ => continue,
@@ -972,15 +1015,33 @@ impl SemanticForcesEngine {
         let num_types = 4usize;
 
         // Build positions and forces arrays in Float3 layout
-        let mut positions: Vec<kernel_bridge::Float3> = graph.nodes.iter()
-            .map(|n| kernel_bridge::Float3 { x: n.data.x, y: n.data.y, z: n.data.z })
+        let mut positions: Vec<kernel_bridge::Float3> = graph
+            .nodes
+            .iter()
+            .map(|n| kernel_bridge::Float3 {
+                x: n.data.x,
+                y: n.data.y,
+                z: n.data.z,
+            })
             .collect();
         let mut forces: Vec<kernel_bridge::Float3> = vec![
-            kernel_bridge::Float3 { x: 0.0, y: 0.0, z: 0.0 }; num_nodes
+            kernel_bridge::Float3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            };
+            num_nodes
         ];
 
         // Calculate centroids on GPU
-        let mut centroids = vec![kernel_bridge::Float3 { x: 0.0, y: 0.0, z: 0.0 }; num_types];
+        let mut centroids = vec![
+            kernel_bridge::Float3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            };
+            num_types
+        ];
         let mut counts = vec![0i32; num_types];
         kernel_bridge::calculate_physicality_centroids(
             &self.node_physicality,
@@ -1013,15 +1074,33 @@ impl SemanticForcesEngine {
         // Role: 0=None, 1=Process, 2=Agent, 3=Resource, 4=Concept
         let num_types = 5usize;
 
-        let mut positions: Vec<kernel_bridge::Float3> = graph.nodes.iter()
-            .map(|n| kernel_bridge::Float3 { x: n.data.x, y: n.data.y, z: n.data.z })
+        let mut positions: Vec<kernel_bridge::Float3> = graph
+            .nodes
+            .iter()
+            .map(|n| kernel_bridge::Float3 {
+                x: n.data.x,
+                y: n.data.y,
+                z: n.data.z,
+            })
             .collect();
         let mut forces: Vec<kernel_bridge::Float3> = vec![
-            kernel_bridge::Float3 { x: 0.0, y: 0.0, z: 0.0 }; num_nodes
+            kernel_bridge::Float3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            };
+            num_nodes
         ];
 
         // Calculate centroids on GPU
-        let mut centroids = vec![kernel_bridge::Float3 { x: 0.0, y: 0.0, z: 0.0 }; num_types];
+        let mut centroids = vec![
+            kernel_bridge::Float3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            };
+            num_types
+        ];
         let mut counts = vec![0i32; num_types];
         kernel_bridge::calculate_role_centroids(
             &self.node_role,
@@ -1052,11 +1131,22 @@ impl SemanticForcesEngine {
     fn apply_maturity_layout_forces_gpu(&self, graph: &mut GraphData) {
         let num_nodes = graph.nodes.len();
 
-        let mut positions: Vec<kernel_bridge::Float3> = graph.nodes.iter()
-            .map(|n| kernel_bridge::Float3 { x: n.data.x, y: n.data.y, z: n.data.z })
+        let mut positions: Vec<kernel_bridge::Float3> = graph
+            .nodes
+            .iter()
+            .map(|n| kernel_bridge::Float3 {
+                x: n.data.x,
+                y: n.data.y,
+                z: n.data.z,
+            })
             .collect();
         let mut forces: Vec<kernel_bridge::Float3> = vec![
-            kernel_bridge::Float3 { x: 0.0, y: 0.0, z: 0.0 }; num_nodes
+            kernel_bridge::Float3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0
+            };
+            num_nodes
         ];
 
         kernel_bridge::apply_maturity_layout_force(
@@ -1118,7 +1208,9 @@ impl SemanticForcesEngine {
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
                 if dist < self.config.physicality_cluster.cluster_radius * 2.0 && dist > 0.001 {
-                    let force = self.config.physicality_cluster.inter_physicality_repulsion / (dist * dist) * 0.01;
+                    let force = self.config.physicality_cluster.inter_physicality_repulsion
+                        / (dist * dist)
+                        * 0.01;
                     forces[i].0 += dx * force / dist;
                     forces[i].1 += dy * force / dist;
                     forces[i].2 += dz * force / dist;
@@ -1177,7 +1269,8 @@ impl SemanticForcesEngine {
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
                 if dist < self.config.role_cluster.cluster_radius * 2.0 && dist > 0.001 {
-                    let force = self.config.role_cluster.inter_role_repulsion / (dist * dist) * 0.01;
+                    let force =
+                        self.config.role_cluster.inter_role_repulsion / (dist * dist) * 0.01;
                     forces[i].0 += dx * force / dist;
                     forces[i].1 += dy * force / dist;
                     forces[i].2 += dz * force / dist;
@@ -1216,12 +1309,16 @@ impl SemanticForcesEngine {
     }
 
     fn apply_cross_domain_forces_cpu(&self, graph: &mut GraphData) {
-        let bridge_id = self.registry.get_id("bridge")
+        let bridge_id = self
+            .registry
+            .get_id("bridge")
             .map(|id| id as i32)
             .unwrap_or(i32::MAX);
 
         // Build node ID to index map
-        let node_id_to_idx: HashMap<u32, usize> = graph.nodes.iter()
+        let node_id_to_idx: HashMap<u32, usize> = graph
+            .nodes
+            .iter()
             .enumerate()
             .map(|(idx, node)| (node.id, idx))
             .collect();
@@ -1235,7 +1332,7 @@ impl SemanticForcesEngine {
 
             let (src_idx, tgt_idx) = match (
                 node_id_to_idx.get(&edge.source),
-                node_id_to_idx.get(&edge.target)
+                node_id_to_idx.get(&edge.target),
             ) {
                 (Some(&src), Some(&tgt)) => (src, tgt),
                 _ => continue,
@@ -1369,7 +1466,10 @@ impl DynamicRelationshipBufferManager {
         let result = kernel_bridge::set_dynamic_relationship_buffer(configs, true);
 
         if result != 0 {
-            return Err(format!("CUDA error uploading relationship buffer: {}", result));
+            return Err(format!(
+                "CUDA error uploading relationship buffer: {}",
+                result
+            ));
         }
 
         self.current_version = kernel_bridge::get_dynamic_relationship_buffer_version();
@@ -1405,7 +1505,10 @@ impl DynamicRelationshipBufferManager {
         let result = kernel_bridge::update_dynamic_relationship_config(type_id as i32, config);
 
         if result != 0 {
-            return Err(format!("CUDA error updating relationship config: {}", result));
+            return Err(format!(
+                "CUDA error updating relationship config: {}",
+                result
+            ));
         }
 
         self.current_version = kernel_bridge::get_dynamic_relationship_buffer_version();
@@ -1423,11 +1526,17 @@ impl DynamicRelationshipBufferManager {
         let result = kernel_bridge::set_dynamic_relationships_enabled(enabled);
 
         if result != 0 {
-            return Err(format!("CUDA error setting dynamic relationships enabled: {}", result));
+            return Err(format!(
+                "CUDA error setting dynamic relationships enabled: {}",
+                result
+            ));
         }
 
         self.enabled = enabled;
-        info!("Dynamic relationship forces {}", if enabled { "enabled" } else { "disabled" });
+        info!(
+            "Dynamic relationship forces {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
 
         Ok(())
     }
@@ -1462,8 +1571,8 @@ impl Default for DynamicRelationshipBufferManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use visionclaw_domain::models::node::Node;
     use visionclaw_domain::models::edge::Edge;
+    use visionclaw_domain::models::node::Node;
 
     #[test]
     fn test_semantic_config_defaults() {

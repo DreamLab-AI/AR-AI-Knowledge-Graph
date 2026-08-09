@@ -303,7 +303,12 @@ mod tests {
     #[test]
     fn update_positions_message_constructor_round_trips_forces() {
         use visionclaw_domain::ports::gpu_physics_adapter::NodeForce;
-        let forces = vec![NodeForce { node_id: 1, force_x: 0.1, force_y: 0.2, force_z: 0.3 }];
+        let forces = vec![NodeForce {
+            node_id: 1,
+            force_x: 0.1,
+            force_y: 0.2,
+            force_z: 0.3,
+        }];
         let msg = UpdatePositionsMessage::new(forces.clone());
         assert_eq!(msg.forces.len(), forces.len());
         assert_eq!(msg.forces[0].node_id, 1);

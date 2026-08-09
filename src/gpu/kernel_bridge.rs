@@ -171,10 +171,7 @@ mod gpu_ffi {
             num_nodes: i32,
         );
 
-        pub fn finalize_role_centroids(
-            role_centroids: *mut super::Float3,
-            role_counts: *const i32,
-        );
+        pub fn finalize_role_centroids(role_centroids: *mut super::Float3, role_counts: *const i32);
     }
 }
 
@@ -198,10 +195,7 @@ pub struct Float3 {
 ///
 /// Returns 0 on success, non-zero on error.
 /// On CPU fallback: always returns 0 (no-op).
-pub fn set_dynamic_relationship_buffer(
-    configs: &[DynamicForceConfigGPU],
-    enabled: bool,
-) -> i32 {
+pub fn set_dynamic_relationship_buffer(configs: &[DynamicForceConfigGPU], enabled: bool) -> i32 {
     #[cfg(feature = "gpu")]
     {
         if configs.len() > i32::MAX as usize {
@@ -212,14 +206,15 @@ pub fn set_dynamic_relationship_buffer(
         } else {
             configs.as_ptr()
         };
-        unsafe {
-            gpu_ffi::set_dynamic_relationship_buffer(ptr, configs.len() as i32, enabled)
-        }
+        unsafe { gpu_ffi::set_dynamic_relationship_buffer(ptr, configs.len() as i32, enabled) }
     }
     #[cfg(not(feature = "gpu"))]
     {
         let _ = (configs, enabled);
-        warn_once(&WARNED_SET_DYNAMIC_BUFFER, "set_dynamic_relationship_buffer");
+        warn_once(
+            &WARNED_SET_DYNAMIC_BUFFER,
+            "set_dynamic_relationship_buffer",
+        );
         0
     }
 }
@@ -228,10 +223,7 @@ pub fn set_dynamic_relationship_buffer(
 ///
 /// Returns 0 on success, non-zero on error.
 /// On CPU fallback: always returns 0 (no-op).
-pub fn update_dynamic_relationship_config(
-    type_id: i32,
-    config: &DynamicForceConfigGPU,
-) -> i32 {
+pub fn update_dynamic_relationship_config(type_id: i32, config: &DynamicForceConfigGPU) -> i32 {
     #[cfg(feature = "gpu")]
     {
         unsafe { gpu_ffi::update_dynamic_relationship_config(type_id, config as *const _) }
@@ -475,8 +467,17 @@ pub fn apply_physicality_cluster_force(
     }
     #[cfg(not(feature = "gpu"))]
     {
-        let _ = (node_physicality, physicality_centroids, positions, forces, num_nodes);
-        warn_once(&WARNED_PHYSICALITY_CLUSTER, "apply_physicality_cluster_force");
+        let _ = (
+            node_physicality,
+            physicality_centroids,
+            positions,
+            forces,
+            num_nodes,
+        );
+        warn_once(
+            &WARNED_PHYSICALITY_CLUSTER,
+            "apply_physicality_cluster_force",
+        );
     }
 }
 
@@ -572,7 +573,10 @@ pub fn calculate_physicality_centroids(
     }
     #[cfg(not(feature = "gpu"))]
     {
-        warn_once(&WARNED_PHYSICALITY_CENTROIDS, "calculate_physicality_centroids");
+        warn_once(
+            &WARNED_PHYSICALITY_CENTROIDS,
+            "calculate_physicality_centroids",
+        );
         let num_types = physicality_centroids.len();
         for c in physicality_centroids.iter_mut() {
             c.x = 0.0;
@@ -612,7 +616,10 @@ pub fn finalize_physicality_centroids(
     }
     #[cfg(not(feature = "gpu"))]
     {
-        warn_once(&WARNED_FINALIZE_PHYSICALITY, "finalize_physicality_centroids");
+        warn_once(
+            &WARNED_FINALIZE_PHYSICALITY,
+            "finalize_physicality_centroids",
+        );
         let num_types = physicality_centroids.len().min(physicality_counts.len());
         for i in 0..num_types {
             let count = physicality_counts[i];
@@ -679,17 +686,11 @@ pub fn calculate_role_centroids(
 /// Finalize role centroids by dividing accumulated positions by count.
 ///
 /// On CPU fallback: performs the division directly.
-pub fn finalize_role_centroids(
-    role_centroids: &mut [Float3],
-    role_counts: &[i32],
-) {
+pub fn finalize_role_centroids(role_centroids: &mut [Float3], role_counts: &[i32]) {
     #[cfg(feature = "gpu")]
     {
         unsafe {
-            gpu_ffi::finalize_role_centroids(
-                role_centroids.as_mut_ptr(),
-                role_counts.as_ptr(),
-            );
+            gpu_ffi::finalize_role_centroids(role_centroids.as_mut_ptr(), role_counts.as_ptr());
         }
     }
     #[cfg(not(feature = "gpu"))]
@@ -780,11 +781,27 @@ mod tests {
         }
         let node_types = [0i32, 0, 1];
         let positions = [
-            Float3 { x: 2.0, y: 4.0, z: 6.0 },
-            Float3 { x: 4.0, y: 6.0, z: 8.0 },
-            Float3 { x: 10.0, y: 20.0, z: 30.0 },
+            Float3 {
+                x: 2.0,
+                y: 4.0,
+                z: 6.0,
+            },
+            Float3 {
+                x: 4.0,
+                y: 6.0,
+                z: 8.0,
+            },
+            Float3 {
+                x: 10.0,
+                y: 20.0,
+                z: 30.0,
+            },
         ];
-        let mut centroids = [Float3 { x: 0.0, y: 0.0, z: 0.0 }; 2];
+        let mut centroids = [Float3 {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        }; 2];
         let mut counts = [0i32; 2];
 
         calculate_type_centroids(&node_types, &positions, &mut centroids, &mut counts, 3, 2);

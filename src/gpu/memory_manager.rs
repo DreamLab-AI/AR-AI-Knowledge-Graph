@@ -46,8 +46,8 @@ use cust::stream::{Stream, StreamFlags};
 use log::{debug, error, info, warn};
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 /// Configuration for buffer growth and size limits
@@ -71,7 +71,7 @@ impl Default for BufferConfig {
             bytes_per_element: 4, // f32
             growth_factor: 1.5,
             max_size_bytes: 1024 * 1024 * 1024, // 1GB
-            min_size_bytes: 4096,                // 4KB
+            min_size_bytes: 4096,               // 4KB
             enable_async: false,
         }
     }
@@ -158,7 +158,10 @@ impl<T: cust_core::DeviceCopy + Clone + Default> GpuBuffer<T> {
 
         // Initialize async buffers if enabled
         let (host_buffer_a, host_buffer_b) = if config.enable_async {
-            (Some(vec![T::default(); capacity]), Some(vec![T::default(); capacity]))
+            (
+                Some(vec![T::default(); capacity]),
+                Some(vec![T::default(); capacity]),
+            )
         } else {
             (None, None)
         };
@@ -264,7 +267,10 @@ impl<T: cust_core::DeviceCopy + Clone + Default> GpuBuffer<T> {
             match self.host_buffer_a.as_mut() {
                 Some(buf) => buf,
                 None => {
-                    error!("Host buffer A not initialized for async buffer '{}'", self.name);
+                    error!(
+                        "Host buffer A not initialized for async buffer '{}'",
+                        self.name
+                    );
                     return Err(CudaError::InvalidValue);
                 }
             }
@@ -272,7 +278,10 @@ impl<T: cust_core::DeviceCopy + Clone + Default> GpuBuffer<T> {
             match self.host_buffer_b.as_mut() {
                 Some(buf) => buf,
                 None => {
-                    error!("Host buffer B not initialized for async buffer '{}'", self.name);
+                    error!(
+                        "Host buffer B not initialized for async buffer '{}'",
+                        self.name
+                    );
                     return Err(CudaError::InvalidValue);
                 }
             }
@@ -280,13 +289,13 @@ impl<T: cust_core::DeviceCopy + Clone + Default> GpuBuffer<T> {
 
         // Start async copy from device to host
         stream.synchronize()?; // Ensure previous operations complete
-        // SAFETY: This async copy is safe because:
-        // 1. `self.device_buffer` is a valid DeviceBuffer allocated during GpuBuffer::new()
-        // 2. `target_buffer` points to a valid host Vec<T> (either host_buffer_a or host_buffer_b)
-        //    that was allocated with the same capacity as the device buffer
-        // 3. The stream was synchronized before this call to ensure no concurrent modifications
-        // 4. T implements DeviceCopy, guaranteeing the type is safe for GPU memory operations
-        // 5. The caller must call wait_for_download() before accessing target_buffer data
+                               // SAFETY: This async copy is safe because:
+                               // 1. `self.device_buffer` is a valid DeviceBuffer allocated during GpuBuffer::new()
+                               // 2. `target_buffer` points to a valid host Vec<T> (either host_buffer_a or host_buffer_b)
+                               //    that was allocated with the same capacity as the device buffer
+                               // 3. The stream was synchronized before this call to ensure no concurrent modifications
+                               // 4. T implements DeviceCopy, guaranteeing the type is safe for GPU memory operations
+                               // 5. The caller must call wait_for_download() before accessing target_buffer data
         unsafe {
             self.device_buffer.async_copy_to(target_buffer, stream)?;
         }
@@ -629,7 +638,10 @@ impl GpuMemoryManager {
                 leaks
             }
             Err(e) => {
-                error!("Lock poisoned while checking for leaks: {} - Cannot determine leak status", e);
+                error!(
+                    "Lock poisoned while checking for leaks: {} - Cannot determine leak status",
+                    e
+                );
                 Vec::new() // Return empty, cannot verify
             }
         }
@@ -647,7 +659,10 @@ impl GpuMemoryManager {
                 },
             );
 
-            let new_total = self.total_allocated.fetch_add(size_bytes, Ordering::Relaxed) + size_bytes;
+            let new_total = self
+                .total_allocated
+                .fetch_add(size_bytes, Ordering::Relaxed)
+                + size_bytes;
 
             // Update peak
             let mut peak = self.peak_allocated.load(Ordering::Relaxed);
@@ -706,7 +721,10 @@ impl GpuMemoryManager {
             };
 
             if allocations.remove(name).is_some() {
-                let new_total = self.total_allocated.fetch_sub(actual_size, Ordering::Relaxed) - actual_size;
+                let new_total = self
+                    .total_allocated
+                    .fetch_sub(actual_size, Ordering::Relaxed)
+                    - actual_size;
                 debug!(
                     "GPU Memory: -{} bytes for '{}', total: {} bytes",
                     actual_size, name, new_total
@@ -767,7 +785,9 @@ mod tests {
 
         // Allocate buffer
         let config = BufferConfig::default();
-        manager.allocate::<f32>("test_buffer", 1000, config).unwrap();
+        manager
+            .allocate::<f32>("test_buffer", 1000, config)
+            .unwrap();
 
         // Verify allocation
         let stats = manager.stats();
@@ -815,7 +835,9 @@ mod tests {
         let mut manager = GpuMemoryManager::new().unwrap();
 
         let config = BufferConfig::default();
-        manager.allocate::<f32>("leaked_buffer", 100, config).unwrap();
+        manager
+            .allocate::<f32>("leaked_buffer", 100, config)
+            .unwrap();
 
         // Don't free the buffer
         let leaks = manager.check_leaks();
@@ -831,7 +853,9 @@ mod tests {
         let mut config = BufferConfig::for_positions();
         config.enable_async = true;
 
-        manager.allocate::<f32>("async_buffer", 100, config).unwrap();
+        manager
+            .allocate::<f32>("async_buffer", 100, config)
+            .unwrap();
 
         // Start async download
         manager.start_async_download::<f32>("async_buffer").unwrap();

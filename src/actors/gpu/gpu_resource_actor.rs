@@ -14,9 +14,9 @@ use cudarc::driver::{CudaDevice, CudaStream};
 
 use super::shared::GPUState;
 use crate::actors::messages::*;
-use visionclaw_domain::models::graph::GraphData;
 use crate::utils::socket_flow_messages::BinaryNodeData;
 use crate::utils::unified_gpu_compute::UnifiedGPUCompute;
+use visionclaw_domain::models::graph::GraphData;
 
 #[allow(dead_code)]
 const MAX_NODES: u32 = 1_000_000;
@@ -24,19 +24,14 @@ const MAX_NODES: u32 = 1_000_000;
 const MAX_GPU_FAILURES: u32 = 5;
 
 pub struct GPUResourceActor {
-    
     device: Option<Arc<CudaDevice>>,
 
-    
     cuda_stream: Option<CudaStream>,
 
-    
     unified_compute: Option<UnifiedGPUCompute>,
 
-    
     gpu_state: GPUState,
 
-    
     #[allow(dead_code)]
     last_failure_reset: Instant,
 }
@@ -53,7 +48,6 @@ impl GPUResourceActor {
         }
     }
 
-    
     async fn perform_gpu_initialization(
         &mut self,
         graph_data: Arc<GraphData>,
@@ -68,13 +62,11 @@ impl GPUResourceActor {
             graph_data.edges.len()
         );
 
-        
         debug!("GPUResourceActor - Testing GPU capabilities...");
         Self::static_test_gpu_capabilities()
             .await
             .map_err(|e| format!("GPU capabilities test failed: {}", e))?;
 
-        
         debug!("GPUResourceActor - Creating CUDA device 0...");
         let device = CudaDevice::new(0).map_err(|e| {
             error!("Failed to create CUDA device: {}", e);
@@ -82,7 +74,6 @@ impl GPUResourceActor {
         })?;
         info!("CUDA device initialized successfully");
 
-        
         debug!("GPUResourceActor - Creating CUDA stream...");
         let cuda_stream = device.fork_default_stream().map_err(|e| {
             error!("Failed to create CUDA stream: {}", e);
@@ -90,7 +81,6 @@ impl GPUResourceActor {
         })?;
         info!("CUDA stream created successfully");
 
-        
         let max_threads_per_block = device
             .attribute(CUdevice_attribute_enum::CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK)
             .map_err(|e| format!("Failed to get device attributes: {}", e))?
@@ -105,8 +95,6 @@ impl GPUResourceActor {
             max_threads_per_block, compute_capability_major
         );
 
-        
-        
         debug!("Loading PTX content using ptx utility module");
         let ptx_content = visionclaw_gpu::ptx_loader::load_ptx_module_sync(
             visionclaw_gpu::ptx_loader::PTXModule::VisionflowUnified,
@@ -120,7 +108,6 @@ impl GPUResourceActor {
             ptx_content.len()
         );
 
-        
         let clustering_ptx = match visionclaw_gpu::ptx_loader::load_ptx_module_sync(
             visionclaw_gpu::ptx_loader::PTXModule::GpuClusteringKernels,
         ) {
@@ -193,17 +180,24 @@ impl GPUResourceActor {
                             csr_result.num_nodes as usize,
                             csr_result.num_edges as usize,
                         )
-                        .map_err(|e| format!("Failed to initialize graph in unified compute: {}", e))?;
+                        .map_err(|e| {
+                            format!("Failed to initialize graph in unified compute: {}", e)
+                        })?;
 
                     // Upload buffer_index → graph_node_id mapping so clustering
                     // actors can translate GPU indices back to real node IDs.
                     // Pad to allocated_nodes since device buffer may be overallocated.
-                    let mut graph_ids = Self::build_node_graph_id_vec(&csr_result.node_indices, csr_result.num_nodes as usize);
+                    let mut graph_ids = Self::build_node_graph_id_vec(
+                        &csr_result.node_indices,
+                        csr_result.num_nodes as usize,
+                    );
                     use cust::memory::CopyDestination;
                     if graph_ids.len() < compute.node_graph_id.len() {
                         graph_ids.resize(compute.node_graph_id.len(), 0);
                     }
-                    compute.node_graph_id.copy_from(&graph_ids)
+                    compute
+                        .node_graph_id
+                        .copy_from(&graph_ids)
                         .map_err(|e| format!("Failed to upload node_graph_id: {}", e))?;
                 }
 
@@ -217,7 +211,9 @@ impl GPUResourceActor {
                     let class_masses = vec![1.0f32; num];
 
                     for node in &graph_data.nodes {
-                        let domain = node.metadata.get("source_domain")
+                        let domain = node
+                            .metadata
+                            .get("source_domain")
                             .map(|s| s.as_str())
                             .unwrap_or("");
                         // Charge modulates repulsion: charge[i] * charge[j] multiplies base repelK.
@@ -240,7 +236,10 @@ impl GPUResourceActor {
                     match uc.upload_class_metadata(&class_ids, &class_charges, &class_masses) {
                         Ok(_) => {
                             let classified = class_ids.iter().filter(|&&id| id > 0).count();
-                            info!("Uploaded domain class metadata: {}/{} nodes classified", classified, num);
+                            info!(
+                                "Uploaded domain class metadata: {}/{} nodes classified",
+                                classified, num
+                            );
                         }
                         Err(e) => warn!("Failed to upload class metadata: {}", e),
                     }
@@ -251,7 +250,8 @@ impl GPUResourceActor {
                 self.gpu_state.num_nodes = csr_result.num_nodes;
                 self.gpu_state.num_edges = csr_result.num_edges;
                 self.gpu_state.node_indices = csr_result.node_indices;
-                self.gpu_state.graph_structure_hash = Self::calculate_graph_structure_hash(&graph_data);
+                self.gpu_state.graph_structure_hash =
+                    Self::calculate_graph_structure_hash(&graph_data);
                 self.gpu_state.positions_hash = Self::calculate_positions_hash(&graph_data);
                 self.gpu_state.csr_structure_uploaded = true;
             }
@@ -270,7 +270,6 @@ impl GPUResourceActor {
         Ok(())
     }
 
-    
     async fn static_test_gpu_capabilities() -> Result<(), Error> {
         info!("Testing CUDA capabilities");
         match CudaDevice::count() {
@@ -290,7 +289,6 @@ impl GPUResourceActor {
         }
     }
 
-    
     fn create_csr_from_graph_data(&self, graph_data: &GraphData) -> Result<CsrResult, String> {
         let num_nodes = graph_data.nodes.len() as u32;
         let num_edges = graph_data.edges.len() as u32;
@@ -304,23 +302,19 @@ impl GPUResourceActor {
             num_nodes, num_edges
         );
 
-        
         let mut node_indices = HashMap::new();
         for (i, node) in graph_data.nodes.iter().enumerate() {
             node_indices.insert(node.id, i);
         }
 
-        
         let mut row_offsets = vec![0u32; (num_nodes + 1) as usize];
         let mut col_indices = Vec::new();
         let mut edge_weights = Vec::new();
 
-        
         let positions_x: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.x).collect();
         let positions_y: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.y).collect();
         let positions_z: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.z).collect();
 
-        
         let mut adjacency_lists: Vec<Vec<(u32, f32)>> = vec![Vec::new(); num_nodes as usize];
 
         for edge in &graph_data.edges {
@@ -331,14 +325,12 @@ impl GPUResourceActor {
                 let weight = edge.weight;
                 adjacency_lists[source_idx].push((target_idx as u32, weight));
 
-                
                 if source_idx != target_idx {
                     adjacency_lists[target_idx].push((source_idx as u32, weight));
                 }
             }
         }
 
-        
         let mut edge_count = 0;
         for (i, adj_list) in adjacency_lists.iter().enumerate() {
             row_offsets[i] = edge_count;
@@ -384,27 +376,23 @@ impl GPUResourceActor {
     fn calculate_graph_structure_hash(graph_data: &GraphData) -> u64 {
         let mut hasher = DefaultHasher::new();
 
-        
         graph_data.nodes.len().hash(&mut hasher);
         graph_data.edges.len().hash(&mut hasher);
 
-        
         for edge in &graph_data.edges {
             edge.source.hash(&mut hasher);
             edge.target.hash(&mut hasher);
-            
+
             edge.weight.to_bits().hash(&mut hasher);
         }
 
         hasher.finish()
     }
 
-    
     fn calculate_positions_hash(graph_data: &GraphData) -> u64 {
         let mut hasher = DefaultHasher::new();
 
         for node in &graph_data.nodes {
-            
             node.data.x.to_bits().hash(&mut hasher);
             node.data.y.to_bits().hash(&mut hasher);
             node.data.z.to_bits().hash(&mut hasher);
@@ -483,16 +471,15 @@ impl Handler<InitializeGPU> for GPUResourceActor {
         let physics_orchestrator_addr = msg.physics_orchestrator_addr;
         let gpu_manager_addr = msg.gpu_manager_addr;
 
-        
         debug!("Starting async GPU initialization");
         Box::pin(async move {
-            
+
             Ok::<(), ()>(())
         }.into_actor(self).map(move |result, actor, _ctx| {
             match result {
                 Ok(_) => {
                     debug!("Async initialization started, performing GPU initialization...");
-                    
+
                     let initialization_result = futures::executor::block_on(
                         actor.perform_gpu_initialization(graph_data)
                     );
@@ -501,7 +488,7 @@ impl Handler<InitializeGPU> for GPUResourceActor {
                         Ok(_) => {
                             info!("GPU initialization completed successfully");
 
-                            
+
                             if let (Some(device), Some(stream), Some(compute)) = (
                                 actor.device.as_ref().cloned(),
                                 actor.cuda_stream.take(),
@@ -586,7 +573,6 @@ impl Handler<UpdateGPUGraphData> for GPUResourceActor {
             return Err("GPU not initialized".to_string());
         }
 
-        
         self.update_graph_data_internal_optimized(&msg.graph)
     }
 }
@@ -630,7 +616,6 @@ impl Handler<GetNodeData> for GPUResourceActor {
 }
 
 impl GPUResourceActor {
-    
     fn update_graph_data_internal_optimized(
         &mut self,
         graph_data: &Arc<GraphData>,
@@ -646,14 +631,12 @@ impl GPUResourceActor {
             structure_changed, positions_changed
         );
 
-        
         if !structure_changed && !positions_changed {
             trace!("GPU upload skipped - no changes detected");
             return Ok(());
         }
 
         if structure_changed {
-            
             info!("GPU: Full structure update required");
 
             let csr_result = self.create_csr_from_graph_data(graph_data)?;
@@ -678,14 +661,18 @@ impl GPUResourceActor {
 
             // Upload buffer_index → graph_node_id mapping for clustering actors.
             // Pad to allocated_nodes since device buffer may be overallocated.
-            let mut graph_ids = Self::build_node_graph_id_vec(&csr_result.node_indices, csr_result.num_nodes as usize);
+            let mut graph_ids = Self::build_node_graph_id_vec(
+                &csr_result.node_indices,
+                csr_result.num_nodes as usize,
+            );
             use cust::memory::CopyDestination;
             if graph_ids.len() < unified_compute.node_graph_id.len() {
                 graph_ids.resize(unified_compute.node_graph_id.len(), 0);
             }
-            unified_compute.node_graph_id.copy_from(&graph_ids)
+            unified_compute
+                .node_graph_id
+                .copy_from(&graph_ids)
                 .map_err(|e| format!("Failed to upload node_graph_id: {}", e))?;
-
 
             self.gpu_state.num_nodes = csr_result.num_nodes;
             self.gpu_state.num_edges = csr_result.num_edges;
@@ -694,7 +681,6 @@ impl GPUResourceActor {
             self.gpu_state.positions_hash = new_positions_hash;
             self.gpu_state.csr_structure_uploaded = true;
         } else if positions_changed {
-            
             info!("GPU: Position-only update");
 
             let positions_x: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.x).collect();

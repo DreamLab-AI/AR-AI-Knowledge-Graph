@@ -9,12 +9,12 @@ use log::{debug, info};
 use serde::Serialize;
 use std::sync::Arc;
 
-use crate::services::schema_service::{SchemaService, GraphSchema};
 use crate::actors::graph_state_actor::GraphStateActor;
+use crate::services::schema_service::{GraphSchema, SchemaService};
 use actix::Addr;
 
 // Response macros
-use crate::{ok_json, error_json};
+use crate::{error_json, ok_json};
 
 /// Schema response
 #[derive(Debug, Serialize)]
@@ -131,9 +131,7 @@ pub async fn get_llm_context(
 
     let context = schema_service.get_llm_context().await;
 
-    HttpResponse::Ok()
-        .content_type("text/plain")
-        .body(context)
+    HttpResponse::Ok().content_type("text/plain").body(context)
 }
 
 /// Get all available node types
@@ -220,7 +218,10 @@ pub async fn get_node_type_info(
             ok_json!(response)
         }
         None => {
-            error_json!("Node type not found", format!("No nodes with type '{}'", node_type))
+            error_json!(
+                "Node type not found",
+                format!("No nodes with type '{}'", node_type)
+            )
         }
     }
 }
@@ -253,7 +254,10 @@ pub async fn get_edge_type_info(
             ok_json!(response)
         }
         None => {
-            error_json!("Edge type not found", format!("No edges with type '{}'", edge_type))
+            error_json!(
+                "Edge type not found",
+                format!("No edges with type '{}'", edge_type)
+            )
         }
     }
 }
@@ -267,6 +271,6 @@ pub fn configure_schema_routes(cfg: &mut web::ServiceConfig) {
             .route("/node-types", web::get().to(get_node_types))
             .route("/edge-types", web::get().to(get_edge_types))
             .route("/node-types/{type}", web::get().to(get_node_type_info))
-            .route("/edge-types/{type}", web::get().to(get_edge_type_info))
+            .route("/edge-types/{type}", web::get().to(get_edge_type_info)),
     );
 }

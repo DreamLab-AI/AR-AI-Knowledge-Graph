@@ -28,13 +28,12 @@ use crate::utils::socket_flow_messages::BinaryNodeData;
 pub use visionclaw_actors::messages::graph_messages::{
     AddEdge, AddNode, AddNodesFromMetadata, ArchiveWorkspace, AutoBalanceNotification,
     BuildGraphFromMetadata, CreateWorkspace, DeleteWorkspace, GetAutoBalanceNotifications,
-    GetGraphData, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions,
-    GetNodeTypeArrays, GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount,
-    GetWorkspaces, InitializeActor, LoadWorkspaces, NodeIdMapping, NodeTypeArrays,
-    PositionFrameSnapshot, PositionRow, RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge,
-    RemoveNode, RemoveNodeByMetadata, SaveWorkspaces, ToggleFavoriteWorkspace,
-    UpdateGraphData, UpdateMetadata, UpdateNodeFromMetadata,
-    UpdateNodeTypeArrays, UpdateWorkspace, WorkspaceChangeType,
+    GetGraphData, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions, GetNodeTypeArrays,
+    GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount, GetWorkspaces, InitializeActor,
+    LoadWorkspaces, NodeIdMapping, NodeTypeArrays, PositionFrameSnapshot, PositionRow,
+    RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata,
+    SaveWorkspaces, ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata,
+    UpdateNodeFromMetadata, UpdateNodeTypeArrays, UpdateWorkspace, WorkspaceChangeType,
     WorkspaceStateChanged,
 };
 

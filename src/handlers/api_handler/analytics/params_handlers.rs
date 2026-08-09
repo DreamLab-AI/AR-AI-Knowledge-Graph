@@ -5,13 +5,13 @@ use crate::actors::messages::{
     GetConstraints, GetSettings, UpdateConstraints, UpdateVisualAnalyticsParams,
 };
 use crate::gpu::visual_analytics::VisualAnalyticsParams;
-use visionclaw_domain::models::constraints::ConstraintSet;
-use crate::{ok_json, error_json, service_unavailable, bad_request};
 use crate::AppState;
+use crate::{bad_request, error_json, ok_json, service_unavailable};
+use visionclaw_domain::models::constraints::ConstraintSet;
 
 use super::types::{
-    AnalyticsParamsResponse, ConstraintsResponse, FocusRegion, FocusResponse,
-    SetFocusRequest, UpdateConstraintsRequest,
+    AnalyticsParamsResponse, ConstraintsResponse, FocusRegion, FocusResponse, SetFocusRequest,
+    UpdateConstraintsRequest,
 };
 
 pub async fn get_analytics_params(app_state: web::Data<AppState>) -> Result<HttpResponse> {
@@ -40,7 +40,6 @@ pub async fn get_analytics_params(app_state: web::Data<AppState>) -> Result<Http
             );
         }
     };
-
 
     let params = create_default_analytics_params(&settings);
 
@@ -127,7 +126,6 @@ pub async fn get_constraints(app_state: web::Data<AppState>) -> Result<HttpRespo
         }
     }
 
-
     ok_json!(ConstraintsResponse {
         success: true,
         constraints: Some(ConstraintSet::default()),
@@ -210,7 +208,6 @@ pub async fn set_focus(
     info!("Setting focus node/region");
 
     let mut focus_response = if let Some(node_id) = request.node_id {
-
         debug!("Setting focus on node {}", node_id);
         FocusResponse {
             success: false,
@@ -219,7 +216,6 @@ pub async fn set_focus(
             error: None,
         }
     } else if let Some(region) = &request.region {
-
         debug!(
             "Setting focus on region center: ({}, {}, {}), radius: {}",
             region.center_x, region.center_y, region.center_z, region.radius
@@ -244,9 +240,7 @@ pub async fn set_focus(
         }));
     };
 
-
     let current_params = VisualAnalyticsParams::default();
-
 
     #[derive(Debug)]
     enum FocusRequest {
@@ -273,10 +267,8 @@ pub async fn set_focus(
         }));
     };
 
-
     if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
         info!("Setting focus on GPU compute actor");
-
 
         let mut updated_params = current_params.clone();
         match focus_request {
@@ -298,7 +290,6 @@ pub async fn set_focus(
                 });
             }
         }
-
 
         use crate::actors::messages::UpdateVisualAnalyticsParams;
         match gpu_addr
@@ -322,7 +313,6 @@ pub async fn set_focus(
         }
     } else {
         warn!("GPU compute actor not available for focus setting");
-
 
         match focus_request {
             FocusRequest::Node { node_id } => {
@@ -372,14 +362,12 @@ pub async fn set_kernel_mode(
     info!("Setting GPU kernel mode");
 
     if let Some(mode) = request.get("mode").and_then(|m| m.as_str()) {
-
         let compute_mode = match mode {
             "legacy" => crate::utils::unified_gpu_compute::ComputeMode::Basic,
             "dual_graph" => crate::utils::unified_gpu_compute::ComputeMode::DualGraph,
             "advanced" => crate::utils::unified_gpu_compute::ComputeMode::Advanced,
 
             "standard" => crate::utils::unified_gpu_compute::ComputeMode::Basic,
-
 
             "visual_analytics" => crate::utils::unified_gpu_compute::ComputeMode::Advanced,
             _ => {

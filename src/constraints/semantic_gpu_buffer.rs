@@ -199,7 +199,10 @@ impl SemanticGPUConstraintBuffer {
     /// Register class IRI and get index
     pub fn register_class(&mut self, class_iri: &str) -> i32 {
         let next_index = self.iri_to_index.len() as i32;
-        *self.iri_to_index.entry(class_iri.to_string()).or_insert(next_index)
+        *self
+            .iri_to_index
+            .entry(class_iri.to_string())
+            .or_insert(next_index)
     }
 
     /// Add semantic constraints to buffer
@@ -225,7 +228,8 @@ impl SemanticGPUConstraintBuffer {
 
         // Convert to GPU format
         for constraint in constraints {
-            let gpu_constraint = SemanticGPUConstraint::from_semantic(constraint, &self.iri_to_index);
+            let gpu_constraint =
+                SemanticGPUConstraint::from_semantic(constraint, &self.iri_to_index);
 
             if gpu_constraint.is_valid() {
                 self.data.push(gpu_constraint);
@@ -347,7 +351,10 @@ mod tests {
         buffer.add_constraints(&[constraint]).unwrap();
 
         assert_eq!(buffer.len(), 1);
-        assert_eq!(buffer.data[0].constraint_type, gpu_semantic_types::SEPARATION);
+        assert_eq!(
+            buffer.data[0].constraint_type,
+            gpu_semantic_types::SEPARATION
+        );
         assert_eq!(buffer.data[0].params[0], 50.0);
         assert_eq!(buffer.data[0].params[1], 0.8);
     }
@@ -366,7 +373,10 @@ mod tests {
 
         buffer.add_constraints(&[constraint]).unwrap();
 
-        assert_eq!(buffer.data[0].constraint_type, gpu_semantic_types::ALIGNMENT);
+        assert_eq!(
+            buffer.data[0].constraint_type,
+            gpu_semantic_types::ALIGNMENT
+        );
         assert_eq!(buffer.data[0].axis, 1); // X = 1
         assert_eq!(buffer.data[0].params[0], 100.0);
     }

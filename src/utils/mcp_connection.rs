@@ -16,7 +16,6 @@ pub struct PersistentMCPConnection {
 }
 
 impl PersistentMCPConnection {
-    
     pub async fn new(
         host: &str,
         port: &str,
@@ -29,7 +28,6 @@ impl PersistentMCPConnection {
 
         let session_id = Uuid::new_v4().to_string();
 
-        
         let init_request = json!({
             "jsonrpc": "2.0",
             "id": session_id.clone(),
@@ -53,15 +51,12 @@ impl PersistentMCPConnection {
         stream.write_all(msg.as_bytes()).await?;
         stream.flush().await?;
 
-        
         let mut buffer = Vec::new();
         let mut byte = [0u8; 1];
 
-        
         loop {
             buffer.clear();
 
-            
             loop {
                 match tokio::time::timeout(Duration::from_secs(5), stream.read_exact(&mut byte))
                     .await
@@ -86,12 +81,10 @@ impl PersistentMCPConnection {
             let response_line = String::from_utf8_lossy(&buffer);
             debug!("MCP response: {}", response_line.trim());
 
-            
             if response_line.contains("server.initialized") {
                 continue;
             }
 
-            
             if let Ok(response) = serde_json::from_str::<Value>(&response_line) {
                 if response.get("id").and_then(|id| id.as_str()) == Some(&session_id) {
                     if response.get("result").is_some() {
@@ -111,7 +104,6 @@ impl PersistentMCPConnection {
         }
     }
 
-    
     pub async fn execute_command(
         &self,
         method: &str,
@@ -132,20 +124,16 @@ impl PersistentMCPConnection {
         let msg = format!("{}\n", request.to_string());
         debug!("Sending MCP command: {}", msg.trim());
 
-        
         let mut stream = self.stream.lock().await;
         stream.write_all(msg.as_bytes()).await?;
         stream.flush().await?;
 
-        
         let mut buffer = Vec::new();
         let mut byte = [0u8; 1];
 
-        
         loop {
             buffer.clear();
 
-            
             loop {
                 match tokio::time::timeout(Duration::from_secs(10), stream.read_exact(&mut byte))
                     .await
@@ -176,14 +164,11 @@ impl PersistentMCPConnection {
 
             debug!("MCP response: {}", trimmed);
 
-            
             if trimmed.contains("server.initialized") {
                 continue;
             }
 
-            
             if let Ok(response) = serde_json::from_str::<Value>(trimmed) {
-                
                 if response.get("id").and_then(|id| id.as_str()) == Some(&request_id) {
                     if let Some(result) = response.get("result") {
                         info!("MCP command '{}' executed successfully", method);
@@ -193,7 +178,6 @@ impl PersistentMCPConnection {
                         return Err(format!("MCP error: {:?}", error).into());
                     }
                 } else if response.get("method").is_some() {
-                    
                     continue;
                 }
             }
@@ -221,12 +205,10 @@ impl MCPConnectionPool {
         }
     }
 
-    
     pub async fn get_connection(
         &self,
         purpose: &str,
     ) -> Result<Arc<PersistentMCPConnection>, Box<dyn std::error::Error + Send + Sync>> {
-        
         {
             let connections = self.connections.read().await;
             if let Some(conn) = connections.get(purpose) {
@@ -235,7 +217,6 @@ impl MCPConnectionPool {
             }
         }
 
-        
         info!("Creating new MCP connection for {}", purpose);
 
         for attempt in 1..=self.max_retries {
@@ -245,7 +226,6 @@ impl MCPConnectionPool {
                 Ok(conn) => {
                     let conn = Arc::new(conn);
 
-                    
                     let mut connections = self.connections.write().await;
                     connections.insert(purpose.to_string(), Arc::clone(&conn));
 
@@ -266,7 +246,6 @@ impl MCPConnectionPool {
         Err("Failed to establish MCP connection after all retries".into())
     }
 
-    
     pub async fn execute_command(
         &self,
         purpose: &str,
@@ -277,7 +256,6 @@ impl MCPConnectionPool {
         conn.execute_command(method, params).await
     }
 
-    
     pub async fn remove_connection(&self, purpose: &str) {
         let mut connections = self.connections.write().await;
         if connections.remove(purpose).is_some() {
@@ -405,15 +383,13 @@ pub async fn call_task_orchestrate(
 
 #[derive(Debug, Clone)]
 pub enum TaskMethod {
-    Docker, 
-    MCP,    
-    Hybrid, 
+    Docker,
+    MCP,
+    Hybrid,
 }
 
 // DEPRECATED: Legacy Docker orchestration functions removed
 // Use TaskOrchestratorActor with Management API instead
-
-
 
 pub async fn call_task_status(
     host: &str,

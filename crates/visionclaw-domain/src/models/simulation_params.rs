@@ -12,11 +12,21 @@ use serde::{Deserialize, Serialize};
 use crate::types::layout::LayoutMode;
 use crate::types::physics_config::{AutoBalanceConfig, AutoPauseConfig, PhysicsSettings};
 
-fn default_lin_log_mode() -> bool { true }
-fn default_scaling_ratio() -> f32 { 10.0 }
-fn default_adaptive_speed() -> bool { true }
-fn default_global_speed() -> f32 { 0.16 }
-fn default_spring_pop_scale() -> f32 { 1.0 }
+fn default_lin_log_mode() -> bool {
+    true
+}
+fn default_scaling_ratio() -> f32 {
+    10.0
+}
+fn default_adaptive_speed() -> bool {
+    true
+}
+fn default_global_speed() -> f32 {
+    0.16
+}
+fn default_spring_pop_scale() -> f32 {
+    1.0
+}
 
 /// Controls how the physics simulation converges.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -216,38 +226,62 @@ impl SimulationParams {
             errors.push(format!("spring_k must be >= 0, got {}", self.spring_k));
         }
         if self.max_velocity <= 0.0 {
-            errors.push(format!("max_velocity must be > 0, got {}", self.max_velocity));
+            errors.push(format!(
+                "max_velocity must be > 0, got {}",
+                self.max_velocity
+            ));
         }
         if self.max_force <= 0.0 {
             errors.push(format!("max_force must be > 0, got {}", self.max_force));
         }
         if self.cooling_rate < 0.0 || self.cooling_rate > 1.0 {
-            errors.push(format!("cooling_rate must be in [0, 1], got {}", self.cooling_rate));
+            errors.push(format!(
+                "cooling_rate must be in [0, 1], got {}",
+                self.cooling_rate
+            ));
         }
         if self.boundary_damping < 0.0 || self.boundary_damping > 1.0 {
-            errors.push(format!("boundary_damping must be in [0, 1], got {}", self.boundary_damping));
+            errors.push(format!(
+                "boundary_damping must be in [0, 1], got {}",
+                self.boundary_damping
+            ));
         }
         if self.temperature < 0.0 {
-            errors.push(format!("temperature must be >= 0, got {}", self.temperature));
+            errors.push(format!(
+                "temperature must be >= 0, got {}",
+                self.temperature
+            ));
         }
         if self.center_gravity_k < 0.0 {
-            errors.push(format!("center_gravity_k must be >= 0, got {}", self.center_gravity_k));
+            errors.push(format!(
+                "center_gravity_k must be >= 0, got {}",
+                self.center_gravity_k
+            ));
         }
         if self.rest_length <= 0.0 {
             errors.push(format!("rest_length must be > 0, got {}", self.rest_length));
         }
         if self.separation_radius < 0.0 {
-            errors.push(format!("separation_radius must be >= 0, got {}", self.separation_radius));
+            errors.push(format!(
+                "separation_radius must be >= 0, got {}",
+                self.separation_radius
+            ));
         }
         if self.gravity < 0.0 {
             errors.push(format!("gravity must be >= 0, got {}", self.gravity));
         }
         if self.max_repulsion_dist < 10.0 || self.max_repulsion_dist > 5000.0 {
-            errors.push(format!("max_repulsion_dist must be in [10, 5000], got {}", self.max_repulsion_dist));
+            errors.push(format!(
+                "max_repulsion_dist must be in [10, 5000], got {}",
+                self.max_repulsion_dist
+            ));
         }
         // cluster_strength is the raw kernel coefficient (no scale factor).
         if self.cluster_strength < 0.0 || self.cluster_strength > 0.02 {
-            errors.push(format!("cluster_strength must be in [0, 0.02], got {}", self.cluster_strength));
+            errors.push(format!(
+                "cluster_strength must be in [0, 0.02], got {}",
+                self.cluster_strength
+            ));
         }
         match self.sssp_alpha {
             Some(a) if !a.is_finite() => {
@@ -276,11 +310,17 @@ impl SimulationParams {
             ("alignment_strength", self.alignment_strength),
             ("rest_length", self.rest_length),
             ("gravity", self.gravity),
-            ("repulsion_softening_epsilon", self.repulsion_softening_epsilon),
+            (
+                "repulsion_softening_epsilon",
+                self.repulsion_softening_epsilon,
+            ),
             ("grid_cell_size", self.grid_cell_size),
             ("min_distance", self.min_distance),
             ("max_repulsion_dist", self.max_repulsion_dist),
-            ("constraint_max_force_per_node", self.constraint_max_force_per_node),
+            (
+                "constraint_max_force_per_node",
+                self.constraint_max_force_per_node,
+            ),
             ("spring_k_knowledge", self.spring_k_knowledge),
             ("spring_k_ontology", self.spring_k_ontology),
             ("spring_k_agent", self.spring_k_agent),
@@ -413,7 +453,10 @@ mod tests {
     #[test]
     fn test_settle_mode_default() {
         match SettleMode::default() {
-            SettleMode::FastSettle { max_settle_iterations, .. } => {
+            SettleMode::FastSettle {
+                max_settle_iterations,
+                ..
+            } => {
                 assert_eq!(max_settle_iterations, 10000);
             }
             _ => panic!("expected FastSettle"),
@@ -437,9 +480,9 @@ mod tests {
     #[test]
     fn test_validate_multiple_errors_collected() {
         let mut p = SimulationParams::default();
-        p.dt = -1.0;         // invalid
-        p.damping = 2.0;     // invalid (> 1)
-        p.repel_k = -1.0;    // invalid
+        p.dt = -1.0; // invalid
+        p.damping = 2.0; // invalid (> 1)
+        p.repel_k = -1.0; // invalid
         let err = p.validate().unwrap_err();
         // All three errors should be in the semicolon-separated message
         let count = err.split(';').count();
@@ -459,7 +502,11 @@ mod tests {
         let mut p = SimulationParams::default();
         p.max_velocity = f32::INFINITY;
         let err = p.validate().unwrap_err();
-        assert!(err.contains("max_velocity"), "should mention max_velocity: {}", err);
+        assert!(
+            err.contains("max_velocity"),
+            "should mention max_velocity: {}",
+            err
+        );
     }
 
     #[test]

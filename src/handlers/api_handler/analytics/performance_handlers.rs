@@ -2,8 +2,8 @@ use actix_web::{web, HttpResponse, Result};
 use log::{debug, error, info, warn};
 
 use crate::actors::messages::GetPhysicsStats;
-use crate::{ok_json, service_unavailable};
 use crate::AppState;
+use crate::{ok_json, service_unavailable};
 
 use super::real_gpu_functions::get_real_gpu_physics_stats;
 use super::types::{GPUPhysicsStats, StatsResponse, SystemMetrics};
@@ -12,37 +12,29 @@ pub(crate) async fn calculate_network_metrics(
     _app_state: &AppState,
     physics_stats: &Option<GPUPhysicsStats>,
 ) -> (f32, f32, f32, f32, f32) {
-
     let active_nodes = physics_stats.as_ref().map(|s| s.nodes_count).unwrap_or(0) as f32;
     let active_edges = physics_stats.as_ref().map(|s| s.edges_count).unwrap_or(0) as f32;
-
 
     let bytes_per_node_per_frame = 38.0;
     let frames_per_second = 60.0;
     let seconds_per_minute = 60.0;
 
-
     let data_transfer_mb =
         (active_nodes * bytes_per_node_per_frame * frames_per_second * seconds_per_minute)
             / (1024.0 * 1024.0);
 
-
     let bandwidth_usage_mbps =
         (active_nodes * bytes_per_node_per_frame * frames_per_second * 8.0) / (1024.0 * 1024.0);
-
 
     let cost_per_gb = 0.09;
     let cost_per_mb = cost_per_gb / 1024.0;
     let network_cost_per_mb = cost_per_mb;
 
-
     let total_network_cost = data_transfer_mb * network_cost_per_mb;
-
 
     let base_latency = 15.0;
     let complexity_factor = (active_edges / (active_nodes + 1.0)).min(10.0);
     let network_latency_ms = base_latency + (complexity_factor * 2.0);
-
 
     let base_mcp_latency = 5.0;
 
@@ -63,49 +55,57 @@ pub(crate) async fn calculate_network_metrics(
 pub async fn get_performance_stats(app_state: web::Data<AppState>) -> Result<HttpResponse> {
     info!("Getting performance statistics");
 
-    let physics_stats: Option<GPUPhysicsStats> = if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
-        match gpu_addr.send(GetPhysicsStats).await {
-            Ok(Ok(stats)) => Some(GPUPhysicsStats {
-                iteration_count: stats.iteration_count,
-                nodes_count: stats.nodes_count,
-                edges_count: stats.edges_count,
-                kinetic_energy: stats.average_velocity,
-                total_forces: 0.0,
-                gpu_enabled: true,
-                compute_mode: format!("{:?}", stats.compute_mode),
-                kernel_mode: String::new(),
-                num_nodes: stats.nodes_count,
-                num_edges: stats.edges_count,
-                num_constraints: 0,
-                num_isolation_layers: 0,
-                stress_majorization_interval: 0,
-                last_stress_majorization: 0,
-                gpu_failure_count: stats.gpu_failure_count,
-                has_advanced_features: false,
-                has_dual_graph_features: false,
-                has_visual_analytics_features: false,
-                stress_safety_stats: super::types::StressMajorizationStats {
-                    total_runs: 0, successful_runs: 0, failed_runs: 0,
-                    consecutive_failures: 0, emergency_stopped: false,
-                    last_error: String::new(), average_computation_time_ms: 0,
-                    success_rate: 0.0, is_emergency_stopped: false,
-                    emergency_stop_reason: String::new(), avg_computation_time_ms: 0,
-                    avg_stress: 0.0, avg_displacement: 0.0, is_converging: false,
-                },
-            }),
-            Ok(Err(e)) => {
-                warn!("Failed to get physics stats: {}", e);
-                None
+    let physics_stats: Option<GPUPhysicsStats> =
+        if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+            match gpu_addr.send(GetPhysicsStats).await {
+                Ok(Ok(stats)) => Some(GPUPhysicsStats {
+                    iteration_count: stats.iteration_count,
+                    nodes_count: stats.nodes_count,
+                    edges_count: stats.edges_count,
+                    kinetic_energy: stats.average_velocity,
+                    total_forces: 0.0,
+                    gpu_enabled: true,
+                    compute_mode: format!("{:?}", stats.compute_mode),
+                    kernel_mode: String::new(),
+                    num_nodes: stats.nodes_count,
+                    num_edges: stats.edges_count,
+                    num_constraints: 0,
+                    num_isolation_layers: 0,
+                    stress_majorization_interval: 0,
+                    last_stress_majorization: 0,
+                    gpu_failure_count: stats.gpu_failure_count,
+                    has_advanced_features: false,
+                    has_dual_graph_features: false,
+                    has_visual_analytics_features: false,
+                    stress_safety_stats: super::types::StressMajorizationStats {
+                        total_runs: 0,
+                        successful_runs: 0,
+                        failed_runs: 0,
+                        consecutive_failures: 0,
+                        emergency_stopped: false,
+                        last_error: String::new(),
+                        average_computation_time_ms: 0,
+                        success_rate: 0.0,
+                        is_emergency_stopped: false,
+                        emergency_stop_reason: String::new(),
+                        avg_computation_time_ms: 0,
+                        avg_stress: 0.0,
+                        avg_displacement: 0.0,
+                        is_converging: false,
+                    },
+                }),
+                Ok(Err(e)) => {
+                    warn!("Failed to get physics stats: {}", e);
+                    None
+                }
+                Err(e) => {
+                    warn!("GPU compute actor mailbox error: {}", e);
+                    None
+                }
             }
-            Err(e) => {
-                warn!("GPU compute actor mailbox error: {}", e);
-                None
-            }
-        }
-    } else {
-        None
-    };
-
+        } else {
+            None
+        };
 
     let (
         network_cost_per_mb,
@@ -146,9 +146,10 @@ pub async fn get_performance_stats(app_state: web::Data<AppState>) -> Result<Htt
     })
 }
 
-pub async fn get_gpu_metrics(app_state: web::Data<AppState>) -> Result<HttpResponse, actix_web::Error> {
+pub async fn get_gpu_metrics(
+    app_state: web::Data<AppState>,
+) -> Result<HttpResponse, actix_web::Error> {
     debug!("Retrieving GPU performance metrics");
-
 
     // Task #74: per-kernel GPU-vs-fallback execution-path counters are process-global
     // (the GPU analytics actors record them via analytics_telemetry::record_execution),
@@ -187,7 +188,9 @@ pub async fn get_gpu_metrics(app_state: web::Data<AppState>) -> Result<HttpRespo
         }
     } else {
         warn!("GPU compute actor not available");
-        service_unavailable!("GPU compute not available - GPU acceleration is not enabled or not available")
+        service_unavailable!(
+            "GPU compute not available - GPU acceleration is not enabled or not available"
+        )
     }
 }
 

@@ -219,7 +219,9 @@ impl Actor for DecisionElevationActor {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        info!("[DecisionElevation] actor starting (panel '{PANEL_ID}', case prefix '{CASE_PREFIX}')");
+        info!(
+            "[DecisionElevation] actor starting (panel '{PANEL_ID}', case prefix '{CASE_PREFIX}')"
+        );
         let secret = self.panel_secret.clone();
         let relay = self.forum_relay_url.clone();
         let addr = ctx.address();
@@ -394,10 +396,7 @@ impl Handler<Decision> for DecisionElevationActor {
                 let summary = case.summary.clone();
                 let file_path = case.file_path.clone();
                 let draft = case.draft.clone();
-                let agent_id = format!(
-                    "decision-{}",
-                    decision_slug(&decision_urn, &summary)
-                );
+                let agent_id = format!("decision-{}", decision_slug(&decision_urn, &summary));
                 ctx.spawn(
                     actix::fut::wrap_future::<_, Self>(async move {
                         let pr = GitHubPRService::new();
@@ -568,7 +567,10 @@ mod tests {
 
     #[test]
     fn terminal_pr_state_maps_merge_and_abandon() {
-        assert_eq!(terminal_for_pr_state(PrState::Merged), Some("decision_elevated"));
+        assert_eq!(
+            terminal_for_pr_state(PrState::Merged),
+            Some("decision_elevated")
+        );
         assert_eq!(
             terminal_for_pr_state(PrState::ClosedUnmerged),
             Some("decision_abandoned")

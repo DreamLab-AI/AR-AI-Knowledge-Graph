@@ -20,12 +20,12 @@ pub mod simulation_params;
 pub mod user_settings;
 pub mod workspace;
 
-pub use visionclaw_domain::models::edge::SemanticEdgeType;
-pub use visionclaw_domain::models::metadata::MetadataStore;
 pub use pagination::PaginationParams;
 pub use protected_settings::ProtectedSettings;
 pub use simulation_params::SimulationParams;
 pub use user_settings::UserSettings;
+pub use visionclaw_domain::models::edge::SemanticEdgeType;
+pub use visionclaw_domain::models::metadata::MetadataStore;
 pub use workspace::{
     CreateWorkspaceRequest, UpdateWorkspaceRequest, Workspace, WorkspaceListResponse,
     WorkspaceResponse,

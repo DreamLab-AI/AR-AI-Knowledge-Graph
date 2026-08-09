@@ -1,8 +1,8 @@
 use actix_web::{web, HttpResponse, Result};
 use log::{debug, error, info, warn};
 
-use crate::{ok_json, error_json};
 use crate::AppState;
+use crate::{error_json, ok_json};
 
 use super::state::FEATURE_FLAGS;
 use super::types::{SSSPToggleRequest, SSSPToggleResponse};
@@ -17,7 +17,6 @@ pub async fn toggle_sssp(
         request.enabled, request.alpha
     );
 
-
     if let Some(alpha) = request.alpha {
         if alpha < 0.0 || alpha > 1.0 {
             return Ok(HttpResponse::BadRequest().json(SSSPToggleResponse {
@@ -29,7 +28,6 @@ pub async fn toggle_sssp(
             }));
         }
     }
-
 
     if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
         let message = crate::actors::messages::UpdateSimulationParams {
@@ -134,7 +132,6 @@ pub async fn update_sssp_params(
         .and_then(|v| v.as_f64())
         .map(|v| v as f32);
 
-
     info!(
         "SSSP parameters update requested: enabled={}, alpha={:?}",
         use_sssp, sssp_alpha
@@ -150,10 +147,10 @@ pub async fn update_sssp_params(
     }))
 }
 
-pub async fn get_sssp_params(_app_state: web::Data<AppState>) -> Result<HttpResponse, actix_web::Error> {
+pub async fn get_sssp_params(
+    _app_state: web::Data<AppState>,
+) -> Result<HttpResponse, actix_web::Error> {
     debug!("Retrieving SSSP parameters");
-
-
 
     ok_json!(serde_json::json!({
         "success": true,
@@ -177,7 +174,6 @@ pub async fn compute_sssp(
         .and_then(|v| v.as_u64())
         .map(|v| v as u32)
         .unwrap_or(0);
-
 
     use crate::actors::messages::ComputeShortestPaths;
     match app_state

@@ -1,6 +1,6 @@
-use crate::config::AppFullSettings; 
-use visionclaw_domain::models::metadata::Metadata;
+use crate::config::AppFullSettings;
 use crate::services::file_service::ProcessedFile;
+use crate::utils::time;
 use log::{error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::utils::time;
+use visionclaw_domain::models::metadata::Metadata;
 
 const MARKDOWN_DIR: &str = "/app/data/markdown";
 
@@ -34,7 +34,7 @@ struct QueryRequest {
 
 pub struct PerplexityService {
     client: Client,
-    settings: Arc<RwLock<AppFullSettings>>, 
+    settings: Arc<RwLock<AppFullSettings>>,
 }
 
 impl PerplexityService {
@@ -53,7 +53,6 @@ impl PerplexityService {
     pub async fn new_with_settings(
         settings: Arc<RwLock<AppFullSettings>>,
     ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-
         let timeout_duration = {
             let settings_read = settings.read().await;
 
@@ -97,7 +96,6 @@ impl PerplexityService {
     ) -> Result<String, Box<dyn StdError + Send + Sync>> {
         let settings_read = self.settings.read().await;
 
-        
         let perplexity_config = match settings_read.perplexity.as_ref() {
             Some(p) => p,
             None => {
@@ -108,7 +106,6 @@ impl PerplexityService {
             }
         };
 
-        
         let api_url = perplexity_config
             .api_url
             .as_deref()
@@ -124,7 +121,6 @@ impl PerplexityService {
 
         info!("Sending query to Perplexity API: {}", api_url);
 
-        
         let request = QueryRequest {
             query: query.to_string(),
             conversation_id: conversation_id.to_string(),
@@ -176,7 +172,6 @@ impl PerplexityService {
         let content = fs::read_to_string(&file_path)?;
         let settings_read = self.settings.read().await;
 
-        
         let perplexity_config = match settings_read.perplexity.as_ref() {
             Some(p) => p,
             None => {
@@ -187,7 +182,6 @@ impl PerplexityService {
             }
         };
 
-        
         let api_url = perplexity_config
             .api_url
             .as_deref()
@@ -199,7 +193,6 @@ impl PerplexityService {
 
         info!("Sending request to Perplexity API: {}", api_url);
 
-        
         let response = self
             .client
             .post(api_url)
@@ -223,7 +216,6 @@ impl PerplexityService {
 
         let perplexity_response: PerplexityResponse = response.json().await?;
 
-        
         let metadata = Metadata {
             file_name: file_name.to_string(),
             file_size: perplexity_response.content.len(),

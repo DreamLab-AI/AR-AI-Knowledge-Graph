@@ -8,10 +8,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::actors::graph_actor::{AutoBalanceNotification, PhysicsState};
+use crate::ports::graph_repository::{GraphRepository, PathfindingParams, PathfindingResult};
 use visionclaw_domain::models::constraints::ConstraintSet;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::node::Node;
-use crate::ports::graph_repository::{GraphRepository, PathfindingParams, PathfindingResult};
 
 // ============================================================================
 // GET GRAPH DATA
@@ -36,10 +36,9 @@ impl QueryHandler<GetGraphData, Arc<GraphData>> for GetGraphDataHandler {
 
         let repository = self.repository.clone();
 
-        
-        
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| Hexserror::adapter("E_GRAPH_001", &format!("Failed to create runtime: {}", e)))?;
+        let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+            Hexserror::adapter("E_GRAPH_001", &format!("Failed to create runtime: {}", e))
+        })?;
 
         runtime.block_on(async move {
             repository.get_graph().await.map_err(|e| {
@@ -72,9 +71,9 @@ impl QueryHandler<GetNodeMap, Arc<HashMap<u32, Node>>> for GetNodeMapHandler {
 
         let repository = self.repository.clone();
 
-        
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| Hexserror::adapter("E_GRAPH_002", &format!("Failed to create runtime: {}", e)))?;
+        let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+            Hexserror::adapter("E_GRAPH_002", &format!("Failed to create runtime: {}", e))
+        })?;
 
         runtime.block_on(async move {
             repository.get_node_map().await.map_err(|e| {
@@ -107,9 +106,9 @@ impl QueryHandler<GetPhysicsState, PhysicsState> for GetPhysicsStateHandler {
 
         let repository = self.repository.clone();
 
-        
-        let runtime = tokio::runtime::Runtime::new()
-            .map_err(|e| Hexserror::adapter("E_GRAPH_003", &format!("Failed to create runtime: {}", e)))?;
+        let runtime = tokio::runtime::Runtime::new().map_err(|e| {
+            Hexserror::adapter("E_GRAPH_003", &format!("Failed to create runtime: {}", e))
+        })?;
 
         runtime.block_on(async move {
             repository.get_physics_state().await.map_err(|e| {
@@ -155,7 +154,6 @@ impl QueryHandler<GetAutoBalanceNotifications, Vec<AutoBalanceNotification>>
 
         let repository = self.repository.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository
                 .get_auto_balance_notifications()
@@ -193,7 +191,6 @@ impl QueryHandler<GetBotsGraphData, Arc<GraphData>> for GetBotsGraphDataHandler 
 
         let repository = self.repository.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.get_bots_graph().await.map_err(|e| {
                 Hexserror::adapter(
@@ -228,7 +225,6 @@ impl QueryHandler<GetConstraints, ConstraintSet> for GetConstraintsHandler {
 
         let repository = self.repository.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.get_constraints().await.map_err(|e| {
                 Hexserror::adapter("E_GRAPH_006", &format!("Failed to get constraints: {}", e))
@@ -260,7 +256,6 @@ impl QueryHandler<GetEquilibriumStatus, bool> for GetEquilibriumStatusHandler {
 
         let repository = self.repository.clone();
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository.get_equilibrium_status().await.map_err(|e| {
                 Hexserror::adapter(
@@ -309,7 +304,6 @@ impl QueryHandler<ComputeShortestPaths, PathfindingResult> for ComputeShortestPa
             max_depth: query.max_depth,
         };
 
-        
         tokio::runtime::Handle::current().block_on(async move {
             repository
                 .compute_shortest_paths(params)

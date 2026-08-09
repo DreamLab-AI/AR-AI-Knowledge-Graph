@@ -101,15 +101,12 @@ impl Default for PhysicsParameters {
 
 #[async_trait]
 pub trait GpuPhysicsAdapter: Send + Sync {
-    async fn initialize(&mut self, graph: Arc<GraphData>, params: PhysicsParameters)
-        -> Result<()>;
+    async fn initialize(&mut self, graph: Arc<GraphData>, params: PhysicsParameters) -> Result<()>;
 
     async fn compute_forces(&mut self) -> Result<Vec<NodeForce>>;
 
-    async fn update_positions(
-        &mut self,
-        forces: &[NodeForce],
-    ) -> Result<Vec<(u32, f32, f32, f32)>>;
+    async fn update_positions(&mut self, forces: &[NodeForce])
+        -> Result<Vec<(u32, f32, f32, f32)>>;
 
     async fn step(&mut self) -> Result<PhysicsStepResult>;
 

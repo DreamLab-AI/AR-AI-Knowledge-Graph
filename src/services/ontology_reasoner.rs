@@ -11,13 +11,15 @@
 //! - Pre-caches inference results to avoid repeated reasoning
 //! - Pre-computes transitive closure for efficient subclass queries
 
-use std::sync::Arc;
-use std::collections::HashSet;
-use dashmap::DashMap;
-use log::{info, warn, debug};
-use tokio::sync::RwLock;
 use crate::adapters::whelk_inference_engine::WhelkInferenceEngine;
-use visionclaw_domain::ports::ontology_repository::{OntologyRepository, OwlClass, Result as OntResult};
+use dashmap::DashMap;
+use log::{debug, info, warn};
+use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use visionclaw_domain::ports::ontology_repository::{
+    OntologyRepository, OwlClass, Result as OntResult,
+};
 
 /// Ontology reasoner for inferring missing class assignments
 /// Thread-safe implementation using DashMap for lock-free concurrent access
@@ -39,7 +41,7 @@ pub struct OntologyReasoner {
 
 impl OntologyReasoner {
     /// Create a new OntologyReasoner
-        /// # Arguments
+    /// # Arguments
     /// * `inference_engine` - The whelk inference engine (will be wrapped in RwLock)
     /// * `ontology_repo` - The ontology repository for persistence
     pub fn new(
@@ -87,7 +89,7 @@ impl OntologyReasoner {
     }
 
     /// Pre-load known classes into the verified cache
-        /// Call this before parallel sync to reduce lock contention.
+    /// Call this before parallel sync to reduce lock contention.
     /// Classes in the cache won't trigger DB lookups or creation.
     /// Now lock-free with DashMap.
     pub async fn preload_verified_classes(&self, class_iris: Vec<String>) {
@@ -107,15 +109,19 @@ impl OntologyReasoner {
     }
 
     /// Pre-compute transitive closure for a set of class hierarchies
-        /// This builds an ancestor lookup table for efficient subclass queries.
+    /// This builds an ancestor lookup table for efficient subclass queries.
     /// Should be called after loading ontology to enable fast relationship checks.
     pub async fn precompute_transitive_closure(&self, subclass_pairs: Vec<(String, String)>) {
         // Build adjacency list: child -> parent
-        let mut adjacency: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        let mut adjacency: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
         let mut all_classes: HashSet<String> = HashSet::new();
 
         for (child, parent) in &subclass_pairs {
-            adjacency.entry(child.clone()).or_default().push(parent.clone());
+            adjacency
+                .entry(child.clone())
+                .or_default()
+                .push(parent.clone());
             all_classes.insert(child.clone());
             all_classes.insert(parent.clone());
         }
@@ -145,11 +151,14 @@ impl OntologyReasoner {
             self.transitive_closure.insert(class.clone(), ancestors);
         }
 
-        info!("Pre-computed transitive closure for {} classes", all_classes.len());
+        info!(
+            "Pre-computed transitive closure for {} classes",
+            all_classes.len()
+        );
     }
 
     /// Check if a class is a subclass of another (using pre-computed closure)
-        /// Returns true if `subclass` is equal to or a subclass of `superclass`.
+    /// Returns true if `subclass` is equal to or a subclass of `superclass`.
     /// Runs in O(1) lookup time after precompute_transitive_closure() is called.
     pub fn is_subclass_of(&self, subclass: &str, superclass: &str) -> bool {
         if let Some(ancestors) = self.transitive_closure.get(subclass) {
@@ -162,21 +171,23 @@ impl OntologyReasoner {
 
     /// Get all ancestors of a class (using pre-computed closure)
     pub fn get_ancestors(&self, class_iri: &str) -> Option<HashSet<String>> {
-        self.transitive_closure.get(class_iri).map(|entry| entry.clone())
+        self.transitive_closure
+            .get(class_iri)
+            .map(|entry| entry.clone())
     }
 
     /// Infer the most appropriate OWL class for a markdown file
-        /// Uses multiple heuristics:
+    /// Uses multiple heuristics:
     /// 1. File path analysis (e.g., "people/Tim-Cook.md" → mv:Person)
     /// 2. Content analysis (keywords, structure)
     /// 3. Frontmatter/metadata
     /// 4. Reasoning over existing ontology
-        /// Thread-safe: Uses read lock on inference cache, write lock only on cache miss.
-        /// # Arguments
+    /// Thread-safe: Uses read lock on inference cache, write lock only on cache miss.
+    /// # Arguments
     /// * `file_path` - Path to the markdown file
     /// * `content` - File content
     /// * `metadata` - Optional frontmatter metadata
-        /// # Returns
+    /// # Returns
     /// Optional OWL class IRI if classification succeeds
     pub async fn infer_class(
         &self,
@@ -242,23 +253,38 @@ impl OntologyReasoner {
         let path_lower = file_path.to_lowercase();
 
         // Check common directory patterns
-        if path_lower.contains("people") || path_lower.contains("person") || path_lower.contains("authors") {
+        if path_lower.contains("people")
+            || path_lower.contains("person")
+            || path_lower.contains("authors")
+        {
             return Some("mv:Person".to_string());
         }
 
-        if path_lower.contains("companies") || path_lower.contains("organizations") || path_lower.contains("orgs") {
+        if path_lower.contains("companies")
+            || path_lower.contains("organizations")
+            || path_lower.contains("orgs")
+        {
             return Some("mv:Company".to_string());
         }
 
-        if path_lower.contains("projects") || path_lower.contains("repos") || path_lower.contains("repositories") {
+        if path_lower.contains("projects")
+            || path_lower.contains("repos")
+            || path_lower.contains("repositories")
+        {
             return Some("mv:Project".to_string());
         }
 
-        if path_lower.contains("concepts") || path_lower.contains("ideas") || path_lower.contains("topics") {
+        if path_lower.contains("concepts")
+            || path_lower.contains("ideas")
+            || path_lower.contains("topics")
+        {
             return Some("mv:Concept".to_string());
         }
 
-        if path_lower.contains("technologies") || path_lower.contains("tools") || path_lower.contains("tech") {
+        if path_lower.contains("technologies")
+            || path_lower.contains("tools")
+            || path_lower.contains("tech")
+        {
             return Some("mv:Technology".to_string());
         }
 
@@ -271,9 +297,20 @@ impl OntologyReasoner {
 
         // Person indicators
         let person_keywords = [
-            "biography", "born", "education", "career", "works at",
-            "position:", "role:", "email:", "linkedin", "twitter",
-            "professional", "developer", "engineer", "scientist",
+            "biography",
+            "born",
+            "education",
+            "career",
+            "works at",
+            "position:",
+            "role:",
+            "email:",
+            "linkedin",
+            "twitter",
+            "professional",
+            "developer",
+            "engineer",
+            "scientist",
         ];
 
         let person_score = person_keywords
@@ -283,9 +320,20 @@ impl OntologyReasoner {
 
         // Company indicators
         let company_keywords = [
-            "founded", "headquarters", "employees", "revenue",
-            "products", "services", "ceo:", "leadership", "board",
-            "corporation", "inc.", "ltd.", "llc", "company",
+            "founded",
+            "headquarters",
+            "employees",
+            "revenue",
+            "products",
+            "services",
+            "ceo:",
+            "leadership",
+            "board",
+            "corporation",
+            "inc.",
+            "ltd.",
+            "llc",
+            "company",
         ];
 
         let company_score = company_keywords
@@ -295,9 +343,18 @@ impl OntologyReasoner {
 
         // Project indicators
         let project_keywords = [
-            "repository", "github", "codebase", "documentation",
-            "installation", "usage", "api", "contributing",
-            "license", "version", "release", "changelog",
+            "repository",
+            "github",
+            "codebase",
+            "documentation",
+            "installation",
+            "usage",
+            "api",
+            "contributing",
+            "license",
+            "version",
+            "release",
+            "changelog",
         ];
 
         let project_score = project_keywords
@@ -307,9 +364,17 @@ impl OntologyReasoner {
 
         // Technology indicators
         let tech_keywords = [
-            "library", "framework", "language", "programming",
-            "architecture", "protocol", "specification", "standard",
-            "algorithm", "implementation", "platform",
+            "library",
+            "framework",
+            "language",
+            "programming",
+            "architecture",
+            "protocol",
+            "specification",
+            "standard",
+            "algorithm",
+            "implementation",
+            "platform",
         ];
 
         let tech_score = tech_keywords
@@ -345,12 +410,9 @@ impl OntologyReasoner {
     }
 
     /// Batch infer classes for multiple files
-        /// More efficient than calling infer_class() repeatedly as it batches
+    /// More efficient than calling infer_class() repeatedly as it batches
     /// cache operations. Now lock-free with DashMap.
-    pub async fn infer_classes_batch(
-        &self,
-        files: Vec<FileContext>,
-    ) -> Vec<Option<String>> {
+    pub async fn infer_classes_batch(&self, files: Vec<FileContext>) -> Vec<Option<String>> {
         let mut results = Vec::with_capacity(files.len());
         let mut uncached_indices = Vec::new();
 
@@ -416,7 +478,7 @@ impl OntologyReasoner {
     }
 
     /// Ensure a class exists in the ontology, creating it if missing
-        /// Thread-safe: Uses verified_classes DashMap for lock-free lookups.
+    /// Thread-safe: Uses verified_classes DashMap for lock-free lookups.
     /// Uses entry API for atomic check-and-insert.
     pub async fn ensure_class_exists(&self, class_iri: &str) -> OntResult<()> {
         // Fast path: check verified cache (lock-free)
@@ -426,7 +488,9 @@ impl OntologyReasoner {
 
         // Slow path: check DB and potentially create class
         // Use entry API for atomic operation
-        if let dashmap::mapref::entry::Entry::Vacant(entry) = self.verified_classes.entry(class_iri.to_string()) {
+        if let dashmap::mapref::entry::Entry::Vacant(entry) =
+            self.verified_classes.entry(class_iri.to_string())
+        {
             // Check if class exists in DB
             if let Some(_existing) = self.ontology_repo.get_owl_class(class_iri).await? {
                 entry.insert(true);
@@ -452,7 +516,7 @@ impl OntologyReasoner {
     }
 
     /// Batch ensure multiple classes exist (more efficient than individual calls)
-        /// Uses DashMap for lock-free concurrent access - no lock contention.
+    /// Uses DashMap for lock-free concurrent access - no lock contention.
     pub async fn ensure_classes_exist_batch(&self, class_iris: Vec<&str>) -> OntResult<()> {
         // Filter uncached classes using lock-free DashMap access
         let uncached: Vec<&str> = class_iris
@@ -505,7 +569,6 @@ impl OntologyReasoner {
             .replace('_', " ")
             .replace('-', " ")
     }
-
 }
 
 /// File context for batch inference
@@ -553,9 +616,6 @@ mod tests {
             reasoner.type_to_class_iri("Company"),
             Some("mv:Company".to_string())
         );
-        assert_eq!(
-            reasoner.type_to_class_iri("unknown"),
-            None
-        );
+        assert_eq!(reasoner.type_to_class_iri("unknown"), None);
     }
 }

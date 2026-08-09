@@ -113,16 +113,30 @@ impl SemanticPhysicsConstraint {
     /// Get class IRIs involved in this constraint
     pub fn involved_classes(&self) -> Vec<String> {
         match self {
-            Self::Separation { class_a, class_b, .. } => vec![class_a.clone(), class_b.clone()],
-            Self::HierarchicalAttraction { child_class, parent_class, .. } => {
+            Self::Separation {
+                class_a, class_b, ..
+            } => vec![class_a.clone(), class_b.clone()],
+            Self::HierarchicalAttraction {
+                child_class,
+                parent_class,
+                ..
+            } => {
                 vec![child_class.clone(), parent_class.clone()]
             }
             Self::Alignment { class_iri, .. } => vec![class_iri.clone()],
-            Self::BidirectionalEdge { class_a, class_b, .. } => {
+            Self::BidirectionalEdge {
+                class_a, class_b, ..
+            } => {
                 vec![class_a.clone(), class_b.clone()]
             }
-            Self::Colocation { class_a, class_b, .. } => vec![class_a.clone(), class_b.clone()],
-            Self::Containment { child_class, parent_class, .. } => {
+            Self::Colocation {
+                class_a, class_b, ..
+            } => vec![class_a.clone(), class_b.clone()],
+            Self::Containment {
+                child_class,
+                parent_class,
+                ..
+            } => {
                 vec![child_class.clone(), parent_class.clone()]
             }
         }
@@ -283,15 +297,15 @@ mod tests {
 
     #[test]
     fn test_alignment_constraint() {
-        let constraint = SemanticConstraintBuilder::alignment(
-            "ClassA".to_string(),
-            Axis::X,
-            100.0,
-            0.7,
-        );
+        let constraint =
+            SemanticConstraintBuilder::alignment("ClassA".to_string(), Axis::X, 100.0, 0.7);
 
         match constraint {
-            SemanticPhysicsConstraint::Alignment { axis, target_position, .. } => {
+            SemanticPhysicsConstraint::Alignment {
+                axis,
+                target_position,
+                ..
+            } => {
                 assert_eq!(axis, Axis::X);
                 assert_eq!(target_position, 100.0);
             }

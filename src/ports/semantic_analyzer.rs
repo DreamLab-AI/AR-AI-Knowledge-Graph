@@ -53,20 +53,16 @@ pub enum ClusterAlgorithm {
 
 #[async_trait]
 pub trait SemanticAnalyzer: Send + Sync {
-    
     async fn run_sssp(&self, graph: &GraphData, source: u32) -> Result<SSSPResult>;
 
-    
     async fn run_clustering(
         &self,
         graph: &GraphData,
         algorithm: ClusterAlgorithm,
     ) -> Result<ClusteringResult>;
 
-    
     async fn detect_communities(&self, graph: &GraphData) -> Result<CommunityResult>;
 
-    
     async fn get_shortest_path(
         &self,
         graph: &GraphData,
@@ -74,6 +70,5 @@ pub trait SemanticAnalyzer: Send + Sync {
         target: u32,
     ) -> Result<Vec<u32>>;
 
-    
     async fn invalidate_cache(&self) -> Result<()>;
 }

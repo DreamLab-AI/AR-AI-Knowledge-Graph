@@ -9,43 +9,40 @@ use super::{HealthStatus, ServiceHealthInfo};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DegradationLevel {
-    
     Normal,
-    
+
     Degraded,
-    
+
     SeverelyDegraded,
-    
+
     Unavailable,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DegradationStrategy {
-    
     UseCachedData { max_age: Duration },
-    
+
     UseFallbackService { fallback_service: String },
-    
+
     ReducedFunctionality { features_disabled: Vec<String> },
-    
+
     UseDefaults,
-    
+
     QueueRequests { max_queue_size: usize },
-    
+
     FailFast,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GracefulDegradationConfig {
-    
     pub strategies: HashMap<DegradationLevel, Vec<DegradationStrategy>>,
-    
-    pub degradation_threshold: f64, 
-    
+
+    pub degradation_threshold: f64,
+
     pub recovery_threshold: f64,
-    
+
     pub health_window: Duration,
-    
+
     pub auto_degrade: bool,
 }
 
@@ -116,7 +113,6 @@ struct QueuedRequest {
 }
 
 impl GracefulDegradationManager {
-    
     pub fn new(config: GracefulDegradationConfig) -> Self {
         Self {
             config,
@@ -126,7 +122,6 @@ impl GracefulDegradationManager {
         }
     }
 
-    
     pub async fn update_service_health(&self, service_name: &str, health: &ServiceHealthInfo) {
         let new_level = self.calculate_degradation_level(health);
         let mut levels = self.service_levels.write().await;
@@ -138,7 +133,6 @@ impl GracefulDegradationManager {
                     service_name, current_level, new_level
                 );
 
-                
                 self.apply_degradation_strategies(service_name, new_level)
                     .await;
             }
@@ -152,7 +146,6 @@ impl GracefulDegradationManager {
         levels.insert(service_name.to_string(), new_level);
     }
 
-    
     pub async fn get_degradation_level(&self, service_name: &str) -> DegradationLevel {
         self.service_levels
             .read()
@@ -162,7 +155,6 @@ impl GracefulDegradationManager {
             .unwrap_or(DegradationLevel::Normal)
     }
 
-    
     pub async fn execute_with_degradation<T>(
         &self,
         service_name: &str,
@@ -175,18 +167,14 @@ impl GracefulDegradationManager {
         let degradation_level = self.get_degradation_level(service_name).await;
 
         match degradation_level {
-            DegradationLevel::Normal => {
-                
-                match operation.await {
-                    Ok(result) => {
-                        self.cache_response(request_key, &result).await;
-                        Ok(result)
-                    }
-                    Err(e) => Err(e),
+            DegradationLevel::Normal => match operation.await {
+                Ok(result) => {
+                    self.cache_response(request_key, &result).await;
+                    Ok(result)
                 }
-            }
+                Err(e) => Err(e),
+            },
             DegradationLevel::Degraded | DegradationLevel::SeverelyDegraded => {
-                
                 match operation.await {
                     Ok(result) => {
                         self.cache_response(request_key, &result).await;
@@ -199,14 +187,12 @@ impl GracefulDegradationManager {
                 }
             }
             DegradationLevel::Unavailable => {
-                
                 self.apply_fallback_strategies(service_name, request_key, degradation_level)
                     .await
             }
         }
     }
 
-    
     pub async fn cache_response<T>(&self, key: &str, data: &T)
     where
         T: serde::Serialize,
@@ -215,7 +201,7 @@ impl GracefulDegradationManager {
             let cached = CachedResponse {
                 data: json_data,
                 timestamp: Instant::now(),
-                ttl: Duration::from_secs(300), 
+                ttl: Duration::from_secs(300),
             };
 
             self.cached_data
@@ -226,7 +212,6 @@ impl GracefulDegradationManager {
         }
     }
 
-    
     pub async fn get_cached_response<T>(&self, key: &str, max_age: Duration) -> Option<T>
     where
         T: serde::de::DeserializeOwned,
@@ -247,7 +232,6 @@ impl GracefulDegradationManager {
         None
     }
 
-    
     pub async fn queue_request(
         &self,
         service_name: &str,
@@ -259,7 +243,6 @@ impl GracefulDegradationManager {
             .entry(service_name.to_string())
             .or_insert_with(Vec::new);
 
-        
         if let Some(strategies) = self.config.strategies.get(&DegradationLevel::Degraded) {
             for strategy in strategies {
                 if let DegradationStrategy::QueueRequests { max_queue_size } = strategy {
@@ -283,7 +266,6 @@ impl GracefulDegradationManager {
         Ok(())
     }
 
-    
     pub async fn process_queued_requests(&self, service_name: &str) {
         let mut queues = self.request_queues.write().await;
 
@@ -295,21 +277,16 @@ impl GracefulDegradationManager {
             );
 
             for request in queue {
-                
-                
                 debug!("Processing queued request: {}", request.id);
             }
         }
     }
 
-    
     pub async fn get_degradation_stats(&self) -> HashMap<String, DegradationLevel> {
         self.service_levels.read().await.clone()
     }
 
-    
     pub async fn cleanup(&self) {
-        
         {
             let mut cache = self.cached_data.write().await;
             cache.retain(|key, cached| {
@@ -321,14 +298,11 @@ impl GracefulDegradationManager {
             });
         }
 
-        
         {
             let mut queues = self.request_queues.write().await;
             for (service_name, queue) in queues.iter_mut() {
                 let original_len = queue.len();
-                queue.retain(|req| {
-                    req.timestamp.elapsed() < Duration::from_secs(3600) 
-                });
+                queue.retain(|req| req.timestamp.elapsed() < Duration::from_secs(3600));
 
                 if queue.len() != original_len {
                     debug!(
@@ -340,8 +314,6 @@ impl GracefulDegradationManager {
             }
         }
     }
-
-    
 
     fn calculate_degradation_level(&self, health: &ServiceHealthInfo) -> DegradationLevel {
         match health.current_status {
@@ -416,7 +388,6 @@ impl GracefulDegradationManager {
                         return Err(format!("Service {} is unavailable", service_name));
                     }
                     _ => {
-                        
                         continue;
                     }
                 }

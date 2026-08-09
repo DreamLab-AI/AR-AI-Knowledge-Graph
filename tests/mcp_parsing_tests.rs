@@ -1,8 +1,8 @@
 // Test file for MCP response parsing functionality
 // This tests the type-safe JSON parsing to eliminate brittle double-parsing
 
-use visionclaw_server::types::mcp_responses::*;
 use serde_json::{json, Value};
+use visionclaw_server::types::mcp_responses::*;
 
 #[cfg(test)]
 mod tests {

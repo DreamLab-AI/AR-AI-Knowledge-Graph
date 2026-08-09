@@ -4,18 +4,18 @@ use crate::actors::messages::{GetSettings, UpdateSettings};
 use crate::app_state::AppState;
 use crate::config::path_access::JsonPathAccessible;
 use crate::config::AppFullSettings;
+use crate::{bad_request, error_json, ok_json, service_unavailable};
 use actix_web::{web, Error, HttpRequest, HttpResponse};
 use log::{debug, error, info, warn};
 use serde_json::{json, Value};
-use crate::{ok_json, error_json, bad_request, service_unavailable};
 
 use crate::handlers::settings_validation_fix::convert_to_snake_case_recursive;
 use crate::settings::auth_extractor::AuthenticatedUser;
 
-use super::types::{SettingsResponseDTO, value_type_name};
-use super::validation::validate_settings_update;
-use super::physics::propagate_physics_to_gpu;
 use super::helpers::extract_physics_updates;
+use super::physics::propagate_physics_to_gpu;
+use super::types::{value_type_name, SettingsResponseDTO};
+use super::validation::validate_settings_update;
 
 pub async fn update_settings(
     _req: HttpRequest,
@@ -25,11 +25,9 @@ pub async fn update_settings(
 ) -> Result<HttpResponse, Error> {
     let mut update = payload.into_inner();
 
-
     convert_to_snake_case_recursive(&mut update);
 
     debug!("Settings update received: {:?}", update);
-
 
     if let Err(e) = validate_settings_update(&update) {
         error!("Settings validation failed: {}", e);
@@ -39,7 +37,6 @@ pub async fn update_settings(
         );
         return bad_request!("Invalid settings: {}", e);
     }
-
 
     let mut app_settings = match state.settings_addr.send(GetSettings).await {
         Ok(Ok(s)) => s,
@@ -53,7 +50,6 @@ pub async fn update_settings(
         }
     };
 
-
     if crate::utils::logging::is_debug_enabled() {
         debug!(
             "Settings update payload (before merge): {}",
@@ -62,14 +58,11 @@ pub async fn update_settings(
         );
     }
 
-
-
     let mut modified_update = update.clone();
     let auto_balance_update = update
         .get("visualisation")
         .and_then(|v| v.get("graphs"))
         .and_then(|g| {
-
             if let Some(logseq) = g.get("logseq") {
                 if let Some(physics) = logseq.get("physics") {
                     if let Some(auto_balance) = physics.get("autoBalance") {
@@ -88,13 +81,11 @@ pub async fn update_settings(
             None
         });
 
-
     if let Some(ref auto_balance_value) = auto_balance_update {
         info!(
             "Synchronizing auto_balance setting across both graphs: {}",
             auto_balance_value
         );
-
 
         let vis_obj = modified_update
             .as_object_mut()
@@ -110,7 +101,6 @@ pub async fn update_settings(
             });
 
         if let Some(graphs) = vis_obj {
-
             let logseq_physics = graphs
                 .entry("logseq")
                 .or_insert_with(|| json!({}))
@@ -123,7 +113,6 @@ pub async fn update_settings(
             if let Some(physics) = logseq_physics {
                 physics.insert("autoBalance".to_string(), auto_balance_value.clone());
             }
-
 
             let visionclaw_physics = graphs
                 .entry("visionclaw")
@@ -140,7 +129,6 @@ pub async fn update_settings(
         }
     }
 
-
     if let Err(e) = app_settings.merge_update(modified_update.clone()) {
         error!("Failed to merge settings: {}", e);
         if crate::utils::logging::is_debug_enabled() {
@@ -153,10 +141,7 @@ pub async fn update_settings(
         return error_json!("Failed to merge settings: {}", e);
     }
 
-
-
     let _updated_graphs = if auto_balance_update.is_some() {
-
         let _physics_updates = extract_physics_updates(&update);
         vec!["logseq", "visionclaw"]
     } else {
@@ -177,8 +162,6 @@ pub async fn update_settings(
             .unwrap_or_default()
     };
 
-
-
     let auto_balance_active = app_settings
         .visualisation
         .graphs
@@ -192,7 +175,6 @@ pub async fn update_settings(
             .physics
             .auto_balance;
 
-
     match state
         .settings_addr
         .send(UpdateSettings {
@@ -203,16 +185,9 @@ pub async fn update_settings(
         Ok(Ok(())) => {
             info!("Settings updated successfully");
 
-
-
             let is_auto_balance_change = auto_balance_update.is_some();
 
-
-
-
             if is_auto_balance_change || !auto_balance_active {
-
-
                 propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
                 if is_auto_balance_change {
                     info!("[AUTO-BALANCE] Propagating auto_balance setting change to GPU (logseq only)");
@@ -220,7 +195,6 @@ pub async fn update_settings(
             } else {
                 info!("[AUTO-BALANCE] Skipping physics propagation to GPU - auto-balance is active and not changing");
             }
-
 
             let response_dto: SettingsResponseDTO = (&app_settings).into();
 
@@ -242,7 +216,6 @@ pub async fn reset_settings(
     _user: AuthenticatedUser,
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, Error> {
-
     let default_settings = match AppFullSettings::new() {
         Ok(settings) => settings,
         Err(e) => {
@@ -250,7 +223,6 @@ pub async fn reset_settings(
             return error_json!("Failed to load default settings");
         }
     };
-
 
     match state
         .settings_addr
@@ -261,7 +233,6 @@ pub async fn reset_settings(
     {
         Ok(Ok(())) => {
             info!("Settings reset to defaults");
-
 
             let response_dto: SettingsResponseDTO = (&default_settings).into();
 
@@ -284,7 +255,6 @@ pub async fn save_settings(
     state: web::Data<AppState>,
     payload: Option<web::Json<Value>>,
 ) -> Result<HttpResponse, Error> {
-
     let mut app_settings = match state.settings_addr.send(GetSettings).await {
         Ok(Ok(s)) => s,
         Ok(Err(e)) => {
@@ -297,16 +267,13 @@ pub async fn save_settings(
         }
     };
 
-
     if let Some(update) = payload {
         let update_value = update.into_inner();
-
 
         if let Err(e) = validate_settings_update(&update_value) {
             error!("Settings validation failed: {}", e);
             return bad_request!("Invalid settings: {}", e);
         }
-
 
         if let Err(e) = app_settings.merge_update(update_value) {
             error!("Failed to merge settings update: {}", e);
@@ -314,16 +281,15 @@ pub async fn save_settings(
         }
     }
 
-
     if !app_settings.system.persist_settings {
-        return bad_request!("Settings persistence is disabled. Enable 'system.persist_settings' to save settings.");
+        return bad_request!(
+            "Settings persistence is disabled. Enable 'system.persist_settings' to save settings."
+        );
     }
-
 
     match app_settings.save() {
         Ok(()) => {
             info!("Settings successfully saved to file");
-
 
             match state
                 .settings_addr
@@ -419,7 +385,6 @@ pub async fn batch_update_settings(
     state: web::Data<AppState>,
     payload: web::Json<Value>,
 ) -> Result<HttpResponse, Error> {
-
     info!("Batch update request received: {:?}", payload);
 
     let updates = payload
@@ -481,12 +446,10 @@ pub async fn batch_update_settings(
                 }));
             }
             Err(e) => {
-
                 error!(
                     "Failed to update path '{}' with value {:?}: {}",
                     path, value, e
                 );
-
 
                 let error_detail = if e.contains("does not exist") {
                     format!("Path '{}' does not exist in settings structure", path)
@@ -510,7 +473,6 @@ pub async fn batch_update_settings(
         }
     }
 
-
     if success_count > 0 {
         match state
             .settings_addr
@@ -521,7 +483,6 @@ pub async fn batch_update_settings(
         {
             Ok(Ok(())) => {
                 info!("Batch updated {} settings successfully", success_count);
-
 
                 let mut physics_updated = false;
                 for update in updates {
@@ -539,8 +500,6 @@ pub async fn batch_update_settings(
                     info!("Physics settings changed in batch update, propagating to GPU actors");
 
                     propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
-
-
                 }
             }
             Ok(Err(e)) => {

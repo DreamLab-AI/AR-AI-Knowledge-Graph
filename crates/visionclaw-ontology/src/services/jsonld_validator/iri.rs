@@ -53,10 +53,7 @@ pub fn is_well_formed(value: &str) -> bool {
         // Be conservative: the fixtures only mint ASCII IRIs.
         return false;
     }
-    if value
-        .chars()
-        .any(|c| c.is_whitespace() || c.is_control())
-    {
+    if value.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return false;
     }
     // Must have a scheme separator.
@@ -149,10 +146,7 @@ mod tests {
 
     #[test]
     fn classify_visionclaw_iris() {
-        assert_eq!(
-            classify("urn:visionclaw:page:abc"),
-            Some(IriScheme::Page)
-        );
+        assert_eq!(classify("urn:visionclaw:page:abc"), Some(IriScheme::Page));
         assert_eq!(
             classify("urn:visionclaw:linked:tempietto"),
             Some(IriScheme::LinkedPage)

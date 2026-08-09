@@ -40,12 +40,14 @@ impl NostrBeadPublisher {
         let privkey = std::env::var("VISIONCLAW_NOSTR_PRIVKEY")
             .ok()
             .filter(|s| !s.is_empty())?;
-        let relay_url = std::env::var("NOSTR_RELAY_URL")
-            .unwrap_or_else(|_| "ws://localhost:7000".to_string());
+        let relay_url =
+            std::env::var("NOSTR_RELAY_URL").unwrap_or_else(|_| "ws://localhost:7000".to_string());
 
         // Validate relay URL scheme to prevent SSRF via env var injection.
         if !relay_url.starts_with("ws://") && !relay_url.starts_with("wss://") {
-            error!("[NostrBeadPublisher] NOSTR_RELAY_URL must start with ws:// or wss://: {relay_url}");
+            error!(
+                "[NostrBeadPublisher] NOSTR_RELAY_URL must start with ws:// or wss://: {relay_url}"
+            );
             return None;
         }
 
@@ -78,12 +80,21 @@ impl NostrBeadPublisher {
         debrief_path: &str,
     ) {
         let mut tags = vec![
-            Tag::custom(TagKind::Custom("h".into()), vec!["visionclaw-activity".to_string()]),
+            Tag::custom(
+                TagKind::Custom("h".into()),
+                vec!["visionclaw-activity".to_string()],
+            ),
             // `d` tag makes this parameterized replaceable — deduped by (pubkey, kind, d)
             Tag::custom(TagKind::Custom("d".into()), vec![bead_id.to_string()]),
             Tag::custom(TagKind::Custom("bead_id".into()), vec![bead_id.to_string()]),
-            Tag::custom(TagKind::Custom("brief_id".into()), vec![brief_id.to_string()]),
-            Tag::custom(TagKind::Custom("debrief_path".into()), vec![debrief_path.to_string()]),
+            Tag::custom(
+                TagKind::Custom("brief_id".into()),
+                vec![brief_id.to_string()],
+            ),
+            Tag::custom(
+                TagKind::Custom("debrief_path".into()),
+                vec![debrief_path.to_string()],
+            ),
         ];
 
         if let Some(pk) = user_pubkey {
@@ -106,7 +117,10 @@ impl NostrBeadPublisher {
 
         match self.send_to_relay(&event).await {
             Ok(()) => {
-                debug!("[NostrBeadPublisher] Published bead {bead_id} (event {})", event.id);
+                debug!(
+                    "[NostrBeadPublisher] Published bead {bead_id} (event {})",
+                    event.id
+                );
                 // Oxigraph provenance write: Phase 2 (ADR-11) — not yet implemented.
                 // todo!("Phase 2: write SPARQL provenance triples via OxigraphOntologyRepository")
             }

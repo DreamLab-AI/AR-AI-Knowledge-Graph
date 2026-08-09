@@ -144,9 +144,16 @@ mod tests {
 
     #[test]
     fn metadata_serde_uses_camel_case() {
-        let m = Metadata { hyperlink_count: 5, ..Metadata::default() };
+        let m = Metadata {
+            hyperlink_count: 5,
+            ..Metadata::default()
+        };
         let json = serde_json::to_string(&m).unwrap();
-        assert!(json.contains("hyperlinkCount"), "expected camelCase key, got: {}", json);
+        assert!(
+            json.contains("hyperlinkCount"),
+            "expected camelCase key, got: {}",
+            json
+        );
     }
 
     #[test]
@@ -181,7 +188,10 @@ mod tests {
     #[test]
     fn metadata_store_validate_files_missing_file_returns_false() {
         let mut store = MetadataStore::new();
-        store.insert("nonexistent.md".to_string(), make_metadata("1", "nonexistent.md"));
+        store.insert(
+            "nonexistent.md".to_string(),
+            make_metadata("1", "nonexistent.md"),
+        );
         assert!(!store.validate_files("/definitely/not/a/real/dir"));
     }
 }

@@ -14,9 +14,7 @@
 //! filename-hash + body-regex + side-channel JSON-LD paths with a single
 //! JSON-LD-first pass).
 
-use visionclaw_domain::models::canonical_entity::{
-    CanonicalEntity, EntityKind, OutboundLink,
-};
+use visionclaw_domain::models::canonical_entity::{CanonicalEntity, EntityKind, OutboundLink};
 
 use super::errors::Result;
 use super::expander::{expand_block, expand_iri_or_keep, slugify, ExpandedNode, ExpandedValue};
@@ -115,11 +113,7 @@ fn push_link_value(val: &ExpandedValue, out: &mut Vec<OutboundLink>) {
                 let slug = slug_from_iri(iri);
                 out.push(OutboundLink {
                     target_slug: slug,
-                    target_label: if label.is_empty() {
-                        iri.clone()
-                    } else {
-                        label
-                    },
+                    target_label: if label.is_empty() { iri.clone() } else { label },
                     target_iri: iri.clone(),
                 });
             }
@@ -139,7 +133,10 @@ fn push_link_value(val: &ExpandedValue, out: &mut Vec<OutboundLink>) {
 /// and slugifying it. Matches the upstream pipeline's convention.
 pub fn slug_from_iri(iri: &str) -> String {
     let after_colon = iri.rsplit_once(':').map(|(_, r)| r).unwrap_or(iri);
-    let after_slash = after_colon.rsplit_once('/').map(|(_, r)| r).unwrap_or(after_colon);
+    let after_slash = after_colon
+        .rsplit_once('/')
+        .map(|(_, r)| r)
+        .unwrap_or(after_colon);
     slugify(after_slash)
 }
 
@@ -291,7 +288,10 @@ mod tests {
         assert_eq!(e.title, "Camera");
         assert!(e.public);
         assert_eq!(e.outbound_links.len(), 2);
-        assert!(e.outbound_links.iter().any(|l| l.target_slug == "image-sensor"));
+        assert!(e
+            .outbound_links
+            .iter()
+            .any(|l| l.target_slug == "image-sensor"));
         assert!(e.outbound_links.iter().any(|l| l.target_slug == "sensor"));
         assert_eq!(e.class_iri.as_deref(), Some("urn:ngm:class:camera"));
     }

@@ -77,7 +77,11 @@ pub async fn socket_flow_handler(
         // this is a same-origin request proxied through nginx and should be permitted.
         // Nginx may strip the port from Host ($host), so we compare hostnames only.
         let is_same_host = if !is_allowed {
-            if let Some(host_header) = req.headers().get("Host").or_else(|| req.headers().get("X-Forwarded-Host")) {
+            if let Some(host_header) = req
+                .headers()
+                .get("Host")
+                .or_else(|| req.headers().get("X-Forwarded-Host"))
+            {
                 let host = host_header.to_str().unwrap_or("");
                 // Extract host from origin URL (strip scheme)
                 let origin_host = origin
@@ -87,7 +91,9 @@ pub async fn socket_flow_handler(
                 // Strip port from both for comparison (nginx $host strips port)
                 let host_no_port = host.split(':').next().unwrap_or("");
                 let origin_no_port = origin_host.split(':').next().unwrap_or("");
-                !host_no_port.is_empty() && !origin_no_port.is_empty() && origin_no_port == host_no_port
+                !host_no_port.is_empty()
+                    && !origin_no_port.is_empty()
+                    && origin_no_port == host_no_port
             } else {
                 false
             }
@@ -100,8 +106,10 @@ pub async fn socket_flow_handler(
                 "WebSocket connection rejected - invalid origin: {} (allowed: {})",
                 origin, allowed_origins
             );
-            return Ok(HttpResponse::Forbidden()
-                .body(format!("Origin '{}' not allowed for WebSocket connections", origin)));
+            return Ok(HttpResponse::Forbidden().body(format!(
+                "Origin '{}' not allowed for WebSocket connections",
+                origin
+            )));
         }
     } else {
         // No Origin header. Release builds reject; dev builds may permit when
@@ -163,10 +171,8 @@ pub async fn socket_flow_handler(
                                          token failed cryptographic validation",
                                         client_ip
                                     );
-                                    return Ok(
-                                        HttpResponse::Unauthorized()
-                                            .body("Invalid or expired authentication token")
-                                    );
+                                    return Ok(HttpResponse::Unauthorized()
+                                        .body("Invalid or expired authentication token"));
                                 }
                             }
                             #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
@@ -177,10 +183,8 @@ pub async fn socket_flow_handler(
                                      token failed cryptographic validation",
                                     client_ip
                                 );
-                                return Ok(
-                                    HttpResponse::Unauthorized()
-                                        .body("Invalid or expired authentication token")
-                                );
+                                return Ok(HttpResponse::Unauthorized()
+                                    .body("Invalid or expired authentication token"));
                             }
                         } else {
                             debug!(
@@ -198,10 +202,8 @@ pub async fn socket_flow_handler(
                                     "SECURITY: NostrService unavailable, rejecting WebSocket from {}",
                                     client_ip
                                 );
-                                return Ok(
-                                    HttpResponse::Unauthorized()
-                                        .body("Authentication service unavailable")
-                                );
+                                return Ok(HttpResponse::Unauthorized()
+                                    .body("Authentication service unavailable"));
                             }
                             warn!(
                                 "SECURITY: NostrService unavailable but ALLOW_INSECURE_DEFAULTS set \
@@ -216,10 +218,8 @@ pub async fn socket_flow_handler(
                                 "SECURITY: NostrService unavailable, rejecting WebSocket from {}",
                                 client_ip
                             );
-                            return Ok(
-                                HttpResponse::Unauthorized()
-                                    .body("Authentication service unavailable")
-                            );
+                            return Ok(HttpResponse::Unauthorized()
+                                .body("Authentication service unavailable"));
                         }
                     }
                 }
@@ -233,10 +233,8 @@ pub async fn socket_flow_handler(
                             "SECURITY: Rejecting unauthenticated WebSocket connection on /wss from {}",
                             client_ip
                         );
-                        return Ok(
-                            HttpResponse::Unauthorized()
-                                .body("Authentication required for WebSocket connections")
-                        );
+                        return Ok(HttpResponse::Unauthorized()
+                            .body("Authentication required for WebSocket connections"));
                     }
                     warn!(
                         "SECURITY: Unauthenticated WebSocket connection on /wss from {} \
@@ -251,10 +249,8 @@ pub async fn socket_flow_handler(
                         "SECURITY: Rejecting unauthenticated WebSocket connection on /wss from {}",
                         client_ip
                     );
-                    return Ok(
-                        HttpResponse::Unauthorized()
-                            .body("Authentication required for WebSocket connections")
-                    );
+                    return Ok(HttpResponse::Unauthorized()
+                        .body("Authentication required for WebSocket connections"));
                 }
             }
         }
@@ -357,10 +353,7 @@ pub async fn socket_flow_handler(
         .start()
     {
         Ok(response) => {
-            info!(
-                "[WebSocket] Client {} connected successfully",
-                client_ip
-            );
+            info!("[WebSocket] Client {} connected successfully", client_ip);
             Ok(response)
         }
         Err(e) => {

@@ -148,7 +148,7 @@ impl EventHandler for GraphEventHandler {
             "EdgeAdded" => self.handle_edge_added(event).await,
             "EdgeRemoved" => self.handle_edge_removed(event).await,
             "GraphCleared" => self.handle_graph_cleared(event).await,
-            _ => Ok(()), 
+            _ => Ok(()),
         }
     }
 
@@ -221,7 +221,6 @@ mod tests {
     async fn test_graph_cleared_event() {
         let handler = GraphEventHandler::new("graph-handler");
 
-        
         let add_event = NodeAddedEvent {
             node_id: "node-1".to_string(),
             label: "Test".to_string(),
@@ -243,7 +242,6 @@ mod tests {
         handler.handle(&stored_add).await.unwrap();
         assert_eq!(handler.get_node_count().await, 1);
 
-        
         let clear_event = GraphClearedEvent {
             graph_id: "graph-1".to_string(),
             timestamp: time::now(),

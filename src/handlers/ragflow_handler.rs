@@ -7,6 +7,7 @@ use crate::utils::validation::rate_limit::{extract_client_id, EndpointRateLimits
 use crate::utils::validation::sanitization::Sanitizer;
 use crate::utils::validation::MAX_REQUEST_SIZE;
 use crate::AppState;
+use crate::{error_json, ok_json, service_unavailable, too_many_requests};
 use actix_web::web::Bytes;
 use actix_web::web::ServiceConfig;
 use actix_web::HttpRequest;
@@ -16,11 +17,6 @@ use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
-use crate::{
-    ok_json, error_json,
-    too_many_requests, service_unavailable,
-};
-
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,40 +55,36 @@ pub async fn send_message(
 ) -> Result<HttpResponse, actix_web::Error> {
     let ragflow_service = match &state.ragflow_service {
         Some(service) => service,
-        None => {
-            return service_unavailable!("RAGFlow service is not available")
-        }
+        None => return service_unavailable!("RAGFlow service is not available"),
     };
 
-    
     let session_id = match &request.session_id {
         Some(id) => id.clone(),
         None => state.ragflow_session_id.clone(),
     };
 
     let enable_tts = request.enable_tts.unwrap_or(false);
-    
+
     match ragflow_service
         .send_message(
             session_id,
             request.question.clone(),
-            false, 
-            None,  
+            false,
+            None,
             request.stream.unwrap_or(true),
         )
         .await
     {
         Ok(response_stream) => {
-            
             if enable_tts {
                 if let Some(speech_service) = &state.speech_service {
                     let speech_service = speech_service.clone();
-                    
+
                     let question = request.question.clone();
-                    
+
                     actix_web::rt::spawn(async move {
                         let speech_options = SpeechOptions::default();
-                        
+
                         if let Err(e) = speech_service
                             .text_to_speech(question, speech_options)
                             .await
@@ -103,17 +95,14 @@ pub async fn send_message(
                 }
             }
 
-            
-            let enable_tts = enable_tts; 
+            let enable_tts = enable_tts;
             let mapped_stream = response_stream.map(move |result| {
                 result
                     .map(|answer| {
-                        
                         if answer.is_empty() {
                             return Bytes::new();
                         }
 
-                        
                         if enable_tts {
                             if let Some(speech_service) = &state.speech_service {
                                 let speech_service = speech_service.clone();
@@ -155,22 +144,15 @@ pub async fn create_session(
     let user_id = request.user_id.clone();
     let ragflow_service = match &state.ragflow_service {
         Some(service) => service,
-        None => {
-            return service_unavailable!("RAGFlow service is not available")
-        }
+        None => return service_unavailable!("RAGFlow service is not available"),
     };
 
     match ragflow_service.create_session(user_id.clone()).await {
         Ok(session_id) => {
-
-
-
-
             info!(
                 "Created new RAGFlow session: {}. Note: session ID cannot be stored in shared AppState.",
                 session_id
             );
-
 
             ok_json!(CreateSessionResponse {
                 success: true,
@@ -192,9 +174,7 @@ pub async fn get_session_history(
 ) -> Result<HttpResponse, actix_web::Error> {
     let ragflow_service = match &state.ragflow_service {
         Some(service) => service,
-        None => {
-            return service_unavailable!("RAGFlow service is not available")
-        }
+        None => return service_unavailable!("RAGFlow service is not available"),
     };
 
     match ragflow_service
@@ -215,7 +195,6 @@ async fn handle_ragflow_chat(
     req: HttpRequest,
     payload: web::Json<RagflowChatRequest>,
 ) -> Result<impl Responder, actix_web::Error> {
-    
     let pubkey = match req
         .headers()
         .get("X-Nostr-Pubkey")
@@ -234,8 +213,9 @@ async fn handle_ragflow_chat(
     {
         Some(t) => t.to_string(),
         None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(json!({"error": "Missing Authorization token"})))
+            return Ok(
+                HttpResponse::Unauthorized().json(json!({"error": "Missing Authorization token"}))
+            )
         }
     };
 
@@ -243,7 +223,7 @@ async fn handle_ragflow_chat(
         if !nostr_service.validate_session(&pubkey, &token).await {
             return Ok(HttpResponse::Unauthorized().json(json!({"error": "Invalid session token"})));
         }
-        
+
         let has_ragflow_specific_access = state.has_feature_access(&pubkey, "ragflow");
         let is_power_user = state.is_power_user(&pubkey);
 
@@ -251,8 +231,6 @@ async fn handle_ragflow_chat(
             return Ok(HttpResponse::Forbidden().json(json!({"error": "This feature requires power user access or specific RAGFlow permission"})));
         }
     } else {
-        
-        
         error!(
             "Nostr service not available during chat handling for pubkey: {}",
             pubkey
@@ -264,7 +242,7 @@ async fn handle_ragflow_chat(
     info!(
         "[handle_ragflow_chat] Checking RAGFlow service availability. Is Some: {}",
         state.ragflow_service.is_some()
-    ); 
+    );
 
     let ragflow_service = match &state.ragflow_service {
         Some(service) => service,
@@ -275,11 +253,10 @@ async fn handle_ragflow_chat(
         }
     };
 
-    info!("[handle_ragflow_chat] RAGFlow service is Some. Proceeding."); 
+    info!("[handle_ragflow_chat] RAGFlow service is Some. Proceeding.");
 
     let mut session_id = payload.session_id.clone();
     if session_id.is_none() {
-        
         match ragflow_service.create_session(pubkey.clone()).await {
             Ok(new_sid) => {
                 info!(
@@ -326,11 +303,9 @@ async fn handle_ragflow_chat(
                 session_id: final_session_id,
             })
         }
-        Ok(ChatResponse::Streaming(stream)) => {
-            Ok(HttpResponse::Ok()
-                .content_type("text/event-stream")
-                .streaming(stream))
-        }
+        Ok(ChatResponse::Streaming(stream)) => Ok(HttpResponse::Ok()
+            .content_type("text/event-stream")
+            .streaming(stream)),
         Err(e) => {
             error!(
                 "Error communicating with RAGFlow for session {}: {}",
@@ -356,7 +331,6 @@ impl EnhancedRagFlowHandler {
         }
     }
 
-    
     pub async fn chat_enhanced(
         &self,
         req: HttpRequest,
@@ -365,7 +339,6 @@ impl EnhancedRagFlowHandler {
     ) -> Result<HttpResponse> {
         let client_id = extract_client_id(&req);
 
-        
         if !self.rate_limiter.is_allowed(&client_id) {
             warn!(
                 "Rate limit exceeded for RAGFlow chat from client: {}",
@@ -378,7 +351,6 @@ impl EnhancedRagFlowHandler {
             })));
         }
 
-        
         let payload_size = serde_json::to_vec(&*payload).unwrap_or_default().len();
         if payload_size > MAX_REQUEST_SIZE {
             error!("RAGFlow chat payload too large: {} bytes", payload_size);
@@ -394,7 +366,6 @@ impl EnhancedRagFlowHandler {
             client_id, payload_size
         );
 
-        
         let pubkey = match req
             .headers()
             .get("X-Nostr-Pubkey")
@@ -426,7 +397,6 @@ impl EnhancedRagFlowHandler {
             }
         };
 
-        
         if let Some(nostr_service) = &state.nostr_service {
             if !nostr_service.validate_session(&pubkey, &token).await {
                 warn!(
@@ -457,7 +427,6 @@ impl EnhancedRagFlowHandler {
             return service_unavailable!("Authentication service is not available");
         }
 
-        
         let validated_payload = match self.validation_service.validate_ragflow_chat(&payload) {
             Ok(sanitized) => sanitized,
             Err(validation_error) => {
@@ -471,7 +440,6 @@ impl EnhancedRagFlowHandler {
 
         debug!("RAGFlow chat validation passed for client: {}", client_id);
 
-        
         let question = validated_payload
             .get("question")
             .and_then(|q| q.as_str())
@@ -495,10 +463,8 @@ impl EnhancedRagFlowHandler {
             .and_then(|t| t.as_bool())
             .unwrap_or(false);
 
-        
         self.validate_question_content(question)?;
 
-        
         let ragflow_service = match &state.ragflow_service {
             Some(service) => service,
             None => {
@@ -527,7 +493,6 @@ impl EnhancedRagFlowHandler {
             }
         };
 
-        
         if enable_tts {
             self.process_tts_request(&state, question).await;
         }
@@ -573,7 +538,6 @@ impl EnhancedRagFlowHandler {
         }
     }
 
-    
     pub async fn create_session_enhanced(
         &self,
         req: HttpRequest,
@@ -582,7 +546,6 @@ impl EnhancedRagFlowHandler {
     ) -> Result<HttpResponse> {
         let client_id = extract_client_id(&req);
 
-        
         if !self.rate_limiter.is_allowed(&client_id) {
             return too_many_requests!("Too many session creation requests");
         }
@@ -592,13 +555,11 @@ impl EnhancedRagFlowHandler {
             client_id
         );
 
-        
         let user_id = payload
             .get("user_id")
             .and_then(|u| u.as_str())
             .ok_or_else(|| DetailedValidationError::missing_required_field("user_id"))?;
 
-        
         let sanitized_user_id = Sanitizer::sanitize_string(user_id).map_err(|e| {
             warn!("User ID sanitization failed: {}", e);
             e
@@ -637,7 +598,6 @@ impl EnhancedRagFlowHandler {
         }
     }
 
-    
     pub async fn get_session_history_enhanced(
         &self,
         req: HttpRequest,
@@ -646,7 +606,6 @@ impl EnhancedRagFlowHandler {
     ) -> Result<HttpResponse> {
         let client_id = extract_client_id(&req);
 
-        
         let history_rate_limiter = Arc::new(RateLimiter::new(
             crate::utils::validation::rate_limit::RateLimitConfig {
                 requests_per_minute: 30,
@@ -659,7 +618,6 @@ impl EnhancedRagFlowHandler {
             return too_many_requests!("Too many history requests");
         }
 
-        
         let sanitized_session_id = Sanitizer::sanitize_string(&session_id).map_err(|e| {
             warn!("Session ID sanitization failed: {}", e);
             e
@@ -702,9 +660,7 @@ impl EnhancedRagFlowHandler {
         }
     }
 
-    
     fn validate_question_content(&self, question: &str) -> Result<(), DetailedValidationError> {
-        
         let injection_patterns = [
             "ignore previous instructions",
             "forget everything above",
@@ -712,8 +668,8 @@ impl EnhancedRagFlowHandler {
             "system:",
             "\\n\\nUser:",
             "\\n\\nAssistant:",
-            "<|im_star|>", 
-            "<|im_en|>",   
+            "<|im_star|>",
+            "<|im_en|>",
         ];
 
         let question_lower = question.to_lowercase();
@@ -727,7 +683,6 @@ impl EnhancedRagFlowHandler {
             }
         }
 
-        
         if self.has_excessive_repetition(question) {
             return Err(DetailedValidationError::new(
                 "question",
@@ -736,7 +691,6 @@ impl EnhancedRagFlowHandler {
             ));
         }
 
-        
         if question.len() > 8000 {
             return Err(DetailedValidationError::new(
                 "question",
@@ -748,7 +702,6 @@ impl EnhancedRagFlowHandler {
         Ok(())
     }
 
-    
     fn has_excessive_repetition(&self, text: &str) -> bool {
         if text.len() < 50 {
             return false;
@@ -761,14 +714,12 @@ impl EnhancedRagFlowHandler {
             *word_counts.entry(word.to_lowercase()).or_insert(0) += 1;
         }
 
-        
         let total_words = words.len();
         word_counts
             .values()
             .any(|&count| count as f64 / total_words as f64 > 0.3)
     }
 
-    
     async fn process_tts_request(&self, state: &web::Data<AppState>, text: &str) {
         if let Some(speech_service) = &state.speech_service {
             let speech_service = speech_service.clone();
@@ -803,13 +754,13 @@ pub fn config(cfg: &mut ServiceConfig) {
                 .route("/chat", web::post().to(|req: HttpRequest, state: web::Data<AppState>, payload: web::Json<serde_json::Value>, handler: web::Data<EnhancedRagFlowHandler>| async move {
 
                     handler.chat_enhanced(req, state, payload).await
-                })) 
+                }))
                 .route("/session/enhanced", web::post().to(|req, state, payload, handler: web::Data<EnhancedRagFlowHandler>| async move {
                     handler.create_session_enhanced(req, state, payload).await
-                })) 
+                }))
                 .route("/history/{session_id}", web::get().to(get_session_history)) 
                 .route("/history/enhanced/{session_id}", web::get().to(|req, state, session_id, handler: web::Data<EnhancedRagFlowHandler>| async move {
                     handler.get_session_history_enhanced(req, state, session_id).await
-                })) 
+                }))
         );
 }

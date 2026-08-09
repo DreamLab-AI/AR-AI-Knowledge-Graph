@@ -20,15 +20,12 @@ unsafe impl DeviceCopy for curandState {}
 // GPU Performance Metrics tracking structure
 #[derive(Debug, Clone)]
 pub struct GPUPerformanceMetrics {
-
     pub kernel_times: HashMap<String, Vec<f32>>,
     pub total_kernel_calls: HashMap<String, u64>,
-
 
     pub total_memory_allocated: usize,
     pub peak_memory_usage: usize,
     pub current_memory_usage: usize,
-
 
     pub force_kernel_avg_time: f32,
     pub integrate_kernel_avg_time: f32,
@@ -38,10 +35,8 @@ pub struct GPUPerformanceMetrics {
     pub anomaly_detection_avg_time: f32,
     pub community_detection_avg_time: f32,
 
-
     pub gpu_utilization_percent: f32,
     pub memory_bandwidth_utilization: f32,
-
 
     pub frames_per_second: f32,
     pub total_simulation_time: f32,

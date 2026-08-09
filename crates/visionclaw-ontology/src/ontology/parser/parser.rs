@@ -7,9 +7,8 @@ use std::path::Path;
 
 /// Regex for matching markdown headings (e.g., "# Title")
 /// Compiled once at startup - pattern is a compile-time constant that is always valid
-static HEADING_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^#\s+(.+)$").expect("HEADING_RE pattern is a compile-time constant")
-});
+static HEADING_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^#\s+(.+)$").expect("HEADING_RE pattern is a compile-time constant"));
 
 /// Regex for matching Logseq property syntax (e.g., "key:: value" or "owl:class:: value")
 /// Supports both inline properties and Logseq outline format with "- " prefix
@@ -93,12 +92,10 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
     while i < lines.len() {
         let line = lines[i].trim();
 
-        
-        
         let fence_match = if line.starts_with("```") {
             Some(line)
         } else if line.starts_with("- ```") {
-            Some(&line[2..]) 
+            Some(&line[2..])
         } else {
             None
         };
@@ -106,19 +103,15 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
         if let Some(fence_line) = fence_match {
             let language = fence_line.trim_start_matches("```").trim();
 
-            
             if language == "clojure" || language.is_empty() {
                 i += 1;
                 if i >= lines.len() {
                     break;
                 }
 
-                
-                
                 let should_extract = if language == "clojure" {
                     true
                 } else if lines[i].trim().starts_with("owl:functional-syntax::") {
-                    
                     i += 1;
                     true
                 } else {
@@ -126,14 +119,13 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
                 };
 
                 if should_extract {
-                    
                     let mut block_lines = Vec::new();
                     while i < lines.len() {
                         let current_line = lines[i];
                         if current_line.trim().starts_with("```") {
                             break;
                         }
-                        
+
                         let trimmed = current_line.trim_start();
                         if !trimmed.is_empty()
                             && !trimmed.starts_with(";;")
@@ -145,7 +137,6 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
                         i += 1;
                     }
 
-                    
                     let block_text = block_lines.join("\n");
                     let is_owl = block_text.contains("Declaration(")
                         || block_text.contains("SubClassOf(")
@@ -162,7 +153,6 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
             i += 1;
             continue;
         }
-
 
         if line.starts_with("owl:functional-syntax::") {
             // Check if | is on the same line or the next line
@@ -194,7 +184,6 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
                 break;
             }
 
-            
             let mut block_lines = Vec::new();
             let base_indent = if i < lines.len() {
                 lines[i].len() - lines[i].trim_start().len()
@@ -206,12 +195,10 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
                 let current_line = lines[i];
                 let current_indent = current_line.len() - current_line.trim_start().len();
 
-                
                 if !current_line.trim().is_empty() && current_indent < base_indent {
                     break;
                 }
 
-                
                 if current_line.trim_start().starts_with('#')
                     || current_line.trim().starts_with("```")
                     || (current_line.contains("::") && !current_line.trim().starts_with("|"))
@@ -219,7 +206,6 @@ fn extract_owl_blocks(content: &str) -> Result<Vec<String>> {
                     break;
                 }
 
-                
                 if current_indent >= base_indent && !current_line.trim().is_empty() {
                     let trimmed = if current_indent >= base_indent {
                         &current_line[base_indent..]
@@ -258,9 +244,23 @@ has-part:: [[Visual Mesh]], [[Animation Rig]]
 "#;
 
         let props = extract_properties(content);
-        assert_eq!(props.get("term-id").expect("Missing required key: term-id")[0], "20067");
-        assert_eq!(props.get("maturity").expect("Missing required key: maturity")[0], "mature");
-        assert_eq!(props.get("has-part").expect("Missing required key: has-part").len(), 2);
+        assert_eq!(
+            props.get("term-id").expect("Missing required key: term-id")[0],
+            "20067"
+        );
+        assert_eq!(
+            props
+                .get("maturity")
+                .expect("Missing required key: maturity")[0],
+            "mature"
+        );
+        assert_eq!(
+            props
+                .get("has-part")
+                .expect("Missing required key: has-part")
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -311,10 +311,33 @@ owl:functional-syntax:: |
 "#;
 
         let props = extract_properties(content);
-        assert_eq!(props.get("term-id").expect("Missing required key: term-id")[0], "20067");
-        assert_eq!(props.get("preferred-term").expect("Missing required key: preferred-term")[0], "Avatar");
-        assert_eq!(props.get("owl:class").expect("Missing required key: owl:class")[0], "mv:Avatar");
-        assert_eq!(props.get("owl:physicality").expect("Missing required key: owl:physicality")[0], "VirtualEntity");
-        assert_eq!(props.get("owl:role").expect("Missing required key: owl:role")[0], "Agent");
+        assert_eq!(
+            props.get("term-id").expect("Missing required key: term-id")[0],
+            "20067"
+        );
+        assert_eq!(
+            props
+                .get("preferred-term")
+                .expect("Missing required key: preferred-term")[0],
+            "Avatar"
+        );
+        assert_eq!(
+            props
+                .get("owl:class")
+                .expect("Missing required key: owl:class")[0],
+            "mv:Avatar"
+        );
+        assert_eq!(
+            props
+                .get("owl:physicality")
+                .expect("Missing required key: owl:physicality")[0],
+            "VirtualEntity"
+        );
+        assert_eq!(
+            props
+                .get("owl:role")
+                .expect("Missing required key: owl:role")[0],
+            "Agent"
+        );
     }
 }

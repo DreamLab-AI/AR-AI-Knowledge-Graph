@@ -82,7 +82,9 @@ fn invalid_fixture_expectation(filename: &str) -> Option<&'static str> {
     }
 }
 
-async fn run_ingest(path: &Path) -> Result<visionclaw_server::services::jsonld_ingest::IngestOutcome, JsonLdIngestError> {
+async fn run_ingest(
+    path: &Path,
+) -> Result<visionclaw_server::services::jsonld_ingest::IngestOutcome, JsonLdIngestError> {
     let markdown = std::fs::read_to_string(path)
         .unwrap_or_else(|e| panic!("read fixture {}: {}", path.display(), e));
     let meta = PageMetadata::new(path.display().to_string());
@@ -176,10 +178,7 @@ async fn rejects_every_invalid_fixture() {
             .and_then(|n| n.to_str())
             .expect("fixture filename");
         let expected = invalid_fixture_expectation(filename).unwrap_or_else(|| {
-            panic!(
-                "no expected-error mapping for invalid fixture {}",
-                filename
-            )
+            panic!("no expected-error mapping for invalid fixture {}", filename)
         });
 
         match run_ingest(path).await {
@@ -337,11 +336,7 @@ async fn emits_expected_triples() {
         }
 
         // Render all quads to strings once.
-        let serialised: BTreeSet<String> = outcome
-            .quads
-            .iter()
-            .map(quad_to_string)
-            .collect();
+        let serialised: BTreeSet<String> = outcome.quads.iter().map(quad_to_string).collect();
 
         // Each substring must appear in at least one quad's serialisation.
         for needle in case.must_contain {

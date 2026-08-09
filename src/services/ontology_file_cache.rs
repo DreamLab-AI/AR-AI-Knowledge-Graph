@@ -119,8 +119,8 @@ pub struct OntologyFileCache {
 
 impl OntologyFileCache {
     pub fn new(config: OntologyCacheConfig) -> Self {
-        let capacity = NonZeroUsize::new(config.max_entries.max(1))
-            .expect("max(1) guarantees non-zero");
+        let capacity =
+            NonZeroUsize::new(config.max_entries.max(1)).expect("max(1) guarantees non-zero");
         let cache = Arc::new(RwLock::new(LruCache::new(capacity)));
 
         let stats = Arc::new(RwLock::new(OntologyCacheStats {
@@ -218,10 +218,8 @@ impl OntologyFileCache {
     /// Get cache entries sorted by priority
     pub async fn get_by_priority(&self) -> Vec<(String, CachedOntologyFile)> {
         let cache = self.cache.read().await;
-        let mut entries: Vec<(String, CachedOntologyFile)> = cache
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        let mut entries: Vec<(String, CachedOntologyFile)> =
+            cache.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
 
         // Sort by priority (Priority1 first, then Priority2, etc.)
         entries.sort_by(|a, b| a.1.metadata.priority.cmp(&b.1.metadata.priority));
@@ -315,11 +313,17 @@ mod tests {
 
         let cache = OntologyFileCache::new(config);
 
-        cache.put("file1.md".to_string(), create_test_entry("sha1")).await;
-        cache.put("file2.md".to_string(), create_test_entry("sha2")).await;
+        cache
+            .put("file1.md".to_string(), create_test_entry("sha1"))
+            .await;
+        cache
+            .put("file2.md".to_string(), create_test_entry("sha2"))
+            .await;
 
         // This should evict file1
-        cache.put("file3.md".to_string(), create_test_entry("sha3")).await;
+        cache
+            .put("file3.md".to_string(), create_test_entry("sha3"))
+            .await;
 
         let stats = cache.get_stats().await;
         assert_eq!(stats.evictions, 1);

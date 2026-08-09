@@ -1,8 +1,8 @@
+use crate::utils::time;
 use actix_web::{HttpResponse, ResponseError};
 use log::error;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::utils::time;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetailedValidationError {

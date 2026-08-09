@@ -3,20 +3,20 @@
 //!
 //! HTTP handlers for physics simulation endpoints using PhysicsService.
 
+use crate::settings::auth_extractor::AuthenticatedUser;
+use crate::AppState;
+use crate::{error_json, ok_json};
 use actix_web::{web, HttpResponse, Result as ActixResult};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::{ok_json, error_json};
-use crate::AppState;
-use crate::settings::auth_extractor::AuthenticatedUser;
 
 use crate::application::physics_service::{
     LayoutOptimizationRequest, PhysicsService, SimulationParams,
 };
-use visionclaw_domain::models::graph::GraphData;
 use crate::models::simulation_params::SettleMode;
+use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::ports::gpu_physics_adapter::PhysicsParameters;
 
 #[derive(Debug, Deserialize)]
@@ -126,7 +126,6 @@ pub async fn start_simulation(
     user.require_power_user()?;
     let graph = graph_data.read().await.clone();
 
-    
     let mut params = PhysicsParameters::default();
     if let Some(v) = req.time_step {
         params.time_step = v;
@@ -188,9 +187,7 @@ pub async fn stop_simulation(
     }
 }
 
-pub async fn get_status(
-    app_state: web::Data<AppState>,
-) -> ActixResult<HttpResponse> {
+pub async fn get_status(app_state: web::Data<AppState>) -> ActixResult<HttpResponse> {
     // Query GPU compute actor availability from AppState
     let gpu_available = app_state.get_gpu_compute_addr().await.is_some();
 
@@ -382,9 +379,7 @@ pub async fn get_settle_mode() -> ActixResult<HttpResponse> {
 
 /// POST /physics/settle-mode -- validate and echo back the requested mode.
 /// The actual mode is set when starting a simulation via `/physics/start`.
-pub async fn set_settle_mode(
-    req: web::Json<SetSettleModeRequest>,
-) -> ActixResult<HttpResponse> {
+pub async fn set_settle_mode(req: web::Json<SetSettleModeRequest>) -> ActixResult<HttpResponse> {
     // Validate FastSettle parameters if applicable.
     if let SettleMode::FastSettle {
         damping_override,
@@ -393,7 +388,10 @@ pub async fn set_settle_mode(
     } = &req.settle_mode
     {
         if *damping_override <= 0.0 || *damping_override > 1.0 {
-            return error_json!("damping_override must be in (0.0, 1.0], got {}", damping_override);
+            return error_json!(
+                "damping_override must be in (0.0, 1.0], got {}",
+                damping_override
+            );
         }
         if *max_settle_iterations == 0 {
             return error_json!("max_settle_iterations must be > 0");

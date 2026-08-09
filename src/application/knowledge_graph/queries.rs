@@ -7,10 +7,10 @@ use hexser::{HexResult, Hexserror, QueryHandler};
 use serde::Serialize;
 use std::sync::Arc;
 
+use crate::ports::knowledge_graph_repository::{GraphStatistics, KnowledgeGraphRepository};
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::node::Node;
-use crate::ports::knowledge_graph_repository::{GraphStatistics, KnowledgeGraphRepository};
 
 #[derive(Debug, Clone, Serialize)]
 pub enum QueryResult {

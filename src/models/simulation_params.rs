@@ -17,7 +17,9 @@ pub use visionclaw_domain::models::simulation_params::{
 };
 
 use visionclaw_domain::types::layout::LayoutMode;
-use visionclaw_domain::types::physics_config::{AutoBalanceConfig, AutoPauseConfig, PhysicsSettings};
+use visionclaw_domain::types::physics_config::{
+    AutoBalanceConfig, AutoPauseConfig, PhysicsSettings,
+};
 
 // GPU-aligned simulation parameters. Mirrors the CUDA `SimParams` struct;
 // must match its size and layout exactly (see `const _:()` assertion below).
@@ -228,7 +230,11 @@ impl From<&SimulationParams> for SimParams {
             cluster_strength: params.cluster_strength,
             alignment_strength: params.alignment_strength,
             temperature: params.temperature,
-            viewport_bounds: if params.enable_bounds { params.viewport_bounds } else { 0.0 },
+            viewport_bounds: if params.enable_bounds {
+                params.viewport_bounds
+            } else {
+                0.0
+            },
             sssp_alpha: params.sssp_alpha.unwrap_or(0.0),
             boundary_damping: params.boundary_damping,
             constraint_ramp_frames: params.constraint_ramp_frames,
@@ -245,10 +251,12 @@ impl From<&SimulationParams> for SimParams {
             learning_rate_default: crate::config::dev_config::physics().learning_rate_default,
 
             norm_delta_cap: crate::config::dev_config::physics().norm_delta_cap,
-            position_constraint_attraction: crate::config::dev_config::physics().position_constraint_attraction,
+            position_constraint_attraction: crate::config::dev_config::physics()
+                .position_constraint_attraction,
             lof_score_min: crate::config::dev_config::physics().lof_score_min,
             lof_score_max: crate::config::dev_config::physics().lof_score_max,
-            weight_precision_multiplier: crate::config::dev_config::physics().weight_precision_multiplier,
+            weight_precision_multiplier: crate::config::dev_config::physics()
+                .weight_precision_multiplier,
             gravity: params.gravity,
             lin_log_mode: if params.lin_log_mode { 1 } else { 0 },
             scaling_ratio: params.scaling_ratio,
@@ -297,7 +305,11 @@ impl From<&PhysicsSettings> for SimParams {
             // preserving the 172-byte repr(C) layout.
             alignment_strength: 0.0,
             temperature: physics.temperature,
-            viewport_bounds: if physics.enable_bounds { physics.bounds_size } else { 0.0 },
+            viewport_bounds: if physics.enable_bounds {
+                physics.bounds_size
+            } else {
+                0.0
+            },
             sssp_alpha: physics.sssp_alpha,
             boundary_damping: physics.boundary_damping,
             constraint_ramp_frames: physics.constraint_ramp_frames,
@@ -314,10 +326,12 @@ impl From<&PhysicsSettings> for SimParams {
             learning_rate_default: crate::config::dev_config::physics().learning_rate_default,
 
             norm_delta_cap: crate::config::dev_config::physics().norm_delta_cap,
-            position_constraint_attraction: crate::config::dev_config::physics().position_constraint_attraction,
+            position_constraint_attraction: crate::config::dev_config::physics()
+                .position_constraint_attraction,
             lof_score_min: crate::config::dev_config::physics().lof_score_min,
             lof_score_max: crate::config::dev_config::physics().lof_score_max,
-            weight_precision_multiplier: crate::config::dev_config::physics().weight_precision_multiplier,
+            weight_precision_multiplier: crate::config::dev_config::physics()
+                .weight_precision_multiplier,
             gravity: physics.gravity,
             lin_log_mode: if physics.lin_log_mode { 1 } else { 0 },
             scaling_ratio: physics.scaling_ratio,

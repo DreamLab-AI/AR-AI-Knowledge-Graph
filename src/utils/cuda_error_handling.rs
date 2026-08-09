@@ -3,11 +3,11 @@
 //! Provides comprehensive error checking and recovery for all CUDA operations.
 //! Implements proper error propagation, automatic cleanup, and fallback mechanisms.
 
+use log::{debug, error, info, warn};
 use std::ffi::{c_char, c_int, c_void};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use log::{error, warn, info, debug};
 
 #[repr(i32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,13 +192,12 @@ impl std::error::Error for CudaError {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum RecoveryStrategy {
-    
     Retry,
-    
+
     FallbackToCPU,
-    
+
     ResetContext,
-    
+
     Abort,
 }
 
@@ -240,18 +239,20 @@ impl CudaErrorHandler {
             return Ok(());
         }
 
-        
         let error_count = self.error_count.fetch_add(1, Ordering::Relaxed);
         let now = Instant::now();
 
-        
         if let Ok(mut last_time) = self.last_error_time.lock() {
             *last_time = Some(now);
         }
 
-        error!("CUDA error in {}: {} (error #{} total)", operation_name, cuda_error, error_count + 1);
+        error!(
+            "CUDA error in {}: {} (error #{} total)",
+            operation_name,
+            cuda_error,
+            error_count + 1
+        );
 
-        
         let strategy = self.determine_recovery_strategy(&cuda_error, error_count + 1);
 
         match strategy {
@@ -261,20 +262,31 @@ impl CudaErrorHandler {
                 // 1. It clears the last error state in the CUDA runtime (idempotent operation)
                 // 2. No memory is accessed or modified beyond the CUDA runtime's internal state
                 // 3. This prepares the runtime for a clean retry attempt
-                unsafe { cudaGetLastError(); }
+                unsafe {
+                    cudaGetLastError();
+                }
                 return Err(cuda_error);
             }
             RecoveryStrategy::FallbackToCPU => {
-                warn!("Falling back to CPU for {} due to repeated CUDA errors", operation_name);
+                warn!(
+                    "Falling back to CPU for {} due to repeated CUDA errors",
+                    operation_name
+                );
                 return Err(cuda_error);
             }
             RecoveryStrategy::ResetContext => {
-                warn!("Resetting CUDA context for {} due to critical error", operation_name);
+                warn!(
+                    "Resetting CUDA context for {} due to critical error",
+                    operation_name
+                );
                 self.reset_cuda_context();
                 return Err(cuda_error);
             }
             RecoveryStrategy::Abort => {
-                error!("Aborting {} due to unrecoverable CUDA error", operation_name);
+                error!(
+                    "Aborting {} due to unrecoverable CUDA error",
+                    operation_name
+                );
                 return Err(cuda_error);
             }
         }
@@ -291,16 +303,17 @@ impl CudaErrorHandler {
             let result = cudaDeviceSynchronize();
             if result != 0 {
                 let cuda_error = CudaError::from(result);
-                error!("CUDA synchronization failed in {}: {}", operation_name, cuda_error);
+                error!(
+                    "CUDA synchronization failed in {}: {}",
+                    operation_name, cuda_error
+                );
                 return Err(cuda_error);
             }
         }
 
-        
         self.check_error(&format!("{}_sync", operation_name))
     }
 
-    
     pub fn get_error_stats(&self) -> (u32, Option<Duration>) {
         let error_count = self.error_count.load(Ordering::Relaxed);
         let time_since_last = if let Ok(last_time) = self.last_error_time.lock() {
@@ -312,7 +325,6 @@ impl CudaErrorHandler {
         (error_count, time_since_last)
     }
 
-    
     pub fn reset_stats(&self) {
         self.error_count.store(0, Ordering::Relaxed);
         if let Ok(mut last_time) = self.last_error_time.lock() {
@@ -321,7 +333,6 @@ impl CudaErrorHandler {
         info!("CUDA error statistics reset");
     }
 
-    
     pub fn should_fallback_to_cpu(&self) -> bool {
         let error_count = self.error_count.load(Ordering::Relaxed);
         error_count >= self.fallback_threshold
@@ -329,7 +340,6 @@ impl CudaErrorHandler {
 
     fn determine_recovery_strategy(&self, error: &CudaError, error_count: u32) -> RecoveryStrategy {
         match error {
-            
             CudaError::OutOfMemory | CudaError::MemoryValueTooLarge => {
                 if error_count >= 2 {
                     RecoveryStrategy::FallbackToCPU
@@ -338,7 +348,6 @@ impl CudaErrorHandler {
                 }
             }
 
-            
             CudaError::NotInitialized | CudaError::DeInitialized | CudaError::InvalidContext => {
                 if error_count >= self.context_reset_threshold {
                     RecoveryStrategy::Abort
@@ -347,7 +356,6 @@ impl CudaErrorHandler {
                 }
             }
 
-            
             CudaError::LaunchFailure | CudaError::InvalidConfiguration => {
                 if error_count >= 3 {
                     RecoveryStrategy::FallbackToCPU
@@ -356,17 +364,10 @@ impl CudaErrorHandler {
                 }
             }
 
-            
-            CudaError::NoDevice | CudaError::DevicesUnavailable => {
-                RecoveryStrategy::FallbackToCPU
-            }
+            CudaError::NoDevice | CudaError::DevicesUnavailable => RecoveryStrategy::FallbackToCPU,
 
-            
-            CudaError::ECCUncorrectable | CudaError::NvlinkUncorrectable => {
-                RecoveryStrategy::Abort
-            }
+            CudaError::ECCUncorrectable | CudaError::NvlinkUncorrectable => RecoveryStrategy::Abort,
 
-            
             _ => {
                 if error_count >= self.fallback_threshold {
                     RecoveryStrategy::FallbackToCPU
@@ -421,7 +422,11 @@ pub struct CudaMemoryGuard {
 }
 
 impl CudaMemoryGuard {
-    pub fn new(size: usize, name: String, error_handler: Arc<CudaErrorHandler>) -> Result<Self, CudaError> {
+    pub fn new(
+        size: usize,
+        name: String,
+        error_handler: Arc<CudaErrorHandler>,
+    ) -> Result<Self, CudaError> {
         let mut ptr: *mut c_void = std::ptr::null_mut();
 
         // SAFETY: cudaMalloc is safe to call because:
@@ -434,7 +439,10 @@ impl CudaMemoryGuard {
             let result = cudaMalloc(&mut ptr as *mut *mut c_void, size);
             if result != 0 {
                 let cuda_error = CudaError::from(result);
-                error!("Failed to allocate {} bytes for {}: {}", size, name, cuda_error);
+                error!(
+                    "Failed to allocate {} bytes for {}: {}",
+                    size, name, cuda_error
+                );
                 return Err(cuda_error);
             }
         }
@@ -463,9 +471,16 @@ impl CudaMemoryGuard {
     /// - `host_data` must be a valid pointer to at least `size` bytes of readable memory
     /// - The memory at `host_data` must remain valid and unmodified during the copy
     /// - `host_data` must be properly aligned for the data type being copied
-    pub unsafe fn copy_from_host(&self, host_data: *const c_void, size: usize) -> Result<(), CudaError> {
+    pub unsafe fn copy_from_host(
+        &self,
+        host_data: *const c_void,
+        size: usize,
+    ) -> Result<(), CudaError> {
         if size > self.size {
-            error!("Attempting to copy {} bytes to buffer of size {}", size, self.size);
+            error!(
+                "Attempting to copy {} bytes to buffer of size {}",
+                size, self.size
+            );
             return Err(CudaError::InvalidValue);
         }
 
@@ -479,12 +494,16 @@ impl CudaMemoryGuard {
             let result = cudaMemcpy(self.ptr, host_data, size, cudaMemcpyHostToDevice);
             if result != 0 {
                 let cuda_error = CudaError::from(result);
-                error!("Failed to copy {} bytes to {}: {}", size, self.name, cuda_error);
+                error!(
+                    "Failed to copy {} bytes to {}: {}",
+                    size, self.name, cuda_error
+                );
                 return Err(cuda_error);
             }
         }
 
-        self.error_handler.check_error(&format!("copy_to_{}", self.name))?;
+        self.error_handler
+            .check_error(&format!("copy_to_{}", self.name))?;
 
         debug!("Copied {} bytes to {}", size, self.name);
         Ok(())
@@ -496,9 +515,16 @@ impl CudaMemoryGuard {
     /// - `host_data` must be a valid pointer to at least `size` bytes of writable memory
     /// - The memory at `host_data` must be exclusively owned by the caller during the copy
     /// - `host_data` must be properly aligned for the data type being copied
-    pub unsafe fn copy_to_host(&self, host_data: *mut c_void, size: usize) -> Result<(), CudaError> {
+    pub unsafe fn copy_to_host(
+        &self,
+        host_data: *mut c_void,
+        size: usize,
+    ) -> Result<(), CudaError> {
         if size > self.size {
-            error!("Attempting to copy {} bytes from buffer of size {}", size, self.size);
+            error!(
+                "Attempting to copy {} bytes from buffer of size {}",
+                size, self.size
+            );
             return Err(CudaError::InvalidValue);
         }
 
@@ -512,12 +538,16 @@ impl CudaMemoryGuard {
             let result = cudaMemcpy(host_data, self.ptr, size, cudaMemcpyDeviceToHost);
             if result != 0 {
                 let cuda_error = CudaError::from(result);
-                error!("Failed to copy {} bytes from {}: {}", size, self.name, cuda_error);
+                error!(
+                    "Failed to copy {} bytes from {}: {}",
+                    size, self.name, cuda_error
+                );
                 return Err(cuda_error);
             }
         }
 
-        self.error_handler.check_error(&format!("copy_from_{}", self.name))?;
+        self.error_handler
+            .check_error(&format!("copy_from_{}", self.name))?;
 
         debug!("Copied {} bytes from {}", size, self.name);
         Ok(())
@@ -536,7 +566,10 @@ impl Drop for CudaMemoryGuard {
             unsafe {
                 let result = cudaFree(self.ptr);
                 if result != 0 {
-                    error!("Failed to free CUDA memory for {}: error code {}", self.name, result);
+                    error!(
+                        "Failed to free CUDA memory for {}: error code {}",
+                        self.name, result
+                    );
                 } else {
                     debug!("Freed {} bytes for {}", self.size, self.name);
                 }
@@ -580,7 +613,8 @@ macro_rules! cuda_check {
     }};
 }
 
-static GLOBAL_CUDA_ERROR_HANDLER: std::sync::OnceLock<Arc<CudaErrorHandler>> = std::sync::OnceLock::new();
+static GLOBAL_CUDA_ERROR_HANDLER: std::sync::OnceLock<Arc<CudaErrorHandler>> =
+    std::sync::OnceLock::new();
 
 pub fn get_global_cuda_error_handler() -> Arc<CudaErrorHandler> {
     GLOBAL_CUDA_ERROR_HANDLER
@@ -613,7 +647,6 @@ mod tests {
         let handler = CudaErrorHandler::new();
         assert!(!handler.should_fallback_to_cpu());
 
-        
         for _ in 0..5 {
             handler.error_count.fetch_add(1, Ordering::Relaxed);
         }

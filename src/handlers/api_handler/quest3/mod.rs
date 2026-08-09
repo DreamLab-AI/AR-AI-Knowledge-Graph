@@ -1,9 +1,7 @@
-
-
+use crate::ok_json;
 use actix_web::{web, HttpResponse, Result};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use crate::ok_json;
 
 use crate::actors::messages::{GetSettings, UpdateSettings};
 use crate::AppState;
@@ -22,8 +20,8 @@ pub struct Quest3Settings {
 #[serde(rename_all = "camelCase")]
 pub struct Quest3XRSettings {
     pub enabled: bool,
-    pub display_mode: String, 
-    pub space_type: String,   
+    pub display_mode: String,
+    pub space_type: String,
     pub enable_hand_tracking: bool,
     pub enable_passthrough_portal: bool,
     pub passthrough_opacity: f32,
@@ -31,21 +29,21 @@ pub struct Quest3XRSettings {
     pub passthrough_contrast: f32,
     pub enable_plane_detection: bool,
     pub enable_scene_understanding: bool,
-    pub locomotion_method: String, 
+    pub locomotion_method: String,
     pub movement_speed: f32,
     pub interaction_distance: f32,
-    pub quality: String,   
-    pub refresh_rate: u32, 
+    pub quality: String,
+    pub refresh_rate: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Quest3VisualizationSettings {
-    pub rendering_context: String, 
+    pub rendering_context: String,
     pub enable_antialiasing: bool,
     pub enable_shadows: bool,
-    pub shadow_quality: String,   
-    pub background_color: String, 
+    pub shadow_quality: String,
+    pub background_color: String,
     pub bounds_size: f32,
     pub max_velocity: f32,
     pub physics_enabled: bool,
@@ -61,9 +59,9 @@ pub struct Quest3PerformanceSettings {
     pub adaptive_quality: bool,
     pub thermal_throttling: bool,
     pub battery_optimization: bool,
-    pub gpu_priority: String, 
-    pub cpu_affinity: String, 
-    pub memory_pressure_handling: String, 
+    pub gpu_priority: String,
+    pub cpu_affinity: String,
+    pub memory_pressure_handling: String,
     pub network_optimization: bool,
 }
 
@@ -81,7 +79,7 @@ pub struct Quest3InteractionSettings {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Quest3GpuSettings {
-    pub kernel_mode: String, 
+    pub kernel_mode: String,
     pub force_params: GpuForceParams,
     pub constraints: Vec<String>,
     pub isolation_layers: Vec<String>,
@@ -107,7 +105,7 @@ pub struct ComfortSettings {
     pub vignetting: bool,
     pub teleport_fade: bool,
     pub snap_turning: bool,
-    pub comfort_mode_intensity: f32, 
+    pub comfort_mode_intensity: f32,
 }
 
 #[derive(Debug, Serialize)]
@@ -133,27 +131,27 @@ pub struct Quest3CalibrationRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserProfile {
-    pub ipd: Option<f32>,                 
-    pub height: Option<f32>,              
-    pub dominant_hand: Option<String>,    
-    pub experience_level: Option<String>, 
-    pub motion_sensitivity: Option<f32>,  
+    pub ipd: Option<f32>,
+    pub height: Option<f32>,
+    pub dominant_hand: Option<String>,
+    pub experience_level: Option<String>,
+    pub motion_sensitivity: Option<f32>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EnvironmentProfile {
-    pub lighting_conditions: Option<String>, 
-    pub space_size: Option<String>,          
-    pub tracking_quality: Option<String>,    
-    pub wifi_quality: Option<String>,        
+    pub lighting_conditions: Option<String>,
+    pub space_size: Option<String>,
+    pub tracking_quality: Option<String>,
+    pub wifi_quality: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PerformanceTarget {
-    pub target_framerate: Option<u32>,      
-    pub quality_preference: Option<String>, 
+    pub target_framerate: Option<u32>,
+    pub quality_preference: Option<String>,
     pub battery_priority: Option<bool>,
     pub thermal_priority: Option<bool>,
 }
@@ -161,9 +159,9 @@ pub struct PerformanceTarget {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserPreferences {
-    pub comfort_level: Option<f32>,        
-    pub interaction_style: Option<String>, 
-    pub ar_preference: Option<bool>,       
+    pub comfort_level: Option<f32>,
+    pub interaction_style: Option<String>,
+    pub ar_preference: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -185,7 +183,7 @@ pub struct OptimizationApplied {
     pub category: String,
     pub optimization: String,
     pub reason: String,
-    pub impact: String, 
+    pub impact: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -193,9 +191,9 @@ pub struct OptimizationApplied {
 pub struct PerformanceEstimate {
     pub expected_framerate: u32,
     pub battery_life_hours: f32,
-    pub thermal_rating: String, 
-    pub comfort_score: f32,     
-    pub quality_score: f32,     
+    pub thermal_rating: String,
+    pub comfort_score: f32,
+    pub quality_score: f32,
 }
 
 pub async fn get_quest3_defaults(_app_state: web::Data<AppState>) -> Result<HttpResponse> {
@@ -226,12 +224,10 @@ pub async fn calibrate_quest3(
 ) -> Result<HttpResponse> {
     info!("Calibrating Quest 3 settings for user profile");
 
-    
     let mut calibrated_settings = create_quest3_defaults();
     let mut optimizations = Vec::new();
     let mut recommendations = Vec::new();
 
-    
     if let Some(user_profile) = &request.user_profile {
         apply_user_profile_optimizations(
             &mut calibrated_settings,
@@ -240,12 +236,10 @@ pub async fn calibrate_quest3(
         );
     }
 
-    
     if let Some(environment) = &request.environment {
         apply_environment_optimizations(&mut calibrated_settings, &mut optimizations, environment);
     }
 
-    
     if let Some(performance_target) = &request.performance_target {
         apply_performance_optimizations(
             &mut calibrated_settings,
@@ -254,7 +248,6 @@ pub async fn calibrate_quest3(
         );
     }
 
-    
     if let Some(preferences) = &request.preferences {
         apply_user_preferences(
             &mut calibrated_settings,
@@ -264,13 +257,10 @@ pub async fn calibrate_quest3(
         );
     }
 
-    
     let calibration_id = format!("quest3_cal_{}", chrono::Utc::now().timestamp());
 
-    
     let performance_estimate = estimate_performance(&calibrated_settings);
 
-    
     let settings_applied =
         match apply_quest3_settings_to_system(app_state, &calibrated_settings).await {
             Ok(()) => {
@@ -348,7 +338,7 @@ fn create_quest3_defaults() -> Quest3Settings {
         interaction: Quest3InteractionSettings {
             hand_tracking_confidence: 0.7,
             gesture_recognition: true,
-            eye_tracking: false, 
+            eye_tracking: false,
             voice_commands: true,
             haptic_feedback: true,
             comfort_settings: ComfortSettings {
@@ -370,9 +360,9 @@ fn create_quest3_defaults() -> Quest3Settings {
             },
             constraints: vec!["boundary".to_string(), "collision".to_string()],
             isolation_layers: vec!["focus".to_string()],
-            trajectories_enabled: false, 
+            trajectories_enabled: false,
             clustering_enabled: true,
-            anomaly_detection: false, 
+            anomaly_detection: false,
         },
     }
 }
@@ -407,7 +397,7 @@ fn apply_user_profile_optimizations(
                     impact: "high".to_string(),
                 });
             }
-            _ => {} 
+            _ => {}
         }
     }
 
@@ -457,7 +447,7 @@ fn apply_environment_optimizations(
                     impact: "medium".to_string(),
                 });
             }
-            _ => {} 
+            _ => {}
         }
     }
 
@@ -473,7 +463,7 @@ fn apply_environment_optimizations(
                 settings.visualisation.culling_distance = 100.0;
                 settings.xr.space_type = "bounded-floor".to_string();
             }
-            _ => {} 
+            _ => {}
         }
     }
 
@@ -512,7 +502,7 @@ fn apply_performance_optimizations(
                 settings.visualisation.particle_count = 2000;
                 settings.performance.battery_optimization = true;
             }
-            _ => {} 
+            _ => {}
         }
     }
 
@@ -543,7 +533,7 @@ fn apply_performance_optimizations(
                     impact: "high".to_string(),
                 });
             }
-            _ => {} 
+            _ => {}
         }
     }
 
@@ -592,7 +582,7 @@ fn apply_user_preferences(
                 settings.interaction.haptic_feedback = true;
                 recommendations.push("Ensure controllers are charged and paired".to_string());
             }
-            _ => {} 
+            _ => {}
         }
     }
 
@@ -614,15 +604,13 @@ fn estimate_performance(settings: &Quest3Settings) -> PerformanceEstimate {
     let mut performance_score = 1.0f32;
     let mut battery_multiplier = 1.0f32;
 
-    
     performance_score *= match settings.performance.target_framerate {
-        120 => 0.7, 
-        90 => 1.0,  
-        72 => 1.3,  
+        120 => 0.7,
+        90 => 1.0,
+        72 => 1.3,
         _ => 1.0,
     };
 
-    
     if settings.visualisation.enable_shadows {
         performance_score *= 0.9;
         battery_multiplier *= 1.1;
@@ -632,20 +620,18 @@ fn estimate_performance(settings: &Quest3Settings) -> PerformanceEstimate {
         battery_multiplier *= 1.05;
     }
 
-    
     if settings.xr.enable_hand_tracking {
         performance_score *= 0.98;
         battery_multiplier *= 1.02;
     }
 
-    
     if settings.performance.battery_optimization {
         battery_multiplier *= 0.8;
     }
 
     let expected_framerate =
         (settings.performance.target_framerate as f32 * performance_score) as u32;
-    let battery_life = 2.5 * battery_multiplier; 
+    let battery_life = 2.5 * battery_multiplier;
 
     let thermal_rating = if performance_score < 0.8 && settings.performance.target_framerate >= 90 {
         "hot"
@@ -679,7 +665,6 @@ async fn apply_quest3_settings_to_system(
     app_state: web::Data<AppState>,
     quest3_settings: &Quest3Settings,
 ) -> Result<(), String> {
-    
     let mut settings = app_state
         .settings_addr
         .send(GetSettings)
@@ -687,10 +672,8 @@ async fn apply_quest3_settings_to_system(
         .map_err(|e| format!("Failed to get settings: {}", e))?
         .map_err(|e| format!("Settings error: {}", e))?;
 
-    
     settings.xr.enabled = Some(quest3_settings.xr.enabled);
 
-    
     settings.xr.mode = Some(quest3_settings.xr.display_mode.clone());
     settings.xr.space_type = quest3_settings.xr.space_type.clone();
 
@@ -703,7 +686,6 @@ async fn apply_quest3_settings_to_system(
     settings.xr.locomotion_method = quest3_settings.xr.locomotion_method.clone();
     settings.xr.interaction_radius = quest3_settings.xr.interaction_distance;
 
-    
     settings.visualisation.graphs.logseq.physics.bounds_size =
         quest3_settings.visualisation.bounds_size;
     settings.visualisation.graphs.logseq.physics.max_velocity =
@@ -722,7 +704,6 @@ async fn apply_quest3_settings_to_system(
     settings.visualisation.graphs.visionclaw.physics.enabled =
         quest3_settings.visualisation.physics_enabled;
 
-    
     app_state
         .settings_addr
         .send(UpdateSettings { settings })

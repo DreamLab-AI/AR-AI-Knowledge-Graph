@@ -179,7 +179,6 @@ pub trait Validator<T> {
 pub struct ValidationUtils;
 
 impl ValidationUtils {
-    
     pub fn validate_string_length(
         value: &str,
         max_length: usize,
@@ -195,7 +194,6 @@ impl ValidationUtils {
         Ok(())
     }
 
-    
     pub fn validate_numeric_range<T>(value: T, min: T, max: T, field: &str) -> ValidationResult<()>
     where
         T: PartialOrd + Copy + Into<f64>,
@@ -211,7 +209,6 @@ impl ValidationUtils {
         Ok(())
     }
 
-    
     pub fn validate_required<'a, T>(value: &'a Option<T>, field: &str) -> ValidationResult<&'a T> {
         match value {
             Some(v) => Ok(v),
@@ -219,7 +216,6 @@ impl ValidationUtils {
         }
     }
 
-    
     pub fn validate_array_size<T>(
         array: &[T],
         max_size: usize,
@@ -235,7 +231,6 @@ impl ValidationUtils {
         Ok(())
     }
 
-    
     pub fn validate_email(email: &str, field: &str) -> ValidationResult<()> {
         let email_regex = regex::Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
             .map_err(|_| {
@@ -252,7 +247,6 @@ impl ValidationUtils {
         Ok(())
     }
 
-    
     pub fn validate_url(url: &str, field: &str) -> ValidationResult<()> {
         if url.parse::<url::Url>().is_err() {
             return Err(DetailedValidationError::pattern_mismatch(
@@ -264,7 +258,6 @@ impl ValidationUtils {
         Ok(())
     }
 
-    
     pub fn validate_hex_color(color: &str, field: &str) -> ValidationResult<()> {
         let hex_regex = regex::Regex::new(r"^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$").map_err(|_| {
             DetailedValidationError::new(field, "Invalid color regex", "REGEX_ERROR")
@@ -280,7 +273,6 @@ impl ValidationUtils {
         Ok(())
     }
 
-    
     pub fn validate_uuid(uuid: &str, field: &str) -> ValidationResult<()> {
         if uuid::Uuid::parse_str(uuid).is_err() {
             return Err(DetailedValidationError::pattern_mismatch(
