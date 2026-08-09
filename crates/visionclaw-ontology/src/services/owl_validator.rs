@@ -331,9 +331,9 @@ impl OwlValidatorService {
                     // A genuine type reference (registered CURIE, known absolute
                     // scheme, or a clean bare-local slug) → rdf:type IRI.
                     triples.push(RdfTriple {
-                        subject: self.expand_iri(&node.id)?,
+                        subject: self.expand_iri_lenient(&node.id),
                         predicate: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
-                        object: self.expand_iri(label)?,
+                        object: self.expand_iri_lenient(label),
                         is_literal: false,
                         datatype: None,
                         language: None,
@@ -345,7 +345,7 @@ impl OwlValidatorService {
                     // rd:type object, which raised "Unknown prefix" on such titles
                     // and mis-asserted display names as classes in the reasoned graph.
                     triples.push(RdfTriple {
-                        subject: self.expand_iri(&node.id)?,
+                        subject: self.expand_iri_lenient(&node.id),
                         predicate: "http://www.w3.org/2000/01/rdf-schema#label".to_string(),
                         object: label.clone(),
                         is_literal: true,
@@ -360,8 +360,8 @@ impl OwlValidatorService {
                 let (object, is_literal, datatype, language) =
                     self.serialize_property_value(prop_value)?;
                 triples.push(RdfTriple {
-                    subject: self.expand_iri(&node.id)?,
-                    predicate: self.expand_iri(prop_name)?,
+                    subject: self.expand_iri_lenient(&node.id),
+                    predicate: self.expand_iri_lenient(prop_name),
                     object,
                     is_literal,
                     datatype,
@@ -373,9 +373,9 @@ impl OwlValidatorService {
         
         for edge in &graph_data.edges {
             triples.push(RdfTriple {
-                subject: self.expand_iri(&edge.source)?,
-                predicate: self.expand_iri(&edge.relationship_type)?,
-                object: self.expand_iri(&edge.target)?,
+                subject: self.expand_iri_lenient(&edge.source),
+                predicate: self.expand_iri_lenient(&edge.relationship_type),
+                object: self.expand_iri_lenient(&edge.target),
                 is_literal: false,
                 datatype: None,
                 language: None,
@@ -386,8 +386,8 @@ impl OwlValidatorService {
                 let (object, is_literal, datatype, language) =
                     self.serialize_property_value(prop_value)?;
                 triples.push(RdfTriple {
-                    subject: self.expand_iri(&edge.id)?,
-                    predicate: self.expand_iri(prop_name)?,
+                    subject: self.expand_iri_lenient(&edge.id),
+                    predicate: self.expand_iri_lenient(prop_name),
                     object,
                     is_literal,
                     datatype,
@@ -684,6 +684,20 @@ impl OwlValidatorService {
     /// types and must not be expanded as rd:type IRIs.
     fn is_iri_shaped(&self, label: &str) -> bool {
         !label.chars().any(char::is_whitespace) && self.expand_iri(label).is_ok()
+    }
+
+    /// Total (never-failing) IRI expansion for graph→RDF mapping. Like
+    /// `expand_iri`, but an unresolvable value (a `prefix:local` whose prefix is
+    /// neither a registered CURIE nor a known absolute scheme, e.g. `ai:foo`)
+    /// becomes a safe opaque local IRI instead of an error. `map_graph_to_rdf`
+    /// uses this for every mandatory IRI position (subject / predicate / edge
+    /// endpoints) so one non-IRI value can never abort the whole mapping via `?`
+    /// — otherwise the first odd string fails the entire validation and the real
+    /// OWL violations are never reported. Strict `expand_iri` is retained for
+    /// callers that must surface an invalid IRI.
+    fn expand_iri_lenient(&self, iri: &str) -> String {
+        self.expand_iri(iri)
+            .unwrap_or_else(|_| format!("http://example.org/{}", iri))
     }
 
     fn expand_iri(&self, iri: &str) -> Result<String> {
