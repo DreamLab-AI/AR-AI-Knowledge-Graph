@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > enrichment-decide handler (`services::broker_events`) over the multiplexed graph
 > socket. Read "`BrokerActor`" below as "the broker governance publisher".
 
+## [Unreleased] - 2026-08-10
+
+### Changed — Ontology reasoner is live by default
+
+- **`ontology_validation` feature flag now defaults ON** (`FeatureFlags::default()` in `src/handlers/api_handler/analytics/types.rs`; `FEATURE_FLAGS` initialises from it in `analytics/state.rs`). The Whelk EL reasoner's HTTP read endpoints (`/api/ontology/*`) are therefore exposed by default — the reasoner is no longer opt-in. Commit `ea8d5e360`.
+- **Whelk classifier runs at boot** and materialises ~37k inferred axioms into the named graph `urn:ngm:graph:ontology:inferred` (reflexive `X ⊑ X`, `X ⊑ owl:Thing`, `owl:Nothing ⊑ X`, plus the asserted-subclass closure). The "live reasoned graph" is now actually served, not aspirational.
+
+### Fixed
+
+- **`GET /api/ontology/hierarchy` no longer panics.** It was crashing with a `block_on`-in-async panic; it now returns `200` with the full OWL class hierarchy (~12,417 nodes). The class list/hierarchy is fetched async-direct via `state.ontology_repository.list_owl_classes().await` rather than through the sync `QueryHandler`. Commit `2d17365c5`.
+
 ## [Unreleased] - 2026-06-21
 
 ### Added — Semantic Trust Layer (PRD-022 Phase 1, ADR-127)

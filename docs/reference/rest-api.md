@@ -481,7 +481,7 @@ Full list registered by `settings_routes.rs:1404-1430` (`configure_routes`). GET
 
 ## Ontology Endpoints
 
-Configured in `ontology_handler.rs`. Note: `/api/ontology-agent/*` endpoints are now authentication-gated (previously unwrapped, critical security fix per ADR-028-ext).
+Configured in `ontology_handler.rs`. Note: `/api/ontology-agent/*` **read** endpoints (`discover`, `read`, `query`, `traverse`, `validate`, `status`) are anonymous; only `POST /api/ontology-agent/propose` is authenticated (`power_user`) and rate-limited — the governed write anchor. (Historically the whole scope was left unwrapped; the WS-1 fix re-gated `/propose` specifically, per ADR-028-ext.)
 
 ### GET /api/ontology/classes
 
