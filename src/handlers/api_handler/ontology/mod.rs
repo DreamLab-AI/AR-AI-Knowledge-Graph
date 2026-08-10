@@ -1063,13 +1063,12 @@ pub async fn get_hierarchy(
         );
     }
 
-    use crate::application::ontology::{ListOwlClasses, ListOwlClassesHandler};
-    use hexser::QueryHandler;
-
-    let handler = ListOwlClassesHandler::new(state.ontology_repository.clone());
-    let list_query = ListOwlClasses;
-
-    match handler.handle(list_query) {
+    // Call the async repository directly. The sync ListOwlClassesHandler wraps
+    // this same call in `tokio::runtime::Handle::current().block_on` (queries.rs:97),
+    // which panics with "Cannot start a runtime from within a runtime" when invoked
+    // from this async actix worker — crashing the endpoint with an empty reply.
+    // Going async-direct avoids the sync-over-async bridge entirely.
+    match state.ontology_repository.list_owl_classes().await {
         Ok(classes) => {
             info!("Building class hierarchy from {} classes", classes.len());
 
