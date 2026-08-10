@@ -462,6 +462,12 @@ pub struct GraphServiceSupervisor {
     auto_pagerank_in_flight: bool,
     auto_anomaly_in_flight: bool,
     auto_components_in_flight: bool,
+
+    // Live-linkage (graphUpdated) broadcast state. Every topology mutation
+    // bumps the revision; a debounce window coalesces mutation bursts (bulk
+    // sync, bots edge loops) into a single client notification.
+    graph_revision: u64,
+    graph_update_notify_pending: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -528,7 +534,44 @@ impl GraphServiceSupervisor {
             auto_pagerank_in_flight: false,
             auto_anomaly_in_flight: false,
             auto_components_in_flight: false,
+            graph_revision: 0,
+            graph_update_notify_pending: false,
         }
+    }
+
+    /// Live linkage: debounced "graph topology changed" broadcast.
+    ///
+    /// Every mutation of the reasoned graph (runtime add-node/edge, bulk
+    /// metadata ingest, full database reload after a GitHub sync) bumps a
+    /// monotonic revision and schedules ONE `graphUpdated` JSON text frame
+    /// per settle window over the existing ClientCoordinatorActor
+    /// broadcast_message fan-out. Clients respond by refetching REST
+    /// `/api/graph/data`; their topology hash makes a no-change refetch a
+    /// no-op, so over-signalling is cheap while under-signalling (the
+    /// pre-existing behaviour: never telling clients at all) left connected
+    /// clients blind to every structural change until reconnect.
+    fn notify_graph_updated(&mut self, ctx: &mut Context<Self>, reason: &'static str) {
+        self.graph_revision += 1;
+        if self.graph_update_notify_pending {
+            return;
+        }
+        self.graph_update_notify_pending = true;
+        ctx.run_later(Duration::from_millis(500), move |act, _ctx| {
+            act.graph_update_notify_pending = false;
+            if let Some(ref client) = act.client {
+                let payload = format!(
+                    "{{\"type\":\"graphUpdated\",\"revision\":{},\"reason\":\"{}\"}}",
+                    act.graph_revision, reason
+                );
+                client.do_send(msgs::BroadcastMessage { message: payload });
+                info!(
+                    "GraphServiceSupervisor: broadcast graphUpdated rev={} reason={}",
+                    act.graph_revision, reason
+                );
+            } else {
+                debug!("GraphServiceSupervisor: graphUpdated suppressed (no client coordinator)");
+            }
+        });
     }
 
     pub fn with_config(
@@ -1473,19 +1516,68 @@ impl Handler<msgs::GetGraphData> for GraphServiceSupervisor {
 /// Previously this handler only read stale cached data from GraphStateActor without
 /// triggering an actual reload, causing "0 links" when the actor loaded before
 /// Oxigraph was populated by load_graph_from_files.
+/// Live-linkage signal: ask the supervisor to run its debounced
+/// `graphUpdated` client broadcast. Used internally by async handlers
+/// (ReloadGraphFromDatabase) that cannot reach `self` from inside their
+/// future, and externally by REST handlers whose writes change the reasoned
+/// graph outside the supervisor's own mailbox (e.g. ontology axiom writes).
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct NotifyGraphUpdated {
+    pub reason: &'static str,
+}
+
+impl Handler<NotifyGraphUpdated> for GraphServiceSupervisor {
+    type Result = ();
+
+    fn handle(&mut self, msg: NotifyGraphUpdated, ctx: &mut Self::Context) -> Self::Result {
+        self.notify_graph_updated(ctx, msg.reason);
+    }
+}
+
+/// Replace the supervisor's client-coordinator address with the application's
+/// canonical instance — the one SocketFlowServer actually registers clients
+/// with (`AppState::client_manager_addr`). The supervisor's own
+/// ClientCoordinator child (spawned in `initialize_actors`) has an EMPTY
+/// client registry, so anything broadcast through it reaches nobody: a latent
+/// bug for the SupervisorMessage::BroadcastMessage routing and fatal for the
+/// live-linkage `graphUpdated` signal. AppState sends this right after
+/// starting the supervisor. Note: a supervised restart of the
+/// ClientCoordinator child would re-overwrite this with a fresh orphan —
+/// acceptable while that restart path is effectively unused.
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SetClientCoordinatorAddr {
+    pub addr: Addr<ClientCoordinatorActor>,
+}
+
+impl Handler<SetClientCoordinatorAddr> for GraphServiceSupervisor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetClientCoordinatorAddr, _ctx: &mut Self::Context) -> Self::Result {
+        self.client = Some(msg.addr);
+        self.wire_physics_and_client();
+        info!("GraphServiceSupervisor: client coordinator rebound to application instance");
+    }
+}
+
 impl Handler<msgs::ReloadGraphFromDatabase> for GraphServiceSupervisor {
     type Result = ResponseFuture<Result<(), String>>;
 
     fn handle(
         &mut self,
         _msg: msgs::ReloadGraphFromDatabase,
-        _ctx: &mut Self::Context,
+        ctx: &mut Self::Context,
     ) -> Self::Result {
         info!("GraphServiceSupervisor: ReloadGraphFromDatabase received");
 
         let graph_state_addr = self.graph_state.clone();
         let physics_addr = self.physics.clone();
         let gpu_manager_addr = self.gpu_manager.clone();
+        // Live linkage: notify clients AFTER the reload completes (a full
+        // GitHub-sync reload can take minutes; signalling up-front would make
+        // clients refetch the pre-reload graph and then miss the real change).
+        let self_addr = ctx.address();
 
         Box::pin(async move {
             if let Some(graph_state) = graph_state_addr {
@@ -1542,6 +1634,12 @@ impl Handler<msgs::ReloadGraphFromDatabase> for GraphServiceSupervisor {
                         // the GPU mutex. The single-path through PhysicsOrchestratorActor →
                         // ForceComputeActor is the correct (and sole) graph upload path.
 
+                        // Live linkage: the reasoned graph just changed shape —
+                        // tell connected clients to refetch topology.
+                        self_addr.do_send(NotifyGraphUpdated {
+                            reason: "database_reload",
+                        });
+
                         Ok(())
                     }
                     Ok(Err(e)) => {
@@ -1596,7 +1694,10 @@ impl Handler<msgs::ComputeShortestPaths> for GraphServiceSupervisor {
 impl Handler<msgs::UpdateGraphData> for GraphServiceSupervisor {
     type Result = ResponseActFuture<Self, Result<(), String>>;
 
-    fn handle(&mut self, msg: msgs::UpdateGraphData, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: msgs::UpdateGraphData, ctx: &mut Self::Context) -> Self::Result {
+        // Live linkage: full topology replacement — signal connected clients.
+        // (Debounce window comfortably outlasts the mailbox forward below.)
+        self.notify_graph_updated(ctx, "graph_data_replaced");
         if let Some(ref graph_state_addr) = self.graph_state {
             let addr = graph_state_addr.clone();
             Box::pin(
@@ -1623,11 +1724,9 @@ impl Handler<msgs::UpdateGraphData> for GraphServiceSupervisor {
 impl Handler<msgs::AddNodesFromMetadata> for GraphServiceSupervisor {
     type Result = ResponseFuture<Result<(), String>>;
 
-    fn handle(
-        &mut self,
-        msg: msgs::AddNodesFromMetadata,
-        _ctx: &mut Self::Context,
-    ) -> Self::Result {
+    fn handle(&mut self, msg: msgs::AddNodesFromMetadata, ctx: &mut Self::Context) -> Self::Result {
+        // Live linkage: bulk node ingest — signal connected clients.
+        self.notify_graph_updated(ctx, "nodes_added");
         if let Some(ref graph_state_addr) = self.graph_state {
             let addr = graph_state_addr.clone();
             Box::pin(async move {
@@ -2077,10 +2176,14 @@ impl Handler<msgs::GetNodeIdMapping> for GraphServiceSupervisor {
 impl Handler<msgs::AddEdge> for GraphServiceSupervisor {
     type Result = Result<(), String>;
 
-    fn handle(&mut self, msg: msgs::AddEdge, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: msgs::AddEdge, ctx: &mut Self::Context) -> Self::Result {
         if let Some(ref graph_state_addr) = self.graph_state {
             debug!("Forwarding AddEdge to GraphStateActor");
             graph_state_addr.do_send(msg);
+            // Live linkage: runtime edge insert — signal connected clients.
+            // The debounce coalesces the bots-visualization tight AddEdge
+            // loops into one notification per settle window.
+            self.notify_graph_updated(ctx, "edge_added");
             Ok(())
         } else {
             warn!("Cannot forward AddEdge: GraphStateActor not initialized");

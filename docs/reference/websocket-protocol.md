@@ -129,6 +129,33 @@ in [binary-protocol.md](./binary-protocol.md).
 Unknown types are logged and ignored; malformed JSON returns a
 `{"type":"error"}` frame.
 
+### Live linkage — `graphUpdated` (server → client)
+
+When the reasoned graph changes shape at runtime, `GraphServiceSupervisor`
+broadcasts a debounced JSON text frame to every connected client over the
+`ClientCoordinatorActor` fan-out:
+
+```json
+{"type":"graphUpdated","revision":42,"reason":"database_reload"}
+```
+
+- `revision` — monotonic mutation counter (bumps on every topology mutation;
+  one frame per ~500 ms settle window coalesces bursts).
+- `reason` — `database_reload` (GitHub sync / admin reload), `nodes_added`
+  (bulk metadata ingest), `edge_added` (runtime edge insert),
+  `graph_data_replaced` (full topology replacement),
+  `ontology_axiom_added` / `ontology_axiom_removed` (REST axiom writes), or
+  `inference_results_stored` (fresh Whelk inferences landed).
+
+The client (`textMessageHandler.ts`) responds with a trailing-debounced
+(750 ms) refetch of REST `GET /api/graph/data` plus a refresh of the
+inferred-axioms overlay (`/ontology/inferred`). The topology hash in
+`graphDataManager` collapses no-change deliveries to a no-op, so
+over-signalling is cheap. A sampling self-heal in
+`graphDataManager.updateNodePositions` backstops missed signals: if the binary
+position stream references node ids the client has never learned, it refetches
+topology (30 s cooldown).
+
 ```mermaid
 sequenceDiagram
     participant C as Client

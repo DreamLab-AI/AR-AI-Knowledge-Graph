@@ -8,12 +8,38 @@
 import { createLogger, createErrorMetadata } from '../../utils/loggerConfig';
 import { debugState } from '../../utils/clientDebugState';
 import { graphDataManager } from '../../features/graph/managers/graphDataManager';
+import { useInferredEdgesStore } from '../../features/ontology/store/useInferredEdgesStore';
 import type { WebSocketMessage } from '../../types/websocketTypes';
 import type { WebSocketErrorFrame } from './types';
 import { emit, notifyMessageHandlers } from './connectionManager';
 import { handleErrorFrame } from './binaryProtocol';
 
 const logger = createLogger('WebSocketStore');
+
+// Live linkage (graphUpdated): trailing debounce so a burst of server-side
+// mutation signals costs one refetch. The refetch itself is cheap when nothing
+// changed — graphDataManager's topology hash turns a no-change delivery into a
+// no-op — so the client can afford to trust every signal.
+let graphUpdatedRefetchTimer: ReturnType<typeof setTimeout> | null = null;
+const GRAPH_UPDATED_REFETCH_DEBOUNCE_MS = 750;
+
+function scheduleGraphRefetch(revision: number | undefined, reason: string | undefined) {
+  if (graphUpdatedRefetchTimer !== null) clearTimeout(graphUpdatedRefetchTimer);
+  graphUpdatedRefetchTimer = setTimeout(() => {
+    graphUpdatedRefetchTimer = null;
+    logger.info(
+      `[LiveLinkage] graphUpdated rev=${revision ?? '?'} reason=${reason ?? '?'} — refetching topology`,
+    );
+    graphDataManager.fetchInitialData().catch((error) => {
+      logger.error('[LiveLinkage] topology refetch failed:', createErrorMetadata(error));
+    });
+    // The reasoned layer: pull fresh Whelk inferences so InferredEdges tracks
+    // the evolving ontology, not just the asserted topology.
+    useInferredEdgesStore.getState().refresh().catch(() => {
+      /* refresh() is internally empty-safe; nothing further to do */
+    });
+  }, GRAPH_UPDATED_REFETCH_DEBOUNCE_MS);
+}
 
 /**
  * Process a parsed JSON WebSocket message, dispatching to the appropriate
@@ -62,6 +88,15 @@ export function handleTextMessage(
   // Memory flash events -- forward to event bus for EmbeddingCloudLayer
   if (message.type === 'memory_flash' && (message as unknown as Record<string, unknown>).data) {
     emit('memoryFlash', (message as unknown as Record<string, unknown>).data);
+  }
+
+  // Live linkage: the server's reasoned graph changed shape (GitHub sync
+  // reload, runtime node/edge mutation, ontology write). Refetch topology
+  // (debounced) and rebroadcast on the event bus for other consumers.
+  if (message.type === 'graphUpdated') {
+    const m = message as unknown as { revision?: number; reason?: string };
+    emit('graphUpdated', { revision: m.revision, reason: m.reason });
+    scheduleGraphRefetch(m.revision, m.reason);
   }
 
   notifyMessageHandlers(message);

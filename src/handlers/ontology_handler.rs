@@ -570,17 +570,34 @@ pub async fn add_axiom(
     let handler = AddAxiomHandler::new(state.ontology_repository.clone());
 
     let axiom_type = format!("{:?}", axiom.axiom_type);
-    match handler.handle(AddAxiom { axiom }) {
-        Ok(()) => {
+    // The CQRS handler is sync-over-async (block_on inside): calling it inline
+    // on an actix worker panics with "Cannot start a runtime from within a
+    // runtime" and drops the connection. Run it on a dedicated thread, exactly
+    // as remove_axiom below already does.
+    let result = execute_in_thread(move || handler.handle(AddAxiom { axiom })).await;
+    match result {
+        Ok(Ok(())) => {
             info!("Axiom added successfully via CQRS: type={}", axiom_type);
+            // Live linkage: the reasoned ontology just changed — nudge
+            // connected clients (debounced broadcast → topology + inferred-
+            // axioms refresh) so the visible graph tracks the evolving data.
+            state.graph_service_addr.do_send(
+                crate::actors::graph_service_supervisor::NotifyGraphUpdated {
+                    reason: "ontology_axiom_added",
+                },
+            );
             ok_json!(serde_json::json!({
                 "success": true,
                 "message": format!("Axiom of type {} added", axiom_type)
             }))
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             error!("CQRS directive failed to add axiom: {}", e);
             error_json!("Failed to add axiom", e.to_string())
+        }
+        Err(e) => {
+            error!("Thread execution error: {}", e);
+            error_json!("Internal server error")
         }
     }
 }
@@ -600,6 +617,12 @@ pub async fn remove_axiom(
     match result {
         Ok(Ok(())) => {
             info!("Axiom removed successfully via CQRS");
+            // Live linkage: reasoned ontology changed — nudge clients.
+            state.graph_service_addr.do_send(
+                crate::actors::graph_service_supervisor::NotifyGraphUpdated {
+                    reason: "ontology_axiom_removed",
+                },
+            );
             ok_json!(serde_json::json!({
                 "success": true
             }))
@@ -662,6 +685,14 @@ pub async fn store_inference_results(
     match result {
         Ok(Ok(())) => {
             info!("Inference results stored successfully via CQRS");
+            // Live linkage: fresh Whelk inferences just landed — this is THE
+            // "reasoned data evolved" event. Nudge clients so the inferred-
+            // edges overlay refreshes without a reload.
+            state.graph_service_addr.do_send(
+                crate::actors::graph_service_supervisor::NotifyGraphUpdated {
+                    reason: "inference_results_stored",
+                },
+            );
             ok_json!(serde_json::json!({
                 "success": true
             }))

@@ -785,6 +785,18 @@ impl AppState {
             as Arc<dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository>)
         .start();
 
+        // Live linkage: rebind the supervisor's client coordinator to THIS
+        // AppState's canonical instance (the one SocketFlowServer registers
+        // clients with). The supervisor's own ClientCoordinator child has an
+        // empty registry — broadcasts through it (graphUpdated, forwarded
+        // BroadcastMessage) would reach nobody. Mailbox ordering guarantees
+        // this lands after the supervisor's initialize_actors self-wiring.
+        graph_service_addr.do_send(
+            crate::actors::graph_service_supervisor::SetClientCoordinatorAddr {
+                addr: client_manager_addr.clone(),
+            },
+        );
+
         // Store graph service address in Arc for GitHub sync task to use
         let graph_service_addr_clone = graph_service_addr.clone();
         tokio::spawn(async move {

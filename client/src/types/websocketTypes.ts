@@ -484,8 +484,18 @@ export interface MemoryFlashMessage extends BaseWebSocketMessage {
   };
 }
 
+// Live linkage: server-side reasoned-graph change signal (sync reload,
+// runtime node/edge mutation, ontology axiom write, inference results).
+// Client responds with a debounced topology + inferred-axioms refetch.
+export interface GraphUpdatedMessage extends BaseWebSocketMessage {
+  type: 'graphUpdated';
+  revision?: number;
+  reason?: string;
+}
+
 // Union type of all possible WebSocket messages
 export type WebSocketMessage =
+  | GraphUpdatedMessage
   | WorkspaceUpdateMessage
   | WorkspaceDeletedMessage
   | WorkspaceCollaborationMessage

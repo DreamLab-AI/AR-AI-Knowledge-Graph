@@ -17,6 +17,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2026-08-10
 
+### Added — Live linkage: reasoned graph → visible graph (`graphUpdated`)
+
+- **Server now signals connected clients when the reasoned graph changes.**
+  `GraphServiceSupervisor` broadcasts a debounced `{"type":"graphUpdated",
+  "revision":N,"reason":…}` text frame over the existing
+  `ClientCoordinatorActor` fan-out on: full database reload (GitHub sync /
+  admin reload — fires *after* the reload completes), bulk node ingest,
+  runtime edge inserts, full topology replacement, ontology axiom add/remove,
+  and stored Whelk inference results. Previously connected clients were never
+  told about any structural change and stayed stale until reconnect.
+- **Client refetches on signal.** `textMessageHandler.ts` handles
+  `graphUpdated` with a 750 ms trailing debounce: refetch REST
+  `/api/graph/data` (topology-hash dedup makes no-change refetches free) and
+  refresh the inferred-axioms overlay so `InferredEdges` tracks the evolving
+  reasoner output live.
+- **Self-heal backstop.** `graphDataManager.updateNodePositions` sample-checks
+  the id-keyed binary position stream (~every 2 s, 30 s refetch cooldown); if
+  frames reference node ids the client never learned, topology is refetched —
+  covers missed signals and frame/refetch races.
+- Protocol documented in `docs/reference/websocket-protocol.md` (§ Live
+  linkage).
+
+### Fixed — Graph interactions restored (drag + double-click)
+
+- **Node drag and double-click→narrativegoldmine both work again.** Five
+  compounding faults: StrictMode unmount disposed the GPU-transform picking
+  texture while the memoised mesh survived (raycast fed a null buffer);
+  `useMemo` ref side-effects leaked from discarded renders so `useFrame` drove
+  a phantom mesh while the R3F-committed mesh (with the pointer handlers)
+  rendered nothing; the R3F event manager could mount unconnected (async `gl`
+  factory); the `onDragStateChange` → OrbitControls-disable wiring was lost
+  when `GraphViewport` was retired; and the `WebSocketAdapter` lacked
+  `sendMessage`, so hidden `as unknown as` casts threw at runtime — killing the
+  `nodeDragStart/Update/End` server pin protocol *and* stranding OrbitControls
+  disabled. Pointer capture now uses R3F's capture shim so drags no longer
+  stall when the cursor outruns the node. Commit `2644fdeea`.
+
 ### Changed — Ontology reasoner is live by default
 
 - **`ontology_validation` feature flag now defaults ON** (`FeatureFlags::default()` in `src/handlers/api_handler/analytics/types.rs`; `FEATURE_FLAGS` initialises from it in `analytics/state.rs`). The Whelk EL reasoner's HTTP read endpoints (`/api/ontology/*`) are therefore exposed by default — the reasoner is no longer opt-in. Commit `ea8d5e360`.

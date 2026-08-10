@@ -13,6 +13,7 @@ import { buildNodeIdMaps, upsertNodeIdEntry, setDataAndNotify, topologyHash } fr
 import { ListenerRegistry } from './dataManager/listeners';
 import { fetchGraphData, scheduleEmptyDataRetry, type GraphTypeFilter } from './dataManager/restClient';
 import { handleBinaryFrame, sendNodePositions as _sendNodePositions, enableBinaryUpdates as _enableBinaryUpdates } from './dataManager/wsClient';
+import { parseBinaryNodeData, getActualNodeId } from '../../../types/binaryProtocol';
 
 // Re-export types for backward compat
 export type { Node, Edge, GraphData, NodeMetadata } from './graphWorkerProxy';
@@ -54,6 +55,10 @@ class GraphDataManager {
   private retryTimeout: number | null = null;
 
   private updateCount: number = 0;
+
+  // ── Live-linkage self-heal state (see maybeSelfHealUnknownNodes) ───────
+  private selfHealFrameCounter: number = 0;
+  private lastSelfHealRefetch: number = 0;
 
   private constructor() {
     this.waitForWorker();
@@ -357,11 +362,41 @@ class GraphDataManager {
 
   public async updateNodePositions(positionData: ArrayBuffer): Promise<void> {
     this.updateCount = (this.updateCount || 0) + 1;
+    this.maybeSelfHealUnknownNodes(positionData);
     await handleBinaryFrame(
       positionData,
       this.lastBinaryUpdateTime,
       t => { this.lastBinaryUpdateTime = t; },
     );
+  }
+
+  /**
+   * Live-linkage self-heal: if the position stream references node ids this
+   * client has never learned, the server's topology is ahead of ours (a
+   * graphUpdated signal was missed, or binary frames raced the refetch).
+   * Sample-check roughly every 2s of frames; on detection, refetch topology —
+   * the topology hash makes a false-positive refetch a no-op. Backstops the
+   * signal path rather than replacing it.
+   */
+  private maybeSelfHealUnknownNodes(positionData: ArrayBuffer): void {
+    this.selfHealFrameCounter = (this.selfHealFrameCounter + 1) % 120;
+    if (this.selfHealFrameCounter !== 0) return;
+    if (this.nodeIdMap.size === 0) return; // topology not loaded yet
+    const now = Date.now();
+    if (now - this.lastSelfHealRefetch < 30_000) return; // refetch cooldown
+    try {
+      const nodes = parseBinaryNodeData(positionData);
+      const unknown = nodes.some(n => !this.reverseNodeIdMap.has(getActualNodeId(n.nodeId)));
+      if (unknown) {
+        this.lastSelfHealRefetch = now;
+        logger.info('[LiveLinkage] binary stream references unknown node ids — refetching topology');
+        this.fetchInitialData().catch(err =>
+          logger.error('[LiveLinkage] self-heal refetch failed:', createErrorMetadata(err)),
+        );
+      }
+    } catch {
+      // Frame parse issues are the binary pipeline's concern, not self-heal's.
+    }
   }
 
   public async sendNodePositions(): Promise<void> {
