@@ -3,8 +3,10 @@ import type { NodePositionBatchQueue } from '../../utils/BatchQueue';
 import type { NodeType } from '../../types/binaryProtocol';
 
 // WebSocketAdapter interface for components that need to send binary data
+// plus typed JSON control messages (node drag pin/unpin protocol).
 export interface WebSocketAdapter {
   send: (data: ArrayBuffer) => void;
+  sendMessage: (type: string, data?: unknown) => void;
   isReady: () => boolean;
 }
 

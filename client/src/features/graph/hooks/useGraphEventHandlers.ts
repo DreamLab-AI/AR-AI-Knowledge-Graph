@@ -61,7 +61,7 @@ export const useGraphEventHandlers = (
           // pin-at-position + fast-settle. The legacy binary position frame
           // (sendNodePositionUpdates) was removed 2026-06-03 — it sent a
           // redundant SECOND frame per drag move, duplicating this update.
-          (graphDataManager.webSocketService as unknown as { sendMessage: (type: string, data?: unknown) => void }).sendMessage('nodeDragUpdate', {
+          graphDataManager.webSocketService.sendMessage('nodeDragUpdate', {
             nodeId: numericId,
             position,
             timestamp: Date.now()
@@ -103,15 +103,18 @@ export const useGraphEventHandlers = (
       currentNodePos3D: new THREE.Vector3(node.position.x, node.position.y, node.position.z),
     };
 
-    // Capture pointer to ensure we receive all subsequent pointer events
-    // even if pointer moves outside the mesh
-    const target = event.nativeEvent.target as Element;
-    if (target && 'setPointerCapture' in target) {
-      try {
-        target.setPointerCapture(event.nativeEvent.pointerId);
-      } catch (e) {
-        // Pointer capture may fail in some browsers/contexts
-      }
+    // R3F-level pointer capture (NOT DOM capture): event.target here is R3F's
+    // capture shim — it registers this mesh in the event manager's capturedMap
+    // AND takes DOM capture, so every subsequent pointermove/pointerup for this
+    // pointerId is delivered to the mesh even when the cursor outruns the
+    // node's screen radius. Capturing only on the DOM canvas (the old code)
+    // left R3F routing moves by raycast, so drags stalled the moment the
+    // pointer escaped the node between frames.
+    try {
+      (event.target as unknown as { setPointerCapture?: (id: number) => void })
+        ?.setPointerCapture?.(event.pointerId);
+    } catch (e) {
+      // Pointer capture may fail in some browsers/contexts
     }
 
     startInteraction(node.id);
@@ -140,16 +143,21 @@ export const useGraphEventHandlers = (
           // `nodeDragStart` message below pins the node server-side.
           // graphWorkerProxy.pinNode was removed.
 
-          // Notify server of drag start so it can pin the node server-side
-          if (graphDataManager.webSocketService?.isReady()) {
-            (graphDataManager.webSocketService as unknown as { sendMessage: (type: string, data?: unknown) => void }).sendMessage('nodeDragStart', {
-              nodeId: numericId,
-              position: {
-                x: drag.startNodePos3D.x,
-                y: drag.startNodePos3D.y,
-                z: drag.startNodePos3D.z
-              }
-            });
+          // Notify server of drag start so it can pin the node server-side.
+          // try/catch: a send failure must never abort the drag state machine.
+          try {
+            if (graphDataManager.webSocketService?.isReady()) {
+              graphDataManager.webSocketService.sendMessage('nodeDragStart', {
+                nodeId: numericId,
+                position: {
+                  x: drag.startNodePos3D.x,
+                  y: drag.startNodePos3D.y,
+                  z: drag.startNodePos3D.z
+                }
+              });
+            }
+          } catch (e) {
+            logger.warn('nodeDragStart send failed:', e);
           }
         }
         if (debugState.isEnabled()) {
@@ -218,15 +226,15 @@ export const useGraphEventHandlers = (
       return;
     }
 
-    // Release pointer capture if we captured it
-    if (event?.nativeEvent) {
-      const target = event.nativeEvent.target as Element;
-      if (target && 'releasePointerCapture' in target) {
-        try {
-          target.releasePointerCapture(event.nativeEvent.pointerId);
-        } catch (e) {
-          // Pointer may not have been captured
-        }
+    // Release the R3F-level capture (mirror of setPointerCapture above).
+    // R3F also cleans its capturedMap via onLostPointerCapture, so this is a
+    // defensive release rather than the only path.
+    if (event) {
+      try {
+        (event.target as unknown as { releasePointerCapture?: (id: number) => void })
+          ?.releasePointerCapture?.(event.pointerId);
+      } catch (e) {
+        // Pointer may not have been captured
       }
     }
 
@@ -237,13 +245,19 @@ export const useGraphEventHandlers = (
       if (numericId !== undefined) {
         // ADR-03 D7: unpin is server-authoritative via the websocket
         // `nodeDragEnd` message below; graphWorkerProxy.unpinNode was removed.
-        flushPositionUpdates();
+        // try/catch: a failure here must never skip the state reset below —
+        // an exception used to leave OrbitControls disabled and the drag stuck.
+        try {
+          flushPositionUpdates();
 
-        // Notify server of drag end so it can unpin the node and run final settle
-        if (graphDataManager.webSocketService?.isReady()) {
-          (graphDataManager.webSocketService as unknown as { sendMessage: (type: string, data?: unknown) => void }).sendMessage('nodeDragEnd', {
-            nodeId: numericId
-          });
+          // Notify server of drag end so it can unpin the node and run final settle
+          if (graphDataManager.webSocketService?.isReady()) {
+            graphDataManager.webSocketService.sendMessage('nodeDragEnd', {
+              nodeId: numericId
+            });
+          }
+        } catch (e) {
+          logger.warn('nodeDragEnd send failed:', e);
         }
       }
     } else {

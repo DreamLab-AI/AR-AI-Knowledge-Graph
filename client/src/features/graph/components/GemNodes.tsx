@@ -320,6 +320,10 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
     metaTex.magFilter = THREE.NearestFilter;
     metaTex.needsUpdate = true;
     metaTexRef.current = metaTex;
+    // Stash on the mesh for commit-time ref reconciliation (see
+    // handleCommittedMesh): ref side effects in this useMemo can leak from
+    // renders React discards, so the committed mesh is the source of truth.
+    inst.userData.metaTex = metaTex;
 
     // WebGL parity (task #50): the GLSL emissive injection (GlslMetadataGlow)
     // stays GLSL ES 1.00 and cannot vertex-sample the metadata DataTexture, so it
@@ -367,6 +371,14 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
     xformTex.magFilter = THREE.NearestFilter;
     xformTex.needsUpdate = true;
     xformTexRef.current = xformTex;
+    // The texture's lifetime is the MESH's lifetime, not the effect lifecycle:
+    // StrictMode's simulated unmount runs the cleanup below (disposing the
+    // texture + nulling the ref) but useMemo — and this mesh — survive the
+    // remount. Stash the texture on the mesh so the remount effect can re-sync
+    // the ref; otherwise the per-frame loop feeds the raycast a null picking
+    // buffer forever and every pointer interaction (click/drag/double-click)
+    // silently dies while rendering keeps showing the stale GPU texture.
+    inst.userData.xformTex = xformTex;
     gpuTransformRef.current = false;
 
     // WebGPU parity: apply the TSL emissive + GPU-transform augments to THIS
@@ -396,6 +408,16 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
   // Stale mesh cleanup on mode change is handled synchronously in useFrame
   // (via sceneMeshesRef) to avoid async useEffect timing gaps during rapid toggles.
   useEffect(() => {
+    // StrictMode remount recovery: the simulated unmount's cleanup disposed the
+    // transform texture and nulled the ref, but the useMemo mesh (and the TSL
+    // material sampling the texture) survived. Re-sync the ref from the mesh and
+    // re-upload so the GPU resource is re-initialised and the picking buffer
+    // (xformBufRef, fed from this texture each frame) comes back to life.
+    const tex = meshRef.current?.userData.xformTex as THREE.DataTexture | undefined;
+    if (tex && xformTexRef.current !== tex) {
+      xformTexRef.current = tex;
+      tex.needsUpdate = true;
+    }
     return () => {
       for (const old of sceneMeshesRef.current) {
         if (old.parent) old.parent.remove(old);
@@ -1020,6 +1042,26 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
     }
   }, -1);
 
+  // Commit-time ref reconciliation. The mesh/texture refs are assigned as side
+  // effects inside the mesh useMemo, and React may run that memo in a render it
+  // then DISCARDS (StrictMode double-render, concurrent interruption). The refs
+  // then point at a mesh React never committed: useFrame drives — and manually
+  // scene-adds — the phantom mesh (visible, count>0, no events) while the
+  // committed mesh (the one R3F registered the pointer handlers on) stays at
+  // count 0. Net effect: the graph you SEE has no event handlers and the mesh
+  // with handlers renders nothing, so hover/click/drag/double-click all die
+  // silently. R3F invokes this callback ref with the COMMITTED object at attach
+  // time — re-point every per-mesh ref at it; the per-frame stale-mesh sweep
+  // then removes and disposes the phantom generation.
+  const handleCommittedMesh = useCallback((obj: THREE.InstancedMesh | null) => {
+    if (!obj) return;
+    if (meshRef.current !== obj) meshRef.current = obj;
+    const xt = obj.userData.xformTex as THREE.DataTexture | undefined;
+    if (xt && xformTexRef.current !== xt) { xformTexRef.current = xt; xt.needsUpdate = true; }
+    const mt = obj.userData.metaTex as THREE.DataTexture | undefined;
+    if (mt && metaTexRef.current !== mt) { metaTexRef.current = mt; mt.needsUpdate = true; }
+  }, []);
+
   // This mesh renders a contiguous slice of the parent's displayNodes, so R3F
   // reports an instanceId LOCAL to this mesh. Shift it by instanceIdBase before
   // delegating so the parent's shared handler indexes the correct GLOBAL node.
@@ -1034,6 +1076,7 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
     <primitive
       key={mesh.uuid}
       object={mesh}
+      ref={handleCommittedMesh}
       onPointerDown={(e: ThreeEvent<PointerEvent>) => onPointerDown(shiftInstanceId(e))}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

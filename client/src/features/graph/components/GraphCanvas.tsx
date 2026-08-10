@@ -152,6 +152,30 @@ const CameraAspectSync: React.FC = () => {
 };
 
 // ============================================================================
+// Event-system connection guard
+// ============================================================================
+//
+// With an async `gl` factory (createGemRenderer resolves the WebGPU renderer
+// after R3F's first commit) plus StrictMode's mount→unmount→remount, R3F can
+// finish mounting with its pointer-event manager never attached to the canvas
+// (`events.connected === false`). Every node interaction — click, drag,
+// double-click — then dies silently: DOM events reach the canvas but R3F never
+// raycasts them. Re-connect explicitly whenever we detect the disconnected
+// state. `connect` tears down any previous target first, so this is idempotent.
+const EnsureEventsConnected: React.FC = () => {
+  const events = useThree(s => s.events);
+  const gl = useThree(s => s.gl);
+  useEffect(() => {
+    const target = gl?.domElement;
+    if (target && events.connect && !events.connected) {
+      events.connect(target);
+      logger.info('[GraphCanvas] R3F event system was disconnected — re-connected to canvas');
+    }
+  }, [events, gl]);
+  return null;
+};
+
+// ============================================================================
 // Phase 6 (ADR-04 D5 / T3) — Software-WebGL detection + Environment fallback
 // ============================================================================
 //
@@ -322,6 +346,10 @@ const GraphCanvas: React.FC = () => {
                     the WebGPU path where R3F leaves camera.aspect at 0. */}
                 <CameraAspectSync />
 
+                {/* Re-attach R3F pointer events if the async-renderer +
+                    StrictMode mount left them disconnected (see component). */}
+                <EnsureEventsConnected />
+
                 {/* DEV-only render-loop diagnostics (no-op until __perf.on()).
                     Tree-shaken to zero in production builds. */}
                 {import.meta.env.DEV && PerfProbe && (
@@ -384,9 +412,15 @@ const GraphCanvas: React.FC = () => {
                 {/* Embedding cloud — background layer behind graph nodes */}
                 <EmbeddingCloudLayer enabled={embeddingCloudEnabled} />
 
-                {}
+                {/* onDragStateChange restores the node-drag ↔ camera arbitration
+                    lost when GraphViewport was retired: while a node is being
+                    dragged, OrbitControls must be disabled or every drag also
+                    orbits the camera and the node never tracks the pointer.
+                    Imperative ref toggle — no Canvas re-render per drag. */}
                 {canvasReady && nodeCount > 0 && (
-                    <GraphManager />
+                    <GraphManager onDragStateChange={(isDragging) => {
+                        if (orbitControlsRef.current) orbitControlsRef.current.enabled = !isDragging;
+                    }} />
                 )}
                 
                 {}

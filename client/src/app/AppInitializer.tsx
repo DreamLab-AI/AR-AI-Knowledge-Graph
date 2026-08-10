@@ -346,6 +346,15 @@ const AppInitializer: React.FC<AppInitializerProps> = ({ onInitialized, onError 
           send: (data: ArrayBuffer) => {
             websocketService.sendRawBinaryData(data);
           },
+          // JSON control channel — the node-drag protocol (nodeDragStart /
+          // nodeDragUpdate / nodeDragEnd → server-side pin + fast-settle)
+          // sends typed messages through the same socket. The adapter used to
+          // omit this, so drag handlers casting to { sendMessage } threw at
+          // runtime, which both killed the server drag protocol AND aborted
+          // handlePointerUp before it re-enabled OrbitControls.
+          sendMessage: (type: string, data?: unknown) => {
+            websocketService.sendMessage(type, data);
+          },
           isReady: () => websocketService.isReady()
         };
         graphDataManager.setWebSocketService(wsAdapter);
