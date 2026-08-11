@@ -52,7 +52,15 @@ class LoomGraph:
         return _HAVE_OX and self.store is not None
 
     def load(self) -> None:
-        """Load ontology.ttl + ontology-inferred.ttl into a fresh in-memory store."""
+        """Load ontology.ttl + ontology-inferred.ttl into a fresh in-memory store.
+
+        INVARIANT (DDD BC24 I11): the Loom serves the PUBLISHED ONTOLOGY ONLY. It
+        never loads, mirrors, or queries the working graph (personal/working notes,
+        potentially multi-user/private). Only these two published-ontology artifacts
+        are ever loaded — do NOT add workingGraph sources here. Uplift into the
+        ontology happens via VisionClaw / the forum / agentic writes into the logseq
+        corpus, never through the Loom.
+        """
         if not _HAVE_OX:
             self.error = "pyoxigraph not installed — graph read-truth disabled (scaffold still works)"
             return
