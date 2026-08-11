@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ontology_scaffold as osc  # noqa: E402
+from loom_graph import LoomGraph  # noqa: E402
 
 BACKEND = os.environ.get("DISTILL_BACKEND_URL", "").rstrip("/")  # e.g. http://192.168.2.132:8084/v1
 INDEX = os.environ.get("ONTOLOGY_INDEX", "/app/data/scaffold-index.json")
@@ -37,6 +38,9 @@ TIMEOUT = float(os.environ.get("LOOM_TIMEOUT", "600"))  # distillation is slow b
 
 os.environ.setdefault("ONTOLOGY_INDEX", INDEX)
 os.environ.setdefault("ONTOLOGY_PROSE_INDEX", PROSE)
+
+# The single read-truth graph store (pyoxigraph over the mirrored reasoned generation).
+GRAPH = LoomGraph(os.path.dirname(INDEX))
 
 
 def _generation() -> dict:
@@ -112,6 +116,7 @@ class Handler(BaseHTTPRequestHandler):
                 "backend": BACKEND or None,
                 "backend_reachable": self._probe_backend() if BACKEND else None,
                 "index_classes": len(idx.classes) if idx else None,
+                "graph": GRAPH.status(),
                 "generation": _generation(),
             })
         elif self.path in ("/loom/generation", "/generation"):
@@ -123,6 +128,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not_found", "path": self.path})
 
     def do_POST(self):
+        if self.path in ("/loom/sparql", "/sparql"):
+            j = self._read()
+            q = j.get("query") or ""
+            if not q:
+                return self._send(400, {"error": "missing query"})
+            return self._send(200, GRAPH.sparql(q))
+        if self.path in ("/loom/search", "/search"):
+            j = self._read()
+            q = j.get("q") or j.get("query") or ""
+            if not q:
+                return self._send(400, {"error": "missing q"})
+            return self._send(200, GRAPH.search(q, limit=int(j.get("limit", 20))))
         if self.path in ("/loom/scaffold", "/scaffold"):
             j = self._read()
             prompt = j.get("prompt") or j.get("query") or ""
@@ -194,6 +211,13 @@ def main():
         sys.stderr.write(f"[loom] index loaded: {len(idx.classes)} classes; generation={_generation()}\n")
     except Exception as e:  # noqa: BLE001
         sys.stderr.write(f"[loom] WARNING index not loaded: {e}\n")
+    # load the read-truth graph store (single source of truth for the reasoned corpus)
+    GRAPH.load()
+    gs = GRAPH.status()
+    if gs["available"]:
+        sys.stderr.write(f"[loom] graph store: {gs['triples']} triples from {gs['loaded_files']} (pyoxigraph)\n")
+    else:
+        sys.stderr.write(f"[loom] graph store DISABLED: {gs['error']}\n")
     sys.stderr.write(f"[loom] façade on :{PORT}; backend={BACKEND or '(none)'}; budget={BUDGET}\n")
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 

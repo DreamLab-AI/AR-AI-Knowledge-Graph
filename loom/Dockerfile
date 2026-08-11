@@ -9,6 +9,11 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates bash \
     && rm -rf /var/lib/apt/lists/*
 
+# pyoxigraph: in-process SPARQL store for the read-truth graph (loads the reasoned
+# generation). A wheel — keeps the Loom portable. Optional at runtime: if absent the
+# façade falls back to the flat scaffold-index and reports it in /health.
+RUN pip install --no-cache-dir "pyoxigraph>=0.4"
+
 WORKDIR /app
 COPY app/ /app/
 RUN chmod +x /app/entrypoint.sh /app/mirror.sh || true
