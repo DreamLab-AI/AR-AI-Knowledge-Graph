@@ -1,0 +1,21 @@
+{
+  "name": "ontology-mcp",
+  "version": "1.0.0",
+  "description": "Standalone stdio MCP server for the NarrativeGoldmine ontology — public site API or local scaffold index.",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "ontology-mcp": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}

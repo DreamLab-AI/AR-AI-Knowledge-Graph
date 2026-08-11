@@ -221,12 +221,62 @@ services:
       - production
       - prod
 
+  # ── Ontology Loom sidecar (Deployment B — VisionClaw ADR-135 D1 / PRD-025) ──
+  # A portable ontology node with a stable, model-swappable façade. Co-located by
+  # default (the usual all-on-one-machine case): reachable at http://loom:8080 on
+  # visionclaw_network by VisionClaw and agentbox. The model is a URL behind the
+  # façade (DISTILL_BACKEND_URL) — swap Gemma → Muse → next with zero consumer
+  # change. Corpus generation is mirrored on start into the loom-data volume;
+  # retrieval (/loom/scaffold, /health) works with NO backend configured.
+  # Opt-in: docker compose --profile loom up -d loom   (or launch.sh with the loom profile)
+  loom:
+    container_name: ${LOOM_CONTAINER:-loom-sidecar}
+    build:
+      context: ./loom
+      dockerfile: Dockerfile
+    image: ${LOOM_IMAGE:-loom-sidecar:dev}
+    environment:
+      # Model-swap seam. Default co-located options (pick one at deploy):
+      #   http://host.docker.internal:11434/v1  (local Ollama/LM Studio on the host)
+      #   http://192.168.2.132:8084/v1          (LAN reasoner, e.g. HP-Desktop)
+      # Blank = retrieval-only (scaffold + health work; /v1 returns 503).
+      DISTILL_BACKEND_URL: ${DISTILL_BACKEND_URL:-}
+      ONTOLOGY_BUDGET: ${LOOM_BUDGET:-1500}
+      LOOM_MIRROR_ON_START: ${LOOM_MIRROR_ON_START:-1}
+      ONTOLOGY_SITE: ${ONTOLOGY_SITE:-https://narrativegoldmine.com}
+    volumes:
+      # Corpus generation (mirrored on start). Bind a logseq www/data here for a
+      # fully-offline co-located generation: ${HOST_PROJECT_ROOT:-.}/../logseq/www/data:/app/data
+      - loom-data:/app/data
+    ports:
+      - "${LOOM_PORT:-8090}:8080"
+    networks:
+      visionclaw_network:
+        aliases:
+          - loom
+          - ontology-loom
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    logging:
+      <<: *common-logging
+    profiles:
+      - loom
+
 networks:
   visionclaw_network:
     external: true
     name: ${EXTERNAL_NETWORK:-visionclaw_network}
 
 volumes:
+  # Ontology Loom mirrored corpus generation
+  loom-data:
+    name: ${LOOM_DATA_VOLUME:-loom-data}
+    driver: local
   # Persistent data volumes
   visionclaw-data:
     name: ${DATA_VOLUME_NAME:-visionclaw-data}
