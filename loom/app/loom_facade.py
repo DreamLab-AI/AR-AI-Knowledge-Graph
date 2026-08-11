@@ -35,6 +35,12 @@ PROSE = os.environ.get("ONTOLOGY_PROSE_INDEX", "/app/data/prose-index.json")
 BUDGET = int(os.environ.get("ONTOLOGY_BUDGET", "1500"))
 PORT = int(os.environ.get("LOOM_FACADE_PORT", "8080"))
 TIMEOUT = float(os.environ.get("LOOM_TIMEOUT", "600"))  # distillation is slow by design
+# Reasoning backends (e.g. Muse) spend their budget in reasoning_content and emit
+# EMPTY final content if max_tokens is too small (verified: 400 → empty, needs
+# ≥1536). The façade floors the caller's max_tokens so a consumer that asks for a
+# short completion (chat clients default 256-512) still gets a real answer through
+# a reasoning model. Never lowers a caller's higher ask. Set 0 to disable.
+MIN_MAX_TOKENS = int(os.environ.get("LOOM_MIN_MAX_TOKENS", "1536"))
 
 os.environ.setdefault("ONTOLOGY_INDEX", INDEX)
 os.environ.setdefault("ONTOLOGY_PROSE_INDEX", PROSE)
@@ -174,6 +180,15 @@ class Handler(BaseHTTPRequestHandler):
                 sys.stderr.write(f"[loom] scaffold skip: {e}\n")
             j["messages"] = msgs
             j.pop("stream", None)
+            # Floor max_tokens so a reasoning backend never truncates to empty
+            # content (see MIN_MAX_TOKENS). Honour both the legacy and the newer
+            # OpenAI field names; only ever raise, never lower.
+            if MIN_MAX_TOKENS > 0:
+                for field in ("max_tokens", "max_completion_tokens"):
+                    if field in j and isinstance(j[field], int):
+                        j[field] = max(j[field], MIN_MAX_TOKENS)
+                if "max_tokens" not in j and "max_completion_tokens" not in j:
+                    j["max_tokens"] = MIN_MAX_TOKENS
             code, body, ctype = _backend("/v1/chat/completions", json.dumps(j).encode(), "POST")
             # annotate for bench accounting (fail-labelled honesty)
             if code == 200 and ctype.startswith("application/json"):
