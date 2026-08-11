@@ -170,10 +170,12 @@ class Handler(BaseHTTPRequestHandler):
             j = self._read()
             msgs = j.get("messages", [])
             injected = 0
+            scaffold_meta: dict = {}
             try:
                 before = sum(len(str(m.get("content", ""))) for m in msgs)
                 msgs = osc.scaffold_messages(msgs, budget_tokens=int(j.get("ontology_budget", BUDGET)),
-                                             prose=bool(j.get("ontology_prose", False)))
+                                             prose=bool(j.get("ontology_prose", False)),
+                                             meta_out=scaffold_meta)
                 after = sum(len(str(m.get("content", ""))) for m in msgs)
                 injected = max(0, (after - before + 3) // 4)
             except Exception as e:  # noqa: BLE001
@@ -195,6 +197,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     obj = json.loads(body)
                     obj["loom"] = {"mode": "scaffold", "injected_tokens": injected,
+                                   "grounding": scaffold_meta or None,
                                    "generation": _generation()}
                     body = json.dumps(obj).encode()
                 except ValueError:

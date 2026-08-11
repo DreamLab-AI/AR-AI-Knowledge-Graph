@@ -80,6 +80,19 @@ REL_CAP = 3                   # relation targets listed per relation type
 NEIGHBOUR_DEFS = 2            # 1-hop neighbour definitions per seed (hops>=1)
 NEIGHBOUR_DEF_CHARS = 220     # neighbour one-liner definition truncation
 
+# --- confidence-aware selective injection (Loom optimisation #2) -------------
+# 2026 research on "context interference": injecting ontology context on a weak /
+# off-topic match can DISPLACE the model's own parametric knowledge, so selective,
+# confidence-scaled injection beats blanket grounding (see
+# docs/USING-ONTOLOGY-DATA-AGENTICALLY.md). The match() score is the confidence
+# signal — a strong exact-title hit scores >= EXACT_TITLE_WEIGHT; a loose overlap
+# barely clears MIN_SEED_SCORE. OPT-IN: with LOOM_CONFIDENCE_INJECTION unset the
+# behaviour is byte-identical to before (full budget whenever any seed matches).
+CONFIDENCE_INJECTION = os.environ.get("LOOM_CONFIDENCE_INJECTION", "0") not in ("0", "false", "no", "")
+STRONG_MATCH_SCORE = float(os.environ.get("LOOM_STRONG_MATCH_SCORE", str(EXACT_TITLE_WEIGHT)))  # full budget at/above
+MIN_INJECT_SCORE = float(os.environ.get("LOOM_MIN_INJECT_SCORE", str(MIN_SEED_SCORE)))          # below this top score → skip
+MIN_INJECT_FRACTION = float(os.environ.get("LOOM_MIN_INJECT_FRACTION", "0.4"))                  # weakest match still gets this fraction of budget
+
 HEADER = "[ONTOLOGY CONTEXT]"
 FOOTER = "[END ONTOLOGY CONTEXT]"
 
@@ -398,6 +411,7 @@ def scaffold(
     index: Optional[ScaffoldIndex] = None,
     prose: bool = False,
     prose_index: Optional[dict] = None,
+    meta_out: Optional[dict] = None,
 ) -> str:
     """Build an ontology context block for ``prompt``.
 
@@ -405,13 +419,39 @@ def scaffold(
     prose index (full definitions + Current Landscape research prose) when
     available — degrading silently to structural-only otherwise.
 
+    ``meta_out`` (if given) is populated with grounding telemetry —
+    ``top_score`` (retrieval confidence), ``seed_count``, ``effective_budget``,
+    and whether confidence injection fired — so a caller can surface how
+    confident the grounding was (step-level grounding metadata).
+
     Returns ``''`` when no class scores above the seed threshold — the caller
     should then fall back to the raw prompt.
     """
     idx = index if index is not None else get_index()
     seeds = idx.match(prompt, max_seeds=max_seeds)
     if not seeds:
+        if meta_out is not None:
+            meta_out.update({"top_score": 0.0, "seed_count": 0, "injected": False})
         return ""
+    top_score = seeds[0][1]
+    if CONFIDENCE_INJECTION:
+        # Selective: a weak top match means the query is only loosely on-ontology —
+        # skip injection entirely rather than risk displacing parametric knowledge.
+        if top_score < MIN_INJECT_SCORE:
+            if meta_out is not None:
+                meta_out.update({"top_score": top_score, "seed_count": len(seeds),
+                                 "injected": False, "reason": "below_min_inject_score"})
+            return ""
+        # Confidence-scaled budget: full budget for a strong exact-title hit,
+        # tapering to MIN_INJECT_FRACTION for a barely-clearing match.
+        frac = 1.0
+        if STRONG_MATCH_SCORE > 0:
+            frac = min(1.0, max(MIN_INJECT_FRACTION, top_score / STRONG_MATCH_SCORE))
+        budget_tokens = max(1, int(budget_tokens * frac))
+    if meta_out is not None:
+        meta_out.update({"top_score": top_score, "seed_count": len(seeds),
+                         "effective_budget": budget_tokens, "injected": True,
+                         "confidence_injection": CONFIDENCE_INJECTION})
     prose_data: dict = {}
     if prose:
         prose_data = prose_index if prose_index is not None else get_prose()
@@ -447,6 +487,7 @@ def scaffold_messages(
     index: Optional[ScaffoldIndex] = None,
     prose: bool = False,
     prose_index: Optional[dict] = None,
+    meta_out: Optional[dict] = None,
 ) -> list:
     """Scaffold an OpenAI chat ``messages`` list from its LAST user message.
 
@@ -470,6 +511,7 @@ def scaffold_messages(
         index=index,
         prose=prose,
         prose_index=prose_index,
+        meta_out=meta_out,
     )
     if not block:
         return out
