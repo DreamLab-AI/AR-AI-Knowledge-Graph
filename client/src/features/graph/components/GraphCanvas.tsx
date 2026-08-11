@@ -167,9 +167,22 @@ const EnsureEventsConnected: React.FC = () => {
   const gl = useThree(s => s.gl);
   useEffect(() => {
     const target = gl?.domElement;
-    if (target && events.connect && !events.connected) {
-      events.connect(target);
-      logger.info('[GraphCanvas] R3F event system was disconnected — re-connected to canvas');
+    // `connected` can read false while a previous listener set is STILL
+    // attached (R3F re-configures events with fresh handler identities and
+    // resets the flag). Connecting again in that state stacks a second
+    // listener set — every pointer event then delivers twice (double
+    // page-opens on double-click). disconnect() first is not enough: it
+    // consults the same stale flag and skips removal. So: only connect when
+    // the event system has never attached anything (no prior connect call),
+    // tracked via a marker on the canvas element itself.
+    const el = target as (Element & { __r3fEventsAttached?: boolean }) | undefined;
+    if (el && events.connect && !events.connected && !el.__r3fEventsAttached) {
+      el.__r3fEventsAttached = true;
+      events.connect(el);
+      logger.info('[GraphCanvas] R3F event system was disconnected — connected to canvas');
+    } else if (el && events.connected) {
+      // R3F connected on its own — record it so we never double-attach.
+      el.__r3fEventsAttached = true;
     }
   }, [events, gl]);
   return null;

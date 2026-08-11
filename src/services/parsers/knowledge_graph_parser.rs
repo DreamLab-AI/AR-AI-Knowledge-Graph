@@ -122,6 +122,15 @@ impl KnowledgeGraphParser {
             metadata.insert("source_domain".to_string(), dom.clone());
         }
 
+        // Authored quality/maturity from the page's JSON-LD ontology block —
+        // the signals the per-client quality gates filter on.
+        if let Some(q) = Self::extract_quality(content) {
+            metadata.insert("quality_score".to_string(), q.to_string());
+        }
+        if let Some(m) = Self::extract_maturity(content) {
+            metadata.insert("maturity".to_string(), m);
+        }
+
         let id = self.page_name_to_id(page_name);
 
         // Use existing position or generate random (position preservation)
@@ -184,6 +193,46 @@ impl KnowledgeGraphParser {
                 let value = rest.trim();
                 if !value.is_empty() {
                     return Some(value.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    /// Extract `"quality": <float>` from the page's embedded JSON-LD ontology
+    /// block. The corpus authors a 0-1 quality score per page (surfaced as
+    /// vc:qualityScore by the logseq pipeline); publishing it here as
+    /// `metadata.quality_score` powers the per-client quality filter
+    /// (client_filter.rs reads exactly this key) and the client's
+    /// quality-driven node visuals — both were dead signals without it.
+    pub(crate) fn extract_quality(content: &str) -> Option<f32> {
+        for line in content.lines() {
+            let t = line.trim();
+            if let Some(rest) = t.strip_prefix("\"quality\":") {
+                let v = rest.trim().trim_end_matches(',').trim();
+                if let Ok(q) = v.parse::<f32>() {
+                    return Some(q.clamp(0.0, 1.0));
+                }
+            }
+        }
+        None
+    }
+
+    /// Extract `"maturity": "<tier>"` from the embedded JSON-LD ontology block
+    /// (draft/developing/emerging/growing/established/mature) — feeds the
+    /// client's min-maturity filter.
+    pub(crate) fn extract_maturity(content: &str) -> Option<String> {
+        for line in content.lines() {
+            let t = line.trim();
+            if let Some(rest) = t.strip_prefix("\"maturity\":") {
+                let v = rest
+                    .trim()
+                    .trim_end_matches(',')
+                    .trim()
+                    .trim_matches('"')
+                    .to_string();
+                if !v.is_empty() {
+                    return Some(v);
                 }
             }
         }

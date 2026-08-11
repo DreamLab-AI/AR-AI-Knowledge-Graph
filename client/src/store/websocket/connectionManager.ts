@@ -289,6 +289,14 @@ function sendHeartbeat(
         type: 'subscribe_position_updates',
         data: { interval: 200, binary: true },
       }));
+      // A settled physics sim legitimately stops broadcasting, so silence
+      // alone is not death — but only BINARY traffic resets this watchdog.
+      // request_full_snapshot forces the server to emit one binary frame
+      // immediately: a healthy pipeline answers (resetting the counter via
+      // noteInboundBinary), a dead one stays silent and still gets recycled.
+      // Without this, an idle-but-healthy connection was recycled forever
+      // (~90s cycle: probe at 30s, probe at 60s, close(4000) at 90s).
+      state.socket.send(JSON.stringify({ type: 'request_full_snapshot' }));
     }
 
     if (debugState.isDataDebugEnabled()) {

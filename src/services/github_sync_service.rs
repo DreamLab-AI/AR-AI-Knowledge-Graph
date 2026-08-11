@@ -1573,6 +1573,21 @@ impl GitHubSyncService {
         let mut page_node = build_node_from_entity(&entity, source_id, self.kg_parser.as_ref());
         // WS-0: guarantee a non-NULL source_domain for this node.
         ensure_source_domain(&mut page_node, &file.path);
+        // Authored quality/maturity from the page's JSON-LD ontology block.
+        // CanonicalEntity does not carry these, so extract from the raw
+        // content — metadata.quality_score is the key the per-client quality
+        // gates (client_filter.rs) and the client's quality visuals read.
+        if let Some(q) = KnowledgeGraphParser::extract_quality(content) {
+            page_node
+                .metadata
+                .insert("quality_score".to_string(), q.to_string());
+        }
+        if let Some(m) = KnowledgeGraphParser::extract_maturity(content) {
+            page_node
+                .metadata
+                .entry("maturity".to_string())
+                .or_insert(m);
+        }
         // Total outbound wikilink degree (resolved + dangling). Dangling links
         // no longer materialise stub nodes, so this count is the weight signal
         // the GPU can consume for connectivity-based mass.

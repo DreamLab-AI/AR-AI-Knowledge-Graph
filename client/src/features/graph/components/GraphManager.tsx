@@ -27,6 +27,7 @@ import { type GraphData } from '../managers/graphDataManager'
 import { useGraphDataSubscription } from '../hooks/useGraphDataSubscription'
 import { useGraphSelection } from '../hooks/useGraphSelection'
 import { useEdgeBufferComputation } from '../hooks/useEdgeBufferComputation'
+import { nodePageUrl } from '../utils/pageLinks'
 
 const logger = createLogger('GraphManager')
 
@@ -490,13 +491,17 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
 
   const handleNodeDoubleClick = useCallback((event: ThreeEvent<MouseEvent>) => {
     if (event.instanceId !== undefined && event.instanceId < typeFilteredNodes.length) {
+      // First hit wins: the ray often pierces several instances (and the
+      // co-located knowledge + ontology nodes of one concept live in two
+      // meshes sharing this handler) — without stopping propagation a single
+      // double-click opened the page once per delivered intersection.
+      event.stopPropagation()
       const node = typeFilteredNodes[event.instanceId]
       if (node) {
-        const pageUrl  = node.metadata?.page_url || node.metadata?.pageUrl || node.metadata?.url
-        if (pageUrl) { window.open(pageUrl, '_blank', 'noopener,noreferrer'); return }
-        const filePath = node.metadata?.file_path || node.metadata?.filePath || node.metadata?.path
-        if (filePath) { window.open(`https://narrativegoldmine.com/#/page/${encodeURIComponent(filePath)}`, '_blank', 'noopener,noreferrer'); return }
-        if (node.label) { window.open(`https://narrativegoldmine.com/#/page/${encodeURIComponent(node.label)}`, '_blank', 'noopener,noreferrer'); return }
+        // Slug-first resolution (metadataId IS the api/pages key) against the
+        // path-routed site — the old #/page/<Title> hash route is dead.
+        const url = nodePageUrl(node)
+        if (url) { window.open(url, '_blank', 'noopener,noreferrer'); return }
         const hierarchyNode = hierarchyMap.get(node.id)
         if (hierarchyNode && hierarchyNode.childIds.length > 0) expansionState.toggleExpansion(node.id)
       }

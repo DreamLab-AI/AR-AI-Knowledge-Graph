@@ -57,6 +57,9 @@ pub fn recompute_filtered_nodes(filter: &mut ClientFilter, graph_data: &GraphDat
         let quality = node
             .metadata
             .get("quality_score")
+            // Ontology-entity sync path stores the same signal camelCase
+            // (`qualityScore`, from vc:qualityScore) — accept both keys.
+            .or_else(|| node.metadata.get("qualityScore"))
             .and_then(|s| s.parse::<f64>().ok())
             .or_else(|| {
                 graph_data

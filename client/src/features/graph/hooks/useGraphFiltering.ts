@@ -172,8 +172,14 @@ export function useGraphFiltering(
       // Then apply quality/authority filtering if enabled
       if (filterEnabled) {
         // Get quality score - use metadata if available, otherwise compute from connections
-        let quality = node.metadata?.quality ?? node.metadata?.qualityScore;
-        if (quality === undefined || quality === null) {
+        // Authored score first: the sync publishes the corpus JSON-LD
+        // "quality" as metadata.quality_score (pages) / qualityScore
+        // (ontology entities). Only unscored nodes fall back to the degree
+        // heuristic — before this, the authored key was never consulted and
+        // the client filter disagreed with the server's.
+        let quality = node.metadata?.quality_score ?? node.metadata?.quality ?? node.metadata?.qualityScore;
+        if (typeof quality === 'string') quality = parseFloat(quality);
+        if (quality === undefined || quality === null || Number.isNaN(quality)) {
           // Compute quality from node connections (normalized 0-1) using pre-built map
           const connectionCount = connectionCountMap.get(node.id) || 0;
           // Map connections to 0-1 range: 0 connections = 0, 10+ connections = 1

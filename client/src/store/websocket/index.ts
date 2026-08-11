@@ -56,6 +56,7 @@ import {
   cleanupFilterSubscriptions,
   forceRefreshFilter as forceRefreshFilterFn,
   resetFilterState,
+  expectFilterResponse,
 } from './filterSync';
 
 import { createBinaryFrameDispatcher, createMessageHandler } from './binaryFrameDispatcher';
@@ -364,6 +365,11 @@ export const useWebSocketStore = create<WebSocketState>()(
           logger.warn('Cannot send filter update: WebSocket not connected');
           return;
         }
+
+        // The server answers with a (typically smaller) filtered
+        // initialGraphLoad — arm the acceptance window so the shrink-guard
+        // in handleInitialGraphLoad lets it through (see filterSync.ts).
+        expectFilterResponse();
 
         state.sendMessage('filter_update', {
           enabled: filter.enabled,

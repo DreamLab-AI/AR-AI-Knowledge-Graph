@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { graphDataManager, type GraphData, type Node } from '../managers/graphDataManager';
 import { useSettingsStore } from '../../../store/settingsStore';
+import { nodePageUrl } from '../utils/pageLinks';
 
 /**
  * Assertion-version attribution (ADR-049) threaded into the node-selected event
@@ -71,20 +72,11 @@ export const NodeDetailPanel: React.FC = () => {
 
   const handleOpenFullPage = useCallback(() => {
     if (!detail) return;
-    const meta = detail.metadata || {};
-    const pageUrl = meta.page_url || meta.pageUrl || meta.url;
-    if (pageUrl) {
-      window.open(pageUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    const filePath = meta.file_path || meta.filePath || meta.path;
-    const target = filePath || detail.label;
-    if (target) {
-      window.open(
-        `https://narrativegoldmine.com/#/page/${encodeURIComponent(target)}`,
-        '_blank',
-        'noopener,noreferrer'
-      );
+    // Slug-first resolution against the path-routed site (see pageLinks.ts);
+    // the legacy #/page/<Title> hash route no longer resolves.
+    const url = nodePageUrl(detail as Parameters<typeof nodePageUrl>[0]);
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
     }
   }, [detail]);
 

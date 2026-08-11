@@ -8,11 +8,13 @@
 import { createLogger, createErrorMetadata } from '../../utils/loggerConfig';
 import { debugState } from '../../utils/clientDebugState';
 import { graphDataManager } from '../../features/graph/managers/graphDataManager';
+import { useSettingsStore } from '../settingsStore';
 import { useInferredEdgesStore } from '../../features/ontology/store/useInferredEdgesStore';
 import type { WebSocketMessage } from '../../types/websocketTypes';
 import type { WebSocketErrorFrame } from './types';
 import { emit, notifyMessageHandlers } from './connectionManager';
 import { handleErrorFrame } from './binaryProtocol';
+import { isFilterResponseExpected, clearFilterResponseExpectation } from './filterSync';
 
 const logger = createLogger('WebSocketStore');
 
@@ -30,15 +32,39 @@ function scheduleGraphRefetch(revision: number | undefined, reason: string | und
     logger.info(
       `[LiveLinkage] graphUpdated rev=${revision ?? '?'} reason=${reason ?? '?'} — refetching topology`,
     );
-    graphDataManager.fetchInitialData().catch((error) => {
-      logger.error('[LiveLinkage] topology refetch failed:', createErrorMetadata(error));
-    });
+    graphDataManager.fetchInitialData()
+      .then(() => {
+        // REST returns the UNFILTERED graph; if the user has quality gates
+        // active, re-assert the server-side filter so the refetch doesn't
+        // silently expand a filtered view back to the full graph.
+        const nf = useSettingsStore.getState().settings?.nodeFilter;
+        if (nf?.enabled && (nf.filterByQuality || nf.filterByAuthority)) {
+          reassertFilter(nf);
+        }
+      })
+      .catch((error) => {
+        logger.error('[LiveLinkage] topology refetch failed:', createErrorMetadata(error));
+      });
     // The reasoned layer: pull fresh Whelk inferences so InferredEdges tracks
     // the evolving ontology, not just the asserted topology.
     useInferredEdgesStore.getState().refresh().catch(() => {
       /* refresh() is internally empty-safe; nothing further to do */
     });
   }, GRAPH_UPDATED_REFETCH_DEBOUNCE_MS);
+}
+
+function reassertFilter(nf: { enabled?: boolean; filterByQuality?: boolean; filterByAuthority?: boolean; qualityThreshold?: number; authorityThreshold?: number; filterMode?: string; includeLinkedPages?: boolean }) {
+  import('./index').then(({ useWebSocketStore }) => {
+    useWebSocketStore.getState().sendFilterUpdate({
+      enabled: nf.enabled,
+      qualityThreshold: nf.qualityThreshold,
+      authorityThreshold: nf.authorityThreshold,
+      filterByQuality: nf.filterByQuality,
+      filterByAuthority: nf.filterByAuthority,
+      filterMode: nf.filterMode,
+      includeLinkedPages: nf.includeLinkedPages,
+    });
+  }).catch(() => { /* store unavailable — next user change re-syncs */ });
 }
 
 /**
@@ -110,16 +136,30 @@ function handleInitialGraphLoad(message: WebSocketMessage) {
 
   const existingNodeCount = graphDataManager.nodeIdMap.size;
   if (existingNodeCount > 0 && nodes.length < existingNodeCount) {
-    logger.info(
-      `[WebSocket] Skipping initialGraphLoad setGraphData: REST already loaded ${existingNodeCount} nodes, ` +
-      `WS only has ${nodes.length}. Positions will arrive via binary stream.`
-    );
-    emit('graphDataUpdated', {
-      nodeCount: existingNodeCount,
-      edgeCount: 0,
-      source: 'websocket_filter_skipped'
-    });
-    return;
+    // Shrink-guard: the connect-time initialGraphLoad is capped (~200 nodes)
+    // and must not clobber a full REST load. BUT a smaller payload arriving
+    // right after WE sent a filter_update is the server's FILTERED graph —
+    // the authoritative answer to the user's quality gates — and must land.
+    // Without this exception every filter response was silently discarded
+    // and the quality-gate UI appeared dead.
+    if (isFilterResponseExpected()) {
+      clearFilterResponseExpectation();
+      logger.info(
+        `[WebSocket] Accepting filtered initialGraphLoad: ${nodes.length} nodes ` +
+        `(down from ${existingNodeCount}) in response to filter_update`
+      );
+    } else {
+      logger.info(
+        `[WebSocket] Skipping initialGraphLoad setGraphData: REST already loaded ${existingNodeCount} nodes, ` +
+        `WS only has ${nodes.length}. Positions will arrive via binary stream.`
+      );
+      emit('graphDataUpdated', {
+        nodeCount: existingNodeCount,
+        edgeCount: 0,
+        source: 'websocket_filter_skipped'
+      });
+      return;
+    }
   }
 
   const transformedNodes = nodes.map((node: unknown) => {

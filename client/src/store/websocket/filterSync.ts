@@ -17,6 +17,30 @@ let filterSubscriptionSet = false;
 let filterUnsubscribers: (() => void)[] = [];
 let lastFilterSnapshot: FilterSnapshot | null = null;
 
+// ── Filter-response expectation window ─────────────────────────────────
+//
+// After the client sends a filter_update, the server answers with a
+// per-client initialGraphLoad carrying the FILTERED (usually smaller) node
+// set. handleInitialGraphLoad's shrink-guard — which exists to stop the
+// 200-node connect-time payload from clobbering a full REST load — must NOT
+// swallow that response, or the quality gates appear to do nothing (the
+// long-standing break). The guard consults this window: a smaller load is
+// authoritative while a filter response is pending.
+const FILTER_RESPONSE_WINDOW_MS = 15_000;
+let filterResponseExpectedUntil = 0;
+
+export function expectFilterResponse() {
+  filterResponseExpectedUntil = Date.now() + FILTER_RESPONSE_WINDOW_MS;
+}
+
+export function isFilterResponseExpected(): boolean {
+  return Date.now() < filterResponseExpectedUntil;
+}
+
+export function clearFilterResponseExpectation() {
+  filterResponseExpectedUntil = 0;
+}
+
 // ── State accessors (used by index.ts for _reset) ──
 
 export function resetFilterState() {

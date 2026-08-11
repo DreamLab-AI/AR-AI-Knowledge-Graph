@@ -87,6 +87,45 @@ pub(crate) fn handle_authenticate(
             .unwrap_or(false);
 
         if let (Some(token), Some(pubkey)) = (token, pubkey) {
+            // ADR-06 §D1 parity: the REST extractor accepts the literal
+            // dev-session-token in dev builds (auth_extractor.rs), but this WS
+            // path only knew real Nostr sessions — so the dev client's
+            // authenticate frame was rejected on every connection, spamming an
+            // error frame and leaving the WS session without power_user. Same
+            // compile-time gate as REST: stripped from release builds unless
+            // the dev-auth feature is on.
+            #[cfg(any(debug_assertions, feature = "dev-auth"))]
+            {
+                if token == "dev-session-token" {
+                    act.pubkey = Some(pubkey.clone());
+                    act.is_power_user = true;
+                    if let Some(cid) = act.client_id {
+                        use crate::actors::messages::AuthenticateClient;
+                        act.client_manager_addr.do_send(AuthenticateClient {
+                            client_id: cid,
+                            pubkey: pubkey.clone(),
+                            is_power_user: true,
+                            ephemeral: is_ephemeral,
+                        });
+                    }
+                    let response = serde_json::json!({
+                        "type": "authenticate_success",
+                        "pubkey": pubkey,
+                        "is_power_user": true,
+                        "ephemeral": is_ephemeral,
+                        "timestamp": chrono::Utc::now().timestamp_millis()
+                    });
+                    if let Ok(msg_str) = serde_json::to_string(&response) {
+                        ctx.text(msg_str);
+                    }
+                    info!(
+                        "dev-auth: WS dev-session-token accepted for pubkey {} (dev build)",
+                        pubkey
+                    );
+                    return;
+                }
+            }
+
             let nostr_service = act.app_state.nostr_service.clone();
             let client_id = act.client_id;
             let cm_addr = act.client_manager_addr.clone();
