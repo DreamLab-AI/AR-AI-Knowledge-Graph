@@ -73,7 +73,7 @@ services:
       # Nostr bead provenance bridge — scoped to visionclaw only (privkey must not leak to other containers)
       # Bridge pubkey: eb47d8a792a4709329270a9f85f012326c61867a913791dc5f89dc7a0a760754
       VISIONCLAW_NOSTR_PRIVKEY: ${VISIONCLAW_NOSTR_PRIVKEY:-}
-      FORUM_RELAY_URL: ${FORUM_RELAY_URL:-}
+      FORUM_RELAY_URL: ${FORUM_RELAY_URL:-wss://dreamlab-nostr-relay.solitary-paper-764d.workers.dev}
     volumes:
       # Data volumes - ALWAYS mounted (both dev and prod)
       - visionclaw-data:/app/data
@@ -160,7 +160,7 @@ services:
       VISIONCLAW_AGENT_KEY: ${VISIONCLAW_AGENT_KEY:?VISIONCLAW_AGENT_KEY must be set}
       # Nostr bead provenance bridge — scoped here only, never in common-environment
       VISIONCLAW_NOSTR_PRIVKEY: ${VISIONCLAW_NOSTR_PRIVKEY:-}
-      FORUM_RELAY_URL: ${FORUM_RELAY_URL:-}
+      FORUM_RELAY_URL: ${FORUM_RELAY_URL:-wss://dreamlab-nostr-relay.solitary-paper-764d.workers.dev}
     volumes:
       # Production: ONLY data volumes (no source mounts, no Docker socket)
       - visionclaw-data:/app/data
