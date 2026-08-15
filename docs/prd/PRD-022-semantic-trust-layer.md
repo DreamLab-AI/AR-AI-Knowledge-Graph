@@ -1,7 +1,7 @@
 ---
 id: PRD-022
 title: "Semantic Trust Layer: W3C Shape Validation, Provenance Reification, and Relay-Mediated Federation"
-status: proposed
+status: partially implemented — WS-1 (SHACL enforcement) and WS-2 (provenance reification) landed 2026-08-15
 date: 2026-06-21
 authors: VisionClaw platform team (opus exploration mesh)
 linked_adrs: [ADR-127, ADR-128, ADR-129, ADR-130]
@@ -12,7 +12,7 @@ supersedes: none
 
 # PRD-022 — Semantic Trust Layer: W3C Shape Validation, Provenance Reification, and Relay-Mediated Federation
 
-**Status:** Proposed
+**Status:** Partially implemented — WS-1 (SHACL shape enforcement, shape-driven gate enforcing by default) and WS-2 (PROV-O reification into the unified `urn:ngm:graph:provenance` ledger with a SPARQL-backed query surface) landed 2026-08-15. Remaining workstreams unchanged.
 **Date:** 2026-06-21
 
 > **EXECUTION NOTE (read first):** This is a **design + workstream plan**. No agentbox or VisionClaw code is changed by this PRD. Implementation is the WS-0…WS-5 workstreams below, each gated by the evidence bars in §7. The driving thesis: agent memory that cannot be **validated, audited, and federated** is untrusted memory — and the gap between VisionFlow's current state and that standard is narrower than it appears.

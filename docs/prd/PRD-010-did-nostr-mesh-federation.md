@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Phase 0-1 complete; Phase 2 kit extraction done; federation implementation in progress |
+| Status | Phase 0-1 complete; Phase 2 kit extraction done; forum reference implementation shipped 2026-08-15 (IS-Envelope v1 + JCS, in-crate NIP-26, tri-mode `[mesh]` config, CF-compatible MeshTransport, G4 NIP-42 universal write gate); VisionClaw/agentbox substrate adoption outstanding |
 | Authors | Multi-agent research swarm + synthesis (J. O'Hare) |
 | Predecessors | PRD-004, PRD-006, ADR-053, ADR-054, ADR-058, ADR-061 |
 | Companion ADRs | ADR-073, ADR-074, ADR-075, ADR-076 |

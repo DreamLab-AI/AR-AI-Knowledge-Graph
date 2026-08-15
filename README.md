@@ -194,7 +194,7 @@ VisionClaw's docs follow the [Diátaxis](https://diataxis.fr/) framework, backed
 
 ## Status & remaining work
 
-*Dated 2026-07-22. Maturity words pinned to the ADR-002 ladder; the canonical register is [`docs/TODO-unified.md`](docs/TODO-unified.md).*
+*Dated 2026-08-15. Maturity words pinned to the ADR-002 ladder; the canonical register is [`docs/TODO-unified.md`](docs/TODO-unified.md).*
 
 | Capability | Maturity | Honest boundary |
 |---|---|---|
@@ -206,8 +206,8 @@ VisionClaw's docs follow the [Diátaxis](https://diataxis.fr/) framework, backed
 | ACSP signed governance | integrated | Six-kind protocol live; only the admin key publishes a Decision (31403). One use case today (ontology elevation, ≤5 concurrent) — narrower than universal HITL. |
 | RuVector semantic memory | released | 1.17M+ embeddings, bge-small-en-v1.5 via Xinference, 384-dim, HNSW. |
 | Judgment broker | integrated | Runs as `ElevationActor` / case queue on `main` — **not** the designed distributed `BrokerActor`. |
-| SHACL shape validation | scaffolded | "Lite" — an inline Rust matcher, advisory-only. The 5 `.shacl.ttl` NodeShapes are authored but **not** loaded into Oxigraph. It is not a dual-mode gate. |
-| PROV-O provenance | scaffolded | URN-based today; **not** yet reified as queryable RDF triples. Do not assume "every decision traceable via SPARQL". |
+| SHACL shape validation | integrated | Enforcing by default (2026-08-15): the 5 `.shacl.ttl` NodeShapes are loaded and drive a shape-derived validator; a `sh:Violation` rejects the write with zero quads emitted, `sh:Warning` stays advisory. Rollback knob `ontology_agent.shacl_mode: advisory`; trust-status reports the live mode. Constraint coverage is the subset the shapes use, not the full SHACL spec. |
+| PROV-O provenance | integrated | Queryable RDF (2026-08-15): mutation, inference, and decision paths reify into the single append-only ledger `urn:ngm:graph:provenance` (full triad; URNs preserved as subjects). `GET /api/ontology/provenance?entity=<urn>` walks the `wasGeneratedBy`/`wasDerivedFrom` chain. Emission is fail-open — an audit trail, not a write gate. |
 | Gluon attractive force | planned | The beam is shipped; the intended agent→target attractive edge is deferred pending a transient-edge GPU buffer (ADR-059 addendum). |
 
 **Live-session pending** (code + tests proven; awaiting observation on real traffic — [TODO-unified §3](docs/TODO-unified.md)): envelope canary fire (L-1), ADR-117 query clamp fire (L-3), ADR-119 telemetry fire (L-4), Quest 3 physical on-device validation (L-5). Keystones K-1/K-2 (server up, canary sweep) landed 2026-07-22.

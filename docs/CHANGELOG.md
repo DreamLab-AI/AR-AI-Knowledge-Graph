@@ -15,6 +15,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > enrichment-decide handler (`services::broker_events`) over the multiplexed graph
 > socket. Read "`BrokerActor`" below as "the broker governance publisher".
 
+## [Unreleased] - 2026-08-15
+
+### Added — Semantic-trust gap closures (PRD-022 WS-1/WS-2, PRD-010 G4)
+
+Four long-standing scaffolds finished and verified (four-agent mesh, all gates
+green; per-workstream detail in the commit messages):
+
+- **SHACL enforcement** — the five `.shacl.ttl` NodeShapes now load at startup
+  and drive a shape-derived validator; the ingest gate is enforcing by default
+  (`ontology_agent.shacl_mode`, rollback `advisory`), and the trust-status
+  endpoint reports the live mode. Live GitHub sync now skips shape-invalid
+  blocks instead of silently ingesting them.
+- **PROV-O provenance** — unified into the single append-only ledger
+  `urn:ngm:graph:provenance`; `propose_create`/`propose_amend`, inference, and
+  decision paths all reify (fail-open). New query surface
+  `GET /api/ontology/provenance?entity=<urn>[&depth=N]`.
+- **Forum NIP-42 AUTH** (`nostr-rust-forum`) — NIP-42 is the universal write
+  gate; the pubkey allowlist is authorisation-after-authentication. Escape
+  hatch `AUTH_MODE=allowlist`.
+- **Mesh federation** (`nostr-rust-forum`) — PRD-010 forum reference
+  implementation shipped: IS-Envelope v1 (JCS/RFC 8785), in-crate NIP-26,
+  tri-mode `[mesh]` config, CF-compatible MeshTransport, fan-out planner
+  gated on live NIP-42 sessions via `SessionAuthBoundary`.
+
+### Fixed
+
+- Three stale test expectations repaired: two V3 wire-format size asserts
+  (48 → 52 bytes/node, ADR-031) and an f64-scale epsilon on the f32 GPU
+  community-modularity oracle.
+
 ## [Unreleased] - 2026-08-10
 
 ### Added — Live linkage: reasoned graph → visible graph (`graphUpdated`)
