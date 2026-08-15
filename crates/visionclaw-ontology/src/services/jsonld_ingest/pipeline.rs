@@ -30,7 +30,7 @@ use oxigraph::model::Quad;
 use super::errors::{JsonLdIngestError, Result};
 use super::expander::expand_block;
 use super::extractor::extract_jsonld_blocks;
-use super::shacl_gate::{gate_block_advisory, ShaclGateReport};
+use super::shacl_gate::{gate_block, global_gate_mode, GateMode, ShaclGateReport};
 use super::triple_emitter::emit_quads;
 use super::validator::validate;
 use crate::services::jsonld_ingest::graph_port_shim::GraphRepository;
@@ -72,17 +72,34 @@ pub struct IngestOutcome {
     pub quads: Vec<Quad>,
     /// Source path (echoed from metadata).
     pub source_path: String,
-    /// SHACL-lite gate result over the parsed shapes (ADR-100 D4 / PRD-018
-    /// WS-5). The schema/profile validator runs first and hard-fails ingest;
-    /// this gate then surfaces shape-level findings as a report so the
-    /// operator dashboard sees every violation. `report.is_valid()` is the
-    /// gate decision.
+    /// Shape-driven SHACL gate result over the parsed shapes (PRD-022 WS-1).
+    /// The schema/profile validator runs first and hard-fails ingest; this
+    /// gate then validates each entry against the five `.shacl.ttl` NodeShapes.
+    /// In [`GateMode::Enforcing`] a `sh:Violation` finding rejects the whole
+    /// ingest (this outcome is never produced — an `Err` is returned instead);
+    /// in [`GateMode::Advisory`] the report is surfaced with every finding.
     pub shacl_report: ShaclGateReport,
 }
 
 /// Build an `IngestOutcome` from a markdown source without touching any
-/// repository. Useful for tests and dry-run validation.
+/// repository, using the process-wide gate mode ([`global_gate_mode`]).
+/// Useful for tests and dry-run validation.
 pub fn parse_and_emit(markdown: &str, metadata: &PageMetadata) -> Result<IngestOutcome> {
+    parse_and_emit_with_mode(markdown, metadata, global_gate_mode())
+}
+
+/// Build an `IngestOutcome` with an explicit SHACL gate mode.
+///
+/// In [`GateMode::Enforcing`], if any entry produces a `sh:Violation` finding
+/// the function returns [`JsonLdIngestError::ShaclViolations`] carrying the
+/// structured violation list, and NO quads are returned — the caller therefore
+/// never persists a shape-invalid document. In [`GateMode::Advisory`] the
+/// findings ride along on `outcome.shacl_report` and the write proceeds.
+pub fn parse_and_emit_with_mode(
+    markdown: &str,
+    metadata: &PageMetadata,
+    mode: GateMode,
+) -> Result<IngestOutcome> {
     let blocks = extract_jsonld_blocks(markdown);
 
     if blocks.is_empty() {
@@ -98,16 +115,25 @@ pub fn parse_and_emit(markdown: &str, metadata: &PageMetadata) -> Result<IngestO
         let doc = expand_block(&metadata.source_path, block.index, &block.body)?;
         // Schema/profile/PROV-O validator: hard gate (first error fails ingest).
         validate(&metadata.source_path, &doc)?;
-        // SHACL-lite shape gate (ADR-100 D4 / PRD-018 WS-5): reuse the
-        // existing `shacl_lite` engine over the parsed JSON-LD shapes and
-        // surface findings as a report. The block body already parsed cleanly
-        // in `expand_block`, so this re-parse cannot fail; on the off chance
-        // it does, the shape gate simply records nothing for that block.
+        // Shape-driven SHACL gate (PRD-022 WS-1): validate the parsed JSON-LD
+        // against the real NodeShapes. The block body already parsed cleanly in
+        // `expand_block`, so this re-parse cannot fail; if it somehow does, the
+        // shape gate simply records nothing for that block.
         if let Ok(value) = serde_json::from_str::<serde_json::Value>(&block.body) {
-            gate_block_advisory(&value, block.index, &mut shacl_report);
+            gate_block(&value, block.index, mode, &mut shacl_report);
         }
         let quads = emit_quads(&doc);
         all_quads.extend(quads);
+    }
+
+    // Enforcing mode: a Violation-severity finding rejects the write. Returning
+    // an Err (rather than an Ok outcome) means the caller never persists the
+    // shape-invalid quads.
+    if !shacl_report.is_valid() {
+        return Err(JsonLdIngestError::ShaclViolations {
+            file: metadata.source_path.clone(),
+            violations: shacl_report.violation_details(),
+        });
     }
 
     Ok(IngestOutcome {
@@ -212,6 +238,7 @@ mod tests {
   "@context": "https://narrativegoldmine.com/context/v1.jsonld",
   "@id": "urn:visionclaw:owl:class:cybernetics",
   "@type": "OntologyClass",
+  "rdfs:label": "Cybernetics",
   "rdfs:subClassOf": { "@id": "urn:visionclaw:owl:class:built-environment" },
   "prov:wasAttributedTo": { "@id": "did:nostr:npub1abc" },
   "prov:generatedAtTime": { "@value": "2026-01-01T00:00:00Z", "@type": "xsd:dateTime" }
@@ -224,6 +251,83 @@ mod tests {
             "{:?}",
             outcome.shacl_report
         );
+    }
+
+    /// A block that is schema-valid (context/prov/id present) but violates a
+    /// SHACL shape (`vc:agent_pubkey` missing) is REJECTED in enforcing mode:
+    /// `parse_and_emit_with_mode` returns a structured `ShaclViolations` error
+    /// and emits no quads, so the caller never persists it.
+    #[test]
+    fn enforcing_mode_rejects_shape_violation() {
+        let markdown = r#"```json-ld
+{
+  "@context": "https://narrativegoldmine.com/context/v1.jsonld",
+  "@id": "urn:visionclaw:agent:run-x",
+  "@type": "AgentNode",
+  "rdfs:label": "Agent X",
+  "prov:wasAttributedTo": { "@id": "did:nostr:npub1abc" },
+  "prov:generatedAtTime": { "@value": "2026-01-01T00:00:00Z", "@type": "xsd:dateTime" }
+}
+```"#;
+        let meta = PageMetadata::new("agent.md");
+        let err = parse_and_emit_with_mode(markdown, &meta, GateMode::Enforcing).unwrap_err();
+        match err {
+            JsonLdIngestError::ShaclViolations { file, violations } => {
+                assert_eq!(file, "agent.md");
+                assert!(
+                    violations.iter().any(|v| v.path == "vc:agent_pubkey"
+                        && v.constraint == "sh:minCount"
+                        && v.severity == "violation"),
+                    "expected a pubkey minCount violation, got {violations:?}"
+                );
+            }
+            other => panic!("expected ShaclViolations, got {other:?}"),
+        }
+    }
+
+    /// The same violating block is accepted in advisory mode: quads are emitted
+    /// and the violation rides along on the report for the dashboard.
+    #[test]
+    fn advisory_mode_accepts_with_recorded_violation() {
+        let markdown = r#"```json-ld
+{
+  "@context": "https://narrativegoldmine.com/context/v1.jsonld",
+  "@id": "urn:visionclaw:agent:run-x",
+  "@type": "AgentNode",
+  "rdfs:label": "Agent X",
+  "prov:wasAttributedTo": { "@id": "did:nostr:npub1abc" },
+  "prov:generatedAtTime": { "@value": "2026-01-01T00:00:00Z", "@type": "xsd:dateTime" }
+}
+```"#;
+        let meta = PageMetadata::new("agent.md");
+        let outcome = parse_and_emit_with_mode(markdown, &meta, GateMode::Advisory).unwrap();
+        assert!(outcome.shacl_report.is_valid(), "advisory always passes");
+        assert_eq!(
+            outcome.shacl_report.violation_count(),
+            1,
+            "the violation is still recorded: {:?}",
+            outcome.shacl_report
+        );
+    }
+
+    /// A fully shape-valid AgentNode passes in enforcing mode.
+    #[test]
+    fn enforcing_mode_accepts_valid_agent() {
+        let markdown = r#"```json-ld
+{
+  "@context": "https://narrativegoldmine.com/context/v1.jsonld",
+  "@id": "urn:visionclaw:agent:run-x",
+  "@type": "AgentNode",
+  "vc:agent_pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "rdfs:label": "Agent X",
+  "prov:wasAttributedTo": { "@id": "did:nostr:npub1abc" },
+  "prov:generatedAtTime": { "@value": "2026-01-01T00:00:00Z", "@type": "xsd:dateTime" }
+}
+```"#;
+        let meta = PageMetadata::new("agent.md");
+        let outcome = parse_and_emit_with_mode(markdown, &meta, GateMode::Enforcing).unwrap();
+        assert!(outcome.shacl_report.is_valid());
+        assert_eq!(outcome.shacl_report.violation_count(), 0);
     }
 
     #[test]

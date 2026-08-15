@@ -446,6 +446,13 @@ pub async fn get_trust_status(state: web::Data<AppState>) -> impl Responder {
     let shapes_loaded = provenance_emitter::count_shapes_loaded(store).unwrap_or(0);
     let provenance_triples = provenance_emitter::count_provenance_triples(store).unwrap_or(0);
 
+    // PRD-022 WS-1: report the REAL enforcement posture. The shape-driven SHACL
+    // validator now consumes the loaded NodeShapes, and the ingest gate rejects
+    // `sh:Violation` findings on the write path when the process-wide mode
+    // (seeded from `ontology_agent.shacl_mode`) is enforcing.
+    let gate_mode = visionclaw_ontology::services::jsonld_ingest::shacl_gate::global_gate_mode();
+    let mode_str = gate_mode.as_str();
+
     let shapes_healthy = shapes_loaded > 0;
     let provenance_healthy = true;
 
@@ -459,21 +466,21 @@ pub async fn get_trust_status(state: web::Data<AppState>) -> impl Responder {
         "status": status,
         "shacl": {
             "shapesLoaded": shapes_loaded,
-            // The ingest gate is the SHACL-lite Rust matcher running in advisory
-            // mode: violations are logged + metered but NEVER block a write
-            // (`shacl_report` is surfaced for dashboards, no callsite rejects on
-            // it). Reporting "enforcing" here would be false — PRD-022 WS-1
-            // truthful state is advisory across both paths.
-            "engine": "shacl-lite",
+            // The ingest gate is the shape-driven validator: it parses the five
+            // `.shacl.ttl` NodeShapes and validates every ingested JSON-LD entry
+            // against them. On the write path a `sh:Violation` finding rejects
+            // the ingest when the gate mode is enforcing (`sh:Warning` stays
+            // advisory in every mode). This report reflects the LIVE mode.
+            "engine": "shape-driven",
             "gateModes": {
-                "writePaths": "advisory",
+                // Write (ingest) path honours the configured mode; read/query
+                // paths never gate (advisory).
+                "writePaths": mode_str,
                 "readPaths": "advisory"
             },
-            // The `shapesLoaded` count above are real W3C SHACL NodeShapes loaded
-            // into the shapes graph at startup (queryable/provenance), but the
-            // running validator does not yet consume them: full W3C-SHACL
-            // enforcement over these shapes is tracked WS-1 residual.
-            "w3cEnforcement": "deferred",
+            // The loaded NodeShapes are now consumed by the running validator;
+            // enforcement is active whenever writePaths == "enforcing".
+            "w3cEnforcement": mode_str,
             "healthy": shapes_healthy
         },
         "provenance": {

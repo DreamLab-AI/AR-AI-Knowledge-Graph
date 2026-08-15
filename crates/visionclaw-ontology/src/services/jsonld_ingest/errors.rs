@@ -141,6 +141,15 @@ pub enum JsonLdIngestError {
         message: String,
     },
 
+    /// One or more `sh:Violation`-severity SHACL findings blocked the write in
+    /// enforcing mode (PRD-022 WS-1). Carries the structured violation list
+    /// (focus node, path, constraint, message) for the operator dashboard.
+    #[error("[ShaclViolations] at {file}: {} SHACL violation(s) blocked ingest in enforcing mode", .violations.len())]
+    ShaclViolations {
+        file: String,
+        violations: Vec<super::shacl_gate::ShaclViolationDetail>,
+    },
+
     /// Upstream repository adapter error.
     #[error("[RepositoryError] {0}")]
     RepositoryError(String),
@@ -162,6 +171,7 @@ impl JsonLdIngestError {
             Self::ProvAttributionMissing { .. } => "ProvAttributionMissing",
             Self::ProvTimestampMissing { .. } => "ProvTimestampMissing",
             Self::JsonParseError { .. } => "JsonParseError",
+            Self::ShaclViolations { .. } => "ShaclViolations",
             Self::RepositoryError(_) => "RepositoryError",
         }
     }

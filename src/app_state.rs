@@ -419,6 +419,29 @@ impl AppState {
         info!("[AppState::new] Initializing actor system");
         tokio::time::sleep(Duration::from_millis(50)).await;
 
+        // PRD-022 WS-1: seed the process-wide SHACL ingest-gate mode from
+        // config (`ontology_agent.shacl_mode`, default "enforcing"). This is the
+        // single source of truth read by both the ingest pipeline and the
+        // trust-status endpoint. Enforcing = a `sh:Violation` finding rejects
+        // the write; advisory = findings are logged but the write proceeds.
+        {
+            use visionclaw_ontology::services::jsonld_ingest::shacl_gate::{
+                set_global_gate_mode, GateMode,
+            };
+            let configured = settings
+                .ontology_agent
+                .as_ref()
+                .map(|o| o.shacl_mode.as_str())
+                .unwrap_or("enforcing");
+            let mode = GateMode::from_config_str(configured);
+            set_global_gate_mode(mode);
+            info!(
+                "[AppState::new] SHACL ingest gate mode: {} (from ontology_agent.shacl_mode={:?})",
+                mode.as_str(),
+                configured
+            );
+        }
+
         info!("[AppState::new] Creating repository adapters for hexagonal architecture (ADR-11 Oxigraph)");
 
         // Open Oxigraph store — shared across ontology + graph repositories (ADR-11 §D1)

@@ -262,8 +262,17 @@ pub struct OntologyAgentSettings {
     /// Labels to add to ontology PRs
     #[serde(default = "default_pr_labels", alias = "pr_labels")]
     pub pr_labels: Vec<String>,
+    /// SHACL ingest-gate mode (PRD-022 WS-1): `"enforcing"` rejects an ingest
+    /// on any `sh:Violation` shape finding; `"advisory"` records findings but
+    /// lets the write proceed. Default `"enforcing"`; set `"advisory"` to roll
+    /// back. Consumed at startup by `shacl_gate::set_global_gate_mode`.
+    #[serde(default = "default_shacl_mode", alias = "shacl_mode")]
+    pub shacl_mode: String,
 }
 
+fn default_shacl_mode() -> String {
+    "enforcing".to_string()
+}
 fn default_auto_merge_threshold() -> f32 {
     0.9
 }
