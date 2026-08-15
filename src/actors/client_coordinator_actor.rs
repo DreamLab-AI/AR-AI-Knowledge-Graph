@@ -2067,8 +2067,8 @@ mod tests {
         }];
 
         let serialized = actor.serialize_positions(&positions);
-        // V3 protocol: 1 header byte + 48 bytes per node
-        assert_eq!(serialized.len(), 1 + 48);
+        // V3 protocol (ADR-031 analytics extension): 1 header byte + 52 bytes per node
+        assert_eq!(serialized.len(), 1 + 52);
     }
 
     #[test]

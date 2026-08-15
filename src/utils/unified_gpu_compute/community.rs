@@ -1006,8 +1006,10 @@ mod tests {
         for (n, edges, labels) in cases {
             let csr = q_of(*n, edges, labels) as f64;
             let oracle = oracle_q(*n, edges, labels);
+            // q_of computes in f32; 1/3-valued fixtures round at ~1e-8, so the
+            // tolerance must be f32-scale, not f64-scale.
             assert!(
-                (csr - oracle).abs() < 1e-9,
+                (csr - oracle).abs() < 1e-6,
                 "CSR {csr} vs oracle {oracle} for labels {labels:?}"
             );
         }

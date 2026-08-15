@@ -804,8 +804,9 @@ mod tests {
         )];
 
         let size = calculate_message_size(&nodes);
-        // V3: 1 header + 48 bytes per node
-        assert_eq!(size, 1 + 48);
+        // V3 (ADR-031 analytics extension): 1 header + 52 bytes per node
+        assert_eq!(size, 1 + WIRE_V3_ITEM_SIZE);
+        assert_eq!(WIRE_V3_ITEM_SIZE, 52);
 
         let encoded = encode_node_data(&nodes);
         assert_eq!(encoded.len(), size);
