@@ -1411,7 +1411,7 @@ fn parse_rfc3339_utc(raw: &str) -> Result<DateTime<Utc>, String> {
 }
 
 /// Build the bi-temporal `state_at(t)` SPARQL SELECT over
-/// `urn:agentbox:graph:provenance` (ADR-049 portable reification).
+/// `urn:ngm:graph:provenance` (ADR-049 portable reification, PRD-022 WS-2 unified).
 ///
 /// Joins the reified statement (`rdf:subject`/`rdf:predicate`/`rdf:object`), the
 /// valid-time start (`dl:validFrom`), recorded time (`prov:generatedAtTime`), the
@@ -1508,7 +1508,7 @@ fn map_state_at_rows(sparql_json: &serde_json::Value) -> Vec<serde_json::Value> 
 /// `GET /api/ontology/state-at?t=<RFC3339>[&recorded_as_of=<RFC3339>]`
 ///
 /// Bi-temporal valid-time projection (ADR-049): returns the assertion-version
-/// entities in `urn:agentbox:graph:provenance` whose half-open valid-time
+/// entities in `urn:ngm:graph:provenance` whose half-open valid-time
 /// interval contains `t` (start inclusive, end exclusive). With
 /// `recorded_as_of`, additionally restricts to `generatedAt <= recorded_as_of`
 /// (point-in-time-of-knowledge). This is the TEMPORAL subset (runtime governed
@@ -1562,6 +1562,54 @@ pub async fn state_at(
         Err(e) => {
             error!("state_at SPARQL query failed: {}", e);
             crate::error_json!("Failed to compute state_at projection", e.to_string())
+        }
+    }
+}
+
+/// Query parameters for [`get_provenance`].
+#[derive(Debug, serde::Deserialize)]
+pub struct ProvenanceParams {
+    /// The entity URN/IRI to resolve provenance for (required).
+    pub entity: Option<String>,
+    /// Max `prov:wasDerivedFrom` hops to walk (default 16, hard-capped 64).
+    pub depth: Option<usize>,
+}
+
+/// `GET /api/ontology/provenance?entity=<urn>[&depth=<n>]`
+///
+/// Answers "provenance for entity X" (PRD-022 WS-2): walks the PROV-O
+/// `wasGeneratedBy` / `wasDerivedFrom` chain in the unified
+/// `urn:ngm:graph:provenance` ledger — seeding through `rdf:subject` so a
+/// governed statement subject (a class or decision URN) resolves to its reified
+/// assertion-version provenance — and returns `{ root, nodes, count }`. One
+/// query surfaces inference, mutation AND decision provenance now that all three
+/// paths share the one ledger. Read-auth mirrors `/query` / `/state-at`.
+/// Fails graceful: an entity with no provenance yields `nodes: []`, `count: 0`.
+pub async fn get_provenance(
+    _auth: crate::settings::auth_extractor::AuthenticatedUser,
+    state: web::Data<AppState>,
+    params: web::Query<ProvenanceParams>,
+) -> Result<HttpResponse, actix_web::Error> {
+    let params = params.into_inner();
+    let Some(entity) = params.entity.filter(|e| !e.trim().is_empty()) else {
+        return crate::bad_request!("Missing required query parameter 'entity' (URN/IRI)");
+    };
+    let depth = params.depth.unwrap_or(16).min(64);
+
+    info!("provenance chain requested for entity={entity} (depth={depth})");
+    match state
+        .ontology_repository
+        .provenance_for_entity(entity.clone(), depth)
+        .await
+    {
+        Ok(chain) => ok_json!(serde_json::json!({
+            "root": chain.root,
+            "nodes": chain.nodes,
+            "count": chain.nodes.len(),
+        })),
+        Err(e) => {
+            error!("provenance chain for {entity} failed: {e}");
+            crate::error_json!("Failed to resolve provenance chain", e.to_string())
         }
     }
 }
@@ -1648,6 +1696,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             // ADR-049 bi-temporal valid-time projection (read; authed via the
             // AuthenticatedUser extractor on the handler, like /query).
             .route("/state-at", web::get().to(state_at))
+            // PRD-022 WS-2 "provenance for entity X" — walks wasGeneratedBy /
+            // wasDerivedFrom in the unified provenance ledger (read; authed via
+            // the AuthenticatedUser extractor on the handler, like /query).
+            .route("/provenance", web::get().to(get_provenance))
             .route("/reports/{id}", web::get().to(get_report_by_id))
             .route("/report", web::get().to(get_validation_report))
             .route("/health", web::get().to(get_health_status))
@@ -1769,9 +1821,9 @@ mod tests {
     #[::core::prelude::v1::test]
     fn build_state_at_sparql_is_bounded_half_open_read() {
         let q = build_state_at_sparql(ts("2026-08-07T00:00:00Z"), None);
-        // Scopes to the ADR-049 provenance graph.
+        // Scopes to the unified provenance graph (PRD-022 WS-2 reconciliation).
         assert!(
-            q.contains("GRAPH <urn:agentbox:graph:provenance>"),
+            q.contains("GRAPH <urn:ngm:graph:provenance>"),
             "provenance graph scope"
         );
         // Joins the full portable-reification shape the contract requires.

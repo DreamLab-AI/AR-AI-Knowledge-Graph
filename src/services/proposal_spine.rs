@@ -507,7 +507,7 @@ impl From<StorageError> for TxError {
 }
 
 /// Execute a governed assertion as ONE atomic Oxigraph transaction: the T3
-/// provenance-graph PROV-O quads (`urn:agentbox:graph:provenance`) and the
+/// provenance-graph PROV-O quads (`urn:ngm:graph:provenance`) and the
 /// asserted-graph projection quads (`urn:ngm:graph:ontology:assert`) commit
 /// together or not at all. Both named graphs live in the SAME shared store
 /// (ADR-049 §Decision, ADR-11 §D1 single-writer), so the single
@@ -547,7 +547,7 @@ pub struct CommitRequest<'a> {
     pub payload_hash: &'a str,
     /// Quads projected into `urn:ngm:graph:ontology:assert`.
     pub asserted_quads: &'a [Quad],
-    /// PROV-O quads appended to `urn:agentbox:graph:provenance` (T3).
+    /// PROV-O quads appended to `urn:ngm:graph:provenance` (T3).
     pub provenance_quads: &'a [Quad],
     /// Native signature envelope, if verified before mutation (`None` → unsigned).
     pub envelope: Option<&'a str>,
@@ -818,7 +818,8 @@ mod tests {
     use oxigraph::model::{GraphName, NamedNode, Quad as OxQuad};
 
     const ASSERT_GRAPH: &str = "urn:ngm:graph:ontology:assert";
-    const PROV_GRAPH: &str = "urn:agentbox:graph:provenance";
+    // Unified provenance ledger (PRD-022 WS-2 reconciliation of ADR-049).
+    const PROV_GRAPH: &str = "urn:ngm:graph:provenance";
 
     fn iri(s: &str) -> NamedNode {
         NamedNode::new_unchecked(s)

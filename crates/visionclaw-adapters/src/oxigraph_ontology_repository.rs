@@ -321,13 +321,14 @@ fn db_err<E: std::fmt::Display>(e: E) -> OntologyRepositoryError {
 // The five canonical `.shacl.ttl` NodeShape files live in the sibling
 // `visionclaw-ontology` crate. They are embedded here at compile time and
 // loaded into `GRAPH_SHAPES` on startup so the shape catalogue is queryable
-// (`trust-status.shapesLoaded`) and available to any future W3C-SHACL engine.
+// (`trust-status.shapesLoaded`) and available to the SHACL engine.
 //
-// NOTE ON ENFORCEMENT (audit truth): loading these shapes makes them present
-// and countable; it does NOT make the ingest gate a W3C-SHACL validator. The
-// running ingest gate is the SHACL-lite Rust matcher (advisory mode). These
-// are the canonical W3C definitions the lite matcher approximates; full
-// W3C-SHACL enforcement over this graph is tracked WS-1 residual.
+// NOTE ON ENFORCEMENT (audit truth): the ingest gate is now shape-driven and
+// ENFORCING by default (config knob `ontology_agent.shacl_mode`, default
+// "enforcing"). In enforcing mode shape-invalid JSON-LD is rejected with
+// `JsonLdIngestError::ShaclViolations` and writes zero quads; "advisory" mode
+// downgrades violations to warnings. These embedded files are the canonical
+// W3C shape definitions the gate validates against.
 // ----------------------------------------------------------------------
 
 /// The five embedded W3C SHACL shape files: `(logical-name, turtle-body)`.
@@ -633,6 +634,40 @@ impl OxigraphOntologyRepository {
     /// Convenience accessor for tests / migration tooling.
     pub fn store(&self) -> &Arc<Store> {
         &self.store
+    }
+
+    /// PROV-O emission seam (PRD-022 WS-2). Every production write path that
+    /// should leave a queryable provenance trail — ontology mutation, inference,
+    /// decision recording — reifies its event here as an append-only PROV-O
+    /// activity (the full `prov:Entity`/`prov:Activity`/`prov:Agent` triad) in
+    /// `GRAPH_PROVENANCE`. Returns the triple count. This is the single wiring
+    /// point over `provenance_emitter::reify_activity`, so callers never
+    /// re-implement the `spawn_blocking` + error-mapping dance.
+    pub async fn emit_provenance(
+        &self,
+        record: crate::provenance_emitter::ActivityRecord,
+    ) -> RepoResult<usize> {
+        crate::provenance_emitter::emit_activity(Arc::clone(&self.store), record)
+            .await
+            .map_err(db_err)
+    }
+
+    /// Answer "provenance for entity X": walk the `prov:wasGeneratedBy` /
+    /// `prov:wasDerivedFrom` chain in `GRAPH_PROVENANCE` (seeding through
+    /// `rdf:subject` so a governed statement subject resolves to its reified
+    /// assertion-version provenance) and return the chain.
+    pub async fn provenance_for_entity(
+        &self,
+        entity_urn: String,
+        max_depth: usize,
+    ) -> RepoResult<crate::provenance_emitter::ProvenanceChain> {
+        let store = Arc::clone(&self.store);
+        tokio::task::spawn_blocking(move || {
+            crate::provenance_emitter::provenance_for_entity(&store, &entity_urn, max_depth)
+        })
+        .await
+        .map_err(|e| db_err(format!("join error: {e}")))?
+        .map_err(db_err)
     }
 
     /// Content-address a reasoner run (ADR-099 D3 provenance). Stable for an
@@ -2532,10 +2567,9 @@ impl OntologyRepository for OxigraphOntologyRepository {
 
         // PRD-022 WS-2: reify the reasoner run as an append-only PROV-O activity
         // in `GRAPH_PROVENANCE` so the inference is queryable through the trust
-        // ledger (the reified emitter's first production caller). This is an
-        // audit side-effect over an already-committed materialisation — a
-        // provenance failure is logged, never propagated back to the caller.
-        let prov_store = Arc::clone(&self.store);
+        // ledger. This is an audit side-effect over an already-committed
+        // materialisation — a provenance failure is logged, never propagated
+        // back to the caller. Routed through the single `emit_provenance` seam.
         let record = crate::provenance_emitter::ActivityRecord {
             activity_urn: format!("urn:visionclaw:execution:inference-{run_id}"),
             agent_did: REASONER_AGENT_DID.to_string(),
@@ -2546,18 +2580,11 @@ impl OntologyRepository for OxigraphOntologyRepository {
             generated: Some(GRAPH_ONTOLOGY_INFERRED.to_string()),
             informed_by: None,
         };
-        match tokio::task::spawn_blocking(move || {
-            crate::provenance_emitter::reify_activity(&prov_store, &record)
-        })
-        .await
-        {
-            Ok(Ok(n)) => {
-                tracing::debug!(
-                    "inference provenance: reified {n} PROV-O triple(s) for run {run_id}"
-                )
-            }
-            Ok(Err(e)) => tracing::warn!("inference provenance emit failed (non-fatal): {e}"),
-            Err(e) => tracing::warn!("inference provenance join error (non-fatal): {e}"),
+        match self.emit_provenance(record).await {
+            Ok(n) => tracing::debug!(
+                "inference provenance: reified {n} PROV-O triple(s) for run {run_id}"
+            ),
+            Err(e) => tracing::warn!("inference provenance emit failed (non-fatal): {e}"),
         }
         Ok(())
     }

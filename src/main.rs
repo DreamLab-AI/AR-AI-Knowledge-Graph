@@ -502,7 +502,10 @@ async fn main() -> std::io::Result<()> {
             github_pr_service.clone(),
             proposal_idempotency,
             proposal_intents,
-        ),
+        )
+        // PRD-022 WS-2: share the Oxigraph store so committed proposals reify
+        // queryable PROV-O provenance (single-writer, ADR-11 §D1).
+        .with_provenance_store(app_state.ontology_repository.store().clone()),
     );
 
     // W-B (PRD-022 / ADR-048/049): governed decision write door. Shares the same

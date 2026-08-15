@@ -24,6 +24,7 @@ use visionclaw_server::ports::knowledge_graph_repository::{
 use visionclaw_server::services::github_pr_service::GitHubPRService;
 use visionclaw_server::services::ontology_mutation_service::OntologyMutationService;
 use visionclaw_server::services::ontology_query_service::OntologyQueryService;
+use visionclaw_server::services::proposal_spine::{InMemoryIdempotencyStore, InMemoryIntentLog};
 use visionclaw_server::services::schema_service::SchemaService;
 use visionclaw_server::test_helpers::create_test_ontology_repo;
 use visionclaw_server::types::ontology_tools::*;
@@ -139,7 +140,13 @@ fn build_mutation_service() -> OntologyMutationService {
     let repo = create_test_ontology_repo();
     let whelk = Arc::new(RwLock::new(WhelkInferenceEngine::new()));
     let github_pr = Arc::new(GitHubPRService::new());
-    OntologyMutationService::new(repo, whelk, github_pr)
+    OntologyMutationService::new(
+        repo,
+        whelk,
+        github_pr,
+        Arc::new(InMemoryIdempotencyStore::new()),
+        Arc::new(InMemoryIntentLog::new()),
+    )
 }
 
 fn build_mutation_service_with_markdown() -> OntologyMutationService {
@@ -160,7 +167,13 @@ fn build_mutation_service_with_markdown() -> OntologyMutationService {
     }
     let whelk = Arc::new(RwLock::new(WhelkInferenceEngine::new()));
     let github_pr = Arc::new(GitHubPRService::new());
-    OntologyMutationService::new(repo, whelk, github_pr)
+    OntologyMutationService::new(
+        repo,
+        whelk,
+        github_pr,
+        Arc::new(InMemoryIdempotencyStore::new()),
+        Arc::new(InMemoryIntentLog::new()),
+    )
 }
 
 fn test_agent_context() -> AgentContext {
@@ -299,7 +312,7 @@ async fn test_propose_create_generates_valid_result() {
     };
 
     let result = mutation_service
-        .propose_create(proposal, test_agent_context())
+        .propose_create(proposal, test_agent_context(), None, None)
         .await
         .unwrap();
 
@@ -348,7 +361,7 @@ async fn test_propose_create_markdown_contains_ontology_block() {
     };
 
     let result = mutation_service
-        .propose_create(proposal, test_agent_context())
+        .propose_create(proposal, test_agent_context(), None, None)
         .await
         .unwrap();
 
@@ -392,7 +405,7 @@ async fn test_propose_amend_existing_class() {
     };
 
     let result = mutation_service
-        .propose_amend("mv:Person", amendment, test_agent_context())
+        .propose_amend("mv:Person", amendment, test_agent_context(), None, None)
         .await
         .unwrap();
 
@@ -424,7 +437,7 @@ async fn test_quality_score_fully_specified() {
     };
 
     let result = mutation_service
-        .propose_create(proposal, test_agent_context())
+        .propose_create(proposal, test_agent_context(), None, None)
         .await
         .unwrap();
 
@@ -452,7 +465,7 @@ async fn test_quality_score_minimal() {
     };
 
     let result = mutation_service
-        .propose_create(proposal, test_agent_context())
+        .propose_create(proposal, test_agent_context(), None, None)
         .await
         .unwrap();
 

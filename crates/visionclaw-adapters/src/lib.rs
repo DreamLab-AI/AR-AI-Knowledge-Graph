@@ -46,4 +46,7 @@ pub mod rdf_serializer;
 // PRD-022 WS-2 — PROV-O provenance reification emitter. Reifies activity
 // URNs as RDF triples in the append-only urn:ngm:graph:provenance graph.
 pub mod provenance_emitter;
-pub use provenance_emitter::{reify_activity, ActivityRecord, ProvenanceError};
+pub use provenance_emitter::{
+    emit_activity, emit_activity_nonfatal, provenance_for_entity, reify_activity, ActivityRecord,
+    ProvenanceChain, ProvenanceError, ProvenanceNode,
+};

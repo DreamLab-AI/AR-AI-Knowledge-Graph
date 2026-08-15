@@ -13,7 +13,7 @@
 //! | Graph | Contents | Whelk classifies? |
 //! |---|---|---|
 //! | [`GRAPH_ASSERT`] `urn:ngm:graph:ontology:assert` | current plain asserted triples | Yes |
-//! | [`GRAPH_PROVENANCE`] `urn:agentbox:graph:provenance` | assertion-version entities, intervals, activities, agents | No |
+//! | [`GRAPH_PROVENANCE`] `urn:ngm:graph:provenance` | assertion-version entities, intervals, activities, agents | No |
 //!
 //! The provenance graph is the append-only historical source of truth; the
 //! asserted graph is the current-time (`state_at(now)`) valid-time projection.
@@ -69,13 +69,22 @@ use oxigraph::model::vocab::xsd;
 use oxigraph::model::{Literal, NamedNode, Quad};
 use sha2::{Digest, Sha256};
 
-// ── Named graphs (ADR-049 §Decision) ────────────────────────────────────────
+// ── Named graphs (ADR-049 §Decision, reconciled per PRD-022 WS-2) ───────────
 
-/// Append-only portable-reification provenance graph (NOT Whelk-classified).
-/// ADR-049 mandates `urn:agentbox:graph:provenance` for assertion-version
-/// entities — distinct from the pre-existing `urn:ngm:graph:provenance`
-/// activity-only emitter graph (`provenance_emitter.rs`).
-pub const GRAPH_PROVENANCE: &str = "urn:agentbox:graph:provenance";
+/// Append-only provenance graph (NOT Whelk-classified). **One source of truth.**
+///
+/// ADR-049 originally minted a *separate* `urn:agentbox:graph:provenance` for
+/// assertion-version entities, distinct from the pre-existing
+/// `urn:ngm:graph:provenance` activity emitter graph. That fork left the
+/// decision path (this writer) and the ingest/inference/mutation paths (the
+/// `provenance_emitter`) writing to two graphs a single "provenance for entity
+/// X" query could never join. PRD-022 WS-2 reconciles them onto the one
+/// canonical ledger — the graph the `0003_bootstrap_provenance_graph` SPARQL
+/// migration establishes and the trust-status/health counters read — by
+/// re-exporting the adapter's constant here. Assertion-versions and activity
+/// records now co-reside; both remain OUTSIDE the Whelk-classified assert graph,
+/// so the reasoner-isolation invariant ADR-049 protected still holds.
+pub use visionclaw_adapters::oxigraph_ontology_repository::GRAPH_PROVENANCE;
 
 /// Current-time asserted projection — the plain triples Whelk classifies.
 pub const GRAPH_ASSERT: &str = "urn:ngm:graph:ontology:assert";
@@ -187,7 +196,7 @@ pub struct AssertionVersion {
 pub struct AssertionVersionQuads {
     /// The minted content-addressed entity IRI.
     pub entity_iri: String,
-    /// Reification + interval + PROV-O quads for `urn:agentbox:graph:provenance`.
+    /// Reification + interval + PROV-O quads for `urn:ngm:graph:provenance`.
     pub provenance_quads: Vec<Quad>,
     /// The plain current triple for `urn:ngm:graph:ontology:assert`.
     pub asserted_quad: Quad,

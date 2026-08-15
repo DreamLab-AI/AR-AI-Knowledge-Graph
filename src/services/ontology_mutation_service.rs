@@ -30,8 +30,10 @@ use crate::services::proposal_spine::{
 use crate::types::ontology_tools::*;
 use chrono::Utc;
 use log::{error, info, warn};
+use oxigraph::store::Store;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use visionclaw_adapters::{emit_activity_nonfatal, ActivityRecord};
 use visionclaw_domain::ports::ontology_repository::{
     AxiomType, OntologyRepository, OwlAxiom, OwlClass,
 };
@@ -60,6 +62,15 @@ pub struct OntologyMutationService {
     idempotency: Arc<dyn IdempotencyStore>,
     /// W-E: write-ahead intent log for deterministic recovery.
     intents: Arc<dyn IntentLog>,
+    /// PRD-022 WS-2 provenance seam. The mutation door projects to a GitHub PR
+    /// for human review (it does not write the asserted graph directly), but it
+    /// STILL reifies each committed proposal as an append-only PROV-O activity
+    /// in `urn:ngm:graph:provenance` so "who proposed class X, when, deriving
+    /// from what" is queryable. Injected from `main.rs` via
+    /// [`with_provenance_store`]; `None` in unit tests that don't assert
+    /// provenance (emission then no-ops). The concrete Oxigraph store handle is
+    /// reached through `OxigraphOntologyRepository::store()`.
+    provenance_store: Option<Arc<Store>>,
 }
 
 impl OntologyMutationService {
@@ -76,7 +87,44 @@ impl OntologyMutationService {
             github_pr,
             idempotency,
             intents,
+            provenance_store: None,
         }
+    }
+
+    /// Inject the shared Oxigraph store so committed proposals emit queryable
+    /// PROV-O provenance (PRD-022 WS-2). Production wiring passes
+    /// `app_state.ontology_repository.store().clone()`.
+    pub fn with_provenance_store(mut self, store: Arc<Store>) -> Self {
+        self.provenance_store = Some(store);
+        self
+    }
+
+    /// Reify a committed proposal as an append-only PROV-O activity. Fail-open:
+    /// a provenance error is logged, never surfaced to the proposer. `agent_id`
+    /// is the authenticated x-only pubkey; the generated entity is the target
+    /// class IRI (URN scheme preserved verbatim as the RDF subject).
+    async fn emit_proposal_provenance(
+        &self,
+        activity_kind: &str,
+        action: &str,
+        proposal_id: &str,
+        target_iri: &str,
+        agent_id: &str,
+    ) {
+        let Some(store) = self.provenance_store.clone() else {
+            return;
+        };
+        let record = ActivityRecord {
+            activity_urn: format!("urn:visionclaw:execution:{activity_kind}-{proposal_id}"),
+            agent_did: format!("did:nostr:{agent_id}"),
+            timestamp: Utc::now().to_rfc3339(),
+            action: action.to_string(),
+            derivation: "proposed".to_string(),
+            used: None,
+            generated: Some(target_iri.to_string()),
+            informed_by: None,
+        };
+        emit_activity_nonfatal(store, record).await;
     }
 
     /// Propose creating a new note in the ontology corpus.
@@ -248,6 +296,16 @@ impl OntologyMutationService {
         });
         self.idempotency.commit(&idem_key, &phash, receipt.clone());
         self.intents.mark(&proposal_id, IntentState::Committed);
+
+        // PRD-022 WS-2: reify the committed proposal as queryable provenance.
+        self.emit_proposal_provenance(
+            "propose",
+            "propose",
+            &proposal_id,
+            &proposal.owl_class,
+            &agent_ctx.agent_id,
+        )
+        .await;
 
         let status = if pr_url.is_some() {
             ProposalStatus::PRCreated
@@ -491,6 +549,16 @@ impl OntologyMutationService {
         });
         self.idempotency.commit(&idem_key, &phash, receipt.clone());
         self.intents.mark(&proposal_id, IntentState::Committed);
+
+        // PRD-022 WS-2: reify the committed amendment as queryable provenance.
+        self.emit_proposal_provenance(
+            "amend",
+            "amend",
+            &proposal_id,
+            target_iri,
+            &agent_ctx.agent_id,
+        )
+        .await;
 
         let status = if pr_url.is_some() {
             ProposalStatus::PRCreated
@@ -898,4 +966,160 @@ fn provenance_seed(proposal_id: &str, subject: &str, agent_iri: &str) -> Vec<Str
         "assertion-version proposal:{} subject:{} attributedTo:{}",
         proposal_id, subject, agent_iri
     )]
+}
+
+#[cfg(test)]
+mod provenance_wiring_tests {
+    //! PRD-022 WS-2: mutation-path provenance emission — a proposal driven
+    //! through the REAL `OntologyMutationService` reifies a queryable PROV-O
+    //! chain into the unified `urn:ngm:graph:provenance` ledger.
+    use super::*;
+    use crate::services::proposal_spine::{InMemoryIdempotencyStore, InMemoryIntentLog};
+    use oxigraph::store::Store;
+    use std::collections::HashMap;
+    use visionclaw_adapters::OxigraphOntologyRepository;
+
+    const PUBKEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const PROV_GRAPH: &str = "urn:ngm:graph:provenance";
+
+    /// Build the service over an in-memory Oxigraph store. `GitHubPRService` is
+    /// configured with an EMPTY token so the PR projection degrades gracefully
+    /// (early Err, no network) and the proposal still commits + emits provenance.
+    fn service_with_store(store: Arc<Store>, inject_store: bool) -> OntologyMutationService {
+        let repo = Arc::new(OxigraphOntologyRepository::from_store(Arc::clone(&store)));
+        let svc = OntologyMutationService::new(
+            repo as Arc<dyn OntologyRepository>,
+            Arc::new(RwLock::new(WhelkInferenceEngine::new())),
+            Arc::new(GitHubPRService::with_config(
+                String::new(),
+                String::new(),
+                String::new(),
+                "main".to_string(),
+            )),
+            Arc::new(InMemoryIdempotencyStore::new()),
+            Arc::new(InMemoryIntentLog::new()),
+        );
+        if inject_store {
+            svc.with_provenance_store(store)
+        } else {
+            svc
+        }
+    }
+
+    fn agent_ctx() -> AgentContext {
+        AgentContext {
+            agent_id: PUBKEY.to_string(),
+            agent_type: "test-agent".to_string(),
+            task_description: "provenance wiring test".to_string(),
+            session_id: None,
+            confidence: 0.9,
+            user_id: "user-1".to_string(),
+        }
+    }
+
+    fn proposal(iri: &str) -> NoteProposal {
+        NoteProposal {
+            preferred_term: "Quantum Widget".to_string(),
+            definition: "A widget exhibiting quantum behaviour.".to_string(),
+            owl_class: iri.to_string(),
+            physicality: "conceptual".to_string(),
+            role: "concept".to_string(),
+            domain: "ai".to_string(),
+            is_subclass_of: vec![],
+            relationships: HashMap::new(),
+            alt_terms: vec![],
+            owner_user_id: Some("user-1".to_string()),
+        }
+    }
+
+    /// INTEGRATION: a mutation performed through the service reifies a full
+    /// PROV-O chain into Oxigraph, discoverable by SPARQL and the query surface.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn propose_create_emits_queryable_provenance_chain() {
+        let store = Arc::new(Store::new().unwrap());
+        let svc = service_with_store(Arc::clone(&store), true);
+
+        let iri = "urn:ngm:class:quantum-widget";
+        let res = svc
+            .propose_create(proposal(iri), agent_ctx(), None, None)
+            .await
+            .expect("propose_create ok");
+        assert_eq!(res.target_iri, iri);
+
+        // SPARQL over the unified provenance graph finds the full triad: the
+        // class URN is a prov:Entity, wasGeneratedBy the propose activity, which
+        // wasAssociatedWith the agent DID; the entity wasAttributedTo the agent.
+        let repo = OxigraphOntologyRepository::from_store(Arc::clone(&store));
+        let ask = repo
+            .sparql_select_json(format!(
+                "PREFIX prov: <http://www.w3.org/ns/prov#> \
+                 ASK FROM <{PROV_GRAPH}> {{ \
+                   <{iri}> a prov:Entity ; \
+                           prov:wasGeneratedBy ?act ; \
+                           prov:wasAttributedTo <did:nostr:{PUBKEY}> . \
+                   ?act a prov:Activity ; prov:wasAssociatedWith <did:nostr:{PUBKEY}> . \
+                   <did:nostr:{PUBKEY}> a prov:Agent }}"
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            ask["boolean"],
+            serde_json::Value::Bool(true),
+            "full PROV-O triad present: {ask}"
+        );
+
+        // The query surface walks the chain for the entity.
+        let chain = repo.provenance_for_entity(iri.to_string(), 8).await.unwrap();
+        assert_eq!(chain.root, iri);
+        let node = chain
+            .nodes
+            .iter()
+            .find(|n| n.entity == iri)
+            .expect("entity node present");
+        assert_eq!(node.action.as_deref(), Some("propose"));
+        assert_eq!(node.derivation.as_deref(), Some("proposed"));
+        assert_eq!(
+            node.attributed_to.as_deref(),
+            Some(format!("did:nostr:{PUBKEY}").as_str())
+        );
+        assert!(node.generated_by.is_some(), "wasGeneratedBy resolved");
+        assert!(node.generated_at.is_some(), "generatedAtTime present");
+    }
+
+    /// URN round-trip: the exact class URN minted by the proposal is the RDF
+    /// subject that comes back out of the provenance query, byte-for-byte.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn class_urn_round_trips_through_provenance() {
+        let store = Arc::new(Store::new().unwrap());
+        let svc = service_with_store(Arc::clone(&store), true);
+
+        let iri = "urn:ngm:class:round-trip-subject";
+        svc.propose_create(proposal(iri), agent_ctx(), None, None)
+            .await
+            .expect("ok");
+
+        let repo = OxigraphOntologyRepository::from_store(Arc::clone(&store));
+        let chain = repo.provenance_for_entity(iri.to_string(), 4).await.unwrap();
+        assert_eq!(chain.root, iri, "root URN preserved verbatim");
+        assert!(
+            chain.nodes.iter().any(|n| n.entity == iri),
+            "the minted URN is the entity subject in the RDF"
+        );
+    }
+
+    /// Fail-open: with no store injected the proposal still commits and simply
+    /// writes zero provenance (unit-test path).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn no_store_injected_is_provenance_noop() {
+        let store = Arc::new(Store::new().unwrap());
+        let svc = service_with_store(Arc::clone(&store), false);
+        svc.propose_create(proposal("urn:ngm:class:no-prov"), agent_ctx(), None, None)
+            .await
+            .expect("ok");
+        assert_eq!(
+            visionclaw_adapters::provenance_emitter::count_provenance_triples(&store).unwrap(),
+            0,
+            "no store injected → no provenance emitted"
+        );
+    }
 }
