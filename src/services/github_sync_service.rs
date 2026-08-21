@@ -587,6 +587,33 @@ impl GitHubSyncService {
             warn!("Failed to update file_metadata: {}", e);
         }
 
+        // ADR-114 seed leg (deliverable 2 — the trigger). When the ontology
+        // corpus changed this sync, (re-)condense per-class summaries into the
+        // RuVector `ontology-classes` namespace and fire
+        // `ClassSummaryIndexRefreshed{changed_count}`. Config-gated, default-OFF
+        // (`ONTOLOGY_CLASS_INDEX_ENABLED`), and fully fail-open — a failure here
+        // never taints the sync result.
+        let ontology_changed = stats.ontology_files_processed > 0;
+        if ontology_changed {
+            match self.onto_repo.list_owl_classes().await {
+                Ok(classes) => {
+                    let _ = crate::services::ontology_class_index::maybe_refresh_after_sync(
+                        ontology_changed,
+                        &classes,
+                    )
+                    .await;
+                }
+                Err(e) => {
+                    // Only a warning: the seed leg is a derived projection; a
+                    // failure to list classes must not fail the sync.
+                    debug!(
+                        "[class-index] skipped refresh — list_owl_classes failed: {}",
+                        e
+                    );
+                }
+            }
+        }
+
         stats.duration = start_time.elapsed();
         info!(
             "Sync complete: {} nodes, {} edges in {:?}",

@@ -345,6 +345,52 @@ impl McpTcpClient {
         Ok(server_info)
     }
 
+    /// Store a value into RuVector via the claude-flow `memory_store` MCP tool
+    /// (ADR-114 seed-leg substrate: xinference `bge-small-en-v1.5` 384-dim HNSW).
+    /// This is the mandated write path — the embedding pipeline runs behind
+    /// `memory_store`; a raw SQL INSERT would bypass it (agentbox CLAUDE.md).
+    /// Returns the raw tool result on success.
+    pub async fn memory_store(
+        &self,
+        namespace: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let params = json!({
+            "namespace": namespace,
+            "key": key,
+            "value": value,
+        });
+        debug!(
+            "memory_store ns='{}' key='{}' ({} bytes)",
+            namespace,
+            key,
+            value.len()
+        );
+        self.send_tool_call("memory_store", params).await
+    }
+
+    /// Semantic-search a RuVector namespace via the claude-flow `memory_search`
+    /// MCP tool. Used by the ADR-119 liveness canary to prove the seed index is
+    /// live and readable. Returns the raw tool result (caller extracts hits).
+    pub async fn memory_search(
+        &self,
+        namespace: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        let params = json!({
+            "namespace": namespace,
+            "query": query,
+            "limit": limit,
+        });
+        debug!(
+            "memory_search ns='{}' query='{}' limit={}",
+            namespace, query, limit
+        );
+        self.send_tool_call("memory_search", params).await
+    }
+
     fn parse_agent_list_response(
         &self,
         response: &Value,

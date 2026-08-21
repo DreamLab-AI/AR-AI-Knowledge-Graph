@@ -30,6 +30,7 @@ pub mod voice_intent_client;
 // low-confidence / under-specified spoken command for a clarification turn
 // instead of dispatching it.
 pub mod edge_classifier;
+pub mod ontology_class_index;
 pub mod ontology_content_analyzer;
 pub mod ontology_converter;
 pub mod ontology_enrichment_service;
