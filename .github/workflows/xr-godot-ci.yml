@@ -1,0 +1,175 @@
+name: XR Godot CI
+
+# PRD-008 §5.7 godot-rust pipeline. Created 2026-08-21: the VIVE close-out
+# (docs/gap-close-evidence/P2-vive-closeout-2026-08-20.md) found this file
+# named-but-absent since PRD authoring — doc-drift finding §5.
+#
+# Gating policy (matches ci.yml):
+#   BLOCKING (proven on hosted-runner-equivalent environments):
+#     * xr-rust-tests  — gdext lib/integration/property tests (195 as of the
+#                        close-out) + visionclaw-xr-presence (adversarial +
+#                        property). Both CUDA-free; run anywhere Rust runs.
+#     * gut-headless   — GUT 9.3 GDScript suite under real Godot 4.3 headless,
+#                        using exactly the invocation proven on the HP rig
+#                        (51/51, first full pass in project history).
+#   NON-BLOCKING (never executed end-to-end yet):
+#     * quest3-android — full NDK r26d + cargo-ndk + export-template APK
+#                        pipeline from PRD-008 §5.7 steps 2–6 & 9. Kept
+#                        continue-on-error until its first green hosted run,
+#                        then flip to blocking and add to branch protection.
+#
+# Deliberately NOT duplicated here: visionclaw-protocol (wire parity) —
+# already a blocking crate in ci.yml rust-cpu.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'xr-client/**'
+      - 'crates/visionclaw-xr-presence/**'
+      - '.github/workflows/xr-godot-ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'xr-client/**'
+      - 'crates/visionclaw-xr-presence/**'
+      - '.github/workflows/xr-godot-ci.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: xr-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+  GODOT_VERSION: 4.3-stable
+  GUT_VERSION: 9.3.1
+
+jobs:
+  # ── BLOCKING ──────────────────────────────────────────────────────────────
+  xr-rust-tests:
+    name: Rust XR crates — gdext + presence (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install native build deps
+        # oxrocksdb-sys (bindgen) via the workspace dependency graph needs clang;
+        # same list as ci.yml rust-cpu.
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev cmake pkg-config
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            xr-client/rust
+            .
+      - name: cargo test gdext (all features)
+        working-directory: xr-client/rust
+        run: cargo test -p visionclaw-xr-gdext --all-features
+      - name: cargo test xr-presence
+        run: cargo test -p visionclaw-xr-presence
+
+  gut-headless:
+    name: GUT GDScript suite under Godot 4.3 headless (blocking)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: xr-client
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build gdextension cdylib (debug — path expected by .gdextension)
+        working-directory: xr-client/rust
+        run: cargo build -p visionclaw-xr-gdext
+      - name: Install Godot ${{ env.GODOT_VERSION }} headless
+        run: |
+          curl -fsSL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          sudo mv /tmp/godot/Godot_v${GODOT_VERSION}_linux.x86_64 /usr/local/bin/godot
+          godot --version
+      - name: Vendor GUT ${{ env.GUT_VERSION }} (not committed upstream)
+        # Pinned tag, no fallback: silently vendoring a different GUT version
+        # would change what the suite runs against.
+        run: |
+          # NB: GUT tags are v-prefixed except 9.3.1, which is tagged bare.
+          git clone --depth 1 --branch "${GUT_VERSION}" https://github.com/bitwes/Gut /tmp/gut
+          rm -rf addons/gut && cp -r /tmp/gut/addons/gut addons/gut
+      - name: Run GUT unit suite (canonical close-out invocation)
+        run: |
+          mkdir -p tests/report
+          godot --headless --path . -s addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gut-junit
+          path: xr-client/tests/report/junit.xml
+          if-no-files-found: warn
+
+  # ── NON-BLOCKING ──────────────────────────────────────────────────────────
+  quest3-android:
+    name: Quest 3 arm64 APK export (advisory until first green run)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain (aarch64-linux-android target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Install JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android NDK r26d
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+          add-to-path: true
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - name: Build gdext .so for arm64
+        working-directory: xr-client/rust
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: cargo ndk -t aarch64-linux-android build --release -p visionclaw-xr-gdext
+        # No staging step: visionclaw_xr_gdext.gdextension loads the .so directly
+        # from res://rust/target/aarch64-linux-android/release/.
+      - name: Install Godot export templates (${{ env.GODOT_VERSION }})
+        run: |
+          curl -fsSL -o /tmp/templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          mkdir -p ~/.local/share/godot/export_templates
+          unzip -q /tmp/templates.tpz -d /tmp/tpl
+          mv /tmp/tpl/templates/* ~/.local/share/godot/export_templates/
+          ls ~/.local/share/godot/export_templates/ | head -4
+      - name: Export Quest 3 arm64 APK
+        working-directory: xr-client
+        run: |
+          curl -fsSL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d /tmp/godot
+          mkdir -p export
+          /tmp/godot/Godot_v${GODOT_VERSION}_linux.x86_64 --headless \
+            --path . --export-release "Quest 3 arm64" export/visionclaw-xr.apk
+      - name: "APK size gate (PRD-008 G4: fail > 80 MB)"
+        working-directory: xr-client
+        run: |
+          size_mb=$(du -m export/visionclaw-xr.apk | cut -f1)
+          echo "APK size: ${size_mb} MB"
+          test "${size_mb}" -le 80
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: visionclaw-xr-apk
+          path: xr-client/export/visionclaw-xr.apk
+          if-no-files-found: error
