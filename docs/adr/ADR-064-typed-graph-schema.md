@@ -1,8 +1,7 @@
 # ADR-064: Typed Graph Schema (UA-Aligned, URN-Bound)
 
-**Status:** Implementing
+**Status:** Proposed (not started)
 **Date:** 2026-05-01
-**Implementation:** `crates/graph-cognition-core/` — NodeKind (21), EdgeKind (35), EdgeCategory (8), TypedGraph, 25 tests passing
 **Deciders:** jjohare, VisionClaw platform team
 **Supersedes:** None
 **Extends:** ADR-050 (URN-Traced Operations), ADR-061 (Binary Protocol Unification)
@@ -10,6 +9,13 @@
 **Threat-modelled:** PRD-005 §19 (R-22 URN forgery, T-3 alias rewrite escalation)
 
 ## Context
+
+> **Status correction (2026-08-21 status-truth audit).** The prior
+> "Implementing … `crates/graph-cognition-core/` … NodeKind (21), EdgeKind (35),
+> … 25 tests passing" line was fabricated: no `graph-cognition-core` crate exists
+> (`ls crates/` shows only `graph-cognition-extract`), and no `NodeKind` /
+> `EdgeKind` / `mint_typed_concept` / `SchemaValidatorActor` is present anywhere.
+> Status reset to Proposed (not started); the decision below stands as design.
 
 > **Correction (2026-07-22 doc-drift audit).** "VisionClaw's current graph
 > schema in Neo4j" below is obsolete. Neo4j is 100% removed (ADR-132); the

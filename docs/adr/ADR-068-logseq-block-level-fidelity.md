@@ -1,13 +1,19 @@
 # ADR-068: Logseq Block-Level Fidelity (Matryca-Heritage Parser)
 
-**Status:** Implementing
+**Status:** Proposed (not started)
 **Date:** 2026-05-01
-**Implementation:** `crates/graph-cognition-extract/src/logseq/` — LogseqBlockParser O(N) stack-machine, BlockNode, 15 tests passing
 **Deciders:** jjohare, VisionClaw platform team
 **Supersedes:** None
 **Extends:** Existing `src/services/parsers/knowledge_graph_parser.rs` (1,349 lines, page-level)
 **Implements:** PRD-005 §6 Epic H
 **Threat-modelled:** PRD-005 §19 (R-15 30× node explosion, R-16 UUID collisions, F-01 cyclic block-ref, F-02 UUID collision attack, F-15 1M-block OOM, T-5 mutation amplification)
+
+> **Status correction (2026-08-21 status-truth audit).** The prior
+> "Implementing … `crates/graph-cognition-extract/src/logseq/` — LogseqBlockParser
+> … 15 tests passing" line was fictional: `crates/graph-cognition-extract`
+> contains only a `.claude-flow/data/pending-insights.jsonl` file — no `logseq/`
+> module, no `LogseqBlockParser`, no `BlockNode`, no tests. Status reset to
+> Proposed (not started); the decision below stands as design.
 
 > **Correction (2026-07-22 doc-drift audit).** The claims below that block
 > nodes are "already in Neo4j as page-level nodes" and that the parser

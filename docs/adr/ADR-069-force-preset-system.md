@@ -1,8 +1,7 @@
 # ADR-069: Force-Preset System & Per-Edge-Category Forces
 
-**Status:** Implementing
+**Status:** Proposed (not started)
 **Date:** 2026-05-01
-**Implementation:** `crates/graph-cognition-physics-presets/` — ForcePreset enum, 5 TOML presets, 35 edge-kind configs, builtin loading, 21 tests passing
 **Deciders:** jjohare, VisionClaw platform team
 **Supersedes:** None
 **Extends:** Existing GPU dispatch path via `DynamicRelationshipBuffer` + `SemanticTypeRegistry`
@@ -11,9 +10,18 @@
 
 ## Context
 
+> **Status correction (2026-08-21 status-truth audit).** The prior "Implementing …
+> `crates/graph-cognition-physics-presets/` … 21 tests passing" line was false: no
+> such crate exists, `grep ForcePreset` returns nothing, and no `presets/*.toml`
+> is present — only the pre-existing plumbing (`SemanticTypeRegistry`,
+> `DynamicRelationshipBuffer`) it would extend. The kernel citation was also wrong:
+> `semantic_forces.cu` lives at `crates/visionclaw-gpu/src/cuda_sources/`, not
+> `src/utils/` (`src/services/semantic_type_registry.rs` is correct as cited).
+> Status reset to Proposed (not started); the decision below stands as design.
+
 PRD-005 Epic I introduces named force presets — empirically-tuned constants for known graph topologies (Logseq vault, code repo, research wiki, etc.). It draws on matryca's vis-network experimentation and on the new typed graph schema (ADR-064).
 
-QE quality-analyzer caught a structural error in PRD §13.2 v1: the legacy fields `requires_strength` / `enables_strength` etc. on `SemanticForcesParams` were described as live, but verification against `src/utils/semantic_forces.cu:55-64` shows they are explicitly marked legacy and unused. The actual GPU dispatch path uses `DynamicRelationshipBuffer` populated from `SemanticTypeRegistry`. This ADR encodes the corrected plumbing decision and the schedule revision.
+QE quality-analyzer caught a structural error in PRD §13.2 v1: the legacy fields `requires_strength` / `enables_strength` etc. on `SemanticForcesParams` were described as live, but verification against `crates/visionclaw-gpu/src/cuda_sources/semantic_forces.cu:55-64` shows they are explicitly marked legacy and unused. The actual GPU dispatch path uses `DynamicRelationshipBuffer` populated from `SemanticTypeRegistry`. This ADR encodes the corrected plumbing decision and the schedule revision.
 
 QE chaos review flagged three high-severity concerns:
 
@@ -29,7 +37,7 @@ QE chaos review flagged three high-severity concerns:
 
 - `SemanticTypeRegistry` (existing, in `src/services/semantic_type_registry.rs`) is extended to register all 35 UA `EdgeKind` variants. Registration is data-driven from a `presets/edge-kinds.toml` file.
 - `DynamicRelationshipBuffer` (existing, populated each tick) carries per-edge coefficients for the active preset's 35 edge kinds.
-- Existing `apply_relationship_forces_kernel` in `src/utils/semantic_forces.cu` reads the buffer; **no new kernel** — but the buffer layout grows.
+- Existing `apply_relationship_forces_kernel` in `crates/visionclaw-gpu/src/cuda_sources/semantic_forces.cu` reads the buffer; **no new kernel** — but the buffer layout grows.
 - The legacy fields on `SemanticForcesParams` (requires_strength, enables_strength, has_part_strength, bridges_to_strength) are marked `#[deprecated]` in this ADR and removed in a follow-up cleanup ADR after the new path is verified at 100% rollout.
 
 This is a **3-4 week** structural change, not the "~8 fields, 1 week" estimate in PRD v2 §13.2. PRD v3 §13.2 is corrected.
@@ -177,7 +185,7 @@ User can toggle temporal axis on/off in settings (default off).
 
 - PRD-005 §6 Epic I, §13.2 (corrected), §13.9 (GPU questions), §19 (R-19, R-23, F-13, F-16, F-29, F-30)
 - Matryca: `lib/bindings/utils.js` (force constants), `docs/ARCHITECTURE.md`
-- Existing: `src/utils/semantic_forces.cu:55-64`, `src/services/semantic_type_registry.rs`, `src/models/simulation_params.rs`
+- Existing: `crates/visionclaw-gpu/src/cuda_sources/semantic_forces.cu:55-64`, `src/services/semantic_type_registry.rs`, `src/models/simulation_params.rs`
 - ADR-061 (Binary Protocol — preserved)
 - ADR-031 (Network Backpressure — informs the broadcast cadence interaction)
 - ADR-064 (Typed Graph Schema — provides the EdgeKind taxonomy this ADR consumes)

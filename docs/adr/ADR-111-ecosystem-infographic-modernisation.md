@@ -1,6 +1,6 @@
 # ADR-111 — Ecosystem Infographic Modernisation: diagram-as-code + Nano Banana regeneration
 
-**Status:** Proposed
+**Status:** Accepted — the §7 follow-up task ran 2026-07-22 (execution receipt at the foot of this ADR); status flipped 2026-08-21. Two optional website heroes (corporate-immersive, creative-technology-fundamentals) remain deferred.
 **Date:** 2026-06-13
 **Supersedes/relates:** ADR-110 (ACSP elevation control surfaces), ADR-032 (embed solid-pod-rs), agentbox ADR-032 (402 scheme grammar), agentbox PRD-015 (consumer broadcast economy), solid-pod-rs ADR-059 (provenance primitives: block-trails + git-marks), **PRD-020 + ADR-112 (pervasive ontology↔agentbox augmentation — in design; this ADR registers its diagram requirements §4.6)**
 **Scope:** Six repos — `project` (VisionClaw/VisionFlow), `agentbox`, `nostr-rust-forum`, `solid-pod-rs`, `dreamlab-ai-website`, and the VisionFlow ecosystem pitch/website asset tree.

@@ -483,18 +483,13 @@ to migrate.
 | LiveKit Android | **`v2.x` AAR** (latest stable at sprint start) | `xr-client/android/build.gradle` Maven dependency |
 | Java/Kotlin toolchain | JDK 17 (Android Gradle plugin requirement) | `xr-client/android/build.gradle` |
 
-**CI build pipeline** (GitHub Actions workflow `.github/workflows/xr-godot-ci.yml` — 10 jobs, 473 lines, operational):
+**CI build pipeline** (GitHub Actions workflow `.github/workflows/xr-godot-ci.yml` — created 2026-08-21 as part of the VIVE close-out; 3 jobs, 175 lines). The workflow committed today is a first cut, narrower than the 10-step pipeline sketched below (which remains the target as the hosted-runner path is proven out):
 
-1. Restore cargo cache.
-2. Install Android NDK r26d, Godot 4.3 export templates, JDK 17.
-3. `cargo ndk -t aarch64-linux-android build --release -p visionclaw-xr-gdext`.
-4. Stage `.so` into `xr-client/addons/visionclaw_xr_gdext/aarch64/`.
-5. `godot --headless --export-release "Quest 3 arm64" xr-client/export/visionclaw-xr.apk`.
-6. APK size gate: fail if `> 80 MB` (G4).
-7. `cargo test -p visionclaw-xr-gdext --all-features`.
-8. `cargo tarpaulin -p visionclaw-xr-gdext` — fail if line coverage `< 80 %` (G5).
-9. Upload APK + coverage report as workflow artifacts.
-10. On `main` push: also publish APK to internal release channel for QA side-load.
+1. **`xr-rust-tests`** — restore cargo cache and run the gdext crate's Rust unit tests on the hosted Ubuntu runner (no NDK / no export template).
+2. **`gut-headless`** — run the GUT (Godot Unit Test) suite headless against Godot 4.3.
+3. **`quest3-android`** — the full device path (Android NDK r26d + `cargo-ndk` cross-build → Godot export-template APK for "Quest 3 arm64"). Marked **advisory** (`continue-on-error: true`) until its first green run on a hosted runner, so a missing NDK/template does not red the whole workflow.
+
+Still to land (the fuller pipeline above): the APK size gate (`> 80 MB`, G4), `cargo tarpaulin` coverage gate (`< 80 %`, G5), APK + coverage artifact upload, and the on-`main` publish to the internal QA side-load channel.
 
 **Android export preset** (`xr-client/export_presets.cfg`):
 
