@@ -4,12 +4,13 @@ extends "res://addons/gut/test.gd"
 #
 # Each test loads one of the four canonical scenes and verifies it
 # instantiates without errors and contains the expected child structure.
-# These run headless under CI via `xr-client/tests/run_gut.gd`.
+# These run headless under CI via GUT 9.3's `addons/gut/gut_cmdln.gd`
+# (see `xr-client/.gutconfig.json` / `xr-client/tests/run_gut.gd`).
 
 func test_xr_boot_scene_loads():
-	var packed := load("res://scenes/XRBoot.tscn")
+	var packed: PackedScene = load("res://scenes/XRBoot.tscn")
 	assert_not_null(packed, "XRBoot.tscn must be loadable")
-	var root := packed.instantiate()
+	var root: Node3D = packed.instantiate()
 	assert_not_null(root, "XRBoot.tscn must instantiate")
 	assert_eq(root.name, "XRBoot", "root node name")
 	# XRBoot must contain an XROrigin3D (per scene definition).
@@ -22,9 +23,9 @@ func test_xr_boot_scene_loads():
 	root.queue_free()
 
 func test_graph_scene_loads():
-	var packed := load("res://scenes/GraphScene.tscn")
+	var packed: PackedScene = load("res://scenes/GraphScene.tscn")
 	assert_not_null(packed, "GraphScene.tscn must be loadable")
-	var root := packed.instantiate()
+	var root: Node3D = packed.instantiate()
 	assert_not_null(root, "GraphScene.tscn must instantiate")
 	assert_eq(root.name, "GraphScene", "root node name")
 	# Graph scene also hosts an XR origin + camera (player rig).
@@ -32,9 +33,9 @@ func test_graph_scene_loads():
 	root.queue_free()
 
 func test_hud_scene_loads():
-	var packed := load("res://scenes/HUD.tscn")
+	var packed: PackedScene = load("res://scenes/HUD.tscn")
 	assert_not_null(packed, "HUD.tscn must be loadable")
-	var root := packed.instantiate()
+	var root: Node3D = packed.instantiate()
 	assert_not_null(root, "HUD.tscn must instantiate")
 	assert_eq(root.name, "HUD", "root node name")
 	# HUD hosts a SubViewport so the panel can render UI offscreen.
@@ -42,9 +43,9 @@ func test_hud_scene_loads():
 	root.queue_free()
 
 func test_avatar_scene_loads():
-	var packed := load("res://scenes/Avatar.tscn")
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
 	assert_not_null(packed, "Avatar.tscn must be loadable")
-	var root := packed.instantiate()
+	var root: Node3D = packed.instantiate()
 	assert_not_null(root, "Avatar.tscn must instantiate")
 	assert_eq(root.name, "Avatar", "root node name")
 	# Avatar geometry: head + (hidden) hand mesh instances.
@@ -56,9 +57,9 @@ func test_avatar_scene_loads():
 	root.queue_free()
 
 func test_agent_avatar_scene_loads():
-	var packed := load("res://scenes/AgentAvatar.tscn")
+	var packed: PackedScene = load("res://scenes/AgentAvatar.tscn")
 	assert_not_null(packed, "AgentAvatar.tscn must be loadable")
-	var root := packed.instantiate()
+	var root: Node3D = packed.instantiate()
 	assert_not_null(root, "AgentAvatar.tscn must instantiate")
 	assert_eq(root.name, "AgentAvatar", "root node name")
 	# M3 geometric embodiment: core + billboard + gaze cone + DID badge.
@@ -109,8 +110,8 @@ func test_scene_uids_are_unique():
 # ---------------------------------------------------------------------------
 
 func test_avatar_set_display_name():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -124,8 +125,8 @@ func test_avatar_set_display_name():
 
 
 func test_avatar_apply_pose_updates_head_transform():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -145,8 +146,8 @@ func test_avatar_apply_pose_updates_head_transform():
 
 
 func test_avatar_apply_pose_shows_hands_when_tracked():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -169,8 +170,8 @@ func test_avatar_apply_pose_shows_hands_when_tracked():
 
 
 func test_avatar_lod_level_high():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -188,8 +189,8 @@ func test_avatar_lod_level_high():
 
 
 func test_avatar_lod_level_medium_hides_nameplate():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -207,8 +208,8 @@ func test_avatar_lod_level_medium_hides_nameplate():
 
 
 func test_avatar_lod_level_low_hides_hands():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -226,8 +227,8 @@ func test_avatar_lod_level_low_hides_hands():
 
 
 func test_avatar_lod_level_culled_hides_avatar():
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 
@@ -245,8 +246,8 @@ func test_avatar_lod_level_culled_hides_avatar():
 # ---------------------------------------------------------------------------
 
 func test_hud_set_avatar_count():
-	var packed := load("res://scenes/HUD.tscn")
-	var hud := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/HUD.tscn")
+	var hud: Node3D = packed.instantiate()
 	add_child(hud)
 	await get_tree().process_frame
 
@@ -264,8 +265,8 @@ func test_hud_set_avatar_count():
 
 
 func test_hud_set_mtp_ms():
-	var packed := load("res://scenes/HUD.tscn")
-	var hud := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/HUD.tscn")
+	var hud: Node3D = packed.instantiate()
 	add_child(hud)
 	await get_tree().process_frame
 
@@ -282,8 +283,8 @@ func test_hud_set_mtp_ms():
 
 
 func test_hud_connection_status():
-	var packed := load("res://scenes/HUD.tscn")
-	var hud := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/HUD.tscn")
+	var hud: Node3D = packed.instantiate()
 	add_child(hud)
 	await get_tree().process_frame
 
@@ -307,8 +308,8 @@ func test_hud_connection_status():
 # ---------------------------------------------------------------------------
 
 func test_graph_scene_avatar_join_adds_child():
-	var packed := load("res://scenes/GraphScene.tscn")
-	var scene := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/GraphScene.tscn")
+	var scene: Node3D = packed.instantiate()
 	add_child(scene)
 	await get_tree().process_frame
 
@@ -326,8 +327,8 @@ func test_graph_scene_avatar_join_adds_child():
 
 
 func test_graph_scene_avatar_leave_removes_child():
-	var packed := load("res://scenes/GraphScene.tscn")
-	var scene := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/GraphScene.tscn")
+	var scene: Node3D = packed.instantiate()
 	add_child(scene)
 	await get_tree().process_frame
 
@@ -350,8 +351,8 @@ func test_graph_scene_avatar_leave_removes_child():
 
 
 func test_graph_scene_avatar_leave_nonexistent_is_safe():
-	var packed := load("res://scenes/GraphScene.tscn")
-	var scene := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/GraphScene.tscn")
+	var scene: Node3D = packed.instantiate()
 	add_child(scene)
 	await get_tree().process_frame
 

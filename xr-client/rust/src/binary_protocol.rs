@@ -298,6 +298,22 @@ pub enum GraphInbound {
     Frame(Vec<u8>),
     /// Edge topology from the `initialGraphLoad` text frame.
     Topology(Vec<EdgeSpec>),
+    /// Any other JSON text frame on the multiplexed `/wss` socket (e.g.
+    /// `broker:new_case`, `broker:case_decided`). Forwarded verbatim to GDScript
+    /// via `text_message`; the scene layer routes by the envelope `type`.
+    Text(String),
+}
+
+/// Classify an inbound text frame from the multiplexed `/wss` graph socket.
+/// The `initialGraphLoad` topology is decoded into [`GraphInbound::Topology`];
+/// every other JSON envelope (broker events, acks, info frames) is forwarded
+/// verbatim as [`GraphInbound::Text`] for the scene layer to route by `type`.
+/// Pure (no Godot deps) so it is unit-testable under `cfg(test)`.
+pub fn classify_graph_text(text: &str) -> GraphInbound {
+    match parse_initial_graph_load(text) {
+        Some(edges) => GraphInbound::Topology(edges),
+        None => GraphInbound::Text(text.to_owned()),
+    }
 }
 
 #[cfg(not(test))]
@@ -335,6 +351,12 @@ impl BinaryProtocolClient {
     /// `get_edges()` / `get_edge_weights()`.
     #[signal]
     fn topology_updated(edge_count: u32);
+
+    /// Fired for every non-topology JSON text frame on the multiplexed `/wss`
+    /// socket (e.g. `broker:new_case`). The scene layer parses the envelope and
+    /// routes by its `type`; the Rust side stays transport-only.
+    #[signal]
+    fn text_message(json: GString);
 
     #[func]
     fn create() -> Gd<Self> {
@@ -408,6 +430,10 @@ impl BinaryProtocolClient {
                     let count = edges.len() as u32;
                     self.base_mut()
                         .emit_signal("topology_updated", &[Variant::from(count)]);
+                }
+                GraphInbound::Text(json) => {
+                    self.base_mut()
+                        .emit_signal("text_message", &[Variant::from(GString::from(json))]);
                 }
             }
         }
@@ -761,6 +787,34 @@ mod tests {
         assert!(
             parse_initial_graph_load(r#"{"type":"initialDataInfo","message":"x"}"#).is_none()
         );
+    }
+
+    #[test]
+    fn classify_graph_text_topology_vs_text() {
+        // initialGraphLoad → Topology (decoded edges).
+        let topo = r#"{"type":"initialGraphLoad","nodes":[],"edges":[
+            {"id":"a","source_id":1,"target_id":2,"weight":2.5}
+        ],"timestamp":1}"#;
+        match classify_graph_text(topo) {
+            GraphInbound::Topology(edges) => assert_eq!(edges.len(), 1),
+            other => panic!("expected Topology, got {:?}", std::mem::discriminant(&other)),
+        }
+
+        // broker:new_case → forwarded verbatim as Text for the scene layer.
+        let broker = r#"{"type":"broker:new_case","channel":"inbox","payload":{"caseId":"case-9","title":"Merge","category":"ontology"}}"#;
+        match classify_graph_text(broker) {
+            GraphInbound::Text(json) => {
+                assert_eq!(json, broker);
+                assert!(json.contains("broker:new_case"));
+            }
+            other => panic!("expected Text, got {:?}", std::mem::discriminant(&other)),
+        }
+
+        // An ack/info frame is also forwarded as Text (never silently dropped).
+        match classify_graph_text(r#"{"type":"pong"}"#) {
+            GraphInbound::Text(json) => assert_eq!(json, r#"{"type":"pong"}"#),
+            other => panic!("expected Text, got {:?}", std::mem::discriminant(&other)),
+        }
     }
 
     #[test]

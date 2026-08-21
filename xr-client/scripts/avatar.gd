@@ -44,7 +44,7 @@ func set_display_name(display_name: String) -> void:
 ## reflects the Schnorr-challenge check (ADR-130 Decision 6). An unverified claim
 ## renders visually distinct (amber + "?") and is never mistaken for a trusted
 ## identity — the invariant-2 counter to a self-reported nameplate.
-func set_identity(display_name: String, did: String, verified: bool) -> void:
+func set_avatar_identity(display_name: String, did: String, verified: bool) -> void:
 	_did = did
 	_verified = verified
 	set_display_name(display_name)

@@ -40,6 +40,11 @@ const PRESENCE_PATH := "/ws/presence"
 const DEFAULT_ROOM_URN := "urn:visionclaw:room:sha256-12-deadbeefcafe"
 const DEFAULT_DISPLAY_NAME := "Quest User"
 
+# RES-a / ADR-130 D3 liveness canary the on-device selection loop fires once,
+# the first time the selection arbiter resolves a non-origin agent-node
+# selection. Recorded via POST /api/canary/observe/{id} (unauthenticated JSON).
+const CANARY_M4_RAY := "CANARY-VC-M4-RAY"
+
 var _binary_client: RefCounted = null
 var _presence_client: RefCounted = null
 var _interaction: RefCounted = null
@@ -91,6 +96,12 @@ var _nostr_secret_hex: String = ""
 var _reconnect_attempts: int = 0
 var _reconnect_timer: float = -1.0
 
+# One-shot latch for the M4-RAY canary (fires on the first resolved agent
+# selection). The HTTPRequest is created in _ready so the POST never blocks the
+# scene-tree thread.
+var _m4_ray_observed: bool = false
+var _observe_http: HTTPRequest = null
+
 # Server-authoritative drag state.
 var _grabbed_id: int = -1
 var _grab_controller: XRController3D = null
@@ -131,6 +142,8 @@ func _ready() -> void:
 		_binary_client.connect("connection_changed", Callable(self, "_on_connection_changed"))
 		_binary_client.connect("node_visuals_updated", Callable(self, "_on_node_visuals_updated"))
 		_binary_client.connect("topology_updated", Callable(self, "_on_topology_updated"))
+		if _binary_client.has_signal("text_message"):
+			_binary_client.connect("text_message", Callable(self, "_on_graph_text"))
 	if _presence_client != null:
 		_presence_client.connect("avatar_joined", Callable(self, "_on_avatar_joined"))
 		_presence_client.connect("avatar_left", Callable(self, "_on_avatar_left"))
@@ -142,6 +155,11 @@ func _ready() -> void:
 	if _interaction != null:
 		_interaction.connect("node_targeted", Callable(self, "_on_node_targeted"))
 		_interaction.connect("node_grabbed", Callable(self, "_on_node_grabbed"))
+
+	# HTTPRequest for the M4-RAY liveness observe POST (created at runtime so the
+	# scene file stays script-only; the request is async and non-blocking).
+	_observe_http = HTTPRequest.new()
+	add_child(_observe_http)
 
 	_probe_eye_gaze()
 	_wire_hud()
@@ -436,8 +454,8 @@ func spawn_agent(agent_id: String, display_name: String, did: String, verified: 
 	agent.set_meta("agent_id", agent_id)
 	agent.set_meta("handle", handle)
 	agent.set_meta("did", did)
-	if agent.has_method("set_identity"):
-		agent.set_identity(display_name, did, verified)
+	if agent.has_method("set_avatar_identity"):
+		agent.set_avatar_identity(display_name, did, verified)
 	_agents[agent_id] = agent
 	_agent_by_handle[handle] = agent_id
 	_agent_order.append(agent_id)
@@ -614,10 +632,56 @@ func _on_selection_made(handle: int, did_nostr: String, _resolver: int) -> void:
 		return
 	var agent_id: String = _agent_by_handle[handle]
 	emit_signal("agent_selected", agent_id, did_nostr)
+	# M4-RAY: the arbiter resolved a non-origin agent-node selection — fire the
+	# liveness canary once (RES-a / ADR-130 D3).
+	_fire_m4_ray_canary(agent_id, did_nostr)
 	# If the selected agent is awaiting approval, open the intervention panel.
 	if _agent_cases.has(agent_id) and hud != null and hud.has_method("show_case"):
 		var c: Dictionary = _agent_cases[agent_id]
 		hud.show_case(c.get("case_id", ""), c.get("summary", ""))
+
+
+# One-shot POST /api/canary/observe/CANARY-VC-M4-RAY, latched so it fires exactly
+# once per session — on the first resolved agent selection. The route is
+# unauthenticated (a thin JSON adapter over the LivenessHarness), so no NIP-98
+# header is needed. Fail-open: a failed dispatch un-latches so a later selection
+# can retry, and never blocks the scene.
+func _fire_m4_ray_canary(agent_id: String, did_nostr: String) -> void:
+	if _m4_ray_observed or _observe_http == null:
+		return
+	_m4_ray_observed = true
+	var url: String = "%s/api/canary/observe/%s" % [_http_base(), CANARY_M4_RAY]
+	var body: Dictionary = {
+		"evidence": "xr-client selection arbiter resolved agent %s (%s)" % [agent_id, did_nostr],
+	}
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	var err: int = _observe_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
+	if err != OK:
+		push_warning("GraphScene: M4-RAY observe POST failed to start (%d)" % err)
+		_m4_ray_observed = false
+
+
+# Inbound non-topology JSON on the multiplexed /wss graph socket (M2). The Rust
+# BinaryProtocolClient forwards these verbatim via text_message; we parse the
+# envelope and route broker:new_case to the HUD intervention panel's entry point.
+func _on_graph_text(json: String) -> void:
+	var parsed: Variant = JSON.parse_string(json)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var msg: Dictionary = parsed
+	match str(msg.get("type", "")):
+		"broker:new_case":
+			_handle_broker_new_case(msg.get("payload", {}))
+
+
+func _handle_broker_new_case(payload: Dictionary) -> void:
+	var case_id: String = str(payload.get("caseId", ""))
+	if case_id.is_empty():
+		return
+	var summary: String = str(payload.get("title", ""))
+	# Surface the case through the HUD's existing intervention entry point.
+	if hud != null and hud.has_method("show_case"):
+		hud.show_case(case_id, summary)
 
 
 func _tick_reconnect(delta: float) -> void:
@@ -720,8 +784,8 @@ func _on_avatar_joined(did: String, display_name: String, avatar_id: String) -> 
 	# badge reads unverified until the client runs the Schnorr-challenge check
 	# (ADR-130 Decision 6) — the server-vouched roster DID is not client-trusted
 	# on presentation (invariant 2).
-	if avatar.has_method("set_identity"):
-		avatar.set_identity(display_name, did, false)
+	if avatar.has_method("set_avatar_identity"):
+		avatar.set_avatar_identity(display_name, did, false)
 	elif avatar.has_method("set_display_name"):
 		avatar.set_display_name(display_name)
 	_avatars[avatar_id] = avatar

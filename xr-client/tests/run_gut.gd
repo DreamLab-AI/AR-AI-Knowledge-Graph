@@ -1,35 +1,46 @@
 extends SceneTree
 
-# Headless gut runner. PRD-QE-002 §4.2 specifies gut as the GDScript test
-# framework; the CI installs it under res://addons/gut/. This script boots
-# gut, runs every test under res://tests/unit/, writes a JUnit report under
-# res://tests/report/, and exits with a non-zero status on any failure.
+# ---------------------------------------------------------------------------
+# GUT 9.3 headless runner shim (PRD-QE-002 §4.2).
+#
+# GUT 9.x ships its own headless entry point, `res://addons/gut/gut_cmdln.gd`,
+# which extends SceneTree and parses `-g*` command-line flags. The pre-9.x
+# programmatic API this script used to drive (GutMain.set_log_level /
+# add_directory / test_scripts / the `tests_finished` signal) no longer exists,
+# so the old runner parsed as a no-op and hung the CI job. A SceneTree cannot
+# host a second SceneTree, so there is nothing useful to "wrap" here.
+#
+# CANONICAL INVOCATION — call gut_cmdln.gd directly (this is what CI runs):
+#
+#   godot --headless --path xr-client \
+#     -s res://addons/gut/gut_cmdln.gd \
+#     -gdir=res://tests/unit -ginclude_subdirs \
+#     -gexit -gjunit_xml_file=res://tests/report/junit.xml
+#
+# or, equivalently, using the checked-in config so the flags stay in one place:
+#
+#   godot --headless --path xr-client \
+#     -s res://addons/gut/gut_cmdln.gd -gconfig=res://.gutconfig.json
+#
+# `-gexit` makes GUT quit with a non-zero status on any failure; the JUnit XML
+# lands under res://tests/report/ for CI to collect. GUT is installed under
+# res://addons/gut/ by CI (not vendored in the repo).
+#
+# This shim exists only so `-s res://tests/run_gut.gd` fails LOUDLY with the
+# correct command instead of silently hanging. It never reports a false pass.
+# ---------------------------------------------------------------------------
 
-const REPORT_DIR := "res://tests/report"
-const TESTS_DIR := "res://tests/unit"
+const GUT_CMDLN := "res://addons/gut/gut_cmdln.gd"
+const CANONICAL := \
+	"godot --headless --path xr-client -s %s -gconfig=res://.gutconfig.json" % GUT_CMDLN
+
 
 func _init() -> void:
-	var gut_class := load("res://addons/gut/gut.gd")
-	if gut_class == null:
-		printerr("gut framework not installed at res://addons/gut/")
-		quit(2)
-		return
-
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(REPORT_DIR))
-
-	var gut := gut_class.new()
-	get_root().add_child(gut)
-	gut.set_log_level(2)
-	gut.add_directory(TESTS_DIR)
-	gut.set_junit_xml_file(REPORT_DIR.path_join("junit.xml"))
-	gut.connect("tests_finished", Callable(self, "_on_tests_finished").bind(gut))
-	gut.test_scripts()
-
-func _on_tests_finished(gut) -> void:
-	var failed := gut.get_fail_count() + gut.get_pending_count()
-	if failed > 0:
-		printerr("gut: %d failed / %d pending" % [gut.get_fail_count(), gut.get_pending_count()])
-		quit(1)
+	printerr("run_gut.gd is a shim for GUT 9.3 — do not invoke it directly.")
+	if ResourceLoader.exists(GUT_CMDLN):
+		printerr("Run GUT's own headless entry point instead:\n    %s" % CANONICAL)
 	else:
-		print("gut: all %d tests passed" % gut.get_pass_count())
-		quit(0)
+		printerr("GUT is not installed at %s; install it, then run:\n    %s"
+			% [GUT_CMDLN, CANONICAL])
+	# Non-zero: a CI step that still targets this script must fail, not pass.
+	quit(2)

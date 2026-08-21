@@ -196,6 +196,12 @@ pub struct InitialNodeData {
     /// Arbitrary node metadata (source_domain, type, source_file, …).
     #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
     pub metadata: std::collections::HashMap<String, String>,
+    /// Validated `did:nostr` identity for an agent node (COM-14 / PRD-023 WP-9
+    /// M4). Surfaced as a top-level field so the Godot XR client's
+    /// `binary_protocol::parse_agent_identities` can key each selection to the
+    /// target's DID. `None` for non-agent nodes or agents without a DID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub did_nostr: Option<String>,
 }
 
 /// Edge record sent during the initial graph-load handshake.
@@ -222,4 +228,60 @@ pub fn vec3data_to_array(vec: &Vec3Data) -> [f32; 3] {
 #[inline]
 pub fn array_to_vec3data(arr: [f32; 3]) -> Vec3Data {
     Vec3Data::new(arr[0], arr[1], arr[2])
+}
+
+#[cfg(test)]
+mod initial_graph_load_did_tests {
+    use super::*;
+
+    fn agent_node(id: u32, did: Option<&str>) -> InitialNodeData {
+        InitialNodeData {
+            id,
+            metadata_id: format!("agent-{id}"),
+            label: "agent".to_string(),
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            vx: 0.0,
+            vy: 0.0,
+            vz: 0.0,
+            owl_class_iri: None,
+            node_type: Some("agent".to_string()),
+            metadata: std::collections::HashMap::new(),
+            did_nostr: did.map(|s| s.to_string()),
+        }
+    }
+
+    // PRD-023 WP-9 M4 residual: the initialGraphLoad node must carry a
+    // TOP-LEVEL `did_nostr` string — the exact JSON path the Godot XR client's
+    // `binary_protocol::parse_agent_identities` reads (`node.get("did_nostr")`).
+    #[test]
+    fn initial_graph_load_serialises_top_level_did_nostr() {
+        let did = format!("did:nostr:{}", "a".repeat(64));
+        let msg = Message::InitialGraphLoad {
+            nodes: vec![agent_node(10000, Some(&did))],
+            edges: vec![],
+            timestamp: 1,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["type"], "initialGraphLoad");
+        let node = &v["nodes"][0];
+        // Client reads a top-level `did_nostr`, not `metadata.did_nostr`.
+        assert_eq!(node["did_nostr"], did);
+    }
+
+    // Non-agent / DID-less nodes omit the field entirely (skip_serializing_if),
+    // so the client parser drops them — no fabricated identity.
+    #[test]
+    fn did_nostr_absent_when_none() {
+        let msg = Message::InitialGraphLoad {
+            nodes: vec![agent_node(1, None)],
+            edges: vec![],
+            timestamp: 1,
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
+        assert!(v["nodes"][0].get("did_nostr").is_none());
+    }
 }

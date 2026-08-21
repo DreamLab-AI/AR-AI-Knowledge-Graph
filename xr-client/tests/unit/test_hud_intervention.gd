@@ -8,15 +8,15 @@ extends "res://addons/gut/test.gd"
 
 
 func _make_hud() -> Node3D:
-	var packed := load("res://scenes/HUD.tscn")
-	var hud := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/HUD.tscn")
+	var hud: Node3D = packed.instantiate()
 	add_child(hud)
 	await get_tree().process_frame
 	return hud
 
 
 func test_intervention_panel_hidden_by_default():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	var panel: PanelContainer = hud.get_node("HudViewport/HudControl/InterventionPanel")
 	assert_false(panel.visible, "no case → no intervention panel")
 	hud.queue_free()
@@ -24,7 +24,7 @@ func test_intervention_panel_hidden_by_default():
 
 
 func test_show_case_reveals_panel_with_case_id():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	hud.show_case("case-42", "Merge ontology enrichment for Foo")
 	var panel: PanelContainer = hud.get_node("HudViewport/HudControl/InterventionPanel")
 	var title: Label = hud.get_node("HudViewport/HudControl/InterventionPanel/IVBox/CaseTitle")
@@ -37,7 +37,7 @@ func test_show_case_reveals_panel_with_case_id():
 
 
 func test_clear_case_hides_panel():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	hud.show_case("case-1", "x")
 	hud.clear_case()
 	var panel: PanelContainer = hud.get_node("HudViewport/HudControl/InterventionPanel")
@@ -47,7 +47,7 @@ func test_clear_case_hides_panel():
 
 
 func test_acsp_indicator_tracks_open_case_count():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	hud.set_case_count(3)
 	var label: Label = hud.get_node("HudViewport/HudControl/AcspIndicator/AcspLabel")
 	assert_true(label.text.contains("3"), "ambient ACSP indicator shows the open-case count")
@@ -58,7 +58,7 @@ func test_acsp_indicator_tracks_open_case_count():
 
 
 func test_approve_emits_decision_intent():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	hud.show_case("case-7", "approve me")
 	watch_signals(hud)
 	hud.approve_selected_case()
@@ -68,7 +68,7 @@ func test_approve_emits_decision_intent():
 
 
 func test_deny_emits_reject_intent():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	hud.show_case("case-8", "deny me")
 	watch_signals(hud)
 	hud.deny_selected_case()
@@ -78,7 +78,7 @@ func test_deny_emits_reject_intent():
 
 
 func test_decision_without_case_is_a_noop():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	watch_signals(hud)
 	hud.approve_selected_case()  # no case selected
 	assert_signal_not_emitted(hud, "decision_submitted", "no case → no decision")
@@ -87,7 +87,7 @@ func test_decision_without_case_is_a_noop():
 
 
 func test_dwell_reticle_reflects_charge():
-	var hud := await _make_hud()
+	var hud: Node3D = await _make_hud()
 	var reticle: Control = hud.get_node("HudViewport/HudControl/DwellReticle")
 	assert_false(reticle.visible, "reticle hidden at zero charge")
 	hud.set_dwell_charge(0.5)

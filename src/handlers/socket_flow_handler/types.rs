@@ -380,6 +380,7 @@ impl SocketFlowServer {
                                 vz: node.data.vz,
                                 owl_class_iri: node.owl_class_iri.clone(),
                                 node_type: node.node_type.clone(),
+                                did_nostr: node.metadata.get("did_nostr").cloned(),
                                 metadata: node.metadata.clone(),
                             })
                             .collect();

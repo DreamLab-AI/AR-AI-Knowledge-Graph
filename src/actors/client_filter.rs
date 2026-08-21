@@ -104,39 +104,17 @@ pub fn recompute_filtered_nodes(filter: &mut ClientFilter, graph_data: &GraphDat
         filter.filter_mode
     );
 
-    // Apply max_nodes cap if set
-    if let Some(max) = filter.max_nodes {
-        if candidates.len() > max {
-            // Sort by combined quality score (quality * authority) descending
-            candidates.sort_by(|a, b| {
-                let score_a = a.1 * a.2;
-                let score_b = b.1 * b.2;
-                score_b
-                    .partial_cmp(&score_a)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-
-            // Take top N
-            candidates.truncate(max);
-            debug!(
-                "Max nodes limit applied: truncated to {} nodes",
-                candidates.len()
-            );
-        }
-    }
-
     // Populate filtered_node_ids
     for (node_id, _, _) in candidates {
         filter.filtered_node_ids.insert(node_id);
     }
 
     debug!(
-        "Recomputed filtered nodes: {} nodes visible (quality_threshold={}, authority_threshold={}, mode={:?}, max_nodes={:?})",
+        "Recomputed filtered nodes: {} nodes visible (quality_threshold={}, authority_threshold={}, mode={:?})",
         filter.filtered_node_ids.len(),
         filter.quality_threshold,
         filter.authority_threshold,
-        filter.filter_mode,
-        filter.max_nodes
+        filter.filter_mode
     );
 }
 
@@ -290,22 +268,6 @@ mod tests {
         assert!(filter.filtered_node_ids.contains(&1));
         assert!(filter.filtered_node_ids.contains(&2));
         assert!(filter.filtered_node_ids.contains(&3));
-    }
-
-    #[test]
-    fn test_max_nodes_limit() {
-        let graph = create_test_graph();
-        let mut filter = ClientFilter::default();
-        filter.enabled = true;
-        filter.filter_by_quality = false;
-        filter.filter_by_authority = false;
-        filter.max_nodes = Some(2);
-
-        recompute_filtered_nodes(&mut filter, &graph);
-
-        // Should limit to 2 nodes (highest combined scores)
-        assert_eq!(filter.filtered_node_ids.len(), 2);
-        assert!(filter.filtered_node_ids.contains(&1)); // Highest combined
     }
 
     #[test]

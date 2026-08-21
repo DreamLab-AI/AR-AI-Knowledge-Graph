@@ -10,17 +10,17 @@ const COLOR_UNVERIFIED := Color(1.0, 0.72, 0.28)
 
 
 func _make_avatar() -> Node3D:
-	var packed := load("res://scenes/Avatar.tscn")
-	var avatar := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/Avatar.tscn")
+	var avatar: Node3D = packed.instantiate()
 	add_child(avatar)
 	await get_tree().process_frame
 	return avatar
 
 
 func test_set_identity_populates_nameplate_and_did_badge():
-	var avatar := await _make_avatar()
+	var avatar: Node3D = await _make_avatar()
 	var did := "did:nostr:" + "c".repeat(56) + "0badf00d"
-	avatar.set_identity("Alice", did, true)
+	avatar.set_avatar_identity("Alice", did, true)
 	var nameplate: Label3D = avatar.get_node("Head/Nameplate")
 	var badge: Label3D = avatar.get_node("Head/DidBadge")
 	assert_eq(nameplate.text, "Alice", "nameplate carries the display name")
@@ -32,8 +32,8 @@ func test_set_identity_populates_nameplate_and_did_badge():
 
 
 func test_unverified_identity_is_distinct():
-	var avatar := await _make_avatar()
-	avatar.set_identity("Mallory", "did:nostr:" + "d".repeat(64), false)
+	var avatar: Node3D = await _make_avatar()
+	avatar.set_avatar_identity("Mallory", "did:nostr:" + "d".repeat(64), false)
 	var badge: Label3D = avatar.get_node("Head/DidBadge")
 	assert_true(badge.text.contains("?"), "unverified badge carries a query mark")
 	assert_eq(badge.modulate, COLOR_UNVERIFIED, "unverified badge is amber")
@@ -42,8 +42,8 @@ func test_unverified_identity_is_distinct():
 
 
 func test_set_verified_flips_badge_state():
-	var avatar := await _make_avatar()
-	avatar.set_identity("Bob", "did:nostr:" + "e".repeat(64), false)
+	var avatar: Node3D = await _make_avatar()
+	avatar.set_avatar_identity("Bob", "did:nostr:" + "e".repeat(64), false)
 	var badge: Label3D = avatar.get_node("Head/DidBadge")
 	assert_eq(badge.modulate, COLOR_UNVERIFIED, "starts unverified")
 	avatar.set_verified(true)
@@ -54,8 +54,8 @@ func test_set_verified_flips_badge_state():
 
 
 func test_did_badge_drops_at_medium_lod():
-	var avatar := await _make_avatar()
-	avatar.set_identity("Carol", "did:nostr:" + "f".repeat(64), true)
+	var avatar: Node3D = await _make_avatar()
+	avatar.set_avatar_identity("Carol", "did:nostr:" + "f".repeat(64), true)
 	avatar.set_lod_level(0)
 	await get_tree().process_frame
 	assert_true(avatar.get_node("Head/DidBadge").visible, "DID badge visible at High")
@@ -67,7 +67,7 @@ func test_did_badge_drops_at_medium_lod():
 
 
 func test_short_did_static_helper():
-	var avatar := await _make_avatar()
+	var avatar: Node3D = await _make_avatar()
 	assert_eq(avatar._short_did(""), "unverified")
 	assert_eq(avatar._short_did("did:nostr:aabbccddeeff0011"), "…eeff0011")
 	avatar.queue_free()

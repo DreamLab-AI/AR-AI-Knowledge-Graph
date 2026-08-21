@@ -1123,6 +1123,15 @@ impl Handler<UpdateBotsGraph> for GraphStateActor {
             node.metadata
                 .insert("is_agent".to_string(), "true".to_string());
 
+            // PRD-023 WP-9 M4: carry the agent's validated did:nostr onto the
+            // graph node so it rides `initialGraphLoad` to the Godot XR client
+            // (parse_agent_identities). Absent for agents without a DID.
+            if let Some(did) = &agent.did_nostr {
+                if !did.is_empty() {
+                    node.metadata.insert("did_nostr".to_string(), did.clone());
+                }
+            }
+
             nodes.push(node);
         }
 

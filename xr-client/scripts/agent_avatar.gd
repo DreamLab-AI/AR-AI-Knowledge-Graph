@@ -76,7 +76,7 @@ func _ready() -> void:
 ## Schnorr-challenge check (ADR-130 Decision 6); an unverified claim renders
 ## visually distinct (amber + "?" mark) so it is never mistaken for a trusted
 ## identity.
-func set_identity(display_name: String, did: String, verified: bool) -> void:
+func set_avatar_identity(display_name: String, did: String, verified: bool) -> void:
 	_display_name = display_name
 	_did = did
 	_verified = verified

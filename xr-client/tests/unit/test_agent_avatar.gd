@@ -16,17 +16,17 @@ const COLOR_UNVERIFIED := Color(1.0, 0.72, 0.28)
 
 
 func _make_agent() -> Node3D:
-	var packed := load("res://scenes/AgentAvatar.tscn")
-	var agent := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/AgentAvatar.tscn")
+	var agent: Node3D = packed.instantiate()
 	add_child(agent)
 	await get_tree().process_frame
 	return agent
 
 
 func test_set_identity_renders_short_did_verified():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	var did := "did:nostr:" + "a".repeat(56) + "deadbeef"
-	agent.set_identity("Planner", did, true)
+	agent.set_avatar_identity("Planner", did, true)
 	var badge: Label3D = agent.get_node("Badge")
 	assert_true(badge.text.contains("Planner"), "badge shows the agent name")
 	assert_true(badge.text.contains("…deadbeef"), "badge shows the …last8 short DID")
@@ -37,8 +37,8 @@ func test_set_identity_renders_short_did_verified():
 
 
 func test_set_identity_unverified_is_visually_distinct():
-	var agent := await _make_agent()
-	agent.set_identity("Rogue", "did:nostr:" + "b".repeat(64), false)
+	var agent: Node3D = await _make_agent()
+	agent.set_avatar_identity("Rogue", "did:nostr:" + "b".repeat(64), false)
 	var badge: Label3D = agent.get_node("Badge")
 	assert_true(badge.text.contains("?"), "unverified badge carries the query mark")
 	assert_eq(badge.modulate, COLOR_UNVERIFIED, "unverified badge is amber, not the verified colour")
@@ -48,8 +48,8 @@ func test_set_identity_unverified_is_visually_distinct():
 
 
 func test_empty_did_reads_unverified_never_fabricated():
-	var agent := await _make_agent()
-	agent.set_identity("Anon", "", false)
+	var agent: Node3D = await _make_agent()
+	agent.set_avatar_identity("Anon", "", false)
 	var badge: Label3D = agent.get_node("Badge")
 	assert_true(badge.text.contains("unverified"), "an absent DID reads unverified, not a fake id")
 	agent.queue_free()
@@ -57,7 +57,7 @@ func test_empty_did_reads_unverified_never_fabricated():
 
 
 func test_short_did_helper_variants():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	assert_eq(agent._short_did(""), "unverified", "empty → unverified")
 	assert_eq(agent._short_did("did:nostr:0123456789abcdef"), "…89abcdef", "…last8 of the pubkey")
 	assert_eq(agent._short_did("short"), "…short", "sub-8 pubkey kept whole")
@@ -66,7 +66,7 @@ func test_short_did_helper_variants():
 
 
 func test_feature_mask_high_shows_everything():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	agent.set_feature_mask(FEAT_BADGE | FEAT_CONE | FEAT_CORE_MESH)
 	assert_true(agent.get_node("Badge").visible, "badge visible at High")
 	assert_true(agent.get_node("GazeCone").visible, "cone visible at High")
@@ -78,7 +78,7 @@ func test_feature_mask_high_shows_everything():
 
 
 func test_feature_mask_medium_drops_badge_first():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	agent.set_feature_mask(FEAT_CONE | FEAT_CORE_MESH)
 	assert_false(agent.get_node("Badge").visible, "badge drops first at Medium")
 	assert_true(agent.get_node("GazeCone").visible, "cone survives Medium")
@@ -88,7 +88,7 @@ func test_feature_mask_medium_drops_badge_first():
 
 
 func test_feature_mask_low_billboards_core():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	agent.set_feature_mask(FEAT_CORE_BILLBOARD)
 	assert_false(agent.get_node("GazeCone").visible, "cone drops at Low")
 	assert_false(agent.get_node("Core").visible, "core mesh off at Low")
@@ -98,7 +98,7 @@ func test_feature_mask_low_billboards_core():
 
 
 func test_feature_mask_culled_hides_avatar():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	agent.set_feature_mask(0)
 	assert_false(agent.visible, "avatar hidden when the feature mask is empty")
 	agent.queue_free()
@@ -106,7 +106,7 @@ func test_feature_mask_culled_hides_avatar():
 
 
 func test_apply_signal_drives_activity_state():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	# TaskStarted (ordinal 0) moves Idle → Working (activity 1). The Rust node
 	# emits activity_changed synchronously; agent_avatar caches it.
 	agent.apply_signal(0)
@@ -117,7 +117,7 @@ func test_apply_signal_drives_activity_state():
 
 
 func test_gaze_cone_basis_aligns_y_with_gaze():
-	var agent := await _make_agent()
+	var agent: Node3D = await _make_agent()
 	var gaze := Vector3(1.0, 0.0, -1.0).normalized()
 	var basis: Basis = agent._basis_from_y(gaze)
 	# The cone mesh axis is +Y; the built basis must map +Y onto the gaze ray.

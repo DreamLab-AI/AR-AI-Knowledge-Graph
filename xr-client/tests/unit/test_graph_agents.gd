@@ -9,15 +9,15 @@ extends "res://addons/gut/test.gd"
 
 
 func _make_scene() -> Node3D:
-	var packed := load("res://scenes/GraphScene.tscn")
-	var scene := packed.instantiate()
+	var packed: PackedScene = load("res://scenes/GraphScene.tscn")
+	var scene: Node3D = packed.instantiate()
 	add_child(scene)
 	await get_tree().process_frame
 	return scene
 
 
 func test_spawn_agent_adds_child_to_agent_spawner():
-	var scene := await _make_scene()
+	var scene: Node3D = await _make_scene()
 	var spawner: Node3D = scene.get_node("AgentSpawner")
 	var before := spawner.get_child_count()
 	scene.spawn_agent("agent_1", "Planner", "did:nostr:" + "a".repeat(64), false)
@@ -29,7 +29,7 @@ func test_spawn_agent_adds_child_to_agent_spawner():
 
 
 func test_spawn_agent_is_idempotent():
-	var scene := await _make_scene()
+	var scene: Node3D = await _make_scene()
 	var spawner: Node3D = scene.get_node("AgentSpawner")
 	scene.spawn_agent("agent_dup", "A", "did:nostr:" + "b".repeat(64), false)
 	await get_tree().process_frame
@@ -42,7 +42,7 @@ func test_spawn_agent_is_idempotent():
 
 
 func test_despawn_agent_removes_child():
-	var scene := await _make_scene()
+	var scene: Node3D = await _make_scene()
 	var spawner: Node3D = scene.get_node("AgentSpawner")
 	scene.spawn_agent("agent_2", "Coder", "did:nostr:" + "c".repeat(64), false)
 	await get_tree().process_frame
@@ -57,7 +57,7 @@ func test_despawn_agent_removes_child():
 
 
 func test_agent_case_publishes_count_and_state():
-	var scene := await _make_scene()
+	var scene: Node3D = await _make_scene()
 	scene.spawn_agent("agent_3", "Reviewer", "did:nostr:" + "d".repeat(64), false)
 	await get_tree().process_frame
 	scene.set_agent_case("agent_3", "case-9", "approve the enrichment")
@@ -73,7 +73,7 @@ func test_agent_case_publishes_count_and_state():
 
 
 func test_selecting_an_agent_with_a_case_opens_the_panel():
-	var scene := await _make_scene()
+	var scene: Node3D = await _make_scene()
 	scene.spawn_agent("agent_4", "Judge", "did:nostr:" + "e".repeat(64), true)
 	await get_tree().process_frame
 	scene.set_agent_case("agent_4", "case-11", "merge decision")

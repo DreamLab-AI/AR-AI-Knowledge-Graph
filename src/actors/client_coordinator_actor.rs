@@ -80,12 +80,12 @@ impl Default for ClientFilter {
         Self {
             // DEFAULT FILTER ENABLED: Fresh clients get quality-filtered sparse dataset
             enabled: true,
-            quality_threshold: 0.7,
+            quality_threshold: 0.9,
             authority_threshold: 0.5,
             filter_by_quality: true,
             filter_by_authority: false,
             filter_mode: FilterMode::Or,
-            max_nodes: Some(10000),
+            max_nodes: None,
             filtered_node_ids: std::collections::HashSet::new(),
             include_linked_pages: false,
         }
@@ -1947,12 +1947,11 @@ impl Handler<UpdateClientFilter> for ClientCoordinatorActor {
             client.filter.filter_by_quality = msg.filter_by_quality;
             client.filter.filter_by_authority = msg.filter_by_authority;
             client.filter.filter_mode = filter_mode;
-            client.filter.max_nodes = msg.max_nodes.map(|n| n as usize);
             client.filter.include_linked_pages = msg.include_linked_pages;
 
             info!(
-                "Updated filter for client {}: enabled={}, quality_threshold={}, max_nodes={:?}",
-                msg.client_id, msg.enabled, msg.quality_threshold, msg.max_nodes
+                "Updated filter for client {}: enabled={}, quality_threshold={}",
+                msg.client_id, msg.enabled, msg.quality_threshold
             );
 
             // Recompute filtered nodes with updated criteria and send filtered graph to client
@@ -1995,6 +1994,7 @@ impl Handler<UpdateClientFilter> for ClientCoordinatorActor {
                                             vz: node.data.vz,
                                             owl_class_iri: node.owl_class_iri.clone(),
                                             node_type: node.node_type.clone(),
+                                            did_nostr: node.metadata.get("did_nostr").cloned(),
                                             metadata: node.metadata.clone(),
                                         })
                                         .collect();

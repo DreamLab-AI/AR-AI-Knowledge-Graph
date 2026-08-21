@@ -1,0 +1,8 @@
+{
+	"dirs": ["res://tests/unit"],
+	"include_subdirs": true,
+	"log_level": 2,
+	"should_exit": true,
+	"should_exit_on_success": true,
+	"junit_xml_file": "res://tests/report/junit.xml"
+}

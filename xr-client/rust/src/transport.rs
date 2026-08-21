@@ -133,11 +133,10 @@ async fn pump_graph_messages(
                 match msg {
                     Some(Ok(Message::Binary(b))) => push_graph(inbox, GraphInbound::Frame(b)),
                     Some(Ok(Message::Text(t))) => {
-                        // The only text frame the XR client consumes is the
-                        // initialGraphLoad topology; acks/info frames are ignored.
-                        if let Some(edges) = crate::binary_protocol::parse_initial_graph_load(&t) {
-                            push_graph(inbox, GraphInbound::Topology(edges));
-                        }
+                        // initialGraphLoad → Topology; every other JSON envelope
+                        // (broker:new_case, broker:case_decided, …) is forwarded
+                        // verbatim as Text for the scene layer to route by `type`.
+                        push_graph(inbox, crate::binary_protocol::classify_graph_text(&t));
                     }
                     Some(Ok(Message::Ping(p))) => {
                         let _ = sink.send(Message::Pong(p)).await;
