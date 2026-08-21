@@ -209,6 +209,20 @@ pub struct UnifiedGPUCompute {
     pub(crate) prev_force_x: DeviceBuffer<f32>,
     pub(crate) prev_force_y: DeviceBuffer<f32>,
     pub(crate) prev_force_z: DeviceBuffer<f32>,
+
+    /// ADR-070 D2.2: per-node total constraint-force magnitude, written by the
+    /// force pass and read by the stability check as the third (constraint)
+    /// criterion. Persistent so the stability kernel (which runs *before* the
+    /// force pass in a tick) sees the previous tick's magnitudes.
+    pub(crate) node_constraint_force: DeviceBuffer<f32>,
+
+    /// ADR-070 D3.1 (P2): sparse compute mask. When `compute_mask_len > 0` the
+    /// masked force pass evaluates only these node indices (built host-side by
+    /// `visionclaw_gpu::hardening::build_compute_mask_with_neighbors`: visible
+    /// persona nodes + their 1-hop neighbours). Capacity is `allocated_nodes`.
+    pub(crate) compute_mask: DeviceBuffer<i32>,
+    /// Number of valid entries in `compute_mask`; 0 = mask inactive (evaluate all).
+    pub(crate) compute_mask_len: usize,
 }
 
 impl UnifiedGPUCompute {
@@ -558,6 +572,11 @@ impl UnifiedGPUCompute {
             prev_force_x: DeviceBuffer::zeroed(num_nodes)?,
             prev_force_y: DeviceBuffer::zeroed(num_nodes)?,
             prev_force_z: DeviceBuffer::zeroed(num_nodes)?,
+
+            // ADR-070 D2.2 / D3.1 buffers (num_nodes-sized, mask inactive at start).
+            node_constraint_force: DeviceBuffer::zeroed(num_nodes)?,
+            compute_mask: DeviceBuffer::zeroed(num_nodes.max(1))?,
+            compute_mask_len: 0,
         };
 
         Ok(gpu_compute)

@@ -37,6 +37,43 @@ use visionclaw_ontology::services::iri_node_resolver::IriNodeResolver;
 /// from the unscaled base, so the user can return to 1.0 or push lower live.
 pub const DEFAULT_GLOBAL_STRENGTH: f32 = 0.6;
 
+/// ADR-070 D2.3 — input-edge NaN guard.
+///
+/// Drop any constraint that references a node whose current position is
+/// non-finite (NaN / ±Inf), so a bad upstream position can never enter the GPU
+/// force kernel where it would NaN-cascade into every client (R-19 / F-09).
+/// Returns the surviving constraints and the number rejected. The decision
+/// logic itself lives in `visionclaw_gpu::hardening::partition_finite_constraints`
+/// (pure + unit-tested); this adapter just builds the id→position lookup from
+/// the live graph and maps `ConstraintData` onto the guard's input view.
+fn reject_nonfinite_constraints(
+    buffer: &[ConstraintData],
+    graph_data: &visionclaw_domain::models::graph::GraphData,
+) -> (Vec<ConstraintData>, usize) {
+    use std::collections::HashMap;
+    use visionclaw_gpu::hardening::{partition_finite_constraints, ConstraintForceInput};
+
+    let mut pos_by_id: HashMap<i32, [f32; 3]> = HashMap::with_capacity(graph_data.nodes.len());
+    for node in &graph_data.nodes {
+        pos_by_id.insert(node.id as i32, [node.x(), node.y(), node.z()]);
+    }
+
+    let inputs: Vec<ConstraintForceInput> = buffer
+        .iter()
+        .map(|c| ConstraintForceInput {
+            kind: c.kind,
+            count: c.count,
+            node_idx: c.node_idx,
+            params: c.params,
+            weight: c.weight,
+        })
+        .collect();
+
+    let (kept, rejected) = partition_finite_constraints(&inputs, &pos_by_id);
+    let survivors: Vec<ConstraintData> = kept.iter().map(|&i| buffer[i].clone()).collect();
+    (survivors, rejected.len())
+}
+
 /// Scale a copy of the mapper's unscaled constraint buffer by `strength`.
 /// Weight is the only field the global strength touches; node indices, kind,
 /// params (rest-length / min-distance) and activation frame are preserved.
@@ -61,6 +98,9 @@ pub struct OntologyConstraintStats {
     pub cpu_fallback_count: u32,
     pub constraint_cache_hits: u32,
     pub constraint_cache_misses: u32,
+    /// ADR-070 D2.3: cumulative count of constraints dropped by the input-edge
+    /// NaN guard because they referenced a node with a non-finite position.
+    pub rejected_nonfinite_constraints: u32,
 }
 
 impl Default for OntologyConstraintStats {
@@ -74,6 +114,7 @@ impl Default for OntologyConstraintStats {
             cpu_fallback_count: 0,
             constraint_cache_hits: 0,
             constraint_cache_misses: 0,
+            rejected_nonfinite_constraints: 0,
         }
     }
 }
@@ -191,7 +232,27 @@ impl OntologyConstraintActor {
         let mut resolver = IriNodeResolver::from_nodes(&graph_data.nodes);
         // Keep the unscaled mapper output as the base so the global-strength
         // slider can rescale reversibly; the live buffer is base × strength.
-        self.constraint_buffer_base = map_axioms_to_constraints(&domain_axioms, &mut resolver);
+        let mapped = map_axioms_to_constraints(&domain_axioms, &mut resolver);
+
+        // ADR-070 D2.3 — input-edge NaN guard. Reject any mapped constraint that
+        // references a node with a non-finite position before it can reach the
+        // GPU kernel and NaN-cascade to clients (R-19 / F-09). Applied to the
+        // unscaled base so the drop persists across every subsequent
+        // global-strength rescale.
+        let (clean, rejected) = reject_nonfinite_constraints(&mapped, graph_data);
+        if rejected > 0 {
+            warn!(
+                "OntologyConstraintActor: NaN guard dropped {} constraint(s) referencing non-finite node positions ({} of {} survived)",
+                rejected,
+                clean.len(),
+                mapped.len()
+            );
+            self.stats.rejected_nonfinite_constraints = self
+                .stats
+                .rejected_nonfinite_constraints
+                .saturating_add(rejected as u32);
+        }
+        self.constraint_buffer_base = clean;
         self.constraint_buffer =
             scale_constraint_buffer(&self.constraint_buffer_base, self.global_strength);
         self.stats.total_axioms_processed += domain_axioms.len() as u32;
@@ -727,6 +788,58 @@ mod tests {
         assert_eq!(stats.total_axioms_processed, 0);
         assert_eq!(stats.active_ontology_constraints, 0);
         assert_eq!(stats.gpu_failure_count, 0);
+    }
+
+    #[test]
+    fn test_nan_guard_drops_constraints_on_nonfinite_nodes() {
+        use visionclaw_domain::models::graph::GraphData;
+        use visionclaw_domain::models::node::Node;
+
+        // Three nodes; node id 2 has a NaN X position.
+        let mut good_a = Node::new("a".to_string());
+        good_a.id = 1;
+        good_a.set_x(0.0);
+        good_a.set_y(0.0);
+        good_a.set_z(0.0);
+
+        let mut bad = Node::new("b".to_string());
+        bad.id = 2;
+        bad.set_x(f32::NAN);
+        bad.set_y(0.0);
+        bad.set_z(0.0);
+
+        let mut good_c = Node::new("c".to_string());
+        good_c.id = 3;
+        good_c.set_x(5.0);
+        good_c.set_y(0.0);
+        good_c.set_z(0.0);
+
+        let mut graph = GraphData::new();
+        graph.nodes = vec![good_a, bad, good_c];
+
+        let buffer = vec![
+            ConstraintData {
+                kind: 0,
+                count: 2,
+                node_idx: [1, 3, 0, 0],
+                params: [10.0; 8],
+                weight: 1.0,
+                activation_frame: 0,
+            },
+            ConstraintData {
+                kind: 0,
+                count: 2,
+                node_idx: [1, 2, 0, 0], // references the NaN node → dropped
+                params: [10.0; 8],
+                weight: 1.0,
+                activation_frame: 0,
+            },
+        ];
+
+        let (survivors, rejected) = reject_nonfinite_constraints(&buffer, &graph);
+        assert_eq!(rejected, 1);
+        assert_eq!(survivors.len(), 1);
+        assert_eq!(survivors[0].node_idx, [1, 3, 0, 0]);
     }
 
     #[test]

@@ -146,15 +146,30 @@ impl UnifiedGPUCompute {
 
             let stability_kernel = self._module.get_function("check_system_stability_kernel")?;
             let reduction_blocks = (num_blocks as u32).min(256);
+            // ADR-070 D2.2 — constraint-force third criterion. Feed the previous
+            // tick's per-node constraint-force magnitudes plus a per-preset
+            // epsilon so a graph pinned taut by hierarchy/disjoint constraints is
+            // never mis-reported as converged. Epsilon self-scales to 1% of the
+            // per-node constraint force cap; it is disabled (0.0) when no
+            // constraints are resident so constraint-free graphs still idle.
+            let (constraint_force_ptr, constraint_force_epsilon) = if self.num_constraints > 0 {
+                (
+                    self.node_constraint_force.as_device_ptr(),
+                    0.01_f32 * params.constraint_max_force_per_node,
+                )
+            } else {
+                (DevicePointer::<f32>::null(), 0.0_f32)
+            };
             // SAFETY: Kernel launch is safe because:
             // 1. All DeviceBuffer arguments are valid allocations from UnifiedGPUCompute::new()
             // 2. reduction_blocks is bounded to max 256 (valid CUDA block size)
-            // 3. Shared memory (reduction_blocks * 4) fits within GPU limits
+            // 3. Shared memory (reduction_blocks * 8 = 2 floats/thread: KE sum + CF max) fits GPU limits
             // 4. This reduction kernel reads from partial_kinetic_energy computed by prior kernel
+            // 5. node_constraint_force is a valid num_nodes buffer (or null when no constraints)
             unsafe {
                 let stream = &self.stream;
                 launch!(
-                    stability_kernel<<<1, reduction_blocks, reduction_blocks * 4, stream>>>(
+                    stability_kernel<<<1, reduction_blocks, reduction_blocks * 8, stream>>>(
                         self.partial_kinetic_energy.as_device_ptr(),
                         self.active_node_count.as_device_ptr(),
                         self.should_skip_physics.as_device_ptr(),
@@ -162,7 +177,9 @@ impl UnifiedGPUCompute {
                         num_blocks as i32,
                         self.num_nodes as i32,
                         params.stability_threshold,
-                        self.iteration
+                        self.iteration,
+                        constraint_force_ptr,
+                        constraint_force_epsilon
                     )
                 )?;
             }
@@ -559,11 +576,26 @@ impl UnifiedGPUCompute {
             DevicePointer::<f32>::null()
         };
 
+        // ADR-070 D3.1 (P2) — sparse compute mask. When a persona/filter mask is
+        // bound (`compute_mask_len > 0`) the force pass evaluates only those node
+        // indices; otherwise it runs one thread per node exactly as before. The
+        // masked launch uses a grid sized to the mask length so hidden nodes cost
+        // no threads at all.
+        let (compute_mask_ptr, compute_mask_len, force_grid_size) = if self.compute_mask_len > 0 {
+            (
+                self.compute_mask.as_device_ptr(),
+                self.compute_mask_len as i32,
+                ((self.compute_mask_len as u32) + block_size as u32 - 1) / block_size as u32,
+            )
+        } else {
+            (DevicePointer::<i32>::null(), 0i32, grid_size as u32)
+        };
+
         unsafe {
             if params.stability_threshold > 0.0 {
                 // Force pass with stability checking variant
                 launch!(
-                    force_pass_kernel<<<grid_size as u32, block_size as u32, 0, stream>>>(
+                    force_pass_kernel<<<force_grid_size, block_size as u32, 0, stream>>>(
                     self.pos_in_x.as_device_ptr(),
                     self.pos_in_y.as_device_ptr(),
                     self.pos_in_z.as_device_ptr(),
@@ -587,11 +619,16 @@ impl UnifiedGPUCompute {
                     self.num_constraints as i32,
                     self.should_skip_physics.as_device_ptr(),
                     d_node_degrees,
-                    self.spring_scale.as_device_ptr()
+                    self.spring_scale.as_device_ptr(),
+                    // ADR-070 D2.2: publish per-node constraint force for the stability check
+                    self.node_constraint_force.as_device_ptr(),
+                    // ADR-070 D3.1: sparse compute mask (null + 0 when inactive)
+                    compute_mask_ptr,
+                    compute_mask_len
                 ))?;
             } else {
                 launch!(
-                    force_pass_kernel<<<grid_size as u32, block_size as u32, 0, stream>>>(
+                    force_pass_kernel<<<force_grid_size, block_size as u32, 0, stream>>>(
                     self.pos_in_x.as_device_ptr(),
                     self.pos_in_y.as_device_ptr(),
                     self.pos_in_z.as_device_ptr(),
@@ -612,7 +649,8 @@ impl UnifiedGPUCompute {
                     self.num_constraints as i32,
                     DevicePointer::<f32>::null(),
                     DevicePointer::<f32>::null(),
-                    DevicePointer::<f32>::null(),
+                    // ADR-070 D2.2: publish per-node constraint force (was null)
+                    self.node_constraint_force.as_device_ptr(),
                     // Ontology class metadata
                     self.class_id.as_device_ptr(),
                     self.class_charge.as_device_ptr(),
@@ -620,7 +658,10 @@ impl UnifiedGPUCompute {
                     // FA2 degree-scaled repulsion
                     d_node_degrees,
                     // Per-population spring strength multiplier
-                    self.spring_scale.as_device_ptr()
+                    self.spring_scale.as_device_ptr(),
+                    // ADR-070 D3.1: sparse compute mask (null + 0 when inactive)
+                    compute_mask_ptr,
+                    compute_mask_len
                 ))?;
             }
         }

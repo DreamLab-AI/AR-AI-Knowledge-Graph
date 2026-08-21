@@ -288,10 +288,22 @@ __global__ void force_pass_kernel(
     // Per-population spring strength multiplier (nullptr = uniform 1.0). Lets the
     // Knowledge/Ontology/Agent spring sliders act independently — applied to BOTH
     // the LinLog and Hooke attraction paths so the slider is never inert.
-    const float* __restrict__ spring_scale)      // [num_nodes] per-node spring multiplier
+    const float* __restrict__ spring_scale,      // [num_nodes] per-node spring multiplier
+    // ADR-070 D3.1 (P2) sparse compute mask (Epic E.4 persona masking).
+    // When compute_mask != nullptr, thread t evaluates node compute_mask[t]
+    // instead of node t, so hidden nodes cost no force computation. The host
+    // builds the mask as visible-nodes ∪ their 1-hop neighbours, so the force
+    // field felt by visible nodes stays coherent (ADR-070 §Risks). nullptr /
+    // mask_len 0 = evaluate every node (identical to the pre-D3.1 behaviour).
+    const int* __restrict__ compute_mask,        // [mask_len] node indices to evaluate
+    const int mask_len)
 {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= num_nodes) return;
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (compute_mask != nullptr) {
+        if (idx >= mask_len) return;
+        idx = compute_mask[idx];
+    }
+    if (idx < 0 || idx >= num_nodes) return;
 
     float3 my_pos = make_vec3(pos_in_x[idx], pos_in_y[idx], pos_in_z[idx]);
     float3 total_force = make_vec3(0.0f, 0.0f, 0.0f);
@@ -1858,52 +1870,121 @@ __global__ void check_system_stability_kernel(
     const int num_blocks,
     const int num_nodes,
     const float stability_threshold,
-    const int iteration)
+    const int iteration,
+    // ADR-070 D2.2: per-node constraint-force magnitude (nullptr = criterion off)
+    // and the per-preset epsilon (<= 0 = criterion off). The system is stable
+    // ONLY when the KE/motion gate holds AND the largest constraint force is at
+    // or below epsilon — a system pinned taut by hierarchy/disjoint constraints
+    // is not "at rest" even when kinetic energy has bled off (fixes the
+    // false-stable convergence report).
+    const float* __restrict__ node_constraint_force,
+    const float constraint_force_epsilon)
 {
-    extern __shared__ float shared_ke[];
+    // Two contiguous shared regions of blockDim.x floats: [0]=KE sum reduction,
+    // [blockDim.x]=constraint-force max reduction. Host allocates 2*blockDim*4 B.
+    extern __shared__ float sdata[];
+    float* shared_ke = sdata;
+    float* shared_cf = &sdata[blockDim.x];
     const int tid = threadIdx.x;
-    
+
     // Load and sum partial kinetic energies
     float sum = 0.0f;
     for (int i = tid; i < num_blocks; i += blockDim.x) {
         sum += partial_kinetic_energy[i];
     }
     shared_ke[tid] = sum;
-    
+
+    // ADR-070 D2.2: local max of the per-node constraint-force magnitude.
+    float cf_max = 0.0f;
+    if (node_constraint_force != nullptr && constraint_force_epsilon > 0.0f) {
+        for (int i = tid; i < num_nodes; i += blockDim.x) {
+            float v = node_constraint_force[i];
+            // A non-finite constraint force is decisively "not small": bias the
+            // reduction to +inf so the constraint gate reports unstable.
+            if (!isfinite(v)) {
+                cf_max = INFINITY;
+            } else if (v > cf_max) {
+                cf_max = v;
+            }
+        }
+    }
+    shared_cf[tid] = cf_max;
+
     __syncthreads();
-    
-    // Final reduction
+
+    // Final reduction: sum for KE, max for constraint force.
     for (int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
             shared_ke[tid] += shared_ke[tid + s];
+            shared_cf[tid] = fmaxf(shared_cf[tid], shared_cf[tid + s]);
         }
         __syncthreads();
     }
-    
+
     // Check stability conditions
     if (tid == 0) {
         float total_ke = shared_ke[0];
         int active_nodes = *active_node_count;
-        
+
         // Store system kinetic energy for monitoring
         *system_kinetic_energy = total_ke;
-        
+
         // Calculate average KE per active node
         float avg_ke = (active_nodes > 0) ? (total_ke / active_nodes) : 0.0f;
-        
+
         // System is stable if:
         // 1. Average KE is below threshold, OR
         // 2. Very few nodes are moving (< 1% of total)
         bool energy_stable = avg_ke < stability_threshold;
         bool motion_stable = active_nodes < max(1, num_nodes / 100);
-        
-        *should_skip_physics = (energy_stable || motion_stable) ? 1 : 0;
-        
+
+        // ADR-070 D2.2 third criterion: a taut constraint field vetoes stability.
+        bool constraint_stable = true;
+        float max_cf = shared_cf[0];
+        if (node_constraint_force != nullptr && constraint_force_epsilon > 0.0f) {
+            constraint_stable = isfinite(max_cf) && (max_cf <= constraint_force_epsilon);
+        }
+
+        *should_skip_physics =
+            ((energy_stable || motion_stable) && constraint_stable) ? 1 : 0;
+
         // Debug output periodically
         if (iteration % 600 == 0 && *should_skip_physics) {
-            printf("[GPU Stability Gate] System stable: avg_KE=%.8f, active=%d/%d\n", 
-                   avg_ke, active_nodes, num_nodes);
+            printf("[GPU Stability Gate] System stable: avg_KE=%.8f, active=%d/%d, max_constraint_force=%.6f\n",
+                   avg_ke, active_nodes, num_nodes, max_cf);
         }
+    }
+}
+
+/**
+ * ADR-070 D3.1 (P2) — sparse compute-mask compaction.
+ *
+ * Compacts a per-node "must compute" flag array into the dense ascending index
+ * list the masked force pass consumes, in one pass with a single atomic
+ * counter. `include_flags[i] != 0` means node i is either visible under the
+ * active persona OR a 1-hop neighbour of a visible node (the ADR §Risks force
+ * coherence set); the host marks that set (or a companion neighbour-marking
+ * kernel does) before this compaction. `out_count` must be zeroed by the host
+ * before launch.
+ *
+ * Note: atomicAdd assigns slots in nondeterministic order, so the host sorts
+ * `compute_mask[0..*out_count]` if a stable/ascending order is required (the
+ * host CPU builder `build_compute_mask_with_neighbors` already emits sorted
+ * output, so the two producers are interchangeable after that sort).
+ *
+ * Grid: (ceil(num_nodes/block), 1, 1).
+ */
+extern "C" __global__ void build_compute_mask_kernel(
+    const int* __restrict__ include_flags,   // [num_nodes] 0/1 include flags
+    int* __restrict__ compute_mask,          // [num_nodes] out: compacted indices
+    int* __restrict__ out_count,             // [1] out: number of masked nodes
+    const int num_nodes)
+{
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= num_nodes) return;
+    if (include_flags[idx] != 0) {
+        int slot = atomicAdd(out_count, 1);
+        compute_mask[slot] = idx;
     }
 }
 
@@ -1938,31 +2019,44 @@ __global__ void force_pass_with_stability_kernel(
     const float* __restrict__ node_degrees,      // [num_nodes] sum of incident edge weights
     // Per-population spring strength multiplier (nullptr = uniform 1.0); mirrors
     // force_pass_kernel so the spring sliders behave identically on both paths.
-    const float* __restrict__ spring_scale)      // [num_nodes] per-node spring multiplier
+    const float* __restrict__ spring_scale,      // [num_nodes] per-node spring multiplier
+    // ADR-070 D2.2: per-node total constraint-force magnitude out (nullptr = skip).
+    // The stability check reads this as its third (constraint-force) criterion.
+    float* __restrict__ node_constraint_force,
+    // ADR-070 D3.1 (P2) sparse compute mask (see force_pass_kernel). nullptr /
+    // mask_len 0 = evaluate every node.
+    const int* __restrict__ compute_mask,
+    const int mask_len)
 {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= num_nodes) return;
-    
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (compute_mask != nullptr) {
+        if (idx >= mask_len) return;
+        idx = compute_mask[idx];
+    }
+    if (idx < 0 || idx >= num_nodes) return;
+
     // Global stability check - skip all physics if system is stable
     if (*should_skip_all_physics) {
         force_out_x[idx] = 0.0f;
         force_out_y[idx] = 0.0f;
         force_out_z[idx] = 0.0f;
+        if (node_constraint_force != nullptr) node_constraint_force[idx] = 0.0f;
         return;
     }
-    
+
     // Per-node stability check
     float vx = vel_in_x[idx];
     float vy = vel_in_y[idx];
     float vz = vel_in_z[idx];
     float vel_sq = vx * vx + vy * vy + vz * vz;
     float min_vel_sq = c_params.min_velocity_threshold * c_params.min_velocity_threshold;
-    
+
     // Skip force calculation for nearly stationary nodes
     if (vel_sq < min_vel_sq) {
         force_out_x[idx] = 0.0f;
         force_out_y[idx] = 0.0f;
         force_out_z[idx] = 0.0f;
+        if (node_constraint_force != nullptr) node_constraint_force[idx] = 0.0f;
         return;
     }
     
@@ -2092,10 +2186,14 @@ __global__ void force_pass_with_stability_kernel(
     }
 
     // Constraints processing (if enabled)
+    // ADR-070 D2.2: accumulate the per-node constraint-force magnitude so the
+    // stability check can gate on it (the third criterion). Mirrors the
+    // main-pass `total_constraint_force_magnitude`.
+    float total_constraint_force_magnitude = 0.0f;
     if ((c_params.feature_flags & FeatureFlags::ENABLE_CONSTRAINTS) && constraints != nullptr) {
         for (int c = 0; c < num_constraints; c++) {
             const ConstraintData& constraint = constraints[c];
-            
+
             // Check if this node is involved
             bool is_involved = false;
             int node_role = -1;
@@ -2106,31 +2204,29 @@ __global__ void force_pass_with_stability_kernel(
                     break;
                 }
             }
-            
+
             if (!is_involved) continue;
-            
+
+            float3 constraint_force = make_vec3(0.0f, 0.0f, 0.0f);
+
             // Apply constraint forces (simplified for stability example)
             if (constraint.kind == ConstraintKind::DISTANCE && constraint.count >= 2) {
                 int other_idx = (node_role == 0) ? constraint.node_idx[1] : constraint.node_idx[0];
                 if (other_idx >= 0 && other_idx < num_nodes) {
-                    float3 other_pos = make_vec3(pos_in_x[other_idx], 
-                                                pos_in_y[other_idx], 
+                    float3 other_pos = make_vec3(pos_in_x[other_idx],
+                                                pos_in_y[other_idx],
                                                 pos_in_z[other_idx]);
                     float3 diff = vec3_sub(my_pos, other_pos);
                     float current_dist = vec3_length(diff);
                     float target_dist = constraint.params[0];
-                    
+
                     if (current_dist > 1e-6f && isfinite(current_dist) && target_dist > 0.0f) {
                         float error = current_dist - target_dist;
                         float force_magnitude = -constraint.weight * error;
-                        force_magnitude = fmaxf(-c_params.constraint_max_force_per_node, 
+                        force_magnitude = fmaxf(-c_params.constraint_max_force_per_node,
                                               fminf(c_params.constraint_max_force_per_node, force_magnitude));
-                        
-                        float3 constraint_force = vec3_scale(diff, force_magnitude / current_dist);
-                        if (isfinite(constraint_force.x) && isfinite(constraint_force.y) &&
-                            isfinite(constraint_force.z)) {
-                            total_force = vec3_add(total_force, constraint_force);
-                        }
+
+                        constraint_force = vec3_scale(diff, force_magnitude / current_dist);
                     }
                 }
             }
@@ -2151,13 +2247,15 @@ __global__ void force_pass_with_stability_kernel(
                         float force_magnitude = constraint.weight * penetration;
                         force_magnitude = fminf(force_magnitude, c_params.constraint_max_force_per_node);
 
-                        float3 constraint_force = vec3_scale(diff, force_magnitude / current_dist);
-                        if (isfinite(constraint_force.x) && isfinite(constraint_force.y) &&
-                            isfinite(constraint_force.z)) {
-                            total_force = vec3_add(total_force, constraint_force);
-                        }
+                        constraint_force = vec3_scale(diff, force_magnitude / current_dist);
                     }
                 }
+            }
+
+            if (isfinite(constraint_force.x) && isfinite(constraint_force.y) &&
+                isfinite(constraint_force.z)) {
+                total_force = vec3_add(total_force, constraint_force);
+                total_constraint_force_magnitude += vec3_length(constraint_force);
             }
         }
     }
@@ -2165,6 +2263,12 @@ __global__ void force_pass_with_stability_kernel(
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;
     force_out_z[idx] = total_force.z;
+
+    // ADR-070 D2.2: publish the per-node constraint-force magnitude for the
+    // stability third criterion.
+    if (node_constraint_force != nullptr) {
+        node_constraint_force[idx] = total_constraint_force_magnitude;
+    }
 }
 
 // =============================================================================

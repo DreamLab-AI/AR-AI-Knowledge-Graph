@@ -466,6 +466,13 @@ impl UnifiedGPUCompute {
         self.prev_force_y = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.prev_force_z = DeviceBuffer::zeroed(actual_new_nodes)?;
 
+        // ADR-070 D2.2 / D3.1: constraint-force telemetry + sparse compute mask.
+        // The mask is invalidated on resize (node indices may have moved); it is
+        // rebuilt from the persona/filter on the next set_compute_mask call.
+        self.node_constraint_force = DeviceBuffer::zeroed(actual_new_nodes)?;
+        self.compute_mask = DeviceBuffer::zeroed(actual_new_nodes.max(1))?;
+        self.compute_mask_len = 0;
+
         self.cluster_assignments = DeviceBuffer::zeroed(actual_new_nodes)?;
         self.distances_to_centroid = DeviceBuffer::zeroed(actual_new_nodes)?;
 
@@ -570,6 +577,54 @@ impl UnifiedGPUCompute {
         )?;
 
         Ok(())
+    }
+
+    /// ADR-070 D3.1 (P2) — bind a sparse compute mask (Epic E.4 persona masking).
+    ///
+    /// `mask` is the compacted, ascending list of node indices the force pass
+    /// should evaluate this and subsequent ticks — built host-side by
+    /// [`visionclaw_gpu::hardening::build_compute_mask_with_neighbors`] so it
+    /// already includes the 1-hop neighbours of every visible node (the ADR
+    /// §Risks force-coherence mitigation). Indices at or beyond `allocated_nodes`
+    /// are dropped defensively. Passing an empty mask is equivalent to
+    /// [`clear_compute_mask`](Self::clear_compute_mask): the force pass reverts to
+    /// evaluating every node.
+    pub fn set_compute_mask(&mut self, mask: &[i32]) -> Result<()> {
+        let filtered: Vec<i32> = mask
+            .iter()
+            .copied()
+            .filter(|&ix| ix >= 0 && (ix as usize) < self.allocated_nodes)
+            .collect();
+
+        if filtered.is_empty() {
+            self.compute_mask_len = 0;
+            return Ok(());
+        }
+
+        if filtered.len() > self.compute_mask.len() {
+            // Capacity is allocated_nodes, so a well-formed mask never exceeds it;
+            // grow defensively rather than truncate silently.
+            self.compute_mask = DeviceBuffer::from_slice(&filtered)?;
+        } else {
+            checked_copy_from(&mut self.compute_mask, &filtered, "compute_mask")?;
+        }
+        self.compute_mask_len = filtered.len();
+        debug!(
+            "ADR-070 D3.1: bound sparse compute mask with {} node(s) (of {} allocated)",
+            self.compute_mask_len, self.allocated_nodes
+        );
+        Ok(())
+    }
+
+    /// ADR-070 D3.1 — clear any active compute mask; the force pass returns to
+    /// evaluating every node.
+    pub fn clear_compute_mask(&mut self) {
+        self.compute_mask_len = 0;
+    }
+
+    /// Whether a sparse compute mask is currently active.
+    pub fn compute_mask_active(&self) -> bool {
+        self.compute_mask_len > 0
     }
 
     /// Upload constraints to GPU losslessly.

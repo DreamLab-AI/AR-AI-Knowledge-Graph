@@ -20,5 +20,10 @@
 //! Those cross-cutting dependencies must be resolved first.
 //! See the Phase 3 implementation report for details.
 
+/// ADR-070 CUDA integration hardening — host-side (CPU) logic for the
+/// stability third criterion (D2.2), input-edge NaN guard (D2.3), and the
+/// sparse compute mask (D3.1 / P2). Pure and GPU-free so it is unit-testable
+/// without a device.
+pub mod hardening;
 pub mod memory;
 pub mod ptx_loader;
