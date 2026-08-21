@@ -922,6 +922,10 @@ async fn main() -> std::io::Result<()> {
             )
             .service(
                 web::scope("/api")
+                    // Pre-demo security fix #1 (audit 2026-08-21): when
+                    // PUBLIC_DEMO=read-only, reject every mutating method on the
+                    // whole /api scope with 403. Inert (passthrough) by default.
+                    .wrap(visionclaw_server::middleware::PublicDemoGuard::from_env())
                     // Client logs route - registered early to avoid scope conflicts
                     .route("/client-logs", web::post().to(client_log_handler::handle_client_logs))
                     .service(
