@@ -1,0 +1,15 @@
+[package]
+name = "visionclaw-analytics-oracle"
+version = "0.1.0"
+edition = "2021"
+description = "ADR-031 D7 — CUDA-free CPU-reference oracle + graph fixtures for the analytics correctness suite. Pure std, no GPU linkage, so the ubuntu CPU_CRATES CI job can run the known-answer gate (two_clique/pagerank/dbscan/lof) that the CUDA-linking root crate could not."
+license = "AGPL-3.0-only"
+
+# Deliberately dependency-free: the fixtures and CPU reference implementations
+# use only std. This keeps the crate (and its test target) buildable on a
+# GPU-less GitHub-hosted runner, which is the whole point of ADR-031 D7 —
+# the correctness known-answer tests must gate on `cargo test` in `rust-cpu`.
+
+[dependencies]
+
+[dev-dependencies]

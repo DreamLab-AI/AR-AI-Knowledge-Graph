@@ -9,6 +9,7 @@ members = [
     "crates/visionclaw-ontology",
     "crates/visionclaw-actors",
     "crates/visionclaw-xr-presence",
+    "crates/visionclaw-analytics-oracle",
 ]
 # PRD-008: the Godot gdext client (xr-client/rust) is its own workspace context
 # (cdylib for the Quest APK, separate target). Exclude it from the server
@@ -225,6 +226,12 @@ mockall = "0.13"
 pretty_assertions = "1.4"
 tempfile = "3.14"
 actix-rt = "2.11.0"
+# ADR-031 D7: CUDA-free CPU-reference oracle + graph fixtures. The correctness
+# known-answer gate lives (and runs in CI) inside this crate; here it is a
+# dev-dependency only so the root crate's GPU-gated `#[ignore]` tests and the
+# wire-snapshot / endpoint / sssp tests can share the same fixtures via the
+# `tests/analytics_fixtures.rs` re-export shim. Pure std, no CUDA linkage.
+visionclaw-analytics-oracle = { path = "crates/visionclaw-analytics-oracle" }
 
 # WASM Support for hybrid CPU-WASM/GPU SSSP
 [target.'cfg(target_arch = "wasm32")'.dependencies]

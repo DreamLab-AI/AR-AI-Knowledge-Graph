@@ -6765,6 +6765,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "visionclaw-analytics-oracle"
+version = "0.1.0"
+
+[[package]]
 name = "visionclaw-contracts"
 version = "0.1.0"
 dependencies = [
@@ -6960,6 +6964,7 @@ dependencies = [
  "validator",
  "visionclaw-actors",
  "visionclaw-adapters",
+ "visionclaw-analytics-oracle",
  "visionclaw-domain",
  "visionclaw-gpu",
  "visionclaw-ontology",

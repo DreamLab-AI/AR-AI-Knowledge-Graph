@@ -27,9 +27,12 @@ name: CI
 #   normal build/deploy workflow (./scripts/launch.sh), which is the authoritative
 #   GPU validation — a self-hosted GPU CI runner added nothing at deploy time and
 #   only queued indefinitely when offline, so the rust-gpu job was removed
-#   2026-07-24. The other seven workspace crates (contracts, domain, protocol,
-#   adapters, ontology, actors, xr-presence) are CUDA-free and carry the bulk of
-#   the pure-logic test corpus, so they form the blocking gate here.
+#   2026-07-24. The other eight workspace crates (contracts, domain, protocol,
+#   adapters, ontology, actors, xr-presence, analytics-oracle) are CUDA-free and
+#   carry the bulk of the pure-logic test corpus, so they form the blocking gate
+#   here. analytics-oracle (ADR-031 D7) holds the analytics correctness
+#   known-answer suite (two_clique/pagerank/dbscan/lof) that previously sat in the
+#   CUDA-linking root crate and therefore gated nothing.
 
 on:
   push:
@@ -79,6 +82,7 @@ jobs:
         -p visionclaw-ontology
         -p visionclaw-actors
         -p visionclaw-xr-presence
+        -p visionclaw-analytics-oracle
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain (clippy)
