@@ -210,6 +210,10 @@ pub(crate) fn handle_request_full_snapshot(
     let include_agent = graphs.map_or(true, |arr| arr.iter().any(|v| v.as_str() == Some("agent")));
 
     let app_state = _act.app_state.clone();
+    // ADR-060: the drop-set filter must also cover the snapshot path, not just
+    // the live subscribe broadcast — a snapshot request would otherwise leak
+    // private node positions with the filter enabled.
+    let caller_pubkey = _act.pubkey.clone();
     let fut = async move {
         use crate::actors::messages::{GetBotsGraphData, GetGraphData, GetNodeTypeArrays};
         use std::collections::HashSet;
@@ -223,6 +227,8 @@ pub(crate) fn handle_request_full_snapshot(
 
         let mut knowledge_nodes = Vec::new();
         let mut agent_nodes = Vec::new();
+        let filter_on = pubkey_visibility_filter_enabled();
+        let mut visibility: Vec<NodeVisibility> = Vec::new();
 
         // Fetch node type arrays (already compact IDs from source remapping)
         let nta = app_state
@@ -262,12 +268,30 @@ pub(crate) fn handle_request_full_snapshot(
                         vy: node.data.vy,
                         vz: node.data.vz,
                     };
+                    if filter_on {
+                        visibility.push(node_visibility(flagged_id, node));
+                    }
                     if agent_set.contains(&compact_id) {
                         agent_nodes.push((flagged_id, node_data));
                     } else {
                         knowledge_nodes.push((flagged_id, node_data));
                     }
                 }
+            }
+        }
+
+        // ADR-060 / ADR-059 §Phase-4: drop private nodes before the snapshot
+        // leaves the server. Default OFF (`visibility` stays empty).
+        if !visibility.is_empty() {
+            let drop_set = compute_private_opaque_ids(&visibility, caller_pubkey.as_deref());
+            if !drop_set.is_empty() {
+                let before = knowledge_nodes.len() + agent_nodes.len();
+                knowledge_nodes.retain(|(id, _)| !drop_set.contains(id));
+                agent_nodes.retain(|(id, _)| !drop_set.contains(id));
+                debug!(
+                    "ADR-060 snapshot filter dropped {} private nodes",
+                    before - (knowledge_nodes.len() + agent_nodes.len())
+                );
             }
         }
 
