@@ -76,6 +76,12 @@ cp .env.example .env
 
 # Start the development stack (auto-detects source changes, ~2 min warm)
 ./scripts/launch.sh up dev
+
+# Production uses a separate, explicit environment file. The launcher refuses
+# `up prod` if this file is absent rather than falling back to development.
+cp env.production.template .env.prod
+chmod 600 .env.prod
+# edit .env.prod and replace every placeholder before starting production
 ```
 
 Launcher commands (`./scripts/launch.sh <command> [dev|prod]`):
@@ -100,6 +106,8 @@ docker compose -f docker-compose.unified.yml --profile dev up -d
 The `dev` profile mounts source read-only and compiles Rust on first boot
 (allow up to ~5 min cold; the warm path is ~2 min). The `prod` profile uses a
 pre-compiled image — see [production deployment](operations/configuration.md).
+Compose receives the selected file through `ENV_FILE`; do not put production
+credentials in the development `.env`.
 
 ---
 

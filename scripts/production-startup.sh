@@ -21,8 +21,8 @@ fi
 mkdir -p /app/logs /var/log/nginx /var/run/nginx
 
 # Verify the pre-built production binary exists
-if [ ! -f /app/webxr ]; then
-    log "ERROR: Production binary /app/webxr not found!"
+if [ ! -x /app/visionclaw-server ]; then
+    log "ERROR: Production binary /app/visionclaw-server not found or not executable!"
     exit 1
 else
     log "Using pre-built production binary"
@@ -35,36 +35,36 @@ else
     log "WARNING: PTX file not found - GPU features may not work"
 fi
 
-# Use supervisord for production
-if [ -f /app/supervisord.production.conf ]; then
-    log "Starting production services with supervisord..."
-    exec supervisord -c /app/supervisord.production.conf
-else
-    # Fallback to direct execution
-    log "Starting services directly (no supervisord config found)..."
+# Start Rust backend on the loopback-only upstream port used by nginx.
+log "Starting Rust backend on port 4001..."
+SYSTEM_NETWORK_PORT=4001 RUST_LOG=${RUST_LOG:-info} /app/visionclaw-server &
+BACKEND_PID=$!
 
-    # Start Rust backend on port 4001 (nginx needs 4000, backend on 4001)
-    log "Starting Rust backend on port 4001..."
-    SYSTEM_NETWORK_PORT=4001 RUST_LOG=${RUST_LOG:-info} /app/webxr --gpu-debug &
-    BACKEND_PID=$!
+terminate_backend() {
+    kill "$BACKEND_PID" 2>/dev/null || true
+    wait "$BACKEND_PID" 2>/dev/null || true
+}
+trap terminate_backend EXIT INT TERM
 
-    # Wait for backend to be ready
-    log "Waiting for backend to start..."
-    for i in {1..30}; do
-        if nc -z localhost 4001; then
-            log "Backend is ready on port 4001"
-            break
-        fi
-        sleep 1
-    done
-
-    # Check if backend is still running
-    if ! kill -0 $BACKEND_PID 2>/dev/null; then
+log "Waiting for backend to start..."
+for _ in {1..60}; do
+    if nc -z 127.0.0.1 4001; then
+        log "Backend is accepting connections on port 4001"
+        break
+    fi
+    if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
         log "ERROR: Backend crashed during startup"
+        wait "$BACKEND_PID"
         exit 1
     fi
+    sleep 1
+done
 
-    # Start nginx on port 3001 to serve frontend and proxy API (cloudflared interface)
-    log "Starting nginx on port 3001..."
-    nginx -g "daemon off;"
+if ! nc -z 127.0.0.1 4001; then
+    log "ERROR: Backend did not bind port 4001 within 60 seconds"
+    exit 1
 fi
+
+# nginx stays in the foreground as PID 1; the EXIT trap stops the backend.
+log "Starting nginx on port 3001..."
+nginx -g "daemon off;"

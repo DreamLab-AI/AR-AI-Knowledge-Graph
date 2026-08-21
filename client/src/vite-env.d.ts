@@ -24,6 +24,7 @@ interface ImportMetaEnv {
   readonly VITE_DEBUG_PRESET?: string;
   readonly VITE_DEBUG_CATEGORIES?: string;
   readonly VITE_DEV_MODE_AUTH?: string;
+  readonly VITE_PUBLIC_DEMO?: string;
   readonly VITE_DEV_POWER_USER_PUBKEY?: string;
   readonly VITE_REMOTE_LOGGING_DISABLED?: string;
   readonly LOG_LEVEL?: string;

@@ -159,16 +159,43 @@ load_env_config() {
 
     if [[ -f "$env_file" ]]; then
         success "Loading environment config: .env.$ENVIRONMENT"
+
+        if [[ "$ENVIRONMENT" == "prod" ]] && [[ "$COMMAND" =~ ^(up|restart)$ ]]; then
+            local forbidden_setting
+            for forbidden_setting in SETTINGS_AUTH_BYPASS ALLOW_INSECURE_DEFAULTS VISIONCLAW_DEV_MODE; do
+                if grep -Eq "^[[:space:]]*${forbidden_setting}[[:space:]]*=" "$env_file"; then
+                    error ".env.prod must not define ${forbidden_setting} (even as false)"
+                    exit 1
+                fi
+            done
+
+            local required_setting required_value
+            for required_setting in CLOUDFLARE_TUNNEL_TOKEN MANAGEMENT_API_KEY VISIONCLAW_AGENT_KEY SOLID_PROXY_SECRET_KEY; do
+                required_value=$(sed -n "s/^[[:space:]]*${required_setting}[[:space:]]*=[[:space:]]*//p" "$env_file" | tail -n 1)
+                if [[ -z "$required_value" ]] || [[ "$required_value" == *'${'* ]]; then
+                    error ".env.prod requires a concrete value for ${required_setting}"
+                    exit 1
+                fi
+            done
+        fi
+
         set -a
         source "$env_file"
         set +a
+        export ENV_FILE="$env_file"
     else
         warning "Environment file not found: $env_file"
+        if [[ "$ENVIRONMENT" == "prod" ]] && [[ "$COMMAND" =~ ^(up|restart)$ ]]; then
+            error "Production startup requires an explicit .env.prod file"
+            info "Create it with: cp env.production.template .env.prod"
+            exit 1
+        fi
         if [[ -f "$PROJECT_ROOT/.env" ]]; then
             info "Using default .env file"
             set -a
             source "$PROJECT_ROOT/.env"
             set +a
+            export ENV_FILE="$PROJECT_ROOT/.env"
         else
             error "No .env file found. Please create .env.$ENVIRONMENT or .env"
             exit 1
@@ -180,6 +207,7 @@ load_env_config() {
 set_environment_vars() {
     case "$ENVIRONMENT" in
         dev)
+            export CONTAINER_NAME="visionclaw_container"
             export BUILD_TARGET="development"
             export COMPOSE_PROFILES="dev"
             export LOG_LEVEL="debug"
@@ -190,6 +218,7 @@ set_environment_vars() {
             info "  - No restart policy"
             ;;
         prod)
+            export CONTAINER_NAME="visionclaw_prod_container"
             export BUILD_TARGET="production"
             export COMPOSE_PROFILES="prod"
             export LOG_LEVEL="info"
@@ -307,6 +336,7 @@ cleanup_conflicts() {
     # Stop and remove any containers with conflicting names
     local conflicting_containers=(
         "visionclaw_container"
+        "visionclaw_prod_container"
         "visionclaw-backend"
         "visionclaw-frontend"
         "visionclaw-cloudflared"
@@ -1055,20 +1085,24 @@ show_service_urls() {
     log "Service URLs:"
 
     if [[ "$ENVIRONMENT" == "dev" ]]; then
-        echo "  ${GREEN}Vite Dev:${NC}      http://localhost:3001"
-        echo "  ${GREEN}Web UI:${NC}        http://localhost:4000 (→ 3001)"
+        echo "  ${GREEN}Web UI:${NC}        http://localhost:${DEV_NGINX_PORT:-3001}"
+        echo "  ${GREEN}API (direct):${NC}  http://localhost:${API_PORT:-4000}"
     else
-        echo "  ${GREEN}Web UI:${NC}        http://localhost:4000"
+        echo "  ${GREEN}Web UI:${NC}        http://localhost:${PROD_API_PORT:-3001}"
     fi
 
-    echo "  ${GREEN}WebSocket:${NC}     ws://localhost:4000/ws"
+    if [[ "$ENVIRONMENT" == "dev" ]]; then
+        echo "  ${GREEN}WebSocket:${NC}     ws://localhost:${API_PORT:-4000}/ws"
+    else
+        echo "  ${GREEN}WebSocket:${NC}     ws://localhost:${PROD_API_PORT:-3001}/ws"
+    fi
     echo "  ${GREEN}Claude Flow:${NC}   tcp://localhost:9500"
 
     # Check for cloudflared tunnel
     if docker ps 2>/dev/null | grep -q cloudflared-tunnel; then
         echo ""
         success "Cloudflared tunnel: Active"
-        echo "  ${GREEN}Public URL:${NC}    https://www.visionclaw.info"
+        echo "  ${GREEN}Public URL:${NC}    https://${PUBLIC_HOSTNAME:-junkiejarvis.com}"
     fi
 }
 

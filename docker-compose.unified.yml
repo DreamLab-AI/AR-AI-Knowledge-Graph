@@ -54,7 +54,7 @@ services:
         CUDA_ARCH: ${CUDA_ARCH:-75}
         BUILD_TARGET: ${BUILD_TARGET:-development}
     env_file:
-      - .env
+      - ${ENV_FILE:-.env}
     environment:
       <<: *common-environment
       # Development-specific variables (overridden in production profile)
@@ -140,8 +140,9 @@ services:
         CUDA_ARCH: ${CUDA_ARCH:-75}
         BUILD_TARGET: production
         REBUILD_PTX: ${REBUILD_PTX:-false}
+        VITE_PUBLIC_DEMO: ${VITE_PUBLIC_DEMO:-false}
     env_file:
-      - .env
+      - ${ENV_FILE:-.env}
     environment:
       <<: *common-environment
       # Production-specific overrides
@@ -149,8 +150,15 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
       GIT_HASH: ${GIT_HASH:-production}
       VITE_DEBUG: "false"
+      # Writable production paths live under the persistent /app/data volume.
+      # Development defaults point at bind-mounted /workspace/ext paths and are
+      # not valid in the non-root production image.
+      DATA_ROOT: /app/data
+      MARKDOWN_DIR: /app/data/markdown
+      METADATA_DIR: /app/data/metadata
+      SOLID_DATA_ROOT: /app/data/solid
       # CORS — must include production domain so nginx can pass real Origin
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://www.visionclaw.info,https://visionclaw.info,http://localhost:3000,http://localhost:3001}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://junkiejarvis.com,http://localhost:3000,http://localhost:3001}
       # ComfyUI image generation
       COMFYUI_URL: ${COMFYUI_URL:-http://comfyui:8188}
       COMFYUI_SALAD_URL: ${COMFYUI_SALAD_URL:-http://comfyui:3000}
@@ -184,7 +192,7 @@ services:
     runtime: nvidia
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/readyz"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -203,8 +211,6 @@ services:
     command: tunnel --no-autoupdate run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-    volumes:
-      - ./config.yml:/etc/cloudflared/config.yml:ro
     depends_on:
       visionclaw:
         condition: service_started

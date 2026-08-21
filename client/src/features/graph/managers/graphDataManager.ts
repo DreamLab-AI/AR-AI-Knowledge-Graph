@@ -227,8 +227,6 @@ class GraphDataManager {
     }
 
     const storeState = useSettingsStore.getState();
-    const qualityGates = storeState.settings?.qualityGates;
-    const maxNodeCount = qualityGates?.maxNodeCount ?? Infinity;
     const includeLinkedPages = storeState.settings?.nodeFilter?.includeLinkedPages ?? false;
 
     // Population gate (ingestion): drop linked_page wikilink-stub nodes before
@@ -241,36 +239,10 @@ class GraphDataManager {
     let validatedData = gatedData;
 
     if (gatedData && gatedData.nodes) {
-      let nodesToUse = gatedData.nodes;
-
-      if (nodesToUse.length > maxNodeCount) {
-        logger.info(`Filtering nodes: ${nodesToUse.length} exceeds maxNodeCount ${maxNodeCount}`);
-
-        const scoredNodes = nodesToUse.map(node => ({
-          node,
-          score: (node.metadata?.authority_score ?? 0) + (node.metadata?.quality_score ?? 0),
-        }));
-        scoredNodes.sort((a, b) => b.score - a.score);
-        nodesToUse = scoredNodes.slice(0, maxNodeCount).map(s => s.node);
-
-        logger.info(`Filtered to ${nodesToUse.length} nodes (by authority/quality score)`);
-
-        const keptNodeIds = new Set(nodesToUse.map(n => String(n.id)));
-        const filteredEdges = (gatedData.edges || []).filter(
-          edge => keptNodeIds.has(String(edge.source)) && keptNodeIds.has(String(edge.target)),
-        );
-        logger.info(`Filtered edges: ${gatedData.edges?.length ?? 0} -> ${filteredEdges.length}`);
-
-        validatedData = {
-          nodes: nodesToUse.map(node => ensureNodeHasValidPosition(node)),
-          edges: filteredEdges,
-        };
-      } else {
-        validatedData = {
-          ...gatedData,
-          nodes: nodesToUse.map(node => ensureNodeHasValidPosition(node)),
-        };
-      }
+      validatedData = {
+        ...gatedData,
+        nodes: gatedData.nodes.map(node => ensureNodeHasValidPosition(node)),
+      };
 
       if (debugState.isEnabled()) logger.info(`Validated ${validatedData.nodes.length} nodes with positions`);
     } else {

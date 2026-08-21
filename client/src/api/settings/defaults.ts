@@ -169,7 +169,8 @@ export const DEFAULT_QUALITY_GATES: QualityGateSettings = {
   ruvectorEnabled: false,
   gnnPhysics: false,
   minFpsThreshold: 30,
-  maxNodeCount: 100000,
+  // Retained for settings-wire compatibility; graph selection is quality-only.
+  maxNodeCount: Number.MAX_SAFE_INTEGER,
   autoAdjust: true,
   ontologyStrength: 0.5,
   dagLevelAttraction: 0.5,

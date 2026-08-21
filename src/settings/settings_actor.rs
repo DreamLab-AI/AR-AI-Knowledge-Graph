@@ -63,7 +63,7 @@ impl Actor for SettingsActor {
                 }
                 Ok(_) => {
                     // No node filter settings exist, initialize with defaults
-                    info!("No node filter settings found, initializing defaults (enabled=true, quality_threshold=0.7)");
+                    info!("No node filter settings found, initializing defaults (enabled=true, quality_threshold=0.9)");
                     let default_settings = NodeFilterSettings::default();
                     let settings_json = serde_json::to_value(&default_settings).unwrap_or_default();
 

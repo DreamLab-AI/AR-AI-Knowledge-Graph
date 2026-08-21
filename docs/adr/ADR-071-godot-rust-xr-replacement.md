@@ -5,7 +5,7 @@
 **Deciders:** jjohare, VisionClaw XR/platform team
 **Supersedes:** ADR-032 (RATK integration), ADR-033 (Vircadia decoupling)
 **Superseded by:** None
-**Amended by:** ADR-102 (XR transport completion) — corrects the "28 B/node" wire claim in this ADR's TL;DR, Decision Drivers, and Consequences: the live graph wire is **Protocol V3** (`0x03` version byte + 52-byte records, analytics inline). The Godot/gdext/OpenXR decision here is unchanged; only the wire-size figure is superseded. See ADR-102 §6.
+**Amended by:** ADR-136 (desktop OpenXR / VIVE Pro accepted as close-out validation target; Quest 3 remains sole ship target). ADR-102 (XR transport completion) — corrects the "28 B/node" wire claim in this ADR's TL;DR, Decision Drivers, and Consequences: the live graph wire is **Protocol V3** (`0x03` version byte + 52-byte records, analytics inline). The Godot/gdext/OpenXR decision here is unchanged; only the wire-size figure is superseded. See ADR-102 §6.
 **Related:**
 - PRD-008 (XR client native replacement — this ADR is the decision instance)
 - DDD `ddd-xr-godot-context.md` (bounded-context model for the new XR client)

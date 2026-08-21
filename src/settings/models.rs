@@ -142,7 +142,8 @@ impl Default for QualityGateSettings {
             ruvector_enabled: false, // Off by default (requires integration)
             gnn_physics: false,      // Off by default (advanced)
             min_fps_threshold: 30,
-            max_node_count: 500000,
+            // Retained for settings-wire compatibility; no graph-selection cap.
+            max_node_count: usize::MAX,
             auto_adjust: true, // Auto-adjust on by default
             ontology_strength: 0.5,
             dag_level_attraction: 0.5,
@@ -188,7 +189,7 @@ impl Default for NodeFilterSettings {
     fn default() -> Self {
         Self {
             enabled: true,
-            quality_threshold: 0.7,
+            quality_threshold: 0.9,
             authority_threshold: 0.5,
             filter_by_quality: true,
             filter_by_authority: false,

@@ -112,7 +112,8 @@ export function transformApiToClientSettings(
     nodeFilter: {
       ...{
         enabled: true,
-        qualityThreshold: 0.7,
+        // Conservative public-demo default: approximately the top quality decile.
+        qualityThreshold: 0.9,
         authorityThreshold: 0.5,
         filterByQuality: true,
         filterByAuthority: false,

@@ -62,7 +62,7 @@ WebSocket stream share one Actix server on `:4000`; nginx serves the client on
 | `MANAGEMENT_API_HOST` | string | `agentic-workstation` | Management API host. |
 
 The dev health check probes `http://localhost:4000/api/health`; production probes
-`http://localhost:3001/health`.
+`http://localhost:3001/readyz` through nginx to verify backend readiness.
 
 ---
 

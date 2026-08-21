@@ -895,12 +895,12 @@ S4 encoder builds a DID Document Object (s04-did.js:76-83); the viewer manifest 
 `agentbox.toml:72-76` declares an operator identity:
 ```toml
 [sovereign_mesh.operator]
-pubkey_hex   = "11ed64225dd5e2c5e18f61ad43d5ad9272d08739d3a20dd25886197b0738663c"
+pubkey_hex   = "b41654017f6850b13857d19d8ae0e3f88f1365600cab0321e8101c9e92682f7a"
 npub         = ""
 display_name = ""
 ```
 
-`agentbox.toml:64-68` claims this pubkey is "Added to the relay allowlist (can publish events to the embedded relay) ... operator-level access to management API via NIP-98 ... delegator on NIP-26 agent delegations ... WebID owner in Solid pod ACLs". 
+`agentbox.toml:64-68` claims this pubkey is "Added to the relay allowlist (can publish events to the embedded relay) ... operator-level access to management API via NIP-98 ... delegator on NIP-26 agent delegations ... WebID owner in Solid pod ACLs".
 
 But: `flake.nix:732-736` only emits `pubkey_whitelist` from `relayCfg.allowed_pubkeys` (which is empty), not from `operator.pubkey_hex`. There is no source-side code path that auto-injects the operator pubkey into the relay allowlist. The comment is **PLANNED behaviour, not yet implemented** in flake or entrypoint.
 

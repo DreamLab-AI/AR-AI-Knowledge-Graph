@@ -307,8 +307,10 @@ docker compose -f docker-compose.unified.yml --profile dev build --no-cache \
 
 ### Health checks
 
-The dev and prod services define a `curl -f http://localhost:4000/api/health`
-healthcheck (prod nginx checks `:3001/health`). Inspect status directly:
+The dev service checks `http://localhost:4000/api/health`. Production checks
+`http://localhost:3001/readyz`, which nginx proxies to the Rust backend so a
+failed or unready graph store cannot be masked by a healthy nginx process.
+Inspect status directly:
 
 ```bash
 docker inspect --format='{{.State.Health.Status}}' visionclaw_container

@@ -43,6 +43,9 @@ RUN for attempt in 1 2 3; do \
         && break || { echo "Attempt $attempt failed, retrying in 10s..."; sleep 10; pacman -Syy --noconfirm; }; \
     done && rm -rf /var/cache/pacman/pkg/*
 
+# oxrocksdb-sys generates bindings during the Rust build.
+RUN pacman -S --noconfirm --needed clang && rm -rf /var/cache/pacman/pkg/*
+
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 
@@ -59,6 +62,11 @@ WORKDIR /app
 
 # Copy ONLY dependency manifests (whelk-rs is now a git dep — no path-dep COPY)
 COPY Cargo.toml Cargo.lock ./
+# Workspace crates contain their own manifests and build inputs. Keeping the
+# complete directory here is required for Cargo metadata resolution; source
+# edits invalidate this dependency layer but still leave the OS/CUDA layers
+# cached.
+COPY crates ./crates
 
 # Create stub sources so cargo can resolve and compile all dependencies.
 # The dummy lib/main must reference whelk so the path dep compiles too.
@@ -92,10 +100,10 @@ ARG CUDA_ARCH=86
 WORKDIR /app
 
 # Copy ONLY CUDA source files — PTX layer rebuilds only when .cu files change
-COPY src/utils/*.cu src/utils/
+COPY crates/visionclaw-gpu/src/cuda_sources/*.cu cuda_sources/
 
 RUN mkdir -p /app/ptx && \
-    for cu_file in src/utils/*.cu; do \
+    for cu_file in cuda_sources/*.cu; do \
         name=$(basename "$cu_file" .cu); \
         echo "Compiling $name.ptx..."; \
         nvcc -ptx -arch sm_${CUDA_ARCH} -o /app/ptx/${name}.ptx "$cu_file" --use_fast_math -O3; \
@@ -108,8 +116,10 @@ RUN mkdir -p /app/ptx && \
 FROM toolchain AS frontend
 
 WORKDIR /app/client
+ARG VITE_PUBLIC_DEMO=false
 ENV DOCKER_BUILD=1 \
-    VITE_JSS_WS_URL=wss://www.visionclaw.info/solid/.notifications
+    VITE_JSS_WS_URL=wss://junkiejarvis.com/solid/.notifications \
+    VITE_PUBLIC_DEMO=${VITE_PUBLIC_DEMO}
 
 # Copy package manifests and scripts needed by preinstall hook
 COPY client/package.json client/package-lock.json ./
@@ -186,6 +196,7 @@ RUN mkdir -p /app/data/markdown \
     /app/data/runtime \
     /app/user_settings \
     /app/logs \
+    /workspace/ext \
     /var/log/nginx \
     /var/run/nginx \
     /var/lib/nginx/tmp && \
@@ -195,7 +206,9 @@ RUN mkdir -p /app/data/markdown \
         /var/log/nginx \
         /var/run/nginx \
         /var/run/nginx.pid \
-        /var/lib/nginx
+        /var/lib/nginx && \
+    ln -s /app/data /workspace/ext/data && \
+    chown -h appuser:appuser /workspace/ext/data
 
 # Cache-buster AFTER heavy installs: pass --build-arg CACHE_BUST=$(date +%s) to
 # force re-copy of artifacts from builder. Placed here so it only invalidates the

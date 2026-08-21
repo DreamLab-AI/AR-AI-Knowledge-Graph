@@ -122,12 +122,15 @@ function App() {
     return <LoadingScreen message="Checking authentication..." />;
   }
 
-  // Allow bypass for visual testing via URL parameter (DEVELOPMENT ONLY)
+  // A production demo build may bypass only the client-side onboarding screen.
+  // Backend authorization remains enforced for protected API operations.
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const skipAuth = isDevelopment && (
+  const isPublicDemo = import.meta.env.VITE_PUBLIC_DEMO === 'true' &&
+    window.location.hostname === 'junkiejarvis.com';
+  const skipAuth = isPublicDemo || (isDevelopment && (
     window.location.search.includes('skipAuth=true') ||
     window.location.search.includes('test=visual')
-  );
+  ));
 
   // Show login screen if not authenticated (unless testing bypass in dev mode)
   if (!authenticated && !skipAuth) {
