@@ -9,6 +9,56 @@ use crate::utils::validation::rate_limit::EndpointRateLimits;
 
 use super::types::SocketFlowServer;
 
+pub(crate) use visionclaw_domain::utils::visibility_filter::{
+    apply_drop_set, compute_private_opaque_ids, NodeVisibility,
+};
+
+/// Env flag gating the ADR-060 pubkey-visibility drop-set filter.
+///
+/// Default OFF: when unset (or set to anything other than a recognised truthy
+/// token) the position encoder ships every node exactly as before, with ADR-050
+/// bit-29 opacification the only privacy layer. When enabled, nodes that are
+/// private and not owned by the session pubkey are dropped from the wire frame
+/// entirely (ADR-059 §Phase-4). Fail-closed: anonymous + flag on ⇒ public-only.
+const PUBKEY_VISIBILITY_FILTER_ENV: &str = "PUBKEY_VISIBILITY_FILTER";
+
+/// Whether the ADR-060 drop-set filter is enabled for this process.
+///
+/// Matches the file's other env-flag idioms (parse-once, default to the safe
+/// pre-existing behaviour on any unexpected value).
+fn pubkey_visibility_filter_enabled() -> bool {
+    std::env::var(PUBKEY_VISIBILITY_FILTER_ENV)
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// Project a graph node's ADR-050 visibility primitives onto its flagged wire id.
+///
+/// ADR-050 stores `visibility` / `owner_pubkey` on the node. Until that storage
+/// lands, we derive them from the node metadata the parser already populates:
+/// a node is public iff `metadata["public"] == "true"` (the `public:: true`
+/// Logseq tag), and `owner_pubkey` is read from `metadata["owner_pubkey"]` when
+/// present. Absent an owner, a private node fails closed (dropped for everyone
+/// but a future owner match).
+fn node_visibility(wire_id: u32, node: &visionclaw_domain::models::Node) -> NodeVisibility {
+    let is_public = node
+        .metadata
+        .get("public")
+        .map(|v| v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let owner_pubkey = node.metadata.get("owner_pubkey").cloned();
+    NodeVisibility {
+        wire_id,
+        is_public,
+        owner_pubkey,
+    }
+}
+
 /// Maximum time budget (ms) for settle iterations per drag update.
 const DRAG_SETTLE_BUDGET_MS: u64 = 50;
 
@@ -42,7 +92,7 @@ fn sanitize_position(x: f32, y: f32, z: f32) -> Option<(f32, f32, f32)> {
 pub(crate) async fn fetch_nodes(
     app_state: std::sync::Arc<crate::app_state::AppState>,
     _settings_addr: actix::Addr<crate::actors::optimized_settings_actor::OptimizedSettingsActor>,
-) -> Option<(Vec<(u32, BinaryNodeData)>, bool)> {
+) -> Option<(Vec<(u32, BinaryNodeData)>, bool, Vec<NodeVisibility>)> {
     use crate::actors::messages::{GetGraphData, GetNodeTypeArrays};
     use log::error;
     use std::collections::HashSet;
@@ -100,7 +150,17 @@ pub(crate) async fn fetch_nodes(
         }
     }
 
+    // ADR-060: only pay for the per-node visibility projection when the
+    // drop-set filter is actually enabled; otherwise leave the vec empty so the
+    // hot path is untouched.
+    let filter_on = pubkey_visibility_filter_enabled();
+
     let mut nodes = Vec::with_capacity(graph_data.nodes.len());
+    let mut visibility = if filter_on {
+        Vec::with_capacity(graph_data.nodes.len())
+    } else {
+        Vec::new()
+    };
     for node in &graph_data.nodes {
         // Node IDs are already compact (0..N-1) from GraphStateActor source remapping
         let compact_id = node.id;
@@ -118,6 +178,9 @@ pub(crate) async fn fetch_nodes(
         } else {
             compact_id
         };
+        if filter_on {
+            visibility.push(node_visibility(flagged_id, node));
+        }
         let node_data = BinaryNodeDataClient::new(
             flagged_id,
             node.data.position().into(),
@@ -130,7 +193,7 @@ pub(crate) async fn fetch_nodes(
         return None;
     }
 
-    Some((nodes, detailed_debug))
+    Some((nodes, detailed_debug, visibility))
 }
 
 pub(crate) fn handle_request_full_snapshot(
@@ -581,7 +644,7 @@ pub(crate) fn handle_subscribe_position_updates(
             if act.position_sub_generation != my_generation {
                 return;
             }
-            if let Some((mut nodes, detailed_debug)) = result {
+            if let Some((mut nodes, detailed_debug, visibility)) = result {
                 // FIX 6: Apply per-client node type filter to reduce bandwidth.
                 // When the client subscribes with nodeTypes, skip nodes that
                 // don't match. Type is determined from the flag bits in the node ID.
@@ -599,6 +662,27 @@ pub(crate) fn handle_subscribe_position_updates(
                         };
                         type_filter.contains(type_str)
                     });
+                }
+
+                // ADR-060 / ADR-059 §Phase-4: pubkey-visibility drop-set filter.
+                // Default OFF (fetch_nodes returns an empty `visibility` vec when
+                // the flag is unset, so this branch is skipped and the frame is
+                // untouched). When enabled, drop every (id, data) pair for a node
+                // that is private and not owned by this session's pubkey, before
+                // it reaches the encoder. Fail-closed: an unauthenticated session
+                // (`act.pubkey == None`) drops all private nodes → public-only.
+                if !visibility.is_empty() {
+                    let drop_set =
+                        compute_private_opaque_ids(&visibility, act.pubkey.as_deref());
+                    let dropped = apply_drop_set(&mut nodes, &drop_set);
+                    if dropped > 0 {
+                        debug!(
+                            "Sent position frame with {} nodes ({} dropped by {})",
+                            nodes.len(),
+                            dropped,
+                            PUBKEY_VISIBILITY_FILTER_ENV
+                        );
+                    }
                 }
 
                 // Single full-state frame per tick. No delta encoding, no
