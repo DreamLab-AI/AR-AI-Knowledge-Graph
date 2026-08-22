@@ -48,3 +48,40 @@ dual Quadro RTX 6000) became available 2026-08-20.
 - A future Quest 3 on-device pass remains desirable for the vendor-extension
   surface (M3's passthrough/hand-tracking subset stays at its current tier
   until then), but no longer blocks close-out of the copresence layer.
+
+## Outcome (2026-08-22 — runtime bring-up)
+
+The VIVE Pro validation target went live. **First-ever working in-headset render
+of the Godot XR client was achieved** on 2026-08-22 (branch `xr-vive-runtime`) —
+both eyes, live wand interaction, live physics. Details in PRD-008 §7.4; summary:
+
+- **Working stack:** Godot 4.6.1-stable + **Compatibility (OpenGL /
+  `gl_compatibility`) renderer** + NVIDIA **580.178.04** (`nvidia-580xx-open-dkms`)
+  + native X11 (XFCE) + SteamVR, on HP-Desktop.
+- **Hard render constraint discovered:** the RenderingDevice renderers
+  (Forward+/Mobile, Vulkan) have a **broken multiview tonemapper** on this
+  SteamVR/Linux/NVIDIA stack — null shader variant → **both eyes black**,
+  reproducible across Godot 4.3/4.4/4.6.1, NVIDIA 610 and 580, X11 and Wayland,
+  all settings. Workaround: the Compatibility renderer (inline tonemap, no RD post
+  pass). Glow / advanced post-process breaks Compat XR multiview submission (→
+  SteamVR home grid), so **glow OFF, Linear tonemap only**; the second-eye
+  `GL_OVR_multiview` works on NVIDIA 580 but not 610. This constraint is now the
+  governing fact for any XR renderer choice on this hardware.
+- **Validated in-headset:** both-eye render, dual-wand interaction (right wand
+  live, left pending power-on), ray/sphere node grab with keep-distance, trackpad
+  locomotion, world-anchored wand-movable HUD, custom `openxr_action_map.tres`
+  bound to `htc/vive_controller`, top-5% node display (640 by centrality),
+  adaptive room-fit, client-side position hunting, edges (node cap 200 → 3000).
+
+**Decision-scope correction to Decision point 1.** Decision 1 anticipated that
+"canaries fired from this session legitimately promote M-items `standalone →
+integrated`." That promotion has **not** happened yet: the render + interaction
+bring-up is done, but the **formal copresence canary session is PENDING** (resumes
+next session). `CANARY-VC-M1-HUD`, `CANARY-VC-COM18-INTERV`, and
+`CANARY-VC-M4-RAY` have **not** fired on the VIVE. **M-items remain at their
+pre-existing tiers** until those receipts exist. Decision 2 (Quest 3 remains the
+sole ship target; APK still frozen/unbuilt) is unchanged and confirmed. Substrate
+substitution per Decision 3 (controller-ray for pinch) is confirmed live.
+
+**Status of this ADR:** Accepted — target validated as a render vehicle; the
+canary-promotion clause of Decision 1 is not yet exercised.

@@ -1012,6 +1012,18 @@ pub(crate) fn handle_node_drag_start(
             positions: vec![(node_id, pinned_data)],
             correlation_id: None,
         });
+
+        // 3. Grab→spring: pin the node ON THE GPU so the force kernel holds it at
+        //    the hand position and springs its neighbours around it. Reheat on
+        //    drag-start so a settled graph has energy to visibly react.
+        use crate::actors::messages::PinNodePositions;
+        if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+            gpu_addr.do_send(PinNodePositions {
+                pins: vec![(node_id, [pos_x, pos_y, pos_z])],
+                unpin: Vec::new(),
+                reheat: true,
+            });
+        }
     };
 
     ctx.spawn(actix::fut::wrap_future::<_, SocketFlowServer>(fut).map(|_, _, _| ()));
@@ -1155,6 +1167,18 @@ pub(crate) fn handle_node_drag_update(
             correlation_id: None,
         });
 
+        // 1b. Grab→spring: update the GPU pin so the force kernel holds the node at
+        //     the new hand position and its neighbours spring around it. No reheat on
+        //     per-frame updates (only on drag-start).
+        use crate::actors::messages::PinNodePositions;
+        if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+            gpu_addr.do_send(PinNodePositions {
+                pins: vec![(node_id, [pos_x, pos_y, pos_z])],
+                unpin: Vec::new(),
+                reheat: false,
+            });
+        }
+
         // 2. Run time-budgeted settle iterations for neighbor relaxation
         //    We run multiple SimulationSteps within our time budget.
         use crate::actors::messages::SimulationStep;
@@ -1285,6 +1309,17 @@ pub(crate) fn handle_node_drag_end(
                 interaction_type: NodeInteractionType::Released,
                 position: None,
             });
+
+        // 1b. Grab→spring: release the GPU pin so the node integrates freely again
+        //     and the surrounding springs settle it into its new resting place.
+        use crate::actors::messages::PinNodePositions;
+        if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+            gpu_addr.do_send(PinNodePositions {
+                pins: Vec::new(),
+                unpin: vec![node_id],
+                reheat: false,
+            });
+        }
 
         // 2. Run one final settle cycle with the node free
         use crate::actors::messages::SimulationStep;

@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://b3xrgraph01vc"]
+[gd_scene load_steps=13 format=3 uid="uid://b3xrgraph01vc"]
 
 [ext_resource type="Script" path="res://scripts/graph_scene.gd" id="1_graph"]
 [ext_resource type="PackedScene" uid="uid://b3xravatar01vc" path="res://scenes/Avatar.tscn" id="2_avatar"]
@@ -27,16 +27,36 @@ radial_segments = 8
 rings = 1
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_edge"]
-albedo_color = Color(0.5, 0.7, 1, 0.6)
-transparency = 1
+albedo_color = Color(0.4, 0.6, 1, 1)
+emission_enabled = true
+emission = Color(0.3, 0.5, 0.9, 1)
+emission_energy_multiplier = 1.2
 
 [sub_resource type="MultiMesh" id="MultiMesh_edges"]
 transform_format = 1
 mesh = SubResource("CylinderMesh_edge")
 instance_count = 0
 
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 1
+background_color = Color(0.02, 0.03, 0.06, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.55, 0.6, 0.7, 1)
+ambient_light_energy = 0.5
+tonemap_mode = 0
+tonemap_exposure = 1.1
+glow_enabled = false
+glow_intensity = 0.8
+glow_strength = 1.0
+glow_bloom = 0.1
+glow_blend_mode = 1
+glow_hdr_threshold = 1.0
+
 [node name="GraphScene" type="Node3D"]
 script = ExtResource("1_graph")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
 
 [node name="XROrigin3D" type="XROrigin3D" parent="."]
 
@@ -50,27 +70,33 @@ pose = &"aim"
 tracker = &"right_hand"
 pose = &"aim"
 
-[node name="NodesMulti" type="MultiMeshInstance3D" parent="."]
+[node name="GraphRoot" type="Node3D" parent="."]
+
+[node name="NodesMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
 material_override = ExtResource("3_gem")
 multimesh = SubResource("MultiMesh_nodes")
 
-[node name="OntologyMulti" type="MultiMeshInstance3D" parent="."]
+[node name="OntologyMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
 material_override = ExtResource("4_orb")
 
-[node name="AgentMulti" type="MultiMeshInstance3D" parent="."]
+[node name="AgentMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
 material_override = ExtResource("5_caps")
 
-[node name="EdgesMulti" type="MultiMeshInstance3D" parent="."]
+[node name="EdgesMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
 material_override = SubResource("StandardMaterial3D_edge")
 multimesh = SubResource("MultiMesh_edges")
 
-[node name="AvatarSpawner" type="Node3D" parent="."]
+[node name="AvatarSpawner" type="Node3D" parent="GraphRoot"]
 metadata/avatar_template = ExtResource("2_avatar")
 
-[node name="AgentSpawner" type="Node3D" parent="."]
+[node name="AgentSpawner" type="Node3D" parent="GraphRoot"]
 
 [node name="HUD" parent="XROrigin3D/XRCamera3D" instance=ExtResource("6_hud")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, -0.8)
+
+[node name="FlatFallbackCamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.3, 1.2)
+current = false
 
 [node name="AmbientLight" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866, -0.5, 0, 0.5, 0.866, 0, 0, 0, 1, 0, 5, 0)

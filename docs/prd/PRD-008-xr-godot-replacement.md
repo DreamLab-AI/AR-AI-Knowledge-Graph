@@ -1,8 +1,8 @@
 # PRD-008: XR Client Replacement — Native Quest 3 APK via Godot 4 + godot-rust + OpenXR
 
-**Status:** In Progress — scaffold, protocol, presence, interaction, LOD, avatar rendering, and testing feature-complete; **copresence layer (gaze, geometric agent avatars, proxemics, in-headset identity + intervention) implemented post-Phase-2 (gap-close 2026-07, ADR-130 D4)**, on-device validation pending; LiveKit AAR JNI bridge, WebXR removal, soak testing, and on-device profiling remain planned
+**Status:** In Progress — scaffold, protocol, presence, interaction, LOD, avatar rendering, and testing feature-complete; **copresence layer (gaze, geometric agent avatars, proxemics, in-headset identity + intervention) implemented post-Phase-2 (gap-close 2026-07, ADR-130 D4)**. **First-ever working in-headset render achieved 2026-08-22 on an HTC VIVE Pro (desktop OpenXR / SteamVR, per ADR-136) — both eyes, live interaction, physics; see §7.4.** Still pending: the formal copresence canary session (M-items stay pre-`integrated`), LiveKit AAR JNI bridge, WebXR removal, soak testing, on-device profiling, and the Quest 3 APK cross-build (still frozen/unbuilt).
 **Priority:** P0 — current XR stack is silent-failing in production; the user-facing immersive path is effectively unshipped
-**Date:** 2026-05-02 (last updated 2026-07-08)
+**Date:** 2026-05-02 (last updated 2026-08-22)
 **Author:** Architecture Audit (xr-godot-replacement swarm `swarm-1777757491161-nl2bbv`)
 **Supersedes:**
 - `docs/prd-xr-modernization.md` — incremental fix to the Babylon/R3F/Vircadia stack; **superseded in full** by this PRD
@@ -606,6 +606,65 @@ host-target `.so`. Per ADR-130 Decision 4, M3 is not folded into a closed
 `integrated` claim without the sidecar render receipt, and body/face tracking
 stay out of scope (Quest 3 has no eye/face hardware). Per-item tiers and evidence:
 `docs/gap-close-evidence/P2-{M1,M2,M3,M4,M6}.md`.
+
+### 7.4 VIVE Pro runtime bring-up (2026-08-22, branch `xr-vive-runtime`)
+
+**First-ever working headset render of the Godot XR client** — both eyes, live
+interaction, live physics. The vehicle is an **HTC VIVE Pro on desktop OpenXR /
+SteamVR (not a Quest 3)**, the validation target ADR-136 accepted on 2026-08-20.
+Ran on HP-Desktop (`ssh john@10.10.10.1`), native X11 (XFCE session), SteamVR.
+
+**Working stack (the only combination that renders):**
+
+- **Godot 4.6.1-stable** with the **Compatibility (OpenGL / `gl_compatibility`)
+  renderer**, **glow OFF**, **Linear tonemap only**.
+- **NVIDIA 580.178.04** (pinned `nvidia-580xx-open-dkms`).
+
+**Hard render constraint discovered (the reason for the stack above).** The
+RenderingDevice renderers (Forward+/Mobile, Vulkan) have a **broken multiview
+tonemapper** on this SteamVR/Linux/NVIDIA stack — the shader resolves to a null
+variant and **both eyes render black**. Reproduced across Godot 4.3/4.4/4.6.1,
+both NVIDIA 610 and 580, X11 and Wayland, every settings permutation. The
+**Compatibility (OpenGL) renderer** works because it does inline tonemapping with
+no RenderingDevice post pass. Two further constraints on that path: **glow /
+advanced post-process breaks Compat XR multiview frame submission** (drops the
+session to the SteamVR home grid), so glow is off and tonemap is Linear; and the
+**second-eye `GL_OVR_multiview`** only works on NVIDIA **580** (610 fails it).
+Visual parity cost: glow is sacrificed on the Compat path.
+
+**Verified working in-headset (2026-08-22):**
+
+- Both-eye stereo render; **dual-wand interaction path** — right wand confirmed
+  live, left wand pending power-on.
+- Literal ray/sphere node grab with keep-distance; **trackpad locomotion**;
+  world-anchored, wand-movable HUD.
+- Custom `openxr_action_map.tres` bound to `htc/vive_controller`.
+- Top-5% node display (640 nodes by centrality), adaptive room-fit, client-side
+  optimistic position hunting, per-node hues, edges (initial-graph-load node cap
+  raised 200 → 3000; 49 → 7558 edges).
+
+**Backend physics changes (this bring-up):** default is now **Continuous settle**
+(replacing the FastSettle latch that froze the graph); client hunting model;
+**grab-reheat** plus a new **`PinNodePositions` GPU injection** (a dragged node
+perturbs neighbours' springs). Tunable live via the dev-auth settings endpoint
+(`PUT /api/settings/physics`, `Authorization: Bearer dev-session-token`).
+
+**NOT yet done — do not over-claim:**
+
+- The **formal copresence canary session is PENDING** (resumes next session). The
+  §7.3 canaries `CANARY-VC-M1-HUD` / `CANARY-VC-M4-RAY` / `CANARY-VC-COM18-INTERV`
+  have **not** fired on the VIVE. **M-items remain pre-`integrated`** — the
+  render+interaction bring-up is done, the canary receipts are not.
+- The **Quest 3 APK path remains frozen/unbuilt** (no `aarch64` NDK / `cargo-ndk`).
+  VIVE Pro desktop-OpenXR is now the actual validation vehicle per ADR-136.
+
+**Known issues / WIP:** edge endpoints don't track nodes when moved (stuck near
+initial positions); adaptive-fit rescales oddly while a node is grabbed and moved;
+left wand not yet powered; glow visual parity sacrificed on the Compat path;
+debug prints retained in the code.
+
+**Code:** committed to branch `xr-vive-runtime` (pushed to
+`DreamLab-AI/VisionClaw`), PR-ready for `main`; still WIP.
 
 ---
 

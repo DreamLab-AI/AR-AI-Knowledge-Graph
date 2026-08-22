@@ -8,7 +8,10 @@ use tracing::trace;
 use godot::prelude::*;
 
 pub const MAX_RAY_DISTANCE_M: f32 = 30.0;
-pub const TARGET_RADIUS_M: f32 = 1.0;
+// Acquisition radius around the ray line ≈ the node's rendered world radius, so a
+// grab is a near-literal ray/sphere intersection rather than a fat-tube capture.
+// Best-aligned candidate within this wins (see find_target).
+pub const TARGET_RADIUS_M: f32 = 0.05;
 pub const ACTIVATION_THRESHOLD: f32 = 0.7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,7 +45,7 @@ pub fn find_target(ray: &HandRay, candidates: &[TargetCandidate]) -> Option<Rayc
         return None;
     }
     let dir = normalise(ray.direction);
-    let mut best: Option<RaycastHit> = None;
+    let mut best: Option<(RaycastHit, f32)> = None;
     for c in candidates {
         let to = [
             c.position[0] - ray.origin[0],
@@ -62,14 +65,24 @@ pub fn find_target(ray: &HandRay, candidates: &[TargetCandidate]) -> Option<Rayc
             node_id: c.node_id,
             distance: along,
         };
+        // Select the node best aligned with the ray (smallest perpendicular
+        // offset = what the user is actually pointing at), tie-breaking by the
+        // nearer node. Nearest-along alone grabs a near-camera node inside the
+        // acquisition tube and feels random.
         match best {
-            None => best = Some(candidate_hit),
-            Some(prev) if along < prev.distance => best = Some(candidate_hit),
-            _ => {}
+            None => best = Some((candidate_hit, perp_sq)),
+            Some((prev_hit, prev_perp)) => {
+                let better_aligned = perp_sq < prev_perp - 1e-6;
+                let tied_but_nearer =
+                    (perp_sq - prev_perp).abs() <= 1e-6 && along < prev_hit.distance;
+                if better_aligned || tied_but_nearer {
+                    best = Some((candidate_hit, perp_sq));
+                }
+            }
         }
     }
     trace!(?best, "find_target result");
-    best
+    best.map(|(hit, _)| hit)
 }
 
 pub fn is_grab_active(ray: &HandRay) -> bool {

@@ -1,12 +1,10 @@
 [gd_resource type="StandardMaterial3D" format=3 uid="uid://b3xrmatorb01"]
 
 [resource]
-transparency = 1
-albedo_color = Color(0.5, 0.85, 1, 0.65)
-metallic = 0.4
-roughness = 0.05
+vertex_color_use_as_albedo = true
+albedo_color = Color(0.7, 0.9, 1, 1)
+metallic = 0.3
+roughness = 0.15
 emission_enabled = true
-emission = Color(0.3, 0.6, 1, 1)
-emission_energy_multiplier = 0.6
-refraction_enabled = true
-refraction_scale = 0.05
+emission = Color(0.25, 0.5, 0.9, 1)
+emission_energy_multiplier = 0.5

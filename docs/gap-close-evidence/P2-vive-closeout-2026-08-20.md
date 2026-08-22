@@ -108,3 +108,45 @@ HP session-state changes to revert/keep at close-out: SDDM autologin
 `User=john` added (backup at `/etc/sddm.conf.bak.wsb`); `~/godot43/`,
 `~/visionclaw-xr/`, GUT 9.3 in `addons/gut/` (not committed upstream);
 gdext debug→release symlink in `rust/target/`.
+
+## 7. 2026-08-22 runtime bring-up (first on-headset render)
+
+Branch `xr-vive-runtime` (commit `b5e4dc123`). The §6 blockers were cleared and
+the client **rendered on the VIVE Pro for the first time**. Runtime stack differs
+from the §1 receipts: **Godot 4.6.1-stable Compatibility renderer + NVIDIA 580
+open (`nvidia-580xx-open-dkms`, pinned) + native X11 + SteamVR** — not the
+Godot 4.3 / driver-610 combination probed on 08-20. Launch:
+`godot --path xr-client --rendering-driver opengl3 --display-driver x11
+res://scenes/XRBoot.tscn` with `XR_BACKEND_WS` / `XR_NOSTR_SECRET`.
+
+### What rendered / worked in-headset
+- **Both eyes** — stereo submission via the Compatibility renderer. The RD/Vulkan
+  multiview **tonemapper is broken on SteamVR/Linux/NVIDIA**; Compat is the
+  workaround. **Glow OFF** (breaks Compat XR multiview submission). NVIDIA **580,
+  not 610** — 610 fails the GL multiview second eye.
+- **Dual-wand grab** — world-space raycast, literal ray/sphere pick
+  (`interaction.rs` `TARGET_RADIUS` 1.0→0.05, best-aligned). **Right wand
+  confirmed**; left wand WIP.
+- **Trackpad locomotion**; **world-anchored, grip-to-move HUD**.
+- **Graph** — top-5% cap (640 nodes), per-node hue fallback, **adaptive fit**
+  re-measured each frame; **client-side optimistic position hunting**
+  (`_node_targets` → eased `_node_positions`).
+- **Physics** — live and tunable via dev-auth `PUT /api/settings/physics`
+  (`Authorization: Bearer dev-session-token`).
+- **Edges** — backend `initialGraphLoad` node limit **200→3000** so edges reach
+  the client (**49→7558 edges**); backend switched to **Continuous settle** (was
+  a FastSettle latch that froze the graph post-convergence) and injects
+  **`PinNodePositions`** on grab so a dragged node perturbs neighbour springs.
+
+### Still pending (NOT closed)
+- **Canary fires NOT yet done** — `CANARY-VC-M1-HUD`, `CANARY-VC-M4-RAY`,
+  `CANARY-VC-COM18-INTERV` remain **armed, unfired**. On-device render ≠ canary
+  fire; the §6 tier promotions `standalone → integrated` are therefore **still
+  pending** and **not** taken in this record.
+- **Edge tracking** of moving endpoints — WIP.
+- **Adaptive-fit-on-grab** — unfinished.
+- **Left wand** grab — unconfirmed.
+- **Glow parity** with the desktop client — outstanding (glow off by constraint).
+
+Branch is WIP: debug prints retained, uncommitted-tree defects from §3 carried
+forward.

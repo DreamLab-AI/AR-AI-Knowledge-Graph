@@ -23,14 +23,38 @@ const RECONNECT_MAX_DELAY_SEC: float = 60.0
 # Quest render budgets. When the graph exceeds these, the most important
 # nodes (by server-computed centrality) and the heaviest edges (by weight)
 # are kept — same importance language as the desktop client.
-const NODE_INSTANCE_CAP: int = 4000
+const NODE_INSTANCE_CAP: int = 640
 const EDGE_INSTANCE_CAP: int = 3000
+
+# XR fit-to-view: the server streams graph coordinates spanning hundreds of
+# metres centred nowhere near the user. A flat client frames its camera to the
+# graph AABB; XR cannot move the user's physical floor, so instead we scale and
+# recentre the whole graph (GraphRoot) into a room-sized volume anchored in
+# front of the standing user. Recomputed while the layout is still settling,
+# then latched so it does not jitter once stable.
+const GRAPH_TARGET_SPAN: float = 2.4          # metres — longest AABB axis maps to this
+const GRAPH_ANCHOR := Vector3(0.0, 1.3, -1.6) # in front of XROrigin, ~chest height
+const GRAPH_REFIT_SETTLE_SEC: float = 6.0     # keep refitting for this long after first nodes
+
+# GraphRoot's fit-scale shrinks node/edge geometry along with positions, so a
+# raw 0.5 m node sphere becomes sub-pixel. Nodes and edges compensate by the
+# inverse of the fit scale to hold a fixed apparent world size. Mesh radii come
+# from GraphScene.tscn (SphereMesh r=0.5, CylinderMesh r=0.03).
+const NODE_MESH_RADIUS: float = 0.5
+const NODE_WORLD_RADIUS: float = 0.03         # ~3 cm node in the room
+const EDGE_MESH_RADIUS: float = 0.03
+const EDGE_WORLD_RADIUS: float = 0.0015       # ~1.5 mm edge tube
 
 # Grab hysteresis: engagement is decided Rust-side (XrInteraction
 # ACTIVATION_THRESHOLD = 0.7); release happens here when the trigger falls
 # below this lower bound, so a half-pulled trigger can't flicker drag
 # start/end at the boundary.
 const GRAB_RELEASE: float = 0.4
+
+# Controller locomotion: trackpad/stick slides the XR rig through the graph
+# volume in the head-facing horizontal plane.
+const LOCOMOTION_SPEED: float = 1.5   # metres/second at full deflection
+const LOCOMOTION_DEADZONE: float = 0.15
 
 # Backend endpoint resolution (env-overridable). The Rust hot-path crate owns the
 # wire; GDScript only supplies URLs/credentials and pumps the inbox each frame.
@@ -73,6 +97,9 @@ var _lod_recompute: bool = false
 
 var _avatars: Dictionary = {}
 var _node_positions: Dictionary = {}
+# Authoritative server positions treated as optimistic targets; the rendered
+# _node_positions hunt toward these each frame (see _hunt_positions).
+var _node_targets: Dictionary = {}
 # Server-computed visual identity (community colour / centrality size /
 # anomaly tint), keyed by node id. Populated from node_visuals_updated.
 var _node_colors: Dictionary = {}
@@ -105,12 +132,18 @@ var _observe_http: HTTPRequest = null
 # Server-authoritative drag state.
 var _grabbed_id: int = -1
 var _grab_controller: XRController3D = null
+var _grab_distance: float = 1.0
 var _last_targeted_id: int = -1
 
-@onready var nodes_multi: MultiMeshInstance3D = $NodesMulti
-@onready var edges_multi: MultiMeshInstance3D = $EdgesMulti
-@onready var avatar_spawner: Node3D = $AvatarSpawner
-@onready var agent_spawner: Node3D = $AgentSpawner
+# Movable world-anchored HUD state.
+var _hud_grab_controller: XRController3D = null
+var _hud_grab_offset: Transform3D = Transform3D.IDENTITY
+
+@onready var graph_root: Node3D = $GraphRoot
+@onready var nodes_multi: MultiMeshInstance3D = $GraphRoot/NodesMulti
+@onready var edges_multi: MultiMeshInstance3D = $GraphRoot/EdgesMulti
+@onready var avatar_spawner: Node3D = $GraphRoot/AvatarSpawner
+@onready var agent_spawner: Node3D = $GraphRoot/AgentSpawner
 @onready var left_controller: XRController3D = $XROrigin3D/LeftController
 @onready var right_controller: XRController3D = $XROrigin3D/RightController
 @onready var hud: Node3D = get_node_or_null("XROrigin3D/XRCamera3D/HUD")
@@ -122,6 +155,22 @@ signal connection_status_changed(connected: bool)
 
 
 func _ready() -> void:
+	# The flat fallback camera is only for non-XR (desktop diagnostic / no-HMD
+	# fallback). In an XR session the XRCamera3D must drive both eyes, so release
+	# the flat camera's `current` flag to avoid it stealing the viewport.
+	var flat_cam: Camera3D = get_node_or_null("FlatFallbackCamera")
+	if flat_cam != null:
+		# XR session drives both eyes via XRCamera3D — the flat camera must NOT be
+		# current or it steals the viewport and the HMD layer goes empty (SteamVR
+		# falls back to its home environment). Only make it current for a non-XR
+		# desktop/diagnostic run.
+		flat_cam.current = not get_viewport().use_xr
+	# Detach the HUD from the camera so it stops following the gaze; re-anchor it
+	# in the play space as a world-fixed panel the user can grab and reposition
+	# with a wand (see _update_hud_grab). Deferred so we don't reparent while the
+	# XR node tree is still being built.
+	if hud != null:
+		_reparent_hud_to_world.call_deferred()
 	# gdext classes are #[class(no_init)] in Rust — construct via their static create() factory, not ClassDB.instantiate() (which cannot build a no_init class).
 	_binary_client = BinaryProtocolClient.create()
 	_presence_client = PresenceClientNode.create()
@@ -276,6 +325,10 @@ func _physics_process(delta: float) -> void:
 	if _presence_client != null and _presence_client.has_method("poll"):
 		_presence_client.poll()
 	_update_lod()
+	_update_locomotion(delta)
+	_update_hud_grab()
+	_hunt_positions()
+	_fit_graph_to_view(delta)
 	_update_multimesh()
 	_update_edge_multimesh()
 	_update_interaction()
@@ -283,6 +336,75 @@ func _physics_process(delta: float) -> void:
 	_update_selection(delta)
 	_update_voice_listener()
 	_tick_reconnect(delta)
+
+
+# Trackpad/stick locomotion: slide the XR rig through the graph. Either wand's
+# primary axis drives movement in the camera's horizontal facing plane (push
+# up = move the way you look, sideways = strafe). Vertical fly is on the same
+# stick's push when the trigger is not held, kept simple and comfortable.
+func _update_locomotion(delta: float) -> void:
+	var origin: XROrigin3D = get_node_or_null("XROrigin3D")
+	var camera: XRCamera3D = _find_xr_camera()
+	if origin == null or camera == null:
+		return
+	var move := Vector2.ZERO
+	for controller: XRController3D in [left_controller, right_controller]:
+		if controller == null or not controller.get_is_active():
+			continue
+		var v: Vector2 = controller.get_vector2("primary")
+		if v.length() > move.length():
+			move = v
+	if move.length() < LOCOMOTION_DEADZONE:
+		return
+	var fwd: Vector3 = -camera.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var right: Vector3 = camera.global_transform.basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var step: Vector3 = (fwd * move.y + right * move.x) * LOCOMOTION_SPEED * delta
+	origin.global_position += step
+
+
+# Move the HUD out of the camera (gaze-locked) and anchor it in the play space
+# as a world-fixed, wand-movable panel.
+func _reparent_hud_to_world() -> void:
+	if hud == null:
+		return
+	var origin: XROrigin3D = get_node_or_null("XROrigin3D")
+	if origin == null:
+		return
+	var old_parent: Node = hud.get_parent()
+	if old_parent != null and old_parent != origin:
+		old_parent.remove_child(hud)
+		origin.add_child(hud)
+	# Comfortable default: down and to the left, angled toward the user.
+	hud.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(25.0)), Vector3(-0.6, 1.0, -0.9))
+	hud.visible = true
+
+
+# Grab the HUD with a wand: hold the grip button while the wand is near the panel
+# to pick it up; it then rides the controller until grip releases.
+func _update_hud_grab() -> void:
+	if hud == null:
+		return
+	if _hud_grab_controller != null:
+		var grip_now: float = _hud_grab_controller.get_float("grip")
+		if grip_now < 0.5:
+			_hud_grab_controller = null
+		else:
+			hud.global_transform = _hud_grab_controller.global_transform * _hud_grab_offset
+		return
+	for controller: XRController3D in [left_controller, right_controller]:
+		if controller == null or not controller.get_is_active():
+			continue
+		if controller.get_float("grip") < 0.7:
+			continue
+		if controller.global_position.distance_to(hud.global_position) < 0.4:
+			_hud_grab_controller = controller
+			_hud_grab_offset = controller.global_transform.affine_inverse() * hud.global_transform
+			_pulse(controller, 0.4, 0.05)
+			break
 
 
 func _update_lod() -> void:
@@ -307,6 +429,66 @@ func _update_lod() -> void:
 			av.set_lod_level(level)
 
 
+var _graph_scale: float = 1.0
+var _fit_frame: int = 0
+var _fit_target_scale: float = 0.0
+var _fit_target_centre: Vector3 = Vector3.ZERO
+# Frames between AABB recomputes (a full pass over _node_positions is O(N)).
+const FIT_RECOMPUTE_FRAMES: int = 15
+# Per-frame easing toward the fit target — small enough that a moving/re-settling
+# graph rescales smoothly rather than snapping.
+const FIT_EASE: float = 0.06
+
+
+# Scale + recentre GraphRoot so the streamed node cloud always fills a room-sized
+# volume in front of the user. Adaptive (not latched): the AABB is re-measured
+# periodically and the transform eased toward the new target, so the graph stays
+# room-sized as the force layout spreads, re-settles, or reheats after a physics
+# change. Node/edge geometry compensates for `_graph_scale` so it never shrinks
+# to specks.
+func _fit_graph_to_view(_delta: float) -> void:
+	if graph_root == null or _node_positions.is_empty():
+		return
+	_fit_frame += 1
+	if _fit_frame % FIT_RECOMPUTE_FRAMES == 0 or _fit_target_scale == 0.0:
+		var mn := Vector3(INF, INF, INF)
+		var mx := Vector3(-INF, -INF, -INF)
+		for pos: Vector3 in _node_positions.values():
+			mn = mn.min(pos)
+			mx = mx.max(pos)
+		var span: Vector3 = mx - mn
+		var longest: float = maxf(span.x, maxf(span.y, span.z))
+		if longest >= 0.001:
+			_fit_target_scale = GRAPH_TARGET_SPAN / longest
+			_fit_target_centre = (mn + mx) * 0.5
+	if _fit_target_scale <= 0.0:
+		return
+	# Ease current scale/centre toward the target, then rebuild the transform:
+	# world = anchor + scale * (server_pos - centre) → graph centre sits at anchor.
+	var ease: float = FIT_EASE if _graph_scale > 0.0 else 1.0
+	_graph_scale = lerpf(_graph_scale, _fit_target_scale, ease)
+	graph_root.transform = Transform3D(
+		Basis.IDENTITY.scaled(Vector3(_graph_scale, _graph_scale, _graph_scale)),
+		GRAPH_ANCHOR - _fit_target_centre * _graph_scale
+	)
+
+
+# Client-side optimistic position hunting: the server streams authoritative
+# positions as targets; each frame the rendered position eases toward its target
+# so motion stays smooth between (and independent of) update ticks — the same
+# pattern the desktop client uses. The grabbed node is exempt (it tracks the
+# hand locally and the server echoes it back).
+const POSITION_HUNT_EASE: float = 0.06
+
+
+func _hunt_positions() -> void:
+	for node_id: int in _node_targets:
+		if node_id == _grabbed_id:
+			continue
+		var cur: Vector3 = _node_positions.get(node_id, _node_targets[node_id])
+		_node_positions[node_id] = cur.lerp(_node_targets[node_id], POSITION_HUNT_EASE)
+
+
 func _update_multimesh() -> void:
 	if nodes_multi == null or nodes_multi.multimesh == null:
 		return
@@ -329,13 +511,17 @@ func _update_multimesh() -> void:
 
 	var count: int = ids.size()
 	if mm.instance_count != count:
+		print("GraphScene DEBUG: multimesh instance_count %d -> %d" % [mm.instance_count, count])
 		mm.instance_count = count
 	_render_ids.resize(count)
 	_render_positions.resize(count)
 	for i: int in range(count):
 		var node_id: int = ids[i]
 		var pos: Vector3 = _node_positions[node_id]
-		var size: float = _node_sizes.get(node_id, 1.0)
+		# Compensate the GraphRoot fit-scale so the node holds ~NODE_WORLD_RADIUS
+		# in the room; _node_sizes (centrality, ~0.5–2.0) still modulates it.
+		var comp: float = NODE_WORLD_RADIUS / (NODE_MESH_RADIUS * _graph_scale)
+		var size: float = _node_sizes.get(node_id, 1.0) * comp
 		var xf := Transform3D(Basis.IDENTITY.scaled(Vector3(size, size, size)), pos)
 		mm.set_instance_transform(i, xf)
 		mm.set_instance_color(i, _node_colors.get(node_id, Color(0.55, 0.65, 0.85)))
@@ -351,10 +537,17 @@ func _update_edge_multimesh() -> void:
 	var written: int = 0
 	if mm.instance_count != pair_count:
 		mm.instance_count = pair_count
+	# Only draw an edge when BOTH endpoints are actually rendered (in the top-N
+	# displayed subset). Testing _node_positions instead would draw edges to the
+	# ~12k streamed-but-unrendered nodes, producing long streaks to invisible
+	# endpoints.
+	var shown := {}
+	for rid: int in _render_ids:
+		shown[rid] = true
 	for i: int in range(pair_count):
 		var src: int = _edge_pairs[i * 2]
 		var tgt: int = _edge_pairs[i * 2 + 1]
-		if not (_node_positions.has(src) and _node_positions.has(tgt)):
+		if not (shown.has(src) and shown.has(tgt)):
 			continue
 		var a: Vector3 = _node_positions[src]
 		var b: Vector3 = _node_positions[tgt]
@@ -362,9 +555,22 @@ func _update_edge_multimesh() -> void:
 		var length: float = d.length()
 		if length < 0.001:
 			continue
-		# Unit cylinder is Y-aligned: rotate Y onto the edge direction and
-		# stretch to the span, positioned at the midpoint.
-		var basis := Basis(Quaternion(Vector3.UP, d / length)).scaled(Vector3(1.0, length, 1.0))
+		# Unit cylinder is Y-aligned: rotate Y onto the edge direction and stretch
+		# to the span, positioned at the midpoint. Build the rotation robustly —
+		# Quaternion(UP, dir) is degenerate when dir is (anti)parallel to UP, which
+		# for a Y-tall/thin layout is most edges, producing wrong/vertical tubes.
+		var dir: Vector3 = d / length
+		var q: Quaternion
+		var dp: float = Vector3.UP.dot(dir)
+		if dp > 0.9999:
+			q = Quaternion.IDENTITY
+		elif dp < -0.9999:
+			q = Quaternion(Vector3.RIGHT, PI)  # flip Y→-Y about X
+		else:
+			var axis: Vector3 = Vector3.UP.cross(dir).normalized()
+			q = Quaternion(axis, acos(clampf(dp, -1.0, 1.0)))
+		var er: float = EDGE_WORLD_RADIUS / (EDGE_MESH_RADIUS * _graph_scale)
+		var basis := Basis(q).scaled(Vector3(er, length, er))
 		mm.set_instance_transform(written, Transform3D(basis, a + d * 0.5))
 		written += 1
 	# Park any unfilled instances (endpoints not yet streamed) at zero scale.
@@ -377,6 +583,7 @@ func _update_edge_multimesh() -> void:
 # candidate arrays are only consulted while a trigger is live or a grab is
 # in flight.
 func _update_interaction() -> void:
+	_ensure_controller_rays()
 	if _interaction == null or _binary_client == null:
 		return
 
@@ -390,10 +597,17 @@ func _update_interaction() -> void:
 			_grabbed_id = -1
 			_grab_controller = null
 		else:
-			var hand_pos: Vector3 = _grab_controller.global_position - _grab_controller.global_transform.basis.z * 0.6
-			_node_positions[_grabbed_id] = hand_pos  # optimistic local echo
+			# Keep the node at the distance it was grabbed at (ride the ray), rather
+			# than snapping it to a fixed point in front of the wand. World→server
+			# because the server and _node_positions work in GraphRoot-local space.
+			var ray_origin: Vector3 = _grab_controller.global_position
+			var ray_dir: Vector3 = -_grab_controller.global_transform.basis.z
+			var hand_world: Vector3 = ray_origin + ray_dir * _grab_distance
+			var hand_server: Vector3 = graph_root.global_transform.affine_inverse() * hand_world
+			_node_positions[_grabbed_id] = hand_server  # optimistic local echo
+			_node_targets[_grabbed_id] = hand_server
 			if _binary_client.has_method("send_drag_update"):
-				_binary_client.send_drag_update(_grabbed_id, hand_pos)
+				_binary_client.send_drag_update(_grabbed_id, hand_server)
 		return
 
 	for controller: XRController3D in [left_controller, right_controller]:
@@ -403,12 +617,20 @@ func _update_interaction() -> void:
 		if pinch < 0.05:
 			continue
 		_grab_controller = controller
+		# Node render positions are in GraphRoot's scaled space; transform to world
+		# so the world-space wand ray and the interaction's metre-space thresholds
+		# actually intersect the nodes.
+		var gxf: Transform3D = graph_root.global_transform
+		var world_positions := PackedVector3Array()
+		world_positions.resize(_render_positions.size())
+		for i: int in range(_render_positions.size()):
+			world_positions[i] = gxf * _render_positions[i]
 		_interaction.evaluate_ray(
 			controller.global_position,
 			-controller.global_transform.basis.z,
 			pinch,
 			_render_ids,
-			_render_positions
+			world_positions
 		)
 		break
 
@@ -417,6 +639,45 @@ func _controller_trigger(controller: XRController3D) -> float:
 	if controller == null or not controller.get_is_active():
 		return 0.0
 	return controller.get_float("trigger")
+
+
+# Desktop-parity laser pointers. A thin emissive beam is parented to each wand,
+# extending down the aim pose's -Z (the same ray fed to the Rust interaction
+# policy). Created once, then shown only while the controller is tracking and
+# tinted green as the trigger engages so the user sees the selection ray.
+const RAY_LENGTH: float = 5.0
+const RAY_IDLE_COLOR := Color(0.35, 0.7, 1.0)   # cyan when tracking, idle
+const RAY_ACTIVE_COLOR := Color(0.3, 1.0, 0.4)  # green as the trigger pulls
+
+
+func _ensure_controller_rays() -> void:
+	for controller: XRController3D in [left_controller, right_controller]:
+		if controller == null:
+			continue
+		var ray: MeshInstance3D = controller.get_node_or_null("AimRay") as MeshInstance3D
+		if ray == null:
+			var mesh := BoxMesh.new()
+			# Thin beam down -Z; the box is centred so offset it forward by half.
+			mesh.size = Vector3(0.006, 0.006, RAY_LENGTH)
+			var mat := StandardMaterial3D.new()
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.emission_enabled = true
+			mat.emission = RAY_IDLE_COLOR
+			mat.albedo_color = RAY_IDLE_COLOR
+			ray = MeshInstance3D.new()
+			ray.name = "AimRay"
+			ray.mesh = mesh
+			ray.material_override = mat
+			ray.position = Vector3(0.0, 0.0, -RAY_LENGTH * 0.5)
+			controller.add_child(ray)
+		var active: bool = controller.get_is_active()
+		ray.visible = active
+		if active:
+			var cur_mat := ray.material_override as StandardMaterial3D
+			if cur_mat != null:
+				var col: Color = RAY_ACTIVE_COLOR if _controller_trigger(controller) > 0.05 else RAY_IDLE_COLOR
+				cur_mat.emission = col
+				cur_mat.albedo_color = col
 
 
 func _pulse(controller: XRController3D, amplitude: float, duration_sec: float) -> void:
@@ -727,25 +988,40 @@ func _on_connection_changed(connected: bool) -> void:
 		_schedule_reconnect()
 
 
+var _dbg_pos_frames: int = 0
+
+
 func _on_position_updated(node_id: int, position: Vector3, _velocity: Vector3) -> void:
 	# Server is authoritative — but never fight the local hand while dragging.
+	_dbg_pos_frames += 1
+	if _dbg_pos_frames == 1 or _dbg_pos_frames % 5000 == 0:
+		print("GraphScene DEBUG: position update #%d node=%d pos=%s" % [_dbg_pos_frames, node_id, position])
 	if node_id == _grabbed_id:
 		return
-	_node_positions[node_id] = position
+	# Store as an optimistic target; the render position hunts toward it each
+	# frame (_hunt_positions). Seed the render position on first appearance so a
+	# new node doesn't ease in from the origin.
+	if not _node_positions.has(node_id):
+		_node_positions[node_id] = position
+	_node_targets[node_id] = position
 
 
 func _on_node_visuals_updated(node_id: int, community_id: int, centrality: float, anomaly: float) -> void:
-	_node_colors[node_id] = _community_color(community_id, anomaly)
+	_node_colors[node_id] = _community_color(community_id, anomaly, node_id)
 	_node_sizes[node_id] = clampf(0.5 + centrality * 1.5, 0.5, 2.0)
 	_node_centrality[node_id] = centrality
 
 
 # Deterministic community palette: golden-ratio hue walk gives well-separated
 # colours for any community count (same approach as the desktop renderer).
-# Anomalous nodes blend toward warning red.
-func _community_color(community_id: int, anomaly: float) -> Color:
-	var hue: float = fmod(float(community_id) * 0.61803398875, 1.0)
-	var base: Color = Color.from_hsv(hue, 0.65, 0.9)
+# When the server has not computed communities (all community_id == 0, which
+# collapses every node to hue 0 / red), fall back to a per-node golden-ratio hue
+# so the graph still reads as varied rather than a uniform mass. Anomalous nodes
+# blend toward warning red regardless.
+func _community_color(community_id: int, anomaly: float, node_id: int = 0) -> Color:
+	var key: int = community_id if community_id != 0 else node_id
+	var hue: float = fmod(float(key) * 0.61803398875, 1.0)
+	var base: Color = Color.from_hsv(hue, 0.6, 0.95)
 	if anomaly > 0.5:
 		return base.lerp(Color(1.0, 0.15, 0.1), clampf((anomaly - 0.5) * 2.0, 0.0, 0.85))
 	return base
@@ -755,6 +1031,7 @@ func _on_topology_updated(_edge_count: int) -> void:
 	var pairs: PackedInt32Array = _binary_client.get_edges()
 	var weights: PackedFloat32Array = _binary_client.get_edge_weights()
 	var total: int = weights.size()
+	print("GraphScene DEBUG: topology arrived edges=%d positions_known=%d" % [total, _node_positions.size()])
 	if total <= EDGE_INSTANCE_CAP:
 		_edge_pairs = pairs
 		return
@@ -833,6 +1110,7 @@ func _on_voice_activity(avatar_id: String, active: bool) -> void:
 func _on_node_targeted(node_id: int, _distance: float) -> void:
 	emit_signal("node_targeted_in_scene", node_id)
 	if node_id != _last_targeted_id:
+		print("GraphScene DEBUG: node_targeted id=%d dist=%.2f" % [node_id, _distance])
 		_last_targeted_id = node_id
 		_pulse(_grab_controller, 0.15, 0.02)
 
@@ -841,6 +1119,11 @@ func _on_node_grabbed(node_id: int, _position: Vector3) -> void:
 	if _grabbed_id == node_id:
 		return
 	_grabbed_id = node_id
+	print("GraphScene DEBUG: node_grabbed id=%d" % node_id)
+	# Remember how far along the ray the node was so the drag preserves depth.
+	if _grab_controller != null:
+		var node_world: Vector3 = graph_root.global_transform * _node_positions.get(node_id, Vector3.ZERO)
+		_grab_distance = clampf(_grab_controller.global_position.distance_to(node_world), 0.2, 6.0)
 	var pos: Vector3 = _node_positions.get(node_id, Vector3.ZERO)
 	if _binary_client != null and _binary_client.has_method("send_drag_start"):
 		_binary_client.send_drag_start(node_id, pos)

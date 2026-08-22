@@ -113,6 +113,21 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedFrame, WireError> {
         });
     }
 
+    // The outer check (line 93) guards the *whole message* minimum, but a frame
+    // can declare a `frame_len` too small to hold the fixed prefix while still
+    // satisfying `bytes.len() >= 3 + frame_len`. Without this guard a hostile
+    // peer sending `frame_len = 0` makes `body` empty and the fixed-offset
+    // slices below panic (copy_from_slice out-of-range), aborting the room
+    // actor — a remote DoS. Reject any body that cannot hold room_hash + the
+    // id-length byte + timestamp + transform mask. (Close-out adversarial
+    // finding: wire-decode panic on truncated-but-consistent frame.)
+    if frame_len < ROOM_HASH_BYTES + AVATAR_ID_LEN_BYTES + TIMESTAMP_BYTES + TRANSFORM_MASK_BYTES {
+        return Err(WireError::TooShort {
+            need: ROOM_HASH_BYTES + AVATAR_ID_LEN_BYTES + TIMESTAMP_BYTES + TRANSFORM_MASK_BYTES,
+            got: frame_len,
+        });
+    }
+
     let body = &bytes[3..3 + frame_len];
     let mut cursor = 0usize;
 
@@ -275,6 +290,18 @@ mod tests {
         .to_vec();
         bytes[0] = 0x42;
         assert!(matches!(decode(&bytes), Err(WireError::BadOpcode { .. })));
+    }
+
+    #[test]
+    fn rejects_truncated_frame_len_without_panic() {
+        // A structurally-valid-length message (>= 29 bytes) that declares a
+        // frame_len too small to hold the fixed prefix must be rejected, not
+        // panic. Regression for the wire-decode DoS: 29 zero bytes with opcode
+        // 0x43 and frame_len = 0 previously panicked at copy_from_slice.
+        let mut bytes = vec![0u8; 29];
+        bytes[0] = OPCODE_AVATAR_POSE;
+        // bytes[1..3] = 0 → frame_len = 0
+        assert!(matches!(decode(&bytes), Err(WireError::TooShort { .. })));
     }
 
     proptest! {

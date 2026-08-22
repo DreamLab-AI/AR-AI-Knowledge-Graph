@@ -30,6 +30,32 @@ the transport and authentication completion is recorded in
 > the APK; non-XR users continue to use the desktop React Three Fiber graph view
 > ([client-architecture.md](client-architecture.md)), which is unchanged.
 
+> **Reality check — first in-headset render was desktop PCVR, not Quest (2026-08-22, [ADR-136](../adr/ADR-136-desktop-openxr-vive-validation-target.md), branch `xr-vive-runtime`).**
+> This document is written Quest-first because the **Quest 3 APK is the sole *ship*
+> target** — but the **first working headset render happened on a physical HTC VIVE
+> Pro over desktop OpenXR**, and the Quest APK cross-build is still frozen/unbuilt.
+> Corrections to the renderer/runtime detail below, for the desktop VIVE path:
+> - **Engine + renderer:** **Godot 4.6.1** (not 4.3) running the **Compatibility
+>   (OpenGL) renderer**, not Forward+/Forward Mobile. The **RD/Vulkan multiview
+>   tonemapper is broken on this stack** (NVIDIA 580 + native X11 + SteamVR), so
+>   glow/bloom is **off** and Compatibility is mandatory. §8's "mobile renderer"
+>   and §3's scene table describe the Quest APK; on desktop VIVE the renderer is
+>   Compatibility.
+> - **Runtime:** **SteamVR** desktop OpenXR on HP-Desktop, lighthouse-tracked —
+>   not the Meta runtime and not the Monado sidecar. `Tier3Tethered`.
+> - **Interaction:** dual VIVE wands (right confirmed) via an
+>   `htc/vive_controller`-bound action map (`pose="aim"`); grab is a literal
+>   world-space ray/sphere intersection that keeps grab distance along the ray;
+>   trackpad locomotion; world-anchored movable (wand-grabbable) HUD. Left wand +
+>   edge-tracking + adaptive-fit-on-grab are WIP.
+> - **Client render model:** adaptive room-fit (re-measured each frame) + client-side
+>   optimistic position hunting — the desktop "**GPU settles fast, clients hunt at
+>   their own speed**" model. Backend defaults to **Continuous settle** (was a
+>   FastSettle latch that froze the graph); `PinNodePositions` GPU-injects a grabbed
+>   node so it perturbs neighbours' springs; `initialGraphLoad` node limit raised
+>   200→3000 so edges reach the client (top-640 node display). The presence/voice
+>   and server-authoritative-drag sections below are unchanged by this bring-up.
+
 ---
 
 ## 1. Why a native APK

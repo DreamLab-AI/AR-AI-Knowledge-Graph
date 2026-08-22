@@ -49,11 +49,12 @@ pub enum SettleMode {
 
 impl Default for SettleMode {
     fn default() -> Self {
-        SettleMode::FastSettle {
-            damping_override: 0.85,
-            max_settle_iterations: 10000,
-            energy_threshold: 1.0,
-        }
+        // Continuous is the default so the GPU physics loop keeps stepping and
+        // broadcasting indefinitely (required for the live XR client: the headset
+        // must keep animating and stay grab-responsive). FastSettle's bounded burst
+        // latched the loop off on convergence, freezing the graph. FastSettle remains
+        // available as an explicit runtime mode for one-shot layout passes.
+        SettleMode::Continuous
     }
 }
 
@@ -452,15 +453,9 @@ mod tests {
 
     #[test]
     fn test_settle_mode_default() {
-        match SettleMode::default() {
-            SettleMode::FastSettle {
-                max_settle_iterations,
-                ..
-            } => {
-                assert_eq!(max_settle_iterations, 10000);
-            }
-            _ => panic!("expected FastSettle"),
-        }
+        // Default is Continuous so the physics loop never latches off on
+        // convergence — the live XR client needs perpetual stepping + broadcast.
+        assert_eq!(SettleMode::default(), SettleMode::Continuous);
     }
 
     #[test]

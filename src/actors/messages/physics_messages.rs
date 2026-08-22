@@ -606,6 +606,27 @@ pub struct SetPhysicsSettled {
     pub settled: bool,
 }
 
+/// Pin/unpin nodes directly on the GPU compute buffer so a client-dragged node's
+/// position enters the force computation and neighbours spring around it.
+///
+/// Sent by the socket drag handlers to `ForceComputeActor`. Pinned nodes have
+/// their GPU position rewritten to the client-supplied location every step (and
+/// are held there rather than integrated), so the spring/repulsion kernel sees
+/// the moved node and relaxes its neighbours around it. Unpinning releases the
+/// node back to normal integration.
+#[derive(Message, Debug, Clone)]
+#[rtype(result = "()")]
+pub struct PinNodePositions {
+    /// `(node_id, [x, y, z])` positions to pin or update.
+    pub pins: Vec<(u32, [f32; 3])>,
+    /// `node_id`s to release from pinning.
+    pub unpin: Vec<u32>,
+    /// When true, inject a mild global velocity perturbation (reheat) so a
+    /// settled graph has energy to visibly react to the grab. Set on drag-start
+    /// only, not on every per-frame update.
+    pub reheat: bool,
+}
+
 /// Axis-aligned bounding box.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BoundingBox {

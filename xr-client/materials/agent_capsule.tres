@@ -1,12 +1,10 @@
 [gd_resource type="StandardMaterial3D" format=3 uid="uid://b3xrmatcap01"]
 
 [resource]
-albedo_color = Color(1, 0.5, 0.7, 1)
+vertex_color_use_as_albedo = true
+albedo_color = Color(1, 0.75, 0.85, 1)
 metallic = 0.3
 roughness = 0.35
 emission_enabled = true
-emission = Color(1, 0.4, 0.7, 1)
-emission_energy_multiplier = 0.3
-clearcoat_enabled = true
-clearcoat = 0.5
-clearcoat_roughness = 0.2
+emission = Color(0.9, 0.35, 0.6, 1)
+emission_energy_multiplier = 0.5
