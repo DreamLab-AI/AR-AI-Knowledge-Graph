@@ -328,7 +328,7 @@ impl SocketFlowServer {
 
                     // DEFAULT INITIAL LOAD SIZE - fresh clients receive sparse, metadata-rich dataset
                     // Client can request more nodes later using filter settings
-                    const DEFAULT_INITIAL_NODE_LIMIT: usize = 200;
+                    const DEFAULT_INITIAL_NODE_LIMIT: usize = 3000;
 
                     // Send new InitialGraphLoad message with LIMITED node set for fast initial render
                     if !graph_data.nodes.is_empty() || !graph_data.edges.is_empty() {
@@ -588,14 +588,25 @@ impl Actor for SocketFlowServer {
         if !self.dragged_nodes.is_empty() {
             let node_ids: Vec<u32> = self.dragged_nodes.drain().collect();
             let graph_addr = self.app_state.graph_service_addr.clone();
+            let app_state = self.app_state.clone();
             let count = node_ids.len();
             actix::spawn(async move {
-                use crate::actors::messages::{NodeInteractionMessage, NodeInteractionType};
+                use crate::actors::messages::{
+                    NodeInteractionMessage, NodeInteractionType, PinNodePositions,
+                };
                 for node_id in &node_ids {
                     graph_addr.do_send(NodeInteractionMessage {
                         node_id: *node_id,
                         interaction_type: NodeInteractionType::Released,
                         position: None,
+                    });
+                }
+                // Release the GPU pins so orphaned nodes resume normal integration.
+                if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+                    gpu_addr.do_send(PinNodePositions {
+                        pins: Vec::new(),
+                        unpin: node_ids.clone(),
+                        reheat: false,
                     });
                 }
                 debug!("[Drag] Cleaned up {} orphaned drags on disconnect", count);

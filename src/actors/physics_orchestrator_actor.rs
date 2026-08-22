@@ -1322,6 +1322,22 @@ impl Handler<NodeInteractionMessage> for PhysicsOrchestratorActor {
                 self.resume_physics(ctx);
             }
 
+            // Grab re-energize: clear the FastSettle latch and settlement telemetry
+            // and re-kick the pipeline UNCONDITIONALLY, so a grab wakes the sim even
+            // when it stopped via FastSettle convergence (fast_settle_complete=true)
+            // rather than an equilibrium pause — resume_physics alone no-ops in that
+            // state because it is guarded on is_physics_paused. schedule_next_pipeline_step
+            // is idempotent (guarded by pipeline_step_pending), so this is safe when the
+            // loop is already running.
+            self.fast_settle_complete = false;
+            self.fast_settle_iteration_count = 0;
+            if let Some(ref gpu_addr) = self.gpu_compute_addr {
+                gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: false });
+            }
+            if self.simulation_running.load(Ordering::SeqCst) {
+                self.schedule_next_pipeline_step(ctx, Duration::ZERO);
+            }
+
             self.force_resume_timer = Some(Instant::now());
         }
 
@@ -1883,39 +1899,45 @@ impl Handler<crate::actors::messages::PhysicsStepCompleted> for PhysicsOrchestra
             let exhausted = self.fast_settle_iteration_count >= max_settle_iterations;
 
             if converged {
-                self.fast_settle_complete = true;
+                // XR ambient-motion contract: do NOT freeze on convergence. A frozen
+                // GPU loop stops BOTH stepping and broadcasting, so the headset shows a
+                // dead graph and a grab cannot perturb a live simulation. Instead
+                // transition to Continuous mode (exactly as the iteration-cap branch
+                // below does): restore the original damping, drop to the steady 16ms
+                // cadence, and keep simulating and broadcasting. The FA2 layout floors
+                // at a small non-zero residual energy, giving gentle, physically-truthful
+                // ambient motion that keeps the headset alive and grab-responsive.
                 self.settle_rest_run = 0;
-                self.simulation_params.is_physics_paused = true;
+                self.simulation_params.settle_mode = SettleMode::Continuous;
+                self.pipeline_target_interval = Duration::from_millis(16);
 
                 if let Some(original_damping) = self.pre_settle_damping.take() {
                     self.simulation_params.damping = original_damping;
                     self.target_params.damping = original_damping;
+                    if let Some(ref gpu_addr) = self.gpu_compute_addr {
+                        gpu_addr.do_send(UpdateSimulationParams {
+                            params: self.simulation_params.clone(),
+                        });
+                    }
                 }
 
                 info!(
                     "PhysicsOrchestratorActor: FastSettle converged after {} iterations \
-                     (energy plateau: per_node_energy={:.6} held within {:.1}% for {} frames, summed_energy={:.6}, n={})",
+                     (energy plateau: per_node_energy={:.6} held within {:.1}% for {} frames, summed_energy={:.6}, n={}); \
+                     transitioning to Continuous mode @ 16ms cadence (ambient motion kept live for XR)",
                     self.fast_settle_iteration_count, per_node_energy,
                     Self::SETTLE_REL_IMPROVE * 100.0, Self::SETTLE_REST_FRAMES,
                     energy, self.last_node_count
                 );
 
-                // Pure snapshot broadcast: clients get final converged positions
-                // without running another integration step.
+                // One authoritative snapshot so late-joining clients get the tidy
+                // converged layout immediately; the loop then keeps ticking at 16ms.
                 if let Some(ref gpu_addr) = self.gpu_compute_addr {
                     use crate::actors::gpu::force_compute_actor::ForceFullBroadcast;
-                    info!("PhysicsOrchestratorActor: Sending ForceFullBroadcast after settle convergence (pure snapshot)");
                     gpu_addr.do_send(ForceFullBroadcast);
-                    // Latch settlement telemetry: the loop is about to stop
-                    // ticking, so the honest "at rest" signal must come from
-                    // here — otherwise the snapshot freezes at this mid-decay KE
-                    // with isSettled=false forever.
-                    gpu_addr.do_send(crate::actors::messages::SetPhysicsSettled { settled: true });
                 }
 
-                self.broadcast_physics_paused();
-                // Do NOT schedule another step — settling is complete.
-                return;
+                // Fall through to schedule the next step at the Continuous cadence.
             } else if exhausted && energy_valid {
                 // Cap reached without convergence — KE is still above threshold but the
                 // burst phase is over. Instead of pausing (which strands the user with

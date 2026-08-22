@@ -1,0 +1,59 @@
+[gd_scene load_steps=8 format=3 uid="uid://b3xrminscene01"]
+
+[ext_resource type="Script" path="res://scripts/xr_min.gd" id="1_min"]
+
+[sub_resource type="Environment" id="Env_min"]
+background_mode = 1
+background_color = Color(0.05, 0.06, 0.1, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.6, 0.65, 0.75, 1)
+ambient_light_energy = 0.8
+tonemap_mode = 0
+
+[sub_resource type="BoxMesh" id="Box_x"]
+size = Vector3(0.6, 0.04, 0.04)
+
+[sub_resource type="StandardMaterial3D" id="Mat_x"]
+albedo_color = Color(1, 0.2, 0.2, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_y"]
+albedo_color = Color(0.2, 1, 0.2, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_z"]
+albedo_color = Color(0.3, 0.4, 1, 1)
+
+[sub_resource type="BoxMesh" id="Box_unit"]
+size = Vector3(0.15, 0.15, 0.15)
+
+[node name="XRMin" type="Node3D"]
+script = ExtResource("1_min")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_min")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 3, 0)
+
+[node name="XROrigin3D" type="XROrigin3D" parent="."]
+
+[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
+
+[node name="AxisX" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 1.4, -1.5)
+mesh = SubResource("Box_x")
+material_override = SubResource("Mat_x")
+
+[node name="AxisY" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, -1, 0, 1, 0, 0, 0, 0, 1, 0, 1.7, -1.5)
+mesh = SubResource("Box_x")
+material_override = SubResource("Mat_y")
+
+[node name="AxisZ" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0, 1.4, -1.2)
+mesh = SubResource("Box_x")
+material_override = SubResource("Mat_z")
+
+[node name="Origin" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.4, -1.5)
+mesh = SubResource("Box_unit")
+material_override = SubResource("Mat_z")

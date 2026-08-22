@@ -258,6 +258,12 @@ pub struct ForceComputeActor {
     /// Maps GPU buffer index → actual graph node ID (populated during graph upload)
     gpu_index_to_node_id: Vec<u32>,
 
+    /// Client-dragged nodes pinned to a fixed position (node_id → world position).
+    /// Each step, pinned nodes are rewritten to these positions on the GPU buffer
+    /// (and held there rather than integrated) so the force kernel relaxes their
+    /// neighbours around the dragged location. Populated by `PinNodePositions`.
+    pinned_nodes: std::collections::HashMap<u32, Vec3>,
+
     /// Per-node graph population classification for dual-graph X-axis offset.
     /// Indexed by GPU buffer index. Populated during graph upload from node_type field.
     node_population: Vec<GraphPopulation>,
@@ -376,6 +382,7 @@ impl ForceComputeActor {
             node_id_buffer: Vec::with_capacity(10000),
             gpu_index_to_node_id: Vec::new(),
             node_population: Vec::new(),
+            pinned_nodes: std::collections::HashMap::new(),
             pending_graph_data: None,
             physics_orchestrator_addr: None,
             gpu_self_init_attempts: 0,
@@ -464,6 +471,57 @@ impl ForceComputeActor {
             is_settled,
             stable_frame_count,
             kinetic_energy: self.last_mean_kinetic_energy,
+        }
+    }
+
+    /// Apply client node pins for the current frame (grab→spring support).
+    ///
+    /// For every pinned node: overwrite its entry in `position_velocity_buffer`
+    /// with the client-supplied position (velocity zeroed) so the broadcast shows
+    /// it locked to the hand, then re-upload the full position buffer to the GPU so
+    /// the NEXT force step computes neighbour springs against the pinned location.
+    /// Non-pinned nodes are re-uploaded with the positions the GPU just integrated
+    /// (a no-op for them), so normal integration continues. Cheap host→device copy
+    /// (~3·N f32); only runs while at least one node is actively pinned.
+    fn apply_node_pins(&mut self) {
+        if self.pinned_nodes.is_empty() {
+            return;
+        }
+
+        let mut any = false;
+        for idx in 0..self.node_id_buffer.len() {
+            let id = self.node_id_buffer[idx];
+            if let Some(pos) = self.pinned_nodes.get(&id).copied() {
+                if idx < self.position_velocity_buffer.len() {
+                    self.position_velocity_buffer[idx] = (pos, Vec3::ZERO);
+                    any = true;
+                }
+            }
+        }
+
+        if !any {
+            return;
+        }
+
+        // Re-upload the (pin-corrected) positions so the force kernel sees the pin.
+        if let Some(shared_context) = &self.shared_context {
+            let n = self.position_velocity_buffer.len();
+            let mut xs = Vec::with_capacity(n);
+            let mut ys = Vec::with_capacity(n);
+            let mut zs = Vec::with_capacity(n);
+            for (p, _v) in &self.position_velocity_buffer {
+                xs.push(p.x);
+                ys.push(p.y);
+                zs.push(p.z);
+            }
+            let unified = match shared_context.unified_compute.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            let mut unified = unified;
+            if let Err(e) = unified.update_positions_only(&xs, &ys, &zs) {
+                warn!("ForceComputeActor: pin re-upload failed: {}", e);
+            }
         }
     }
 
@@ -1777,6 +1835,14 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                         actor.node_id_buffer.push(node_id);
                                     }
 
+                                // Grab→spring: hold any client-pinned (dragged) nodes at
+                                // their client position and push those positions back to the
+                                // GPU so the NEXT force step relaxes their neighbours around
+                                // the moved node. Runs before the display-only projection
+                                // (which is undone before the next step), so the re-uploaded
+                                // buffer carries true physics positions with the pin applied.
+                                actor.apply_node_pins();
+
                                 // Dual-graph facing-discs projection. Flatten BOTH
                                 // populations along Z into thin X-Y discs, then separate
                                 // them along the SAME Z axis (Knowledge at -sep, Ontology
@@ -2666,6 +2732,38 @@ impl Handler<UploadPositions> for ForceComputeActor {
             }
             result
         }))
+    }
+}
+
+/// Grab→spring: pin/unpin client-dragged nodes on the GPU compute buffer.
+///
+/// Pinned nodes are held at their client position every step (see
+/// `apply_node_pins`) so the force kernel relaxes their neighbours around the
+/// moved node. `reheat` injects a mild global velocity perturbation so a settled
+/// graph has energy to visibly react to the grab (set on drag-start only).
+impl Handler<PinNodePositions> for ForceComputeActor {
+    type Result = ();
+
+    fn handle(&mut self, msg: PinNodePositions, _ctx: &mut Self::Context) -> Self::Result {
+        for (id, p) in &msg.pins {
+            self.pinned_nodes
+                .insert(*id, Vec3::new(p[0], p[1], p[2]));
+        }
+        for id in &msg.unpin {
+            self.pinned_nodes.remove(id);
+        }
+        if msg.reheat {
+            // Mild reheat: enough to give neighbours energy to spring, gentle enough
+            // not to disturb the wider layout. Decays over ~230 steps (see step loop).
+            self.reheat_factor = self.reheat_factor.max(0.3);
+        }
+        debug!(
+            "ForceComputeActor: PinNodePositions — {} pinned total (this msg: +{} pins, -{} unpins, reheat={})",
+            self.pinned_nodes.len(),
+            msg.pins.len(),
+            msg.unpin.len(),
+            msg.reheat
+        );
     }
 }
 

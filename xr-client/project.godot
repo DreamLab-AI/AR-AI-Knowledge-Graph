@@ -45,22 +45,22 @@ common/max_physics_steps_per_frame=8
 
 [rendering]
 
-renderer/rendering_method="mobile"
+renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="mobile"
 textures/vram_compression/import_etc2_astc=true
-anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/msaa_3d=0
 viewport/hdr_2d=false
 
 [xr]
 
 openxr/enabled=true
-openxr/default_action_map="res://addons/godot_openxr_vendors/openxr_action_map.tres"
+openxr/default_action_map="res://openxr_action_map.tres"
 openxr/form_factor=0
 openxr/view_configuration=1
 openxr/reference_space=2
 openxr/environment_blend_mode=0
-openxr/foveation_level=2
-openxr/foveation_dynamic=true
+openxr/foveation_level=0
+openxr/foveation_dynamic=false
 openxr/submit_depth_buffer=true
 openxr/startup_alert=false
 shaders/use_xr_shaders=true

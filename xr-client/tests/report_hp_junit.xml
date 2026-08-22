@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="GutTests" failures="0" tests="3" >
+  <testsuite name="tests/unit/test_xr_config.gd" tests="3" failures="0" skipped="0" time="0.000214" >
+      <testcase name="test_boot_sets_use_xr_synchronously" assertions="3" status="pass" classname="tests/unit/test_xr_config.gd" time="0.000069" >
+      </testcase>
+      <testcase name="test_eye_gaze_is_probed_not_blindly_enabled_in_boot" assertions="2" status="pass" classname="tests/unit/test_xr_config.gd" time="0.000043" >
+      </testcase>
+      <testcase name="test_graph_scene_probes_eye_gaze_and_feeds_resolver" assertions="4" status="pass" classname="tests/unit/test_xr_config.gd" time="0.000102" >
+      </testcase>
+      </testsuite>
+  </testsuites>

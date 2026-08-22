@@ -83,6 +83,7 @@ pub use physics_messages::{
     PhysicsPauseMessage,
     // Sequential pipeline (Step 5)
     PhysicsStepCompleted,
+    PinNodePositions,
     PositionBroadcastAck,
     PositionSnapshot,
     RecalculateHierarchy,
