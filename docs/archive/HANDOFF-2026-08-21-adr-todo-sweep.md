@@ -1,5 +1,7 @@
 # Session Handoff — ADR/TODO Sweep + XR Close-Out Completion (2026-08-21)
 
+> **Historical session record (2026-08-21) — queue reconciled 2026-08-25; see ADR-LANDING-PLAN annotations**
+
 **Goal that was set:** deploy a ruflo-managed mesh of opus agents; find all unresolved
 ADRs and TODO items in VisionClaw (`.`) and `./agentbox`; complete all remaining tasks
 and integrations unless there is reason to ask questions.

@@ -1,6 +1,6 @@
 # ADR-135 — Adopt the Ontology Loom node + deferred distillation job pattern
 
-**Status:** Proposed (direct-to-target end state; Phase-1 workstreams WS-A/B/C/D/E/G/J, Phase-2 WS-F/H/I)
+**Status:** Accepted (direct-to-target end state; Phase-1 workstreams WS-A/B/C/D/E/G/J, Phase-2 WS-F/H/I) — see Outcome below
 **Date:** 2026-08-11
 **Decision-type:** Architecture (keystone — node boundary + corpus-lifecycle re-home)
 **Deciders:** Dr John O'Hare (operator)
@@ -24,6 +24,18 @@ precedent only, not the mechanism here*.
 > decisions on the provider door (WS-D), HP `jobd` (WS-E), and consumer MCP tools (WS-J) are
 > summarised in the Decision register (§4) and split into implementation ADRs as they land.
 > This ADR records the **architecture decision**; it does not re-derive the design brief.
+
+## Outcome (2026-08-14 — Qwen3.8 cutover)
+
+The Loom node went live behind the stable façade (`http://192.168.2.132:8084/v1`). The
+deployed model behind the façade cut over to **Qwen3.8-27B on 2026-08-14**, running as the
+`loom-model` container on :8085 (Muse/Gemma systemd units retired, GGUFs kept for rollback —
+see loom `docs/QWEN3.8-CONNECTION.md`). The façade contract held through the swap: consumers
+(email gateway, agents) hold `http://loom:8080`/`:8084` and saw zero change. Benchmark verdict
+from cutover: static scaffold is the win, prose adds ~nothing (dropped as a default), agentic
+tool-traversal quality is model-dependent. This outcome covers the node + façade + model-swap
+mechanics only — the keystone D2.3 corpus re-home and WS-C/D/E/J cross-repo machinery remain
+open (see ADR-LANDING-PLAN-2026-08-21.md §2(b)).
 
 ---
 

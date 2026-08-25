@@ -24,7 +24,7 @@ cd VisionClaw && cp .env.example .env
 | 3D graph frontend | <http://localhost:3001> | nginx |
 | REST API | <http://localhost:4000/api> | HTTP + WebSocket |
 | Solid pod | <http://localhost:8484> | per-user pod storage |
-| Legacy MCP (TCP) | `localhost:9500` | agent orchestration channel |
+| Legacy MCP (TCP) | `localhost:9500` | deprecated, default-off (`ENABLE_MCP_BRIDGE`); listener never built — see [ADR-059](adr/ADR-059-bidirectional-agent-channel-server.md) |
 
 The graph store is the embedded Oxigraph triple store backed by SQLite (ADR-11). Neo4j is fully removed ([ADR-132](adr/ADR-132-neo4j-removal-oxigraph-adoption.md)) and there is no separate database browser UI.
 

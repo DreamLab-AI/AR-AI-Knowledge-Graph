@@ -1,5 +1,7 @@
 # Doc-Drift Audit — 2026-07-22 (13-agent adversarial sweep)
 
+> **Remediation completed — banners landed, ADR-132 Accepted**
+
 > Provenance: Fable-orchestrated workflow — 6 Sonnet doc-researchers, 6 Opus code-verifiers (one per drift axis: neo4j-migration, phantom-actors, binary-protocol, xr-client, missing-docs, deferred-vaporware), 1 Opus remediation planner. 47 claims verified against source: 22 ACCURATE, 22 DOCS_STALE, 4 CODE_GAP, 4 BOTH_DRIFTED. Raw findings journal retained in session transcript. ADR-131/132 below are PROPOSED pending operator acceptance.
 
 
