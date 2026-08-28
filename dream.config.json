@@ -3,19 +3,32 @@
   "slots": [
     {
       "deep": "xr-client-godot",
-      "scan": ["scene-integrity", "action-map", "gdscript-wiring"]
+      "scan": [
+        "scene-integrity",
+        "action-map",
+        "gdscript-wiring"
+      ]
     },
     {
       "deep": "xr-presence-wire",
-      "scan": ["wire-protocol", "presence-messages"]
+      "scan": [
+        "wire-protocol",
+        "presence-messages"
+      ]
     },
     {
       "deep": "gpu-physics-actors",
-      "scan": ["force-compute", "physics-messages"]
+      "scan": [
+        "force-compute",
+        "physics-messages"
+      ]
     },
     {
       "deep": "socket-flow-handlers",
-      "scan": ["position-updates", "handler-types"]
+      "scan": [
+        "position-updates",
+        "handler-types"
+      ]
     }
   ],
   "bonusModuli": {
@@ -31,9 +44,9 @@
     "degradeOnWasmFailure": false
   },
   "evaluatorEntrypoints": {
-    "scene-integrity": "miss=0; total=0; for f in $(grep -rhoE 'path=\"res://[^\"]+\"' xr-client --include='*.tscn' --include='*.tres' | sed 's/path=\"res:\\/\\///;s/\"$//' | sort -u); do total=$((total+1)); [ -e \"xr-client/$f\" ] || { miss=$((miss+1)); echo \"MISSING: $f\"; }; done; echo \"refs: $total missing: $miss\"",
-    "cargo-manifest": "python3 -c \"import json; m=json.load(open('/tmp/vc-meta.json')); pk=[p['name'] for p in m['packages']]; print('crates:', len(pk)); print('xr-presence:', 'visionclaw-xr-presence' in pk)\"",
-    "action-map": "echo \"openxr actions: $(grep -c OpenXRAction xr-client/openxr_action_map.tres)\"; test -s xr-client/openxr_action_map.tres && echo MAP-OK || echo MAP-MISSING"
+    "scene-integrity": "bash scripts/dream-scene-integrity.sh",
+    "cargo-manifest": "bash scripts/dream-cargo-manifest.sh",
+    "action-map": "bash scripts/dream-action-map.sh"
   },
   "competitors": [],
   "adrConvention": "3-digit",
@@ -45,6 +58,9 @@
   ],
   "ledgerPath": "docs/dream-cycle/LEDGER.md",
   "branchPrefix": "dream/",
-  "labels": ["dream-cycle", "xr-stack"],
+  "labels": [
+    "dream-cycle",
+    "xr-stack"
+  ],
   "autoMerge": false
 }
