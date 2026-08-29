@@ -105,6 +105,11 @@ var _node_targets: Dictionary = {}
 var _node_colors: Dictionary = {}
 var _node_sizes: Dictionary = {}
 var _node_centrality: Dictionary = {}
+# Running max centrality, used to normalise per-node size/halo tells. Monotonic
+# (never shrinks while a graph is loaded) so a settled top node keeps a stable
+# reference; updated only when visuals arrive, never per frame. Seeded > 0 to
+# avoid a divide-by-zero before the first analytics frame.
+var _centrality_max: float = 0.0001
 # Edge topology from initialGraphLoad, pre-capped by weight:
 # flat [src0, tgt0, src1, tgt1, ...].
 var _edge_pairs: PackedInt32Array = PackedInt32Array()
@@ -144,6 +149,57 @@ var _last_targeted_id: int = -1
 # Movable world-anchored HUD state.
 var _hud_grab_controller: XRController3D = null
 var _hud_grab_offset: Transform3D = Transform3D.IDENTITY
+
+# --- HUD control-panel state (M2+ operator controls) -------------------------
+# Physics params tracked locally (server is authoritative but has no read-back on
+# this path); seeded to the desktop defaults and mutated by Spread+/- presses.
+var _repel_k: float = 190.0
+var _rest_length: float = 85.0
+var _physics_http: HTTPRequest = null
+# One physics write in flight at a time: _physics_http is single-request, so gate
+# presses until request_completed and only commit local repelK/restLength on a
+# successful dispatch (a dropped ERR_BUSY press must not drift the tracked values).
+var _physics_pending: bool = false
+# Runtime visual factors (client-side only, no HTTP).
+var _node_size_factor: float = 1.0
+# Full topology kept verbatim so the edge ranking can be recomputed once centrality
+# analytics arrive (topology often precedes them, which would otherwise pin the
+# ranking to the global-weight fallback forever).
+var _edge_pairs_full: PackedInt32Array = PackedInt32Array()
+var _edge_weights_full: PackedFloat32Array = PackedFloat32Array()
+# Latches true after the one-shot re-rank fires (once centrality is populated) so
+# the O(E log E) rank runs at most twice: once at topology, once when analytics land.
+var _edge_rerank_done: bool = false
+# Full weight-ranked edge list; Edges+/- re-slice the rendered subset from this
+# without re-sorting or re-fetching. _edge_pairs is a prefix of it.
+var _edge_pairs_ranked: PackedInt32Array = PackedInt32Array()
+var _edge_show_count: int = 0
+
+# HUD pointer (controller-ray → SubViewport) state. Edge-detect the trigger so one
+# pull = one click; track the last hovered controller for haptic feedback.
+var _hud_trigger_was_down: bool = false
+# Last valid viewport pixel the pointer sat at, so a click held while the ray
+# leaves the panel (or the HUD is grabbed) can be released at the right spot
+# instead of latching the SubViewport button-down state.
+var _hud_last_px: Vector2 = Vector2.ZERO
+# The controller whose aim ray is currently on the HUD panel (else null). Set each
+# frame by _update_hud_pointer and read by _update_interaction to suppress node-grab
+# engagement for that controller — a trigger pull aimed at the HUD is a button click,
+# not a node grab.
+var _hud_pointer_controller: XRController3D = null
+# QuadMesh_hud size (HUD.tscn HudPanel) — the ray→UV mapping needs the panel extent.
+const HUD_QUAD_W: float = 1.4
+const HUD_QUAD_H: float = 0.9
+# Physics param clamps.
+const REPEL_K_MIN: float = 20.0
+const REPEL_K_MAX: float = 1000.0
+const REST_LENGTH_MIN: float = 10.0
+const REST_LENGTH_MAX: float = 400.0
+const NODE_SIZE_FACTOR_MIN: float = 0.3
+const NODE_SIZE_FACTOR_MAX: float = 3.0
+const EDGE_SHOW_MIN: int = 200
+# Dev bearer the codebase uses for physics settings writes.
+const PHYSICS_BEARER: String = "Bearer dev-session-token"
 
 @onready var graph_root: Node3D = $GraphRoot
 @onready var nodes_multi: MultiMeshInstance3D = $GraphRoot/NodesMulti
@@ -218,6 +274,15 @@ func _ready() -> void:
 	_observe_http = HTTPRequest.new()
 	add_child(_observe_http)
 
+	# Dedicated request for the HUD physics controls (separate from the observe
+	# POST and the HUD decide POST so none of them can block the others).
+	_physics_http = HTTPRequest.new()
+	add_child(_physics_http)
+	# Bound + gated: request_completed reopens the in-flight gate; a finite timeout
+	# guarantees it fires even on a stalled connection so the gate never latches.
+	_physics_http.request_completed.connect(_on_physics_completed)
+	_physics_http.timeout = 10.0
+
 	_probe_eye_gaze()
 	_wire_hud()
 	_connect_from_env()
@@ -250,6 +315,110 @@ func _wire_hud() -> void:
 		hud.join_requested.connect(_on_hud_join_requested)
 	if hud.has_method("configure_intervention"):
 		hud.configure_intervention(_http_base(), _nostr_auth)
+	if hud.has_signal("control_pressed"):
+		hud.control_pressed.connect(_on_hud_control)
+	_refresh_controls_status()
+
+
+# HUD control-panel actions. Physics actions POST/PUT to the backend on the
+# dedicated _physics_http; visual actions mutate a runtime factor and re-slice /
+# re-scale on the spot (no HTTP, work only on press). Status label refreshed after
+# every press.
+func _on_hud_control(action: String) -> void:
+	match action:
+		"reset_layout":
+			_request_physics_reset()
+		"spread_plus":
+			_request_spread(1.2, 1.15)
+		"spread_minus":
+			_request_spread(0.8, 0.85)
+		"edges_plus":
+			_edge_show_count = int(round(float(_edge_show_count) * 1.4))
+			_apply_edge_slice()
+		"edges_minus":
+			_edge_show_count = int(round(float(_edge_show_count) * 0.7))
+			_apply_edge_slice()
+		"node_size_plus":
+			_node_size_factor = clampf(_node_size_factor * 1.25, NODE_SIZE_FACTOR_MIN, NODE_SIZE_FACTOR_MAX)
+		"node_size_minus":
+			_node_size_factor = clampf(_node_size_factor * 0.8, NODE_SIZE_FACTOR_MIN, NODE_SIZE_FACTOR_MAX)
+		_:
+			push_warning("GraphScene: unknown HUD control '%s'" % action)
+	_refresh_controls_status()
+
+
+func _refresh_controls_status() -> void:
+	if hud != null and hud.has_method("set_controls_status"):
+		var busy: String = "  [busy]" if _physics_pending else ""
+		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d  node×%.2f%s" % [
+			_repel_k, _rest_length, _edge_show_count, _node_size_factor, busy])
+
+
+# Spread ±: compute the candidate params, and only COMMIT the tracked values if the
+# PUT actually dispatched — a busy/failed request must not drift repelK/restLength
+# away from what the server last received.
+func _request_spread(repel_mul: float, rest_mul: float) -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var rk := clampf(_repel_k * repel_mul, REPEL_K_MIN, REPEL_K_MAX)
+	var rl := clampf(_rest_length * rest_mul, REST_LENGTH_MIN, REST_LENGTH_MAX)
+	if _put_physics_params(rk, rl):
+		_repel_k = rk
+		_rest_length = rl
+
+
+func _request_physics_reset() -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	_post_physics_reset()
+
+
+# Fired when any physics request resolves (success, timeout, or failure) — reopens
+# the gate so the next press can dispatch.
+func _on_physics_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	_physics_pending = false
+	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+		push_warning("GraphScene: physics request failed (result=%d code=%d)" % [result, response_code])
+	_refresh_controls_status()
+
+
+# POST {base}/api/settings/physics/reset-layout with the dev bearer. Returns true
+# if the request was dispatched (gate then held until _on_physics_completed).
+func _post_physics_reset() -> bool:
+	if _physics_http == null:
+		return false
+	var url := "%s/api/settings/physics/reset-layout" % _http_base()
+	var headers := PackedStringArray([
+		"Authorization: %s" % PHYSICS_BEARER,
+		"Content-Type: application/json",
+	])
+	var err := _physics_http.request(url, headers, HTTPClient.METHOD_POST, "{}")
+	if err != OK:
+		push_warning("GraphScene: reset-layout POST failed to start (%d)" % err)
+		return false
+	_physics_pending = true
+	return true
+
+
+# PUT {base}/api/settings/physics?graph=logseq with the given params. Returns true
+# only if the request was dispatched.
+func _put_physics_params(repel_k: float, rest_length: float) -> bool:
+	if _physics_http == null:
+		return false
+	var url := "%s/api/settings/physics?graph=logseq" % _http_base()
+	var headers := PackedStringArray([
+		"Authorization: %s" % PHYSICS_BEARER,
+		"Content-Type: application/json",
+	])
+	var body := {"repelK": repel_k, "restLength": rest_length}
+	var err := _physics_http.request(url, headers, HTTPClient.METHOD_PUT, JSON.stringify(body))
+	if err != OK:
+		push_warning("GraphScene: physics PUT failed to start (%d)" % err)
+		return false
+	_physics_pending = true
+	return true
 
 
 func _on_hud_join_requested(room_urn: String) -> void:
@@ -334,6 +503,19 @@ func _connect_graph() -> void:
 		return
 	if _binary_client.has_method("close"):
 		_binary_client.close()
+	# A reconnect may land on a restarted server with a different id space:
+	# stale positions/topology would mix with the fresh snapshot as orphan
+	# gems and phantom edges, so drop all graph state before re-dialling.
+	_node_positions.clear()
+	_node_targets.clear()
+	_node_centrality.clear()
+	_centrality_max = 0.0001
+	_edge_pairs = PackedInt32Array()
+	_edge_pairs_ranked = PackedInt32Array()
+	_edge_pairs_full = PackedInt32Array()
+	_edge_weights_full = PackedFloat32Array()
+	_edge_rerank_done = false
+	_edge_show_count = 0
 	if _binary_client.has_method("connect_to_url"):
 		_binary_client.connect_to_url(_graph_ws_url, _graph_token, _nostr_secret_hex)
 
@@ -357,6 +539,7 @@ func _physics_process(delta: float) -> void:
 	_update_lod()
 	_update_locomotion(delta)
 	_update_hud_grab()
+	_update_hud_pointer()
 	_hunt_positions()
 	_fit_graph_to_view(delta)
 	_update_multimesh()
@@ -435,6 +618,107 @@ func _update_hud_grab() -> void:
 			_hud_grab_offset = controller.global_transform.affine_inverse() * hud.global_transform
 			_pulse(controller, 0.4, 0.05)
 			break
+
+
+# Wand-ray → HUD SubViewport input forwarding. The HUD is a SubViewport rendered
+# onto a quad (HudPanel), so Godot's GUI (Buttons/LineEdit) never sees VR input by
+# itself. Each frame we intersect the active controller's aim ray with the panel
+# quad, convert the hit to viewport pixels, and push a mouse-motion event; the
+# trigger is edge-detected into a single left click. This is THE activation path
+# for every HUD button — Approve/Deny and the new control grid alike.
+func _update_hud_pointer() -> void:
+	# Cleared each frame; set below only if a ray is actually on the panel, so
+	# _update_interaction sees a fresh answer every frame.
+	_hud_pointer_controller = null
+	if hud == null:
+		return
+	var vp := hud.get_node_or_null("HudViewport") as SubViewport
+	var panel := hud.get_node_or_null("HudPanel") as Node3D
+	if vp == null or panel == null:
+		return
+	# While the panel is being physically grabbed (grip), don't also drive the
+	# cursor — moving it would spray clicks. Release any held click FIRST (at the
+	# last valid spot) so the SubViewport button doesn't latch pressed.
+	if _hud_grab_controller != null:
+		if _hud_trigger_was_down:
+			_push_hud_mouse(vp, _hud_last_px, false)
+			_hud_trigger_was_down = false
+		return
+	# Prefer the right controller; fall back to the left. First one whose ray hits
+	# the panel wins. Skip the hand that is mid node-drag — its trigger is held for
+	# the drag, so crossing the panel must not fire button clicks.
+	var hit_uv := Vector2(-1.0, -1.0)
+	var hit_ctrl: XRController3D = null
+	for controller: XRController3D in [right_controller, left_controller]:
+		if controller == null or not controller.get_is_active():
+			continue
+		if _grabbed_id != -1 and controller == _grab_controller:
+			continue
+		var uv := _ray_hit_hud_uv(controller, panel)
+		if uv.x >= 0.0:
+			hit_uv = uv
+			hit_ctrl = controller
+			break
+	if hit_ctrl == null:
+		# Ray left the panel: release a held click at the last valid position so a
+		# button can't latch pressed.
+		if _hud_trigger_was_down:
+			_push_hud_mouse(vp, _hud_last_px, false)
+			_hud_trigger_was_down = false
+		return
+	# Ray is on the panel: claim this controller so node-grab engagement skips it.
+	_hud_pointer_controller = hit_ctrl
+	var px := Vector2(hit_uv.x * float(vp.size.x), hit_uv.y * float(vp.size.y))
+	_hud_last_px = px
+	var motion := InputEventMouseMotion.new()
+	motion.position = px
+	motion.global_position = px
+	vp.push_input(motion)
+	var down: bool = _controller_trigger(hit_ctrl) > 0.6
+	if down and not _hud_trigger_was_down:
+		_push_hud_mouse(vp, px, true)
+	elif not down and _hud_trigger_was_down:
+		_push_hud_mouse(vp, px, false)
+		_pulse(hit_ctrl, 0.3, 0.03)
+	_hud_trigger_was_down = down
+
+
+func _push_hud_mouse(vp: SubViewport, px: Vector2, pressed: bool) -> void:
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = pressed
+	click.position = px
+	click.global_position = px
+	vp.push_input(click)
+
+
+# Intersect a controller aim ray with the HUD quad; returns viewport UV (0..1,
+# y-down) or (-1,-1) on a miss. Works in the panel's local space so the maths is
+# independent of where the movable HUD currently sits.
+func _ray_hit_hud_uv(controller: XRController3D, panel: Node3D) -> Vector2:
+	var to_local: Transform3D = panel.global_transform.affine_inverse()
+	var o: Vector3 = to_local * controller.global_position
+	var d: Vector3 = (to_local.basis * (-controller.global_transform.basis.z)).normalized()
+	# QuadMesh lies in the panel's local XY plane (z = 0), facing +Z.
+	if absf(d.z) < 0.00001:
+		return Vector2(-1.0, -1.0)
+	var t: float = -o.z / d.z
+	if t < 0.0:
+		return Vector2(-1.0, -1.0)
+	var hit: Vector3 = o + d * t
+	var half_w: float = HUD_QUAD_W * 0.5
+	var half_h: float = HUD_QUAD_H * 0.5
+	if absf(hit.x) > half_w or absf(hit.y) > half_h:
+		return Vector2(-1.0, -1.0)
+	# Reach is a WORLD distance: the local param t scales with HUD scale, so compare
+	# the world-space hit distance from the wand instead (scale-invariant reach).
+	var hit_world: Vector3 = panel.global_transform * hit
+	if controller.global_position.distance_to(hit_world) > RAY_LENGTH:
+		return Vector2(-1.0, -1.0)
+	# Local +x → right (u 0→1); local +y is up, viewport v is down → invert.
+	var u: float = (hit.x + half_w) / HUD_QUAD_W
+	var v: float = 1.0 - (hit.y + half_h) / HUD_QUAD_H
+	return Vector2(u, v)
 
 
 func _update_lod() -> void:
@@ -586,12 +870,20 @@ func _update_multimesh() -> void:
 		var node_id: int = ids[i]
 		var pos: Vector3 = _node_positions[node_id]
 		# Compensate the GraphRoot fit-scale so the node holds ~NODE_WORLD_RADIUS
-		# in the room; _node_sizes (centrality, ~0.5–2.0) still modulates it.
-		var comp: float = NODE_WORLD_RADIUS / (NODE_MESH_RADIUS * _graph_scale)
-		var size: float = _node_sizes.get(node_id, 1.0) * comp
+		# in the room, then apply a centrality SIZE tell: normalise centrality
+		# against the running max and map sqrt(norm) through lerp(0.7, 1.9) so
+		# important nodes read visibly bigger while low-centrality nodes don't
+		# vanish. sqrt lifts the low end so mid-tier nodes stay distinguishable.
+		var comp: float = NODE_WORLD_RADIUS * _node_size_factor / (NODE_MESH_RADIUS * _graph_scale)
+		var cen_norm: float = clampf(_node_centrality.get(node_id, 0.0) / _centrality_max, 0.0, 1.0)
+		var size: float = comp * lerpf(0.7, 1.9, sqrt(cen_norm))
 		var xf := Transform3D(Basis.IDENTITY.scaled(Vector3(size, size, size)), pos)
 		mm.set_instance_transform(i, xf)
 		mm.set_instance_color(i, _node_colors.get(node_id, Color(0.55, 0.65, 0.85)))
+		# Carry normalised centrality to the halo shader via INSTANCE_CUSTOM.r so
+		# the fake-bloom intensity scales mildly with importance (no extra buffers,
+		# no per-frame allocation — same loop that writes transform/colour).
+		mm.set_instance_custom_data(i, Color(cen_norm, 0.0, 0.0, 1.0))
 		_render_ids[i] = node_id
 		_render_positions[i] = pos
 
@@ -637,7 +929,9 @@ func _update_edge_multimesh() -> void:
 			var axis: Vector3 = Vector3.UP.cross(dir).normalized()
 			q = Quaternion(axis, acos(clampf(dp, -1.0, 1.0)))
 		var er: float = EDGE_WORLD_RADIUS / (EDGE_MESH_RADIUS * _graph_scale)
-		var basis := Basis(q).scaled(Vector3(er, length, er))
+		# scaled_local: scale along the cylinder's own axes (Y = edge direction).
+		# Global scaled() shears the rotated basis into stretched shards.
+		var basis := Basis(q).scaled_local(Vector3(er, length, er))
 		mm.set_instance_transform(written, Transform3D(basis, a + d * 0.5))
 		written += 1
 	# Park any unfilled instances (endpoints not yet streamed) at zero scale.
@@ -679,6 +973,11 @@ func _update_interaction() -> void:
 
 	for controller: XRController3D in [left_controller, right_controller]:
 		if controller == null or not controller.get_is_active():
+			continue
+		# Don't start a node grab with a controller that's pointing at the HUD —
+		# that trigger pull is a button click. (Release of an already-held grab is
+		# handled above and is unaffected.)
+		if controller == _hud_pointer_controller:
 			continue
 		var pinch: float = _controller_trigger(controller)
 		if pinch < 0.05:
@@ -1113,6 +1412,16 @@ func _on_node_visuals_updated(node_id: int, community_id: int, centrality: float
 	_node_colors[node_id] = _community_color(community_id, anomaly, node_id)
 	_node_sizes[node_id] = clampf(0.5 + centrality * 1.5, 0.5, 2.0)
 	_node_centrality[node_id] = centrality
+	_centrality_max = maxf(_centrality_max, centrality)
+	# Topology often arrives before centrality analytics, forcing the edge ranking
+	# onto its global-weight fallback. Re-rank ONCE — not per-frame — the moment
+	# centrality covers the nodes the cap will actually draw, so the rendered edge
+	# subset finally reflects the visible subgraph.
+	if not _edge_rerank_done and not _edge_pairs_full.is_empty():
+		var need: int = mini(NODE_INSTANCE_CAP, maxi(1, _node_positions.size()))
+		if _node_centrality.size() >= need:
+			_rerank_edges(true)
+			_edge_rerank_done = true
 
 
 # Deterministic community palette: golden-ratio hue walk gives well-separated
@@ -1131,24 +1440,80 @@ func _community_color(community_id: int, anomaly: float, node_id: int = 0) -> Co
 
 
 func _on_topology_updated(_edge_count: int) -> void:
-	var pairs: PackedInt32Array = _binary_client.get_edges()
-	var weights: PackedFloat32Array = _binary_client.get_edge_weights()
+	# Keep the full topology verbatim so the ranking can be recomputed once
+	# centrality analytics arrive (see _on_node_visuals_updated).
+	_edge_pairs_full = _binary_client.get_edges()
+	_edge_weights_full = _binary_client.get_edge_weights()
+	_edge_rerank_done = false
+	print("GraphScene DEBUG: topology arrived edges=%d positions_known=%d" % [
+		_edge_weights_full.size(), _node_positions.size()])
+	# preserve_show=false: a fresh topology defaults to showing all ranked edges.
+	_rerank_edges(false)
+
+
+# (Re)compute the weight-ranked edge list from the kept full topology. When over
+# budget, an edge earns budget only if BOTH endpoints are in the top-centrality
+# node set the node cap will actually draw (visible-subgraph ranking); it falls
+# back to global-weight ranking when centrality is missing/too sparse. Runs on
+# topology and once more when centrality lands — never per frame.
+func _rerank_edges(preserve_show: bool) -> void:
+	var pairs: PackedInt32Array = _edge_pairs_full
+	var weights: PackedFloat32Array = _edge_weights_full
 	var total: int = weights.size()
-	print("GraphScene DEBUG: topology arrived edges=%d positions_known=%d" % [total, _node_positions.size()])
-	if total <= EDGE_INSTANCE_CAP:
-		_edge_pairs = pairs
+	if total <= 0:
+		_edge_pairs_ranked = PackedInt32Array()
+		_edge_show_count = 0
+		_apply_edge_slice()
 		return
-	# Over budget: keep the heaviest edges. One-time sort on topology arrival.
-	var order: Array = range(total)
-	order.sort_custom(func(a: int, b: int) -> bool: return weights[a] > weights[b])
+	if total <= EDGE_INSTANCE_CAP:
+		_edge_pairs_ranked = pairs
+		if not preserve_show:
+			_edge_show_count = total
+		_apply_edge_slice()
+		return
+	var eligible: Array = []
+	var top_ids := {}
+	if not _node_centrality.is_empty():
+		var by_centrality: Array = _node_centrality.keys()
+		by_centrality.sort_custom(func(a: int, b: int) -> bool:
+			return _node_centrality[a] > _node_centrality[b])
+		for i: int in range(mini(NODE_INSTANCE_CAP, by_centrality.size())):
+			top_ids[by_centrality[i]] = true
+		for e: int in range(total):
+			if top_ids.has(pairs[e * 2]) and top_ids.has(pairs[e * 2 + 1]):
+				eligible.append(e)
+	# Fallback to the global ranking when centrality is missing or the visible
+	# subgraph is nearly edgeless (better some context than none).
+	if eligible.size() < EDGE_INSTANCE_CAP / 8:
+		eligible = range(total)
+	eligible.sort_custom(func(a: int, b: int) -> bool: return weights[a] > weights[b])
+	var kept: int = mini(EDGE_INSTANCE_CAP, eligible.size())
 	var capped := PackedInt32Array()
-	capped.resize(EDGE_INSTANCE_CAP * 2)
-	for i: int in range(EDGE_INSTANCE_CAP):
-		var e: int = order[i]
+	capped.resize(kept * 2)
+	for i: int in range(kept):
+		var e: int = eligible[i]
 		capped[i * 2] = pairs[e * 2]
 		capped[i * 2 + 1] = pairs[e * 2 + 1]
-	_edge_pairs = capped
-	push_warning("GraphScene: %d edges exceed budget; rendering heaviest %d" % [total, EDGE_INSTANCE_CAP])
+	_edge_pairs_ranked = capped
+	if not preserve_show:
+		_edge_show_count = kept
+	_apply_edge_slice()
+	push_warning("GraphScene: %d edges exceed budget; rendering %d (visible-subgraph ranked)" % [total, kept])
+
+
+# Render the first _edge_show_count pairs of the ranked edge list (heaviest-first),
+# clamped to [EDGE_SHOW_MIN, ranked size]. Zero-copy when showing all.
+func _apply_edge_slice() -> void:
+	var ranked_pairs: int = _edge_pairs_ranked.size() / 2
+	if ranked_pairs <= 0:
+		_edge_pairs = PackedInt32Array()
+		_edge_show_count = 0
+		return
+	_edge_show_count = clampi(_edge_show_count, mini(EDGE_SHOW_MIN, ranked_pairs), ranked_pairs)
+	if _edge_show_count >= ranked_pairs:
+		_edge_pairs = _edge_pairs_ranked
+	else:
+		_edge_pairs = _edge_pairs_ranked.slice(0, _edge_show_count * 2)
 
 
 func _on_avatar_joined(did: String, display_name: String, avatar_id: String) -> void:

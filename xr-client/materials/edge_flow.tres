@@ -1,0 +1,13 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://b3xrmatedgeflow1"]
+
+[ext_resource type="Shader" path="res://materials/edge_flow.gdshader" id="1_edge_sh"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_edge_sh")
+shader_parameter/flow_color = Color(0.3, 0.72, 1, 1)
+shader_parameter/base_alpha = 0.15
+shader_parameter/pulse_speed = 0.6
+shader_parameter/pulse_width = 0.22
+shader_parameter/pulse_energy = 0.85
+shader_parameter/pulse_gain = 1.6

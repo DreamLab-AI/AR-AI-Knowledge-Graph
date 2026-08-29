@@ -22,6 +22,16 @@ extends Node3D
 @onready var dwell_reticle: Control = $HudViewport/HudControl/DwellReticle
 @onready var decide_http: HTTPRequest = $DecideHttp
 
+# Operator control-panel buttons + live status line.
+@onready var reset_layout_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/ResetLayoutButton
+@onready var spread_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/SpreadPlusButton
+@onready var spread_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/SpreadMinusButton
+@onready var edges_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/EdgesPlusButton
+@onready var edges_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/EdgesMinusButton
+@onready var node_size_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizePlusButton
+@onready var node_size_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizeMinusButton
+@onready var controls_status: Label = $HudViewport/HudControl/VBox/ControlsStatus
+
 signal join_requested(room_urn: String)
 signal mute_toggled(muted: bool)
 ## Emitted the instant the operator approves/denies — the M2 intervention intent,
@@ -29,6 +39,12 @@ signal mute_toggled(muted: bool)
 signal decision_submitted(case_id: String, outcome: String)
 ## Emitted when the decide POST resolves; `accepted` is the server verdict.
 signal case_decided(case_id: String, outcome: String, accepted: bool)
+## Emitted when an operator control-panel button is pressed. GraphScene owns the
+## effect (physics POST/PUT, edge/node runtime factors); the HUD only reports the
+## intent so all state lives in one place. `action` is one of: reset_layout,
+## spread_plus, spread_minus, edges_plus, edges_minus, node_size_plus,
+## node_size_minus.
+signal control_pressed(action: String)
 
 const ACSP_GLOW_COLOR: Color = Color(1.0, 0.62, 0.12, 1.0)
 # Hard cap on a single decide POST. A stalled request fires request_completed with
@@ -64,7 +80,23 @@ func _ready() -> void:
 		# decision gate forever. On timeout Godot still fires request_completed
 		# with result == RESULT_TIMEOUT, which clears the gate below.
 		decide_http.timeout = DECIDE_TIMEOUT_SEC
+	# Operator controls: each button just re-broadcasts a named intent; GraphScene
+	# owns the effect. Bound with the action name so there's no per-button handler.
+	reset_layout_button.pressed.connect(func() -> void: emit_signal("control_pressed", "reset_layout"))
+	spread_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "spread_plus"))
+	spread_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "spread_minus"))
+	edges_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "edges_plus"))
+	edges_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "edges_minus"))
+	node_size_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_plus"))
+	node_size_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_minus"))
 	set_process(true)
+
+
+## Set by GraphScene after each control press: the current physics params, edge
+## count shown, and node-size factor. Called on press only — no per-frame cost.
+func set_controls_status(text: String) -> void:
+	if controls_status != null:
+		controls_status.text = text
 
 
 func _process(delta: float) -> void:

@@ -1,4 +1,4 @@
-[gd_scene load_steps=6 format=3 uid="uid://b3xrhud01vc"]
+[gd_scene load_steps=7 format=3 uid="uid://b3xrhud01vc"]
 
 [ext_resource type="Script" path="res://scripts/hud.gd" id="1_hud"]
 [ext_resource type="Script" path="res://scripts/dwell_reticle.gd" id="2_reticle"]
@@ -7,7 +7,13 @@
 size = Vector2(1.4, 0.9)
 
 [sub_resource type="ViewportTexture" id="ViewportTexture_hud"]
+resource_local_to_scene = true
 viewport_path = NodePath("HudViewport")
+
+[sub_resource type="StandardMaterial3D" id="Mat_hud"]
+resource_local_to_scene = true
+shading_mode = 0
+albedo_texture = SubResource("ViewportTexture_hud")
 
 [node name="HUD" type="Node3D"]
 script = ExtResource("1_hud")
@@ -47,6 +53,47 @@ text = "Mute"
 
 [node name="DebugStats" type="Label" parent="HudViewport/HudControl/VBox"]
 text = "FPS: --  MTP: --ms  Avatars: 0"
+
+[node name="ControlsSep" type="HSeparator" parent="HudViewport/HudControl/VBox"]
+
+[node name="ControlsHeader" type="Label" parent="HudViewport/HudControl/VBox"]
+text = "Controls"
+
+[node name="ControlsGrid" type="GridContainer" parent="HudViewport/HudControl/VBox"]
+columns = 2
+
+[node name="ResetLayoutButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Reset Layout"
+
+[node name="SpacerBtn" type="Control" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+
+[node name="SpreadPlusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Spread +"
+
+[node name="SpreadMinusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Spread -"
+
+[node name="EdgesPlusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Edges +"
+
+[node name="EdgesMinusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Edges -"
+
+[node name="NodeSizePlusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Node Size +"
+
+[node name="NodeSizeMinusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
+custom_minimum_size = Vector2(180, 56)
+text = "Node Size -"
+
+[node name="ControlsStatus" type="Label" parent="HudViewport/HudControl/VBox"]
+text = "repelK --  restLen --  edges --  node x--"
 
 [node name="AcspIndicator" type="Panel" parent="HudViewport/HudControl"]
 anchor_left = 1.0
@@ -115,8 +162,6 @@ script = ExtResource("2_reticle")
 [node name="HudPanel" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.7)
 mesh = SubResource("QuadMesh_hud")
-
-[node name="HudMaterial" type="StandardMaterial3D" parent="HudPanel"]
-albedo_texture = SubResource("ViewportTexture_hud")
+material_override = SubResource("Mat_hud")
 
 [node name="DecideHttp" type="HTTPRequest" parent="."]

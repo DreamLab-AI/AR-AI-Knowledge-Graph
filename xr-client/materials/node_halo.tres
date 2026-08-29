@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3 uid="uid://b3xrmathalo01"]
+
+[ext_resource type="Shader" path="res://materials/node_halo.gdshader" id="1_halo_sh"]
+
+[resource]
+render_priority = 1
+shader = ExtResource("1_halo_sh")
+shader_parameter/halo_width = 0.16
+shader_parameter/fresnel_power = 2.5
+shader_parameter/halo_energy = 1.35
+shader_parameter/cen_boost = 0.4

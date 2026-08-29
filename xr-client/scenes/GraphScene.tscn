@@ -6,6 +6,7 @@
 [ext_resource type="Material" path="res://materials/crystal_orb.tres" id="4_orb"]
 [ext_resource type="Material" path="res://materials/agent_capsule.tres" id="5_caps"]
 [ext_resource type="PackedScene" path="res://scenes/HUD.tscn" id="6_hud"]
+[ext_resource type="Material" path="res://materials/edge_flow.tres" id="7_edge"]
 
 [sub_resource type="SphereMesh" id="SphereMesh_node"]
 radius = 0.5
@@ -16,6 +17,7 @@ rings = 8
 [sub_resource type="MultiMesh" id="MultiMesh_nodes"]
 transform_format = 1
 use_colors = true
+use_custom_data = true
 mesh = SubResource("SphereMesh_node")
 instance_count = 0
 
@@ -25,12 +27,6 @@ bottom_radius = 0.03
 height = 1.0
 radial_segments = 8
 rings = 1
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_edge"]
-albedo_color = Color(0.4, 0.6, 1, 1)
-emission_enabled = true
-emission = Color(0.3, 0.5, 0.9, 1)
-emission_energy_multiplier = 1.2
 
 [sub_resource type="MultiMesh" id="MultiMesh_edges"]
 transform_format = 1
@@ -83,7 +79,7 @@ material_override = ExtResource("4_orb")
 material_override = ExtResource("5_caps")
 
 [node name="EdgesMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
-material_override = SubResource("StandardMaterial3D_edge")
+material_override = ExtResource("7_edge")
 multimesh = SubResource("MultiMesh_edges")
 
 [node name="AvatarSpawner" type="Node3D" parent="GraphRoot"]

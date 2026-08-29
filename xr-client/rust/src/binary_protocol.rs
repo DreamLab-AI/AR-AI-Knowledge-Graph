@@ -19,6 +19,11 @@ use godot::prelude::*;
 
 /// Protocol version byte that prefixes every V3 graph position frame.
 pub const PROTOCOL_V3: u8 = 0x03;
+
+/// Protocol V5 wraps a V3 body with an 8-byte broadcast sequence number:
+/// `[0x05][u64 broadcast_seq][V3 node records]`.
+pub const PROTOCOL_V5: u8 = 0x05;
+const V5_SEQ_BYTES: usize = 8;
 /// Bytes per node record in a V3 frame.
 pub const NODE_RECORD_BYTES: usize = 52;
 const HEADER_BYTES: usize = 1;
@@ -27,10 +32,6 @@ const HEADER_BYTES: usize = 1;
 /// corrupt/hostile frame and the record is dropped. Server physics bounds are
 /// ±400 m, so 10 km leaves ample slack for legitimate overshoot.
 const WORLD_LIMIT_M: f32 = 10_000.0;
-/// Sane world half-extent (metres): finite positions are clamped here so a value
-/// inside the reject bound but outside the physics volume can't drive the fit /
-/// layout off-screen.
-const WORLD_CLAMP_M: f32 = 400.0;
 
 /// Node ID occupies bits 0-25; bits 26-31 carry the node-type flags.
 pub const NODE_ID_MASK: u32 = 0x03FF_FFFF;
@@ -221,13 +222,28 @@ pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeErro
         });
     }
     let version = bytes[0];
-    if version != PROTOCOL_V3 {
-        return Err(DecodeError::BadVersion {
-            version,
-            expected: PROTOCOL_V3,
-        });
-    }
-    let payload = &bytes[HEADER_BYTES..];
+    // V5 = [version][8-byte broadcast_seq][V3 node records]; the sequence number
+    // is a broadcast-ordering aid we don't need, so skip it and parse as V3.
+    let body_offset = match version {
+        PROTOCOL_V3 => HEADER_BYTES,
+        PROTOCOL_V5 => {
+            let need = HEADER_BYTES + V5_SEQ_BYTES;
+            if bytes.len() < need {
+                return Err(DecodeError::TooShort {
+                    need,
+                    got: bytes.len(),
+                });
+            }
+            need
+        }
+        _ => {
+            return Err(DecodeError::BadVersion {
+                version,
+                expected: PROTOCOL_V3,
+            });
+        }
+    };
+    let payload = &bytes[body_offset..];
     if !payload.len().is_multiple_of(NODE_RECORD_BYTES) {
         return Err(DecodeError::Misaligned { len: payload.len() });
     }
@@ -254,13 +270,14 @@ fn sanitize_node_update(mut u: NodeUpdate) -> Option<NodeUpdate> {
             return None;
         }
     }
+    // Hard-reject corrupt magnitudes only. Do NOT clamp survivors: the live
+    // layout legitimately overshoots the physics volume (observed r_max ~3200),
+    // and clamping collapses distinct outliers onto the bounds-cube faces —
+    // which renders as an edge fan converging on the clamped face.
     for c in u.position.iter() {
         if c.abs() > WORLD_LIMIT_M {
             return None;
         }
-    }
-    for c in u.position.iter_mut() {
-        *c = c.clamp(-WORLD_CLAMP_M, WORLD_CLAMP_M);
     }
     if !u.anomaly.is_finite() {
         u.anomaly = 0.0;
@@ -640,6 +657,28 @@ mod tests {
     }
 
     #[test]
+    fn decodes_v5_frame_by_skipping_broadcast_seq() {
+        // Take a valid single-record V3 frame and rewrap it as V5.
+        let v3 = build_frame(&[(7, [1.0, 2.0, 3.0], [0.1, 0.2, 0.3])]);
+        let mut v5 = vec![PROTOCOL_V5];
+        v5.extend_from_slice(&42u64.to_le_bytes());
+        v5.extend_from_slice(&v3[HEADER_BYTES..]);
+        let v3_decoded = decode_position_frame(&v3).unwrap();
+        let v5_decoded = decode_position_frame(&v5).unwrap();
+        assert_eq!(v3_decoded.len(), v5_decoded.len());
+        assert_eq!(v3_decoded[0].node_id, v5_decoded[0].node_id);
+    }
+
+    #[test]
+    fn rejects_truncated_v5_header() {
+        let frame = vec![PROTOCOL_V5, 1, 2, 3];
+        assert!(matches!(
+            decode_position_frame(&frame),
+            Err(DecodeError::TooShort { .. })
+        ));
+    }
+
+    #[test]
     fn rejects_bad_version() {
         let frame = vec![0x99, 0, 0, 0];
         assert!(matches!(
@@ -690,12 +729,15 @@ mod tests {
     }
 
     #[test]
-    fn clamps_position_within_world() {
-        let frame = build_frame(&[(1, [WORLD_CLAMP_M + 500.0, -9000.0, 0.0], [0.0; 3])]);
+    fn preserves_legitimate_outlier_positions() {
+        // Layout overshoot beyond the physics volume is legitimate; clamping it
+        // used to collapse outliers onto the bounds cube (rendered as an edge
+        // fan converging on the clamped face).
+        let frame = build_frame(&[(1, [900.0, -9000.0, 0.0], [0.0; 3])]);
         let decoded = decode_position_frame(&frame).unwrap();
         assert_eq!(decoded.len(), 1);
-        assert_eq!(decoded[0].position[0], WORLD_CLAMP_M);
-        assert_eq!(decoded[0].position[1], -WORLD_CLAMP_M);
+        assert_eq!(decoded[0].position[0], 900.0);
+        assert_eq!(decoded[0].position[1], -9000.0);
     }
 
     #[test]
