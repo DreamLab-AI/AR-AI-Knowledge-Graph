@@ -23,7 +23,11 @@ const RECONNECT_MAX_DELAY_SEC: float = 60.0
 # Quest render budgets. When the graph exceeds these, the most important
 # nodes (by server-computed centrality) and the heaviest edges (by weight)
 # are kept — same importance language as the desktop client.
-const NODE_INSTANCE_CAP: int = 640
+# Desktop-Vive budgets (Quadro RTX 6000): draw the full initial-load node set so
+# the sparse graph's edges (avg degree ~2.6) have both endpoints on screen. The
+# old 640 cap was a Quest mobile budget — it starved the edge web (a 640-hub
+# subset of a 2.6-degree graph has only ~240 internal edges).
+const NODE_INSTANCE_CAP: int = 3000
 const EDGE_INSTANCE_CAP: int = 3000
 
 # XR fit-to-view: the server streams graph coordinates spanning hundreds of
@@ -174,6 +178,17 @@ var _edge_rerank_done: bool = false
 # without re-sorting or re-fetching. _edge_pairs is a prefix of it.
 var _edge_pairs_ranked: PackedInt32Array = PackedInt32Array()
 var _edge_show_count: int = 0
+# Alternating-frame phase for the node/edge multimesh rebuilds (see
+# _physics_process): true → nodes, false → edges.
+var _mm_phase: bool = false
+# Set of node ids that appear as an edge endpoint (built from _edge_pairs_full on
+# topology arrival). The LOD draw domain and the edge-ranking domain are both
+# restricted to these, so drawn nodes and drawable edges stay coherent.
+var _topo_ids: Dictionary = {}
+# Centrality bias added to topo (edge-endpoint) nodes so the LOD cap fills with
+# them first. Far above any real centrality (0..1) so ordering among topo nodes is
+# still by their true centrality, and non-topo nodes only take leftover slots.
+const TOPO_SELECT_BIAS: float = 1.0e6
 
 # HUD pointer (controller-ray → SubViewport) state. Edge-detect the trigger so one
 # pull = one click; track the last hovered controller for haptic feedback.
@@ -515,6 +530,7 @@ func _connect_graph() -> void:
 	_edge_pairs_full = PackedInt32Array()
 	_edge_weights_full = PackedFloat32Array()
 	_edge_rerank_done = false
+	_topo_ids = {}
 	_edge_show_count = 0
 	if _binary_client.has_method("connect_to_url"):
 		_binary_client.connect_to_url(_graph_ws_url, _graph_token, _nostr_secret_hex)
@@ -542,8 +558,15 @@ func _physics_process(delta: float) -> void:
 	_update_hud_pointer()
 	_hunt_positions()
 	_fit_graph_to_view(delta)
-	_update_multimesh()
-	_update_edge_multimesh()
+	# At the desktop-Vive instance budgets the two multimesh rebuilds are the
+	# frame-cost hot spot (GDScript loops over ~6k instances). Alternate them so
+	# each runs at 45 Hz while the compositor holds 90 — position hunting eases
+	# per frame, so half-rate transform refresh is visually indistinguishable.
+	_mm_phase = not _mm_phase
+	if _mm_phase:
+		_update_multimesh()
+	else:
+		_update_edge_multimesh()
 	_update_interaction()
 	_update_agents(delta)
 	_update_selection(delta)
@@ -848,12 +871,22 @@ func _update_multimesh() -> void:
 
 	# Importance cap: when the graph exceeds the Quest instance budget, keep
 	# the highest-centrality nodes (server analytics; nodes with no analytics
-	# yet rank 0 and drop first).
+	# yet rank 0 and drop first). TOPOLOGY COHERENCE: the position/visuals stream
+	# spans ALL ~13k nodes but the edge topology (initialGraphLoad) covers only a
+	# subset, so a pure top-centrality pick over all ids drifts toward nodes that
+	# have no edges → _update_edge_multimesh (both-endpoints-drawn) draws almost
+	# nothing. Bias edge-endpoint (topo) nodes so they win the cap first; spare
+	# slots then fall to the highest-centrality non-topo nodes. _topo_ids is built
+	# on topology arrival, not per frame.
 	if ids.size() > NODE_INSTANCE_CAP and _lod_policy != null and _lod_policy.has_method("visible_subset"):
+		var have_topo: bool = not _topo_ids.is_empty()
 		var centrality := PackedFloat32Array()
 		centrality.resize(ids.size())
 		for i: int in range(ids.size()):
-			centrality[i] = _node_centrality.get(ids[i], 0.0)
+			var c: float = _node_centrality.get(ids[i], 0.0)
+			if have_topo and _topo_ids.has(ids[i]):
+				c += TOPO_SELECT_BIAS
+			centrality[i] = c
 		var subset: PackedInt32Array = _lod_policy.visible_subset(centrality, NODE_INSTANCE_CAP)
 		var capped: Array = []
 		for idx: int in subset:
@@ -1445,16 +1478,41 @@ func _on_topology_updated(_edge_count: int) -> void:
 	_edge_pairs_full = _binary_client.get_edges()
 	_edge_weights_full = _binary_client.get_edge_weights()
 	_edge_rerank_done = false
+	# Endpoint-id set (built once here, not per frame): the LOD draw domain and the
+	# edge ranking domain are both restricted to these so they stay coherent.
+	_topo_ids = {}
+	for i: int in range(_edge_pairs_full.size()):
+		_topo_ids[_edge_pairs_full[i]] = true
 	print("GraphScene DEBUG: topology arrived edges=%d positions_known=%d" % [
 		_edge_weights_full.size(), _node_positions.size()])
 	# preserve_show=false: a fresh topology defaults to showing all ranked edges.
 	_rerank_edges(false)
 
 
+# The node ids the LOD cap will actually draw: all edge-endpoint (topo) nodes when
+# they fit the cap, else the top-cap of them by centrality. Mirrors the TOPO bias
+# in _update_multimesh so the edge ranking domain equals the drawn domain. Empty
+# when no topology has arrived. Event-driven (topology / analytics), not per frame.
+func _topo_top_ids() -> Dictionary:
+	var out := {}
+	if _topo_ids.is_empty():
+		return out
+	var domain: Array = _topo_ids.keys()
+	if domain.size() <= NODE_INSTANCE_CAP:
+		for id: int in domain:
+			out[id] = true
+		return out
+	domain.sort_custom(func(a: int, b: int) -> bool:
+		return _node_centrality.get(a, 0.0) > _node_centrality.get(b, 0.0))
+	for i: int in range(NODE_INSTANCE_CAP):
+		out[domain[i]] = true
+	return out
+
+
 # (Re)compute the weight-ranked edge list from the kept full topology. When over
 # budget, an edge earns budget only if BOTH endpoints are in the top-centrality
 # node set the node cap will actually draw (visible-subgraph ranking); it falls
-# back to global-weight ranking when centrality is missing/too sparse. Runs on
+# back to global-weight ranking only when no draw domain exists yet. Runs on
 # topology and once more when centrality lands — never per frame.
 func _rerank_edges(preserve_show: bool) -> void:
 	var pairs: PackedInt32Array = _edge_pairs_full
@@ -1471,20 +1529,20 @@ func _rerank_edges(preserve_show: bool) -> void:
 			_edge_show_count = total
 		_apply_edge_slice()
 		return
+	# Rank over the SAME domain the LOD path draws: the top-cap topo (edge-endpoint)
+	# nodes by centrality. This keeps the ranking domain and the drawn domain equal,
+	# so both-endpoints-drawn edges actually render instead of being ranked in but
+	# never shown.
 	var eligible: Array = []
-	var top_ids := {}
-	if not _node_centrality.is_empty():
-		var by_centrality: Array = _node_centrality.keys()
-		by_centrality.sort_custom(func(a: int, b: int) -> bool:
-			return _node_centrality[a] > _node_centrality[b])
-		for i: int in range(mini(NODE_INSTANCE_CAP, by_centrality.size())):
-			top_ids[by_centrality[i]] = true
+	var top_ids: Dictionary = _topo_top_ids()
+	if not top_ids.is_empty():
 		for e: int in range(total):
 			if top_ids.has(pairs[e * 2]) and top_ids.has(pairs[e * 2 + 1]):
 				eligible.append(e)
-	# Fallback to the global ranking when centrality is missing or the visible
-	# subgraph is nearly edgeless (better some context than none).
-	if eligible.size() < EDGE_INSTANCE_CAP / 8:
+	# Fallback to global-weight ranking only when there is no usable draw domain yet
+	# (no topology endpoints) — a genuinely sparse-but-real subgraph is kept as-is
+	# rather than padded with edges whose endpoints will never be drawn.
+	if eligible.is_empty():
 		eligible = range(total)
 	eligible.sort_custom(func(a: int, b: int) -> bool: return weights[a] > weights[b])
 	var kept: int = mini(EDGE_INSTANCE_CAP, eligible.size())
