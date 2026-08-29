@@ -14,11 +14,21 @@ pub fn velocity_gate(
 ) -> Result<(), ValidationError> {
     // P2-07: NaN positions bypass the comparison (NaN > X is always false).
     // Reject any frame containing NaN or infinite coordinates before computing
-    // velocity, since such positions are physically impossible.
-    for (_label, pos) in [
-        ("prev.head", &prev.head.position),
-        ("next.head", &next.head.position),
-    ] {
+    // velocity, since such positions are physically impossible. This covers the
+    // head plus whichever hand slots are populated in either frame.
+    let mut positions: Vec<&[f32; 3]> = vec![&prev.head.position, &next.head.position];
+    for hand in [
+        prev.left_hand.as_ref(),
+        next.left_hand.as_ref(),
+        prev.right_hand.as_ref(),
+        next.right_hand.as_ref(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        positions.push(&hand.position);
+    }
+    for pos in positions {
         for &v in pos.iter() {
             if v.is_nan() || v.is_infinite() {
                 return Err(ValidationError::VelocityExceeded {
@@ -37,16 +47,29 @@ pub fn velocity_gate(
     }
     let dt_us = next.timestamp_us - prev.timestamp_us;
     let dt_s = (dt_us as f64) / 1_000_000.0;
-    let dx = next.head.position[0] - prev.head.position[0];
-    let dy = next.head.position[1] - prev.head.position[1];
-    let dz = next.head.position[2] - prev.head.position[2];
-    let dist = ((dx * dx + dy * dy + dz * dz) as f64).sqrt();
-    let observed_mps = (dist / dt_s) as f32;
-    if observed_mps > max_mps {
-        return Err(ValidationError::VelocityExceeded {
-            observed_mps,
-            limit_mps: max_mps,
-        });
+
+    // Gate the head and every hand slot present in BOTH frames against the same
+    // velocity ceiling. A teleporting hand is as much a spoof/abuse signal as a
+    // teleporting head, so hand slots are no longer exempt.
+    let mut pairs: Vec<(&Transform, &Transform)> = vec![(&prev.head, &next.head)];
+    if let (Some(p), Some(n)) = (prev.left_hand.as_ref(), next.left_hand.as_ref()) {
+        pairs.push((p, n));
+    }
+    if let (Some(p), Some(n)) = (prev.right_hand.as_ref(), next.right_hand.as_ref()) {
+        pairs.push((p, n));
+    }
+    for (p, n) in pairs {
+        let dx = n.position[0] - p.position[0];
+        let dy = n.position[1] - p.position[1];
+        let dz = n.position[2] - p.position[2];
+        let dist = ((dx * dx + dy * dy + dz * dz) as f64).sqrt();
+        let observed_mps = (dist / dt_s) as f32;
+        if observed_mps > max_mps {
+            return Err(ValidationError::VelocityExceeded {
+                observed_mps,
+                limit_mps: max_mps,
+            });
+        }
     }
     Ok(())
 }
@@ -232,5 +255,59 @@ mod tests {
             monotonic_timestamp(0, 100),
             Err(ValidationError::IntervalTooShort { .. })
         ));
+    }
+
+    fn tf(x: f32, y: f32, z: f32) -> Transform {
+        Transform {
+            position: [x, y, z],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        }
+    }
+
+    #[test]
+    fn velocity_gate_rejects_teleporting_hand() {
+        // Head barely moves, but the left hand teleports 5m in 10ms → far over
+        // the 20 m/s ceiling. Previously hand slots were unchecked and this
+        // passed.
+        let mut prev = pf(0, 0.0);
+        prev.left_hand = Some(tf(0.0, 0.0, 0.0));
+        let mut next = pf(10_000, 0.01);
+        next.left_hand = Some(tf(5.0, 0.0, 0.0));
+        let err = velocity_gate(&prev, &next, 20.0).unwrap_err();
+        assert!(matches!(err, ValidationError::VelocityExceeded { .. }));
+    }
+
+    #[test]
+    fn velocity_gate_allows_slow_hand() {
+        let mut prev = pf(0, 0.0);
+        prev.right_hand = Some(tf(0.0, 0.0, 0.0));
+        let mut next = pf(100_000, 0.1);
+        next.right_hand = Some(tf(0.1, 0.0, 0.0));
+        velocity_gate(&prev, &next, 20.0).unwrap();
+    }
+
+    #[test]
+    fn velocity_gate_rejects_nan_hand_position() {
+        let mut prev = pf(0, 0.0);
+        prev.left_hand = Some(tf(0.0, 0.0, 0.0));
+        let mut next = pf(100_000, 0.1);
+        next.left_hand = Some(tf(f32::NAN, 0.0, 0.0));
+        let err = velocity_gate(&prev, &next, 20.0).unwrap_err();
+        assert!(matches!(err, ValidationError::VelocityExceeded { .. }));
+    }
+
+    #[test]
+    fn hand_reach_within_limit_passes() {
+        let head = tf(0.0, 0.0, 0.0);
+        let hand = tf(0.5, 0.0, 0.0);
+        hand_reach(&head, &hand, DEFAULT_HAND_REACH_M).unwrap();
+    }
+
+    #[test]
+    fn hand_reach_beyond_limit_rejected() {
+        let head = tf(0.0, 0.0, 0.0);
+        let hand = tf(3.0, 0.0, 0.0);
+        let err = hand_reach(&head, &hand, DEFAULT_HAND_REACH_M).unwrap_err();
+        assert!(matches!(err, ValidationError::HandReachExceeded { .. }));
     }
 }

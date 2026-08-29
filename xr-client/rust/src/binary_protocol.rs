@@ -23,6 +23,15 @@ pub const PROTOCOL_V3: u8 = 0x03;
 pub const NODE_RECORD_BYTES: usize = 52;
 const HEADER_BYTES: usize = 1;
 
+/// Hard-reject bound (metres): a position component beyond this is treated as a
+/// corrupt/hostile frame and the record is dropped. Server physics bounds are
+/// ±400 m, so 10 km leaves ample slack for legitimate overshoot.
+const WORLD_LIMIT_M: f32 = 10_000.0;
+/// Sane world half-extent (metres): finite positions are clamped here so a value
+/// inside the reject bound but outside the physics volume can't drive the fit /
+/// layout off-screen.
+const WORLD_CLAMP_M: f32 = 400.0;
+
 /// Node ID occupies bits 0-25; bits 26-31 carry the node-type flags.
 pub const NODE_ID_MASK: u32 = 0x03FF_FFFF;
 const AGENT_NODE_FLAG: u32 = 0x8000_0000;
@@ -225,9 +234,44 @@ pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeErro
     let count = payload.len() / NODE_RECORD_BYTES;
     let mut out = Vec::with_capacity(count);
     for chunk in payload.chunks_exact(NODE_RECORD_BYTES) {
-        out.push(parse_node_record(chunk));
+        // Drop records the server should never emit (NaN/Inf, absurd magnitude):
+        // a single poisoned position propagates through the fit AABB and edge
+        // layout, so reject at the decode boundary rather than downstream.
+        if let Some(rec) = sanitize_node_update(parse_node_record(chunk)) {
+            out.push(rec);
+        }
     }
     Ok(out)
+}
+
+/// Validate one decoded record. Returns `None` (drop it) when a position or
+/// velocity component is non-finite or a position exceeds [`WORLD_LIMIT_M`];
+/// otherwise clamps positions to [`WORLD_CLAMP_M`] and neutralises any
+/// non-finite analytics-tail scalar so colour/size mapping stays well-defined.
+fn sanitize_node_update(mut u: NodeUpdate) -> Option<NodeUpdate> {
+    for c in u.position.iter().chain(u.velocity.iter()) {
+        if !c.is_finite() {
+            return None;
+        }
+    }
+    for c in u.position.iter() {
+        if c.abs() > WORLD_LIMIT_M {
+            return None;
+        }
+    }
+    for c in u.position.iter_mut() {
+        *c = c.clamp(-WORLD_CLAMP_M, WORLD_CLAMP_M);
+    }
+    if !u.anomaly.is_finite() {
+        u.anomaly = 0.0;
+    }
+    if !u.centrality.is_finite() {
+        u.centrality = 0.0;
+    }
+    if !u.sssp_distance.is_finite() {
+        u.sssp_distance = 0.0;
+    }
+    Some(u)
 }
 
 #[inline]
@@ -620,6 +664,47 @@ mod tests {
             decode_position_frame(&[]),
             Err(DecodeError::TooShort { .. })
         ));
+    }
+
+    #[test]
+    fn drops_record_with_nan_position() {
+        let frame = build_frame(&[
+            (1, [f32::NAN, 0.0, 0.0], [0.0; 3]),
+            (2, [1.0, 2.0, 3.0], [0.0; 3]),
+        ]);
+        let decoded = decode_position_frame(&frame).unwrap();
+        assert_eq!(decoded.len(), 1, "NaN record must be dropped");
+        assert_eq!(decoded[0].node_id, 2);
+    }
+
+    #[test]
+    fn drops_record_with_infinite_velocity() {
+        let frame = build_frame(&[(1, [0.0; 3], [f32::INFINITY, 0.0, 0.0])]);
+        assert!(decode_position_frame(&frame).unwrap().is_empty());
+    }
+
+    #[test]
+    fn drops_record_beyond_world_limit() {
+        let frame = build_frame(&[(1, [WORLD_LIMIT_M * 2.0, 0.0, 0.0], [0.0; 3])]);
+        assert!(decode_position_frame(&frame).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clamps_position_within_world() {
+        let frame = build_frame(&[(1, [WORLD_CLAMP_M + 500.0, -9000.0, 0.0], [0.0; 3])]);
+        let decoded = decode_position_frame(&frame).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].position[0], WORLD_CLAMP_M);
+        assert_eq!(decoded[0].position[1], -WORLD_CLAMP_M);
+    }
+
+    #[test]
+    fn neutralises_nonfinite_analytics_tail() {
+        // build_frame writes sssp_distance = +Inf; sanitize must zero it, not drop.
+        let frame = build_frame(&[(1, [0.0; 3], [0.0; 3])]);
+        let decoded = decode_position_frame(&frame).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].sssp_distance, 0.0);
     }
 
     #[test]

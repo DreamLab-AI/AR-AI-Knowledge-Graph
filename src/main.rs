@@ -10,7 +10,9 @@ use visionclaw_server::{
         client_messages_handler, consolidated_health_handler, graph_export_handler,
         mcp_relay_handler::mcp_relay_handler,
         metrics_handler, multi_mcp_websocket_handler, nostr_handler, pages_handler,
-        presence_handler::{new_room_registry, ws_presence, PresenceHandlerState},
+        presence_handler::{
+            new_room_registry, new_seen_nonce_cache, ws_presence, PresenceHandlerState,
+        },
         socket_flow_handler::{socket_flow_handler, PreReadSocketSettings},
         speech_socket_handler::speech_socket_handler,
         validation_handler, workspace_handler,
@@ -734,6 +736,7 @@ async fn main() -> std::io::Result<()> {
     let presence_handler_state = web::Data::new(PresenceHandlerState {
         registry: presence_registry,
         identity_verifier: presence_verifier,
+        seen_nonces: new_seen_nonce_cache(),
     });
     info!("[ws-presence] XR presence registry + verifier initialised at /ws/presence");
 

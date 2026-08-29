@@ -6,13 +6,17 @@
 //! pose frame to the per-room [`PresenceActor`].
 
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::num::NonZeroUsize;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use actix::prelude::*;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use dashmap::DashMap;
+use lru::LruCache;
+use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
@@ -40,10 +44,33 @@ pub fn new_room_registry() -> PresenceRoomRegistry {
     Arc::new(DashMap::new())
 }
 
+/// T-WS-1 replay defence: bounded set of challenge nonces that have already been
+/// answered. A nonce is inserted the first time a client successfully verifies
+/// against it; a second auth carrying the same nonce is rejected as a replay.
+/// Shared across every session/worker so replay across connections is caught.
+pub type SeenNonces = Arc<Mutex<LruCache<[u8; 32], ()>>>;
+
+/// Upper bound on remembered nonces (#9). Bounded so a flood of connections
+/// cannot grow the set without limit; the LRU evicts the oldest, which is safe
+/// because an evicted nonce belongs to a session that closed long ago and whose
+/// 10s handshake window has already lapsed.
+const SEEN_NONCE_CAPACITY: usize = 4096;
+
+/// Reject a client-supplied handshake timestamp that is more than this far from
+/// the server clock (#9). Guards against replay of an old captured handshake.
+const MAX_HANDSHAKE_SKEW_US: u64 = 30_000_000; // 30s
+
+pub fn new_seen_nonce_cache() -> SeenNonces {
+    Arc::new(Mutex::new(LruCache::new(
+        NonZeroUsize::new(SEEN_NONCE_CAPACITY).expect("capacity is non-zero"),
+    )))
+}
+
 #[derive(Clone)]
 pub struct PresenceHandlerState {
     pub registry: PresenceRoomRegistry,
     pub identity_verifier: Arc<dyn IdentityVerifier>,
+    pub seen_nonces: SeenNonces,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +104,13 @@ enum ClientHandshake {
         signature: String,
         room_id: String,
         metadata: ClientMetadata,
+        /// Optional client-supplied handshake timestamp (µs since epoch). When
+        /// present it is bounded against the server clock to reject replay of a
+        /// stale captured handshake (#9). Absent for the current Godot client,
+        /// which does not send it — its omission does not weaken the fresh
+        /// per-connection nonce + replay-LRU defence.
+        #[serde(default)]
+        ts: Option<u64>,
     },
 }
 
@@ -108,10 +142,11 @@ pub struct PresenceSession {
 
 impl PresenceSession {
     pub fn new(state: Arc<PresenceHandlerState>) -> Self {
+        // #9: fill the challenge nonce from the OS CSPRNG (getrandom-backed
+        // OsRng), not the non-cryptographic `fastrand` PRNG. A predictable nonce
+        // would let an attacker precompute a signature for a future challenge.
         let mut nonce = [0u8; 32];
-        for slot in nonce.iter_mut() {
-            *slot = fastrand::u8(..);
-        }
+        OsRng.fill_bytes(&mut nonce);
         let ts_us = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_micros() as u64)
@@ -175,7 +210,23 @@ impl PresenceSession {
             signature,
             room_id,
             metadata,
+            ts,
         } = parsed;
+
+        // #9: if the client supplied a handshake timestamp, reject it when it is
+        // implausibly far from the server clock — a replayed old handshake.
+        if let Some(client_ts) = ts {
+            let now_us = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_micros() as u64)
+                .unwrap_or(0);
+            let skew = now_us.abs_diff(client_ts);
+            if skew > MAX_HANDSHAKE_SKEW_US {
+                warn!("stale handshake timestamp (skew {skew}µs); rejecting");
+                close_with(ctx, CLOSE_CODE_AUTH_FAIL, "stale handshake timestamp");
+                return;
+            }
+        }
 
         let challenge = SignedChallenge {
             nonce,
@@ -198,6 +249,25 @@ impl PresenceSession {
         if verified.as_str() != did {
             close_with(ctx, CLOSE_CODE_AUTH_FAIL, "did/signature mismatch");
             return;
+        }
+
+        // #9: replay defence. A valid (nonce, signature) pair may only be
+        // consumed once. Insert the nonce into the shared bounded LRU; if it was
+        // already present, this exact challenge response has been seen before —
+        // reject it. Checked only after signature verification so an attacker
+        // cannot burn a victim's nonce with a garbage signature.
+        {
+            let mut seen = match self.state.seen_nonces.lock() {
+                Ok(g) => g,
+                // A poisoned mutex means another thread panicked mid-update;
+                // recover the guard rather than fail-open on replay.
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if seen.put(nonce, ()).is_some() {
+                warn!("replayed presence challenge nonce; rejecting");
+                close_with(ctx, CLOSE_CODE_AUTH_FAIL, "replayed challenge");
+                return;
+            }
         }
 
         let room = match RoomId::parse(room_id.clone()) {
@@ -439,3 +509,44 @@ pub async fn ws_presence(
 
 #[allow(dead_code)]
 pub fn allow_unused_did(_did: &Did) {}
+
+#[cfg(test)]
+mod nonce_tests {
+    use super::*;
+
+    #[test]
+    fn csprng_nonce_is_nonzero_and_distinct() {
+        // Two freshly generated nonces must differ and not be all-zero (a
+        // regression guard against the nonce fill being dropped/stubbed).
+        let mut a = [0u8; 32];
+        let mut b = [0u8; 32];
+        OsRng.fill_bytes(&mut a);
+        OsRng.fill_bytes(&mut b);
+        assert_ne!(a, [0u8; 32]);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn replay_lru_rejects_second_use_of_same_nonce() {
+        let cache = new_seen_nonce_cache();
+        let nonce = [7u8; 32];
+        let mut guard = cache.lock().unwrap();
+        // First use: not previously seen.
+        assert!(guard.put(nonce, ()).is_none());
+        // Second use of the SAME nonce: seen → replay.
+        assert!(guard.put(nonce, ()).is_some());
+    }
+
+    #[test]
+    fn replay_lru_allows_distinct_nonces() {
+        let cache = new_seen_nonce_cache();
+        let mut guard = cache.lock().unwrap();
+        assert!(guard.put([1u8; 32], ()).is_none());
+        assert!(guard.put([2u8; 32], ()).is_none());
+    }
+
+    #[test]
+    fn seen_nonce_cache_is_bounded() {
+        assert_eq!(new_seen_nonce_cache().lock().unwrap().cap().get(), SEEN_NONCE_CAPACITY);
+    }
+}

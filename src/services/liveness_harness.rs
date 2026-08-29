@@ -467,8 +467,9 @@ pub async fn run_kg_watchdog(harness: Arc<LivenessHarness>, self_url: String, pe
 }
 
 /// One health probe. `true` iff `/api/health` answers 2xx and its `status`
-/// field is not `"unhealthy"`. A connection failure, timeout or non-2xx is
-/// backend loss (`false`).
+/// field is not `"unhealthy"`. A connection failure, timeout, non-2xx, or an
+/// unparseable body is backend loss (`false`) — see #12b: a probe must not
+/// report UP on any error it cannot positively interpret as healthy.
 async fn probe_kg(client: &reqwest::Client, base_url: &str) -> bool {
     let url = format!("{}/api/health", base_url.trim_end_matches('/'));
     match client.get(&url).send().await {
@@ -476,16 +477,77 @@ async fn probe_kg(client: &reqwest::Client, base_url: &str) -> bool {
             if !resp.status().is_success() {
                 return false;
             }
-            match resp.json::<serde_json::Value>().await {
-                Ok(v) => v
-                    .get("status")
-                    .and_then(|s| s.as_str())
-                    .map(|s| s != "unhealthy")
-                    .unwrap_or(true),
-                // Reachable but unparseable body → the endpoint answered, treat as up.
-                Err(_) => true,
-            }
+            // `Ok(body)` = 2xx + parseable JSON; `Err(())` = 2xx but the body
+            // could not be parsed as JSON. The verdict logic lives in the pure
+            // `health_verdict` helper so it is unit-testable without a live
+            // server (#12b).
+            let body = resp.json::<serde_json::Value>().await.map_err(|_| ());
+            health_verdict(true, body)
         }
         Err(_) => false,
+    }
+}
+
+/// Pure health-verdict logic, split out of [`probe_kg`] so the fail-closed
+/// behaviour is testable without an HTTP round-trip.
+///
+/// * `is_success` — did the transport succeed with a 2xx status?
+/// * `body` — `Ok` with the parsed JSON, or `Err(())` if the 2xx body could not
+///   be parsed.
+///
+/// Returns `true` (UP) only when the endpoint positively looks healthy:
+/// * a 2xx whose `status` field is present and not `"unhealthy"`, or
+/// * a 2xx with valid JSON but no `status` field (a terse healthy response —
+///   the 2xx itself is the liveness signal).
+///
+/// #12b: everything else is DOWN. A non-2xx, or a 2xx with an unparseable body,
+/// is treated as backend loss so an outage cannot latch `kg_backend_up` UP.
+/// ADR-136 documents fail-open only for the watchdog *loop* (it must never
+/// panic/exit — see [`run_kg_watchdog`]), NOT for the per-probe verdict.
+fn health_verdict(is_success: bool, body: Result<serde_json::Value, ()>) -> bool {
+    if !is_success {
+        return false;
+    }
+    match body {
+        Ok(v) => v
+            .get("status")
+            .and_then(|s| s.as_str())
+            .map(|s| s != "unhealthy")
+            .unwrap_or(true),
+        Err(()) => false,
+    }
+}
+
+#[cfg(test)]
+mod probe_tests {
+    use super::health_verdict;
+    use serde_json::json;
+
+    #[test]
+    fn healthy_status_is_up() {
+        assert!(health_verdict(true, Ok(json!({ "status": "healthy" }))));
+    }
+
+    #[test]
+    fn unhealthy_status_is_down() {
+        assert!(!health_verdict(true, Ok(json!({ "status": "unhealthy" }))));
+    }
+
+    #[test]
+    fn terse_2xx_without_status_field_is_up() {
+        assert!(health_verdict(true, Ok(json!({ "uptime": 42 }))));
+    }
+
+    #[test]
+    fn non_2xx_is_down() {
+        // Even with a healthy-looking body, a non-2xx transport is DOWN.
+        assert!(!health_verdict(false, Ok(json!({ "status": "healthy" }))));
+    }
+
+    #[test]
+    fn unparseable_2xx_body_is_down() {
+        // #12b: the previous behaviour returned UP here, latching the gauge
+        // UP during a partial outage. Must now be DOWN.
+        assert!(!health_verdict(true, Err(())));
     }
 }

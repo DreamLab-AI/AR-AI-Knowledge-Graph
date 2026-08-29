@@ -119,6 +119,25 @@ pub struct SocketFlowServer {
     /// ADR-031 item 4: Pending server-to-client directives embedded in pong frames.
     /// Drained on each `send_pong` call via the `WebSocketHeartbeat` trait override.
     pub(crate) pending_directives: Vec<HeartbeatDirective>,
+
+    /// Last time this connection served a `requestInitialData` full-graph push.
+    /// Guards against a client spamming `requestInitialData` to force unbounded
+    /// full-graph fetch/sort/encode cycles (a cheap DoS). `None` until the first
+    /// request; subsequent requests within `INITIAL_DATA_COOLDOWN` are dropped
+    /// (a >30s gap still serves a legitimate reconnect-in-place).
+    pub(crate) last_initial_data_request: Option<Instant>,
+
+    /// Monotonic generation for in-flight full-state syncs (codex round-2 HIGH).
+    /// `send_full_state_sync` runs asynchronously and its result is delivered via
+    /// `do_send`, so two concurrent syncs can complete out of order — a stale
+    /// (e.g. pre-auth, public-only) sync could otherwise land AFTER a fresh
+    /// post-auth sync and overwrite the authenticated view, or a prior identity's
+    /// private nodes could arrive after a re-auth as a different user. Every sync
+    /// initiation and every auth/pubkey change bumps this counter; each spawned
+    /// sync task captures the value at start and discards its result if the
+    /// session generation has since moved on. `Arc<AtomicU64>` so the detached
+    /// task can read the latest value the actor thread has written.
+    pub(crate) sync_generation: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl SocketFlowServer {
@@ -180,7 +199,19 @@ impl SocketFlowServer {
             position_sub_generation: 0,
             last_position_subscribe: None,
             pending_directives: Vec::new(),
+            last_initial_data_request: None,
+            sync_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// Bump the sync generation and return the new value (codex round-2 HIGH).
+    /// Call whenever a full-state sync is initiated or the session's auth/pubkey
+    /// state changes, so any older in-flight sync task detects it is stale and
+    /// discards its result.
+    pub(crate) fn bump_sync_generation(&self) -> u64 {
+        self.sync_generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            + 1
     }
 
     /// ADR-031 item 4: Queue a directive to be sent to this client in the next pong.
@@ -286,8 +317,32 @@ impl SocketFlowServer {
     pub(crate) fn send_full_state_sync(&self, ctx: &mut <Self as Actor>::Context) {
         let app_state = self.app_state.clone();
         let addr = ctx.address();
+        // #4/ADR-060: honour the pubkey-visibility drop-set on the initial graph
+        // load too. `caller_pubkey == None` (anon, e.g. the Godot client) with the
+        // filter enabled fails closed to public-only nodes.
+        let caller_pubkey = self.pubkey.clone();
+        let visibility_filter_on = std::env::var("PUBKEY_VISIBILITY_FILTER")
+            .map(|v| {
+                matches!(
+                    v.trim().to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes" | "on"
+                )
+            })
+            .unwrap_or(false);
+
+        // codex round-2 HIGH: initiating a sync bumps the generation, invalidating
+        // any older in-flight sync. This task captures `my_generation`; if the
+        // session generation has advanced by the time results are ready (a newer
+        // sync — e.g. post-auth or a re-auth as a different identity — started),
+        // it delivers nothing, so a stale/public-only view cannot overwrite a
+        // fresher one and a prior identity's nodes cannot leak post-re-auth.
+        let sync_generation = self.sync_generation.clone();
+        let my_generation = self.bump_sync_generation();
 
         actix::spawn(async move {
+            let is_current = || sync_generation_is_current(&sync_generation, my_generation);
+
+
             if let Ok(Ok(graph_data)) = app_state
                 .graph_service_addr
                 .send(crate::actors::messages::GetGraphData)
@@ -316,8 +371,22 @@ impl SocketFlowServer {
                         }
                     });
 
+                    // Discard if a newer sync superseded this one during the
+                    // GetGraphData/GetSettings awaits above. Guards the state_sync
+                    // and the InitialGraphLoad below (no await between them); the
+                    // binary broadcast past the next await is re-checked.
+                    if !is_current() {
+                        debug!("Discarding stale full-state sync (generation superseded)");
+                        return;
+                    }
+
                     if let Ok(msg_str) = serde_json::to_string(&state_sync) {
-                        addr.do_send(crate::actors::messages::SendToClientText(msg_str));
+                        // Generation-gated: re-validated at the socket write so a
+                        // sync superseded after this enqueue is dropped, not sent.
+                        addr.do_send(super::actor_messages::GenGatedText {
+                            text: msg_str,
+                            generation: my_generation,
+                        });
                         info!(
                             "Sent state sync: {} nodes, {} edges, version: {}",
                             graph_data.nodes.len(),
@@ -337,8 +406,29 @@ impl SocketFlowServer {
                         };
                         use std::collections::HashSet;
 
+                        // ADR-060 §Phase-4: drop private nodes not owned by this
+                        // session before they reach the wire. Default OFF; when
+                        // enabled an anonymous caller sees public-only (fail-closed).
+                        let is_visible = |node: &visionclaw_domain::models::node::Node| -> bool {
+                            if !visibility_filter_on {
+                                return true;
+                            }
+                            let is_public = node
+                                .metadata
+                                .get("public")
+                                .map(|v| v.eq_ignore_ascii_case("true"))
+                                .unwrap_or(false);
+                            if is_public {
+                                return true;
+                            }
+                            match (caller_pubkey.as_deref(), node.metadata.get("owner_pubkey")) {
+                                (Some(pk), Some(owner)) => pk == owner,
+                                _ => false,
+                            }
+                        };
+
                         let mut sorted_nodes: Vec<&visionclaw_domain::models::node::Node> =
-                            graph_data.nodes.iter().collect();
+                            graph_data.nodes.iter().filter(|n| is_visible(n)).collect();
 
                         // Sort by quality_score descending
                         sorted_nodes.sort_by(|a, b| {
@@ -402,9 +492,10 @@ impl SocketFlowServer {
                             })
                             .collect();
 
-                        addr.do_send(crate::actors::messages::SendInitialGraphLoad {
+                        addr.do_send(super::actor_messages::GenGatedInitialGraphLoad {
                             nodes: nodes.clone(),
                             edges: edges.clone(),
+                            generation: my_generation,
                         });
                         info!("Sent InitialGraphLoad: {} nodes (sparse from {} total), {} edges [limit: {}]",
                               nodes.len(), graph_data.nodes.len(),
@@ -450,8 +541,20 @@ impl SocketFlowServer {
                             })
                             .collect();
 
+                        // Re-check: a newer sync may have superseded this one
+                        // during the GetNodeTypeArrays await above. Skip the
+                        // binary frame so it cannot overwrite a fresher sync's
+                        // positions.
+                        if !is_current() {
+                            debug!(
+                                "Discarding stale full-state sync binary frame (generation superseded)"
+                            );
+                            return;
+                        }
+
                         addr.do_send(super::actor_messages::BroadcastPositionUpdate(
                             node_data.clone(),
+                            Some(my_generation),
                         ));
                         debug!(
                             "Sent initial node positions for {} limited nodes (binary)",
@@ -628,5 +731,77 @@ impl Actor for SocketFlowServer {
             });
             info!("[WebSocket] Client {} disconnected", client_id);
         }
+    }
+}
+
+/// True iff the sync generation captured when a full-state sync task started
+/// still matches the session's current generation (codex round-2 HIGH). A
+/// detached sync task calls this before delivering its result and discards it
+/// when a newer sync has since been initiated (or auth state changed), so
+/// out-of-order completion cannot overwrite a fresher view.
+pub(crate) fn sync_generation_is_current(
+    current: &std::sync::atomic::AtomicU64,
+    captured: u64,
+) -> bool {
+    current.load(std::sync::atomic::Ordering::SeqCst) == captured
+}
+
+#[cfg(test)]
+mod sync_generation_tests {
+    use super::sync_generation_is_current;
+    use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
+
+    #[test]
+    fn fresh_sync_is_current() {
+        let gen = AtomicU64::new(0);
+        // Initiate a sync: bump then capture (mirrors bump_sync_generation()).
+        let my = gen.fetch_add(1, SeqCst) + 1;
+        assert!(sync_generation_is_current(&gen, my));
+    }
+
+    #[test]
+    fn superseded_sync_is_discarded() {
+        let gen = AtomicU64::new(0);
+        // Sync A starts.
+        let a = gen.fetch_add(1, SeqCst) + 1;
+        // Sync B (e.g. post-auth) starts while A is still in flight.
+        let b = gen.fetch_add(1, SeqCst) + 1;
+        // A must now detect it is stale; B is still current.
+        assert!(!sync_generation_is_current(&gen, a), "stale sync A must be discarded");
+        assert!(sync_generation_is_current(&gen, b), "fresh sync B must deliver");
+    }
+
+    #[test]
+    fn reauth_bump_discards_prior_identity_sync() {
+        let gen = AtomicU64::new(0);
+        // Pre-auth sync starts.
+        let anon = gen.fetch_add(1, SeqCst) + 1;
+        // Auth state change bumps the generation (bump_sync_generation()).
+        gen.fetch_add(1, SeqCst);
+        // The prior-identity sync must not deliver after the identity changed.
+        assert!(!sync_generation_is_current(&gen, anon));
+    }
+
+    #[test]
+    fn delivery_time_check_catches_toctou_after_presend_passed() {
+        // codex round-3: a sync stamps its frames with generation `g` and passes
+        // the pre-send early-out (gen == g). If auth bumps the generation while
+        // the frame sits queued in the mailbox, the delivery-time check (run in
+        // the message handler, against the SAME predicate) must now drop it.
+        let gen = AtomicU64::new(0);
+        let g = gen.fetch_add(1, SeqCst) + 1;
+
+        // Pre-send early-out: still current.
+        assert!(sync_generation_is_current(&gen, g), "pre-send check passes");
+
+        // ... message enqueued ... auth bumps the generation before the handler
+        // runs (the TOCTOU window the pre-send check alone cannot cover).
+        gen.fetch_add(1, SeqCst);
+
+        // Delivery-time check in the handler: same generation stamp `g`, now stale.
+        assert!(
+            !sync_generation_is_current(&gen, g),
+            "delivery-time check drops the stale frame"
+        );
     }
 }

@@ -10,7 +10,7 @@
 - PRD-008 (XR client native replacement — §5 protocol surface)
 - PRD-019 (XR transport completion — the product record this ADR decides)
 - DDD `ddd-xr-godot-context.md` (BC22 — bounded-context model, updated alongside this ADR)
-- ADR-061 / `docs/binary-protocol.md` (binary protocol — **stale at 28 B/node; live wire is V3 52 B**, see §2)
+- `docs/reference/binary-protocol.md` (binary protocol reference — **now reconciled to V3 52 B**) / ADR-061 (original decision — still at 28 B/node by design; live wire is V3 52 B, see §2)
 - ADR-031 (analytics extension — the change that took the graph wire from 36 B to 52 B/node)
 - `src/utils/binary_protocol.rs` (authoritative server encoder), `src/actors/presence_actor.rs` (authoritative presence server)
 
@@ -35,7 +35,9 @@ deferred to a follow-up under explicit approval.
 ADR-071 chose Godot + gdext + OpenXR and PRD-008 tracked the client to
 "feature-complete minus LiveKit AAR". The gdext crate registered five classes
 (`BinaryProtocolClient`, `PresenceClientNode`, `XrInteraction`, `LodPolicy`,
-`SpatialVoiceRouter`), each with comprehensive headless test coverage. The gap
+`SpatialVoiceRouter`), each with comprehensive headless test coverage (the copresence layer later added
+five more — `AgentAvatarNode`, `ProxemicsSolver`, `GazeTracker`,
+`SelectionArbiterNode`, `NostrAuth` — per ADR-130 D4; ten register today). The gap
 discovered on audit (2026-06-08):
 
 1. **Transport was never wired.** `graph_scene.gd::connect_to_server(...)` existed
@@ -165,8 +167,9 @@ match; the release cdylib exports `gdext_rust_init`.
 - The 24-byte analytics tail is decoded-and-discarded each frame. Negligible CPU,
   but ~46% of graph-stream bytes are unused by the XR renderer today. Acceptable;
   revisit if on-device bandwidth profiling flags it (see PRD-019 open items).
-- The `local_id ↔ avatar` mapping gap (§5) means inbound sibling poses cannot yet be
-  attributed to a named avatar without a follow-up server change.
+- ~~The `local_id ↔ avatar` mapping gap (§5) means inbound sibling poses cannot yet be
+  attributed to a named avatar without a follow-up server change.~~ **Closed 2026-06-12
+  (PRD-019 task #28); see the §5 update.**
 - LiveKit Android AAR media transport remains unimplemented (PRD-008 §5.5); voice
   routing is in-memory only (`SpatialVoiceRouter`).
 
@@ -175,6 +178,9 @@ match; the release cdylib exports `gdext_rust_init`.
 - `binary-protocol.md` and ADR-061 are not rewritten by this ADR; §2 records that the
   XR client conforms to the **live V3 wire**, and §6 amends ADR-071's stale claim.
   A separate docs-alignment pass should reconcile `binary-protocol.md` to V3.
+  **Update: that pass has since landed — `docs/reference/binary-protocol.md` now
+  documents the V2 36 B / V3 52 B position records (PRD-019 N2). ADR-061 itself is
+  left at its original 28 B framing by design, as the historical decision record.**
 
 ## §2. Live graph wire (authoritative, as emitted by the server today)
 
@@ -204,6 +210,15 @@ The 28-byte/`0x42` layout in `binary-protocol.md` describes the **server-interna
 `BinaryNodeData` struct**, not the wire. The wire has been V3/52-byte since ADR-031.
 
 ## §5. Presence sibling-broadcast frame and the `local_id ↔ avatar` gap
+
+> **Update (2026-06-12 — PRD-019 task #28 shipped).** The *eager assignment +
+> announce* resolution recommended at the foot of this section was implemented.
+> `handle_join` now calls `local_id_for(&avatar_id)` and includes the resulting
+> `local_id` in both the `JoinAck` member snapshots (`presence_actor.rs:429-441`)
+> and the `AvatarJoined` event (`presence_actor.rs:59,126`); the client builds
+> `local_to_avatar` from the JSON path (`xr-client/rust/src/presence.rs`) and applies
+> it to binary frames. **This §5 gap and its Negative consequence are closed.** The
+> description below is retained as the record of the gap as found on 2026-06-08.
 
 Server→client multi-avatar pose frame (`presence_actor.rs:31`, `broadcast`):
 

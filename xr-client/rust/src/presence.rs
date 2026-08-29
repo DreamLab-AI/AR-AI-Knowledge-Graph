@@ -185,21 +185,27 @@ pub fn decode_sibling_frame(bytes: &[u8]) -> Result<SiblingBatch, PresenceError>
         if cursor + need > bytes.len() {
             return Err(PresenceError::Protocol("sibling transforms truncated".into()));
         }
-        let head = read_transform(&bytes[cursor..cursor + Transform::WIRE_SIZE]);
+        let head_raw = read_transform(&bytes[cursor..cursor + Transform::WIRE_SIZE]);
         cursor += Transform::WIRE_SIZE;
         let left_hand = if mask & SLOT_LEFT != 0 {
             let t = read_transform(&bytes[cursor..cursor + Transform::WIRE_SIZE]);
             cursor += Transform::WIRE_SIZE;
-            Some(t)
+            sanitize_transform(t)
         } else {
             None
         };
         let right_hand = if mask & SLOT_RIGHT != 0 {
             let t = read_transform(&bytes[cursor..cursor + Transform::WIRE_SIZE]);
             cursor += Transform::WIRE_SIZE;
-            Some(t)
+            sanitize_transform(t)
         } else {
             None
+        };
+        // Head drives the whole avatar transform; a poisoned head is unusable, so
+        // drop the entire pose rather than render an avatar at NaN/off-world.
+        let head = match sanitize_transform(head_raw) {
+            Some(h) => h,
+            None => continue,
         };
         poses.push(SiblingPose {
             local_id,
@@ -216,6 +222,43 @@ pub fn decode_sibling_frame(bytes: &[u8]) -> Result<SiblingBatch, PresenceError>
         room_id_u32,
         poses,
     })
+}
+
+/// Hard-reject bound (metres) for a pose position component.
+const POSE_LIMIT_M: f32 = 10_000.0;
+/// Sane world half-extent (metres); finite positions are clamped here.
+const POSE_CLAMP_M: f32 = 400.0;
+/// A quaternion within this tolerance of unit length is accepted as-is;
+/// otherwise it is renormalised (or rejected if degenerate).
+const QUAT_UNIT_TOL: f32 = 1e-2;
+/// Minimum quaternion norm treated as non-degenerate.
+const QUAT_MIN_NORM: f32 = 1e-3;
+
+/// Validate/repair an inbound transform. Returns `None` when a position
+/// component is non-finite or beyond [`POSE_LIMIT_M`], or the quaternion is
+/// non-finite/degenerate. Finite positions are clamped to [`POSE_CLAMP_M`] and a
+/// non-unit (but healthy) quaternion is renormalised so avatar bases stay valid.
+fn sanitize_transform(mut t: Transform) -> Option<Transform> {
+    for c in t.position.iter() {
+        if !c.is_finite() || c.abs() > POSE_LIMIT_M {
+            return None;
+        }
+    }
+    for c in t.position.iter_mut() {
+        *c = c.clamp(-POSE_CLAMP_M, POSE_CLAMP_M);
+    }
+    let q = t.rotation;
+    let norm_sq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+    if !norm_sq.is_finite() || norm_sq < QUAT_MIN_NORM * QUAT_MIN_NORM {
+        return None;
+    }
+    let norm = norm_sq.sqrt();
+    if (norm - 1.0).abs() > QUAT_UNIT_TOL {
+        for c in t.rotation.iter_mut() {
+            *c /= norm;
+        }
+    }
+    Some(t)
 }
 
 fn read_transform(slice: &[u8]) -> Transform {
@@ -413,6 +456,10 @@ impl PresenceClientNode {
         head_rot: Quaternion,
         has_left: bool,
         has_right: bool,
+        left_pos: Vector3,
+        left_rot: Quaternion,
+        right_pos: Vector3,
+        right_rot: Quaternion,
     );
 
     #[signal]
@@ -578,17 +625,40 @@ impl PresenceClientNode {
             let head = &pose.frame.head;
             let pos = Vector3::new(head.position[0], head.position[1], head.position[2]);
             let q = head.rotation;
+            // Articulated hands: forward decoded left/right transforms so remote
+            // avatars render real hand poses. Absent hands send identity + the
+            // has_* flag false, which the avatar script treats as "no hand".
+            let (has_left, left_pos, left_rot) = hand_signal_parts(&pose.frame.left_hand);
+            let (has_right, right_pos, right_rot) = hand_signal_parts(&pose.frame.right_hand);
             self.base_mut().emit_signal(
                 "avatar_pose_updated",
                 &[
                     Variant::from(GString::from(avatar_id)),
                     Variant::from(pos),
                     Variant::from(Quaternion::new(q[0], q[1], q[2], q[3])),
-                    Variant::from(pose.frame.left_hand.is_some()),
-                    Variant::from(pose.frame.right_hand.is_some()),
+                    Variant::from(has_left),
+                    Variant::from(has_right),
+                    Variant::from(left_pos),
+                    Variant::from(left_rot),
+                    Variant::from(right_pos),
+                    Variant::from(right_rot),
                 ],
             );
         }
+    }
+}
+
+/// Flatten an optional hand transform into the `(has, pos, rot)` triple the
+/// `avatar_pose_updated` signal carries. `None` → identity + `false`.
+#[cfg(not(test))]
+fn hand_signal_parts(hand: &Option<Transform>) -> (bool, Vector3, Quaternion) {
+    match hand {
+        Some(t) => (
+            true,
+            Vector3::new(t.position[0], t.position[1], t.position[2]),
+            Quaternion::new(t.rotation[0], t.rotation[1], t.rotation[2], t.rotation[3]),
+        ),
+        None => (false, Vector3::ZERO, Quaternion::new(0.0, 0.0, 0.0, 1.0)),
     }
 }
 
@@ -848,6 +918,122 @@ mod tests {
             decode_sibling_frame(truncated),
             Err(PresenceError::Protocol(_))
         ));
+    }
+
+    #[test]
+    fn sibling_drops_pose_with_nan_head() {
+        let bad = PoseFrame {
+            timestamp_us: 1,
+            head: Transform {
+                position: [f32::NAN, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+            },
+            left_hand: None,
+            right_hand: None,
+        };
+        let good = PoseFrame {
+            timestamp_us: 2,
+            head: Transform {
+                position: [1.0, 2.0, 3.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+            },
+            left_hand: None,
+            right_hand: None,
+        };
+        let bytes = build_sibling(&[(1, bad), (2, good.clone())]);
+        let batch = decode_sibling_frame(&bytes).unwrap();
+        assert_eq!(batch.poses.len(), 1, "NaN-head pose must be dropped");
+        assert_eq!(batch.poses[0].local_id, 2);
+    }
+
+    #[test]
+    fn sibling_drops_head_beyond_world_limit() {
+        let frame = PoseFrame {
+            timestamp_us: 1,
+            head: Transform {
+                position: [POSE_LIMIT_M * 2.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+            },
+            left_hand: None,
+            right_hand: None,
+        };
+        let bytes = build_sibling(&[(1, frame)]);
+        assert!(decode_sibling_frame(&bytes).unwrap().poses.is_empty());
+    }
+
+    #[test]
+    fn sibling_clamps_head_position() {
+        let frame = PoseFrame {
+            timestamp_us: 1,
+            head: Transform {
+                position: [POSE_CLAMP_M + 100.0, -5000.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+            },
+            left_hand: None,
+            right_hand: None,
+        };
+        let bytes = build_sibling(&[(1, frame)]);
+        let batch = decode_sibling_frame(&bytes).unwrap();
+        assert_eq!(batch.poses[0].frame.head.position[0], POSE_CLAMP_M);
+        assert_eq!(batch.poses[0].frame.head.position[1], -POSE_CLAMP_M);
+    }
+
+    #[test]
+    fn sibling_renormalises_nonunit_head_quaternion() {
+        let frame = PoseFrame {
+            timestamp_us: 1,
+            head: Transform {
+                position: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 2.0], // norm 2, well outside tolerance
+            },
+            left_hand: None,
+            right_hand: None,
+        };
+        let bytes = build_sibling(&[(1, frame)]);
+        let batch = decode_sibling_frame(&bytes).unwrap();
+        let q = batch.poses[0].frame.head.rotation;
+        let norm = (q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]).sqrt();
+        assert!((norm - 1.0).abs() < 1e-4, "quaternion must be renormalised");
+        assert!((q[3] - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn sibling_drops_pose_with_degenerate_head_quaternion() {
+        let frame = PoseFrame {
+            timestamp_us: 1,
+            head: Transform {
+                position: [0.0, 0.0, 0.0],
+                rotation: [0.0, 0.0, 0.0, 0.0], // zero quaternion → no valid basis
+            },
+            left_hand: None,
+            right_hand: None,
+        };
+        let bytes = build_sibling(&[(1, frame)]);
+        assert!(decode_sibling_frame(&bytes).unwrap().poses.is_empty());
+    }
+
+    #[test]
+    fn sibling_drops_bad_hand_but_keeps_pose() {
+        let bad_hand = Transform {
+            position: [f32::INFINITY, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        };
+        let frame = PoseFrame {
+            timestamp_us: 1,
+            head: Transform {
+                position: [1.0, 1.0, 1.0],
+                rotation: [0.0, 0.0, 0.0, 1.0],
+            },
+            left_hand: Some(bad_hand),
+            right_hand: None,
+        };
+        let bytes = build_sibling(&[(1, frame)]);
+        let batch = decode_sibling_frame(&bytes).unwrap();
+        assert_eq!(batch.poses.len(), 1, "valid head keeps the pose");
+        assert!(
+            batch.poses[0].frame.left_hand.is_none(),
+            "invalid hand must be dropped to None"
+        );
     }
 
     #[test]

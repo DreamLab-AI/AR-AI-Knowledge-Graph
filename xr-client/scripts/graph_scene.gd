@@ -120,8 +120,14 @@ var _room_urn: String = ""
 var _display_name: String = ""
 var _graph_token: String = ""
 var _nostr_secret_hex: String = ""
-var _reconnect_attempts: int = 0
-var _reconnect_timer: float = -1.0
+# Per-socket reconnect state. The graph (/wss) and presence (/ws/presence)
+# sockets fail and recover independently, so each owns its own backoff counter
+# and pending timer. Sharing one counter+timer (the old design) let a pending
+# graph reconnect tear down a live presence socket and vice versa.
+var _graph_reconnect_attempts: int = 0
+var _graph_reconnect_timer: float = -1.0
+var _presence_reconnect_attempts: int = 0
+var _presence_reconnect_timer: float = -1.0
 
 # One-shot latch for the M4-RAY canary (fires on the first resolved agent
 # selection). The HTTPRequest is created in _ready so the POST never blocks the
@@ -197,6 +203,8 @@ func _ready() -> void:
 		_presence_client.connect("avatar_joined", Callable(self, "_on_avatar_joined"))
 		_presence_client.connect("avatar_left", Callable(self, "_on_avatar_left"))
 		_presence_client.connect("avatar_pose_updated", Callable(self, "_on_avatar_pose_updated"))
+		if _presence_client.has_signal("connection_changed"):
+			_presence_client.connect("connection_changed", Callable(self, "_on_presence_connection_changed"))
 		if _presence_client.has_signal("presence_kicked"):
 			_presence_client.connect("presence_kicked", Callable(self, "_on_presence_kicked"))
 	if _voice_router != null and _voice_router.has_signal("voice_activity"):
@@ -246,7 +254,7 @@ func _wire_hud() -> void:
 
 func _on_hud_join_requested(room_urn: String) -> void:
 	_room_urn = room_urn
-	_reconnect_attempts = 0
+	_reset_reconnect_state()
 	_attempt_connect()
 
 
@@ -299,21 +307,43 @@ func connect_to_server(
 	_display_name = display_name
 	_graph_token = graph_token
 	_nostr_secret_hex = nostr_secret_hex
-	_reconnect_attempts = 0
+	_reset_reconnect_state()
 	_attempt_connect()
 
 
+func _reset_reconnect_state() -> void:
+	_graph_reconnect_attempts = 0
+	_graph_reconnect_timer = -1.0
+	_presence_reconnect_attempts = 0
+	_presence_reconnect_timer = -1.0
+
+
 func _attempt_connect() -> void:
-	# Tear down any prior sockets so a reconnect never leaks a detached tokio task.
-	if _binary_client != null and _binary_client.has_method("close"):
+	# Initial connect (and full re-join): bring up both sockets. Reconnects are
+	# per-socket via _connect_graph / _connect_presence so one socket's backoff
+	# never disturbs the other.
+	_connect_graph()
+	_connect_presence()
+
+
+func _connect_graph() -> void:
+	# Tear down any prior graph socket so a reconnect never leaks a detached
+	# tokio task, then re-open. The Nostr secret also NIP-98-authenticates the
+	# graph socket so server-authoritative drag/pin messages are accepted.
+	if _binary_client == null:
+		return
+	if _binary_client.has_method("close"):
 		_binary_client.close()
-	if _presence_client != null and _presence_client.has_method("close"):
-		_presence_client.close()
-	if _binary_client != null and _binary_client.has_method("connect_to_url"):
-		# The Nostr secret also NIP-98-authenticates the graph socket so
-		# server-authoritative drag/pin messages are accepted.
+	if _binary_client.has_method("connect_to_url"):
 		_binary_client.connect_to_url(_graph_ws_url, _graph_token, _nostr_secret_hex)
-	if _presence_client != null and _presence_client.has_method("join"):
+
+
+func _connect_presence() -> void:
+	if _presence_client == null:
+		return
+	if _presence_client.has_method("close"):
+		_presence_client.close()
+	if _presence_client.has_method("join"):
 		_presence_client.join(_presence_ws_url, _room_urn, _display_name, _nostr_secret_hex)
 
 
@@ -451,16 +481,33 @@ func _fit_graph_to_view(_delta: float) -> void:
 		return
 	_fit_frame += 1
 	if _fit_frame % FIT_RECOMPUTE_FRAMES == 0 or _fit_target_scale == 0.0:
-		var mn := Vector3(INF, INF, INF)
-		var mx := Vector3(-INF, -INF, -INF)
-		for pos: Vector3 in _node_positions.values():
-			mn = mn.min(pos)
-			mx = mx.max(pos)
-		var span: Vector3 = mx - mn
-		var longest: float = maxf(span.x, maxf(span.y, span.z))
-		if longest >= 0.001:
-			_fit_target_scale = GRAPH_TARGET_SPAN / longest
-			_fit_target_centre = (mn + mx) * 0.5
+		# Collect positions per axis, EXCLUDING the grabbed node: a node held in
+		# hand is dragged far from the settled cloud, and letting it into the AABB
+		# inflates the fit so the whole graph rescales as you move ("edges scaling
+		# off when moved"). Robust 5th–95th percentile bounds per axis then stop a
+		# single stray outlier from driving the fit.
+		var xs: PackedFloat32Array = PackedFloat32Array()
+		var ys: PackedFloat32Array = PackedFloat32Array()
+		var zs: PackedFloat32Array = PackedFloat32Array()
+		for node_id: int in _node_positions:
+			if node_id == _grabbed_id:
+				continue
+			var pos: Vector3 = _node_positions[node_id]
+			xs.append(pos.x)
+			ys.append(pos.y)
+			zs.append(pos.z)
+		if xs.size() > 0:
+			var mn := Vector3(
+				_percentile(xs, 0.05), _percentile(ys, 0.05), _percentile(zs, 0.05)
+			)
+			var mx := Vector3(
+				_percentile(xs, 0.95), _percentile(ys, 0.95), _percentile(zs, 0.95)
+			)
+			var span: Vector3 = mx - mn
+			var longest: float = maxf(span.x, maxf(span.y, span.z))
+			if longest >= 0.001:
+				_fit_target_scale = GRAPH_TARGET_SPAN / longest
+				_fit_target_centre = (mn + mx) * 0.5
 	if _fit_target_scale <= 0.0:
 		return
 	# Ease current scale/centre toward the target, then rebuild the transform:
@@ -471,6 +518,26 @@ func _fit_graph_to_view(_delta: float) -> void:
 		Basis.IDENTITY.scaled(Vector3(_graph_scale, _graph_scale, _graph_scale)),
 		GRAPH_ANCHOR - _fit_target_centre * _graph_scale
 	)
+
+
+# Linear-interpolated percentile (q in [0,1]) of an unsorted float array. Used to
+# derive robust AABB bounds for the fit so a single outlier node can't drive the
+# whole-graph rescale. Copies before sorting so caller data is untouched.
+func _percentile(values: PackedFloat32Array, q: float) -> float:
+	var n: int = values.size()
+	if n == 0:
+		return 0.0
+	if n == 1:
+		return values[0]
+	var sorted: PackedFloat32Array = values.duplicate()
+	sorted.sort()
+	var rank: float = clampf(q, 0.0, 1.0) * float(n - 1)
+	var lo: int = int(floor(rank))
+	var hi: int = int(ceil(rank))
+	if lo == hi:
+		return sorted[lo]
+	var frac: float = rank - float(lo)
+	return lerpf(sorted[lo], sorted[hi], frac)
 
 
 # Client-side optimistic position hunting: the server streams authoritative
@@ -932,7 +999,12 @@ func _on_graph_text(json: String) -> void:
 	var msg: Dictionary = parsed
 	match str(msg.get("type", "")):
 		"broker:new_case":
-			_handle_broker_new_case(msg.get("payload", {}))
+			# A malformed frame can carry a non-Dictionary payload (string, null,
+			# array); passing that to a Dictionary-typed param crashes
+			# _physics_process. Guard the type before routing.
+			var p: Variant = msg.get("payload", {})
+			if typeof(p) == TYPE_DICTIONARY:
+				_handle_broker_new_case(p)
 
 
 func _handle_broker_new_case(payload: Dictionary) -> void:
@@ -946,22 +1018,39 @@ func _handle_broker_new_case(payload: Dictionary) -> void:
 
 
 func _tick_reconnect(delta: float) -> void:
-	if _reconnect_timer < 0.0:
-		return
-	_reconnect_timer -= delta
-	if _reconnect_timer <= 0.0:
-		_reconnect_timer = -1.0
-		_attempt_connect()
+	# Each socket owns its own countdown; firing one reconnects only that socket
+	# so a pending graph reconnect can't tear down a live presence socket.
+	if _graph_reconnect_timer >= 0.0:
+		_graph_reconnect_timer -= delta
+		if _graph_reconnect_timer <= 0.0:
+			_graph_reconnect_timer = -1.0
+			_connect_graph()
+	if _presence_reconnect_timer >= 0.0:
+		_presence_reconnect_timer -= delta
+		if _presence_reconnect_timer <= 0.0:
+			_presence_reconnect_timer = -1.0
+			_connect_presence()
 
 
-func _schedule_reconnect() -> void:
-	_reconnect_attempts += 1
-	var delay: float = minf(
-		RECONNECT_BASE_DELAY_SEC * pow(2.0, float(_reconnect_attempts - 1)),
+func _backoff_delay(attempts: int) -> float:
+	return minf(
+		RECONNECT_BASE_DELAY_SEC * pow(2.0, float(attempts - 1)),
 		RECONNECT_MAX_DELAY_SEC
 	)
-	_reconnect_timer = delay
-	push_warning("GraphScene: reconnect attempt %d in %.1fs" % [_reconnect_attempts, delay])
+
+
+func _schedule_graph_reconnect() -> void:
+	_graph_reconnect_attempts += 1
+	_graph_reconnect_timer = _backoff_delay(_graph_reconnect_attempts)
+	push_warning("GraphScene: graph reconnect attempt %d in %.1fs" % [
+		_graph_reconnect_attempts, _graph_reconnect_timer])
+
+
+func _schedule_presence_reconnect() -> void:
+	_presence_reconnect_attempts += 1
+	_presence_reconnect_timer = _backoff_delay(_presence_reconnect_attempts)
+	push_warning("GraphScene: presence reconnect attempt %d in %.1fs" % [
+		_presence_reconnect_attempts, _presence_reconnect_timer])
 
 
 func _find_xr_camera() -> XRCamera3D:
@@ -980,12 +1069,26 @@ func _find_xr_camera() -> XRCamera3D:
 	return null
 
 
+# Graph (/wss) socket state. `connected` is emitted only once the subscribe
+# handshake completes (transport.rs), so a live signal always means a usable
+# stream. Clear any pending graph reconnect timer on connect, else a queued
+# _tick_reconnect would tear the fresh socket back down.
 func _on_connection_changed(connected: bool) -> void:
 	emit_signal("connection_status_changed", connected)
 	if connected:
-		_reconnect_attempts = 0
+		_graph_reconnect_attempts = 0
+		_graph_reconnect_timer = -1.0
 	else:
-		_schedule_reconnect()
+		_schedule_graph_reconnect()
+
+
+# Presence (/ws/presence) socket state, on its own independent backoff.
+func _on_presence_connection_changed(connected: bool) -> void:
+	if connected:
+		_presence_reconnect_attempts = 0
+		_presence_reconnect_timer = -1.0
+	else:
+		_schedule_presence_reconnect()
 
 
 var _dbg_pos_frames: int = 0
@@ -1090,13 +1193,22 @@ func _on_avatar_pose_updated(
 	head_pos: Vector3,
 	head_rot: Quaternion,
 	has_left: bool,
-	has_right: bool
+	has_right: bool,
+	left_pos: Vector3,
+	left_rot: Quaternion,
+	right_pos: Vector3,
+	right_rot: Quaternion
 ) -> void:
 	if not _avatars.has(avatar_id):
 		return
 	var av: Node3D = _avatars[avatar_id]
 	if av.has_method("apply_pose"):
-		av.apply_pose(head_pos, head_rot, has_left, has_right)
+		# Forward articulated hand transforms so remote avatars get real hands;
+		# has_left/has_right gate whether the pos/rot are meaningful.
+		av.apply_pose(
+			head_pos, head_rot, has_left, has_right,
+			left_pos, left_rot, right_pos, right_rot
+		)
 
 
 func _on_voice_activity(avatar_id: String, active: bool) -> void:
@@ -1132,4 +1244,4 @@ func _on_node_grabbed(node_id: int, _position: Vector3) -> void:
 
 func _on_presence_kicked(reason: String) -> void:
 	push_warning("GraphScene: kicked from presence -- %s" % reason)
-	_schedule_reconnect()
+	_schedule_presence_reconnect()

@@ -56,7 +56,14 @@ pub fn find_target(ray: &HandRay, candidates: &[TargetCandidate]) -> Option<Rayc
         if along <= 0.0 || along > MAX_RAY_DISTANCE_M {
             continue;
         }
-        let perp_sq = sq_len(&to) - along * along;
+        // Explicit rejection vector: sq_len(to) - along² cancels catastrophically
+        // in f32 when |to| >> radius, misclassifying exact-boundary hits.
+        let perp = [
+            to[0] - along * dir[0],
+            to[1] - along * dir[1],
+            to[2] - along * dir[2],
+        ];
+        let perp_sq = sq_len(&perp);
         let r_sq = TARGET_RADIUS_M * TARGET_RADIUS_M;
         if perp_sq > r_sq {
             continue;

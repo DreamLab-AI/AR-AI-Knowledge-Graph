@@ -116,10 +116,10 @@ Phased per PRD-008. Concrete deliverables in this repository.
 - `xr-client/` directory containing the Godot 4.3 project: `project.godot`, 4 scenes (`XRBoot.tscn`, `GraphScene.tscn`, `Avatar.tscn`, `HUD.tscn`), 4 GDScript scripts, perf benchmark harness, GUT test runner.
 - Workspace member `crates/visionclaw-xr-presence/` (Rust, 1175 lines): types, wire codec (0x43 avatar pose frame with `transform_mask` bitfield), room model, pose validation, delta compression, error hierarchy. Hexagonal port architecture in `ports/mod.rs` with ACL traits for identity verification and room membership.
 - gdext crate at `xr-client/rust/`: GDExtension entry point registering 5 classes (`lib.rs`), binary protocol decoder, presence WS client, interaction/LOD/voice modules, hexagonal port layer with fake transports for testing.
-- CI: `.github/workflows/xr-godot-ci.yml` (473 lines, 10 jobs) covering lint, Rust unit, GDScript unit, property/fuzz, contract, integration, security, coverage, APK build, and on-device perf.
+- CI: `.github/workflows/xr-godot-ci.yml` — the 473-line / 10-job pipeline below (lint, Rust unit, GDScript unit, property/fuzz, contract, integration, security, coverage, APK build, on-device perf) is the **target**. **Update (2026-08-21):** the workflow actually committed for the VIVE close-out is a 3-job / 175-line first cut; the full 10-job pipeline lands as the hosted-runner path is proven (PRD-008 §CI build pipeline).
 
 **Phase 1 — Render parity (2 sprints). DONE.**
-- Binary protocol 0x42 decoder in `binary_protocol.rs` (214 lines, 5 inline tests + integration tests). Reuses `crates/binary-protocol` wire format directly.
+- Binary protocol 0x42 decoder in `binary_protocol.rs` (214 lines, 5 inline tests + integration tests). Reuses `crates/binary-protocol` wire format directly. **(Superseded by ADR-102 §2/§6: the decoder targets live Protocol V3 — a `0x03` version byte + 52-byte records — not the `0x42`/28-byte layout; inline-test and registered-class counts have since grown to 23 and 10 respectively.)**
 - OpenXR session bring-up via `xr_boot.gd` (capability probe, extension verification). Passthrough enabled by default for MR.
 - GraphScene with MultiMesh node rendering, avatar lifecycle signals. LOD driven by distance-bucket policy in `lod.rs` (200 lines, 7 inline + 3 visual fixture + 9 property tests).
 - Hand-tracking ray cast + pinch detection in `interaction.rs` (266 lines, 9 inline + 8 integration + 11 property tests).
@@ -130,7 +130,8 @@ Phased per PRD-008. Concrete deliverables in this repository.
 - Voice routing API surface in `webrtc_audio.rs` (13+ inline tests, being expanded). `SpatialVoiceRouter` GDScript-exposed methods (`update_track_position`, `set_track_muted`, `track_count`) being wired by parallel agents.
 - LiveKit Android AAR JNI bridge (PRD-008 §5.5) **not yet started** — follow-up work.
 
-**Phase 3 — Cutover and removal (1 sprint). PLANNED.**
+**Phase 3 — Cutover and removal (1 sprint). PARTIAL (immersive-tree arm DONE, 2026-07-22; residue deferred to final-mile).**
+- **Done (2026-07-22, `P0-ADR071-PHASE3`):** the `client/src/immersive/` WebXR tree and its `App.tsx` wiring were deleted, retiring the desktop-as-VR rendering bug; the `pre-godot-xr` rollback tag is cut on `main`. Still-live residue deliberately deferred to the final-mile sprint: `quest3AutoDetector.ts` (the *correct* Quest XR path, not the bug), `services/vircadia/*` (dormant, `autoConnect={false}`), and the XR settings schema (`settings.ts:338-342,781-822`).
 - Tag `pre-godot-xr` on `main` immediately before merge of `feat/xr-godot-cutover`.
 - Remove `client/src/immersive/`, `client/src/services/vircadia/`, `quest3AutoDetector.ts`, the Vircadia docker compose service, the world-DB Postgres instance, and all references to ADR-032 / ADR-033 from active docs (ADRs themselves stay, marked Superseded).
 - Per `docs/xr-vircadia-removal-plan.md`.
@@ -151,7 +152,7 @@ Phased per PRD-008. Concrete deliverables in this repository.
 ### Negative
 
 - Browser-based "click to enter VR" is gone. Users install the APK via Quest developer mode (existing path) or eventually via the Quest Store (Phase 3+). This is consistent with how the audience already uses the product but is a real reduction in surface area.
-- Separate APK build pipeline in CI. Godot headless export + Android SDK + signing add ~6 min to the build, parallelisable with the browser build. **Mitigated (2026-05-04):** CI workflow operational at 473 lines / 10 jobs; parallelisation confirmed.
+- Separate APK build pipeline in CI. Godot headless export + Android SDK + signing add ~6 min to the build, parallelisable with the browser build. **Mitigated (2026-05-04):** CI workflow operational; parallelisation confirmed. **(2026-08-21: the committed workflow is a 3-job / 175-line first cut — the 473-line / 10-job pipeline remains the target.)**
 - godot-rust learning curve. Two team members estimated at 1 sprint each to fluency; mitigated by gdext's strong type system and the substantial public example corpus. **Mitigated (2026-05-04):** GDExtension entry point operational with 5 registered classes; hexagonal port architecture with fake transports enables full headless testing without Godot runtime; all Rust modules have comprehensive test coverage.
 - Shader/material porting. Glass edges, instanced labels, and the WASM scene effects (`client/crates/scene-effects/`) need Godot equivalents. Scene-effects WASM stays in the browser bundle for desktop; the XR client gets native shader equivalents written in Godot Shading Language.
 - Quest Store submission (if pursued in Phase 3+) carries Meta's review process, which has its own latency and content rules.

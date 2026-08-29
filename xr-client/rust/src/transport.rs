@@ -85,7 +85,6 @@ async fn graph_pump(
     let full = with_token(&url, &token);
     match connect_async(full.clone()).await {
         Ok((ws, _resp)) => {
-            push_graph(&inbox, GraphInbound::Connected);
             let (mut sink, mut stream) = ws.split();
             if sink
                 .send(Message::Text(GRAPH_REQUEST_INITIAL.to_owned()))
@@ -98,6 +97,11 @@ async fn graph_pump(
             {
                 error!("graph stream: failed to send subscribe control frames");
             } else {
+                // Only now, once the subscribe control frames are on the wire, is
+                // the stream usable — surface Connected here (not on bare TCP
+                // connect) so the scene's reconnect FSM never treats a half-open
+                // socket as live (#3d).
+                push_graph(&inbox, GraphInbound::Connected);
                 // NIP-98 session auth: unlocks server-authoritative interactions
                 // (node drag/pin) for this connection. Anonymous read-only
                 // streaming still works without it.
@@ -217,11 +221,14 @@ async fn presence_pump(
 
     match connect_async(url.clone()).await {
         Ok((ws, _resp)) => {
-            push_presence(&inbox, PresenceInbound::Connected);
             let transport = Arc::new(TungsteniteWsTransport::new(ws));
             let mut client = PresenceClient::new(transport.clone(), signer, room);
             match client.handshake(display_name, None).await {
                 Ok(joined) => {
+                    // Emit Connected only after the join handshake completes, so
+                    // the reconnect FSM never counts a pre-join socket as live
+                    // (#3d).
+                    push_presence(&inbox, PresenceInbound::Connected);
                     push_presence(
                         &inbox,
                         PresenceInbound::Joined {

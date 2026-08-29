@@ -41,6 +41,10 @@ pub(crate) fn handle_authenticate(
                 if let Some(user) = user_opt {
                     act.pubkey = Some(user.pubkey.clone());
                     act.is_power_user = user.is_power_user;
+                    // codex round-2: identity changed — invalidate any in-flight
+                    // (pre-auth) sync so its public-only result cannot land after
+                    // the post-auth sync below.
+                    act.bump_sync_generation();
 
                     if let Some(cid) = client_id {
                         use crate::actors::messages::AuthenticateClient;
@@ -65,6 +69,13 @@ pub(crate) fn handle_authenticate(
                         "NIP-98 WS authenticated: pubkey={}, power_user={}",
                         user.pubkey, user.is_power_user
                     );
+                    // #1 (codex): the visibility drop-set in `send_full_state_sync`
+                    // snapshots `pubkey` at send time. A client that requested
+                    // initial data BEFORE authenticating received the anon
+                    // (public-only) view; now that `act.pubkey` is set, re-push a
+                    // fresh filtered sync so the owner's private nodes appear
+                    // without needing to reconnect.
+                    act.send_full_state_sync(ctx);
                 } else {
                     let error_msg = serde_json::json!({
                         "type": "error",
@@ -99,6 +110,8 @@ pub(crate) fn handle_authenticate(
                 if token == "dev-session-token" {
                     act.pubkey = Some(pubkey.clone());
                     act.is_power_user = true;
+                    // codex round-2: identity changed — invalidate in-flight sync.
+                    act.bump_sync_generation();
                     if let Some(cid) = act.client_id {
                         use crate::actors::messages::AuthenticateClient;
                         act.client_manager_addr.do_send(AuthenticateClient {
@@ -122,6 +135,9 @@ pub(crate) fn handle_authenticate(
                         "dev-auth: WS dev-session-token accepted for pubkey {} (dev build)",
                         pubkey
                     );
+                    // #1 (codex): re-push a fresh filtered sync now that pubkey is
+                    // set (see NIP-98 branch for rationale).
+                    act.send_full_state_sync(ctx);
                     return;
                 }
             }
@@ -145,6 +161,8 @@ pub(crate) fn handle_authenticate(
                     if let Some(user) = user_opt {
                         act.pubkey = Some(user.pubkey.clone());
                         act.is_power_user = user.is_power_user;
+                        // codex round-2: identity changed — invalidate in-flight sync.
+                        act.bump_sync_generation();
 
                         if let Some(cid) = client_id {
                             use crate::actors::messages::AuthenticateClient;
@@ -170,6 +188,9 @@ pub(crate) fn handle_authenticate(
                             "Client authenticated: pubkey={}, power_user={}, ephemeral={}",
                             user.pubkey, user.is_power_user, is_ephemeral
                         );
+                        // #1 (codex): re-push a fresh filtered sync now that pubkey
+                        // is set (see NIP-98 branch for rationale).
+                        act.send_full_state_sync(ctx);
                     } else {
                         let error_msg = serde_json::json!({
                             "type": "error",

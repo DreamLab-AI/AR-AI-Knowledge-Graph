@@ -353,23 +353,44 @@ pub(crate) fn handle_request_full_snapshot(
     }));
 }
 
+/// Minimum gap between `requestInitialData` full-graph pushes on one
+/// connection. A legitimate client requests initial data once per connection
+/// (a reconnect-in-place after >30s is still served); anything faster is a
+/// client bug or an abuse attempt and is dropped.
+const INITIAL_DATA_COOLDOWN: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub(crate) fn handle_request_initial_data(
     act: &mut SocketFlowServer,
     ctx: &mut <SocketFlowServer as Actor>::Context,
 ) {
-    info!("Client requested initial data - unified init flow expects REST call first");
-
-    let response = serde_json::json!({
-        "type": "initialDataInfo",
-        "message": "Please call REST endpoint /api/graph/data first, which will trigger WebSocket sync",
-        "flow": "unified_init",
-        "timestamp": chrono::Utc::now().timestamp_millis()
-    });
-
-    if let Ok(msg_str) = serde_json::to_string(&response) {
-        act.last_activity = std::time::Instant::now();
-        ctx.text(msg_str);
+    // #2 (codex): `send_full_state_sync` triggers a full-graph fetch + quality
+    // sort + binary encode. Without a guard, a client can spam
+    // `requestInitialData` to force that work unbounded (a cheap DoS). Serve at
+    // most once per INITIAL_DATA_COOLDOWN per connection; drop + log repeats.
+    let now = std::time::Instant::now();
+    if let Some(last) = act.last_initial_data_request {
+        if now.duration_since(last) < INITIAL_DATA_COOLDOWN {
+            warn!(
+                "Dropping repeated requestInitialData from {} (<{}s since last; DoS guard)",
+                act.client_ip,
+                INITIAL_DATA_COOLDOWN.as_secs()
+            );
+            return;
+        }
     }
+    act.last_initial_data_request = Some(now);
+
+    // #4: previously this only replied with an `initialDataInfo` stub telling
+    // the client to call a REST endpoint first. The anonymous Godot client has
+    // no REST bootstrap step, so it never received nodes/edges. Push the real
+    // `initialGraphLoad` (plus state_sync + binary positions) directly, using
+    // the same builder as the connect/Authenticate path
+    // (`send_full_state_sync`), which respects DEFAULT_INITIAL_NODE_LIMIT (3000
+    // top-N by quality) and — via the added visibility gate — the
+    // PUBKEY_VISIBILITY_FILTER drop-set when enabled.
+    info!("Client requested initial data - pushing initialGraphLoad directly");
+    act.last_activity = now;
+    act.send_full_state_sync(ctx);
 }
 
 pub(crate) fn handle_enable_randomization(msg: &serde_json::Value) {

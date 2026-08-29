@@ -75,7 +75,29 @@ impl SocketFlowServer {
             }
         }
 
-        // Fall back to legacy binary node data protocol
+        // Fall back to legacy binary node data protocol.
+        //
+        // #11: this branch drives a server-side physics `SimulationStep` (a write
+        // to shared graph state). It must be authenticated — an anonymous client
+        // must not be able to trigger layout recomputation. Matches the VULN-01
+        // gating on the JSON drag path (`handle_node_drag_*`), which also rejects
+        // `pubkey.is_none()`. Reject + warn for anon clients before decoding.
+        if self.pubkey.is_none() {
+            warn!(
+                "Ignoring legacy binary node-data write from unauthenticated client: {}",
+                self.client_ip
+            );
+            let error_msg = serde_json::json!({
+                "type": "error",
+                "message": "Authentication required for position writes",
+                "recoverable": false,
+            });
+            if let Ok(msg_str) = serde_json::to_string(&error_msg) {
+                ctx.text(msg_str);
+            }
+            return;
+        }
+
         match binary_protocol::decode_node_data(data) {
             Ok(nodes) => {
                 info!("Decoded {} nodes from binary message", nodes.len());

@@ -38,21 +38,23 @@ fn build_frame(records: &[(u32, [f32; 3], [f32; 3])]) -> Vec<u8> {
 
 proptest! {
     /// PROP-BIN-1: any (node_id within the 26-bit mask, [f32;3], [f32;3]) tuple
-    /// round-trips exactly through build_frame + decode_position_frame. The id is
-    /// masked because the high 6 bits encode node-type flags, not identity.
+    /// **within the valid inbound domain** round-trips exactly through
+    /// build_frame + decode_position_frame. The id is masked because the high 6
+    /// bits encode node-type flags, not identity. Inbound sanitisation (finding
+    /// #5) drops non-finite / off-world records and clamps positions to ±400 m,
+    /// so this property is now scoped to finite, in-bounds values; the
+    /// reject/clamp behaviour is asserted separately in the unit tests.
     #[test]
     fn single_record_round_trip(
         raw_id in any::<u32>(),
-        pos in proptest::array::uniform3(any::<f32>()),
-        vel in proptest::array::uniform3(any::<f32>()),
+        pos in proptest::array::uniform3(-400.0f32..=400.0),
+        vel in proptest::array::uniform3(-1.0e6f32..=1.0e6),
     ) {
         let node_id = raw_id & NODE_ID_MASK;
         let frame = build_frame(&[(node_id, pos, vel)]);
         let decoded = decode_position_frame(&frame).unwrap();
         prop_assert_eq!(decoded.len(), 1);
         prop_assert_eq!(decoded[0].node_id, node_id);
-        // Bitwise comparison handles NaN/special floats: the raw bytes must
-        // round-trip identically.
         for i in 0..3 {
             prop_assert_eq!(
                 decoded[0].position[i].to_bits(),
@@ -88,7 +90,9 @@ proptest! {
         let records: Vec<(u32, [f32; 3], [f32; 3])> = (0..n)
             .map(|i| {
                 let id = seed.wrapping_add(i as u32) & NODE_ID_MASK;
-                let f = id as f32;
+                // Keep positions inside the ±400 m sanitised world so the decode
+                // is a pure round-trip (off-world clamp is unit-tested).
+                let f = (id % 128) as f32;
                 (id, [f, f + 1.0, f + 2.0], [f * 0.1, f * 0.2, f * 0.3])
             })
             .collect();

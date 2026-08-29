@@ -200,6 +200,13 @@ validation, LOD math, perf taps. Exposed to GDScript via
 
 ### 5.2 Binary Protocol Reuse and Extension
 
+> **Protocol note (ADR-102, 2026-06-08).** The live graph wire is **Protocol V3**
+> (a `0x03` version byte + N×52-byte records, analytics inline), not the 28 B/`0x42`
+> frame this section describes; the avatar pose frame is opcode `0x43` and
+> agent-copresence is `0x44`. The 28 B / `0x42` references below are historical design
+> context — the shipped client conforms to the live V3 wire (ADR-102 §2). The gdext
+> crate registers **ten** classes today, not five (copresence layer, ADR-130 D4).
+
 **The position stream is unchanged.** The Godot client consumes the same
 28 B/node position frame the desktop TS client consumes. Implementation
 lives in `crates/visionclaw-xr-gdext::protocol_decoder` and reuses

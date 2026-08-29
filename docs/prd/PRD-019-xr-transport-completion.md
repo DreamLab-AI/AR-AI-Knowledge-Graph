@@ -10,7 +10,7 @@
 - [ADR-071 — Godot 4 + godot-rust + OpenXR native APK](../adr/ADR-071-godot-rust-xr-replacement.md) (runtime; wire-size claim amended by ADR-102 §6)
 - PRD-QE-002 — XR Godot quality engineering (test strategy this pass extends)
 - [`ddd-xr-godot-context.md`](../ddd/ddd-xr-godot-context.md) (BC22 bounded context — updated alongside)
-- [`binary-protocol.md`](../reference/binary-protocol.md) / ADR-061 (binary protocol — **stale at 28 B/node**; live wire is V3 52 B, ADR-102 §2)
+- [`binary-protocol.md`](../reference/binary-protocol.md) (binary protocol reference — **reconciled to V3 52 B**, documents V2 36 B / V3 52 B position records; N2 docs-alignment effectively complete) / ADR-061 (original decision — still describes the 28 B/node layout, by design)
 
 ---
 

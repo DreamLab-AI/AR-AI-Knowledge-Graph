@@ -31,6 +31,9 @@ signal decision_submitted(case_id: String, outcome: String)
 signal case_decided(case_id: String, outcome: String, accepted: bool)
 
 const ACSP_GLOW_COLOR: Color = Color(1.0, 0.62, 0.12, 1.0)
+# Hard cap on a single decide POST. A stalled request fires request_completed with
+# RESULT_TIMEOUT at this point, releasing the single-in-flight decision gate.
+const DECIDE_TIMEOUT_SEC: float = 10.0
 
 var _avatar_count: int = 0
 var _mtp_ms: float = 0.0
@@ -41,6 +44,10 @@ var _http_base: String = ""
 var _nostr_auth: RefCounted = null  # Rust NostrAuth
 var _current_case_id: String = ""
 var _last_outcome: String = ""
+# Case id captured at POST time. show_case() can swap _current_case_id between the
+# request and its response; the completion handler must attribute the verdict to
+# the case that was actually submitted, not whatever is on screen now.
+var _pending_case_id: String = ""
 var _open_case_count: int = 0
 var _pulse_time: float = 0.0
 
@@ -52,6 +59,11 @@ func _ready() -> void:
 	deny_button.pressed.connect(_on_deny_pressed)
 	if decide_http != null:
 		decide_http.request_completed.connect(_on_decide_completed)
+		# Bound every decide POST: without a finite timeout a stalled connection
+		# never fires request_completed, so _pending_case_id would block the
+		# decision gate forever. On timeout Godot still fires request_completed
+		# with result == RESULT_TIMEOUT, which clears the gate below.
+		decide_http.timeout = DECIDE_TIMEOUT_SEC
 	set_process(true)
 
 
@@ -166,8 +178,16 @@ func _submit_decision(outcome: String) -> void:
 	if _current_case_id.is_empty():
 		push_warning("HUD: no case selected for decision")
 		return
+	# Reject overlapping submissions: the single DecideHttp is one-in-flight, so a
+	# second dispatch would return ERR_BUSY *after* we'd already overwritten the
+	# pending case id — the first (still live) request would then complete under
+	# the second case's identity while the second never went out. Only one decide
+	# may be in flight; a new one is ignored until the current resolves.
+	if not _pending_case_id.is_empty():
+		push_warning("HUD: a decision is already in flight; ignoring new submission")
+		return
 	var case_id := _current_case_id
-	_last_outcome = outcome
+	# Intent is observable immediately, independent of the HTTP round-trip.
 	emit_signal("decision_submitted", case_id, outcome)
 
 	if _nostr_auth == null or _http_base.is_empty() or decide_http == null:
@@ -189,15 +209,36 @@ func _submit_decision(outcome: String) -> void:
 	var err := decide_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
 	if err != OK:
 		push_warning("HUD: decide request failed to start (%d)" % err)
+		return
+	# Record the in-flight attribution ONLY once the request has actually
+	# launched, so a failed/busy dispatch never leaves stale pending state that a
+	# later completion would mis-attribute.
+	_last_outcome = outcome
+	_pending_case_id = case_id
 
 
 func _on_decide_completed(
-	_result: int,
+	result: int,
 	response_code: int,
 	_headers: PackedStringArray,
 	_body: PackedByteArray
 ) -> void:
-	var accepted := response_code >= 200 and response_code < 300
-	emit_signal("case_decided", _current_case_id, _last_outcome, accepted)
-	if accepted:
+	# A verdict counts only when the transport itself succeeded (result ==
+	# RESULT_SUCCESS) AND the server returned 2xx. A timeout / connection failure
+	# reports a non-SUCCESS result with response_code 0 — treat as not accepted,
+	# but still release the gate so the operator can retry.
+	var transport_ok := result == HTTPRequest.RESULT_SUCCESS
+	var accepted := transport_ok and response_code >= 200 and response_code < 300
+	# Attribute the verdict to the in-flight case, not the (possibly swapped)
+	# on-screen case. Clearing _pending_case_id here (on ANY completion, including
+	# timeout/failure) is what reopens the decision gate.
+	var decided_case := _pending_case_id
+	_pending_case_id = ""
+	if not accepted:
+		push_warning("HUD: decide failed for %s (result=%d code=%d)" % [
+			decided_case, result, response_code])
+	emit_signal("case_decided", decided_case, _last_outcome, accepted)
+	# Only dismiss the panel if it is still showing the case we just decided;
+	# a newer case shown mid-flight must stay visible.
+	if accepted and _current_case_id == decided_case:
 		clear_case()

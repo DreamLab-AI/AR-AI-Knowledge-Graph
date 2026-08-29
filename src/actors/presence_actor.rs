@@ -19,9 +19,9 @@ use serde::Serialize;
 use tracing::{debug, info, warn};
 
 use visionclaw_xr_presence::{
-    joint_anatomy, monotonic_timestamp, ports::Broadcaster, types::HandPose, velocity_gate, wire,
-    world_bounds, Aabb, AvatarId, AvatarMetadata, Did, PresenceRoom, RoomId, Transform,
-    ValidationError,
+    hand_reach, joint_anatomy, monotonic_timestamp, ports::Broadcaster, types::HandPose,
+    velocity_gate, wire, world_bounds, Aabb, AvatarId, AvatarMetadata, Did, PresenceRoom, RoomId,
+    Transform, ValidationError,
 };
 
 const TICK_HZ: u64 = 90;
@@ -29,6 +29,22 @@ const TICK_INTERVAL: Duration = Duration::from_micros(1_000_000 / TICK_HZ);
 const VIOLATION_WINDOW: Duration = Duration::from_secs(1);
 const VIOLATION_KICK_THRESHOLD: usize = 10;
 const BACKPRESSURE_LIMIT: usize = 3;
+
+/// Default max head→hand reach (m) when `PRESENCE_HAND_REACH_M` is unset (#4).
+/// More generous than the crate's 1.2m validator default so tall users and
+/// extended-tip controllers are not false-rejected.
+const DEFAULT_PRESENCE_HAND_REACH_M: f32 = 1.5;
+
+/// Read the configured hand-reach limit from `PRESENCE_HAND_REACH_M`, falling
+/// back to [`DEFAULT_PRESENCE_HAND_REACH_M`] on an unset/empty/unparseable or
+/// non-positive value.
+fn configured_hand_reach_m() -> f32 {
+    std::env::var("PRESENCE_HAND_REACH_M")
+        .ok()
+        .and_then(|v| v.trim().parse::<f32>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .unwrap_or(DEFAULT_PRESENCE_HAND_REACH_M)
+}
 
 // 0x43 sibling-frame envelope: [opcode u8][broadcast_seq u64 LE][room_id u32 LE][user_count u16 LE]
 const PREAMBLE_OPCODE: u8 = wire::OPCODE_AVATAR_POSE;
@@ -148,6 +164,10 @@ pub struct PresenceActor {
     broadcast_sequence: u64,
     bounds: Aabb,
     max_velocity_mps: f32,
+    /// Max head→hand distance (m) before a frame is rejected (#4 codex). Env
+    /// `PRESENCE_HAND_REACH_M`, default [`DEFAULT_PRESENCE_HAND_REACH_M`] (a
+    /// generous 1.5m so tall users / extended controllers are not false-kicked).
+    hand_reach_m: f32,
     stats: RoomStatsSnapshot,
 }
 
@@ -167,6 +187,7 @@ impl PresenceActor {
             broadcast_sequence: 0,
             bounds: Aabb::symmetric(50.0),
             max_velocity_mps: 20.0,
+            hand_reach_m: configured_hand_reach_m(),
             stats,
         }
     }
@@ -202,9 +223,16 @@ impl PresenceActor {
         world_bounds(&frame.head, &self.bounds)?;
         if let Some(t) = &frame.left_hand {
             world_bounds(t, &self.bounds)?;
+            // #10: reject anatomically impossible hand extension. A hand farther
+            // than `hand_reach_m` (env PRESENCE_HAND_REACH_M) from the head is a
+            // spoofed/abusive pose. An Err here is recorded as a single violation
+            // by `handle_ingest` (a lone bad frame is dropped as ValidationFailed,
+            // NOT a kick — only VIOLATION_KICK_THRESHOLD within the window kicks).
+            hand_reach(&frame.head, t, self.hand_reach_m)?;
         }
         if let Some(t) = &frame.right_hand {
             world_bounds(t, &self.bounds)?;
+            hand_reach(&frame.head, t, self.hand_reach_m)?;
         }
 
         if let Some(prev) = self
@@ -742,5 +770,61 @@ mod tests {
             .await
             .unwrap();
         assert!(matches!(outcome, IngestOutcome::ValidationFailed(_)));
+    }
+
+    #[test]
+    fn configured_hand_reach_defaults_when_unset() {
+        // Env is process-global; this test only asserts the default when the var
+        // is absent, avoiding cross-test env races.
+        if std::env::var("PRESENCE_HAND_REACH_M").is_err() {
+            assert_eq!(configured_hand_reach_m(), DEFAULT_PRESENCE_HAND_REACH_M);
+        }
+    }
+
+    #[actix::test]
+    async fn ingest_drops_single_out_of_reach_hand_without_kick() {
+        let room = sample_room();
+        // Generous bounds so ONLY the hand-reach check trips.
+        let actor = PresenceActor::new(room.clone())
+            .with_bounds(Aabb::symmetric(50.0), 20.0)
+            .start();
+        let frames = Arc::new(Mutex::new(Vec::new()));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let collector = CollectActor { frames, events }.start();
+
+        let d = did(0x55);
+        let ack = actor
+            .send(JoinRoom {
+                did: d.clone(),
+                metadata: meta(&d, "stretch"),
+                frame_recipient: collector.clone().recipient(),
+                event_recipient: collector.clone().recipient(),
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Hand 3m from the head — beyond the 1.5m default reach, but well inside
+        // world bounds. A single such frame must DROP (ValidationFailed), not
+        // kick.
+        let mut frame = sample_frame(1_000_000);
+        frame.head.position = [0.0, 1.6, 0.0];
+        frame.left_hand = Some(Transform {
+            position: [3.0, 1.6, 0.0],
+            rotation: [0.0, 0.0, 0.0, 1.0],
+        });
+        let bytes = encode(&frame, &room, &ack.avatar_id).unwrap().to_vec();
+        let outcome = actor
+            .send(IngestPose {
+                avatar_id: ack.avatar_id,
+                frame_bytes: bytes,
+            })
+            .await
+            .unwrap();
+        assert!(
+            matches!(outcome, IngestOutcome::ValidationFailed(_)),
+            "single out-of-reach hand frame should drop, not kick: {outcome:?}"
+        );
+        Arbiter::current().stop();
     }
 }

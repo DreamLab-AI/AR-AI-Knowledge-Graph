@@ -21,10 +21,17 @@ impl Handler<SetClientId> for SocketFlowServer {
     }
 }
 
-// Broadcast position update to the client
+// Broadcast position update to the client.
+//
+// The optional second field is the sync generation this frame belongs to
+// (codex round-3). `send_full_state_sync` stamps it; the handler drops the
+// frame if the session generation has advanced between enqueue and delivery
+// (auth/re-auth or a newer sync landed in the mailbox first). `None` = not
+// generation-gated (delivered unconditionally); no such caller exists today
+// but the option keeps the message reusable.
 #[derive(Message, Clone)]
 #[rtype(result = "()")]
-pub struct BroadcastPositionUpdate(pub Vec<(u32, BinaryNodeData)>);
+pub struct BroadcastPositionUpdate(pub Vec<(u32, BinaryNodeData)>, pub Option<u64>);
 
 impl Handler<BroadcastPositionUpdate> for SocketFlowServer {
     type Result = ();
@@ -32,6 +39,16 @@ impl Handler<BroadcastPositionUpdate> for SocketFlowServer {
     fn handle(&mut self, msg: BroadcastPositionUpdate, ctx: &mut Self::Context) -> Self::Result {
         if msg.0.is_empty() {
             return;
+        }
+        // codex round-3: validate the generation at the write, not just before
+        // do_send. Auth can bump the generation between the pre-send early-out
+        // and this handler running, so a stale identity's positions could
+        // otherwise still be written.
+        if let Some(generation) = msg.1 {
+            if !super::types::sync_generation_is_current(&self.sync_generation, generation) {
+                debug!("[WebSocket] Dropping stale position broadcast (generation superseded)");
+                return;
+            }
         }
 
         // Single full-state frame per broadcast. No delta encoding, no per-client
@@ -87,6 +104,76 @@ impl Handler<SendInitialGraphLoad> for SocketFlowServer {
 
     fn handle(&mut self, msg: SendInitialGraphLoad, ctx: &mut Self::Context) -> Self::Result {
         use crate::utils::socket_flow_messages::Message;
+
+        let initial_load = Message::InitialGraphLoad {
+            nodes: msg.nodes,
+            edges: msg.edges,
+            timestamp: chrono::Utc::now().timestamp_millis() as u64,
+        };
+
+        if let Ok(json) = serde_json::to_string(&initial_load) {
+            ctx.text(json);
+            if let Message::InitialGraphLoad { nodes, edges, .. } = &initial_load {
+                info!(
+                    "[WebSocket] Sent initial graph load: {} nodes, {} edges",
+                    nodes.len(),
+                    edges.len()
+                );
+            }
+        } else {
+            error!("[WebSocket] Failed to serialize initial graph load message");
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// codex round-3: generation-gated variants of the two text sends used by
+// `send_full_state_sync`. Unlike the shared `SendToClientText` /
+// `SendInitialGraphLoad` (which many other callers use unconditionally), these
+// carry the sync generation and are validated at the socket write — closing the
+// TOCTOU window between the pre-send check and the actor handling the queued
+// message. A superseded frame is dropped with a log.
+// ---------------------------------------------------------------------------
+
+/// A text frame tagged with the sync generation it belongs to.
+#[derive(Message)]
+#[rtype(result = "()")]
+pub(crate) struct GenGatedText {
+    pub text: String,
+    pub generation: u64,
+}
+
+impl Handler<GenGatedText> for SocketFlowServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: GenGatedText, ctx: &mut Self::Context) {
+        if !super::types::sync_generation_is_current(&self.sync_generation, msg.generation) {
+            debug!("[WebSocket] Dropping stale state_sync text (generation superseded)");
+            return;
+        }
+        ctx.text(msg.text);
+    }
+}
+
+/// An initial-graph-load frame tagged with the sync generation it belongs to.
+#[derive(Message)]
+#[rtype(result = "()")]
+pub(crate) struct GenGatedInitialGraphLoad {
+    pub nodes: Vec<crate::utils::socket_flow_messages::InitialNodeData>,
+    pub edges: Vec<crate::utils::socket_flow_messages::InitialEdgeData>,
+    pub generation: u64,
+}
+
+impl Handler<GenGatedInitialGraphLoad> for SocketFlowServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: GenGatedInitialGraphLoad, ctx: &mut Self::Context) {
+        use crate::utils::socket_flow_messages::Message;
+
+        if !super::types::sync_generation_is_current(&self.sync_generation, msg.generation) {
+            debug!("[WebSocket] Dropping stale InitialGraphLoad (generation superseded)");
+            return;
+        }
 
         let initial_load = Message::InitialGraphLoad {
             nodes: msg.nodes,

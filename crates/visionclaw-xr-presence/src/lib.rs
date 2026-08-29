@@ -28,5 +28,8 @@ pub use error::{RoomError, ValidationError, WireError};
 pub use ports::{Broadcaster, IdentityVerifier, SignedChallenge};
 pub use room::{AvatarState, PresenceRoom};
 pub use types::{Aabb, AvatarId, AvatarMetadata, Did, HandPose, PoseFrame, RoomId, Transform};
-pub use validate::{joint_anatomy, monotonic_timestamp, velocity_gate, world_bounds};
+pub use validate::{
+    hand_reach, joint_anatomy, monotonic_timestamp, velocity_gate, world_bounds,
+    DEFAULT_HAND_REACH_M,
+};
 pub use wire::{decode, encode, OPCODE_AVATAR_POSE};

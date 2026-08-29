@@ -123,8 +123,12 @@ observed bringing up the VIVE Pro:
 cargo test -p visionclaw-xr-gdext
 ```
 
-48 tests across 4 integration files + per-module unit tests run in <1 s
-on a workstation. No Quest, no Godot runtime, no network required.
+The headless suite — 9 integration files under `rust/tests/`
+(`binary_protocol_edge`, `interaction_raycast`, `lod_thresholds`,
+`pose_wire_round_trip`, `presence_handshake`, `property_binary_protocol`,
+`property_interaction`, `property_lod`, `visual_fixture`) plus 100+ per-module
+unit tests — runs in <1 s on a workstation. No Quest, no Godot runtime, no network
+required. (PRD-019 tracks the canonical cross-crate total: 141 headless tests green.)
 
 ## gdext-registered classes
 
