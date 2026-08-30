@@ -1274,6 +1274,48 @@ impl RenderStore {
         buf
     }
 
+    /// Whether an agent's status warrants a live work beam. A beam is the visible
+    /// "this agent is acting on that node" affordance (Pillar 2), so it renders
+    /// while the agent is `WORKING` or `BLOCKED` (stalled but still owning a
+    /// target); `IDLE`/`DONE` agents draw no beam.
+    fn beam_active(status: u8) -> bool {
+        status == AGENT_WORKING || status == AGENT_BLOCKED
+    }
+
+    /// Pack the **work-beam** MultiMesh buffer (Pillar 2, P3): one cylinder per
+    /// active agent→target-node link, ready for the restyled `edge_flow`
+    /// (`agent_beam`) material on the reserved `AgentMulti` MultiMesh. Stride 16
+    /// (12 transform + 4 INSTANCE_CUSTOM: r/g/b reserved, **a = agent status code**
+    /// so the beam shader tints working/blocked and animates the flowing stream).
+    ///
+    /// Both endpoints live in the position store: agent nodes ride the binary wire
+    /// with `AGENT_NODE_FLAG` (upserted like any node), and `target_node_id` is a
+    /// plain graph node — so `id_index` resolves both, no DID mapping needed. The
+    /// cylinder's local Y runs agent→target, so the shader's pulse flows from the
+    /// agent toward the node it is working on. Agents whose position or target is
+    /// not yet known (either end absent from the store), or whose endpoints
+    /// coincide, are skipped. Pure/per-frame — GDScript does one buffer assignment.
+    pub fn build_beam_buffer(&self, radius_comp: f32) -> Vec<f32> {
+        let mut buf = Vec::new();
+        for (&agent_id, rec) in &self.agent_registry {
+            if !Self::beam_active(rec.status) || rec.target_node_id == 0 {
+                continue;
+            }
+            let (Some(&as_), Some(&ts)) = (
+                self.id_index.get(&agent_id),
+                self.id_index.get(&rec.target_node_id),
+            ) else {
+                continue;
+            };
+            if let Some(tf) = edge_transform12(self.positions[as_], self.positions[ts], radius_comp)
+            {
+                buf.extend_from_slice(&tf);
+                buf.extend_from_slice(&[0.0, 0.0, 0.0, rec.status as f32]);
+            }
+        }
+        buf
+    }
+
     /// Pack a **semantic-plane** node buffer: the given `ids` at their stored
     /// positions lifted by `y_offset` (server space). Unlike `build_node_buffer`
     /// this is a clean, ephemeral copy for a query result subgraph — it applies
@@ -1392,6 +1434,33 @@ mod tests {
 
     fn approx(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-4
+    }
+
+    #[test]
+    fn beam_buffer_emits_active_agents_only_with_status_in_custom_a() {
+        let mut s = RenderStore::new();
+        // Agent node 5 and its target node 20 both have positions on the wire.
+        s.upsert(5, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.upsert(20, [0.0, 4.0, 0.0], 0, 0.0, 0.0);
+        // Agent 6 works on a target (30) whose position has NOT arrived yet.
+        s.upsert(6, [1.0, 0.0, 0.0], 0, 0.0, 0.0);
+        // A 0x23 action makes agent 5 WORKING on node 20, agent 6 on the unknown 30.
+        s.record_agent_action(5, 20, 0, 100, "reading");
+        s.record_agent_action(6, 30, 0, 100, "");
+
+        let buf = s.build_beam_buffer(1.0);
+        // Only agent 5 draws: agent 6's target is not in the store yet.
+        assert_eq!(buf.len(), EDGE_STRIDE_TYPED, "one beam, stride 16");
+        // INSTANCE_CUSTOM.a (index 15) carries the status code = WORKING.
+        assert!(approx(buf[15], AGENT_WORKING as f32));
+
+        // DONE / IDLE agents draw no beam; BLOCKED still does (stalled but owning).
+        s.set_agent_state(5, "done", "");
+        assert!(s.build_beam_buffer(1.0).is_empty(), "done agent: no beam");
+        s.set_agent_state(5, "blocked", "");
+        let blocked = s.build_beam_buffer(1.0);
+        assert_eq!(blocked.len(), EDGE_STRIDE_TYPED, "blocked agent still beams");
+        assert!(approx(blocked[15], AGENT_BLOCKED as f32));
     }
 
     /// Drive the hunt to convergence so fold-in/out transitions settle to their end

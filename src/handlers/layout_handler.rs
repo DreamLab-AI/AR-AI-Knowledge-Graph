@@ -36,25 +36,41 @@ pub async fn set_layout_mode(
     // GPU-resident modes (ForceDirected/Radial/Clustered) the SetLayoutMode handler
     // also primes the relevant force-term scalars, and the GPU keeps streaming
     // positions — so we return no one-shot positions and let the settling engine run.
-    if let Some(addr) = data.get_gpu_compute_addr().await {
+    let persisted = if let Some(addr) = data.get_gpu_compute_addr().await {
         use crate::actors::messages::SetLayoutMode;
         match addr.send(SetLayoutMode { mode }).await {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => log::warn!("set_layout_mode: actor rejected mode {}: {}", mode_str, e),
-            Err(e) => log::warn!("set_layout_mode: actor mailbox error: {}", e),
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => {
+                log::warn!("set_layout_mode: actor rejected mode {}: {}", mode_str, e);
+                Err(e)
+            }
+            Err(e) => {
+                log::warn!("set_layout_mode: actor mailbox error: {}", e);
+                Err(format!("actor mailbox error: {}", e))
+            }
         }
     } else {
         log::warn!("set_layout_mode: GPU compute actor unavailable — mode not persisted GPU-side");
-    }
+        Err("GPU compute actor unavailable".to_string())
+    };
 
     // GPU-resident modes settle continuously on the GPU; no CPU one-shot positions.
+    // Their entire effect IS the persisted mode, so a persistence failure must be
+    // reported as a failure rather than a hollow success with no positions.
     if mode.is_gpu_resident() {
-        return ok_json!(serde_json::json!({
-            "success": true,
-            "mode": mode_str,
-            "transitionMs": transition_ms,
-            "positions": []
-        }));
+        return match persisted {
+            Ok(()) => ok_json!(serde_json::json!({
+                "success": true,
+                "mode": mode_str,
+                "transitionMs": transition_ms,
+                "positions": []
+            })),
+            Err(e) => ok_json!(serde_json::json!({
+                "success": false,
+                "mode": mode_str,
+                "error": format!("Failed to apply layout mode: {}", e)
+            })),
+        };
     }
 
     // CPU one-shot modes (Hierarchical/Spectral/Temporal): compute placement below.

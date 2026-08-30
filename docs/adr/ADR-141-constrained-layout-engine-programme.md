@@ -246,3 +246,11 @@ unwieldy (P2–P4 will pressure this).
   GPU-side (`layout_handler.rs`); orphaned `api_handler/constraints/mod.rs` deleted; both
   clients unified on `/api/layout/mode` (desktop option strings corrected, XR HUD picker
   added).
+- 2026-08-30 — Phase 1 codex correctness pass (per-phase gate): fixed three defects before
+  landing. (1) `layout_mode` is now **actor-authoritative** — `UpdateSimulationParams`
+  preserves `self`'s mode so a physics-settings PUT (which rebuilds `SimulationParams`
+  from `PhysicsSettings` with a default mode) no longer silently resets an active
+  Radial/Clustered mode; only `SetLayoutMode` changes it. (2) every non-Radial mode now
+  clears `dag_bias_k` so a Radial→Clustered/CPU switch stops the radial-shell term.
+  (3) `POST /api/layout/mode` returns `success:false` on actor-unavailable/reject instead
+  of a hollow success. Re-verified compile-green.

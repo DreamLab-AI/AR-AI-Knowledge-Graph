@@ -946,6 +946,17 @@ impl BinaryProtocolClient {
         }
     }
 
+    /// Pack the work-beam MultiMesh buffer (Pillar 2, P3): one cylinder per active
+    /// agent→target-node link, 16 floats/instance (12 transform + 4 custom, with
+    /// the agent status code in `INSTANCE_CUSTOM.a`). Assign the result to the
+    /// `AgentMulti` MultiMesh `buffer` (its `agent_beam` material reads `.a`);
+    /// `buffer.size() / 16` is the instance count. Call once per render phase.
+    /// `radius_comp` folds GraphRoot scale into the beam's cylinder radius.
+    #[func]
+    fn build_beam_buffer(&self, radius_comp: f32) -> PackedFloat32Array {
+        PackedFloat32Array::from(self.store.build_beam_buffer(radius_comp).as_slice())
+    }
+
     /// Refine an agent's status + task from the JSON `state` channel. The GDScript
     /// scene layer already receives text frames via `text_message`; when a real
     /// `agent:state` producer lands server-side (a `BroadcastMessage` text frame,

@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://b3xrgraph01vc"]
+[gd_scene load_steps=16 format=3 uid="uid://b3xrgraph01vc"]
 
 [ext_resource type="Script" path="res://scripts/graph_scene.gd" id="1_graph"]
 [ext_resource type="PackedScene" uid="uid://b3xravatar01vc" path="res://scenes/Avatar.tscn" id="2_avatar"]
@@ -7,6 +7,7 @@
 [ext_resource type="Material" path="res://materials/agent_capsule.tres" id="5_caps"]
 [ext_resource type="PackedScene" path="res://scenes/HUD.tscn" id="6_hud"]
 [ext_resource type="Material" path="res://materials/edge_flow.tres" id="7_edge"]
+[ext_resource type="Material" path="res://materials/agent_beam.tres" id="8_beam"]
 
 [sub_resource type="SphereMesh" id="SphereMesh_node"]
 radius = 0.5
@@ -32,6 +33,19 @@ rings = 1
 transform_format = 1
 use_custom_data = true
 mesh = SubResource("CylinderMesh_edge")
+instance_count = 0
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_beam"]
+top_radius = 0.02
+bottom_radius = 0.02
+height = 1.0
+radial_segments = 6
+rings = 1
+
+[sub_resource type="MultiMesh" id="MultiMesh_beams"]
+transform_format = 1
+use_custom_data = true
+mesh = SubResource("CylinderMesh_beam")
 instance_count = 0
 
 [sub_resource type="Environment" id="Environment_world"]
@@ -77,7 +91,8 @@ multimesh = SubResource("MultiMesh_nodes")
 material_override = ExtResource("4_orb")
 
 [node name="AgentMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
-material_override = ExtResource("5_caps")
+material_override = ExtResource("8_beam")
+multimesh = SubResource("MultiMesh_beams")
 
 [node name="EdgesMulti" type="MultiMeshInstance3D" parent="GraphRoot"]
 material_override = ExtResource("7_edge")

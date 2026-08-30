@@ -2554,6 +2554,12 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
         const RADIAL_DEFAULT_DAG_BIAS_K: f32 = 1.0;
         const RADIAL_DEFAULT_DAG_LEVEL_DISTANCE: f32 = 60.0;
 
+        // Layout mode is authoritative on the actor and only SetLayoutMode may change
+        // it. Commit the new mode to self FIRST so the UpdateSimulationParams handler
+        // (which preserves self.simulation_params.layout_mode — see below) carries it
+        // through even if a settings-driven update races in with a default mode.
+        self.simulation_params.layout_mode = msg.mode;
+
         let mut params = self.simulation_params.clone();
         params.layout_mode = msg.mode;
 
@@ -2566,16 +2572,16 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
                     params.dag_level_distance = RADIAL_DEFAULT_DAG_LEVEL_DISTANCE;
                 }
             }
-            LayoutMode::ForceDirected => {
-                // Plain force-directed layout disables the radial shell bias so the
-                // graph relaxes freely.
+            // Every non-Radial mode clears the radial-shell bias so a mode switch
+            // (e.g. Radial → Clustered/ForceDirected/a CPU mode) does not leave the
+            // dag_radial_bias term firing. The mode is authoritative over the shell;
+            // dagBiasK can still be raised explicitly via /api/settings/physics.
+            // Clustered rides the existing cluster-cohesion term (cluster_strength),
+            // which the user controls independently; the CPU one-shot modes
+            // (Hierarchical/Spectral/Temporal) are placed by the layout handler.
+            _ => {
                 params.dag_bias_k = 0.0;
             }
-            // Hierarchical/Spectral/Temporal/Clustered: record the discriminant only.
-            // Clustered rides the existing cluster-cohesion term (cluster_strength),
-            // which the user controls independently; the CPU modes are placed by the
-            // layout handler.
-            _ => {}
         }
 
         info!(
@@ -2592,7 +2598,16 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
 impl Handler<UpdateSimulationParams> for ForceComputeActor {
     type Result = Result<(), String>;
 
-    fn handle(&mut self, msg: UpdateSimulationParams, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, mut msg: UpdateSimulationParams, _ctx: &mut Self::Context) -> Self::Result {
+        // Layout mode is owned exclusively by SetLayoutMode. A settings-driven update
+        // is built via `PhysicsSettings -> SimulationParams`, which cannot recover the
+        // mode (PhysicsSettings has no mode field) and so defaults it to ForceDirected.
+        // Preserve the actor's current mode here so changing any physics slider never
+        // silently resets an active Radial/Clustered/CPU mode. SetLayoutMode commits
+        // the new mode to `self` before delegating here, so this preserves the *new*
+        // mode on that path (no clobber, no lost switch).
+        msg.params.layout_mode = self.simulation_params.layout_mode;
+
         // Validate incoming parameters before applying — reject unsafe values
         // that could cause GPU explosion (dt=1000), infinite energy (damping=0),
         // or gravitational collapse (repel_k=-1).
