@@ -159,9 +159,56 @@ offset_bottom = 32.0
 mouse_filter = 2
 script = ExtResource("2_reticle")
 
+[node name="DocumentPanel" type="PanelContainer" parent="HudViewport/HudControl"]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+
+[node name="DVBox" type="VBoxContainer" parent="HudViewport/HudControl/DocumentPanel"]
+
+[node name="DHeader" type="HBoxContainer" parent="HudViewport/HudControl/DocumentPanel/DVBox"]
+
+[node name="DocTitle" type="Label" parent="HudViewport/HudControl/DocumentPanel/DVBox/DHeader"]
+size_flags_horizontal = 3
+text = "Document"
+
+[node name="CloseDocButton" type="Button" parent="HudViewport/HudControl/DocumentPanel/DVBox/DHeader"]
+custom_minimum_size = Vector2(140, 56)
+text = "Close"
+
+[node name="DocScroll" type="ScrollContainer" parent="HudViewport/HudControl/DocumentPanel/DVBox"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="DocText" type="RichTextLabel" parent="HudViewport/HudControl/DocumentPanel/DVBox/DocScroll"]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+
+[node name="DScroll" type="HBoxContainer" parent="HudViewport/HudControl/DocumentPanel/DVBox"]
+alignment = 1
+
+[node name="ScrollUpButton" type="Button" parent="HudViewport/HudControl/DocumentPanel/DVBox/DScroll"]
+custom_minimum_size = Vector2(120, 56)
+text = "▲"
+
+[node name="ScrollDownButton" type="Button" parent="HudViewport/HudControl/DocumentPanel/DVBox/DScroll"]
+custom_minimum_size = Vector2(120, 56)
+text = "▼"
+
 [node name="HudPanel" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.7)
 mesh = SubResource("QuadMesh_hud")
 material_override = SubResource("Mat_hud")
 
 [node name="DecideHttp" type="HTTPRequest" parent="."]
+
+[node name="DocHttp" type="HTTPRequest" parent="."]

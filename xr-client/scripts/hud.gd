@@ -32,6 +32,21 @@ extends Node3D
 @onready var node_size_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizeMinusButton
 @onready var controls_status: Label = $HudViewport/HudControl/VBox/ControlsStatus
 
+# Double-click document view (narrativegoldmine page card).
+@onready var document_panel: PanelContainer = $HudViewport/HudControl/DocumentPanel
+@onready var doc_title_label: Label = $HudViewport/HudControl/DocumentPanel/DVBox/DHeader/DocTitle
+@onready var close_doc_button: Button = $HudViewport/HudControl/DocumentPanel/DVBox/DHeader/CloseDocButton
+@onready var doc_scroll: ScrollContainer = $HudViewport/HudControl/DocumentPanel/DVBox/DocScroll
+@onready var doc_text: RichTextLabel = $HudViewport/HudControl/DocumentPanel/DVBox/DocScroll/DocText
+@onready var scroll_up_button: Button = $HudViewport/HudControl/DocumentPanel/DVBox/DScroll/ScrollUpButton
+@onready var scroll_down_button: Button = $HudViewport/HudControl/DocumentPanel/DVBox/DScroll/ScrollDownButton
+@onready var doc_http: HTTPRequest = $DocHttp
+
+const NG_PAGE_BASE: String = "https://narrativegoldmine.com/api/pages/"
+const DOC_TIMEOUT_SEC: float = 10.0
+const DOC_SCROLL_STEP: int = 140
+var _doc_title: String = ""
+
 signal join_requested(room_urn: String)
 signal mute_toggled(muted: bool)
 ## Emitted the instant the operator approves/denies — the M2 intervention intent,
@@ -89,6 +104,13 @@ func _ready() -> void:
 	edges_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "edges_minus"))
 	node_size_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_plus"))
 	node_size_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_minus"))
+	# Document view (double-click node → narrativegoldmine page card).
+	close_doc_button.pressed.connect(hide_document)
+	scroll_up_button.pressed.connect(func() -> void: doc_scroll.scroll_vertical -= DOC_SCROLL_STEP)
+	scroll_down_button.pressed.connect(func() -> void: doc_scroll.scroll_vertical += DOC_SCROLL_STEP)
+	if doc_http != null:
+		doc_http.request_completed.connect(_on_doc_completed)
+		doc_http.timeout = DOC_TIMEOUT_SEC
 	set_process(true)
 
 
@@ -97,6 +119,162 @@ func _ready() -> void:
 func set_controls_status(text: String) -> void:
 	if controls_status != null:
 		controls_status.text = text
+
+
+# --- Document view (double-click node → narrativegoldmine page card) ----------
+
+## Open the document view for `slug`, fetching its narrativegoldmine page JSON.
+## `title` is the node label shown while loading. Wand-clickable Close/scroll.
+func show_document(title: String, slug: String) -> void:
+	_doc_title = title
+	if document_panel != null:
+		document_panel.visible = true
+	if doc_title_label != null:
+		doc_title_label.text = title
+	if doc_text != null:
+		doc_text.text = "[i]Loading…[/i]"
+	if doc_scroll != null:
+		doc_scroll.scroll_vertical = 0
+	if doc_http == null:
+		return
+	# One request at a time; a new open cancels the previous fetch.
+	doc_http.cancel_request()
+	var url := "%s%s.json" % [NG_PAGE_BASE, slug.uri_encode()]
+	var err := doc_http.request(url)
+	if err != OK:
+		if doc_text != null:
+			doc_text.text = "[i]Could not reach the page service.[/i]"
+
+
+func hide_document() -> void:
+	if document_panel != null:
+		document_panel.visible = false
+
+
+func _on_doc_completed(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray
+) -> void:
+	if doc_text == null:
+		return
+	var ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300
+	if not ok:
+		doc_text.text = "[i]No linked page.[/i]"
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		doc_text.text = "[i]No linked page.[/i]"
+		return
+	doc_text.text = render_ng_card(_doc_title, parsed)
+
+
+## Pure builder: narrativegoldmine page Dictionary → BBCode card. Total — never
+## errors on missing/oddly-typed fields; unknown sections are skipped.
+func render_ng_card(fallback_title: String, data: Dictionary) -> String:
+	var lines: Array = []
+	var title: String = _dict_str(data, "title", fallback_title)
+	lines.append("[font_size=34][b]%s[/b][/font_size]" % _bb(title))
+	# Subtitle: domain · entityType · maturity · quality score (present fields only).
+	var sub: Array = []
+	var domain := _dict_str(data, "domain", "")
+	if domain != "":
+		sub.append(domain)
+	var entity := _dict_str(data, "entityType", "")
+	if entity != "":
+		sub.append(entity)
+	var maturity := _dict_str(data, "maturity", "")
+	if maturity != "":
+		sub.append(maturity)
+	if data.has("qualityScore") and (data["qualityScore"] is float or data["qualityScore"] is int):
+		sub.append("quality %.2f" % float(data["qualityScore"]))
+	if not sub.is_empty():
+		lines.append("[color=#8fa6c8]%s[/color]" % _bb(" · ".join(sub)))
+	# Definition.
+	var definition := _dict_str(data, "definition", "")
+	if definition != "":
+		lines.append("")
+		lines.append(_bb(definition))
+	# Relationships (defensive shape: dicts predicate→target, or plain strings).
+	var rels: Array = _rel_lines(data.get("relationships", []))
+	if not rels.is_empty():
+		lines.append("")
+		lines.append("[b]Relationships[/b]")
+		for r: String in rels:
+			lines.append("  • %s" % _bb(r))
+	# Links: wikilinks + backlinks, capped.
+	var wl: Array = _link_chips(data.get("wikilinks", []), 10)
+	var bl: Array = _link_chips(data.get("backlinks", []), 10)
+	if not wl.is_empty() or not bl.is_empty():
+		lines.append("")
+		lines.append("[b]Links[/b]")
+		if not wl.is_empty():
+			lines.append("[color=#7fd0ff]→[/color] " + " ".join(wl))
+		if not bl.is_empty():
+			lines.append("[color=#c8a0ff]←[/color] " + " ".join(bl))
+	return "\n".join(lines)
+
+
+# Coloured, escaped chips from a link array (strings or {title/label/slug} dicts),
+# capped at `cap` with a "+N more" tail.
+func _link_chips(arr: Variant, cap: int) -> Array:
+	var out: Array = []
+	if not (arr is Array):
+		return out
+	var items: Array = arr
+	var n: int = items.size()
+	var shown: int = mini(n, cap)
+	for i: int in range(shown):
+		var name := _any_name(items[i])
+		if name != "":
+			out.append("[color=#cfe3ff]%s[/color]" % _bb(name))
+	if n > cap:
+		out.append("[i]+%d more[/i]" % (n - cap))
+	return out
+
+
+# Relationship lines: "predicate → target" from dicts, or the raw string.
+func _rel_lines(arr: Variant) -> Array:
+	var out: Array = []
+	if not (arr is Array):
+		return out
+	var items: Array = arr
+	for i: int in range(mini(items.size(), 15)):
+		var it: Variant = items[i]
+		if it is String:
+			if it != "":
+				out.append(it)
+		elif it is Dictionary:
+			var pred := _dict_str(it, "predicate", _dict_str(it, "relation", _dict_str(it, "type", "")))
+			var tgt := _dict_str(it, "target", _dict_str(it, "object", _dict_str(it, "value", "")))
+			if pred != "" and tgt != "":
+				out.append("%s → %s" % [pred, tgt])
+			elif tgt != "":
+				out.append(tgt)
+			elif pred != "":
+				out.append(pred)
+	return out
+
+
+# Best-effort display name from a string or a dict with title/label/slug.
+func _any_name(v: Variant) -> String:
+	if v is String:
+		return v
+	if v is Dictionary:
+		return _dict_str(v, "title", _dict_str(v, "label", _dict_str(v, "slug", "")))
+	return ""
+
+
+func _dict_str(d: Dictionary, key: String, fallback: String) -> String:
+	if d.has(key) and d[key] is String:
+		return d[key]
+	return fallback
+
+
+# Escape BBCode-significant '[' so page content can't inject tags.
+func _bb(s: String) -> String:
+	return s.replace("[", "[lb]")
 
 
 func _process(delta: float) -> void:

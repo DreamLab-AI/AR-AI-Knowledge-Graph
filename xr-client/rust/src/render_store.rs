@@ -25,6 +25,17 @@
 
 use std::collections::{HashMap, HashSet};
 
+/// Proximity-label metadata for one node (kept small — no full metadata map).
+#[derive(Default, Clone)]
+struct NodeMeta {
+    /// Stable id used as the narrativegoldmine page slug source (falls back to the
+    /// slugified label when empty).
+    meta_id: String,
+    label: String,
+    node_type: String,
+    detail: String,
+}
+
 /// Floats per node instance in the MultiMesh buffer (12 transform + 4 colour + 4 custom).
 pub const NODE_STRIDE: usize = 20;
 /// Floats per edge instance (12 transform only).
@@ -165,6 +176,9 @@ pub struct RenderStore {
     drawn: HashSet<u32>,
     render_ids: Vec<u32>,
     render_positions: Vec<[f32; 3]>,
+    // Node label metadata (from initialGraphLoad), keyed by id — independent of the
+    // position store so it survives whichever arrives first.
+    meta: HashMap<u32, NodeMeta>,
 }
 
 impl RenderStore {
@@ -183,6 +197,69 @@ impl RenderStore {
         self.drawn.clear();
         self.render_ids.clear();
         self.render_positions.clear();
+        self.meta.clear();
+    }
+
+    /// Store a node's label metadata (from initialGraphLoad).
+    pub fn set_meta(&mut self, node_id: u32, meta_id: String, label: String, node_type: String, detail: String) {
+        self.meta.insert(
+            node_id,
+            NodeMeta {
+                meta_id,
+                label,
+                node_type,
+                detail,
+            },
+        );
+    }
+
+    /// Primary label for a node (empty string if unknown).
+    pub fn label_of(&self, node_id: u32) -> String {
+        self.meta.get(&node_id).map(|m| m.label.clone()).unwrap_or_default()
+    }
+
+    /// Slug source (metadata_id) for a node (empty if unknown); the double-click
+    /// document view slugifies this, falling back to the label.
+    pub fn meta_id_of(&self, node_id: u32) -> String {
+        self.meta.get(&node_id).map(|m| m.meta_id.clone()).unwrap_or_default()
+    }
+
+    /// Secondary detail line: node type and one metadata value, joined by " · ".
+    /// Empty when neither is known.
+    pub fn detail_of(&self, node_id: u32) -> String {
+        match self.meta.get(&node_id) {
+            None => String::new(),
+            Some(m) => {
+                let mut parts: Vec<&str> = Vec::new();
+                if !m.node_type.is_empty() {
+                    parts.push(&m.node_type);
+                }
+                if !m.detail.is_empty() {
+                    parts.push(&m.detail);
+                }
+                parts.join(" · ")
+            }
+        }
+    }
+
+    /// Ids of nodes within `radius` (server space) of `center`, nearest first,
+    /// capped at `max`. A plain O(N) scan — fine at 13k for a few-Hz query.
+    pub fn nodes_near(&self, center: [f32; 3], radius: f32, max: usize) -> Vec<u32> {
+        let r2 = radius * radius;
+        let mut hits: Vec<(f32, u32)> = Vec::new();
+        for slot in 0..self.ids.len() {
+            let p = self.positions[slot];
+            let dx = p[0] - center[0];
+            let dy = p[1] - center[1];
+            let dz = p[2] - center[2];
+            let d2 = dx * dx + dy * dy + dz * dz;
+            if d2 <= r2 {
+                hits.push((d2, self.ids[slot]));
+            }
+        }
+        hits.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(max);
+        hits.into_iter().map(|(_, id)| id).collect()
     }
 
     pub fn len(&self) -> usize {
@@ -459,6 +536,39 @@ mod tests {
         // 5th–95th percentile of 0..99 stays well within range; outlier excluded.
         assert!(bb[3] < 100.0, "outlier excluded, x-max stays bounded");
         assert!(bb[0] >= 0.0);
+    }
+
+    #[test]
+    fn nodes_near_orders_by_distance_and_caps() {
+        let mut s = RenderStore::new();
+        // Nodes strung along +X at 1,2,3,4,5 m.
+        for i in 1..=5u32 {
+            s.upsert(i, [i as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        // From the origin, radius 3.5 covers ids 1,2,3; cap to 2 → nearest two.
+        let near = s.nodes_near([0.0, 0.0, 0.0], 3.5, 2);
+        assert_eq!(near, vec![1, 2], "nearest-first, capped at max");
+        // Radius 3.5, no cap pressure → 1,2,3 in order.
+        let near_all = s.nodes_near([0.0, 0.0, 0.0], 3.5, 10);
+        assert_eq!(near_all, vec![1, 2, 3]);
+        // Empty when nothing is in range.
+        assert!(s.nodes_near([100.0, 0.0, 0.0], 0.5, 10).is_empty());
+    }
+
+    #[test]
+    fn meta_label_and_detail() {
+        let mut s = RenderStore::new();
+        s.set_meta(1, "alpha-page".into(), "Alpha".into(), "page".into(), "logseq".into());
+        assert_eq!(s.meta_id_of(1), "alpha-page");
+        assert_eq!(s.label_of(1), "Alpha");
+        assert_eq!(s.detail_of(1), "page · logseq");
+        // Unknown node → empty, not a panic.
+        assert_eq!(s.meta_id_of(99), "");
+        assert_eq!(s.label_of(99), "");
+        assert_eq!(s.detail_of(99), "");
+        // Only node_type present.
+        s.set_meta(2, "".into(), "Beta".into(), "agent".into(), "".into());
+        assert_eq!(s.detail_of(2), "agent");
     }
 
     #[test]

@@ -134,29 +134,96 @@ pub struct EdgeSpec {
 /// `{"type":"initialGraphLoad","nodes":[...],"edges":[{"id":"..","source_id":u32,
 /// "target_id":u32,"weight":f32?,..}],"timestamp":u64}`.
 pub fn parse_initial_graph_load(text: &str) -> Option<Vec<EdgeSpec>> {
+    parse_initial_graph(text).map(|(edges, _)| edges)
+}
+
+/// One node's proximity-label metadata from `initialGraphLoad` (source of truth:
+/// `visionclaw-protocol::socket_flow_messages::InitialNodeData`). Only the fields
+/// the in-headset label overlay needs — id, display label, node type, and one
+/// useful metadata value for the detail line — are kept; the full metadata map is
+/// deliberately dropped to bound client memory at 13k nodes.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeMetaWire {
+    pub id: u32,
+    pub metadata_id: String,
+    pub label: String,
+    pub node_type: String,
+    pub detail: String,
+}
+
+/// Parse an `initialGraphLoad` frame into `(edges, node metadata)` in a single
+/// JSON pass (the frame is ~28 MB at full density, so parsing once matters).
+/// Returns `None` for any non-`initialGraphLoad` text frame. Edge shape:
+/// `edges:[{source_id:u32,target_id:u32,weight:f32?}]`; node shape:
+/// `nodes:[{id:u32,label,node_type?,metadata:{source_domain|type|source_file,…}}]`.
+pub fn parse_initial_graph(text: &str) -> Option<(Vec<EdgeSpec>, Vec<NodeMetaWire>)> {
     let v: serde_json::Value = serde_json::from_str(text).ok()?;
     if v.get("type").and_then(|t| t.as_str()) != Some("initialGraphLoad") {
         return None;
     }
-    let edges = v.get("edges")?.as_array()?;
-    let mut out = Vec::with_capacity(edges.len());
-    for e in edges {
-        let source = e.get("source_id").and_then(|s| s.as_u64())?;
-        let target = e.get("target_id").and_then(|t| t.as_u64())?;
-        if source > u32::MAX as u64 || target > u32::MAX as u64 {
-            continue;
+    let mut edges = Vec::new();
+    if let Some(arr) = v.get("edges").and_then(|e| e.as_array()) {
+        edges.reserve(arr.len());
+        for e in arr {
+            let (Some(source), Some(target)) = (
+                e.get("source_id").and_then(|s| s.as_u64()),
+                e.get("target_id").and_then(|t| t.as_u64()),
+            ) else {
+                continue;
+            };
+            if source > u32::MAX as u64 || target > u32::MAX as u64 {
+                continue;
+            }
+            let weight = e.get("weight").and_then(|w| w.as_f64()).unwrap_or(1.0) as f32;
+            edges.push(EdgeSpec {
+                source: source as u32 & NODE_ID_MASK,
+                target: target as u32 & NODE_ID_MASK,
+                weight,
+            });
         }
-        let weight = e
-            .get("weight")
-            .and_then(|w| w.as_f64())
-            .unwrap_or(1.0) as f32;
-        out.push(EdgeSpec {
-            source: source as u32 & NODE_ID_MASK,
-            target: target as u32 & NODE_ID_MASK,
-            weight,
-        });
     }
-    Some(out)
+    let mut metas = Vec::new();
+    if let Some(nodes) = v.get("nodes").and_then(|n| n.as_array()) {
+        metas.reserve(nodes.len());
+        for node in nodes {
+            let Some(id) = node.get("id").or_else(|| node.get("node_id")).and_then(json_u32) else {
+                continue;
+            };
+            let metadata_id = node
+                .get("metadata_id")
+                .and_then(|m| m.as_str())
+                .unwrap_or("")
+                .to_string();
+            let label = node.get("label").and_then(|l| l.as_str()).unwrap_or("").to_string();
+            let node_type = node
+                .get("node_type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            // One useful metadata value for the detail line; the rest is dropped.
+            let detail = node
+                .get("metadata")
+                .and_then(|m| {
+                    m.get("source_domain")
+                        .or_else(|| m.get("type"))
+                        .or_else(|| m.get("source_file"))
+                })
+                .and_then(|d| d.as_str())
+                .unwrap_or("")
+                .to_string();
+            if metadata_id.is_empty() && label.is_empty() && node_type.is_empty() && detail.is_empty() {
+                continue;
+            }
+            metas.push(NodeMetaWire {
+                id: id & NODE_ID_MASK,
+                metadata_id,
+                label,
+                node_type,
+                detail,
+            });
+        }
+    }
+    Some((edges, metas))
 }
 
 /// Extract `(node_id, did_nostr)` pairs for agent nodes from an
@@ -357,8 +424,11 @@ pub enum GraphInbound {
     Connected,
     Disconnected,
     Frame(Vec<u8>),
-    /// Edge topology from the `initialGraphLoad` text frame.
-    Topology(Vec<EdgeSpec>),
+    /// Edge topology + node label metadata from the `initialGraphLoad` text frame.
+    Topology {
+        edges: Vec<EdgeSpec>,
+        metas: Vec<NodeMetaWire>,
+    },
     /// Any other JSON text frame on the multiplexed `/wss` socket (e.g.
     /// `broker:new_case`, `broker:case_decided`). Forwarded verbatim to GDScript
     /// via `text_message`; the scene layer routes by the envelope `type`.
@@ -371,8 +441,8 @@ pub enum GraphInbound {
 /// verbatim as [`GraphInbound::Text`] for the scene layer to route by `type`.
 /// Pure (no Godot deps) so it is unit-testable under `cfg(test)`.
 pub fn classify_graph_text(text: &str) -> GraphInbound {
-    match parse_initial_graph_load(text) {
-        Some(edges) => GraphInbound::Topology(edges),
+    match parse_initial_graph(text) {
+        Some((edges, metas)) => GraphInbound::Topology { edges, metas },
         None => GraphInbound::Text(text.to_owned()),
     }
 }
@@ -485,13 +555,19 @@ impl BinaryProtocolClient {
                         .emit_signal("connection_changed", &[Variant::from(false)]);
                 }
                 GraphInbound::Frame(bytes) => self.emit_frame(&bytes),
-                GraphInbound::Topology(edges) => {
+                GraphInbound::Topology { edges, metas } => {
                     self.edges_flat.clear();
                     self.edge_weights.clear();
                     for e in &edges {
                         self.edges_flat.push(e.source as i32);
                         self.edges_flat.push(e.target as i32);
                         self.edge_weights.push(e.weight);
+                    }
+                    // Feed node label metadata into the render store for the
+                    // proximity-label overlay (moves the strings, no clone).
+                    for m in metas {
+                        self.store
+                            .set_meta(m.id, m.metadata_id, m.label, m.node_type, m.detail);
                     }
                     let count = edges.len() as u32;
                     self.base_mut()
@@ -618,6 +694,36 @@ impl BinaryProtocolClient {
             Some(bb) => PackedFloat32Array::from(bb.as_slice()),
             None => PackedFloat32Array::new(),
         }
+    }
+
+    /// Ids of nodes within `radius` (server space) of `center`, nearest first,
+    /// capped at `max` — drives the proximity label overlay.
+    #[func]
+    fn nodes_near(&self, center: Vector3, radius: f32, max: u32) -> PackedInt32Array {
+        let ids = self
+            .store
+            .nodes_near([center.x, center.y, center.z], radius, max as usize);
+        let out: Vec<i32> = ids.into_iter().map(|id| id as i32).collect();
+        PackedInt32Array::from(out.as_slice())
+    }
+
+    /// Primary label for a node (empty if unknown).
+    #[func]
+    fn label_of(&self, node_id: u32) -> GString {
+        GString::from(self.store.label_of(node_id))
+    }
+
+    /// Secondary detail line for a node (node type + a metadata value).
+    #[func]
+    fn detail_of(&self, node_id: u32) -> GString {
+        GString::from(self.store.detail_of(node_id))
+    }
+
+    /// Slug source (metadata_id) for a node — the double-click document view
+    /// slugifies this, falling back to the label when empty.
+    #[func]
+    fn meta_id_of(&self, node_id: u32) -> GString {
+        GString::from(self.store.meta_id_of(node_id))
     }
 }
 
@@ -1004,7 +1110,7 @@ mod tests {
             {"id":"a","source_id":1,"target_id":2,"weight":2.5}
         ],"timestamp":1}"#;
         match classify_graph_text(topo) {
-            GraphInbound::Topology(edges) => assert_eq!(edges.len(), 1),
+            GraphInbound::Topology { edges, .. } => assert_eq!(edges.len(), 1),
             other => panic!("expected Topology, got {:?}", std::mem::discriminant(&other)),
         }
 

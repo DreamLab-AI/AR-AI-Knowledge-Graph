@@ -124,6 +124,21 @@ var _selection_dirty: bool = true
 # the dragged node tracks the wand. Updated by _update_interaction.
 var _grab_target_server: Vector3 = Vector3.ZERO
 
+# --- Proximity node-label overlay -------------------------------------------
+# A small pool of world-space Label3D anchors shown only for the nodes closest to
+# the camera, so text stays sparse. World-space (positioned at graph_root xform ×
+# server_pos) so text size is constant in metres regardless of the fit scale.
+const LABEL_POOL_SIZE: int = 12
+const LABEL_UPDATE_SEC: float = 0.25          # 4 Hz refresh, not per frame
+const LABEL_PROXIMITY_M: float = 0.5          # world-metre radius (outer fade edge)
+const LABEL_INNER_M: float = 0.25             # full-opacity radius
+const LABEL_TITLE_PX: float = 0.0006          # pixel_size → ~1.9 cm title text
+const LABEL_TITLE_FONT: int = 32
+const LABEL_DETAIL_FONT: int = 20
+const LABEL_DETAIL_OFFSET_M: float = 0.028
+var _label_pool: Array = []                   # Array[Node3D] anchors, each Title+Detail
+var _label_accum: float = 0.0
+
 var _graph_ws_url: String = ""
 var _presence_ws_url: String = ""
 var _room_urn: String = ""
@@ -150,6 +165,11 @@ var _grabbed_id: int = -1
 var _grab_controller: XRController3D = null
 var _grab_distance: float = 1.0
 var _last_targeted_id: int = -1
+
+# Double-click (node-open) detection: two grabs of the same node within the window.
+const DOUBLE_CLICK_SEC: float = 0.45
+var _dc_last_id: int = -1
+var _dc_last_time: float = 0.0
 
 # Movable world-anchored HUD state.
 var _hud_grab_controller: XRController3D = null
@@ -307,9 +327,105 @@ func _ready() -> void:
 	_physics_http.request_completed.connect(_on_physics_completed)
 	_physics_http.timeout = 10.0
 
+	_init_label_pool()
 	_probe_eye_gaze()
 	_wire_hud()
 	_connect_from_env()
+
+
+# Build the reusable Label3D pool once. Anchors live in world space (siblings of
+# GraphRoot) so their metre-sized text is unaffected by the graph fit scale.
+func _init_label_pool() -> void:
+	for i: int in range(LABEL_POOL_SIZE):
+		var anchor := Node3D.new()
+		anchor.name = "NodeLabel%d" % i
+		anchor.visible = false
+		var title := Label3D.new()
+		title.name = "Title"
+		title.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		title.pixel_size = LABEL_TITLE_PX
+		title.font_size = LABEL_TITLE_FONT
+		title.outline_size = 8
+		title.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		anchor.add_child(title)
+		var detail := Label3D.new()
+		detail.name = "Detail"
+		detail.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		detail.pixel_size = LABEL_TITLE_PX
+		detail.font_size = LABEL_DETAIL_FONT
+		detail.outline_size = 6
+		detail.position = Vector3(0.0, -LABEL_DETAIL_OFFSET_M, 0.0)
+		detail.modulate = Color(0.8, 0.85, 0.95, 1.0)
+		anchor.add_child(detail)
+		add_child(anchor)
+		_label_pool.append(anchor)
+
+
+# Show labels for the nodes nearest the camera (plus the grabbed node), fading with
+# distance. Runs at LABEL_UPDATE_SEC cadence; reuses the pool (no allocation churn
+# beyond the one nodes_near query array).
+func _update_proximity_labels() -> void:
+	if _label_pool.is_empty():
+		return
+	if _binary_client == null or graph_root == null or not _binary_client.has_method("nodes_near"):
+		_hide_all_labels()
+		return
+	var cam: XRCamera3D = _find_xr_camera()
+	if cam == null:
+		_hide_all_labels()
+		return
+	var cam_world: Vector3 = cam.global_position
+	var gxf: Transform3D = graph_root.global_transform
+	var cam_server: Vector3 = gxf.affine_inverse() * cam_world
+	# Radius tracks the fit scale: a fixed world-metre reach maps to a larger
+	# server-space radius when the graph is scaled down.
+	var radius_server: float = LABEL_PROXIMITY_M / maxf(_graph_scale, 0.0001)
+	# Query more than the pool so unlabelled near-nodes don't starve labelled ones.
+	var near: PackedInt32Array = _binary_client.nodes_near(cam_server, radius_server, LABEL_POOL_SIZE * 2)
+	# Build the shown list: grabbed node first (always labelled), then nearest
+	# labelled nodes up to the pool size.
+	var shown: Array = []
+	if _grabbed_id != -1:
+		shown.append(_grabbed_id)
+	for id: int in near:
+		if shown.size() >= LABEL_POOL_SIZE:
+			break
+		if id == _grabbed_id:
+			continue
+		if _binary_client.label_of(id) != "":
+			shown.append(id)
+	for i: int in range(LABEL_POOL_SIZE):
+		var anchor: Node3D = _label_pool[i]
+		if i >= shown.size():
+			anchor.visible = false
+			continue
+		var node_id: int = shown[i]
+		var server_pos: Vector3 = _binary_client.node_position(node_id)
+		var world_pos: Vector3 = gxf * server_pos
+		anchor.global_position = world_pos
+		anchor.visible = true
+		var title: Label3D = anchor.get_node("Title")
+		var detail: Label3D = anchor.get_node("Detail")
+		title.text = _binary_client.label_of(node_id)
+		var d: String = _binary_client.detail_of(node_id)
+		detail.text = d
+		detail.visible = d != ""
+		# Fade: full opacity within LABEL_INNER_M, linear to 0 at the radius edge.
+		# The grabbed node is always fully shown.
+		var a: float = 1.0
+		if node_id != _grabbed_id:
+			var dist: float = cam_world.distance_to(world_pos)
+			a = clampf(
+				1.0 - (dist - LABEL_INNER_M) / maxf(LABEL_PROXIMITY_M - LABEL_INNER_M, 0.001),
+				0.0, 1.0
+			)
+		title.modulate = Color(1.0, 1.0, 1.0, a)
+		detail.modulate = Color(0.8, 0.85, 0.95, a)
+
+
+func _hide_all_labels() -> void:
+	for anchor: Node3D in _label_pool:
+		anchor.visible = false
 
 
 # Eye-gaze capability probe (copresence brief §Godot API availability; the
@@ -591,6 +707,12 @@ func _physics_process(delta: float) -> void:
 	_update_selection(delta)
 	_update_voice_listener()
 	_tick_reconnect(delta)
+	# Proximity labels refresh at ~4 Hz (not per frame) — the query + text/fade
+	# assignment is the only work and it reuses the pool, so zero per-frame cost.
+	_label_accum += delta
+	if _label_accum >= LABEL_UPDATE_SEC:
+		_label_accum -= LABEL_UPDATE_SEC
+		_update_proximity_labels()
 
 
 # Trackpad/stick locomotion: slide the XR rig through the graph. Either wand's
@@ -1618,6 +1740,16 @@ func _on_node_targeted(node_id: int, _distance: float) -> void:
 func _on_node_grabbed(node_id: int, _position: Vector3) -> void:
 	if _grabbed_id == node_id:
 		return
+	# Double-click = two grabs of the SAME node within the window → open the node's
+	# linked page in the HUD instead of grabbing. The grab this second press would
+	# start is suppressed cleanly (we return before setting _grabbed_id / drag_start).
+	var now: float = float(Time.get_ticks_msec()) / 1000.0
+	if node_id == _dc_last_id and (now - _dc_last_time) <= DOUBLE_CLICK_SEC:
+		_dc_last_id = -1
+		_open_node_document(node_id)
+		return
+	_dc_last_id = node_id
+	_dc_last_time = now
 	_grabbed_id = node_id
 	print("GraphScene DEBUG: node_grabbed id=%d" % node_id)
 	# Node render position now lives in the Rust store.
@@ -1630,6 +1762,41 @@ func _on_node_grabbed(node_id: int, _position: Vector3) -> void:
 	if _binary_client != null and _binary_client.has_method("send_drag_start"):
 		_binary_client.send_drag_start(node_id, pos)
 	_pulse(_grab_controller, 0.6, 0.08)
+
+
+# Resolve a node to its narrativegoldmine slug and hand it to the HUD document
+# view. Slug = slugify(metadata_id if present else label). Slugify is idempotent,
+# so slugifying a real slug is a no-op and a title-shaped metadata_id is fixed.
+func _open_node_document(node_id: int) -> void:
+	if hud == null or not hud.has_method("show_document") or _binary_client == null:
+		return
+	var meta_id: String = _binary_client.meta_id_of(node_id) if _binary_client.has_method("meta_id_of") else ""
+	var label: String = _binary_client.label_of(node_id) if _binary_client.has_method("label_of") else ""
+	var raw: String = meta_id if meta_id != "" else label
+	var slug: String = _slugify(raw)
+	if slug == "":
+		return
+	var title: String = label if label != "" else slug
+	hud.show_document(title, slug)
+
+
+# Port of client/src/features/graph/utils/pageLinks.ts slugifyLabel: lowercase,
+# collapse every run of non [a-z0-9] to a single '-', trim leading/trailing '-'.
+func _slugify(s: String) -> String:
+	var lower: String = s.to_lower()
+	var out: String = ""
+	var prev_dash: bool = true  # start true so a leading run doesn't emit a dash
+	for i: int in range(lower.length()):
+		var ch: String = lower[i]
+		if (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9"):
+			out += ch
+			prev_dash = false
+		elif not prev_dash:
+			out += "-"
+			prev_dash = true
+	if out.ends_with("-"):
+		out = out.substr(0, out.length() - 1)
+	return out
 
 
 func _on_presence_kicked(reason: String) -> void:
