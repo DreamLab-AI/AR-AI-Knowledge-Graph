@@ -719,22 +719,22 @@ impl AppState {
         AgentBeamActor::new(client_manager_addr.clone()).start();
 
         // Read persisted physics from SQLite (same source the API GET uses) so a fresh
-        // boot applies runtime-persisted controls (graph_separation_x, axis_compression_z,
+        // boot applies runtime-persisted controls (graph_separation_x, enable_dual_disc_layout,
         // adaptive_speed, etc). Fall back to YAML/defaults when nothing is persisted yet.
         let physics_settings = {
             use crate::ports::settings_repository::SettingValue;
             // When SQLite has no usable "physics" row, seed it from the canonical
             // PhysicsSettings::default() and write it back, so the persisted store
-            // and the live GPU actor share one source of truth (close dual-disc:
-            // graph_separation_x=100, axis_compression_z=0.9). Without this, a
+            // and the live GPU actor share one source of truth (graph_separation_x=100,
+            // enable_dual_disc_layout=false → natural 3D). Without this, a
             // fresh boot served defaults to the actor but left SQLite empty/stale,
             // so GET /api/settings/physics could report a different separation than
             // the running simulation.
             let seed_canonical = |reason: &str| -> crate::config::PhysicsSettings {
                 let default_physics = crate::config::PhysicsSettings::default();
                 info!(
-                    "[AppState::new] {} — seeding SQLite physics from canonical default (graph_separation_x={}, axis_compression_z={})",
-                    reason, default_physics.graph_separation_x, default_physics.axis_compression_z
+                    "[AppState::new] {} — seeding SQLite physics from canonical default (graph_separation_x={}, enable_dual_disc_layout={})",
+                    reason, default_physics.graph_separation_x, default_physics.enable_dual_disc_layout
                 );
                 default_physics
             };
@@ -743,7 +743,7 @@ impl AppState {
                 Ok(Some(SettingValue::Json(json))) => {
                     match serde_json::from_value::<crate::config::PhysicsSettings>(json) {
                         Ok(persisted) => {
-                            info!("[AppState::new] Loaded persisted physics from SQLite (graph_separation_x={}, axis_compression_z={}, adaptive_speed={})", persisted.graph_separation_x, persisted.axis_compression_z, persisted.adaptive_speed);
+                            info!("[AppState::new] Loaded persisted physics from SQLite (graph_separation_x={}, enable_dual_disc_layout={}, adaptive_speed={})", persisted.graph_separation_x, persisted.enable_dual_disc_layout, persisted.adaptive_speed);
                             (persisted, false)
                         }
                         Err(e) => (
@@ -1045,7 +1045,7 @@ impl AppState {
                 let gpu_compute_addr_for_rebroadcast = gpu_compute_addr.clone();
                 // Persisted physics params must reach ForceComputeActor on boot.
                 // The actor initialises with default SimulationParams (graph_separation_x=0,
-                // axis_compression_z=0, adaptive_speed off); without this push the persisted
+                // enable_dual_disc_layout=false, adaptive_speed off); without this push the persisted
                 // values only take effect after a live PUT that differs from the defaults,
                 // making the separation/compression/adaptive-speed controls appear dead.
                 let startup_sim_params =
@@ -1100,7 +1100,7 @@ impl AppState {
                             Ok(Ok(force_compute_actor)) => {
                                 info!("[AppState] Successfully obtained ForceComputeActor address on attempt {}", attempt);
                                 // Push persisted physics params so layout controls
-                                // (graph_separation_x, axis_compression_z, adaptive_speed)
+                                // (graph_separation_x, enable_dual_disc_layout, adaptive_speed)
                                 // are live from boot, not just after the first live PUT.
                                 force_compute_actor.do_send(
                                     crate::actors::messages::UpdateSimulationParams {
@@ -1108,9 +1108,9 @@ impl AppState {
                                     },
                                 );
                                 info!(
-                                    "[AppState] Pushed persisted SimulationParams to ForceComputeActor (graph_separation_x={}, axis_compression_z={}, adaptive_speed={})",
+                                    "[AppState] Pushed persisted SimulationParams to ForceComputeActor (graph_separation_x={}, enable_dual_disc_layout={}, adaptive_speed={})",
                                     startup_sim_params.graph_separation_x,
-                                    startup_sim_params.axis_compression_z,
+                                    startup_sim_params.enable_dual_disc_layout,
                                     startup_sim_params.adaptive_speed
                                 );
                                 let mut guard = gpu_compute_addr_clone.write().await;

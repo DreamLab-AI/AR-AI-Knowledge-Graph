@@ -63,8 +63,6 @@ pub struct LayoutModeConfig {
     pub zones: Vec<ConstraintZone>,
     // Graph separation
     pub graph_separation_x: f32,
-    // Single-axis Z compression (0=none, 1=flat disk)
-    pub axis_compression_z: f32,
 }
 
 impl Default for LayoutModeConfig {
@@ -85,7 +83,6 @@ impl Default for LayoutModeConfig {
             ring_count: 8,
             zones: vec![],
             graph_separation_x: 0.0,
-            axis_compression_z: 0.0,
         }
     }
 }

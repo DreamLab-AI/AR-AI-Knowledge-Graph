@@ -23,12 +23,13 @@ const RECONNECT_MAX_DELAY_SEC: float = 60.0
 # Quest render budgets. When the graph exceeds these, the most important
 # nodes (by server-computed centrality) and the heaviest edges (by weight)
 # are kept — same importance language as the desktop client.
-# Desktop-Vive budgets (Quadro RTX 6000): draw the full initial-load node set so
-# the sparse graph's edges (avg degree ~2.6) have both endpoints on screen. The
-# old 640 cap was a Quest mobile budget — it starved the edge web (a 640-hub
-# subset of a 2.6-degree graph has only ~240 internal edges).
-const NODE_INSTANCE_CAP: int = 3000
-const EDGE_INSTANCE_CAP: int = 3000
+# Instance budgets are now RUNTIME-DERIVED from the received topology (the backend
+# serves a settings-driven initial load that can exceed any fixed constant), not
+# hardcoded quality gates. Node budget = topology node count, edge budget =
+# topology edge count, each bounded by an absolute safety ceiling so a runaway
+# payload can't blow the Quest instance buffers. See _recompute_instance_budgets.
+const NODE_SAFETY_CEILING: int = 20000
+const EDGE_SAFETY_CEILING: int = 20000
 
 # XR fit-to-view: the server streams graph coordinates spanning hundreds of
 # metres centred nowhere near the user. A flat client frames its camera to the
@@ -178,6 +179,12 @@ var _edge_rerank_done: bool = false
 # without re-sorting or re-fetching. _edge_pairs is a prefix of it.
 var _edge_pairs_ranked: PackedInt32Array = PackedInt32Array()
 var _edge_show_count: int = 0
+# Runtime instance budgets derived from the received topology (see
+# _recompute_instance_budgets). Seeded to the safety ceilings so that before any
+# topology arrives the client draws everything the position stream gives it (up to
+# the ceiling) rather than an arbitrary constant.
+var _node_budget: int = NODE_SAFETY_CEILING
+var _edge_budget: int = EDGE_SAFETY_CEILING
 # Alternating-frame phase for the node/edge multimesh rebuilds (see
 # _physics_process): true → nodes, false → edges.
 var _mm_phase: bool = false
@@ -365,8 +372,8 @@ func _on_hud_control(action: String) -> void:
 func _refresh_controls_status() -> void:
 	if hud != null and hud.has_method("set_controls_status"):
 		var busy: String = "  [busy]" if _physics_pending else ""
-		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d  node×%.2f%s" % [
-			_repel_k, _rest_length, _edge_show_count, _node_size_factor, busy])
+		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d/%d  nodes<=%d  node×%.2f%s" % [
+			_repel_k, _rest_length, _edge_show_count, _edge_budget, _node_budget, _node_size_factor, busy])
 
 
 # Spread ±: compute the candidate params, and only COMMIT the tracked values if the
@@ -532,6 +539,10 @@ func _connect_graph() -> void:
 	_edge_rerank_done = false
 	_topo_ids = {}
 	_edge_show_count = 0
+	# Back to "draw everything up to the ceiling" until the next topology sets the
+	# real budgets.
+	_node_budget = NODE_SAFETY_CEILING
+	_edge_budget = EDGE_SAFETY_CEILING
 	if _binary_client.has_method("connect_to_url"):
 		_binary_client.connect_to_url(_graph_ws_url, _graph_token, _nostr_secret_hex)
 
@@ -878,7 +889,10 @@ func _update_multimesh() -> void:
 	# nothing. Bias edge-endpoint (topo) nodes so they win the cap first; spare
 	# slots then fall to the highest-centrality non-topo nodes. _topo_ids is built
 	# on topology arrival, not per frame.
-	if ids.size() > NODE_INSTANCE_CAP and _lod_policy != null and _lod_policy.has_method("visible_subset"):
+	# Only subset when the streamed node set actually exceeds the runtime budget;
+	# when the budget covers everything (budget >= node count) we draw them all and
+	# skip visible_subset entirely.
+	if ids.size() > _node_budget and _lod_policy != null and _lod_policy.has_method("visible_subset"):
 		var have_topo: bool = not _topo_ids.is_empty()
 		var centrality := PackedFloat32Array()
 		centrality.resize(ids.size())
@@ -887,7 +901,7 @@ func _update_multimesh() -> void:
 			if have_topo and _topo_ids.has(ids[i]):
 				c += TOPO_SELECT_BIAS
 			centrality[i] = c
-		var subset: PackedInt32Array = _lod_policy.visible_subset(centrality, NODE_INSTANCE_CAP)
+		var subset: PackedInt32Array = _lod_policy.visible_subset(centrality, _node_budget)
 		var capped: Array = []
 		for idx: int in subset:
 			capped.append(ids[idx])
@@ -1451,7 +1465,7 @@ func _on_node_visuals_updated(node_id: int, community_id: int, centrality: float
 	# centrality covers the nodes the cap will actually draw, so the rendered edge
 	# subset finally reflects the visible subgraph.
 	if not _edge_rerank_done and not _edge_pairs_full.is_empty():
-		var need: int = mini(NODE_INSTANCE_CAP, maxi(1, _node_positions.size()))
+		var need: int = mini(_node_budget, maxi(1, _node_positions.size()))
 		if _node_centrality.size() >= need:
 			_rerank_edges(true)
 			_edge_rerank_done = true
@@ -1483,10 +1497,24 @@ func _on_topology_updated(_edge_count: int) -> void:
 	_topo_ids = {}
 	for i: int in range(_edge_pairs_full.size()):
 		_topo_ids[_edge_pairs_full[i]] = true
-	print("GraphScene DEBUG: topology arrived edges=%d positions_known=%d" % [
-		_edge_weights_full.size(), _node_positions.size()])
+	_recompute_instance_budgets()
+	print("GraphScene DEBUG: topology arrived edges=%d nodes=%d positions_known=%d budgets=%d/%d" % [
+		_edge_weights_full.size(), _topo_ids.size(), _node_positions.size(), _node_budget, _edge_budget])
 	# preserve_show=false: a fresh topology defaults to showing all ranked edges.
 	_rerank_edges(false)
+
+
+# Derive the runtime instance budgets from the received topology, each bounded by
+# its absolute safety ceiling so a runaway settings-driven load can't overrun the
+# Quest instance buffers. Node budget follows the count of topology (edge-endpoint)
+# nodes; edge budget follows the topology edge count. When topology carries no
+# edges the node budget stays at the ceiling so the position stream still draws.
+func _recompute_instance_budgets() -> void:
+	var topo_nodes: int = _topo_ids.size()
+	_node_budget = NODE_SAFETY_CEILING if topo_nodes <= 0 else mini(NODE_SAFETY_CEILING, topo_nodes)
+	_edge_budget = mini(EDGE_SAFETY_CEILING, _edge_weights_full.size())
+	if hud != null:
+		_refresh_controls_status()
 
 
 # The node ids the LOD cap will actually draw: all edge-endpoint (topo) nodes when
@@ -1498,13 +1526,13 @@ func _topo_top_ids() -> Dictionary:
 	if _topo_ids.is_empty():
 		return out
 	var domain: Array = _topo_ids.keys()
-	if domain.size() <= NODE_INSTANCE_CAP:
+	if domain.size() <= _node_budget:
 		for id: int in domain:
 			out[id] = true
 		return out
 	domain.sort_custom(func(a: int, b: int) -> bool:
 		return _node_centrality.get(a, 0.0) > _node_centrality.get(b, 0.0))
-	for i: int in range(NODE_INSTANCE_CAP):
+	for i: int in range(_node_budget):
 		out[domain[i]] = true
 	return out
 
@@ -1523,7 +1551,7 @@ func _rerank_edges(preserve_show: bool) -> void:
 		_edge_show_count = 0
 		_apply_edge_slice()
 		return
-	if total <= EDGE_INSTANCE_CAP:
+	if total <= _edge_budget:
 		_edge_pairs_ranked = pairs
 		if not preserve_show:
 			_edge_show_count = total
@@ -1545,7 +1573,7 @@ func _rerank_edges(preserve_show: bool) -> void:
 	if eligible.is_empty():
 		eligible = range(total)
 	eligible.sort_custom(func(a: int, b: int) -> bool: return weights[a] > weights[b])
-	var kept: int = mini(EDGE_INSTANCE_CAP, eligible.size())
+	var kept: int = mini(_edge_budget, eligible.size())
 	var capped := PackedInt32Array()
 	capped.resize(kept * 2)
 	for i: int in range(kept):

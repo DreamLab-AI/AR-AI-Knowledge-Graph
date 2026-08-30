@@ -17,7 +17,19 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
+use tokio_tungstenite::{connect_async_with_config, MaybeTlsStream, WebSocketStream};
+
+/// Websocket receive limits. The default tungstenite cap is 16 MiB, but a
+/// full-graph initialGraphLoad (13k nodes / 145k edges) is ~28 MB as one text
+/// frame — under the default it kills the socket ("Message too long") in a
+/// permanent connect→sync→die loop. 256 MiB leaves ample headroom.
+fn ws_config() -> WebSocketConfig {
+    let mut cfg = WebSocketConfig::default();
+    cfg.max_message_size = Some(256 * 1024 * 1024);
+    cfg.max_frame_size = Some(256 * 1024 * 1024);
+    cfg
+}
 use tracing::{error, warn};
 
 use visionclaw_xr_presence::{PoseFrame, RoomId};
@@ -83,7 +95,7 @@ async fn graph_pump(
     outbound: mpsc::UnboundedReceiver<String>,
 ) {
     let full = with_token(&url, &token);
-    match connect_async(full.clone()).await {
+    match connect_async_with_config(full.clone(), Some(ws_config()), false).await {
         Ok((ws, _resp)) => {
             let (mut sink, mut stream) = ws.split();
             if sink
@@ -219,7 +231,7 @@ async fn presence_pump(
         }
     };
 
-    match connect_async(url.clone()).await {
+    match connect_async_with_config(url.clone(), Some(ws_config()), false).await {
         Ok((ws, _resp)) => {
             let transport = Arc::new(TungsteniteWsTransport::new(ws));
             let mut client = PresenceClient::new(transport.clone(), signer, room);

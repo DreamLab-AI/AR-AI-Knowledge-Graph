@@ -161,13 +161,15 @@ pub struct SimulationParams {
     #[serde(default)]
     pub settle_mode: SettleMode,
 
-    /// X-axis separation between knowledge and ontology graph populations.
+    /// X-axis separation between knowledge and ontology graph populations
+    /// (disc gap when `enable_dual_disc_layout` is on).
     #[serde(default)]
     pub graph_separation_x: f32,
 
-    /// Single-axis Z compression (0.0 = no flatten, 1.0 = full flatten to z=0).
+    /// Opt-in canonical dual-disc display layout (default OFF → fully 3D).
+    /// Replaces the removed `axis_compression_z` compression amount.
     #[serde(default)]
-    pub axis_compression_z: f32,
+    pub enable_dual_disc_layout: bool,
 
     /// Active layout algorithm (ADR-031). Defaults to ForceDirected.
     #[serde(default)]
@@ -415,7 +417,7 @@ impl From<&PhysicsSettings> for SimulationParams {
             mode: SimulationMode::Remote,
             settle_mode: SettleMode::default(),
             graph_separation_x: physics.graph_separation_x,
-            axis_compression_z: physics.axis_compression_z,
+            enable_dual_disc_layout: physics.enable_dual_disc_layout,
             layout_mode: LayoutMode::default(),
             lin_log_mode: physics.lin_log_mode,
             scaling_ratio: physics.scaling_ratio,
@@ -557,13 +559,13 @@ mod tests {
     fn test_layout_controls_propagate_from_physics_settings() {
         let mut physics = PhysicsSettings::default();
         physics.graph_separation_x = 700.0;
-        physics.axis_compression_z = 0.5;
+        physics.enable_dual_disc_layout = true;
         physics.adaptive_speed = false;
 
         let params = SimulationParams::from(&physics);
 
         assert!((params.graph_separation_x - 700.0).abs() < f32::EPSILON);
-        assert!((params.axis_compression_z - 0.5).abs() < f32::EPSILON);
+        assert!(params.enable_dual_disc_layout);
         assert!(!params.adaptive_speed);
     }
 
@@ -575,7 +577,7 @@ mod tests {
     fn test_physics_settings_camelcase_roundtrip_preserves_layout_controls() {
         let mut physics = PhysicsSettings::default();
         physics.graph_separation_x = 700.0;
-        physics.axis_compression_z = 0.5;
+        physics.enable_dual_disc_layout = true;
         physics.adaptive_speed = false;
 
         let stored = serde_json::to_value(&physics).unwrap();
@@ -584,7 +586,7 @@ mod tests {
 
         let loaded: PhysicsSettings = serde_json::from_value(stored).unwrap();
         assert!((loaded.graph_separation_x - 700.0).abs() < f32::EPSILON);
-        assert!((loaded.axis_compression_z - 0.5).abs() < f32::EPSILON);
+        assert!(loaded.enable_dual_disc_layout);
         assert!(!loaded.adaptive_speed);
     }
 
@@ -637,15 +639,15 @@ mod tests {
         let mut stored = serde_json::to_value(&physics).unwrap();
         let obj = stored.as_object_mut().unwrap();
         obj.remove("graphSeparationX");
-        obj.remove("axisCompressionZ");
+        obj.remove("enableDualDiscLayout");
         obj.remove("adaptiveSpeed");
         obj.insert("graph_separation_x".into(), serde_json::json!(700.0));
-        obj.insert("axis_compression_z".into(), serde_json::json!(0.5));
+        obj.insert("enable_dual_disc_layout".into(), serde_json::json!(true));
         obj.insert("adaptive_speed".into(), serde_json::json!(false));
 
         let loaded: PhysicsSettings = serde_json::from_value(stored).unwrap();
         assert!((loaded.graph_separation_x - 700.0).abs() < f32::EPSILON);
-        assert!((loaded.axis_compression_z - 0.5).abs() < f32::EPSILON);
+        assert!(loaded.enable_dual_disc_layout);
         assert!(!loaded.adaptive_speed);
     }
 }

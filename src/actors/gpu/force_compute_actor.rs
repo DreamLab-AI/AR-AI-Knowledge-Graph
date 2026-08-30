@@ -98,6 +98,13 @@ fn population_centroids_xy(
 /// normal disc and only clamps genuine runaways.
 const DISC_RIM_RADIUS: f32 = 2600.0;
 
+/// Fixed Z-flatten factor applied per disc when the opt-in dual-disc layout is
+/// enabled. Replaces the removed per-user `axis_compression_z` (which defaulted
+/// to 0.9 → face_scale 0.1). `face_scale = 0.1` is a thin disc; `1.0` is no
+/// flatten. Only reached when `enable_dual_disc_layout` is on — the default
+/// (OFF) skips the projection entirely, giving a natural fully-3D layout.
+const DISC_FACE_SCALE: f32 = 0.1;
+
 /// Re-centre a node onto its population's disc, flatten Z, and offset along Z.
 /// Each disc is centred at its population's median in the X-Y plane, flattened
 /// thin on Z, then translated to its target Z (∓sep for Knowledge/Ontology,
@@ -1843,25 +1850,22 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                 // buffer carries true physics positions with the pin applied.
                                 actor.apply_node_pins();
 
-                                // Dual-graph facing-discs projection. Flatten BOTH
-                                // populations along Z into thin X-Y discs, then separate
-                                // them along the SAME Z axis (Knowledge at -sep, Ontology
-                                // at +sep). The two discs end up as parallel X-Y planes
-                                // whose faces point at each other across a depth gap, with
-                                // agents on the mid plane (z=0) and cross-links spanning
-                                // the gap. Viewed from a 3/4 angle the discs face one
-                                // another with connections bridging between them.
-                                //   face_scale = 1.0 -> full-3D blob (no flatten)
-                                //   face_scale = 0.0 -> infinitely thin disc in the X-Y plane
+                                // Opt-in dual-graph facing-discs projection (default OFF →
+                                // no projection, natural fully-3D layout). When enabled,
+                                // flatten BOTH populations along Z into thin X-Y discs, then
+                                // separate them along the SAME Z axis (Knowledge at -sep,
+                                // Ontology at +sep) with agents on the mid plane (z=0). The
+                                // per-user flatten amount (removed `axis_compression_z`) is
+                                // now the fixed DISC_FACE_SCALE constant.
                                 let sep = actor.simulation_params.graph_separation_x;
-                                let flatten = actor.simulation_params.axis_compression_z.clamp(0.0, 1.0);
-                                let face_scale = 1.0 - flatten;
-                                let project = (sep > 0.0 || flatten > 0.0) && !actor.node_population.is_empty();
+                                let face_scale = DISC_FACE_SCALE;
+                                let project = actor.simulation_params.enable_dual_disc_layout
+                                    && !actor.node_population.is_empty();
                                 // Once-per-300-iter diagnostic to verify the params reach this site.
                                 if actor.gpu_state.iteration_count % 300 == 0 && project {
                                     info!(
-                                        "ForceComputeActor: facing-disc projection iter={} sep_z={:.1} flatten={:.2} populations={} (k+o+a)",
-                                        actor.gpu_state.iteration_count, sep, flatten, actor.node_population.len()
+                                        "ForceComputeActor: facing-disc projection iter={} sep_z={:.1} face_scale={:.2} populations={} (k+o+a)",
+                                        actor.gpu_state.iteration_count, sep, face_scale, actor.node_population.len()
                                     );
                                 }
                                 // NOTE: projection is applied DISPLAY-ONLY, after the
@@ -2300,9 +2304,9 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
         // Compare the full set of GPU-relevant fields, not just the original 6.
         //
         // CRITICAL: fields used by post-GPU Rust position-modification code (eg.
-        // graph_separation_x, axis_compression_z) and feature-flag-derived fields
-        // (eg. adaptive_speed) MUST appear here — otherwise their value gets
-        // silently dropped when no other field changed simultaneously.
+        // graph_separation_x, enable_dual_disc_layout) and feature-flag-derived
+        // fields (eg. adaptive_speed) MUST appear here — otherwise their value
+        // gets silently dropped when no other field changed simultaneously.
         let cur = &self.simulation_params;
         let eps = 1e-5_f32; // Slightly larger than EPSILON to catch floating-point round-trips
         let physics_unchanged = (cur.spring_k - msg.params.spring_k).abs() < eps
@@ -2321,7 +2325,7 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             && (cur.boundary_damping - msg.params.boundary_damping).abs() < eps
             && (cur.gravity - msg.params.gravity).abs() < eps
             && (cur.graph_separation_x - msg.params.graph_separation_x).abs() < eps
-            && (cur.axis_compression_z - msg.params.axis_compression_z).abs() < eps
+            && cur.enable_dual_disc_layout == msg.params.enable_dual_disc_layout
             && cur.adaptive_speed == msg.params.adaptive_speed
             && cur.iterations == msg.params.iterations
             && cur.use_sssp_distances == msg.params.use_sssp_distances
@@ -2559,9 +2563,9 @@ impl Handler<ForceFullBroadcast> for ForceComputeActor {
                     // this, a settings change broadcasts raw GPU positions and, if the
                     // sim has converged, the projected positions never overwrite them.
                     let sep = actor.simulation_params.graph_separation_x;
-                    let flatten = actor.simulation_params.axis_compression_z.clamp(0.0, 1.0);
-                    let face_scale = 1.0 - flatten;
-                    let project = (sep > 0.0 || flatten > 0.0) && !actor.node_population.is_empty();
+                    let face_scale = DISC_FACE_SCALE;
+                    let project = actor.simulation_params.enable_dual_disc_layout
+                        && !actor.node_population.is_empty();
 
                     // Mirror the main loop: per-population median centring + rim clamp.
                     let centroids = if project {
@@ -2595,8 +2599,8 @@ impl Handler<ForceFullBroadcast> for ForceComputeActor {
 
                     if let Some(ref graph_addr) = actor.graph_service_addr {
                         info!(
-                            "ForceComputeActor: IMMEDIATE full broadcast — {} nodes (pure snapshot, projected={} sep_y={:.1} flatten={:.2})",
-                            node_updates.len(), project, sep, flatten
+                            "ForceComputeActor: IMMEDIATE full broadcast — {} nodes (pure snapshot, projected={} sep_y={:.1} face_scale={:.2})",
+                            node_updates.len(), project, sep, face_scale
                         );
                         graph_addr.do_send(crate::actors::messages::UpdateNodePositions {
                             positions: node_updates,

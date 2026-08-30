@@ -395,9 +395,14 @@ impl SocketFlowServer {
                         );
                     }
 
-                    // DEFAULT INITIAL LOAD SIZE - fresh clients receive sparse, metadata-rich dataset
-                    // Client can request more nodes later using filter settings
-                    const DEFAULT_INITIAL_NODE_LIMIT: usize = 3000;
+                    // Initial-load node cap, now settings-driven (ungated via the
+                    // /api/settings interface). `initialNodeLimit` lives on the
+                    // logseq graph's physics settings; 0/absent = the built-in
+                    // default (3000), and any value is clamped to a sanity ceiling
+                    // (100_000) so a client can raise it up to the full graph.
+                    let initial_node_limit = resolve_initial_node_limit(
+                        settings.visualisation.graphs.logseq.physics.initial_node_limit,
+                    );
 
                     // Send new InitialGraphLoad message with LIMITED node set for fast initial render
                     if !graph_data.nodes.is_empty() || !graph_data.edges.is_empty() {
@@ -450,7 +455,7 @@ impl SocketFlowServer {
                         let filtered_nodes: Vec<&visionclaw_domain::models::node::Node> =
                             sorted_nodes
                                 .into_iter()
-                                .take(DEFAULT_INITIAL_NODE_LIMIT)
+                                .take(initial_node_limit)
                                 .collect();
 
                         let filtered_node_ids: HashSet<u32> =
@@ -499,7 +504,7 @@ impl SocketFlowServer {
                         });
                         info!("Sent InitialGraphLoad: {} nodes (sparse from {} total), {} edges [limit: {}]",
                               nodes.len(), graph_data.nodes.len(),
-                              edges.len(), DEFAULT_INITIAL_NODE_LIMIT);
+                              edges.len(), initial_node_limit);
 
                         // Fetch node type arrays for binary protocol flags
                         let nta = app_state
@@ -744,6 +749,51 @@ pub(crate) fn sync_generation_is_current(
     captured: u64,
 ) -> bool {
     current.load(std::sync::atomic::Ordering::SeqCst) == captured
+}
+
+/// Built-in fallback initial-load node cap when `initialNodeLimit` is unset (0).
+pub(crate) const INITIAL_NODE_LIMIT_DEFAULT: usize = 3000;
+/// Sanity ceiling for a client-configured initial-load node cap.
+pub(crate) const INITIAL_NODE_LIMIT_CEILING: usize = 100_000;
+
+/// Resolve the settings-driven `initialNodeLimit` to the concrete top-N cap used
+/// by the initial graph load. `0` (or absent → serde default 0) means "use the
+/// built-in default (3000)"; any other value is clamped to
+/// [`INITIAL_NODE_LIMIT_CEILING`] so a client can raise the cap up to the full
+/// graph without allowing an unbounded request.
+pub(crate) fn resolve_initial_node_limit(configured: u32) -> usize {
+    let configured = configured as usize;
+    if configured == 0 {
+        INITIAL_NODE_LIMIT_DEFAULT
+    } else {
+        configured.min(INITIAL_NODE_LIMIT_CEILING)
+    }
+}
+
+#[cfg(test)]
+mod initial_node_limit_tests {
+    use super::{
+        resolve_initial_node_limit, INITIAL_NODE_LIMIT_CEILING, INITIAL_NODE_LIMIT_DEFAULT,
+    };
+
+    #[test]
+    fn zero_uses_builtin_default() {
+        assert_eq!(resolve_initial_node_limit(0), INITIAL_NODE_LIMIT_DEFAULT);
+    }
+
+    #[test]
+    fn explicit_value_is_honoured() {
+        assert_eq!(resolve_initial_node_limit(500), 500);
+        assert_eq!(resolve_initial_node_limit(20_000), 20_000);
+    }
+
+    #[test]
+    fn value_above_ceiling_is_clamped() {
+        assert_eq!(
+            resolve_initial_node_limit(u32::MAX),
+            INITIAL_NODE_LIMIT_CEILING
+        );
+    }
 }
 
 #[cfg(test)]

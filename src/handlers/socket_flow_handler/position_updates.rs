@@ -385,8 +385,9 @@ pub(crate) fn handle_request_initial_data(
     // no REST bootstrap step, so it never received nodes/edges. Push the real
     // `initialGraphLoad` (plus state_sync + binary positions) directly, using
     // the same builder as the connect/Authenticate path
-    // (`send_full_state_sync`), which respects DEFAULT_INITIAL_NODE_LIMIT (3000
-    // top-N by quality) and — via the added visibility gate — the
+    // (`send_full_state_sync`), which respects the settings-driven
+    // `initialNodeLimit` (default 3000, top-N by quality, raisable via
+    // /api/settings) and — via the added visibility gate — the
     // PUBKEY_VISIBILITY_FILTER drop-set when enabled.
     info!("Client requested initial data - pushing initialGraphLoad directly");
     act.last_activity = now;

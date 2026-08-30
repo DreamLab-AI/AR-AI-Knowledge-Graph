@@ -1614,15 +1614,14 @@ pub async fn reset_layout(
 
     // 1. Re-apply the canonical physics defaults (the single source of truth)
     // before re-randomizing positions. No hand-coded literals: PhysicsSettings::
-    // default() carries the close full-size dual-disc envelope
-    // (graph_separation_x=100, axis_compression_z=0.9), so a reset returns to the
-    // canonical layout instead of collapsing both discs into one plane (sep=0).
+    // default() carries graph_separation_x=100 with enable_dual_disc_layout=false
+    // (natural fully-3D layout by default; dual-disc is opt-in).
     let reset_physics = PhysicsSettings::default();
     let sim_params: crate::models::simulation_params::SimulationParams = (&reset_physics).into();
     info!(
-        "Reset physics from canonical default (graph_separation_x={}, axis_compression_z={}, repel_k={}, center_gravity_k={})",
+        "Reset physics from canonical default (graph_separation_x={}, enable_dual_disc_layout={}, repel_k={}, center_gravity_k={})",
         sim_params.graph_separation_x,
-        sim_params.axis_compression_z,
+        sim_params.enable_dual_disc_layout,
         sim_params.repel_k,
         sim_params.center_gravity_k
     );

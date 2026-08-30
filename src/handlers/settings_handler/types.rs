@@ -375,9 +375,12 @@ pub struct PhysicsSettingsDTO {
     /// X-axis separation between knowledge and ontology graph populations (default 0 = merged)
     #[serde(default)]
     pub graph_separation_x: f32,
-    /// Single-axis Z compression toward zero (0=none, 1=full flatten to z=0)
+    /// Opt-in canonical dual-disc display layout (default false → fully 3D)
     #[serde(default)]
-    pub axis_compression_z: f32,
+    pub enable_dual_disc_layout: bool,
+    /// Top-N node cap for the initial graph load (0/absent = built-in default 3000)
+    #[serde(default)]
+    pub initial_node_limit: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

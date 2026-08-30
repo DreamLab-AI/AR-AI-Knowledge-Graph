@@ -293,9 +293,20 @@ pub struct PhysicsSettings {
     #[serde(default, alias = "graph_separation_x")]
     pub graph_separation_x: f32,
 
-    /// Single-axis compression toward zero (0.0 = no compression, 1.0 = full flatten).
-    #[serde(default, alias = "axis_compression_z")]
-    pub axis_compression_z: f32,
+    /// Opt-in canonical "facing dual-disc" display layout (default OFF → fully
+    /// 3D force layout). When enabled, the two graph populations are flattened
+    /// into thin X-Y discs separated along Z by `graph_separation_x`. Replaces
+    /// the removed `axisCompressionZ` compression amount: the flatten amount is
+    /// now a fixed internal constant, exposed only as this on/off toggle.
+    #[serde(default, alias = "enable_dual_disc_layout")]
+    pub enable_dual_disc_layout: bool,
+
+    /// Top-N node cap for the initial graph load pushed to a new/anon client
+    /// (quality-ranked). `0` or absent = the built-in default (3000). The
+    /// consumer clamps to a sanity ceiling (100_000) and may be raised to the
+    /// full graph via the settings API.
+    #[serde(default, alias = "initial_node_limit")]
+    pub initial_node_limit: u32,
 
     /// ForceAtlas2 LinLog mode: log(1+d) attraction per edge.
     #[serde(default = "default_lin_log_mode", alias = "lin_log_mode")]
@@ -378,16 +389,14 @@ impl Default for PhysicsSettings {
             clustering_resolution: 1.0,
             clustering_iterations: 50,
 
-            // Close, full-size dual-disc envelope (single source of truth).
-            // The two graph populations separate along Z at ±graph_separation_x
-            // (gap = 2*sep); ~100 keeps the knowledge/ontology discs close and
-            // overlapping rather than collapsed into one plane (sep=0) or pushed
-            // far apart (sep=250). axis_compression_z=0.9 flattens each
-            // population into a thin disc. reset_layout and the boot SQLite seed
-            // both source these values from PhysicsSettings::default() so the
-            // persisted store and the live GPU actor cannot diverge.
+            // Dual-disc layout is OFF by default → clients get a natural, fully
+            // 3D force layout. `graph_separation_x` still defines the disc gap
+            // for users who opt into `enable_dual_disc_layout`; ~100 keeps the
+            // knowledge/ontology discs close when that mode is enabled.
             graph_separation_x: 100.0,
-            axis_compression_z: 0.9,
+            enable_dual_disc_layout: false,
+            // 0 = defer to the consumer's built-in default (3000).
+            initial_node_limit: 0,
             lin_log_mode: true,
             scaling_ratio: 10.0,
             adaptive_speed: true,
@@ -534,7 +543,10 @@ mod tests {
         // the close value (~100), never 0 (merged single plane) or 250 (far
         // apart). reset_layout and the boot SQLite seed both source this.
         assert_eq!(ps.graph_separation_x, 100.0);
-        assert!((ps.axis_compression_z - 0.9).abs() < 1e-9);
+        // Dual-disc layout is opt-in; default OFF → fully 3D.
+        assert!(!ps.enable_dual_disc_layout);
+        // 0 = defer to the consumer default (3000).
+        assert_eq!(ps.initial_node_limit, 0);
     }
 
     #[test]
