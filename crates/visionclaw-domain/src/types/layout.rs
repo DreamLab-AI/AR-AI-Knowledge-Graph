@@ -80,13 +80,16 @@ impl LayoutMode {
     /// True when the mode is realised by the GPU force engine (continuous settling)
     /// rather than a one-shot CPU placement. ForceDirected and Radial (via the
     /// `dag_radial_bias` shell term) settle on the GPU; Clustered rides the GPU
-    /// cluster-cohesion term. Hierarchical/Spectral/Temporal are CPU one-shot
-    /// placements (Sugiyama ranks, Laplacian eigenvectors, timestamp axis) until
-    /// their GPU force channels land in ADR-141 P4.
+    /// cluster-cohesion term; Hierarchical (ADR-141 P4) now settles on the GPU via
+    /// the Sugiyama Y-by-rank layer spring. Spectral/Temporal remain CPU one-shot
+    /// placements (Laplacian eigenvectors, timestamp axis).
     pub fn is_gpu_resident(self) -> bool {
         matches!(
             self,
-            LayoutMode::ForceDirected | LayoutMode::Radial | LayoutMode::Clustered
+            LayoutMode::ForceDirected
+                | LayoutMode::Radial
+                | LayoutMode::Clustered
+                | LayoutMode::Hierarchical
         )
     }
 }
@@ -224,7 +227,8 @@ mod tests {
         assert!(LayoutMode::ForceDirected.is_gpu_resident());
         assert!(LayoutMode::Radial.is_gpu_resident());
         assert!(LayoutMode::Clustered.is_gpu_resident());
-        assert!(!LayoutMode::Hierarchical.is_gpu_resident());
+        // ADR-141 P4: Hierarchical is now GPU-resident (Sugiyama layer spring).
+        assert!(LayoutMode::Hierarchical.is_gpu_resident());
         assert!(!LayoutMode::Spectral.is_gpu_resident());
         assert!(!LayoutMode::Temporal.is_gpu_resident());
     }

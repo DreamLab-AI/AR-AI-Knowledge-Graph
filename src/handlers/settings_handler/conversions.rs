@@ -236,6 +236,9 @@ impl From<&crate::config::PhysicsSettings> for PhysicsSettingsDTO {
             dag_level_distance: settings.dag_level_distance,
             plane_bias_k: settings.plane_bias_k,
             plane_spacing: settings.plane_spacing,
+            layer_bias_k: settings.layer_bias_k,
+            layer_spacing: settings.layer_spacing,
+            alignment_strength: settings.alignment_strength,
         }
     }
 }

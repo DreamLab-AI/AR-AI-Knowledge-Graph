@@ -2643,6 +2643,11 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
         const RADIAL_DEFAULT_DAG_BIAS_K: f32 = 1.0;
         const RADIAL_DEFAULT_DAG_LEVEL_DISTANCE: f32 = 60.0;
 
+        // Default Sugiyama layer-spring strength/spacing when Hierarchical is
+        // selected with the layer bias still at its off-default (ADR-141 P4).
+        const HIERARCHICAL_DEFAULT_LAYER_BIAS_K: f32 = 1.0;
+        const HIERARCHICAL_DEFAULT_LAYER_SPACING: f32 = 60.0;
+
         // Layout mode is authoritative on the actor and only SetLayoutMode may change
         // it. Commit the new mode to self FIRST so the UpdateSimulationParams handler
         // (which preserves self.simulation_params.layout_mode — see below) carries it
@@ -2660,24 +2665,40 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
                 if params.dag_level_distance <= 0.0 {
                     params.dag_level_distance = RADIAL_DEFAULT_DAG_LEVEL_DISTANCE;
                 }
+                // Radial owns the shell term, not the Sugiyama layer spring.
+                params.layer_bias_k = 0.0;
             }
-            // Every non-Radial mode clears the radial-shell bias so a mode switch
-            // (e.g. Radial → Clustered/ForceDirected/a CPU mode) does not leave the
-            // dag_radial_bias term firing. The mode is authoritative over the shell;
-            // dagBiasK can still be raised explicitly via /api/settings/physics.
-            // Clustered rides the existing cluster-cohesion term (cluster_strength),
-            // which the user controls independently; the CPU one-shot modes
-            // (Hierarchical/Spectral/Temporal) are placed by the layout handler.
+            // Hierarchical (ADR-141 P4) is now a GPU-resident layered layout: prime
+            // the Sugiyama Y-by-rank layer spring so ranked nodes settle onto
+            // top-down layers. The radial shell is cleared so the two don't fight.
+            LayoutMode::Hierarchical => {
+                if params.layer_bias_k <= 0.0 {
+                    params.layer_bias_k = HIERARCHICAL_DEFAULT_LAYER_BIAS_K;
+                }
+                if params.layer_spacing <= 0.0 {
+                    params.layer_spacing = HIERARCHICAL_DEFAULT_LAYER_SPACING;
+                }
+                params.dag_bias_k = 0.0;
+            }
+            // Every other mode clears both the radial-shell bias and the Sugiyama
+            // layer spring so a mode switch (e.g. Radial/Hierarchical →
+            // Clustered/ForceDirected) does not leave a stale bias term firing. The
+            // mode is authoritative over these; dagBiasK/layerBiasK can still be
+            // raised explicitly via /api/settings/physics. Clustered rides the
+            // existing cluster-cohesion term (cluster_strength); the remaining CPU
+            // one-shot modes (Spectral/Temporal) are placed by the layout handler.
             _ => {
                 params.dag_bias_k = 0.0;
+                params.layer_bias_k = 0.0;
             }
         }
 
         info!(
-            "ForceComputeActor: SetLayoutMode -> {:?} (gpu_resident={}, dag_bias_k={:.3})",
+            "ForceComputeActor: SetLayoutMode -> {:?} (gpu_resident={}, dag_bias_k={:.3}, layer_bias_k={:.3})",
             msg.mode,
             msg.mode.is_gpu_resident(),
-            params.dag_bias_k
+            params.dag_bias_k,
+            params.layer_bias_k
         );
 
         <Self as Handler<UpdateSimulationParams>>::handle(self, UpdateSimulationParams { params }, ctx)
@@ -2902,6 +2923,10 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             // silently drops plane-only settings changes at the early return below.
             && (cur.plane_bias_k - msg.params.plane_bias_k).abs() < eps
             && (cur.plane_spacing - msg.params.plane_spacing).abs() < eps
+            // Sugiyama layer spring (ADR-141 P4) is GPU-relevant — omitting these
+            // fields silently drops layer-only settings changes at the early return.
+            && (cur.layer_bias_k - msg.params.layer_bias_k).abs() < eps
+            && (cur.layer_spacing - msg.params.layer_spacing).abs() < eps
             // Radial shell centre (ADR-141 P3) rides SimParams.radial_center — omitting
             // it would silently drop an Ego re-centre at the early return below.
             && (cur.radial_center[0] - msg.params.radial_center[0]).abs() < eps

@@ -73,7 +73,8 @@ pub async fn set_layout_mode(
         };
     }
 
-    // CPU one-shot modes (Hierarchical/Spectral/Temporal): compute placement below.
+    // CPU one-shot modes (Spectral/Temporal): compute placement below. Hierarchical
+    // is now GPU-resident (ADR-141 P4 Sugiyama layer spring) and returns above.
     // Fetch current graph data
     use crate::actors::messages::GetGraphData;
     let graph_data = match data.graph_service_addr.send(GetGraphData).await {

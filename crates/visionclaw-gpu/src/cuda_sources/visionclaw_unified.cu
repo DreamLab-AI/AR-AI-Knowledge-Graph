@@ -105,9 +105,16 @@ struct SimParams {
     float radial_center_x;
     float radial_center_y;
     float radial_center_z;
+
+    // Sugiyama Y-by-rank layer spring (ADR-141 P4). Springs each ranked node's Y
+    // toward y = node_rank[idx] * layer_spacing, giving a top-down layered
+    // (Sugiyama) layout. layer_bias_k = 0 disables the term (default OFF). Added
+    // at the end to preserve the existing repr(C) prefix layout.
+    float layer_bias_k;         // Layer-bias spring strength; 0 = off
+    float layer_spacing;        // World-space Y distance per rank
 };
 
-static_assert(sizeof(SimParams) == 204, "SimParams size mismatch with Rust");
+static_assert(sizeof(SimParams) == 212, "SimParams size mismatch with Rust");
 
 // Global constant memory for simulation parameters
 __constant__ SimParams c_params;
@@ -149,7 +156,8 @@ enum ConstraintKind {
     SEMANTIC = 3,
     TEMPORAL = 4,
     GROUP = 5,
-    SEPARATION = 6   // one-sided push-apart when current_dist < params[0] (disjointWith)
+    SEPARATION = 6,  // one-sided push-apart when current_dist < params[0] (disjointWith)
+    ALIGNMENT = 7    // align constrained nodes on one axis (params[0]=axis 0/1/2)
 };
 
 // =============================================================================
@@ -252,6 +260,27 @@ __device__ inline float3 stratified_plane_bias(float3 my_pos,
     const float target_z = plane * c_params.plane_spacing;
     const float fz = (target_z - my_pos.z) * c_params.plane_bias_k;
     return make_float3(0.0f, 0.0f, fz);
+}
+
+// Sugiyama layered bias (ADR-141 P4). Springs each ranked node's Y toward its
+// layer y = rank * layer_spacing, giving a top-down layered (Sugiyama) layout.
+// rank < 0 (unranked) or layer_bias_k <= 0 disables it. layer_spacing <= 0 is also
+// treated as disabled so a zero/omitted spacing can never collapse every rank onto
+// Y = 0. Only Y is touched; X/Z placement (and crossing spread) stay owned by the
+// other forces.
+__device__ inline float3 sugiyama_layer_bias(float3 my_pos,
+                                             const float* __restrict__ node_rank,
+                                             int idx) {
+    if (node_rank == nullptr || c_params.layer_bias_k <= 0.0f
+        || c_params.layer_spacing <= 0.0f) {
+        return make_float3(0.0f, 0.0f, 0.0f);
+    }
+    const float rank = node_rank[idx];
+    if (rank < 0.0f) {
+        return make_float3(0.0f, 0.0f, 0.0f);
+    }
+    const float target_y = rank * c_params.layer_spacing;
+    return make_float3(0.0f, (target_y - my_pos.y) * c_params.layer_bias_k, 0.0f);
 }
 
 // CAS-based atomic min for float (maximum portability)
@@ -681,6 +710,34 @@ __global__ void force_pass_kernel(
                     }
                 }
             }
+            else if (constraint.kind == ConstraintKind::ALIGNMENT && constraint.count >= 2) {
+                // Alignment constraint (ADR-141 P4b): pull two constrained nodes
+                // onto a shared value on ONE axis (params[0] = 0/1/2 → x/y/z) by
+                // springing each toward the pair midpoint. Complements the
+                // Sugiyama Y-by-rank soft force for sibling classes.
+                int other_idx = (node_role == 0) ? constraint.node_idx[1] : constraint.node_idx[0];
+                if (other_idx >= 0 && other_idx < num_nodes) {
+                    float3 other_pos = make_vec3(pos_in_x[other_idx], pos_in_y[other_idx], pos_in_z[other_idx]);
+                    int axis = (int)constraint.params[0];
+                    float my_a = (axis == 0) ? my_pos.x : (axis == 1) ? my_pos.y : my_pos.z;
+                    float other_a = (axis == 0) ? other_pos.x : (axis == 1) ? other_pos.y : other_pos.z;
+                    // Pull toward the midpoint (half the error) so both endpoints converge.
+                    float err = (other_a - my_a) * 0.5f;
+                    float effective_weight = constraint.weight * progressive_multiplier;
+                    float fmag = err * effective_weight * c_params.alignment_strength;
+
+                    // Cap to the per-node force limit.
+                    float max_constraint_force = c_params.constraint_max_force_per_node;
+                    fmag = fmaxf(-max_constraint_force, fminf(max_constraint_force, fmag));
+
+                    if (isfinite(fmag)) {
+                        // Force lands ONLY on the aligned axis.
+                        constraint_force = make_vec3((axis == 0) ? fmag : 0.0f,
+                                                     (axis == 1) ? fmag : 0.0f,
+                                                     (axis == 2) ? fmag : 0.0f);
+                    }
+                }
+            }
 
             // Apply constraint force with safety checks and collect telemetry
             if (isfinite(constraint_force.x) && isfinite(constraint_force.y) && isfinite(constraint_force.z)) {
@@ -743,6 +800,11 @@ __global__ void force_pass_kernel(
     // assigned plane so node types separate into parallel strata. No-op when
     // plane_bias_k <= 0 or the node is unassigned (NaN).
     total_force = vec3_add(total_force, stratified_plane_bias(my_pos, node_plane, idx));
+
+    // ADR-141 P4: Sugiyama Y-by-rank layered spring — pull each ranked node's Y
+    // toward its layer (target_y = rank * layer_spacing). No-op when
+    // layer_bias_k <= 0 or the node is unranked (rank < 0).
+    total_force = vec3_add(total_force, sugiyama_layer_bias(my_pos, node_rank, idx));
 
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;
@@ -2392,6 +2454,29 @@ __global__ void force_pass_with_stability_kernel(
                     }
                 }
             }
+            else if (constraint.kind == ConstraintKind::ALIGNMENT && constraint.count >= 2) {
+                // Mirror of the main-pass one-axis alignment pull (ADR-141 P4b) so
+                // sibling alignment still holds while the bad-frame fallback is active.
+                int other_idx = (node_role == 0) ? constraint.node_idx[1] : constraint.node_idx[0];
+                if (other_idx >= 0 && other_idx < num_nodes) {
+                    float3 other_pos = make_vec3(pos_in_x[other_idx],
+                                                pos_in_y[other_idx],
+                                                pos_in_z[other_idx]);
+                    int axis = (int)constraint.params[0];
+                    float my_a = (axis == 0) ? my_pos.x : (axis == 1) ? my_pos.y : my_pos.z;
+                    float other_a = (axis == 0) ? other_pos.x : (axis == 1) ? other_pos.y : other_pos.z;
+                    float err = (other_a - my_a) * 0.5f;
+                    float fmag = err * constraint.weight * c_params.alignment_strength;
+                    fmag = fmaxf(-c_params.constraint_max_force_per_node,
+                                 fminf(c_params.constraint_max_force_per_node, fmag));
+
+                    if (isfinite(fmag)) {
+                        constraint_force = make_vec3((axis == 0) ? fmag : 0.0f,
+                                                     (axis == 1) ? fmag : 0.0f,
+                                                     (axis == 2) ? fmag : 0.0f);
+                    }
+                }
+            }
 
             if (isfinite(constraint_force.x) && isfinite(constraint_force.y) &&
                 isfinite(constraint_force.z)) {
@@ -2410,6 +2495,11 @@ __global__ void force_pass_with_stability_kernel(
     // bias applies identically on the stability-gated hot path. No-op when
     // plane_bias_k <= 0 or the node is unassigned (NaN).
     total_force = vec3_add(total_force, stratified_plane_bias(my_pos, node_plane, idx));
+
+    // ADR-141 P4: Sugiyama Y-by-rank layered spring. Mirrors force_pass_kernel so
+    // the bias applies identically on the stability-gated hot path. No-op when
+    // layer_bias_k <= 0 or the node is unranked (rank < 0).
+    total_force = vec3_add(total_force, sugiyama_layer_bias(my_pos, node_rank, idx));
 
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;

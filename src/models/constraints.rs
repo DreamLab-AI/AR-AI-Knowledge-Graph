@@ -66,8 +66,30 @@ impl ConstraintData {
             params[i] = param;
         }
 
+        // The domain `ConstraintKind` and the live kernel's `ConstraintKind` are
+        // divergently numbered (ADR-098 verified-topology break #3), so a raw
+        // `as i32` cast mismaps for the alignment kinds. Translate the three
+        // domain alignment variants onto the single live-kernel ALIGNMENT = 7
+        // branch, carrying the axis in params[0] (0=x/1=y/2=z) which is what the
+        // kernel reads (ADR-141 P4b). Other kinds keep their raw discriminant.
+        let kind = match constraint.kind {
+            ConstraintKind::AlignmentHorizontal => {
+                params[0] = 0.0;
+                7
+            }
+            ConstraintKind::AlignmentVertical => {
+                params[0] = 1.0;
+                7
+            }
+            ConstraintKind::AlignmentDepth => {
+                params[0] = 2.0;
+                7
+            }
+            other => other as i32,
+        };
+
         Self {
-            kind: constraint.kind as i32,
+            kind,
             count: constraint.node_indices.len().min(4) as i32,
             node_idx,
             params,

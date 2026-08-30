@@ -39,6 +39,12 @@ fn default_plane_bias_k() -> f32 {
 fn default_plane_spacing() -> f32 {
     60.0
 }
+fn default_layer_bias_k() -> f32 {
+    0.0
+}
+fn default_layer_spacing() -> f32 {
+    60.0
+}
 fn default_radial_center() -> [f32; 3] {
     [0.0, 0.0, 0.0]
 }
@@ -246,6 +252,16 @@ pub struct SimulationParams {
     #[serde(default = "default_plane_spacing")]
     pub plane_spacing: f32,
 
+    /// Sugiyama Y-by-rank layer spring strength (ADR-141 P4). `0` = off (default).
+    /// Springs each ranked node's Y toward `rank * layer_spacing`, giving a
+    /// top-down layered (Sugiyama) layout over the DAG rank.
+    #[serde(default = "default_layer_bias_k")]
+    pub layer_bias_k: f32,
+
+    /// World-space Y distance per rank for the Sugiyama layer spring (default 60).
+    #[serde(default = "default_layer_spacing")]
+    pub layer_spacing: f32,
+
     /// Radial shell centre (ADR-141 P3) for the `dag_radial_bias` term. Default
     /// `[0,0,0]` = origin = legacy DAG behaviour. This is NOT a PhysicsSettings /
     /// wire field: it is actor-authoritative, owned by the `SetRadialLayout`
@@ -380,6 +396,8 @@ impl SimulationParams {
             ("spring_k_agent", self.spring_k_agent),
             ("dag_bias_k", self.dag_bias_k),
             ("dag_level_distance", self.dag_level_distance),
+            ("layer_bias_k", self.layer_bias_k),
+            ("layer_spacing", self.layer_spacing),
         ];
         for &(name, value) in float_fields {
             if !value.is_finite() {
@@ -443,10 +461,9 @@ impl From<&PhysicsSettings> for SimulationParams {
             separation_radius: physics.separation_radius,
             temperature: physics.temperature,
             center_gravity_k: physics.center_gravity_k,
-            // alignment_strength is no longer a user-facing setting (the kernel
-            // never read it). Kept as an internal field defaulted to 0.0 so the
-            // GPU SimParams layout is preserved and the unread field is inert.
-            alignment_strength: 0.0,
+            // alignment_strength (ADR-141 P4b) is a live scalar again — the kernel
+            // ALIGNMENT constraint branch scales its per-axis pull by it.
+            alignment_strength: physics.alignment_strength,
             cluster_strength: physics.cluster_strength,
             // compute_mode is no longer a user-facing setting; the live physics
             // step always runs the unified kernel (ComputeMode::Basic). Kept as
@@ -484,6 +501,8 @@ impl From<&PhysicsSettings> for SimulationParams {
             dag_level_distance: physics.dag_level_distance,
             plane_bias_k: physics.plane_bias_k,
             plane_spacing: physics.plane_spacing,
+            layer_bias_k: physics.layer_bias_k,
+            layer_spacing: physics.layer_spacing,
             // Actor-authoritative (SetRadialLayout); PhysicsSettings has no source.
             radial_center: default_radial_center(),
         }
@@ -687,10 +706,10 @@ mod tests {
         assert_eq!(params.cluster_strength, 0.0);
     }
 
-    // alignment_strength is no longer a user-facing setting; the conversion must
-    // produce an inert 0.0 (the GPU kernel never reads the field).
+    // alignment_strength (ADR-141 P4b) is a live scalar again, but defaults to 0.0
+    // so the ALIGNMENT constraint branch is inert until the user raises it.
     #[test]
-    fn test_alignment_strength_is_inert_zero() {
+    fn test_alignment_strength_defaults_to_zero() {
         let params = SimulationParams::from(&PhysicsSettings::default());
         assert_eq!(params.alignment_strength, 0.0);
     }

@@ -1,6 +1,6 @@
 # ADR-141: Constrained-Layout Engine Programme — 13-Pattern Taxonomy → Phased GPU + Estate Upgrade
 
-**Status:** Proposed
+**Status:** Accepted (P1–P4 complete; P5/P6 deferred)
 **Date:** 2026-08-30
 **Deciders:** VisionClaw layout-engine lead (Opus), VisionClaw CUDA/physics specialist, XR + desktop client owners
 **Related:**
@@ -199,9 +199,9 @@ methods" axis:
 - **Phase 4 — Sugiyama layered + ontology alignment (P1 + P6).** CPU BFS/spectral rank
   + optional crossing reduction → GPU Y-by-rank SF spring. **Folded in from P5 per the
   Phase 0 steer:** WIRE the dormant `AlignmentHorizontal/Vertical/Depth` constraint
-  kinds + the already-allocated `alignment_strength` `SimParams` field (offset 72) into
-  a kernel branch — low-cost, high-leverage, no UI needed for ontology-driven alignment.
-  *Desktop flagship. Status: not started.*
+  kinds + the already-allocated `alignment_strength` `SimParams` field into a kernel
+  branch — low-cost, high-leverage, no UI needed for ontology-driven alignment.
+  *Desktop flagship. Status: **complete** (2026-08-30).*
 - **Phase 5 (deferred) — User-drawn boundary/region zones (P5).** Multi-zone soft walls
   / hard projection + zone-draw UI on both clients. **Deferred to a separate programme**
   per the Phase 0 steer (needs new UI surfaces on both clients). *Status: deferred.*
@@ -304,6 +304,33 @@ now: ego requires a focus node a static desktop `select` cannot supply, and wiri
 endpoint into the settings-field machinery would be fragile — desktop retains the P1
 `radial` layout mode + P2 plane sliders.
 
+### Phase 4 design note — Sugiyama layering + ontology alignment
+
+**Sugiyama (P4a)** reuses the already-computed `node_rank` (subclass-BFS depth) as the
+layer index: a new SF term `sugiyama_layer_bias` springs each node's **Y** toward
+`rank × layer_spacing` (SimParams `layer_bias_k`/`layer_spacing`, 204→212, both
+static_asserts; Y-only, no new buffer or kernel arg — `node_rank` is already passed).
+The existing repulsion/springs spread nodes within a layer and pull edge-connected
+nodes together across layers, so crossing reduction is emergent rather than a separate
+CPU pass — the "CPU BFS init" is the `node_rank` BFS itself (already run at graph
+upload). `LayoutMode::Hierarchical` becomes GPU-resident: `SetLayoutMode(Hierarchical)`
+primes `layer_bias_k`; every other mode clears it (mirrors the Radial/`dag_bias_k`
+discipline). Desktop gets `layerBiasK`/`layerSpacing` sliders (the desktop flagship);
+XR drives it through the existing layout-mode picker.
+
+**Ontology alignment (P4b)** makes the dormant alignment kinds functional. A new kernel
+constraint branch `ALIGNMENT = 7` (added to **both** force kernels' constraint loops)
+pulls the constrained nodes toward their shared mean coordinate on one axis
+(`params[0]` = 0/1/2 = X/Y/Z), scaled by the now-live `alignment_strength` (re-wired
+from `PhysicsSettings.alignmentStrength`, default 0 = inert; the field was already in
+both 180-byte-prefix structs, so **no size change**). The domain
+`AlignmentHorizontal/Vertical/Depth` kinds map to `ALIGNMENT` with the axis in
+`params[0]`. Ontology-driven emission: the live `ontology_constraint_mapper` groups
+`subClassOf` children by shared parent and emits chained pairwise Y-alignment among
+siblings (capped), so sibling classes settle onto the same Sugiyama layer — directly
+complementing P4a. This runs under the existing `ENABLE_CONSTRAINTS` gate and self-gates
+on `alignment_strength > 0`.
+
 ## Status log
 
 - 2026-08-30 — Proposed. Phase 0 audit complete; programme scoped. Awaiting phase-order approval.
@@ -338,3 +365,44 @@ endpoint into the settings-field machinery would be fragile — desktop retains 
   PUTs; forced reheat on re-key; XR HUD "Radial Shells" group (ego reuses `_radial_node_id`),
   desktop deferred XR-only (justified). Gated `cargo check --features gpu,ontology,dev-auth`
   (nvcc) exit 0 — 204-byte struct + generalised term validated. Codex per-phase pass applied.
+- 2026-08-30 — **Phase 4 complete — programme build phases (P1–P4) DONE.** (A) Sugiyama
+  Y-by-rank SF term `sugiyama_layer_bias` (SimParams 204→212, both static_asserts; reuses
+  `node_rank`, Y-only, added to both force kernels); `LayoutMode::Hierarchical` now
+  GPU-resident and auto-primes `layer_bias_k`; every other mode clears it; desktop
+  `layerBiasK`/`layerSpacing` sliders, XR via the layout picker. (B) new kernel
+  `ALIGNMENT = 7` constraint branch in **both** force kernels (axis in `params[0]`, pull to
+  shared-mean, capped) driven by the re-wired-live `alignment_strength`
+  (`PhysicsSettings.alignmentStrength`, default 0, no struct-size change); domain
+  `AlignmentHorizontal/Vertical/Depth` → kind 7; `ontology_constraint_mapper` emits chained
+  pairwise Y-alignment among `subClassOf` siblings (capped) with unit tests. Gated
+  `cargo check --features gpu,ontology,dev-auth` (nvcc) exit 0 — 212-byte struct + layer
+  term + alignment branch validated. Codex per-phase pass applied.
+- 2026-08-30 — Phase 4 codex pass: two fixes. (1) added a `layer_spacing <= 0 ⇒ inert`
+  guard to `sugiyama_layer_bias` (mirrors the P2 plane-spacing guard) so a zero/omitted
+  spacing can't collapse all ranks onto Y=0. (2) `ontology_constraint_mapper` now
+  sort+dedups siblings before pairing, so duplicate `subClassOf` axioms can't emit both
+  A–B and B–A alignment (double force). Re-verified nvcc-green.
+
+## Programme status (final)
+
+The four build phases of ADR-141 are **complete** and each shipped compile-clean + nvcc-green
+with a codex per-phase correctness pass:
+
+| Phase | Deliverable | Status |
+|---|---|---|
+| P1 | Layout-mode GPU plumbing + `/api/layout/mode` unification + cleanup | ✅ complete (landed) |
+| P2 | Stratified planes by type (SF channel) | ✅ complete (landed) |
+| P3 | Spherical shells + ego-radial (generalised `dag_radial_bias`) | ✅ complete (landed) |
+| P4 | Sugiyama Y-by-rank + ontology alignment wire | ✅ complete |
+| P5 | User-drawn boundary/region zones | ⏸ **deferred** — separate programme (needs zone-draw UI both clients) |
+| P6 | Ring arcs / grid / cylindrical (niche) | ⏸ **deferred** — low value for this estate |
+
+`SimParams` grew 180 → 212 bytes across the programme (layout_mode + plane_bias_k/spacing +
+radial_center xyz + layer_bias_k/spacing), both `static_assert`s moved in lockstep at every
+step; `alignment_strength` (pre-allocated) went live at P4 with no size change. The estate now
+covers taxonomy patterns 1 (Sugiyama), 2 (ego-radial), 6 (alignment, ontology-driven), 8
+(spherical shells), 9 (stratified planes), 10 (DAG-directional) as GPU soft forces, plus the
+pre-existing radial/boundary/cluster terms — leaving only the deferred zones (5) and niche
+patterns (3/4/11/12).
+
+## Status log

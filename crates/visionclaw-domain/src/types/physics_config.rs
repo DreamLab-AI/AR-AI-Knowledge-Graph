@@ -67,6 +67,15 @@ fn default_plane_bias_k() -> f32 {
 fn default_plane_spacing() -> f32 {
     60.0
 }
+fn default_layer_bias_k() -> f32 {
+    0.0
+}
+fn default_layer_spacing() -> f32 {
+    60.0
+}
+fn default_alignment_strength() -> f32 {
+    0.0
+}
 fn default_axis_compression_z() -> f32 {
     1.0
 }
@@ -376,6 +385,23 @@ pub struct PhysicsSettings {
     #[serde(default = "default_plane_spacing", alias = "plane_spacing")]
     pub plane_spacing: f32,
 
+    /// Sugiyama Y-by-rank layer spring strength (ADR-141 P4). `0` = off (default).
+    /// When > 0, each ranked node is sprung along Y toward `rank * layer_spacing`,
+    /// giving a top-down layered (Sugiyama) layout over the DAG rank.
+    #[serde(default = "default_layer_bias_k", alias = "layer_bias_k")]
+    pub layer_bias_k: f32,
+
+    /// World-space Y distance per rank for the Sugiyama layer spring (default 60).
+    /// Larger = more separated layers.
+    #[serde(default = "default_layer_spacing", alias = "layer_spacing")]
+    pub layer_spacing: f32,
+
+    /// Alignment constraint strength (ADR-141 P4b). `0` = off (default). Scales the
+    /// per-axis pull of live-kernel ALIGNMENT constraints (e.g. sibling-class
+    /// alignment emitted by the OWL→constraint mapper).
+    #[serde(default = "default_alignment_strength", alias = "alignment_strength")]
+    pub alignment_strength: f32,
+
     /// FA2 base integration speed.
     #[serde(default = "default_global_speed", alias = "global_speed")]
     pub global_speed: f32,
@@ -464,6 +490,9 @@ impl Default for PhysicsSettings {
             dag_level_distance: default_dag_level_distance(),
             plane_bias_k: default_plane_bias_k(),
             plane_spacing: default_plane_spacing(),
+            layer_bias_k: default_layer_bias_k(),
+            layer_spacing: default_layer_spacing(),
+            alignment_strength: default_alignment_strength(),
             spring_k_knowledge: 1.0,
             spring_k_ontology: 1.0,
             spring_k_agent: 1.0,

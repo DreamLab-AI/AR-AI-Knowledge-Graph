@@ -106,6 +106,12 @@ pub struct SimParams {
     pub radial_center_x: f32,
     pub radial_center_y: f32,
     pub radial_center_z: f32,
+
+    // ADR-141 P4 Sugiyama Y-by-rank layer spring; 0 = off. Springs each ranked
+    // node's Y toward `rank * layer_spacing`. Added at the end to preserve the
+    // existing repr(C) prefix layout.
+    pub layer_bias_k: f32,
+    pub layer_spacing: f32,
 }
 
 // SAFETY: SimParams is repr(C) with only POD types; safe for GPU transfer.
@@ -194,6 +200,8 @@ impl SimParams {
                 self.radial_center_y,
                 self.radial_center_z,
             ],
+            layer_bias_k: self.layer_bias_k,
+            layer_spacing: self.layer_spacing,
             // Per-population spring multipliers (LinLog identity). This GPU-side
             // struct has no per-population source, so default to 1.0.
             spring_k_knowledge: 1.0,
@@ -217,7 +225,7 @@ impl ToSimParams for SimulationParams {
 }
 
 // Compile-time size assertion: SimParams must match the CUDA struct exactly.
-const _: () = assert!(std::mem::size_of::<SimParams>() == 204);
+const _: () = assert!(std::mem::size_of::<SimParams>() == 212);
 
 impl From<&SimParams> for SimulationParams {
     fn from(params: &SimParams) -> Self {
@@ -302,6 +310,8 @@ impl From<&SimulationParams> for SimParams {
             radial_center_x: params.radial_center[0],
             radial_center_y: params.radial_center[1],
             radial_center_z: params.radial_center[2],
+            layer_bias_k: params.layer_bias_k,
+            layer_spacing: params.layer_spacing,
         }
     }
 }
@@ -340,10 +350,9 @@ impl From<&PhysicsSettings> for SimParams {
             iteration: 0,
             separation_radius: physics.separation_radius,
             cluster_strength: physics.cluster_strength,
-            // alignment_strength is no longer a user-facing setting and the
-            // kernel never reads this field; feed 0.0 to keep it inert while
-            // preserving the 172-byte repr(C) layout.
-            alignment_strength: 0.0,
+            // alignment_strength (ADR-141 P4b) is a live scalar again: the kernel
+            // ALIGNMENT constraint branch scales its per-axis pull by it.
+            alignment_strength: physics.alignment_strength,
             temperature: physics.temperature,
             viewport_bounds: if physics.enable_bounds {
                 physics.bounds_size
@@ -391,6 +400,8 @@ impl From<&PhysicsSettings> for SimParams {
             radial_center_x: 0.0,
             radial_center_y: 0.0,
             radial_center_z: 0.0,
+            layer_bias_k: physics.layer_bias_k,
+            layer_spacing: physics.layer_spacing,
         }
     }
 }

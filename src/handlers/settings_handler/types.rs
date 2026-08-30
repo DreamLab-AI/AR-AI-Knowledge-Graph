@@ -396,6 +396,15 @@ pub struct PhysicsSettingsDTO {
     /// World-space Z distance per plane offset unit for the stratified-plane bias (default 60).
     #[serde(default)]
     pub plane_spacing: f32,
+    /// Sugiyama Y-by-rank layer spring strength (0 = off). Top-down layered layout.
+    #[serde(default)]
+    pub layer_bias_k: f32,
+    /// World-space Y distance per rank for the Sugiyama layer spring (default 60).
+    #[serde(default)]
+    pub layer_spacing: f32,
+    /// Alignment constraint strength (0 = off). Scales live-kernel ALIGNMENT constraints.
+    #[serde(default)]
+    pub alignment_strength: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

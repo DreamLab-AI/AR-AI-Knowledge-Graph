@@ -45,6 +45,8 @@ pub enum LiveKernelKind {
     Position = 1,
     /// One-sided min-distance push (no long-range attraction).
     Separation = 6,
+    /// One-axis alignment pull toward the pair midpoint (params[0] = axis 0/1/2).
+    Alignment = 7,
 }
 
 impl LiveKernelKind {
@@ -78,6 +80,16 @@ pub const COLOCATE_WEIGHT: f32 = 0.85;
 pub const DISJOINT_MIN_DISTANCE: f32 = 350.0;
 /// Default separation weight.
 pub const DISJOINT_WEIGHT: f32 = 0.8;
+
+/// Axis (0=x, 1=y, 2=z) that sibling classes align on: Y, complementing the
+/// P4a Sugiyama Y-by-rank spring so a parent's children share a layer.
+pub const SIBLING_ALIGN_AXIS: f32 = 1.0;
+/// Modest weight for the sibling-alignment pull — it nudges siblings onto a
+/// shared layer without overpowering the hierarchical attraction.
+pub const SIBLING_ALIGN_WEIGHT: f32 = 0.5;
+/// Upper bound on emitted sibling-alignment constraints so a very wide hierarchy
+/// (thousands of children under one parent) can never flood the constraint buffer.
+pub const MAX_SIBLING_ALIGN_CONSTRAINTS: usize = 20_000;
 
 /// How a resolved axiom maps onto a live-kernel constraint.
 enum MappedKind {
@@ -174,6 +186,12 @@ pub fn map_axioms_to_constraints(
     let mut skipped_unclassified = 0usize;
     let mut skipped_unresolved = 0usize;
 
+    // Parent node index → resolved child node indices (subClassOf only), used
+    // after the main pass to emit sibling-alignment constraints (ADR-141 P4b).
+    // BTreeMap keeps the emission order deterministic.
+    let mut children_by_parent: std::collections::BTreeMap<u32, Vec<u32>> =
+        std::collections::BTreeMap::new();
+
     for axiom in axioms {
         let mapping = match MappedKind::classify(axiom) {
             Some(m) => m,
@@ -225,13 +243,59 @@ pub fn map_axioms_to_constraints(
 
         out.push(constraint);
         mapped += 1;
+
+        // Record subClassOf children under their shared parent (object) so
+        // siblings can be aligned onto a common layer below. partOf/sameAs are
+        // deliberately excluded — only taxonomic siblings share a rank layer.
+        if axiom.axiom_type == AxiomType::SubClassOf {
+            children_by_parent.entry(object).or_default().push(subject);
+        }
+    }
+
+    // Sibling alignment (ADR-141 P4b): for each parent with ≥2 subClassOf
+    // children, chain consecutive siblings with a one-axis (Y) ALIGNMENT
+    // constraint. This complements the P4a Sugiyama Y-by-rank spring by pulling
+    // classes that share a parent onto the same layer. Bounded by
+    // MAX_SIBLING_ALIGN_CONSTRAINTS so a very wide hierarchy cannot flood the buffer.
+    let mut sibling_aligned = 0usize;
+    'parents: for children in children_by_parent.values() {
+        if children.len() < 2 {
+            continue;
+        }
+        // Dedup siblings first: duplicate subClassOf axioms (or a child listed
+        // twice) would otherwise emit both A–B and B–A alignment constraints,
+        // doubling the force on that pair. Sort+dedup gives a stable, unique chain.
+        let mut siblings: Vec<u32> = children.clone();
+        siblings.sort_unstable();
+        siblings.dedup();
+        if siblings.len() < 2 {
+            continue;
+        }
+        for pair in siblings.windows(2) {
+            if sibling_aligned >= MAX_SIBLING_ALIGN_CONSTRAINTS {
+                break 'parents;
+            }
+            // Skip degenerate self-pairs (a child resolving to itself twice).
+            if pair[0] == pair[1] {
+                continue;
+            }
+            out.push(pairwise(
+                LiveKernelKind::Alignment,
+                pair[0],
+                pair[1],
+                SIBLING_ALIGN_AXIS,
+                SIBLING_ALIGN_WEIGHT,
+            ));
+            sibling_aligned += 1;
+        }
     }
 
     let dropped = resolver.unresolved_count();
     info!(
-        "OWL→constraint mapper: {} axioms in, {} constraints out ({} unclassified, {} with unresolved endpoint(s); resolver dropped {} endpoint lookups)",
+        "OWL→constraint mapper: {} axioms in, {} constraints out ({} sibling-alignment, {} unclassified, {} with unresolved endpoint(s); resolver dropped {} endpoint lookups)",
         axioms.len(),
-        mapped,
+        mapped + sibling_aligned,
+        sibling_aligned,
         skipped_unclassified,
         skipped_unresolved,
         dropped
@@ -394,6 +458,68 @@ mod tests {
         );
         assert_eq!(constraints[0].params[0], SUBCLASS_REST_LENGTH);
         assert_eq!(constraints[0].weight, SUBCLASS_WEIGHT);
+    }
+
+    /// Two classes sharing a parent (subClassOf the same node) yield a kind-7
+    /// ALIGNMENT constraint on axis Y (params[0] == 1.0), complementing the P4a
+    /// Sugiyama Y-by-rank spring. The two subClassOf attractions are still emitted.
+    #[test]
+    fn siblings_yield_kind7_alignment_constraint() {
+        let nodes = vec![
+            node(1, "urn:vc:class:Animal"),
+            node(2, "urn:vc:class:Dog"),
+            node(3, "urn:vc:class:Cat"),
+        ];
+        let mut resolver = IriNodeResolver::from_nodes(&nodes);
+
+        let axioms = vec![
+            // Dog subClassOf Animal
+            axiom(
+                AxiomType::SubClassOf,
+                "urn:vc:class:Dog",
+                "urn:vc:class:Animal",
+            ),
+            // Cat subClassOf Animal  → Dog & Cat are siblings under Animal
+            axiom(
+                AxiomType::SubClassOf,
+                "urn:vc:class:Cat",
+                "urn:vc:class:Animal",
+            ),
+        ];
+
+        let constraints = map_axioms_to_constraints(&axioms, &mut resolver);
+
+        // Two DISTANCE attractions + one sibling ALIGNMENT.
+        let alignments: Vec<&ConstraintData> =
+            constraints.iter().filter(|c| c.kind == 7).collect();
+        assert_eq!(alignments.len(), 1, "one sibling-alignment constraint");
+        let a = alignments[0];
+        assert_eq!(a.kind, 7, "sibling alignment maps to live ALIGNMENT = 7");
+        assert_eq!(a.count, 2);
+        assert_eq!(a.params[0], 1.0, "aligns on axis Y (params[0] == 1.0)");
+        assert_eq!(a.weight, SIBLING_ALIGN_WEIGHT);
+        // Endpoints are the two children (Dog=2, Cat=3) in insertion order.
+        assert_eq!(a.node_idx[0], 2);
+        assert_eq!(a.node_idx[1], 3);
+    }
+
+    /// A parent with a single child yields NO alignment constraint.
+    #[test]
+    fn single_child_yields_no_alignment() {
+        let nodes = vec![node(1, "urn:vc:class:Animal"), node(2, "urn:vc:class:Dog")];
+        let mut resolver = IriNodeResolver::from_nodes(&nodes);
+
+        let axioms = vec![axiom(
+            AxiomType::SubClassOf,
+            "urn:vc:class:Dog",
+            "urn:vc:class:Animal",
+        )];
+
+        let constraints = map_axioms_to_constraints(&axioms, &mut resolver);
+        assert!(
+            constraints.iter().all(|c| c.kind != 7),
+            "a lone child produces no sibling alignment"
+        );
     }
 
     /// Unresolved endpoints are counted, not silently dropped.
