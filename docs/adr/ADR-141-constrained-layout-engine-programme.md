@@ -195,7 +195,7 @@ methods" axis:
 - **Phase 2 — Stratified planes by type (P9).** New SF channel + per-type target-Z
   buffer; XR HUD picker + desktop option. *XR room-scale flagship. Status: **in progress** (2026-08-30).*
 - **Phase 3 — Spherical shells + ego-radial (P8, P2).** Extend `dag_radial_bias`:
-  type/depth-keyed shell radius; BFS-distance-from-focus mode. *Status: not started.*
+  type/depth-keyed shell radius; BFS-distance-from-focus mode. *Status: **complete** (2026-08-30).*
 - **Phase 4 — Sugiyama layered + ontology alignment (P1 + P6).** CPU BFS/spectral rank
   + optional crossing reduction → GPU Y-by-rank SF spring. **Folded in from P5 per the
   Phase 0 steer:** WIRE the dormant `AlignmentHorizontal/Vertical/Depth` constraint
@@ -269,6 +269,41 @@ gap ± buttons in the HUD Graph tab.
   established behaviour exactly — the buffer is NaN-reset on every grow, so a skipped
   upload leaves it inert, not stale; left at parity by design. Re-verified nvcc-green.
 
+### Phase 3 design note — one term, three keyings, settable centre
+
+`dag_radial_bias` is generalised rather than duplicated. The shell radius stays
+`node_rank[idx] * dag_level_distance`; the two things that vary per mode are (1) what
+fills the `node_rank` key buffer and (2) the shell **centre**, newly a settable
+`radial_center` (`SimParams` 192→204, both structs + both static_asserts; default
+`(0,0,0)` = byte-identical legacy behaviour). The kernel change is one line —
+`delta = my_pos − center` — so a single term now serves DAG-depth spheres, type-tier
+spheres, and focus-centred ego shells.
+
+**Three radial modes** (`RadialMode`, actor-side; no new GPU buffer): `DagRank` (cached
+subclass-BFS ranks, origin — the "concentric spheres by depth" P8 case), `TypeTier`
+(population tier Agent→0 / Knowledge→1 / Ontology→2, origin — spheres by type), `Ego`
+(BFS hop-distance from a focus node, centred on that node's live position — P2 ego).
+Modes re-fill `node_rank` and set `radial_center` on demand; the actor caches
+`dag_ranks`, an undirected `graph_adjacency`, and a node-id→index map at graph upload
+to make re-keying cheap.
+
+**Focus-setter design (justified):** a dedicated actor message `SetRadialLayout { mode,
+focus_node }` + `POST /api/layout/radial`, **not** a settings field. Rationale: the
+focus is ephemeral interaction state (the node the user last targeted), and applying it
+requires a CPU recompute (BFS / key rebuild), a live position read, and a buffer upload
+— an actor operation, not a serialisable scalar. It mirrors the `SetLayoutMode`
+precedent and pairs with click-to-focus (task #21). `radial_center` is actor-authoritative
+and preserved across settings PUTs (same discipline as `layout_mode`), so a physics-slider
+change never resets the ego centre. A forced reheat on every re-key ensures the new
+shells engage even at deep equilibrium (the key upload is invisible to the
+`UpdateSimulationParams` idempotency guard).
+
+XR HUD gains a "Radial Shells" group (DAG / Type / Ego-focus / Off; ego reuses the last
+radial-targeted node `_radial_node_id`). Desktop radial is deferred as **XR-only** for
+now: ego requires a focus node a static desktop `select` cannot supply, and wiring a new
+endpoint into the settings-field machinery would be fragile — desktop retains the P1
+`radial` layout mode + P2 plane sliders.
+
 ## Status log
 
 - 2026-08-30 — Proposed. Phase 0 audit complete; programme scoped. Awaiting phase-order approval.
@@ -293,3 +328,13 @@ gap ± buttons in the HUD Graph tab.
   clears `dag_bias_k` so a Radial→Clustered/CPU switch stops the radial-shell term.
   (3) `POST /api/layout/mode` returns `success:false` on actor-unavailable/reject instead
   of a hollow success. Re-verified compile-green.
+- 2026-08-30 — **Phase 2 complete** (stratified planes) and **Phase 3 complete** (spherical
+  shells + ego-radial). See the Phase 2 / Phase 3 design notes and the Phase 2 status-log
+  subsection above. P3: `dag_radial_bias` centre generalised to `radial_center` (SimParams
+  192→204, both static_asserts; kernel `delta = my_pos − center`, origin default = legacy);
+  three `RadialMode`s (DagRank/TypeTier/Ego-BFS) re-key `node_rank` on demand; actor caches
+  `dag_ranks`/`graph_adjacency`/id-index at upload; `SetRadialLayout` message +
+  `POST /api/layout/radial`; `radial_center` actor-authoritative + preserved across settings
+  PUTs; forced reheat on re-key; XR HUD "Radial Shells" group (ego reuses `_radial_node_id`),
+  desktop deferred XR-only (justified). Gated `cargo check --features gpu,ontology,dev-auth`
+  (nvcc) exit 0 — 204-byte struct + generalised term validated. Codex per-phase pass applied.

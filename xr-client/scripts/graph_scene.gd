@@ -731,6 +731,18 @@ func _on_hud_control(action: String) -> void:
 			_request_plane_gap(PLANE_SPACING_STEP)
 		"plane_gap_minus":
 			_request_plane_gap(-PLANE_SPACING_STEP)
+		"radial_dag":
+			_post_radial({"mode": "dagRank", "transitionMs": 800})
+		"radial_type":
+			_post_radial({"mode": "typeTier", "transitionMs": 800})
+		"radial_ego":
+			if _radial_node_id < 0:
+				push_warning("GraphScene: Ego Focus needs a selected node — open a node's radial first")
+			else:
+				_post_radial({"mode": "ego", "focusNode": _radial_node_id, "transitionMs": 800})
+		"radial_off":
+			if _put_physics_body({"dagBiasK": 0.0}):
+				_physics_staged = {"_dag_bias_on": false}
 		"flat_toggle":
 			_request_flat_toggle()
 		"layout_mode_cycle":
@@ -959,6 +971,26 @@ func _post_layout_mode(mode: String) -> bool:
 	var err := _physics_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
 	if err != OK:
 		push_warning("GraphScene: layout mode POST failed to start (%d)" % err)
+		return false
+	_physics_pending = true
+	return true
+
+
+# ADR-141 Phase 3 — POST {base}/api/layout/radial with a radial-shell body
+# ({"mode":<dagRank|typeTier|ego>, "focusNode":<u32?>, "transitionMs":<u64>}).
+# Same single-in-flight gate, auth-header path, and commit-on-2xx discipline as
+# _post_layout_mode. Returns true only if the request was dispatched.
+func _post_radial(body: Dictionary) -> bool:
+	if _physics_http == null:
+		return false
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return false
+	var url := "%s/api/layout/radial" % _http_base()
+	var headers := _auth_headers(url, "POST")
+	var err := _physics_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
+	if err != OK:
+		push_warning("GraphScene: radial POST failed to start (%d)" % err)
 		return false
 	_physics_pending = true
 	return true

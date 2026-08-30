@@ -2684,6 +2684,143 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
     }
 }
 
+/// ADR-141 P3: re-key the `dag_radial_bias` radial shells. Reuses the existing
+/// shell term — only the per-node KEY (uploaded via the `node_rank` buffer) and
+/// the shell CENTRE (`SimulationParams.radial_center`) change per RadialMode:
+///   - DagRank : key = cached DAG hierarchy rank;      centre = origin (legacy).
+///   - TypeTier: key = node-type tier (Agent 0 → Knowledge 1 → Ontology 2);
+///               centre = origin.
+///   - Ego     : key = BFS hop-distance from `focus_node`; centre = the focus
+///               node's live GPU position (origin if unreadable).
+/// The centre is actor-authoritative (preserved through settings PUTs by the
+/// UpdateSimulationParams handler). Applied through the same UpdateSimulationParams
+/// path as SetLayoutMode so validation, resync and reheat behave identically.
+impl Handler<SetRadialLayout> for ForceComputeActor {
+    type Result = Result<(), String>;
+
+    fn handle(&mut self, msg: SetRadialLayout, ctx: &mut Self::Context) -> Self::Result {
+        use crate::layout::types::RadialMode;
+
+        // Prime the shell strength/spacing when Radial re-keying is requested with
+        // the DAG bias still at its off-default, so the shells actually engage
+        // (mirrors the Radial arm of SetLayoutMode).
+        const RADIAL_DEFAULT_DAG_BIAS_K: f32 = 1.0;
+        const RADIAL_DEFAULT_DAG_LEVEL_DISTANCE: f32 = 60.0;
+
+        let num_nodes = self.node_population.len();
+        if num_nodes == 0 {
+            return Err("no graph uploaded — radial layout cannot be keyed".to_string());
+        }
+
+        // Build the per-node shell KEY vec and the shell CENTRE for the mode.
+        let (keys, center): (Vec<f32>, [f32; 3]) = match msg.mode {
+            RadialMode::DagRank => {
+                let keys = if self.dag_ranks.len() == num_nodes {
+                    self.dag_ranks.clone()
+                } else {
+                    // No cached ranks (no hierarchy) → all-unranked (bias inert).
+                    vec![-1.0; num_nodes]
+                };
+                (keys, [0.0, 0.0, 0.0])
+            }
+            RadialMode::TypeTier => {
+                let keys = if self.node_population.len() == num_nodes {
+                    self.node_population
+                        .iter()
+                        .map(|pop| match pop {
+                            GraphPopulation::Agent => 0.0,
+                            GraphPopulation::Knowledge => 1.0,
+                            GraphPopulation::Ontology => 2.0,
+                        })
+                        .collect()
+                } else {
+                    vec![-1.0; num_nodes]
+                };
+                (keys, [0.0, 0.0, 0.0])
+            }
+            RadialMode::Ego => {
+                let focus = msg
+                    .focus_node
+                    .ok_or_else(|| "ego radial mode requires focus_node".to_string())?;
+                let focus_idx = *self
+                    .radial_node_index
+                    .get(&focus)
+                    .ok_or_else(|| "focus node not in graph".to_string())?;
+                let keys =
+                    Self::compute_ego_distances(num_nodes, &self.graph_adjacency, focus_idx);
+                // Centre the shells on the focus node's live position; fall back to
+                // the origin if positions are unreadable.
+                let mut center = [0.0f32, 0.0, 0.0];
+                if let Some(shared) = &self.shared_context {
+                    let mut unified = match shared.unified_compute.lock() {
+                        Ok(g) => g,
+                        Err(poisoned) => poisoned.into_inner(),
+                    };
+                    if let Ok((xs, ys, zs)) = unified.get_node_positions() {
+                        if focus_idx < xs.len() {
+                            center = [xs[focus_idx], ys[focus_idx], zs[focus_idx]];
+                        }
+                    }
+                }
+                (keys, center)
+            }
+        };
+
+        // Upload the shell keys via the existing node_rank buffer.
+        if let Some(shared) = &self.shared_context {
+            let mut unified = match shared.unified_compute.lock() {
+                Ok(g) => g,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if let Err(e) = unified.upload_node_rank(&keys) {
+                return Err(format!("radial key upload failed: {}", e));
+            }
+        } else {
+            return Err("GPU context unavailable — radial layout not applied".to_string());
+        }
+
+        // Commit the actor-authoritative shell centre FIRST so the
+        // UpdateSimulationParams handler (which preserves radial_center) carries it.
+        // NOTE: the per-step physics rebuilds `sim_params` from `self.simulation_params`
+        // via a fresh clone every step (see the ComputeForces path, ~`let sim_params =
+        // self.simulation_params.clone()`), so this centre reaches the GPU on the next
+        // step even when the UpdateSimulationParams idempotency guard skips the reheat —
+        // and the forced reheat below guarantees the graph re-settles onto it.
+        self.simulation_params.radial_center = center;
+
+        let mut params = self.simulation_params.clone();
+        params.radial_center = center;
+        if params.dag_bias_k <= 0.0 {
+            params.dag_bias_k = RADIAL_DEFAULT_DAG_BIAS_K;
+        }
+        if params.dag_level_distance <= 0.0 {
+            params.dag_level_distance = RADIAL_DEFAULT_DAG_LEVEL_DISTANCE;
+        }
+
+        info!(
+            "ForceComputeActor: SetRadialLayout -> {:?} (focus={:?}, center=[{:.1},{:.1},{:.1}], dag_bias_k={:.3})",
+            msg.mode, msg.focus_node, center[0], center[1], center[2], params.dag_bias_k
+        );
+
+        let result =
+            <Self as Handler<UpdateSimulationParams>>::handle(self, UpdateSimulationParams { params }, ctx);
+
+        // Re-keying the shells only changes the per-node node_rank buffer (already
+        // uploaded above), which UpdateSimulationParams' idempotency guard cannot see
+        // — a pure key-source switch (e.g. DagRank→TypeTier) with unchanged SimParams
+        // would otherwise skip reheat and leave the new shells un-engaged at deep
+        // equilibrium. Force a modest reheat + stability-bypass so the graph always
+        // re-settles onto the new shells.
+        if result.is_ok() {
+            self.reheat_factor = self.reheat_factor.max(1.5);
+            self.stability_warmup_remaining = self.stability_warmup_remaining.max(900);
+            self.broadcast_optimizer.reset_broadcast_timer();
+        }
+
+        result
+    }
+}
+
 impl Handler<UpdateSimulationParams> for ForceComputeActor {
     type Result = Result<(), String>;
 
@@ -2696,6 +2833,14 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
         // the new mode to `self` before delegating here, so this preserves the *new*
         // mode on that path (no clobber, no lost switch).
         msg.params.layout_mode = self.simulation_params.layout_mode;
+
+        // ADR-141 P3: the radial shell centre is owned by SetRadialLayout (Ego mode
+        // centres it on the focus node). A settings-driven update is built from
+        // PhysicsSettings, which has no radial_center source and defaults it to the
+        // origin — preserve the actor's current centre so a physics PUT never resets
+        // an active Ego centre. SetRadialLayout commits the new centre to `self`
+        // before delegating here, so this preserves the *new* centre on that path.
+        msg.params.radial_center = self.simulation_params.radial_center;
 
         // Validate incoming parameters before applying — reject unsafe values
         // that could cause GPU explosion (dt=1000), infinite energy (damping=0),
@@ -2757,6 +2902,11 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             // silently drops plane-only settings changes at the early return below.
             && (cur.plane_bias_k - msg.params.plane_bias_k).abs() < eps
             && (cur.plane_spacing - msg.params.plane_spacing).abs() < eps
+            // Radial shell centre (ADR-141 P3) rides SimParams.radial_center — omitting
+            // it would silently drop an Ego re-centre at the early return below.
+            && (cur.radial_center[0] - msg.params.radial_center[0]).abs() < eps
+            && (cur.radial_center[1] - msg.params.radial_center[1]).abs() < eps
+            && (cur.radial_center[2] - msg.params.radial_center[2]).abs() < eps
             // Layout mode (ADR-141 P1) is GPU-relevant — it rides SimParams.layout_mode.
             // Omitting it would silently drop a mode-only switch at the early return.
             && cur.layout_mode == msg.params.layout_mode;

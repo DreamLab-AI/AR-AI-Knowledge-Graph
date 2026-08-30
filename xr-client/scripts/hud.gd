@@ -332,6 +332,16 @@ func _build_graph_page() -> VBoxContainer:
 	g_planes.add_child(_action_btn("Plane Gap -", "plane_gap_minus", "Decrease the gap between type planes"))
 	page.add_child(g_planes)
 
+	# ADR-141 Phase 3 — radial-shell layout modes. Each button POSTs
+	# /api/layout/radial via graph_scene; "Radial Off" disables the shell term.
+	page.add_child(_group_header("Radial Shells"))
+	var g_radial := _grid(2)
+	g_radial.add_child(_action_btn("Radial: DAG", "radial_dag", "Concentric shells by DAG depth, centred on the origin"))
+	g_radial.add_child(_action_btn("Radial: Type", "radial_type", "Concentric shells grouped by node type, centred on the origin"))
+	g_radial.add_child(_action_btn("Ego Focus", "radial_ego", "Shells by hop-distance from the selected node — open a node's radial first"))
+	g_radial.add_child(_action_btn("Radial Off", "radial_off", "Disable the radial shell force"))
+	page.add_child(g_radial)
+
 	# ADR-141 Phase 1 — constrained-layout engine picker. Single cycling button
 	# steps through the backend LayoutMode enum; graph_scene POSTs /api/layout/mode.
 	page.add_child(_group_header("Layout Mode"))

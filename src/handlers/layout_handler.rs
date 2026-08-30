@@ -131,6 +131,74 @@ pub async fn set_layout_mode(
     }))
 }
 
+/// ADR-141 P3: re-key the radial shells of the `dag_radial_bias` term. Body:
+/// `{ "mode": "dagRank"|"typeTier"|"ego", "focusNode": <u32|null>, "transitionMs": <u64> }`.
+/// Mirrors `set_layout_mode`'s persistence pattern: the mode is applied on the
+/// actor via `SetRadialLayout`; a failure returns `success:false`.
+pub async fn set_radial_layout(
+    data: web::Data<AppState>,
+    body: web::Json<serde_json::Value>,
+) -> Result<HttpResponse> {
+    let mode_str = body.get("mode").and_then(|m| m.as_str()).unwrap_or("dagRank");
+    let focus_node = body
+        .get("focusNode")
+        .and_then(|f| f.as_u64())
+        .map(|v| v as u32);
+    let transition_ms = body
+        .get("transitionMs")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(500);
+
+    // Reject an unrecognised mode instead of silently running the default and
+    // returning success — a typo'd mode string must not read as applied.
+    let mode: RadialMode =
+        match serde_json::from_value(serde_json::Value::String(mode_str.to_string())) {
+            Ok(m) => m,
+            Err(_) => {
+                return ok_json!(serde_json::json!({
+                    "success": false,
+                    "mode": mode_str,
+                    "error": format!("unknown radial mode '{}' (expected dagRank|typeTier|ego)", mode_str)
+                }));
+            }
+        };
+
+    if let Some(addr) = data.get_gpu_compute_addr().await {
+        use crate::actors::messages::SetRadialLayout;
+        match addr.send(SetRadialLayout { mode, focus_node }).await {
+            Ok(Ok(())) => ok_json!(serde_json::json!({
+                "success": true,
+                "mode": mode_str,
+                "focusNode": focus_node,
+                "transitionMs": transition_ms
+            })),
+            Ok(Err(e)) => {
+                log::warn!("set_radial_layout: actor rejected mode {}: {}", mode_str, e);
+                ok_json!(serde_json::json!({
+                    "success": false,
+                    "mode": mode_str,
+                    "error": format!("Failed to apply radial layout: {}", e)
+                }))
+            }
+            Err(e) => {
+                log::warn!("set_radial_layout: actor mailbox error: {}", e);
+                ok_json!(serde_json::json!({
+                    "success": false,
+                    "mode": mode_str,
+                    "error": format!("actor mailbox error: {}", e)
+                }))
+            }
+        }
+    } else {
+        log::warn!("set_radial_layout: GPU compute actor unavailable — radial layout not applied");
+        ok_json!(serde_json::json!({
+            "success": false,
+            "mode": mode_str,
+            "error": "GPU compute actor unavailable"
+        }))
+    }
+}
+
 pub async fn get_layout_status(_data: web::Data<AppState>) -> Result<HttpResponse> {
     ok_json!(LayoutStatus {
         current_mode: LayoutMode::ForceDirected,
@@ -204,6 +272,7 @@ pub fn configure_layout_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/layout")
             .route("/modes", web::get().to(get_layout_modes))
             .route("/mode", web::post().to(set_layout_mode))
+            .route("/radial", web::post().to(set_radial_layout))
             .route("/status", web::get().to(get_layout_status))
             .route("/zones", web::post().to(set_zones))
             .route("/zones", web::get().to(get_zones))
