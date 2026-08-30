@@ -321,7 +321,7 @@ func _build_query_page() -> VBoxContainer:
 	var region := _scroll_region(300)
 	_query_vars_list = VBoxContainer.new()
 	_query_vars_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_query_vars_list.add_child(_mk_label("(mark nodes with A/X on a wand)", "Marked query variables appear here"))
+	_query_vars_list.add_child(_mk_label("(mark nodes with the wand MENU button)", "Marked query variables appear here"))
 	(region.get_meta("scroll") as ScrollContainer).add_child(_query_vars_list)
 	page.add_child(region)
 	var btns := _grid(2)
@@ -426,7 +426,7 @@ func _cheat_sheet_bbcode() -> String:
 		["Trigger — point at a node & pull", "Grab it"],
 		["…release the trigger", "Pins the node in place"],
 		["Trigger — double-pull on a node", "Open its page card"],
-		["A / X button", "Node menu (mark variable…)"],
+		["Menu button (or A/X)", "Node menu (mark variable…)"],
 		["", ""],
 		["[b]GRAPH[/b]", ""],
 		["BOTH grips (two hands)", "Seize the whole graph"],
@@ -662,7 +662,7 @@ func set_marked_vars(rows: Array) -> void:
 	for c in _query_vars_list.get_children():
 		c.queue_free()
 	if rows.is_empty():
-		_query_vars_list.add_child(_mk_label("(mark nodes with A/X on a wand)", "Marked query variables appear here"))
+		_query_vars_list.add_child(_mk_label("(mark nodes with the wand MENU button)", "Marked query variables appear here"))
 		call_deferred("_update_scroll_arrows")
 		return
 	for r: Variant in rows:

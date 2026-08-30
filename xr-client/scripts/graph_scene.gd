@@ -2395,7 +2395,9 @@ func _update_radial_menu() -> void:
 	for controller: XRController3D in [right_controller, left_controller]:
 		if controller == null or not controller.get_is_active():
 			continue
-		if controller.is_button_pressed("ax_button"):
+		# Vive wands have no A/X — their menu button (above the trackpad) opens
+		# the node radial; A/X kept for Index/Touch-class controllers.
+		if controller.is_button_pressed("menu_button") or controller.is_button_pressed("ax_button"):
 			ax_down = true
 			ax_ctrl = controller
 			break
