@@ -4,19 +4,22 @@ shader_type spatial;
 // driven purely by TIME so there are zero per-frame GDScript/material touches.
 // Faint base alpha keeps dense edge bundles from blowing out to white. No
 // post-process / screen-space anything — safe on gl_compatibility + multiview.
-render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
+// Alpha (mix) blending: overlapping edges accumulate towards the edge colour
+// instead of summing to white the way additive did in dense bundles.
+render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
 uniform vec3 flow_color : source_color = vec3(0.30, 0.72, 1.0);
-// Baseline additive alpha so the whole edge network is faintly visible.
-uniform float base_alpha = 0.15;
+// Baseline alpha so the whole edge network is faintly visible.
+uniform float base_alpha = 0.35;
 // Pulse travel speed (cycles per second along the edge).
 uniform float pulse_speed = 0.6;
 // Half-width of the travelling pulse in UV space.
 uniform float pulse_width = 0.22;
-// Extra additive alpha at the pulse peak.
-uniform float pulse_energy = 0.85;
-// Brightness boost of the moving highlight colour.
-uniform float pulse_gain = 1.6;
+// Extra alpha at the pulse peak.
+uniform float pulse_energy = 0.4;
+// Brightness boost of the moving highlight colour (kept gentle so the pulse
+// head reads as brightened cyan, not white).
+uniform float pulse_gain = 1.2;
 
 void fragment() {
 	// UV.y runs along the unit cylinder's height; the per-instance transform
