@@ -126,3 +126,26 @@ func _find_button(root: Node, text: String) -> Button:
 		if found != null:
 			return found
 	return null
+
+
+# Wave 2, Feature 3 — type show/hide toggles live on the Graph page and, when
+# pressed, flip their visible state and emit control_pressed
+# "type_toggle:<class>:<1|0>".
+func test_type_toggles_present_and_emit_on_press() -> void:
+	var hud: Node3D = await _make_hud()
+	var graph: Control = hud.get_node("%s/GraphPage" % TABS)
+	# Starts visible → label shows "✓".
+	var knowledge: Button = _find_button(graph, "Knowledge ✓")
+	assert_not_null(knowledge, "Knowledge type toggle present, visible by default")
+	assert_not_null(_find_button(graph, "Ontology ✓"), "Ontology toggle present")
+	assert_not_null(_find_button(graph, "Agents ✓"), "Agents toggle present")
+	# Pressing emits control_pressed with the now-hidden (0) state and relabels.
+	watch_signals(hud)
+	knowledge.pressed.emit()
+	assert_signal_emitted_with_parameters(hud, "control_pressed", ["type_toggle:knowledge:0"])
+	assert_eq(knowledge.text, "Knowledge ✕", "label flips to hidden marker")
+	# Pressing again re-shows it.
+	knowledge.pressed.emit()
+	assert_signal_emitted_with_parameters(hud, "control_pressed", ["type_toggle:knowledge:1"])
+	hud.queue_free()
+	await get_tree().process_frame

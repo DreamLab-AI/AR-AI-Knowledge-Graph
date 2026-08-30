@@ -37,6 +37,15 @@ pub struct SemanticPhysicsConfig {
     /// Enable GPU acceleration for constraints
     pub use_gpu_constraints: bool,
 
+    /// Wave 3 asserted/inferred channel: materialise reasoner-entailed SubClassOf
+    /// axioms as tagged GraphData edges (`inferred:true`, amber-dashed in XR).
+    /// OFF by default — it grows the edge set and feeds physics, so it is enabled
+    /// deliberately once validated on a deployment.
+    pub materialise_inferred_edges: bool,
+
+    /// Per-child cap on materialised inferred parents (volume safety valve).
+    pub max_inferred_parents_per_child: usize,
+
     /// Maximum reasoning depth
     pub max_reasoning_depth: usize,
 
@@ -51,6 +60,9 @@ impl Default for SemanticPhysicsConfig {
             auto_generate_constraints: true,
             constraint_strength: 1.0,
             use_gpu_constraints: true,
+            materialise_inferred_edges: false,
+            max_inferred_parents_per_child:
+                crate::services::inferred_edge_materialiser::DEFAULT_MAX_INFERRED_PARENTS_PER_CHILD,
             max_reasoning_depth: 10,
             cache_inferences: true,
         }
@@ -189,6 +201,16 @@ impl OntologyPipelineService {
                             Err(e) => {
                                 error!("❌ Failed to generate constraints: {}", e);
                             }
+                        }
+                    }
+
+                    // Step 2.5 (Wave 3): materialise inferred SubClassOf axioms as
+                    // tagged GraphData edges for the asserted/inferred visual
+                    // channel. Gated OFF by default. Never fails the pipeline.
+                    if self.config.materialise_inferred_edges && !axioms.is_empty() {
+                        match self.materialise_inferred_edges_from_axioms(&axioms).await {
+                            Ok(n) => info!("Materialised {} inferred edges", n),
+                            Err(e) => error!("❌ Inferred-edge materialisation failed: {}", e),
                         }
                     }
                 }
@@ -434,6 +456,109 @@ impl OntologyPipelineService {
             constraints,
             groups: std::collections::HashMap::new(),
         })
+    }
+
+    /// Wave 3: materialise reasoner-entailed `SubClassOf` axioms as tagged inferred
+    /// GraphData edges (child→parent), for the asserted/inferred visual channel.
+    ///
+    /// Resolves each axiom's subject/object class IRI to node ids (reusing the same
+    /// `get_nodes_by_owl_class_iri` path as constraint generation), forms the
+    /// candidate `(child, parent)` pairs, then runs the pure
+    /// [`inferred_edge_materialiser::select_inferred_edges`] set-logic (self-loop
+    /// drop, dedup, per-child cap). The candidates are already reasoner ENTAILMENTS
+    /// (not asserted triples), so the asserted-diff at this site is the empty set;
+    /// the graph-state injection path — which has the full edge list in hand — can
+    /// pass a populated asserted set to the same pure function. Returns the count of
+    /// edges added. Never panics; a resolution miss skips that axiom.
+    async fn materialise_inferred_edges_from_axioms(
+        &self,
+        axioms: &[crate::reasoning::custom_reasoner::InferredAxiom],
+    ) -> Result<usize, String> {
+        use crate::reasoning::custom_reasoner::AxiomType;
+        use crate::services::inferred_edge_materialiser as mat;
+        use std::collections::{HashMap, HashSet};
+
+        let graph_repo = self
+            .graph_repo
+            .as_ref()
+            .ok_or_else(|| "Graph repository not configured".to_string())?;
+
+        // Step A: the reasoner emits TRANSITIVE subclass ancestors, so first build
+        // the child→ancestor-IRI map and reduce it to IMMEDIATE inferred parents —
+        // otherwise deep hierarchies would materialise long-range grandparent edges.
+        let mut child_to_ancestors: HashMap<String, HashSet<String>> = HashMap::new();
+        for axiom in axioms {
+            if axiom.axiom_type != AxiomType::SubClassOf {
+                continue;
+            }
+            if let Some(superclass) = &axiom.object {
+                if superclass != &axiom.subject {
+                    child_to_ancestors
+                        .entry(axiom.subject.clone())
+                        .or_default()
+                        .insert(superclass.clone());
+                }
+            }
+        }
+        let immediate = mat::immediate_inferred_parents(&child_to_ancestors);
+
+        // Step B: project the immediate (child_iri, parent_iri) pairs to node-id
+        // pairs via the same IRI resolver the constraint path uses. Cache lookups.
+        let mut resolve_cache: HashMap<String, Vec<u32>> = HashMap::new();
+        let mut candidates: Vec<(u32, u32)> = Vec::new();
+        for (child_iri, parent_iri) in &immediate {
+            let child_ids = Self::resolve_nodes(graph_repo.as_ref(), &mut resolve_cache,child_iri).await;
+            if child_ids.is_empty() {
+                continue;
+            }
+            let parent_ids =
+                Self::resolve_nodes(graph_repo.as_ref(), &mut resolve_cache,parent_iri).await;
+            for &c in &child_ids {
+                for &p in &parent_ids {
+                    candidates.push((c, p));
+                }
+            }
+        }
+
+        // Step C: diff against the REAL asserted edge set (both directions) so a
+        // materialised edge can never mirror — and thereby overwrite (Edge id is
+        // `source-target`) — an existing asserted edge.
+        let current = graph_repo
+            .load_graph()
+            .await
+            .map_err(|e| format!("load_graph failed: {}", e))?;
+        let cfg = mat::InferredMaterialisationConfig {
+            enabled: true,
+            max_parents_per_child: self.config.max_inferred_parents_per_child,
+        };
+        let edges = mat::materialise(&candidates, &current.edges, &cfg);
+        if edges.is_empty() {
+            return Ok(0);
+        }
+        let added = edges.len();
+        graph_repo
+            .batch_add_edges(edges)
+            .await
+            .map_err(|e| format!("batch_add_edges failed: {}", e))?;
+        Ok(added)
+    }
+
+    /// Resolve an `owl_class_iri` to its node ids, memoised for the batch.
+    async fn resolve_nodes(
+        repo: &dyn crate::ports::knowledge_graph_repository::KnowledgeGraphRepository,
+        cache: &mut std::collections::HashMap<String, Vec<u32>>,
+        iri: &str,
+    ) -> Vec<u32> {
+        if let Some(v) = cache.get(iri) {
+            return v.clone();
+        }
+        let ids = repo
+            .get_nodes_by_owl_class_iri(iri)
+            .await
+            .map(|ns| ns.into_iter().map(|n| n.id).collect::<Vec<u32>>())
+            .unwrap_or_default();
+        cache.insert(iri.to_string(), ids.clone());
+        ids
     }
 
     /// Upload constraints to GPU

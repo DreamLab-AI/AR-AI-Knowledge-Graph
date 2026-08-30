@@ -2533,6 +2533,62 @@ impl Handler<ComputeForces> for ForceComputeActor {
     }
 }
 
+/// ADR-141 P1: switch the active layout mode on the physics actor. The mode is
+/// carried GPU-side via `SimParams.layout_mode`; for GPU-resident modes it also
+/// primes the associated force-term scalars (Radial ⇒ raise the `dag_radial_bias`
+/// shell strength; ForceDirected ⇒ disable it) so the single "set the mode" call
+/// produces a visible relayout. CPU one-shot modes (Hierarchical/Spectral/Temporal)
+/// still route through the layout handler's `compute_layout`; here they only record
+/// the GPU-visible discriminant. The change is applied through the same
+/// `UpdateSimulationParams` path so validation, idempotency, resync and reheat all
+/// behave identically.
+impl Handler<SetLayoutMode> for ForceComputeActor {
+    type Result = Result<(), String>;
+
+    fn handle(&mut self, msg: SetLayoutMode, ctx: &mut Self::Context) -> Self::Result {
+        use crate::layout::types::LayoutMode;
+
+        // Default radial shell strength when Radial is selected with the DAG bias
+        // still at its off-default (0.0). Kept modest so the shell guides rather than
+        // dominates springs; the user can retune via /api/settings/physics dagBiasK.
+        const RADIAL_DEFAULT_DAG_BIAS_K: f32 = 1.0;
+        const RADIAL_DEFAULT_DAG_LEVEL_DISTANCE: f32 = 60.0;
+
+        let mut params = self.simulation_params.clone();
+        params.layout_mode = msg.mode;
+
+        match msg.mode {
+            LayoutMode::Radial => {
+                if params.dag_bias_k <= 0.0 {
+                    params.dag_bias_k = RADIAL_DEFAULT_DAG_BIAS_K;
+                }
+                if params.dag_level_distance <= 0.0 {
+                    params.dag_level_distance = RADIAL_DEFAULT_DAG_LEVEL_DISTANCE;
+                }
+            }
+            LayoutMode::ForceDirected => {
+                // Plain force-directed layout disables the radial shell bias so the
+                // graph relaxes freely.
+                params.dag_bias_k = 0.0;
+            }
+            // Hierarchical/Spectral/Temporal/Clustered: record the discriminant only.
+            // Clustered rides the existing cluster-cohesion term (cluster_strength),
+            // which the user controls independently; the CPU modes are placed by the
+            // layout handler.
+            _ => {}
+        }
+
+        info!(
+            "ForceComputeActor: SetLayoutMode -> {:?} (gpu_resident={}, dag_bias_k={:.3})",
+            msg.mode,
+            msg.mode.is_gpu_resident(),
+            params.dag_bias_k
+        );
+
+        <Self as Handler<UpdateSimulationParams>>::handle(self, UpdateSimulationParams { params }, ctx)
+    }
+}
+
 impl Handler<UpdateSimulationParams> for ForceComputeActor {
     type Result = Result<(), String>;
 
@@ -2592,7 +2648,10 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             // DAG radial bias (PHASE 2) is GPU-relevant — omitting these fields
             // silently drops DAG-only settings changes at the early return below.
             && (cur.dag_bias_k - msg.params.dag_bias_k).abs() < eps
-            && (cur.dag_level_distance - msg.params.dag_level_distance).abs() < eps;
+            && (cur.dag_level_distance - msg.params.dag_level_distance).abs() < eps
+            // Layout mode (ADR-141 P1) is GPU-relevant — it rides SimParams.layout_mode.
+            // Omitting it would silently drop a mode-only switch at the early return.
+            && cur.layout_mode == msg.params.layout_mode;
 
         if physics_unchanged {
             debug!(

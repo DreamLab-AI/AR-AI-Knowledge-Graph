@@ -81,17 +81,18 @@ func test_menu_items_marked_node_offers_unmark_and_clear():
 	assert_true(actions.has("qb_clear"), "active query offers clear")
 
 
-func test_execute_omitted_while_disabled():
-	# EXECUTE_ENABLED is false until Phase D: the radial must NOT offer a no-op
-	# Execute item (no silent no-op), but must still offer Clear.
-	assert_eq(QueryBuilder.EXECUTE_ENABLED, false, "guard: still pre-Phase-D")
+func test_execute_and_toggle_offered_when_active():
+	# Phase D: Execute is enabled; an active query also offers the edge-type toggle
+	# and Clear.
+	assert_eq(QueryBuilder.EXECUTE_ENABLED, true, "Phase D: execute wired")
 	var qb := QueryBuilder.new()
 	qb.mark(1)
 	var actions: Array = []
 	for it in qb.build_node_menu_items(1):
 		actions.append(it["action"])
-	assert_false(actions.has("qb_execute"), "no Execute item while disabled")
-	assert_true(actions.has("qb_clear"), "Clear still offered")
+	assert_true(actions.has("qb_execute"), "Execute offered")
+	assert_true(actions.has("qb_toggle_edges"), "edge-type toggle offered")
+	assert_true(actions.has("qb_clear"), "Clear offered")
 
 
 func test_menu_items_pass_through_extra_items_in_order():
@@ -137,10 +138,32 @@ func test_build_pattern_payload_shape():
 	var qb := QueryBuilder.new()
 	qb.mark(1)
 	qb.mark(2)
-	var payload := qb.build_pattern_payload(PackedInt32Array([1, 2]), true, 24)
+	var payload := qb.build_pattern_payload(PackedInt32Array([1, 2]), PackedStringArray(["references"]), true, 24)
 	assert_eq(payload["countOnly"], true)
 	assert_eq(payload["limit"], 24)
 	assert_eq((payload["triples"] as Array).size(), 1)
+
+
+func test_concrete_edge_type_used_when_toggle_on():
+	var qb := QueryBuilder.new()
+	qb.mark(1)
+	qb.mark(2)
+	# use_concrete_edges defaults true → the real predicate is emitted.
+	var triples := qb.derive_triples(PackedInt32Array([1, 2]), PackedStringArray(["references"]))
+	assert_eq(triples[0]["edgeType"], "references")
+	# Toggle off → wildcard regardless of the supplied type.
+	qb.use_concrete_edges = false
+	triples = qb.derive_triples(PackedInt32Array([1, 2]), PackedStringArray(["references"]))
+	assert_eq(triples[0]["edgeType"], "any")
+
+
+func test_untyped_edge_falls_back_to_any():
+	var qb := QueryBuilder.new()
+	qb.mark(1)
+	qb.mark(2)
+	# Concrete toggle on but the edge has no type → "any".
+	var triples := qb.derive_triples(PackedInt32Array([1, 2]), PackedStringArray([""]))
+	assert_eq(triples[0]["edgeType"], "any")
 
 
 func test_pattern_summary_pluralises():

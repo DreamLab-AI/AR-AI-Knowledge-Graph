@@ -30,6 +30,7 @@ rings = 1
 
 [sub_resource type="MultiMesh" id="MultiMesh_edges"]
 transform_format = 1
+use_custom_data = true
 mesh = SubResource("CylinderMesh_edge")
 instance_count = 0
 

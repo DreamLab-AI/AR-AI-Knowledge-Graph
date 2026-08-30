@@ -11,17 +11,23 @@ extends RefCounted
 ##
 ## Marked nodes become query variables "?v1","?v2",…; each carries a palette index
 ## (0..QUERY_PALETTE_LEN-1, cycling) that the render store maps to a highlight
-## colour. v1 marks variables only — triple assembly + count preview land in
-## Phase C, so this class already exposes `triples` as an (empty in v1) forward
-## seam without wiring the join UI yet.
+## colour. `derive_triples` turns the marked-marked visible edges into the query
+## pattern; `build_pattern_payload` produces the POST body for the count preview
+## and execute.
 
 ## Must match render_store.rs::QUERY_PALETTE_LEN so palette indices agree.
 const QUERY_PALETTE_LEN: int = 8
 
-## Whether Execute is wired to a real effect. False until Phase D (execute +
-## semantic planes) lands — while false the radial omits the Execute item and the
-## HUD button is disabled/relabelled, so there is no silent no-op.
-const EXECUTE_ENABLED: bool = false
+## Whether Execute is wired to a real effect. Phase D lands execute + semantic
+## planes end-to-end, so this is now TRUE (radial offers the Execute item; the HUD
+## button is enabled).
+const EXECUTE_ENABLED: bool = true
+
+## When true, marked-marked edges contribute their concrete predicate to the
+## pattern; when false, every pattern edge is the "any" wildcard. Toggled from the
+## radial ("Edges: concrete/any"). Defaults to concrete now that the edge-type wire
+## carries predicates (Phase D).
+var use_concrete_edges: bool = true
 
 # node_id:int -> var_name:String ("?v1", …). Insertion order = assignment order.
 var _vars: Dictionary = {}
@@ -30,8 +36,9 @@ var _palette: Dictionary = {}
 # Monotonic counter for the next ?vN name; never reused within a query so names
 # stay stable even after unmarking an earlier variable.
 var _next_index: int = 1
-# Assembled triples (Phase C). Each: {src, edge_type:String, tgt} where src/tgt
-# are a node id (int) or a var name (String). Empty in v1.
+# Pattern triples, rebuilt by derive_triples on each pattern change. Each:
+# {src:String var, edgeType:String, tgt:String var}. Endpoints are ?vN names;
+# edgeType is a concrete predicate or "any".
 var triples: Array = []
 
 
@@ -56,8 +63,9 @@ func unmark(node_id: int) -> bool:
 		return false
 	_vars.erase(node_id)
 	_palette.erase(node_id)
-	# In v1 `triples` is always empty; Phase C will prune triples that referenced
-	# the removed variable here.
+	# No triple pruning needed: derive_triples rebuilds `triples` from scratch on
+	# the next pattern change, so edges that referenced the removed variable drop
+	# out automatically.
 	return true
 
 
@@ -131,9 +139,13 @@ func build_node_menu_items(node_id: int, extra_items: Array = []) -> Array:
 	# 2. Future expansion / Wave-2 items (verbatim pass-through).
 	for it: Dictionary in extra_items:
 		items.append(it)
-	# 3. Query section (only once a query exists). Execute is omitted until Phase D
-	# wires it (EXECUTE_ENABLED) — never a menu item that no-ops.
+	# 3. Query section (only once a query exists). Execute is gated on
+	# EXECUTE_ENABLED — never a menu item that no-ops.
 	if is_active():
+		items.append({
+			"label": "Edges: %s" % ("concrete" if use_concrete_edges else "any"),
+			"action": "qb_toggle_edges",
+		})
 		if EXECUTE_ENABLED:
 			items.append({
 				"label": "Execute query (%d var)" % var_count(),
@@ -154,12 +166,12 @@ func build_node_menu_items(node_id: int, extra_items: Array = []) -> Array:
 ## exactly the set of visible edges connecting marked nodes, with the marked nodes
 ## as query variables.
 ##
-## Edges are WILDCARD ("any") in v1 — the XR render store carries only edge
-## (source,target,weight), NOT the predicate, so a concrete edgeType cannot be
-## derived client-side without a round-trip. The concrete-type toggle is deferred
-## to Phase D (state in the report). Deduped by (src,tgt): parallel edges collapse
-## since the wildcard makes their triples identical. Stores and returns `triples`.
-func derive_triples(edge_pairs: PackedInt32Array) -> Array:
+## `edge_types` (parallel to the pairs, from BinaryProtocolClient.get_edge_types(),
+## empty = untyped) supplies the concrete predicate when `use_concrete_edges` is on;
+## an edge with no type, or the toggle off, falls back to the "any" wildcard. Deduped
+## by (src,tgt,edgeType) so two DIFFERENT concrete predicates between the same pair
+## produce two triples, while wildcards collapse. Stores and returns `triples`.
+func derive_triples(edge_pairs: PackedInt32Array, edge_types: PackedStringArray = PackedStringArray()) -> Array:
 	triples.clear()
 	if _vars.is_empty():
 		return triples
@@ -170,13 +182,18 @@ func derive_triples(edge_pairs: PackedInt32Array) -> Array:
 		var t: int = edge_pairs[i * 2 + 1]
 		if not _vars.has(s) or not _vars.has(t):
 			continue
-		var key := "%d>%d" % [s, t]
+		var etype := "any"
+		if use_concrete_edges and i < edge_types.size():
+			var raw := edge_types[i]
+			if raw != "":
+				etype = raw
+		var key := "%d>%d>%s" % [s, t, etype]
 		if seen.has(key):
 			continue
 		seen[key] = true
 		triples.append({
 			"src": _vars[s],
-			"edgeType": "any",
+			"edgeType": etype,
 			"tgt": _vars[t],
 		})
 	return triples
@@ -184,10 +201,10 @@ func derive_triples(edge_pairs: PackedInt32Array) -> Array:
 
 ## Build the POST /api/graph/query/pattern request body from the current pattern.
 ## `count_only` drives the debounced live-count preview; the full form is used at
-## execute. Derives triples from `edge_pairs` first.
-func build_pattern_payload(edge_pairs: PackedInt32Array, count_only: bool, limit: int) -> Dictionary:
+## execute. Derives triples from `edge_pairs` (+ optional `edge_types`) first.
+func build_pattern_payload(edge_pairs: PackedInt32Array, edge_types: PackedStringArray, count_only: bool, limit: int) -> Dictionary:
 	return {
-		"triples": derive_triples(edge_pairs),
+		"triples": derive_triples(edge_pairs, edge_types),
 		"limit": limit,
 		"countOnly": count_only,
 	}

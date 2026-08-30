@@ -27,6 +27,48 @@ impl Default for LayoutMode {
     }
 }
 
+impl LayoutMode {
+    /// Stable discriminant uploaded to the GPU-aligned `SimParams.layout_mode`
+    /// field (ADR-141 P1). The kernel branches on this to select per-mode force
+    /// terms. The mapping is frozen — never renumber; append new modes only.
+    pub fn as_gpu_u32(self) -> u32 {
+        match self {
+            LayoutMode::ForceDirected => 0,
+            LayoutMode::Hierarchical => 1,
+            LayoutMode::Radial => 2,
+            LayoutMode::Spectral => 3,
+            LayoutMode::Temporal => 4,
+            LayoutMode::Clustered => 5,
+        }
+    }
+
+    /// Inverse of [`LayoutMode::as_gpu_u32`]. Unknown discriminants fall back to
+    /// `ForceDirected` so a corrupt/older GPU struct never panics.
+    pub fn from_gpu_u32(v: u32) -> Self {
+        match v {
+            1 => LayoutMode::Hierarchical,
+            2 => LayoutMode::Radial,
+            3 => LayoutMode::Spectral,
+            4 => LayoutMode::Temporal,
+            5 => LayoutMode::Clustered,
+            _ => LayoutMode::ForceDirected,
+        }
+    }
+
+    /// True when the mode is realised by the GPU force engine (continuous settling)
+    /// rather than a one-shot CPU placement. ForceDirected and Radial (via the
+    /// `dag_radial_bias` shell term) settle on the GPU; Clustered rides the GPU
+    /// cluster-cohesion term. Hierarchical/Spectral/Temporal are CPU one-shot
+    /// placements (Sugiyama ranks, Laplacian eigenvectors, timestamp axis) until
+    /// their GPU force channels land in ADR-141 P4.
+    pub fn is_gpu_resident(self) -> bool {
+        matches!(
+            self,
+            LayoutMode::ForceDirected | LayoutMode::Radial | LayoutMode::Clustered
+        )
+    }
+}
+
 impl std::fmt::Display for LayoutMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -131,6 +173,38 @@ mod tests {
     fn test_display() {
         assert_eq!(LayoutMode::ForceDirected.to_string(), "forceDirected");
         assert_eq!(LayoutMode::Clustered.to_string(), "clustered");
+    }
+
+    #[test]
+    fn test_gpu_u32_round_trip() {
+        // ADR-141 P1: the GPU discriminant mapping must round-trip for every mode
+        // and stay frozen (renumbering would silently repoint the GPU field).
+        for mode in [
+            LayoutMode::ForceDirected,
+            LayoutMode::Hierarchical,
+            LayoutMode::Radial,
+            LayoutMode::Spectral,
+            LayoutMode::Temporal,
+            LayoutMode::Clustered,
+        ] {
+            assert_eq!(LayoutMode::from_gpu_u32(mode.as_gpu_u32()), mode);
+        }
+        // Frozen discriminants.
+        assert_eq!(LayoutMode::ForceDirected.as_gpu_u32(), 0);
+        assert_eq!(LayoutMode::Clustered.as_gpu_u32(), 5);
+        // Unknown discriminants fall back to ForceDirected, never panic.
+        assert_eq!(LayoutMode::from_gpu_u32(999), LayoutMode::ForceDirected);
+    }
+
+    #[test]
+    fn test_gpu_resident_split() {
+        // GPU-resident modes settle on the GPU; CPU one-shot modes do not.
+        assert!(LayoutMode::ForceDirected.is_gpu_resident());
+        assert!(LayoutMode::Radial.is_gpu_resident());
+        assert!(LayoutMode::Clustered.is_gpu_resident());
+        assert!(!LayoutMode::Hierarchical.is_gpu_resident());
+        assert!(!LayoutMode::Spectral.is_gpu_resident());
+        assert!(!LayoutMode::Temporal.is_gpu_resident());
     }
 
     #[test]

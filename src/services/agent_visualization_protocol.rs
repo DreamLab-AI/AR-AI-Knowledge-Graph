@@ -106,6 +106,13 @@ pub struct StateUpdateMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentStateUpdate {
     pub id: String,
+    /// Free-form agent status string. Recognised values (extend freely — this is
+    /// an unconstrained `String`, so adding values needs no schema change):
+    /// `idle | busy | active | initializing | terminating | offline | error`,
+    /// plus the XR-swarm 4-channel additions `blocked` and `done` (ADR: XR agent
+    /// swarm, Pillar 3). The XR client derives its status halo via
+    /// `render_store::agent_status_code`: busy/active/working ⇒ working,
+    /// blocked/error ⇒ blocked, done/terminating/offline ⇒ done, else idle.
     pub status: Option<String>,
     pub health: Option<f32>,
     pub cpu: Option<f32>,

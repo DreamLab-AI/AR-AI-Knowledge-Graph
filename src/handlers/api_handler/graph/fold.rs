@@ -44,13 +44,25 @@ const MAX_FOLD_LEVEL: u8 = 3;
 /// Quantile below which a node counts as "low-signal" for L1 hiding.
 const LOW_SIGNAL_QUANTILE: f32 = 0.25;
 
-/// Accepted relation strings for a *directed* subclass edge (child = source,
-/// parent = target). Mirrors `force_compute_actor::is_directed_hierarchy_relation`
-/// exactly — the narrow set with genuine class-subsumption provenance. The broad
-/// `SemanticEdgeType::Hierarchical` is deliberately NOT used (it folds in the
-/// symmetric `equivalent_class`/`same_as` and the separate `sub_property_of`).
+/// Accepted relation strings for a hierarchy-fold edge (child = source, parent =
+/// target). Includes the explicit subclass provenance strings AND the collapsed
+/// `"hierarchical"` semantic label.
+///
+/// The live graph stores the COLLAPSED `SemanticEdgeType` label on the wire, not
+/// the raw relation: on the running deployment there are 7548 `hierarchical`
+/// edges and ZERO `subclass_of`/`SUBCLASS_OF` strings, so a subclass-only accept
+/// set folds nothing. `force_compute_actor::is_directed_hierarchy_relation` stays
+/// narrow because it fabricates radial DAG *ranks* (where a mislabelled
+/// domain-membership edge would corrupt the layout); folding only *groups*
+/// connected hierarchy nodes into a representative, so treating the whole
+/// hierarchy class as foldable is both correct and what actually reduces density
+/// here. The explicit strings are kept so deployments that DO carry raw
+/// provenance still fold.
 fn is_subclass_relation(rel: &str) -> bool {
-    matches!(rel, "is_subclass_of" | "subclass_of" | "SUBCLASS_OF")
+    matches!(
+        rel,
+        "is_subclass_of" | "subclass_of" | "SUBCLASS_OF" | "hierarchical"
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +103,12 @@ pub struct FoldPlan {
     pub generation: u64,
     pub hidden: Vec<u32>,
     pub groups: Vec<FoldGroup>,
+    /// Diagnostics — make an empty plan explainable from a single curl.
+    /// `analytics_nodes`: how many nodes have populated analytics (0 ⇒ L1/L3 run
+    /// on the degree fallback / produce no communities). `hierarchy_edges`: how
+    /// many in-scope edges the L2 fold accepts as hierarchy edges.
+    pub analytics_nodes: usize,
+    pub hierarchy_edges: usize,
 }
 
 /// Pin-agnostic core of a plan — the memoised unit. Pinned promotion is applied
@@ -197,28 +215,64 @@ fn visible_node_ids(nodes: &[Node], graph_type: Option<&str>) -> Vec<u32> {
     }
 }
 
-/// L1 low-signal set: ids whose centrality is strictly below the
-/// `LOW_SIGNAL_QUANTILE` of the centrality distribution over nodes that have
-/// analytics. Nodes without analytics are never hidden (can't judge). Returns a
-/// sorted vec. Empty when analytics are absent (graceful — nothing to hide yet).
-fn low_signal_ids(candidates: &[u32], analytics: &HashMap<u32, Analytics>) -> Vec<u32> {
-    let mut cents: Vec<f32> = candidates
+/// L1 low-signal set: ids whose "signal" score is strictly below the
+/// `LOW_SIGNAL_QUANTILE` of the score distribution over the candidates.
+///
+/// Prefers PageRank **centrality** (from analytics). When analytics haven't
+/// populated yet — GPU analytics warm-up, or a deployment where they never run —
+/// it DEGRADES to incident-edge **degree** so L1 folds immediately instead of
+/// returning an empty plan. Nodes with no score under the chosen metric are never
+/// hidden. Returns a sorted vec; empty only when there are too few candidates to
+/// define a quartile.
+fn low_signal_ids(
+    candidates: &[u32],
+    analytics: &HashMap<u32, Analytics>,
+    degrees: &HashMap<u32, u32>,
+) -> Vec<u32> {
+    // Use analytics only when a meaningful fraction of candidates are scored with
+    // a non-zero centrality; otherwise fall back to degree.
+    let scored = candidates
         .iter()
-        .filter_map(|id| analytics.get(id).map(|a| a.centrality))
-        .collect();
-    if cents.len() < 4 {
+        .filter(|id| analytics.get(id).is_some_and(|a| a.centrality > 0.0))
+        .count();
+    let use_analytics = scored >= 4;
+
+    let score = |id: u32| -> Option<f32> {
+        if use_analytics {
+            analytics.get(&id).map(|a| a.centrality)
+        } else {
+            degrees.get(&id).map(|&d| d as f32)
+        }
+    };
+
+    let mut vals: Vec<f32> = candidates.iter().filter_map(|&id| score(id)).collect();
+    if vals.len() < 4 {
         return Vec::new(); // too few scored nodes to define a meaningful quartile
     }
-    cents.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let rank = (LOW_SIGNAL_QUANTILE * (cents.len() as f32 - 1.0)).floor() as usize;
-    let threshold = cents[rank];
+    vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let rank = (LOW_SIGNAL_QUANTILE * (vals.len() as f32 - 1.0)).floor() as usize;
+    let threshold = vals[rank];
     let mut hidden: Vec<u32> = candidates
         .iter()
         .copied()
-        .filter(|id| analytics.get(id).is_some_and(|a| a.centrality < threshold))
+        .filter(|&id| score(id).is_some_and(|v| v < threshold))
         .collect();
     hidden.sort_unstable();
     hidden
+}
+
+/// Incident-edge degree per node over the visible set (edges counted only when
+/// both endpoints are visible). Used as the L1 fallback signal when analytics are
+/// absent.
+fn degree_map(visible: &HashSet<u32>, edges: &[Edge]) -> HashMap<u32, u32> {
+    let mut deg: HashMap<u32, u32> = visible.iter().map(|&id| (id, 0)).collect();
+    for e in edges {
+        if visible.contains(&e.source) && visible.contains(&e.target) {
+            *deg.entry(e.source).or_insert(0) += 1;
+            *deg.entry(e.target).or_insert(0) += 1;
+        }
+    }
+    deg
 }
 
 /// L2 subclass groups over the visible set. Each weakly-connected component of
@@ -357,7 +411,10 @@ fn compute_base_plan(
     }
 
     let visible_ids = visible_node_ids(nodes, graph_type);
-    let hidden = low_signal_ids(&visible_ids, analytics);
+    let visible_set: HashSet<u32> = visible_ids.iter().copied().collect();
+    // Degree over the visible set — the L1 fallback signal when analytics are cold.
+    let degrees = degree_map(&visible_set, edges);
+    let hidden = low_signal_ids(&visible_ids, analytics, &degrees);
     if level == 1 {
         return FoldBase {
             hidden,
@@ -545,12 +602,30 @@ pub async fn get_fold_plan(
     );
     let (hidden, groups) = apply_pins(&base, &pinned);
 
+    // Diagnostics: count in-scope hierarchy edges (both endpoints visible) so an
+    // empty L2 plan is explainable straight from curl; analytics_nodes exposes
+    // whether L1/L3 had live analytics or ran on the degree fallback.
+    let scope_ids: HashSet<u32> = visible_node_ids(&graph.nodes, graph_type.as_deref())
+        .into_iter()
+        .collect();
+    let hierarchy_edges = graph
+        .edges
+        .iter()
+        .filter(|e| {
+            e.edge_type.as_deref().is_some_and(is_subclass_relation)
+                && scope_ids.contains(&e.source)
+                && scope_ids.contains(&e.target)
+        })
+        .count();
+
     HttpResponse::Ok().json(FoldPlan {
         level,
         graph_type,
         generation,
         hidden,
         groups,
+        analytics_nodes: analytics.len(),
+        hierarchy_edges,
     })
 }
 
@@ -627,16 +702,50 @@ mod tests {
     }
 
     #[test]
-    fn non_subclass_edges_never_fold() {
-        // A broad "hierarchical" label and a symmetric relation must NOT fold —
-        // only the narrow accept set does.
+    fn non_hierarchy_edges_never_fold() {
+        // Non-hierarchy relations (symmetric equivalence, plain links, structural
+        // part-of) must NOT fold — only the hierarchy accept set does.
         let nodes = vec![node(1, "owl_class"), node(2, "owl_class")];
         let edges = vec![
-            edge(2, 1, "hierarchical"),
             edge(1, 2, "equivalent_class"),
+            edge(2, 1, "explicit_link"),
+            edge(1, 2, "structural"),
         ];
         let base = compute_base_plan(2, &nodes, &edges, &HashMap::new(), None);
-        assert!(base.groups.is_empty(), "non-subclass relations do not fold");
+        assert!(base.groups.is_empty(), "non-hierarchy relations do not fold");
+    }
+
+    #[test]
+    fn collapsed_hierarchical_label_folds() {
+        // Live deployments carry the COLLAPSED `hierarchical` semantic label (not
+        // the raw `subclass_of`); it must fold, else L2 does nothing in production.
+        let nodes = vec![node(1, "owl_class"), node(2, "owl_class"), node(3, "owl_class")];
+        let edges = vec![edge(2, 1, "hierarchical"), edge(3, 2, "hierarchical")];
+        let base = compute_base_plan(2, &nodes, &edges, &HashMap::new(), None);
+        assert_eq!(base.groups.len(), 1, "hierarchical chain folds");
+        assert_eq!(base.groups[0].representative_id, 1, "chain root is rep");
+        assert_eq!(base.groups[0].member_ids, vec![2, 3]);
+    }
+
+    #[test]
+    fn l1_degrades_to_degree_when_analytics_are_cold() {
+        // No analytics at all: L1 must still hide the bottom-quartile-by-degree
+        // nodes rather than returning an empty plan. Node 5 is isolated (degree 0),
+        // the others form a connected core.
+        let nodes: Vec<Node> = (1..=8).map(|i| node(i, "page")).collect();
+        let edges = vec![
+            edge(1, 2, "explicit_link"),
+            edge(2, 3, "explicit_link"),
+            edge(3, 4, "explicit_link"),
+            edge(4, 6, "explicit_link"),
+            edge(6, 7, "explicit_link"),
+            edge(7, 8, "explicit_link"),
+            edge(1, 4, "explicit_link"),
+        ];
+        // Empty analytics → degree fallback. Node 5 (degree 0) is bottom-quartile.
+        let base = compute_base_plan(1, &nodes, &edges, &HashMap::new(), None);
+        assert!(base.hidden.contains(&5), "isolated node hidden via degree fallback");
+        assert!(!base.hidden.is_empty(), "degree fallback produces a non-empty L1");
     }
 
     #[test]

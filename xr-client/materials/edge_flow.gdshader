@@ -20,6 +20,36 @@ uniform float pulse_energy = 0.4;
 // Brightness boost of the moving highlight colour (kept gentle so the pulse
 // head reads as brightened cyan, not white).
 uniform float pulse_gain = 1.2;
+// Relation-type grammar (Wave 2, Feature 4 — OntoAir clean-room). INSTANCE_CUSTOM.a
+// carries a style code set per-edge by the Rust render store: 0 untyped (faint),
+// 1 typed (solid — the baseline look), 2 subclass/taxonomy (dashed + dimmer). The
+// r/g/b custom channels are reserved (0).
+// How dashed a subclass edge reads (fraction of each dash cycle that is a gap).
+uniform float subclass_dash_gap = 0.45;
+// Number of dash cycles along the whole edge length.
+uniform float subclass_dash_freq = 14.0;
+// Alpha multiplier for the dimmer relation classes.
+uniform float subclass_dim = 0.5;
+uniform float untyped_dim = 0.4;
+// Distinct tint for taxonomy edges so subclass structure reads apart from typed
+// links at a glance (cool violet vs the cyan of typed edges).
+uniform vec3 subclass_color : source_color = vec3(0.62, 0.5, 1.0);
+
+// Asserted/inferred channel (Wave 3). INSTANCE_CUSTOM.a code 3 = a reasoner-
+// ENTAILED edge: amber + dashed, so epistemic status reads apart from asserted
+// subclass (code 2, lilac-dashed). A tighter dash than subclass so the two dashed
+// styles are distinguishable at a glance.
+uniform vec3 inferred_color : source_color = vec3(1.0, 0.66, 0.12);
+uniform float inferred_dash_gap = 0.5;
+uniform float inferred_dash_freq = 22.0;
+uniform float inferred_dim = 0.7;
+
+varying flat float v_style;
+
+void vertex() {
+	// Latch the per-instance style code once; fragment reads the flat varying.
+	v_style = INSTANCE_CUSTOM.a;
+}
 
 void fragment() {
 	// UV.y runs along the unit cylinder's height; the per-instance transform
@@ -30,6 +60,25 @@ void fragment() {
 	float d = abs(t - head);
 	d = min(d, 1.0 - d); // wrap so the pulse loops seamlessly end-to-end
 	float pulse = smoothstep(pulse_width, 0.0, d);
-	ALBEDO = flow_color * (1.0 + pulse * (pulse_gain - 1.0));
-	ALPHA = clamp(base_alpha + pulse * pulse_energy, 0.0, 1.0);
+
+	bool is_inferred = v_style > 2.5;                     // code 3 (Wave 3)
+	bool is_subclass = v_style > 1.5 && v_style < 2.5;    // code 2
+	bool is_untyped = v_style < 0.5;                      // code 0
+
+	vec3 tint = is_inferred ? inferred_color : (is_subclass ? subclass_color : flow_color);
+	ALBEDO = tint * (1.0 + pulse * (pulse_gain - 1.0));
+
+	float alpha = base_alpha + pulse * pulse_energy;
+	if (is_inferred) {
+		// Reasoner-entailed: amber, tightly dashed, gently dimmed.
+		float dash = step(inferred_dash_gap, fract(UV.y * inferred_dash_freq));
+		alpha *= inferred_dim * dash;
+	} else if (is_subclass) {
+		// Asserted subclass: dashed + dimmer (lilac tint above).
+		float dash = step(subclass_dash_gap, fract(UV.y * subclass_dash_freq));
+		alpha *= subclass_dim * dash;
+	} else if (is_untyped) {
+		alpha *= untyped_dim;
+	}
+	ALPHA = clamp(alpha, 0.0, 1.0);
 }

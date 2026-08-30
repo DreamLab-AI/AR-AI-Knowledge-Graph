@@ -2013,6 +2013,7 @@ impl Handler<UpdateClientFilter> for ClientCoordinatorActor {
                                             target_id: edge.target,
                                             weight: Some(edge.weight),
                                             edge_type: edge.edge_type.clone(),
+                                            inferred: crate::services::inferred_edge_materialiser::edge_is_inferred(edge),
                                         })
                                         .collect();
 

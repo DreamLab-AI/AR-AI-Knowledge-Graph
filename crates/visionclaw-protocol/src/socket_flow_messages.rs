@@ -214,6 +214,12 @@ pub struct InitialEdgeData {
     pub weight: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edge_type: Option<String>,
+    /// Epistemic status (Wave 3 asserted/inferred channel): `true` when this edge
+    /// is a reasoner ENTAILMENT rather than an asserted triple. Omitted when false
+    /// so today's asserted-only frames are byte-identical; the XR client parses it
+    /// (absent ⇒ asserted) and renders inferred edges amber-dashed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub inferred: bool,
 }
 
 // ===== VEC3DATA HELPERS =====

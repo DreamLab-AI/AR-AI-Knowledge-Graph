@@ -81,9 +81,18 @@ struct SimParams {
     // rank-0 roots). dag_bias_k = 0 disables the term entirely (default OFF).
     float dag_bias_k;           // Radial-bias spring strength; 0 = off
     float dag_level_distance;   // World-space radius per hierarchy level (rank)
+
+    // Layout mode selector (ADR-141 P1 — constrained-layout engine programme).
+    // 0=ForceDirected, 1=Hierarchical, 2=Radial, 3=Spectral, 4=Temporal, 5=Clustered.
+    // Carried GPU-side so force terms can branch on the active layout. P1 only makes
+    // the field visible (the shell term is still driven by dag_bias_k, which the
+    // server raises when a GPU-resident mode like Radial is selected); P2–P4 add the
+    // per-mode force branches (stratified planes, spherical shells, Sugiyama Y-by-rank).
+    // Added at the end to preserve the existing repr(C) prefix layout.
+    unsigned int layout_mode;
 };
 
-static_assert(sizeof(SimParams) == 180, "SimParams size mismatch with Rust");
+static_assert(sizeof(SimParams) == 184, "SimParams size mismatch with Rust");
 
 // Global constant memory for simulation parameters
 __constant__ SimParams c_params;

@@ -88,6 +88,12 @@ pub struct SimParams {
     // Added at the end to preserve the existing repr(C) prefix layout.
     pub dag_bias_k: f32,
     pub dag_level_distance: f32,
+
+    // Layout mode selector (ADR-141 P1). GPU-visible discriminant of the active
+    // `LayoutMode` (0=ForceDirected … 5=Clustered). Mirrors the CUDA field added at
+    // the tail of `SimParams`; the seam P2–P4 branch on. Added at the end to
+    // preserve the existing repr(C) prefix layout.
+    pub layout_mode: u32,
 }
 
 // SAFETY: SimParams is repr(C) with only POD types; safe for GPU transfer.
@@ -162,7 +168,7 @@ impl SimParams {
             graph_separation_x: PhysicsSettings::default().graph_separation_x,
             axis_compression_z: PhysicsSettings::default().axis_compression_z,
             enable_dual_disc_layout: PhysicsSettings::default().enable_dual_disc_layout,
-            layout_mode: LayoutMode::default(),
+            layout_mode: LayoutMode::from_gpu_u32(self.layout_mode),
             lin_log_mode: self.lin_log_mode != 0,
             scaling_ratio: self.scaling_ratio,
             adaptive_speed: self.adaptive_speed != 0,
@@ -192,7 +198,7 @@ impl ToSimParams for SimulationParams {
 }
 
 // Compile-time size assertion: SimParams must match the CUDA struct exactly.
-const _: () = assert!(std::mem::size_of::<SimParams>() == 180);
+const _: () = assert!(std::mem::size_of::<SimParams>() == 184);
 
 impl From<&SimParams> for SimulationParams {
     fn from(params: &SimParams) -> Self {
@@ -271,6 +277,7 @@ impl From<&SimulationParams> for SimParams {
             global_speed: params.global_speed,
             dag_bias_k: params.dag_bias_k,
             dag_level_distance: params.dag_level_distance,
+            layout_mode: params.layout_mode.as_gpu_u32(),
         }
     }
 }
@@ -348,6 +355,10 @@ impl From<&PhysicsSettings> for SimParams {
             global_speed: physics.global_speed,
             dag_bias_k: physics.dag_bias_k,
             dag_level_distance: physics.dag_level_distance,
+            // PhysicsSettings carries no layout mode — the authoritative mode rides
+            // SimulationParams.layout_mode (set via POST /api/layout/mode). Default
+            // to ForceDirected here so this wire path never silently forces a mode.
+            layout_mode: LayoutMode::ForceDirected.as_gpu_u32(),
         }
     }
 }

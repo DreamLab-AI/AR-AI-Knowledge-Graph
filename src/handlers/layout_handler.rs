@@ -31,8 +31,24 @@ pub async fn set_layout_mode(
             Err(_) => LayoutMode::ForceDirected,
         };
 
-    // ForceDirected is handled by the GPU physics engine; no CPU layout needed.
-    if mode == LayoutMode::ForceDirected {
+    // ADR-141 P1: persist the active mode into the GPU-visible SimParams.layout_mode
+    // so both clients (XR + desktop) share one authoritative layout mode. For
+    // GPU-resident modes (ForceDirected/Radial/Clustered) the SetLayoutMode handler
+    // also primes the relevant force-term scalars, and the GPU keeps streaming
+    // positions — so we return no one-shot positions and let the settling engine run.
+    if let Some(addr) = data.get_gpu_compute_addr().await {
+        use crate::actors::messages::SetLayoutMode;
+        match addr.send(SetLayoutMode { mode }).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => log::warn!("set_layout_mode: actor rejected mode {}: {}", mode_str, e),
+            Err(e) => log::warn!("set_layout_mode: actor mailbox error: {}", e),
+        }
+    } else {
+        log::warn!("set_layout_mode: GPU compute actor unavailable — mode not persisted GPU-side");
+    }
+
+    // GPU-resident modes settle continuously on the GPU; no CPU one-shot positions.
+    if mode.is_gpu_resident() {
         return ok_json!(serde_json::json!({
             "success": true,
             "mode": mode_str,
@@ -41,6 +57,7 @@ pub async fn set_layout_mode(
         }));
     }
 
+    // CPU one-shot modes (Hierarchical/Spectral/Temporal): compute placement below.
     // Fetch current graph data
     use crate::actors::messages::GetGraphData;
     let graph_data = match data.graph_service_addr.send(GetGraphData).await {

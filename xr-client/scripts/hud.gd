@@ -125,6 +125,13 @@ var _scroll_regions: Array = []      # scroll-region wrapper HBoxes (▲▼ visi
 var _controls_status: Label = null
 var _hierarchy_button: Button = null
 var _flat_toggle_button: Button = null
+var _layout_mode_button: Button = null
+# Wave 2, Feature 3 — type show/hide toggles (Graph tab). Each tracks its own
+# visible bool so the label/tint reflects state; the class code is in the action.
+var _type_knowledge_button: Button = null
+var _type_ontology_button: Button = null
+var _type_agent_button: Button = null
+var _type_visible: Dictionary = {"knowledge": true, "ontology": true, "agent": true}
 var _fold_plus_button: Button = null
 var _fold_minus_button: Button = null
 # Query page.
@@ -302,6 +309,28 @@ func _build_graph_page() -> VBoxContainer:
 	g2.add_child(_fold_plus_button)
 	g2.add_child(_fold_minus_button)
 	page.add_child(g2)
+
+	# ADR-141 Phase 1 — constrained-layout engine picker. Single cycling button
+	# steps through the backend LayoutMode enum; graph_scene POSTs /api/layout/mode.
+	page.add_child(_group_header("Layout Mode"))
+	var g_layout := _grid(1)
+	_layout_mode_button = _action_btn("Layout: Force", "layout_mode_cycle", "Cycle graph layout mode (force, hierarchical, radial, spectral, temporal, clustered)")
+	g_layout.add_child(_layout_mode_button)
+	page.add_child(g_layout)
+
+	# Wave 2, Feature 3 — type show/hide filter. One wand-clickable toggle per node
+	# class; pressing flips visibility and emits control_pressed
+	# "type_toggle:<class>:<0|1>" (1 = now visible). graph_scene forwards to the
+	# render store's set_type_visible.
+	page.add_child(_group_header("Node Types"))
+	var g3 := _grid(3)
+	_type_knowledge_button = _type_toggle_btn("Knowledge", "knowledge")
+	_type_ontology_button = _type_toggle_btn("Ontology", "ontology")
+	_type_agent_button = _type_toggle_btn("Agents", "agent")
+	g3.add_child(_type_knowledge_button)
+	g3.add_child(_type_ontology_button)
+	g3.add_child(_type_agent_button)
+	page.add_child(g3)
 
 	page.add_child(_group_header("Status"))
 	_controls_status = _mk_label("repelK --  restLen --  edges --  node x--", "Live physics & layout state")
@@ -490,6 +519,28 @@ func _action_btn(text: String, action: String, hint: String) -> Button:
 	return b
 
 
+# A stateful type show/hide toggle (Feature 3). Starts visible (accent tint). On
+# press it flips its tracked bool, restyles ("Knowledge ✓" / "Knowledge ✕"), and
+# emits control_pressed "type_toggle:<key>:<1|0>" so GraphScene drives the store.
+func _type_toggle_btn(label: String, key: String) -> Button:
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(0, BTN_H)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.set_meta(HINT_META, "Show / hide all %s nodes" % label.to_lower())
+	_style_type_toggle(b, label, true)
+	b.pressed.connect(func() -> void:
+		var now_visible: bool = not bool(_type_visible.get(key, true))
+		_type_visible[key] = now_visible
+		_style_type_toggle(b, label, now_visible)
+		emit_signal("control_pressed", "type_toggle:%s:%d" % [key, 1 if now_visible else 0]))
+	return b
+
+
+func _style_type_toggle(b: Button, label: String, visible: bool) -> void:
+	b.text = "%s %s" % [label, "✓" if visible else "✕"]
+	b.add_theme_color_override("font_color", ACCENT if visible else IDLE)
+
+
 # A fixed-height scroll region for a legitimately-unbounded list: an inner
 # ScrollContainer (wand drag-scrolls it natively) plus a ▲/▼ button column for
 # wand pointing. The wrapper HBox is what you add to the page; retrieve the inner
@@ -616,6 +667,12 @@ func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int) ->
 		_unpin_all_button.text = "Unpin All (%d)" % pinned_count if pinned_count > 0 else "Unpin All"
 	if _pins_count_label != null:
 		_pins_count_label.text = "%d pinned" % pinned_count
+
+
+## Reflect the active layout mode on the Layout Mode cycling button face.
+func set_layout_mode_label(mode_label: String) -> void:
+	if _layout_mode_button != null:
+		_layout_mode_button.text = "Layout: %s" % mode_label
 
 
 ## Reflect the fold-ladder level (Wave 3) on the Fold +/- button faces. `level`

@@ -203,6 +203,12 @@ const DAG_LEVEL_DISTANCE_MAX: float = 200.0
 const DAG_LEVEL_DISTANCE_STEP: float = 20.0
 const Z_COMPRESSION_FLAT: float = 0.3
 const Z_COMPRESSION_FULL_3D: float = 1.0
+# ADR-141 Phase 1 — constrained-layout engine. Cycling picker over the backend
+# LayoutMode enum (serde camelCase); POSTed to /api/layout/mode via the same
+# single-in-flight + auth-header path as the physics writes.
+const LAYOUT_MODES: Array = ["forceDirected", "hierarchical", "radial", "spectral", "temporal", "clustered"]
+const LAYOUT_MODE_LABELS: Array = ["Force", "Hierarchical", "Radial", "Spectral", "Temporal", "Clustered"]
+var _layout_mode_idx: int = 0
 # Node ids this session's operator has pinned via a drag (drag-end adds; Unpin All
 # releases them but only removes each on its nodeUnpinAck so unacked ids can be
 # retried). Dictionary used as a set (id → true) for O(1) add/dedupe.
@@ -292,6 +298,10 @@ const PHYSICS_BEARER: String = "Bearer dev-session-token"
 # items. Instanced at runtime from RadialMenu.tscn so the scene file stays as-is.
 const RADIAL_SCENE_PATH := "res://scenes/RadialMenu.tscn"
 const RADIAL_QUAD: float = 0.6              # MenuPanel QuadMesh size (RadialMenu.tscn)
+## Radial→mark chain instrumentation (retained, silenced). Flip true to trace the
+## whole wand-click → item_selected → mark path in the HP log when diagnosing the
+## marking flow; RadialMenu mirrors this via set_debug().
+const QB_DEBUG: bool = false
 var _radial: Node3D = null
 const QueryBuilderScript := preload("res://scripts/query_builder.gd")
 var _query := QueryBuilderScript.new()
@@ -324,6 +334,42 @@ var _query_sent_revision: int = -1
 # pull can therefore never drive both overlapping panels.
 var _hud_owner: XRController3D = null
 var _radial_owner: XRController3D = null
+
+# Semantic planes (Phase D). Execute POSTs the full pattern; each binding spawns a
+# result subgraph on a +Y-stacked plane via PlaneManager. Separate HTTPRequest so a
+# heavy execute never blocks the debounced count preview.
+const PLANE_LIMIT: int = 24
+const PLANE_GAP_M: float = 0.5   # target world-metre gap between layers (pre-fit-scaled)
+const PlaneManagerScript := preload("res://scripts/plane_manager.gd")
+var _planes = null  # PlaneManagerScript instance
+var _exec_http: HTTPRequest = null
+var _exec_pending: bool = false
+
+# Wave 2, Feature 1 — predicate expansion in the node radial. When the radial opens
+# on a node we GET its relations and repopulate the ring with "→ label (N)" /
+# "← label (N)" items (action grammar "expand:<direction>:<edgeType>"). Selecting
+# one POSTs /expand and additively merges the returned edges (no re-fit).
+const EXPAND_LIMIT: int = 25
+var _relations_http: HTTPRequest = null
+var _expand_http: HTTPRequest = null
+var _radial_node_id: int = -1              # node the radial is currently open on
+var _radial_world_pos: Vector3 = Vector3.ZERO
+var _relations_cache: Dictionary = {}      # node_id -> Array[extra_item dict]
+
+# Wave 2, Feature 2 — search-and-teleport. A menu-button press on empty space opens
+# a "top labels" radial (top centrality); selecting glides the XROrigin so the node
+# sits TELEPORT_FRONT_M in front of the user, then pulse-highlights it.
+const TOP_LABELS_COUNT: int = 10
+const TELEPORT_FRONT_M: float = 1.0
+const TELEPORT_GLIDE_SEC: float = 0.5
+const TELEPORT_PULSE_SEC: float = 1.2
+var _teleport_active: bool = false
+var _teleport_from: Transform3D = Transform3D.IDENTITY
+var _teleport_to: Transform3D = Transform3D.IDENTITY
+var _teleport_t: float = 0.0
+var _teleport_pulse_id: int = -1
+var _teleport_pulse_t: float = 0.0
+var _teleport_pulse_applied: bool = false
 
 @onready var graph_root: Node3D = $GraphRoot
 @onready var nodes_multi: MultiMeshInstance3D = $GraphRoot/NodesMulti
@@ -407,6 +453,8 @@ func _ready() -> void:
 		add_child(_radial)
 		if _radial.has_signal("item_selected"):
 			_radial.item_selected.connect(_on_radial_item_selected)
+		if _radial.has_method("set_debug"):
+			_radial.set_debug(QB_DEBUG)
 
 	# Dedicated request for the live query-count preview (separate gate from the
 	# fold/physics/observe requests so none can block the others).
@@ -414,6 +462,33 @@ func _ready() -> void:
 	add_child(_query_http)
 	_query_http.request_completed.connect(_on_query_count_completed)
 	_query_http.timeout = 10.0
+
+	# Wave 2, Feature 1 — node-radial predicate expansion. Two dedicated requests so
+	# neither the relations fetch nor the expand POST can block the query/fold gates.
+	_relations_http = HTTPRequest.new()
+	add_child(_relations_http)
+	_relations_http.request_completed.connect(_on_relations_completed)
+	_relations_http.timeout = 8.0
+	_expand_http = HTTPRequest.new()
+	add_child(_expand_http)
+	_expand_http.request_completed.connect(_on_expand_completed)
+	_expand_http.timeout = 12.0
+
+	# Execute request + the semantic-plane manager (parented under GraphRoot so plane
+	# +Y offsets ride the same fit transform as the graph).
+	_exec_http = HTTPRequest.new()
+	add_child(_exec_http)
+	_exec_http.request_completed.connect(_on_execute_completed)
+	_exec_http.timeout = 15.0
+	_planes = PlaneManagerScript.new()
+	_planes.name = "SemanticPlanes"
+	if graph_root != null:
+		graph_root.add_child(_planes)
+		var node_mesh: Mesh = nodes_multi.multimesh.mesh if nodes_multi != null and nodes_multi.multimesh != null else null
+		var edge_mesh: Mesh = edges_multi.multimesh.mesh if edges_multi != null and edges_multi.multimesh != null else null
+		var node_mat: Material = nodes_multi.material_override if nodes_multi != null else null
+		var edge_mat: Material = edges_multi.material_override if edges_multi != null else null
+		_planes.configure(_binary_client, node_mesh, edge_mesh, node_mat, edge_mat)
 	if hud != null:
 		if hud.has_signal("query_execute_pressed"):
 			hud.query_execute_pressed.connect(_execute_query)
@@ -607,6 +682,10 @@ func _on_hud_reconnect() -> void:
 # re-scale on the spot (no HTTP, work only on press). Status label refreshed after
 # every press.
 func _on_hud_control(action: String) -> void:
+	# Feature 3 — type show/hide filter. "type_toggle:<class>:<1|0>" (1 = visible).
+	if action.begins_with("type_toggle:"):
+		_apply_type_toggle(action.substr(12))
+		return
 	match action:
 		"reset_layout":
 			_request_physics_reset()
@@ -632,6 +711,8 @@ func _on_hud_control(action: String) -> void:
 			_request_shells(-DAG_LEVEL_DISTANCE_STEP)
 		"flat_toggle":
 			_request_flat_toggle()
+		"layout_mode_cycle":
+			_request_layout_mode_cycle()
 		"fold_plus":
 			_request_fold(1)
 		"fold_minus":
@@ -641,6 +722,24 @@ func _on_hud_control(action: String) -> void:
 		_:
 			push_warning("GraphScene: unknown HUD control '%s'" % action)
 	_refresh_controls_status()
+
+
+# Apply a type show/hide toggle "<class>:<1|0>" to the render store. Class codes
+# mirror render_store::KIND_* (0 knowledge / 1 ontology / 2 agent). A rebuild of
+# the draw list happens on the next frame via _recompute_drawn_ids.
+func _apply_type_toggle(spec: String) -> void:
+	if _binary_client == null or not _binary_client.has_method("set_type_visible"):
+		return
+	var parts := spec.split(":")
+	if parts.size() < 2:
+		return
+	var class_code: int = int({"knowledge": 0, "ontology": 1, "agent": 2}.get(parts[0], -1))
+	if class_code < 0:
+		return
+	var visible: bool = parts[1] == "1"
+	_binary_client.set_type_visible(class_code, visible)
+	# Force the draw domain to rebuild so hidden-class nodes drop immediately.
+	_selection_dirty = true
 
 
 func _refresh_controls_status() -> void:
@@ -656,6 +755,8 @@ func _refresh_controls_status() -> void:
 	# Reflect the toggle/pin state on the button faces (press-only, no per-frame cost).
 	if hud.has_method("set_control_states"):
 		hud.set_control_states(_dag_bias_on, _z_compression < Z_COMPRESSION_FULL_3D, _pinned_ids.size())
+	if hud.has_method("set_layout_mode_label"):
+		hud.set_layout_mode_label(LAYOUT_MODE_LABELS[_layout_mode_idx])
 	if hud.has_method("set_fold_state"):
 		hud.set_fold_state(_fold_level)
 	# Populate the Pins tab list (cheap; press/ack-only, no per-frame cost).
@@ -671,6 +772,12 @@ func _refresh_controls_status() -> void:
 func _request_fold(delta: int) -> void:
 	if _fold_pending:
 		push_warning("GraphScene: fold change already in flight; ignoring")
+		return
+	# Suppress ladder steps while a node grab or a two-hand graph manipulation owns
+	# the hands: a fold transition re-seeds/animates positions, which would fight the
+	# grab's optimistic pin and the manip's reference-frame lock (Phase-0 design).
+	if _grabbed_id != -1 or _two_hand_active:
+		push_warning("GraphScene: fold suppressed during grab / two-hand manip")
 		return
 	var target: int = clampi(_fold_level + delta, FOLD_LEVEL_MIN, FOLD_LEVEL_MAX)
 	if target == _fold_level:
@@ -777,6 +884,38 @@ func _request_flat_toggle() -> void:
 	var z: float = Z_COMPRESSION_FLAT if _z_compression >= Z_COMPRESSION_FULL_3D else Z_COMPRESSION_FULL_3D
 	if _put_physics_body({"axisCompressionZ": z}):
 		_physics_staged = {"_z_compression": z}
+
+
+# Layout Mode cycle: step to the next backend LayoutMode and POST it. Uses the same
+# single-in-flight gate + staging discipline as the physics writes — the tracked
+# index flips only on a 2xx ack (see _on_physics_completed), so a busy/failed POST
+# never drifts the HUD label away from what the server last accepted.
+func _request_layout_mode_cycle() -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var next_idx := (_layout_mode_idx + 1) % LAYOUT_MODES.size()
+	if _post_layout_mode(LAYOUT_MODES[next_idx]):
+		_physics_staged = {"_layout_mode_idx": next_idx}
+
+
+# POST {base}/api/layout/mode {"mode":<value>,"transitionMs":800}. Returns true only
+# if the request was dispatched (gate held until _on_physics_completed). Same
+# HTTPRequest + auth-header path as the physics PUT/POST helpers.
+func _post_layout_mode(mode: String) -> bool:
+	if _physics_http == null:
+		return false
+	if _physics_pending:
+		return false
+	var url := "%s/api/layout/mode" % _http_base()
+	var headers := _auth_headers(url, "POST")
+	var body := {"mode": mode, "transitionMs": 800}
+	var err := _physics_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
+	if err != OK:
+		push_warning("GraphScene: layout mode POST failed to start (%d)" % err)
+		return false
+	_physics_pending = true
+	return true
 
 
 # Unpin every node this session pinned via a drag. No HTTP: each unpin rides the
@@ -1027,6 +1166,7 @@ func _physics_process(delta: float) -> void:
 	_update_hud_pointer()
 	_update_radial_menu()
 	_update_query_count(delta)
+	_update_teleport(delta)
 	# Two-hand pinch scale/rotate/move must run BEFORE _fit_graph_to_view: on its
 	# first engage it latches _manual_transform, which makes the adaptive fit
 	# early-return this same frame so the gesture — not the auto-fit — owns
@@ -2381,11 +2521,12 @@ func _on_presence_kicked(reason: String) -> void:
 
 # --- Radial node context menu (visual query builder, flagship) --------------
 #
-# The A/X face button opens a wand-operated radial menu ON the currently targeted
-# node; the menu items combine the query-builder mark/clear actions with any
-# extra (future Wave-2 expand) items. While open, the wand ray drives the menu's
-# SubViewport via its pointer_input API (trigger = click), exactly the way the
-# HUD pointer works. A/X toggles the menu closed.
+# The MENU button (or A/X on Index/Touch-class wands — Vive has no A/X) opens a
+# wand-operated radial menu ON the currently targeted node; the menu items combine
+# the query-builder mark/clear/execute actions with any extra (future Wave-2
+# expand) items. While open, the wand ray drives the menu's SubViewport via its
+# pointer_input API (trigger = click), exactly the way the HUD pointer works. The
+# same button toggles the menu closed.
 func _update_radial_menu() -> void:
 	if _radial == null:
 		return
@@ -2439,6 +2580,8 @@ func _update_radial_menu() -> void:
 	_radial_pointer_controller = hit_ctrl
 	_radial_last_px = hit_uv
 	var click := _controller_trigger(hit_ctrl) >= 0.6
+	if QB_DEBUG and click != _radial_trigger_was_down:
+		print("[QB] radial pointer %s at uv=(%.2f,%.2f)" % ["PRESS" if click else "RELEASE", hit_uv.x, hit_uv.y])
 	_radial.pointer_input(hit_uv, click)
 	_radial_trigger_was_down = click
 
@@ -2450,8 +2593,15 @@ func _open_radial_on_target(controller: XRController3D) -> void:
 		return
 	var node_id := _pick_node_under_ray(controller)
 	if node_id < 0:
+		# Empty space: open the search-and-teleport "top labels" radial instead
+		# (Feature 2 — the wand-friendly, keyboardless search path).
+		_open_top_labels_radial(controller)
 		return
-	var items: Array = _query.build_node_menu_items(node_id)
+	_radial_node_id = node_id
+	# Include any cached predicate-expansion items via the query builder's
+	# extra_items seam; a fresh relations fetch (below) repopulates when it lands.
+	var extra: Array = _relations_cache.get(node_id, [])
+	var items: Array = _query.build_node_menu_items(node_id, extra)
 	var world_pos: Vector3 = graph_root.global_transform * _binary_client.node_position(node_id)
 	var cam: XRCamera3D = _find_xr_camera()
 	if cam != null:
@@ -2459,12 +2609,243 @@ func _open_radial_on_target(controller: XRController3D) -> void:
 		var to_cam: Vector3 = (cam.global_position - world_pos)
 		if to_cam.length() > 0.001:
 			world_pos += to_cam.normalized() * 0.15
+	_radial_world_pos = world_pos
 	_radial.open(items, world_pos)
 	# Face the user: the QuadMesh faces +Z, so aim -Z at the camera then flip.
 	if cam != null:
 		_radial.look_at(cam.global_position, Vector3.UP)
 		_radial.rotate_object_local(Vector3.UP, PI)
 	_pulse(controller, 0.3, 0.04)
+	# Kick a relations fetch so the ring gains "→ label (N)" expansion items.
+	_request_node_relations(node_id)
+
+
+# Feature 2 — open a "top labels" radial (top TOP_LABELS_COUNT nodes by centrality)
+# on empty space; selecting an item teleports to that node. Wand-friendly: no
+# keyboard needed. The panel floats 1.5 m in front of the controller.
+func _open_top_labels_radial(controller: XRController3D) -> void:
+	if _binary_client == null or not _binary_client.has_method("top_labels"):
+		return
+	var ids: PackedInt32Array = _binary_client.top_labels(TOP_LABELS_COUNT)
+	if ids.is_empty():
+		return
+	var items: Array = []
+	for i: int in range(ids.size()):
+		var nid: int = ids[i]
+		var label: String = str(_binary_client.label_of(nid))
+		if label.is_empty():
+			label = "Node %d" % nid
+		items.append({"label": "⌖ %s" % label, "action": "teleport:%d" % nid})
+	_radial_node_id = -1
+	var cam: XRCamera3D = _find_xr_camera()
+	var world_pos: Vector3 = controller.global_position - controller.global_transform.basis.z * 1.5
+	_radial_world_pos = world_pos
+	_radial.open(items, world_pos)
+	if cam != null:
+		_radial.look_at(cam.global_position, Vector3.UP)
+		_radial.rotate_object_local(Vector3.UP, PI)
+	_pulse(controller, 0.3, 0.04)
+
+
+# --- Feature 1: predicate expansion in the node radial ----------------------
+
+# GET {base}/api/graph/node/{id}/relations. On success the ring is repopulated with
+# "→ label (N)" outgoing / "← label (N)" incoming items via the extra_items seam.
+func _request_node_relations(node_id: int) -> void:
+	if _relations_http == null:
+		return
+	var url := "%s/api/graph/node/%d/relations" % [_http_base(), node_id]
+	var headers := _auth_headers(url, "GET")
+	_relations_http.cancel_request()  # supersede any in-flight fetch for a prior node
+	var err := _relations_http.request(url, headers, HTTPClient.METHOD_GET)
+	if err != OK:
+		push_warning("GraphScene: relations GET failed to start (%d)" % err)
+
+
+func _on_relations_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code < 200 or code >= 300:
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var node_id: int = int(parsed.get("nodeId", parsed.get("node_id", _radial_node_id)))
+	var extra: Array = _build_expansion_items(parsed)
+	_relations_cache[node_id] = extra
+	# If the radial is still open on this node, repopulate the ring in place.
+	# BUGFIX (live): do NOT repopulate while a wand click is in progress on the
+	# menu. `_radial.open()` frees + rebuilds every Button; if that lands between the
+	# synthesized press and release of a trigger-click, the pressed button is
+	# destroyed and `item_selected` never fires — the "first mark doesn't persist"
+	# bug. Deferring the async relations repopulate until the trigger is released
+	# keeps the click intact. The items are cached, so the next open shows them.
+	if _radial != null and _radial.visible and _radial_node_id == node_id and not _radial_trigger_was_down:
+		var items: Array = _query.build_node_menu_items(node_id, extra)
+		_radial.open(items, _radial_world_pos)
+		var cam: XRCamera3D = _find_xr_camera()
+		if cam != null:
+			_radial.look_at(cam.global_position, Vector3.UP)
+			_radial.rotate_object_local(Vector3.UP, PI)
+
+
+# Build the radial expansion items from a relations response. Expected shape:
+# {"outgoing":[{"edgeType":str,"count":int,"label":str?}], "incoming":[...]}. Falls
+# back to the edgeType as the label. Action grammar "expand:<direction>:<edgeType>".
+func _build_expansion_items(data: Dictionary) -> Array:
+	var items: Array = []
+	for dir_key: String in ["outgoing", "incoming"]:
+		var arrow: String = "→" if dir_key == "outgoing" else "←"
+		var rels: Variant = data.get(dir_key, [])
+		if typeof(rels) != TYPE_ARRAY:
+			continue
+		for rel: Variant in rels:
+			if typeof(rel) != TYPE_DICTIONARY:
+				continue
+			var edge_type: String = str(rel.get("edgeType", rel.get("edge_type", "")))
+			if edge_type.is_empty():
+				continue
+			var count: int = int(rel.get("count", 0))
+			var label: String = str(rel.get("label", edge_type))
+			items.append({
+				"label": "%s %s (%d)" % [arrow, label, count],
+				"action": "expand:%s:%s" % [dir_key, edge_type],
+			})
+	return items
+
+
+# POST {base}/api/graph/node/{id}/expand {edgeType,direction,limit}. The returned
+# nodes are already in the position stream; the response's edges are additively
+# merged into the topology (no re-fit) on completion.
+func _expand_node(node_id: int, direction: String, edge_type: String) -> void:
+	if _expand_http == null or node_id < 0:
+		return
+	var url := "%s/api/graph/node/%d/expand" % [_http_base(), node_id]
+	var headers := _auth_headers(url, "POST")
+	var payload := {"edgeType": edge_type, "direction": direction, "limit": EXPAND_LIMIT}
+	_expand_http.cancel_request()
+	var err := _expand_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		push_warning("GraphScene: expand POST failed to start (%d)" % err)
+
+
+func _on_expand_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code < 200 or code >= 300:
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	# Collect the returned edges into a flat [s0,t0,…] pair list + parallel types.
+	var edges: Variant = parsed.get("edges", [])
+	if typeof(edges) != TYPE_ARRAY:
+		return
+	var pairs := PackedInt32Array()
+	var types := PackedStringArray()
+	for e: Variant in edges:
+		if typeof(e) != TYPE_DICTIONARY:
+			continue
+		var s: int = int(e.get("source", e.get("source_id", -1)))
+		var t: int = int(e.get("target", e.get("target_id", -1)))
+		if s < 0 or t < 0:
+			continue
+		pairs.push_back(s)
+		pairs.push_back(t)
+		types.push_back(str(e.get("edgeType", e.get("edge_type", ""))))
+	if pairs.is_empty() or _binary_client == null or not _binary_client.has_method("merge_expansion"):
+		return
+	var added: int = _binary_client.merge_expansion(pairs, types)
+	if added > 0:
+		_refresh_topology_additive()
+
+
+# Additively fold newly merged edges into the draw pipeline: re-pull the edge list,
+# extend the endpoint-id domain, recompute budgets and re-rank — WITHOUT re-fitting
+# the view (GraphDBViewerWeb additive-merge principle: no rebuild, no re-fit).
+func _refresh_topology_additive() -> void:
+	if _binary_client == null:
+		return
+	_edge_pairs_full = _binary_client.get_edges()
+	_edge_weights_full = _binary_client.get_edge_weights()
+	for i: int in range(_edge_pairs_full.size()):
+		_topo_ids[_edge_pairs_full[i]] = true
+	_recompute_instance_budgets()
+	_selection_dirty = true
+	_edge_rerank_done = false
+	# preserve_show=true: keep the user's current density; do not reset the fit.
+	_rerank_edges(true)
+
+
+# --- Feature 2: teleport to a node ------------------------------------------
+
+# Glide the XROrigin so `node_id` sits TELEPORT_FRONT_M in front of the user's gaze,
+# then pulse-highlight it. Reuses the locomotion frame (origin translation only; no
+# rotation) so it composes with the existing manual transform.
+func _teleport_to_node(node_id: int) -> void:
+	if _binary_client == null or graph_root == null:
+		return
+	var cam: XRCamera3D = _find_xr_camera()
+	var origin: XROrigin3D = _find_xr_origin()
+	if cam == null or origin == null:
+		return
+	# World position of the target node under the current fit transform.
+	var target_world: Vector3 = graph_root.global_transform * _binary_client.node_position(node_id)
+	# Desired camera position: TELEPORT_FRONT_M back along the camera's forward from
+	# the node, keeping the camera height. Forward is -Z of the camera basis.
+	var fwd: Vector3 = -cam.global_transform.basis.z
+	fwd.y = 0.0
+	if fwd.length() < 0.001:
+		fwd = Vector3.FORWARD
+	fwd = fwd.normalized()
+	var desired_cam: Vector3 = target_world - fwd * TELEPORT_FRONT_M
+	# Move the origin by the delta between where the camera should be and where it is
+	# (origin-space translation = world delta; camera offset within origin is fixed).
+	var delta: Vector3 = desired_cam - cam.global_position
+	_teleport_from = origin.transform
+	_teleport_to = origin.transform.translated(delta)
+	_teleport_t = 0.0
+	_teleport_active = true
+	# Pulse-highlight the target briefly by borrowing the query-var overlay channel
+	# (recolour + rim-flag). Guarded: skip if the node is already a genuine query
+	# var so the transient highlight never clobbers a user's mark.
+	_teleport_pulse_id = node_id
+	_teleport_pulse_t = 0.0
+	_teleport_pulse_applied = false
+	if _binary_client.has_method("is_query_var") and not _binary_client.is_query_var(node_id):
+		if _binary_client.has_method("set_query_var"):
+			_binary_client.set_query_var(node_id, 0)
+			_teleport_pulse_applied = true
+
+
+# Advance the teleport glide + pulse each frame; call from _process.
+func _update_teleport(delta: float) -> void:
+	if _teleport_active:
+		var origin: XROrigin3D = _find_xr_origin()
+		if origin == null:
+			_teleport_active = false
+		else:
+			_teleport_t += delta / maxf(TELEPORT_GLIDE_SEC, 0.0001)
+			var a: float = clampf(_teleport_t, 0.0, 1.0)
+			# Smoothstep ease for a comfortable (nausea-safe) glide.
+			var e: float = a * a * (3.0 - 2.0 * a)
+			origin.transform = _teleport_from.interpolate_with(_teleport_to, e)
+			if a >= 1.0:
+				_teleport_active = false
+	if _teleport_pulse_id >= 0:
+		_teleport_pulse_t += delta
+		if _teleport_pulse_t >= TELEPORT_PULSE_SEC:
+			# Retire the transient highlight (only if we applied it, never a real mark).
+			if _teleport_pulse_applied and _binary_client != null and _binary_client.has_method("clear_query_var"):
+				_binary_client.clear_query_var(_teleport_pulse_id)
+			_teleport_pulse_applied = false
+			_teleport_pulse_id = -1
+
+
+func _find_xr_origin() -> XROrigin3D:
+	var cam: XRCamera3D = _find_xr_camera()
+	var n: Node = cam
+	while n != null:
+		if n is XROrigin3D:
+			return n as XROrigin3D
+		n = n.get_parent()
+	return null
 
 
 # Ray-pick the node under a controller without engaging a grab: evaluate the
@@ -2521,21 +2902,39 @@ func _ray_hit_menu_uv(controller: XRController3D, panel: Node3D) -> Vector2:
 # "qb_execute", "qb_clear" (query builder); other prefixes belong to future
 # Wave-2 providers. The menu closes itself after emitting (radial_menu.gd).
 func _on_radial_item_selected(action: String) -> void:
+	if QB_DEBUG:
+		print("[QB] item_selected action='%s'" % action)
 	if action.begins_with("qb_mark:"):
 		_mark_query_var(int(action.substr(8)))
 	elif action.begins_with("qb_unmark:"):
 		_unmark_query_var(int(action.substr(10)))
+	elif action == "qb_toggle_edges":
+		_query.use_concrete_edges = not _query.use_concrete_edges
+		_mark_query_dirty()  # pattern predicates changed → re-count
 	elif action == "qb_clear":
 		_clear_query()
 	elif action == "qb_execute":
 		_execute_query()
+	elif action.begins_with("expand:"):
+		# "expand:<direction>:<edgeType>" — Feature 1 predicate expansion.
+		var rest := action.substr(7)
+		var sep := rest.find(":")
+		if sep > 0:
+			_expand_node(_radial_node_id, rest.substr(0, sep), rest.substr(sep + 1))
+	elif action.begins_with("teleport:"):
+		_teleport_to_node(int(action.substr(9)))
 
 
 func _mark_query_var(node_id: int) -> void:
 	if _binary_client == null:
 		return
-	_query.mark(node_id)
-	if _binary_client.has_method("set_query_var"):
+	var assigned := _query.mark(node_id)
+	var has_fn: bool = _binary_client.has_method("set_query_var")
+	if QB_DEBUG:
+		print("[QB] mark node=%d -> %s (var_count=%d) set_query_var_bound=%s" % [
+			node_id, assigned, _query.var_count(), str(has_fn)
+		])
+	if has_fn:
 		_binary_client.set_query_var(node_id, _query.palette_index(node_id))
 	_update_proximity_labels()
 	_mark_query_dirty()
@@ -2554,6 +2953,8 @@ func _clear_query() -> void:
 	_query.clear()
 	if _binary_client != null and _binary_client.has_method("clear_query_vars"):
 		_binary_client.clear_query_vars()
+	if _planes != null:
+		_planes.clear()  # discard any result planes
 	_update_proximity_labels()
 	# Reset the preview and hide the HUD panel (no active query).
 	_query_dirty = false
@@ -2568,9 +2969,9 @@ func _clear_query() -> void:
 # The active pattern is the set of visible-graph edges connecting marked nodes,
 # with marked nodes as query variables. On every pattern change we debounce ~400ms
 # then POST it countOnly to /api/graph/query/pattern; the returned bindingCount is
-# staged onto the HUD query panel. NB: the XR render store carries no per-edge
-# predicate, so edges are WILDCARD ("any") in v1 — a concrete-type toggle is
-# deferred to Phase D (see query_builder.gd::derive_triples).
+# staged onto the HUD query panel. Edges carry their concrete predicate (from the
+# edge-type wire) unless the "Edges: any" toggle is on — see
+# query_builder.gd::derive_triples.
 # Decide, once per frame, which panel each active controller's ray owns (nearer
 # panel wins), so the HUD and radial pointer handlers never both consume the same
 # trigger. Each controller is assigned to at most one panel; a full miss leaves it
@@ -2593,14 +2994,18 @@ func _arbitrate_pointers() -> void:
 		var rad_d := _panel_ray_distance(controller, radial_panel, RADIAL_QUAD, RADIAL_QUAD)
 		if hud_d == INF and rad_d == INF:
 			continue
-		# Nearer panel wins. Assign explicitly per branch: when the HUD is nearer
-		# (rad_d > hud_d) _hud_owner MUST be set — an elif nested under the
-		# radial-nearer branch would leave the HUD unowned and let both panels
+		# The radial is a MODAL the user explicitly summoned at a node, so any ray
+		# that hits it wins outright — even if the HUD happens to sit nearer along
+		# that ray. Without this, a node summoned roughly toward the parked HUD lets
+		# the HUD claim the controller and STARVES the radial of all wand input
+		# (the "clicks never land / first mark never registers" bug). When the ray
+		# misses the radial, fall back to nearer-panel between HUD and (closed)
+		# radial. Assign _hud_owner explicitly in the else so both panels can't
 		# consume one trigger.
-		if rad_d <= hud_d:
+		if rad_d != INF:
 			if _radial_owner == null:
 				_radial_owner = controller
-		else:
+		elif hud_d != INF:
 			if _hud_owner == null:
 				_hud_owner = controller
 
@@ -2654,7 +3059,7 @@ func _send_query_count() -> void:
 	if _query_http == null or _binary_client == null or not _query.is_active():
 		return
 	var payload: Dictionary = _query.build_pattern_payload(
-		_binary_client.get_edges(), true, QUERY_PREVIEW_LIMIT
+		_binary_client.get_edges(), _binary_client.get_edge_types(), true, QUERY_PREVIEW_LIMIT
 	)
 	var triples: Array = payload["triples"]
 	if triples.is_empty():
@@ -2702,12 +3107,72 @@ func _refresh_query_hud() -> void:
 	if not _query.is_active():
 		if hud.has_method("hide_query_preview"):
 			hud.hide_query_preview()
+		if hud.has_method("set_marked_vars"):
+			hud.set_marked_vars([])
 		return
 	if _binary_client != null:
-		_query.derive_triples(_binary_client.get_edges())
+		_query.derive_triples(_binary_client.get_edges(), _binary_client.get_edge_types())
 	hud.set_query_preview(_query.pattern_summary(), _query_count, _query_pending, _query_truncated)
+	# Populate the marked-variable chip list (var name without the leading '?', +label).
+	if hud.has_method("set_marked_vars"):
+		var rows: Array = []
+		for mid: int in _query.marked_ids():
+			var vname: String = _query.var_name(mid)
+			rows.append({
+				"var": vname.substr(1) if vname.begins_with("?") else vname,
+				"label": _binary_client.label_of(mid) if _binary_client != null else "",
+			})
+		hud.set_marked_vars(rows)
 
 
 func _execute_query() -> void:
-	# Execution + semantic planes are Phase D; Phase C records the intent.
-	print("GraphScene: execute query — Phase D (%d vars)" % _query.var_count())
+	if _exec_http == null or _binary_client == null or not _query.is_active():
+		return
+	if _exec_pending:
+		return
+	var payload: Dictionary = _query.build_pattern_payload(
+		_binary_client.get_edges(), _binary_client.get_edge_types(), false, PLANE_LIMIT
+	)
+	if (payload["triples"] as Array).is_empty():
+		return
+	var url := "%s/api/graph/query/pattern" % _http_base()
+	var headers := _auth_headers(url, "POST")
+	var err := _exec_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		push_warning("GraphScene: query execute POST failed to start (%d)" % err)
+		return
+	_exec_pending = true
+
+
+func _on_execute_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_exec_pending = false
+	var ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300
+	if not ok:
+		push_warning("GraphScene: query execute failed (result=%d code=%d)" % [result, response_code])
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return
+	var bindings: Array = (parsed as Dictionary).get("bindings", [])
+	if _planes == null:
+		return
+	# Server-space gap so layers land ~PLANE_GAP_M apart after the fit scale.
+	var gap_server: float = PLANE_GAP_M / maxf(_graph_scale, 0.0001)
+	var node_comp: float = NODE_WORLD_RADIUS * _node_size_factor / (NODE_MESH_RADIUS * maxf(_graph_scale, 0.0001))
+	var edge_comp: float = EDGE_WORLD_RADIUS / (EDGE_MESH_RADIUS * maxf(_graph_scale, 0.0001))
+	# size_lo/size_hi match the main node buffer build (graph_scene.gd:_update_multimesh).
+	var spawned: int = _planes.build(
+		bindings, _query.triples, gap_server, node_comp,
+		0.7, 1.9, edge_comp,
+		Callable(self, "_plane_binding_label")
+	)
+	print("GraphScene: query executed → %d planes" % spawned)
+
+
+# Header label for a result plane: the first variable's node label.
+func _plane_binding_label(binding: Dictionary) -> String:
+	for k in binding.keys():
+		var id := int(binding[k])
+		var lbl: String = _binary_client.label_of(id) if _binary_client != null else ""
+		return lbl if lbl != "" else str(id)
+	return ""

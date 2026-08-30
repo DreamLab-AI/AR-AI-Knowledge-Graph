@@ -80,6 +80,19 @@ impl NodeKind {
     }
 }
 
+/// Node class code for the type show/hide filter (Wave 2, Feature 3), collapsing
+/// the five wire kinds into the three UI-toggleable classes plus "other":
+/// `0` knowledge, `1` ontology (class/individual/property), `2` agent, `3` plain.
+/// Mirrors [`crate::render_store`] `KIND_*` constants.
+pub fn node_class_code(kind: NodeKind) -> u8 {
+    match kind {
+        NodeKind::Knowledge => 0,
+        NodeKind::OntologyClass | NodeKind::OntologyIndividual | NodeKind::OntologyProperty => 1,
+        NodeKind::Agent => 2,
+        NodeKind::Plain => 3,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NodeUpdate {
     pub node_id: u32,
@@ -120,12 +133,22 @@ impl VisualsKey {
     }
 }
 
-/// One edge from the `initialGraphLoad` topology message.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// One edge from the `initialGraphLoad` topology message. `edge_type` is the
+/// predicate (`edge.edge_type` on the wire, snake_case); `None`/absent = untyped.
+/// Carried client-side (Phase D) so the visual query builder can derive triples
+/// with the real predicate instead of a wildcard. Not `Copy` (owns a String).
+#[derive(Debug, Clone, PartialEq)]
 pub struct EdgeSpec {
     pub source: u32,
     pub target: u32,
     pub weight: f32,
+    pub edge_type: Option<String>,
+    /// Epistemic status (Wave 3 asserted/inferred channel): `true` when this edge
+    /// is a reasoner ENTAILMENT rather than an asserted triple. Parsed from the
+    /// `inferred` field on the `initialGraphLoad` edge (absent ⇒ `false`, asserted).
+    /// Drives the amber-dashed style code so the wire can light the channel up the
+    /// moment the backend materialises inferred edges (see the module note).
+    pub inferred: bool,
 }
 
 /// Parse a `/wss` text frame; returns the edge topology when the frame is an
@@ -149,6 +172,27 @@ pub struct NodeMetaWire {
     pub label: String,
     pub node_type: String,
     pub detail: String,
+    /// `metadata.file_size` in bytes (page / ontology_node carry it; 0 otherwise).
+    /// Feeds the desktop-parity metadata size formula's log-volume term.
+    pub file_size: u64,
+}
+
+/// Parse a `metadata.file_size` JSON value defensively: it may arrive as a byte
+/// count number OR a numeric string (the backend emits a string for page /
+/// ontology_node). Anything non-numeric, negative or fractional-only → 0.
+fn parse_file_size(v: &serde_json::Value) -> u64 {
+    if let Some(n) = v.as_u64() {
+        return n;
+    }
+    if let Some(f) = v.as_f64() {
+        if f.is_finite() && f > 0.0 {
+            return f as u64;
+        }
+    }
+    if let Some(s) = v.as_str() {
+        return s.trim().parse::<u64>().unwrap_or(0);
+    }
+    0
 }
 
 /// Parse an `initialGraphLoad` frame into `(edges, node metadata)` in a single
@@ -175,10 +219,26 @@ pub fn parse_initial_graph(text: &str) -> Option<(Vec<EdgeSpec>, Vec<NodeMetaWir
                 continue;
             }
             let weight = e.get("weight").and_then(|w| w.as_f64()).unwrap_or(1.0) as f32;
+            let edge_type = e
+                .get("edge_type")
+                .and_then(|t| t.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            // Wave 3 asserted/inferred channel: forward-compatible: absent ⇒ false
+            // (asserted). The backend does not emit this yet (inference is
+            // class-level today — see module note), so every current edge parses
+            // as asserted; the client already renders the channel the instant it
+            // starts arriving.
+            let inferred = e
+                .get("inferred")
+                .and_then(|b| b.as_bool())
+                .unwrap_or(false);
             edges.push(EdgeSpec {
                 source: source as u32 & NODE_ID_MASK,
                 target: target as u32 & NODE_ID_MASK,
                 weight,
+                edge_type,
+                inferred,
             });
         }
     }
@@ -211,7 +271,18 @@ pub fn parse_initial_graph(text: &str) -> Option<(Vec<EdgeSpec>, Vec<NodeMetaWir
                 .and_then(|d| d.as_str())
                 .unwrap_or("")
                 .to_string();
-            if metadata_id.is_empty() && label.is_empty() && node_type.is_empty() && detail.is_empty() {
+            // Byte count for the metadata size formula (string or number on the wire).
+            let file_size = node
+                .get("metadata")
+                .and_then(|m| m.get("file_size"))
+                .map(parse_file_size)
+                .unwrap_or(0);
+            if metadata_id.is_empty()
+                && label.is_empty()
+                && node_type.is_empty()
+                && detail.is_empty()
+                && file_size == 0
+            {
                 continue;
             }
             metas.push(NodeMetaWire {
@@ -220,6 +291,7 @@ pub fn parse_initial_graph(text: &str) -> Option<(Vec<EdgeSpec>, Vec<NodeMetaWir
                 label,
                 node_type,
                 detail,
+                file_size,
             });
         }
     }
@@ -442,10 +514,111 @@ pub fn ingest_frame<F: FnMut(NodeUpdate)>(frame: Bytes, mut sink: F) {
     }
 }
 
+/// Message-type byte prefixing a binary `0x23 AGENT_ACTION` beam frame (server
+/// `src/utils/binary_protocol.rs` `MessageType::AgentAction = 0x23`). Fanned to
+/// every `/wss` client via `broadcast_to_all` — the same binary path as position
+/// frames — so the XR socket receives it. Distinguished from position frames
+/// (`0x03`/`0x05`) by this leading byte.
+pub const MSG_AGENT_ACTION: u8 = 0x23;
+
+/// One decoded agent→node action from a `0x23` beam frame (Pillar 2 data plane).
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentAction {
+    /// Acting agent's wire id (may carry `AGENT_NODE_FLAG`; the store masks it).
+    pub source_agent_id: u32,
+    /// KG-space id of the node being acted on (plain node id, no flag bits).
+    pub target_node_id: u32,
+    /// `AgentActionType` (0 Query..5 Transform).
+    pub action_type: u8,
+    /// Server timestamp (ms, `% u32::MAX`).
+    pub timestamp: u32,
+    /// Task/intent line extracted from the optional action payload (empty if none).
+    pub task: String,
+}
+
+/// Best-effort extraction of a human task line from a `0x23` action payload. The
+/// payload (desktop parity, `useAgentActionFeed`) is either a JSON object with an
+/// `intent` field, or a bare intent string, or absent. Never fails: an
+/// unparseable payload yields an empty string.
+fn extract_action_task(payload: &[u8]) -> String {
+    if payload.is_empty() {
+        return String::new();
+    }
+    let Ok(text) = std::str::from_utf8(payload) else {
+        return String::new();
+    };
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
+        if let Some(intent) = val.get("intent").and_then(|v| v.as_str()) {
+            return intent.to_owned();
+        }
+        // A JSON string literal payload ("...") decodes to a Value::String.
+        if let Some(s) = val.as_str() {
+            return s.to_owned();
+        }
+        // JSON object without an `intent` key ⇒ no task line.
+        if val.is_object() {
+            return String::new();
+        }
+    }
+    // Bare (non-JSON) string payload.
+    trimmed.to_owned()
+}
+
+/// Decode a binary `0x23 AGENT_ACTION` batch frame into its actions. Wire layout
+/// (server `encode_agent_actions`): `[0x23][u16 count]( [u16 ev_len][ev_len bytes] )*`
+/// where each event body is `source u32 | target u32 | action u8 | ts u32 |
+/// duration u16 | payload…` (15-byte fixed header + variable payload). Returns
+/// `None` if the frame is not a `0x23` frame; otherwise a (possibly empty) list.
+/// Never panics on a short/malformed frame — a truncated event ends the parse.
+pub fn decode_agent_action_frame(bytes: &[u8]) -> Option<Vec<AgentAction>> {
+    if bytes.first().copied() != Some(MSG_AGENT_ACTION) {
+        return None;
+    }
+    let mut out = Vec::new();
+    if bytes.len() < 3 {
+        return Some(out); // header-only / truncated count ⇒ no events
+    }
+    let count = u16::from_le_bytes([bytes[1], bytes[2]]) as usize;
+    let mut off = 3usize;
+    const EV_HEADER: usize = 15;
+    for _ in 0..count {
+        if off + 2 > bytes.len() {
+            break;
+        }
+        let ev_len = u16::from_le_bytes([bytes[off], bytes[off + 1]]) as usize;
+        off += 2;
+        if off + ev_len > bytes.len() || ev_len < EV_HEADER {
+            break;
+        }
+        let ev = &bytes[off..off + ev_len];
+        off += ev_len;
+        let source_agent_id = u32::from_le_bytes([ev[0], ev[1], ev[2], ev[3]]);
+        let target_node_id = u32::from_le_bytes([ev[4], ev[5], ev[6], ev[7]]);
+        let action_type = ev[8];
+        let timestamp = u32::from_le_bytes([ev[9], ev[10], ev[11], ev[12]]);
+        // ev[13..15] = duration_ms (animation hint) — unused by the data plane.
+        let task = extract_action_task(&ev[EV_HEADER..]);
+        out.push(AgentAction {
+            source_agent_id,
+            target_node_id,
+            action_type,
+            timestamp,
+            task,
+        });
+    }
+    Some(out)
+}
+
 #[cfg(not(test))]
 use std::collections::VecDeque;
 #[cfg(not(test))]
 use std::sync::{Arc, Mutex};
+#[cfg(not(test))]
+use std::time::Instant;
 
 /// Network → main-thread events for the `/wss` graph stream. The recv pump runs
 /// on the tokio runtime and can never touch Godot objects (not `Send`), so it
@@ -493,9 +666,16 @@ pub struct BinaryProtocolClient {
     /// Latest edge topology from `initialGraphLoad`, flattened for Godot.
     edges_flat: Vec<i32>,
     edge_weights: Vec<f32>,
+    /// Per-edge predicate (parallel to the `get_edges()` pair list); empty string
+    /// = untyped. Feeds the visual query builder's concrete-predicate triples.
+    edge_types: Vec<String>,
     /// Hot-path render store: owns node targets/positions and packs the MultiMesh
     /// instance buffers so GDScript never loops per-instance (PRD-008 perf).
     store: crate::render_store::RenderStore,
+    /// Wall-clock instant of the most recent `0x23` agent action, for the P1
+    /// data-plane liveness diagnostic (`last_agent_action_age_ms`). `None` until
+    /// the first action arrives.
+    last_agent_action: Option<Instant>,
     base: Base<RefCounted>,
 }
 
@@ -533,7 +713,9 @@ impl BinaryProtocolClient {
             visuals: std::collections::HashMap::new(),
             edges_flat: Vec::new(),
             edge_weights: Vec::new(),
+            edge_types: Vec::new(),
             store: crate::render_store::RenderStore::new(),
+            last_agent_action: None,
             base,
         })
     }
@@ -590,16 +772,38 @@ impl BinaryProtocolClient {
                 GraphInbound::Topology { edges, metas } => {
                     self.edges_flat.clear();
                     self.edge_weights.clear();
+                    self.edge_types.clear();
+                    let mut edge_inferred: Vec<bool> = Vec::with_capacity(edges.len());
                     for e in &edges {
                         self.edges_flat.push(e.source as i32);
                         self.edges_flat.push(e.target as i32);
                         self.edge_weights.push(e.weight);
+                        self.edge_types
+                            .push(e.edge_type.clone().unwrap_or_default());
+                        edge_inferred.push(e.inferred);
                     }
-                    // Feed node label metadata into the render store for the
-                    // proximity-label overlay (moves the strings, no clone).
+                    // Register per-edge styles for the edge shader's INSTANCE_CUSTOM.a
+                    // channel: relation grammar (Wave 2, Feature 4) with the Wave 3
+                    // asserted/inferred override — an inferred edge is code 3
+                    // (amber-dashed) regardless of predicate.
+                    let codes: Vec<u8> = self
+                        .edge_types
+                        .iter()
+                        .zip(edge_inferred.iter())
+                        .map(|(t, &inf)| crate::render_store::edge_style_code_prov(t, inf))
+                        .collect();
+                    self.store.set_edge_styles(&self.edges_flat, &codes);
+                    // Per-node degree = incident edge count (desktop parity) — one
+                    // O(E) pass over the full edge list, drives the size formula.
+                    self.store.compute_degrees(&self.edges_flat);
+                    // Feed node label metadata + file_size into the render store for
+                    // the proximity-label overlay and the metadata size formula.
                     for m in metas {
+                        // set_meta replaces the whole entry, so set_file_size AFTER
+                        // it (merges into the just-inserted entry).
                         self.store
                             .set_meta(m.id, m.metadata_id, m.label, m.node_type, m.detail);
+                        self.store.set_file_size(m.id, m.file_size);
                     }
                     let count = edges.len() as u32;
                     self.base_mut()
@@ -624,6 +828,18 @@ impl BinaryProtocolClient {
     #[func]
     fn get_edge_weights(&self) -> PackedFloat32Array {
         PackedFloat32Array::from(self.edge_weights.as_slice())
+    }
+
+    /// Per-edge predicate strings parallel to the `get_edges()` pair list (empty
+    /// string = untyped). Drives the visual query builder's concrete-predicate
+    /// triples (Phase D).
+    #[func]
+    fn get_edge_types(&self) -> PackedStringArray {
+        let mut out = PackedStringArray::new();
+        for t in &self.edge_types {
+            out.push(&GString::from(t.as_str()));
+        }
+        out
     }
 
     /// Begin a server-authoritative drag: the server pins the node and every
@@ -665,6 +881,82 @@ impl BinaryProtocolClient {
         self.emit_frame(payload.as_slice());
     }
 
+    // --- Agent-swarm data plane (Pillar 1-3, P1) --------------------------------
+
+    /// Number of live agents in the swarm registry. P1 diagnostics surface: a
+    /// non-zero count with a fresh `last_agent_action_age_ms` confirms the `0x23`
+    /// beam stream is flowing to the XR socket before any visuals exist.
+    #[func]
+    fn agent_count(&self) -> i64 {
+        self.store.agent_count() as i64
+    }
+
+    /// Milliseconds since the last `0x23` agent-action frame, or `-1` if none has
+    /// arrived. Verifiable from the HP log to prove data-plane liveness.
+    #[func]
+    fn last_agent_action_age_ms(&self) -> i64 {
+        match self.last_agent_action {
+            Some(t) => t.elapsed().as_millis().min(i64::MAX as u128) as i64,
+            None => -1,
+        }
+    }
+
+    /// Monotonic total of agent actions ingested this session (liveness counter).
+    #[func]
+    fn agent_actions_total(&self) -> i64 {
+        self.store.agent_actions_total().min(i64::MAX as u64) as i64
+    }
+
+    /// Sorted live agent ids — roster order for the Swarm tab (P5) and a probe
+    /// for diagnostics.
+    #[func]
+    fn agent_ids(&self) -> PackedInt32Array {
+        let ids: Vec<i32> = self.store.agent_ids().into_iter().map(|id| id as i32).collect();
+        PackedInt32Array::from(ids.as_slice())
+    }
+
+    /// KG-space target node id an agent is currently working on, or `-1` if the
+    /// agent is unknown or has no current target. Feeds the hover glide (P2) and
+    /// work beam (P3).
+    #[func]
+    fn agent_target_node(&self, agent_id: i64) -> i64 {
+        match self.store.agent_rec(agent_id as u32) {
+            Some(rec) if rec.target_node_id != 0 => rec.target_node_id as i64,
+            _ => -1,
+        }
+    }
+
+    /// Derived status channel for an agent (`0` idle, `1` working, `2` blocked,
+    /// `3` done), or `-1` if unknown. Drives the status halo (P2) + roster dot (P5).
+    #[func]
+    fn agent_status(&self, agent_id: i64) -> i64 {
+        match self.store.agent_rec(agent_id as u32) {
+            Some(rec) => rec.status as i64,
+            None => -1,
+        }
+    }
+
+    /// Current task line for an agent (empty string if unknown or none). Rendered
+    /// in the proximity label (P4) + Swarm roster (P5).
+    #[func]
+    fn agent_task(&self, agent_id: i64) -> GString {
+        match self.store.agent_rec(agent_id as u32) {
+            Some(rec) => GString::from(rec.task.as_str()),
+            None => GString::new(),
+        }
+    }
+
+    /// Refine an agent's status + task from the JSON `state` channel. The GDScript
+    /// scene layer already receives text frames via `text_message`; when a real
+    /// `agent:state` producer lands server-side (a `BroadcastMessage` text frame,
+    /// the documented follow-up), the scene calls this with the parsed fields.
+    /// `status` accepts the wire strings (`idle|busy|active|blocked|done|…`).
+    #[func]
+    fn apply_agent_state(&mut self, agent_id: i64, status: GString, task: GString) {
+        self.store
+            .set_agent_state(agent_id as u32, &status.to_string(), &task.to_string());
+    }
+
     // --- hot-path render API (PRD-008): the store owns positions; GDScript calls
     // these per frame instead of looping per instance. ------------------------
 
@@ -686,7 +978,8 @@ impl BinaryProtocolClient {
         PackedFloat32Array::from(v.as_slice())
     }
 
-    /// Pack the edge MultiMesh buffer for the ranked `pairs` (12 floats/instance).
+    /// Pack the edge MultiMesh buffer for the ranked `pairs` (16 floats/instance:
+    /// 12 transform + 4 INSTANCE_CUSTOM, custom `.a` = relation-type style code).
     /// Only edges with both endpoints in the last node buffer's drawn set survive.
     #[func]
     fn build_edge_buffer(&mut self, pairs: PackedInt32Array, radius_comp: f32) -> PackedFloat32Array {
@@ -718,6 +1011,34 @@ impl BinaryProtocolClient {
     #[func]
     fn fold_badge_of(&self, node_id: u32) -> i64 {
         self.store.badge_of(node_id) as i64
+    }
+
+    /// Pack a semantic-plane node buffer (query result subgraph): `ids` at their
+    /// stored positions lifted by `y_offset` (server space), community-coloured,
+    /// no fold/query overlay. 20 floats/instance.
+    #[func]
+    fn build_plane_node_buffer(
+        &self,
+        ids: PackedInt32Array,
+        y_offset: f32,
+        scale_comp: f32,
+        size_lo: f32,
+        size_hi: f32,
+    ) -> PackedFloat32Array {
+        let v = self
+            .store
+            .build_plane_node_buffer(ids.as_slice(), y_offset, scale_comp, size_lo, size_hi);
+        PackedFloat32Array::from(v.as_slice())
+    }
+
+    /// Pack a semantic-plane edge buffer: directed `pairs` at their stored endpoint
+    /// positions lifted by `y_offset`. No drawn filter. 12 floats/instance.
+    #[func]
+    fn build_plane_edge_buffer(&self, pairs: PackedInt32Array, y_offset: f32, radius_comp: f32) -> PackedFloat32Array {
+        let v = self
+            .store
+            .build_plane_edge_buffer(pairs.as_slice(), y_offset, radius_comp);
+        PackedFloat32Array::from(v.as_slice())
     }
 
     /// Drawn node ids from the last `build_node_buffer`, for the interaction ray.
@@ -789,6 +1110,16 @@ impl BinaryProtocolClient {
         PackedInt32Array::from(out.as_slice())
     }
 
+    /// Top `max` labelled nodes by centrality (highest first), resolved to visible
+    /// representatives under the fold plan. Drives the wand search-teleport "top
+    /// labels" radial (Wave 2, Feature 2) — the keyboardless search path.
+    #[func]
+    fn top_labels(&self, max: u32) -> PackedInt32Array {
+        let ids = self.store.top_by_centrality(max as usize);
+        let out: Vec<i32> = ids.into_iter().map(|id| id as i32).collect();
+        PackedInt32Array::from(out.as_slice())
+    }
+
     /// Primary label for a node (empty if unknown).
     #[func]
     fn label_of(&self, node_id: u32) -> GString {
@@ -835,6 +1166,68 @@ impl BinaryProtocolClient {
     fn is_query_var(&self, node_id: u32) -> bool {
         self.store.is_query_var(node_id)
     }
+
+    /// Show or hide a node class (Wave 2, Feature 3 — type show/hide filter).
+    /// `class_code`: 0 knowledge, 1 ontology, 2 agent, 3 other. A hidden class
+    /// drops from the next `build_node_buffer`; its edges then fail the
+    /// both-endpoints-drawn test and vanish. Re-show to restore, no reload.
+    #[func]
+    fn set_type_visible(&mut self, class_code: i64, visible: bool) {
+        if (0..4).contains(&class_code) {
+            self.store.set_type_visible(class_code as u8, visible);
+        }
+    }
+
+    /// Whether a node class is currently visible (Feature 3).
+    #[func]
+    fn is_type_visible(&self, class_code: i64) -> bool {
+        if (0..4).contains(&class_code) {
+            self.store.is_type_visible(class_code as u8)
+        } else {
+            true
+        }
+    }
+
+    /// Additively merge expansion edges into the topology (Wave 2, Feature 1 —
+    /// GraphDBViewerWeb additive-merge principle: no rebuild, no re-fit). The
+    /// returned nodes are already in the position stream, so this only extends the
+    /// edge list: `new_pairs` is `[s0,t0,s1,t1,…]`, `new_types` the parallel
+    /// per-edge predicate strings (empty = untyped). Existing edges are untouched
+    /// and duplicates (either direction) are skipped, so re-expanding never doubles
+    /// edges. Registers the new edges' relation-type styles. Returns the number of
+    /// edges actually added — call `get_edges()`/`get_edge_types()` afterwards to
+    /// re-rank the draw list. Node positions are never disturbed.
+    #[func]
+    fn merge_expansion(&mut self, new_pairs: PackedInt32Array, new_types: PackedStringArray) -> i64 {
+        let np = new_pairs.as_slice();
+        let n = np.len() / 2;
+        let new_types_vec: Vec<String> = (0..n)
+            .map(|i| new_types.get(i).map(|g| g.to_string()).unwrap_or_default())
+            .collect();
+        let new_weights: Vec<f32> = vec![1.0; n];
+        let before = self.edges_flat.len();
+        let added = crate::render_store::append_new_edges(
+            &mut self.edges_flat,
+            &mut self.edge_weights,
+            &mut self.edge_types,
+            np,
+            &new_weights,
+            &new_types_vec,
+        );
+        if added > 0 {
+            // Register styles for the appended tail only (additive, keeps existing).
+            let tail_pairs: Vec<i32> = self.edges_flat[before..].to_vec();
+            let tail_codes: Vec<u8> = self.edge_types[before / 2..]
+                .iter()
+                .map(|t| crate::render_store::edge_style_code(t))
+                .collect();
+            self.store.merge_edge_styles(&tail_pairs, &tail_codes);
+            // Additively bump degree for the newly-attached edges' endpoints so
+            // expansion grows node sizes without a full recount.
+            self.store.add_degrees(&tail_pairs);
+        }
+        added as i64
+    }
 }
 
 #[cfg(not(test))]
@@ -848,6 +1241,32 @@ impl BinaryProtocolClient {
     }
 
     fn emit_frame(&mut self, bytes: &[u8]) {
+        // Agent-swarm data plane (Pillar 2, P1): a `0x23 AGENT_ACTION` beam frame
+        // rides the same binary `/wss` path as position frames. Route it to the
+        // agent registry instead of the position decoder. Never a position frame,
+        // so return early once handled.
+        if bytes.first().copied() == Some(MSG_AGENT_ACTION) {
+            if let Some(actions) = decode_agent_action_frame(bytes) {
+                if !actions.is_empty() {
+                    self.last_agent_action = Some(Instant::now());
+                }
+                for a in &actions {
+                    self.store.record_agent_action(
+                        a.source_agent_id,
+                        a.target_node_id,
+                        a.action_type,
+                        a.timestamp,
+                        &a.task,
+                    );
+                }
+                debug!(
+                    count = actions.len(),
+                    agents = self.store.agent_count(),
+                    "ingested 0x23 agent-action frame"
+                );
+            }
+            return;
+        }
         let mut emit_buf: Vec<NodeUpdate> = Vec::new();
         ingest_frame(Bytes::copy_from_slice(bytes), |u| emit_buf.push(u));
         for u in emit_buf {
@@ -856,6 +1275,9 @@ impl BinaryProtocolClient {
             // nodes was a ~13k-emit-per-frame storm across the gdext boundary.
             self.store
                 .upsert(u.node_id, u.position, u.community_id, u.anomaly, u.centrality);
+            // Record the node class for the type show/hide filter (Wave 2, Feature
+            // 3). Cheap idempotent insert; the kind rides the wire-id flag bits.
+            self.store.set_node_kind(u.node_id, node_class_code(u.kind));
             // Visuals still surface to GDScript (throttled to quantised-key changes)
             // so the scene keeps its centrality mirror for the LOD/edge selection.
             let key = VisualsKey::of(&u);
@@ -877,6 +1299,92 @@ impl BinaryProtocolClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a `0x23` batch frame the way the server `encode_agent_actions` does:
+    /// `[0x23][u16 count]( [u16 ev_len][source u32|target u32|action u8|ts u32|
+    /// duration u16|payload] )*`.
+    fn build_agent_action_frame(events: &[(u32, u32, u8, u32, &[u8])]) -> Vec<u8> {
+        let mut out = vec![MSG_AGENT_ACTION];
+        out.extend_from_slice(&(events.len() as u16).to_le_bytes());
+        for (src, tgt, action, ts, payload) in events {
+            let mut ev = Vec::new();
+            ev.extend_from_slice(&src.to_le_bytes());
+            ev.extend_from_slice(&tgt.to_le_bytes());
+            ev.push(*action);
+            ev.extend_from_slice(&ts.to_le_bytes());
+            ev.extend_from_slice(&0u16.to_le_bytes()); // duration_ms
+            ev.extend_from_slice(payload);
+            out.extend_from_slice(&(ev.len() as u16).to_le_bytes());
+            out.extend_from_slice(&ev);
+        }
+        out
+    }
+
+    #[test]
+    fn decodes_agent_action_batch_with_flag_and_intent() {
+        let payload = br#"{"intent":"reading node"}"#;
+        let frame = build_agent_action_frame(&[
+            (0x8000_0005, 42, 0, 1234, payload), // agent-flagged source
+            (0x8000_0006, 7, 1, 5678, b""),      // no payload
+        ]);
+        let actions = decode_agent_action_frame(&frame).expect("is a 0x23 frame");
+        assert_eq!(actions.len(), 2);
+        assert_eq!(actions[0].source_agent_id, 0x8000_0005);
+        assert_eq!(actions[0].target_node_id, 42);
+        assert_eq!(actions[0].action_type, 0);
+        assert_eq!(actions[0].timestamp, 1234);
+        assert_eq!(actions[0].task, "reading node");
+        assert_eq!(actions[1].target_node_id, 7);
+        assert_eq!(actions[1].task, "");
+    }
+
+    #[test]
+    fn agent_action_frame_rejects_non_0x23_and_survives_truncation() {
+        // Wrong leading byte ⇒ not an agent-action frame.
+        assert_eq!(decode_agent_action_frame(&[PROTOCOL_V3, 0, 0]), None);
+        // Count says 3 but bytes run out mid-event: parse stops, no panic.
+        let mut frame = build_agent_action_frame(&[(1, 2, 0, 0, b"")]);
+        frame[1] = 3; // lie about the count
+        let actions = decode_agent_action_frame(&frame).expect("still a 0x23 frame");
+        assert_eq!(actions.len(), 1); // only the one real event decoded
+        // Header-only frame ⇒ empty list, not an error.
+        assert_eq!(decode_agent_action_frame(&[MSG_AGENT_ACTION]), Some(vec![]));
+    }
+
+    #[test]
+    fn extract_action_task_handles_json_bare_and_garbage() {
+        assert_eq!(extract_action_task(br#"{"intent":"x"}"#), "x");
+        assert_eq!(extract_action_task(br#""bare string""#), "bare string");
+        assert_eq!(extract_action_task(b"plain text"), "plain text");
+        assert_eq!(extract_action_task(br#"{"other":1}"#), ""); // object w/o intent
+        assert_eq!(extract_action_task(b""), "");
+        assert_eq!(extract_action_task(&[0xff, 0xfe]), ""); // invalid utf-8
+    }
+
+    #[test]
+    fn registry_records_action_masks_flag_and_derives_working() {
+        use crate::render_store::{RenderStore, AGENT_WORKING, AGENT_DONE, AGENT_BLOCKED};
+        let mut store = RenderStore::new();
+        store.record_agent_action(0x8000_0005, 0x4000_002A, 2, 999, "building");
+        assert_eq!(store.agent_count(), 1);
+        assert_eq!(store.agent_actions_total(), 1);
+        // Source flag masked to node-id space for the key; target masked too.
+        let rec = store.agent_rec(5).expect("agent keyed by masked id");
+        assert_eq!(rec.status, AGENT_WORKING);
+        assert_eq!(rec.target_node_id, 0x4000_002A & NODE_ID_MASK);
+        assert_eq!(rec.task, "building");
+        // JSON state refines status; empty task must not blank the existing line.
+        store.set_agent_state(5, "done", "");
+        let rec = store.agent_rec(5).unwrap();
+        assert_eq!(rec.status, AGENT_DONE);
+        assert_eq!(rec.task, "building");
+        // A later action flips it back to working and updates the target.
+        store.record_agent_action(5, 8, 0, 1000, "");
+        assert_eq!(store.agent_rec(5).unwrap().status, AGENT_WORKING);
+        // Unknown status string ⇒ idle; error ⇒ blocked.
+        store.set_agent_state(5, "error", "stuck");
+        assert_eq!(store.agent_rec(5).unwrap().status, AGENT_BLOCKED);
+    }
 
     fn build_frame(records: &[(u32, [f32; 3], [f32; 3])]) -> Vec<u8> {
         let mut out = vec![PROTOCOL_V3];
@@ -1178,11 +1686,68 @@ mod tests {
             EdgeSpec {
                 source: 1,
                 target: 2,
-                weight: 2.5
+                weight: 2.5,
+                edge_type: None,
+                inferred: false,
             }
         );
         // Missing weight defaults to 1.0.
         assert_eq!(edges[1].weight, 1.0);
+    }
+
+    #[test]
+    fn parse_initial_graph_reads_inferred_flag() {
+        // Wave 3 asserted/inferred channel: `inferred:true` → entailed edge;
+        // absent ⇒ asserted (false). Forward-compatible with today's wire.
+        let text = r#"{"type":"initialGraphLoad","nodes":[],"edges":[
+            {"id":"a","source_id":1,"target_id":2,"edge_type":"subclass_of","inferred":true},
+            {"id":"b","source_id":3,"target_id":4,"edge_type":"subclass_of"}
+        ],"timestamp":1}"#;
+        let edges = parse_initial_graph_load(text).unwrap();
+        assert!(edges[0].inferred, "explicit inferred:true is carried");
+        assert!(!edges[1].inferred, "absent inferred defaults to asserted");
+    }
+
+    #[test]
+    fn parse_initial_graph_reads_edge_type() {
+        // edge_type present → Some; absent/empty → None. Drives the query builder's
+        // concrete-predicate triples (Phase D).
+        let text = r#"{"type":"initialGraphLoad","nodes":[],"edges":[
+            {"id":"a","source_id":1,"target_id":2,"weight":1.0,"edge_type":"references"},
+            {"id":"b","source_id":3,"target_id":4,"edge_type":""},
+            {"id":"c","source_id":5,"target_id":6}
+        ],"timestamp":1}"#;
+        let (edges, _) = parse_initial_graph(text).unwrap();
+        assert_eq!(edges[0].edge_type.as_deref(), Some("references"));
+        assert_eq!(edges[1].edge_type, None, "empty edge_type → None");
+        assert_eq!(edges[2].edge_type, None, "absent edge_type → None");
+    }
+
+    #[test]
+    fn parse_file_size_handles_number_string_and_junk() {
+        // Number, numeric string, float, and defensive fallbacks.
+        assert_eq!(parse_file_size(&serde_json::json!(4096)), 4096);
+        assert_eq!(parse_file_size(&serde_json::json!("8192")), 8192);
+        assert_eq!(parse_file_size(&serde_json::json!(" 512 ")), 512, "trimmed string");
+        assert_eq!(parse_file_size(&serde_json::json!(1234.0)), 1234, "float byte count");
+        assert_eq!(parse_file_size(&serde_json::json!("notanumber")), 0);
+        assert_eq!(parse_file_size(&serde_json::json!(-5)), 0, "negative → 0");
+        assert_eq!(parse_file_size(&serde_json::json!(null)), 0);
+    }
+
+    #[test]
+    fn parse_initial_graph_reads_file_size_from_metadata() {
+        // file_size lives under node.metadata and may be a string or a number.
+        let text = r#"{"type":"initialGraphLoad","nodes":[
+            {"id":1,"label":"Page A","metadata":{"file_size":"4096"}},
+            {"id":2,"label":"Page B","metadata":{"file_size":8192}},
+            {"id":3,"label":"Owl","metadata":{}}
+        ],"edges":[],"timestamp":1}"#;
+        let (_, metas) = parse_initial_graph(text).unwrap();
+        let by_id = |id: u32| metas.iter().find(|m| m.id == id).unwrap();
+        assert_eq!(by_id(1).file_size, 4096, "string file_size parsed");
+        assert_eq!(by_id(2).file_size, 8192, "numeric file_size parsed");
+        assert_eq!(by_id(3).file_size, 0, "missing file_size → 0");
     }
 
     #[test]

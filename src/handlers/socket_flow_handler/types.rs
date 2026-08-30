@@ -406,6 +406,7 @@ impl SocketFlowServer {
 
                     // Send new InitialGraphLoad message with LIMITED node set for fast initial render
                     if !graph_data.nodes.is_empty() || !graph_data.edges.is_empty() {
+                        use crate::services::inferred_edge_materialiser::edge_is_inferred;
                         use crate::utils::socket_flow_messages::{
                             InitialEdgeData, InitialNodeData,
                         };
@@ -494,6 +495,7 @@ impl SocketFlowServer {
                                 target_id: edge.target,
                                 weight: Some(edge.weight),
                                 edge_type: edge.edge_type.clone(),
+                                inferred: edge_is_inferred(edge),
                             })
                             .collect();
 

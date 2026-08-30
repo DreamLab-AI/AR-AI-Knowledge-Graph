@@ -36,6 +36,7 @@ pub mod ontology_converter;
 pub mod ontology_enrichment_service;
 pub mod ontology_file_cache;
 pub mod ontology_mutation_service;
+pub mod inferred_edge_materialiser;
 pub mod ontology_pipeline_service;
 pub mod ontology_query_service;
 pub mod ontology_reasoner;

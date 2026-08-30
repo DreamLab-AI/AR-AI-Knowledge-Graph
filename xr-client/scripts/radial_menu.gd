@@ -24,12 +24,24 @@ const VISIBLE_LIMIT: int = 10
 @onready var _items_root: Control = $MenuViewport/MenuControl/Items
 @onready var _slider: HSlider = $MenuViewport/MenuControl/OverflowSlider
 
+# Items at or below this count are laid out AROUND THE CENTRE (a small cluster the
+# natural centre-aim can hit) instead of on the outer ring; a lone item lands dead
+# centre. Above it, the full ring + overflow window applies.
+const CENTRE_CLUSTER_MAX: int = 3
+
 # Runtime state.
 var _items: Array = []               # Array[Dictionary]: label, action, count?
 var _buttons: Array[Button] = []
 var _rotation_offset: float = 0.0    # radians added to every item's base angle
 var _click_was_down: bool = false    # edge-detect for pointer_input clicks
 var _last_pointer_pos: Vector2 = Vector2.ZERO  # last viewport-space sample, for a clean release on close()
+var _debug: bool = false             # set_debug() — mirrors graph_scene QB_DEBUG
+
+
+## Enable/disable the radial→mark chain instrumentation (graph_scene sets this from
+## its QB_DEBUG flag at wire-up). Silenced by default.
+func set_debug(on: bool) -> void:
+	_debug = on
 
 
 func _ready() -> void:
@@ -127,8 +139,33 @@ func _relayout() -> void:
 		return
 	var vp_size := Vector2(_viewport.size)
 	var centre := vp_size * 0.5
-	var radius := vp_size.x * 0.35
 	var count := _buttons.size()
+	# Small menus cluster near the centre with widened hit targets so the natural
+	# centre-aim lands on an item — a lone item sits dead centre. (Fixes the "single
+	# item parked at 3 o'clock, centre-aim misses it" ergonomics.)
+	if count <= CENTRE_CLUSTER_MAX:
+		var big := Vector2(300, 90)
+		if count == 1:
+			var only := _buttons[0]
+			only.custom_minimum_size = big
+			only.size = big
+			only.pivot_offset = big * 0.5
+			only.position = centre - big * 0.5
+			only.scale = Vector2.ONE
+			return
+		var cluster_radius := vp_size.x * 0.20
+		for i in count:
+			var b := _buttons[i]
+			b.custom_minimum_size = big
+			b.size = big
+			b.pivot_offset = big * 0.5
+			# Start at the top (-PI/2) so 2 items read top/bottom, 3 read triangular.
+			var a := -PI * 0.5 + TAU * float(i) / float(count)
+			var d := Vector2(cos(a), sin(a))
+			b.position = centre + d * cluster_radius - big * 0.5
+			b.scale = Vector2.ONE
+		return
+	var radius := vp_size.x * 0.35
 	var overflow := count > VISIBLE_LIMIT
 	# The visible window is FIXED at [-PI/2, PI/2]; the slider rotates the item ring
 	# THROUGH it (only the item angle carries _rotation_offset). If the offset were
@@ -161,5 +198,9 @@ func _on_slider_changed(value: float) -> void:
 
 
 func _on_button_pressed(action: String) -> void:
+	# Instrumentation (mirrors graph_scene QB_DEBUG): confirms a wand click actually
+	# reached a menu Button and is emitting its action.
+	if _debug:
+		print("[QB] RadialMenu button pressed action='%s'" % action)
 	item_selected.emit(action)
 	close()
