@@ -624,7 +624,9 @@ impl UnifiedGPUCompute {
                     self.node_constraint_force.as_device_ptr(),
                     // ADR-070 D3.1: sparse compute mask (null + 0 when inactive)
                     compute_mask_ptr,
-                    compute_mask_len
+                    compute_mask_len,
+                    // PHASE 2: per-node DAG rank for the radial hierarchy bias
+                    self.node_rank.as_device_ptr()
                 ))?;
             } else {
                 launch!(
@@ -661,7 +663,9 @@ impl UnifiedGPUCompute {
                     self.spring_scale.as_device_ptr(),
                     // ADR-070 D3.1: sparse compute mask (null + 0 when inactive)
                     compute_mask_ptr,
-                    compute_mask_len
+                    compute_mask_len,
+                    // PHASE 2: per-node DAG rank for the radial hierarchy bias
+                    self.node_rank.as_device_ptr()
                 ))?;
             }
         }
@@ -823,7 +827,10 @@ impl UnifiedGPUCompute {
                 // FA2 adaptive speed: previous-step forces for swing/traction
                 self.prev_force_x.as_device_ptr(),
                 self.prev_force_y.as_device_ptr(),
-                self.prev_force_z.as_device_ptr()
+                self.prev_force_z.as_device_ptr(),
+                // Per-node pinned mask: pinned nodes skip integration (held in place)
+                // but still exert forces on neighbours.
+                self.pinned_mask.as_device_ptr()
             ))?;
         }
 

@@ -68,6 +68,16 @@ pub struct UnifiedGPUCompute {
     // Default 1.0 == identity (current LinLog coefficient). Read in both spring paths.
     pub spring_scale: DeviceBuffer<f32>,
 
+    // Per-node pinned mask (0 = free, non-0 = pinned). A pinned node has its
+    // integration skipped (held at the host-supplied position) but still exerts
+    // repulsion/spring forces on its neighbours. Populated via upload_pinned_mask.
+    pub pinned_mask: DeviceBuffer<i32>,
+
+    // Per-node DAG hierarchy rank for the radial bias force (PHASE 2). 0 = root,
+    // deeper = larger; -1.0 = not in the hierarchy / unreachable (no bias applied).
+    // Populated via upload_node_rank; default -1.0 leaves the term inert.
+    pub node_rank: DeviceBuffer<f32>,
+
     pub edge_row_offsets: DeviceBuffer<i32>,
     pub edge_col_indices: DeviceBuffer<i32>,
     pub edge_weights: DeviceBuffer<f32>,
@@ -340,6 +350,8 @@ impl UnifiedGPUCompute {
         let class_charge = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default charge = 1.0
         let class_mass = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default mass = 1.0
         let spring_scale = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default spring multiplier = 1.0
+        let pinned_mask = DeviceBuffer::zeroed(num_nodes)?; // Default = 0 (no nodes pinned)
+        let node_rank = DeviceBuffer::from_slice(&vec![-1.0f32; num_nodes])?; // -1 = unranked
 
         let edge_row_offsets = DeviceBuffer::zeroed(num_nodes + 1)?;
         let edge_col_indices = DeviceBuffer::zeroed(num_edges)?;
@@ -441,6 +453,8 @@ impl UnifiedGPUCompute {
             vel_out_z,
             mass,
             node_graph_id,
+            pinned_mask,
+            node_rank,
             class_id,
             class_charge,
             class_mass,

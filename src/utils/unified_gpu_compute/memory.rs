@@ -143,6 +143,45 @@ impl UnifiedGPUCompute {
         Ok(())
     }
 
+    /// Upload the per-node pinned mask (0 = free, non-0 = pinned). A pinned node is
+    /// held at its current GPU position by the integrate kernel (integration
+    /// skipped) while still exerting forces on neighbours. `flags[i]` corresponds
+    /// to GPU node index `i`. The slice is padded to the allocated buffer length
+    /// with 0 (free) so trailing over-allocated slots never read as pinned.
+    pub fn upload_pinned_mask(&mut self, flags: &[i32]) -> Result<()> {
+        if flags.len() != self.num_nodes {
+            return Err(anyhow!(
+                "Pinned mask size mismatch: expected {} nodes, got {}",
+                self.num_nodes,
+                flags.len()
+            ));
+        }
+        let alloc = self.pinned_mask.len();
+        let mut padded = flags.to_vec();
+        padded.resize(alloc, 0);
+        checked_copy_from(&mut self.pinned_mask, &padded, "pinned_mask")?;
+        Ok(())
+    }
+
+    /// Upload per-node DAG hierarchy ranks for the radial bias force (PHASE 2).
+    /// `ranks[i]` is the rank of GPU node index `i`: 0 = root, deeper = larger,
+    /// -1.0 = not in the hierarchy (no bias). Padded to the allocated buffer with
+    /// -1.0 so trailing over-allocated slots never receive a bias.
+    pub fn upload_node_rank(&mut self, ranks: &[f32]) -> Result<()> {
+        if ranks.len() != self.num_nodes {
+            return Err(anyhow!(
+                "Node rank size mismatch: expected {} nodes, got {}",
+                self.num_nodes,
+                ranks.len()
+            ));
+        }
+        let alloc = self.node_rank.len();
+        let mut padded = ranks.to_vec();
+        padded.resize(alloc, -1.0);
+        checked_copy_from(&mut self.node_rank, &padded, "node_rank")?;
+        Ok(())
+    }
+
     pub fn upload_edges_csr(
         &mut self,
         row_offsets: &[i32],
@@ -456,6 +495,12 @@ impl UnifiedGPUCompute {
         self.class_charge = DeviceBuffer::from_slice(&vec![1.0f32; actual_new_nodes])?;
         self.class_mass = DeviceBuffer::from_slice(&vec![1.0f32; actual_new_nodes])?;
         self.spring_scale = DeviceBuffer::from_slice(&vec![1.0f32; actual_new_nodes])?;
+        // Pinned mask resized with positions; a resize (node add/remove) drops all
+        // pins — the actor re-uploads the mask on the next step via its dirty flag.
+        self.pinned_mask = DeviceBuffer::zeroed(actual_new_nodes)?;
+        // DAG rank buffer resized with positions; reset to -1 (unranked) — the
+        // actor recomputes and re-uploads ranks after a graph upload.
+        self.node_rank = DeviceBuffer::from_slice(&vec![-1.0f32; actual_new_nodes])?;
 
         // Degree weight buffer must be resized with positions
         self.degree_weight = DeviceBuffer::from_slice(&vec![1.0f32; actual_new_nodes])?;

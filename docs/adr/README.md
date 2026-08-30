@@ -181,6 +181,7 @@ handshake and removal of the legacy enterprise dashboard. See
 | [071](ADR-071-godot-rust-xr-replacement.md) | Godot 4 + godot-rust + OpenXR Native APK as the XR Client | Accepted |
 | [102](ADR-102-xr-client-backend-transport-completion.md) | XR Client ↔ Backend Transport Completion (Graph V3 + Presence) | Accepted |
 | [137](ADR-137-xr-render-offload-and-runtime-quality-dials.md) | XR Render Offload, Runtime Quality Dials, and Full-3D-Default Layout | Accepted (2026-08-30) |
+| [138](ADR-138-gpu-force-channel-registry.md) | GPU Force-Channel Registry — Mapping Layer Now, Array-Backed SimParams Later | Accepted (2026-08-30) |
 | [103](ADR-103-enterprise-dashboard-removal.md) | Enterprise Dashboard Removal — Migration to Nostr Forum | Accepted |
 | [126](ADR-126-omb-adoption-posture.md) | XR/MR Interface — OMB Adoption Posture | Proposed |
 | [129](ADR-129-control-center-reimagination.md) | Control Center Re-imagination — glass overlay replaces the docked settings panel | Accepted |

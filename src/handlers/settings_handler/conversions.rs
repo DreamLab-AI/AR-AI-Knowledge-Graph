@@ -229,8 +229,11 @@ impl From<&crate::config::PhysicsSettings> for PhysicsSettingsDTO {
             clustering_resolution: settings.clustering_resolution,
             clustering_iterations: settings.clustering_iterations,
             graph_separation_x: settings.graph_separation_x,
+            axis_compression_z: settings.axis_compression_z,
             enable_dual_disc_layout: settings.enable_dual_disc_layout,
             initial_node_limit: settings.initial_node_limit,
+            dag_bias_k: settings.dag_bias_k,
+            dag_level_distance: settings.dag_level_distance,
         }
     }
 }

@@ -98,12 +98,18 @@ fn population_centroids_xy(
 /// normal disc and only clamps genuine runaways.
 const DISC_RIM_RADIUS: f32 = 2600.0;
 
-/// Fixed Z-flatten factor applied per disc when the opt-in dual-disc layout is
-/// enabled. Replaces the removed per-user `axis_compression_z` (which defaulted
-/// to 0.9 → face_scale 0.1). `face_scale = 0.1` is a thin disc; `1.0` is no
-/// flatten. Only reached when `enable_dual_disc_layout` is on — the default
-/// (OFF) skips the projection entirely, giving a natural fully-3D layout.
-const DISC_FACE_SCALE: f32 = 0.1;
+/// Clamp floor for the continuous `axis_compression_z` Z-scale factor. `1.0` is
+/// no compression (fully 3D, the default); this floor caps how flat the layout
+/// can be squashed. The field is a real user tunable applied in the sim as the
+/// Z multiplier, and — when `enable_dual_disc_layout` is on — as the disc face
+/// scale (thinness) too.
+const Z_SCALE_MIN: f32 = 0.05;
+
+/// Clamp `axis_compression_z` into the valid Z-scale range `[Z_SCALE_MIN, 1.0]`.
+#[inline]
+fn clamp_z_scale(axis_compression_z: f32) -> f32 {
+    axis_compression_z.clamp(Z_SCALE_MIN, 1.0)
+}
 
 /// Re-centre a node onto its population's disc, flatten Z, and offset along Z.
 /// Each disc is centred at its population's median in the X-Y plane, flattened
@@ -271,6 +277,11 @@ pub struct ForceComputeActor {
     /// neighbours around the dragged location. Populated by `PinNodePositions`.
     pinned_nodes: std::collections::HashMap<u32, Vec3>,
 
+    /// Set whenever `pinned_nodes` changes (pin/unpin). The next physics step
+    /// rebuilds the per-node GPU pinned mask from `pinned_nodes` and uploads it,
+    /// then clears this. Ensures the last unpin still uploads a cleared mask.
+    pinned_mask_dirty: bool,
+
     /// Per-node graph population classification for dual-graph X-axis offset.
     /// Indexed by GPU buffer index. Populated during graph upload from node_type field.
     node_population: Vec<GraphPopulation>,
@@ -390,6 +401,7 @@ impl ForceComputeActor {
             gpu_index_to_node_id: Vec::new(),
             node_population: Vec::new(),
             pinned_nodes: std::collections::HashMap::new(),
+            pinned_mask_dirty: false,
             pending_graph_data: None,
             physics_orchestrator_addr: None,
             gpu_self_init_attempts: 0,
@@ -490,6 +502,152 @@ impl ForceComputeActor {
     /// Non-pinned nodes are re-uploaded with the positions the GPU just integrated
     /// (a no-op for them), so normal integration continues. Cheap host→device copy
     /// (~3·N f32); only runs while at least one node is actively pinned.
+    /// Pure pin/unpin bookkeeping: apply a set of pins and unpins to a pinned-node
+    /// map. Pins insert/update `node_id → position`; unpins remove. Returns true if
+    /// the map changed (so the caller can mark the GPU mask dirty). Actor-free so
+    /// the mask bookkeeping is unit-testable without a GPU context.
+    fn apply_pin_ops(
+        pinned: &mut std::collections::HashMap<u32, Vec3>,
+        pins: &[(u32, [f32; 3])],
+        unpin: &[u32],
+    ) -> bool {
+        let mut changed = false;
+        for (id, p) in pins {
+            let v = Vec3::new(p[0], p[1], p[2]);
+            if pinned.insert(*id, v) != Some(v) {
+                changed = true;
+            }
+        }
+        for id in unpin {
+            if pinned.remove(id).is_some() {
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    /// Build the per-node GPU pinned mask (0 = free, 1 = pinned) aligned to GPU
+    /// buffer indices. `node_ids[i]` is the graph node ID at GPU index `i`; the
+    /// mask bit is set when that ID is in the pinned set. Pure/actor-free for tests.
+    fn build_pinned_mask(
+        node_ids: &[u32],
+        pinned: &std::collections::HashMap<u32, Vec3>,
+    ) -> Vec<i32> {
+        node_ids
+            .iter()
+            .map(|id| if pinned.contains_key(id) { 1 } else { 0 })
+            .collect()
+    }
+
+    /// Compute per-node DAG hierarchy ranks via cycle-safe multi-source BFS over
+    /// the directed hierarchy edges (PHASE 2). `hierarchy_edges` are `(parent_idx,
+    /// child_idx)` pairs (for `subClassOf`: parent = superclass = edge.target,
+    /// child = subclass = edge.source). Roots (rank 0) are hierarchy nodes that
+    /// are never a child; BFS assigns rank = depth from the nearest root. Back- and
+    /// cross-edges are ignored via the visited set (cycle-safe). Nodes not in any
+    /// hierarchy edge, or unreachable, get rank `-1.0` (no radial bias applied).
+    ///
+    /// If the hierarchy is non-empty but has no natural root (a pure cycle), the
+    /// lowest-index participating node is seeded as a root so the layer assignment
+    /// is deterministic rather than empty. Pure/actor-free for unit testing.
+    /// True only for relation strings with explicit class-subsumption provenance
+    /// (`rdfs:subClassOf`, child → parent), usable for hierarchy ranking.
+    ///
+    /// The accept set is deliberately narrow. `SemanticEdgeType::Hierarchical` is
+    /// far too broad — it folds in the SYMMETRIC `equivalent_class` / `same_as`
+    /// (no parent/child) and the separate property hierarchy `sub_property_of`.
+    /// The generic `"hierarchical"` string is also EXCLUDED: GitHub
+    /// domain-membership edges reuse that label, so accepting it would fabricate
+    /// ranks from non-subclass structure. Only explicit subclass provenance
+    /// counts. Pure/actor-free for unit testing.
+    fn is_directed_hierarchy_relation(rel: &str) -> bool {
+        matches!(rel, "is_subclass_of" | "subclass_of" | "SUBCLASS_OF")
+    }
+
+    fn compute_dag_ranks(num_nodes: usize, hierarchy_edges: &[(usize, usize)]) -> Vec<f32> {
+        let mut ranks = vec![-1.0f32; num_nodes];
+        if num_nodes == 0 || hierarchy_edges.is_empty() {
+            return ranks;
+        }
+
+        let mut children: Vec<Vec<usize>> = vec![Vec::new(); num_nodes];
+        let mut is_child = vec![false; num_nodes];
+        let mut in_hierarchy = vec![false; num_nodes];
+        for &(parent, child) in hierarchy_edges {
+            if parent >= num_nodes || child >= num_nodes {
+                continue; // Defensive: ignore out-of-range indices.
+            }
+            children[parent].push(child);
+            is_child[child] = true;
+            in_hierarchy[parent] = true;
+            in_hierarchy[child] = true;
+        }
+
+        // Roots = hierarchy participants that are never a child.
+        let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+        for i in 0..num_nodes {
+            if in_hierarchy[i] && !is_child[i] {
+                ranks[i] = 0.0;
+                queue.push_back(i);
+            }
+        }
+
+        // Pure-cycle fallback: no natural root but edges exist → seed the lowest
+        // participating index so the layout still gets a deterministic layering.
+        if queue.is_empty() {
+            if let Some(seed) = (0..num_nodes).find(|&i| in_hierarchy[i]) {
+                ranks[seed] = 0.0;
+                queue.push_back(seed);
+            }
+        }
+
+        // Multi-source BFS: first visit fixes the (shortest-depth) rank; the
+        // visited guard (rank already set) skips back-/cross-edges → cycle-safe.
+        while let Some(node) = queue.pop_front() {
+            let next_rank = ranks[node] + 1.0;
+            for &child in &children[node] {
+                if ranks[child] < 0.0 {
+                    ranks[child] = next_rank;
+                    queue.push_back(child);
+                }
+            }
+        }
+
+        ranks
+    }
+
+    /// Rebuild and upload the GPU pinned mask from `pinned_nodes` when dirty.
+    /// Runs once per step (cheap: only rebuilds after a pin/unpin). Indexing
+    /// mirrors `apply_node_pins` (`node_id_buffer[idx]` = GPU index idx), so the
+    /// mask and the pinned-position rewrite always agree on which node is pinned.
+    fn sync_pinned_mask(&mut self) {
+        if !self.pinned_mask_dirty {
+            return;
+        }
+        let Some(shared_context) = &self.shared_context else {
+            return;
+        };
+        if self.node_id_buffer.is_empty() {
+            return; // No graph uploaded yet; retry on a later step (stay dirty).
+        }
+        let flags = Self::build_pinned_mask(&self.node_id_buffer, &self.pinned_nodes);
+        let mut unified = match shared_context.unified_compute.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        match unified.upload_pinned_mask(&flags) {
+            Ok(()) => {
+                self.pinned_mask_dirty = false;
+                debug!(
+                    "ForceComputeActor: uploaded pinned mask ({} pinned / {} nodes)",
+                    self.pinned_nodes.len(),
+                    flags.len()
+                );
+            }
+            Err(e) => warn!("ForceComputeActor: pinned mask upload failed: {}", e),
+        }
+    }
+
     fn apply_node_pins(&mut self) {
         if self.pinned_nodes.is_empty() {
             return;
@@ -1004,6 +1162,52 @@ impl ForceComputeActor {
                     }
                 }
 
+                // PHASE 2: compute + upload per-node DAG hierarchy ranks for the
+                // radial bias force. Ranks come from a cycle-safe BFS over the
+                // directed subClassOf-family (Hierarchical) edges: parent =
+                // superclass = edge.target, child = subclass = edge.source. Node
+                // IDs are mapped to GPU indices via node_indices. Namespace edges
+                // are excluded — they group by shared prefix and carry no
+                // parent/child direction, so they cannot define a rank. The bias
+                // itself stays inert until dagBiasK > 0, so uploading ranks
+                // unconditionally is safe and keeps them ready for a later toggle.
+                if let Some(ref graph_data) = self.pending_graph_data {
+                    let mut hierarchy_edges: Vec<(usize, usize)> = Vec::new();
+                    for edge in &graph_data.edges {
+                        // Match the RAW relation string, not the collapsed
+                        // SemanticEdgeType::Hierarchical (which also folds in the
+                        // symmetric equivalent_class/same_as and the separate
+                        // sub_property_of — all of which would corrupt the ranks).
+                        let directed = edge
+                            .edge_type
+                            .as_deref()
+                            .map(Self::is_directed_hierarchy_relation)
+                            .unwrap_or(false);
+                        if directed {
+                            if let (Some(&child_idx), Some(&parent_idx)) = (
+                                node_indices.get(&edge.source),
+                                node_indices.get(&edge.target),
+                            ) {
+                                hierarchy_edges.push((parent_idx, child_idx));
+                            }
+                        }
+                    }
+                    if !hierarchy_edges.is_empty() {
+                        let ranks = Self::compute_dag_ranks(num_nodes, &hierarchy_edges);
+                        let ranked = ranks.iter().filter(|&&r| r >= 0.0).count();
+                        let max_rank = ranks.iter().cloned().fold(-1.0f32, f32::max);
+                        match compute.upload_node_rank(&ranks) {
+                            Ok(()) => info!(
+                                "ForceComputeActor: Uploaded DAG ranks — {} hierarchy edges, {} ranked nodes, max rank {}",
+                                hierarchy_edges.len(), ranked, max_rank
+                            ),
+                            Err(e) => warn!("ForceComputeActor: DAG rank upload failed: {}", e),
+                        }
+                    } else {
+                        debug!("ForceComputeActor: No hierarchy edges — DAG ranks left at -1 (bias inert)");
+                    }
+                }
+
                 // Compute and upload degree weights for degree-weighted gravity.
                 // degree_weight[i] = log(1 + degree[i]), where degree is computed
                 // from the CSR row_offsets. This causes hubs to be pulled toward
@@ -1087,6 +1291,35 @@ impl ForceComputeActor {
                 self.gpu_state.num_nodes = num_nodes as u32;
                 self.gpu_state.num_edges = edge_count;
                 self.pending_graph_data = None;
+
+                // initialize_graph may have resized the GPU buffers, which zeroes
+                // the pinned_mask. Re-upload it SYNCHRONOUSLY here — while the
+                // `compute` lock is still held and BEFORE any subsequent physics
+                // launch — using the authoritative gpu_index_to_node_id map just
+                // rebuilt at the top of this upload. Deferring to the post-step
+                // sync_pinned_mask would let the first post-resize step integrate
+                // pinned nodes against a zeroed mask (they would move one frame).
+                // On failure, fall back to the dirty-flag path.
+                if !self.pinned_nodes.is_empty() {
+                    let flags =
+                        Self::build_pinned_mask(&self.gpu_index_to_node_id, &self.pinned_nodes);
+                    match compute.upload_pinned_mask(&flags) {
+                        Ok(()) => {
+                            self.pinned_mask_dirty = false;
+                            debug!(
+                                "ForceComputeActor: re-uploaded pinned mask after graph upload ({} pinned)",
+                                self.pinned_nodes.len()
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                "ForceComputeActor: post-upload pinned mask sync failed ({}), deferring to step-loop sync",
+                                e
+                            );
+                            self.pinned_mask_dirty = true;
+                        }
+                    }
+                }
 
                 // Fresh graph data needs a full warmup window so the layout can
                 // converge before the GPU stability kernel is allowed to halt
@@ -1848,17 +2081,27 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                 // the moved node. Runs before the display-only projection
                                 // (which is undone before the next step), so the re-uploaded
                                 // buffer carries true physics positions with the pin applied.
+                                // Upload the GPU pinned mask if pins changed, so the
+                                // integrate kernel holds pinned nodes (skips their
+                                // integration) while they still exert forces. Must run
+                                // before apply_node_pins so the mask is live for the
+                                // position rewrite + next force step.
+                                actor.sync_pinned_mask();
                                 actor.apply_node_pins();
 
-                                // Opt-in dual-graph facing-discs projection (default OFF →
-                                // no projection, natural fully-3D layout). When enabled,
-                                // flatten BOTH populations along Z into thin X-Y discs, then
-                                // separate them along the SAME Z axis (Knowledge at -sep,
-                                // Ontology at +sep) with agents on the mid plane (z=0). The
-                                // per-user flatten amount (removed `axis_compression_z`) is
-                                // now the fixed DISC_FACE_SCALE constant.
+                                // Two complementary Z controls:
+                                //  * `axis_compression_z` (clamped) is the continuous
+                                //    Z-scale, applied ALWAYS as the Z multiplier — 1.0 = no
+                                //    compression (fully 3D, default). It drives the disc
+                                //    face thinness when dual-disc is on, and squashes the
+                                //    plain 3D layout when it is off.
+                                //  * `enable_dual_disc_layout` (default OFF) gates the disc
+                                //    re-centre: flatten each population into an X-Y disc and
+                                //    separate along Z (Knowledge -sep, Ontology +sep, agents
+                                //    at 0). OFF → no re-centre, natural 3D.
                                 let sep = actor.simulation_params.graph_separation_x;
-                                let face_scale = DISC_FACE_SCALE;
+                                let face_scale =
+                                    clamp_z_scale(actor.simulation_params.axis_compression_z);
                                 let project = actor.simulation_params.enable_dual_disc_layout
                                     && !actor.node_population.is_empty();
                                 // Once-per-300-iter diagnostic to verify the params reach this site.
@@ -2046,6 +2289,14 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                             project_node_xy(pos, pop, &centroids, sep, face_scale, r_max);
                                         }
                                     }
+                                } else if (face_scale - 1.0).abs() > f32::EPSILON {
+                                    // Dual-disc OFF but the user set a continuous Z compression:
+                                    // apply the Z-scale directly (display-only, undone before
+                                    // the next step like the disc projection). face_scale==1.0
+                                    // is a no-op → fully 3D.
+                                    for (pos, _vel) in actor.position_velocity_buffer.iter_mut() {
+                                        pos.z *= face_scale;
+                                    }
                                 }
 
                                 // Diagnostic: log first few positions on early frames (6 decimal places for velocity)
@@ -2173,13 +2424,14 @@ impl Handler<ComputeForces> for ForceComputeActor {
                                     }
                                 } // end normal broadcast else branch
 
-                                // Undo the display-only projection: restore the pristine
-                                // physics positions captured in last_good_positions so the
-                                // next integration step computes forces on the true,
-                                // un-separated, un-flattened layout. Velocities are unchanged
-                                // by projection, but restoring them too keeps the buffer a
-                                // faithful copy of last_good_positions.
-                                if project {
+                                // Undo the display-only projection/Z-scale: restore the
+                                // pristine physics positions captured in last_good_positions
+                                // so the next integration step computes forces on the true,
+                                // un-separated, un-flattened layout. CRITICAL: this must
+                                // cover the continuous Z-scale branch too (project == false
+                                // but face_scale != 1.0) — otherwise the compression compounds
+                                // every frame and collapses the graph to z=0.
+                                if project || (face_scale - 1.0).abs() > f32::EPSILON {
                                     for idx in 0..actor.position_velocity_buffer.len() {
                                         let (_node_id, pos, vel) = actor.last_good_positions[idx];
                                         actor.position_velocity_buffer[idx] = (pos, vel);
@@ -2304,9 +2556,9 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
         // Compare the full set of GPU-relevant fields, not just the original 6.
         //
         // CRITICAL: fields used by post-GPU Rust position-modification code (eg.
-        // graph_separation_x, enable_dual_disc_layout) and feature-flag-derived
-        // fields (eg. adaptive_speed) MUST appear here — otherwise their value
-        // gets silently dropped when no other field changed simultaneously.
+        // graph_separation_x, axis_compression_z, enable_dual_disc_layout) and
+        // feature-flag-derived fields (eg. adaptive_speed) MUST appear here —
+        // otherwise their value gets silently dropped when no other field changed.
         let cur = &self.simulation_params;
         let eps = 1e-5_f32; // Slightly larger than EPSILON to catch floating-point round-trips
         let physics_unchanged = (cur.spring_k - msg.params.spring_k).abs() < eps
@@ -2325,6 +2577,7 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             && (cur.boundary_damping - msg.params.boundary_damping).abs() < eps
             && (cur.gravity - msg.params.gravity).abs() < eps
             && (cur.graph_separation_x - msg.params.graph_separation_x).abs() < eps
+            && (cur.axis_compression_z - msg.params.axis_compression_z).abs() < eps
             && cur.enable_dual_disc_layout == msg.params.enable_dual_disc_layout
             && cur.adaptive_speed == msg.params.adaptive_speed
             && cur.iterations == msg.params.iterations
@@ -2335,7 +2588,11 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
                 < eps
             && (cur.spring_k_knowledge - msg.params.spring_k_knowledge).abs() < eps
             && (cur.spring_k_ontology - msg.params.spring_k_ontology).abs() < eps
-            && (cur.spring_k_agent - msg.params.spring_k_agent).abs() < eps;
+            && (cur.spring_k_agent - msg.params.spring_k_agent).abs() < eps
+            // DAG radial bias (PHASE 2) is GPU-relevant — omitting these fields
+            // silently drops DAG-only settings changes at the early return below.
+            && (cur.dag_bias_k - msg.params.dag_bias_k).abs() < eps
+            && (cur.dag_level_distance - msg.params.dag_level_distance).abs() < eps;
 
         if physics_unchanged {
             debug!(
@@ -2563,7 +2820,7 @@ impl Handler<ForceFullBroadcast> for ForceComputeActor {
                     // this, a settings change broadcasts raw GPU positions and, if the
                     // sim has converged, the projected positions never overwrite them.
                     let sep = actor.simulation_params.graph_separation_x;
-                    let face_scale = DISC_FACE_SCALE;
+                    let face_scale = clamp_z_scale(actor.simulation_params.axis_compression_z);
                     let project = actor.simulation_params.enable_dual_disc_layout
                         && !actor.node_population.is_empty();
 
@@ -2588,6 +2845,9 @@ impl Handler<ForceFullBroadcast> for ForceComputeActor {
                             if let Some(&pop) = actor.node_population.get(i) {
                                 project_node_xy(&mut position, pop, &centroids, sep, face_scale, r_max);
                             }
+                        } else if (face_scale - 1.0).abs() > f32::EPSILON {
+                            // Dual-disc OFF: apply the continuous Z compression only.
+                            position.z *= face_scale;
                         }
                         let node_id = actor.gpu_index_to_node_id.get(i).copied().unwrap_or(i as u32);
                         node_updates.push((node_id, BinaryNodeDataClient::new(
@@ -2749,12 +3009,11 @@ impl Handler<PinNodePositions> for ForceComputeActor {
     type Result = ();
 
     fn handle(&mut self, msg: PinNodePositions, _ctx: &mut Self::Context) -> Self::Result {
-        for (id, p) in &msg.pins {
-            self.pinned_nodes
-                .insert(*id, Vec3::new(p[0], p[1], p[2]));
-        }
-        for id in &msg.unpin {
-            self.pinned_nodes.remove(id);
+        // Bookkeeping: apply pins/unpins to the map. Mark the GPU mask dirty when
+        // membership changed so the next step re-uploads it (drag-end leaves the
+        // node pinned in place until an explicit unpin arrives in msg.unpin).
+        if Self::apply_pin_ops(&mut self.pinned_nodes, &msg.pins, &msg.unpin) {
+            self.pinned_mask_dirty = true;
         }
         if msg.reheat {
             // Mild reheat: enough to give neighbours energy to spring, gentle enough
@@ -3774,6 +4033,196 @@ impl Handler<crate::actors::messages::PositionBroadcastAck> for ForceComputeActo
 }
 
 #[cfg(test)]
+mod pinning_tests {
+    //! Pure, actor-free tests for the pinned-node mask bookkeeping (PHASE 1):
+    //! pin/unpin map mutation and GPU mask construction, tested without a live
+    //! actor or GPU context (mirrors the settlement_tests precedent).
+    use super::ForceComputeActor as FCA;
+    use glam::Vec3;
+    use std::collections::HashMap;
+
+    #[test]
+    fn pin_inserts_and_reports_change() {
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        let changed = FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
+        assert!(changed, "inserting a new pin must report a change");
+        assert_eq!(pinned.get(&7), Some(&Vec3::new(1.0, 2.0, 3.0)));
+    }
+
+    #[test]
+    fn repinning_same_position_is_not_a_change() {
+        // A per-frame drag update that repeats the exact position must not mark the
+        // mask dirty (avoids a pointless GPU re-upload every drag frame).
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
+        let changed = FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
+        assert!(!changed, "re-pinning identical position must not report a change");
+    }
+
+    #[test]
+    fn moving_a_pin_reports_change() {
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
+        let changed = FCA::apply_pin_ops(&mut pinned, &[(7, [9.0, 9.0, 9.0])], &[]);
+        assert!(changed, "moving a pinned node to a new position must report a change");
+        assert_eq!(pinned.get(&7), Some(&Vec3::new(9.0, 9.0, 9.0)));
+    }
+
+    #[test]
+    fn unpin_removes_and_reports_change() {
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
+        let changed = FCA::apply_pin_ops(&mut pinned, &[], &[7]);
+        assert!(changed, "removing an existing pin must report a change");
+        assert!(pinned.is_empty());
+    }
+
+    #[test]
+    fn unpin_absent_node_is_not_a_change() {
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        let changed = FCA::apply_pin_ops(&mut pinned, &[], &[42]);
+        assert!(!changed, "unpinning a node that was never pinned is a no-op");
+    }
+
+    #[test]
+    fn pin_and_unpin_in_one_op() {
+        // A single message may both pin some nodes and unpin others.
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        FCA::apply_pin_ops(&mut pinned, &[(1, [0.0; 3]), (2, [0.0; 3])], &[]);
+        let changed = FCA::apply_pin_ops(&mut pinned, &[(3, [0.0; 3])], &[1]);
+        assert!(changed);
+        assert!(pinned.contains_key(&2));
+        assert!(pinned.contains_key(&3));
+        assert!(!pinned.contains_key(&1));
+    }
+
+    #[test]
+    fn mask_sets_bit_only_for_pinned_gpu_indices() {
+        // node_ids[i] is the graph node ID at GPU index i. The mask bit is set at
+        // the GPU index whose node ID is pinned — regardless of ID ordering.
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        FCA::apply_pin_ops(&mut pinned, &[(20, [0.0; 3]), (40, [0.0; 3])], &[]);
+        let node_ids = [10u32, 20, 30, 40, 50];
+        let mask = FCA::build_pinned_mask(&node_ids, &pinned);
+        assert_eq!(mask, vec![0, 1, 0, 1, 0]);
+    }
+
+    #[test]
+    fn empty_pin_set_yields_all_zero_mask() {
+        let pinned: HashMap<u32, Vec3> = HashMap::new();
+        let mask = FCA::build_pinned_mask(&[1, 2, 3], &pinned);
+        assert_eq!(mask, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn pinned_id_absent_from_gpu_map_sets_no_bit() {
+        // A stale pin for a node no longer in the graph must not set any bit and
+        // must not panic — the mask length always matches the GPU node count.
+        let mut pinned: HashMap<u32, Vec3> = HashMap::new();
+        FCA::apply_pin_ops(&mut pinned, &[(999, [0.0; 3])], &[]);
+        let mask = FCA::build_pinned_mask(&[1, 2, 3], &pinned);
+        assert_eq!(mask, vec![0, 0, 0]);
+    }
+}
+
+#[cfg(test)]
+mod dag_rank_tests {
+    //! Pure, actor-free tests for the PHASE 2 DAG rank BFS: root detection,
+    //! layered depth, cycle-safety, unreachable/unranked handling.
+    use super::ForceComputeActor as FCA;
+
+    #[test]
+    fn empty_hierarchy_yields_all_unranked() {
+        let ranks = FCA::compute_dag_ranks(4, &[]);
+        assert_eq!(ranks, vec![-1.0, -1.0, -1.0, -1.0]);
+    }
+
+    #[test]
+    fn simple_chain_ranks_by_depth() {
+        // (parent, child): 0→1→2→3. Root 0 = rank 0, then 1,2,3.
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1), (1, 2), (2, 3)]);
+        assert_eq!(ranks, vec![0.0, 1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn tree_assigns_shared_depth_to_siblings() {
+        // 0 is root; 1 and 2 are its children (rank 1); 3 is child of 1 (rank 2).
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1), (0, 2), (1, 3)]);
+        assert_eq!(ranks, vec![0.0, 1.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn unreachable_node_stays_unranked() {
+        // Node 3 participates in no hierarchy edge → rank -1 (no bias).
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1), (1, 2)]);
+        assert_eq!(ranks, vec![0.0, 1.0, 2.0, -1.0]);
+    }
+
+    #[test]
+    fn diamond_takes_shortest_depth() {
+        // 0→1, 0→2, 1→3, 2→3. Node 3 reachable at depth 2 via both paths.
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1), (0, 2), (1, 3), (2, 3)]);
+        assert_eq!(ranks[3], 2.0);
+        assert_eq!(ranks[0], 0.0);
+    }
+
+    #[test]
+    fn back_edge_does_not_inflate_or_loop() {
+        // 0→1→2 plus a back-edge 2→0. Root 0 is never a child (the back-edge makes
+        // 0 a child too), so this is a pure cycle → deterministic seed at index 0.
+        let ranks = FCA::compute_dag_ranks(3, &[(0, 1), (1, 2), (2, 0)]);
+        // Terminates (cycle-safe) and every participant gets a finite layered rank.
+        assert_eq!(ranks[0], 0.0);
+        assert_eq!(ranks[1], 1.0);
+        assert_eq!(ranks[2], 2.0);
+    }
+
+    #[test]
+    fn multiple_roots_form_a_forest() {
+        // Two independent trees: 0→1 and 2→3. Both roots at rank 0.
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1), (2, 3)]);
+        assert_eq!(ranks, vec![0.0, 1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn out_of_range_indices_are_ignored() {
+        // A stale edge referencing index >= num_nodes must not panic.
+        let ranks = FCA::compute_dag_ranks(2, &[(0, 1), (5, 9)]);
+        assert_eq!(ranks, vec![0.0, 1.0]);
+    }
+
+    #[test]
+    fn directed_hierarchy_relation_accepts_only_class_subsumption() {
+        // Explicit class-subsumption provenance only → included.
+        for rel in ["is_subclass_of", "subclass_of", "SUBCLASS_OF"] {
+            assert!(
+                FCA::is_directed_hierarchy_relation(rel),
+                "{rel} should be directed hierarchy"
+            );
+        }
+        // Excluded: symmetric relations (equivalent_class/same_as), the separate
+        // property hierarchy (sub_property_of), and — critically — the generic
+        // "hierarchical" label, which GitHub domain-membership edges reuse and
+        // which therefore has no reliable subclass provenance.
+        for rel in [
+            "hierarchical",
+            "equivalent_class",
+            "same_as",
+            "sub_property_of",
+            "relates_to",
+            "has_part",
+            "namespace",
+            "",
+        ] {
+            assert!(
+                !FCA::is_directed_hierarchy_relation(rel),
+                "{rel} must NOT be treated as directed hierarchy"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
 mod settlement_tests {
     //! Pure, actor-free tests for the settlement decision logic (epsilon /
     //! threshold / counter-reset semantics), following the `ingest::process_frame`
@@ -3914,5 +4363,40 @@ mod settlement_tests {
     fn counter_saturates_without_overflow() {
         // A graph parked at rest indefinitely must not panic on counter overflow.
         assert_eq!(FCA::next_stable_frames(u32::MAX, 0.0, EPS), u32::MAX);
+    }
+}
+
+#[cfg(test)]
+mod z_scale_tests {
+    use super::{clamp_z_scale, project_node_xy, GraphPopulation, Vec3, Z_SCALE_MIN};
+
+    #[test]
+    fn clamp_z_scale_bounds() {
+        assert_eq!(clamp_z_scale(1.0), 1.0); // default: no compression
+        assert_eq!(clamp_z_scale(0.5), 0.5); // mid: honoured
+        assert_eq!(clamp_z_scale(0.0), Z_SCALE_MIN); // below floor → clamped
+        assert_eq!(clamp_z_scale(-3.0), Z_SCALE_MIN);
+        assert_eq!(clamp_z_scale(2.0), 1.0); // above 1.0 → clamped
+    }
+
+    #[test]
+    fn face_scale_one_preserves_z_in_disc_mode() {
+        // Agent population sits on the z=0 mid-plane (target_z = 0), so with
+        // face_scale = 1.0 the Z coordinate is unchanged → fully 3D.
+        let centroids = [(0.0f32, 0.0f32); 3];
+        let mut p = Vec3::new(1.0, 2.0, 7.5);
+        project_node_xy(&mut p, GraphPopulation::Agent, &centroids, 0.0, 1.0, 0.0);
+        assert!((p.z - 7.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn face_scale_derived_from_axis_compression_flattens_disc() {
+        // face_scale = clamp_z_scale(axis_compression_z). At 0.1 the disc is thin:
+        // Agent z scales by 0.1 (target_z = 0).
+        let centroids = [(0.0f32, 0.0f32); 3];
+        let mut p = Vec3::new(0.0, 0.0, 10.0);
+        let face_scale = clamp_z_scale(0.1);
+        project_node_xy(&mut p, GraphPopulation::Agent, &centroids, 0.0, face_scale, 0.0);
+        assert!((p.z - 1.0).abs() < 1e-6);
     }
 }

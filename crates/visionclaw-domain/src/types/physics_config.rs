@@ -53,6 +53,18 @@ fn default_bounds_size() -> f32 {
     400.0
 }
 
+/// Default Z-scale factor: 1.0 = no compression (fully 3D). See the field doc
+/// on `PhysicsSettings::axis_compression_z` for the semantic-flip note.
+fn default_dag_bias_k() -> f32 {
+    0.0
+}
+fn default_dag_level_distance() -> f32 {
+    60.0
+}
+fn default_axis_compression_z() -> f32 {
+    1.0
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default, Type, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoPauseConfig {
@@ -293,11 +305,26 @@ pub struct PhysicsSettings {
     #[serde(default, alias = "graph_separation_x")]
     pub graph_separation_x: f32,
 
+    /// Continuous Z-axis scale factor applied to node positions in the force
+    /// sim. `1.0` = no compression (fully 3D — the default); smaller values
+    /// squash the layout toward the X-Y plane, down to a clamp floor of 0.05.
+    ///
+    /// NOTE — semantic flip vs. the pre-2026-08 field: the old `axis_compression_z`
+    /// was a *compression amount* (0 = none, 0.9 = the disliked near-flat default).
+    /// It is now a *Z-scale factor* (1.0 = none), so the default is 1.0 and the
+    /// desktop slider maps directly to how "tall" the layout is. A stored legacy
+    /// blob whose value was the old 0.9 default therefore now reads as a gentle
+    /// 0.9 z-scale (near-3D), NOT the old flatten — so no migration heuristic is
+    /// needed (see the round-trip test).
+    #[serde(default = "default_axis_compression_z", alias = "axis_compression_z")]
+    pub axis_compression_z: f32,
+
     /// Opt-in canonical "facing dual-disc" display layout (default OFF → fully
-    /// 3D force layout). When enabled, the two graph populations are flattened
-    /// into thin X-Y discs separated along Z by `graph_separation_x`. Replaces
-    /// the removed `axisCompressionZ` compression amount: the flatten amount is
-    /// now a fixed internal constant, exposed only as this on/off toggle.
+    /// 3D force layout). When enabled, the two graph populations are re-centred
+    /// into X-Y discs separated along Z by `graph_separation_x`, with disc
+    /// thinness driven by `axis_compression_z`. Complementary to the continuous
+    /// `axis_compression_z`: this bool gates the disc *re-centre*, the float is
+    /// the Z-scale applied in both modes.
     #[serde(default, alias = "enable_dual_disc_layout")]
     pub enable_dual_disc_layout: bool,
 
@@ -319,6 +346,18 @@ pub struct PhysicsSettings {
     /// FA2 per-node adaptive speed convergence (default true).
     #[serde(default = "default_adaptive_speed", alias = "adaptive_speed")]
     pub adaptive_speed: bool,
+
+    /// DAG radial hierarchy bias strength (PHASE 2). `0` = off (default). When
+    /// > 0, ranked nodes are pulled onto concentric shells (radius =
+    /// `rank * dag_level_distance`) around the hierarchy root, giving a radialout
+    /// tree layout over SUBCLASS_OF / namespace hierarchy edges.
+    #[serde(default = "default_dag_bias_k", alias = "dag_bias_k")]
+    pub dag_bias_k: f32,
+
+    /// World-space radius added per hierarchy level for the DAG radial bias
+    /// (default 60). Larger = more spread-out concentric rings.
+    #[serde(default = "default_dag_level_distance", alias = "dag_level_distance")]
+    pub dag_level_distance: f32,
 
     /// FA2 base integration speed.
     #[serde(default = "default_global_speed", alias = "global_speed")]
@@ -394,6 +433,9 @@ impl Default for PhysicsSettings {
             // for users who opt into `enable_dual_disc_layout`; ~100 keeps the
             // knowledge/ontology discs close when that mode is enabled.
             graph_separation_x: 100.0,
+            // 1.0 = no Z compression → fully 3D by default (was 0.9, the flatten
+            // the user disliked).
+            axis_compression_z: default_axis_compression_z(),
             enable_dual_disc_layout: false,
             // 0 = defer to the consumer's built-in default (3000).
             initial_node_limit: 0,
@@ -401,6 +443,8 @@ impl Default for PhysicsSettings {
             scaling_ratio: 10.0,
             adaptive_speed: true,
             global_speed: 0.4,
+            dag_bias_k: default_dag_bias_k(),
+            dag_level_distance: default_dag_level_distance(),
             spring_k_knowledge: 1.0,
             spring_k_ontology: 1.0,
             spring_k_agent: 1.0,
@@ -543,6 +587,8 @@ mod tests {
         // the close value (~100), never 0 (merged single plane) or 250 (far
         // apart). reset_layout and the boot SQLite seed both source this.
         assert_eq!(ps.graph_separation_x, 100.0);
+        // Z-scale default is 1.0 = no compression (fully 3D). NOT the old 0.9.
+        assert!((ps.axis_compression_z - 1.0).abs() < 1e-9);
         // Dual-disc layout is opt-in; default OFF → fully 3D.
         assert!(!ps.enable_dual_disc_layout);
         // 0 = defer to the consumer default (3000).

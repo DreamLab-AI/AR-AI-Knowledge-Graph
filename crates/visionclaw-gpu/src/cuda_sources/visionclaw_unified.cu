@@ -74,9 +74,16 @@ struct SimParams {
     float scaling_ratio;        // FA2 repulsion: repulsion ∝ scaling_ratio * (deg_i+1) * (deg_j+1) / d
     unsigned int adaptive_speed; // 1 = per-node adaptive speed (FA2 convergence), 0 = global dt
     float global_speed;         // Base speed for adaptive integration
+
+    // DAG radial hierarchy bias (PHASE 2). Pulls each ranked node toward a shell
+    // of radius = rank * dag_level_distance centred on the hierarchy root
+    // (approximated by the world origin, where center gravity already gathers the
+    // rank-0 roots). dag_bias_k = 0 disables the term entirely (default OFF).
+    float dag_bias_k;           // Radial-bias spring strength; 0 = off
+    float dag_level_distance;   // World-space radius per hierarchy level (rank)
 };
 
-static_assert(sizeof(SimParams) == 172, "SimParams size mismatch with Rust");
+static_assert(sizeof(SimParams) == 180, "SimParams size mismatch with Rust");
 
 // Global constant memory for simulation parameters
 __constant__ SimParams c_params;
@@ -156,6 +163,41 @@ __device__ inline float3 vec3_clamp(float3 v, float limit) {
         return vec3_scale(v, limit / len);
     }
     return v;
+}
+
+// DAG radial hierarchy bias (radialout). Returns the force pulling `my_pos`
+// toward the shell of radius `rank * dag_level_distance` centred on the world
+// origin (the hierarchy-root centroid approximation — center gravity already
+// gathers rank-0 roots near the origin). A node with rank < 0 (not in the
+// hierarchy / unreachable) or a disabled bias (dag_bias_k <= 0) gets zero force.
+// The term is a Hooke spring on the radial error, so ranked nodes settle onto
+// concentric shells (root at centre, deeper ranks further out) without
+// disturbing their angular placement, which the other forces still own.
+__device__ inline float3 dag_radial_bias(float3 my_pos,
+                                         const float* __restrict__ node_rank,
+                                         int idx) {
+    if (node_rank == nullptr || c_params.dag_bias_k <= 0.0f) {
+        return make_float3(0.0f, 0.0f, 0.0f);
+    }
+    const float rank = node_rank[idx];
+    if (rank < 0.0f) {
+        return make_float3(0.0f, 0.0f, 0.0f);
+    }
+    const float target_radius = rank * c_params.dag_level_distance;
+    const float dist = vec3_length(my_pos);
+    if (dist > 1e-6f) {
+        // Radial error > 0 ⇒ push outward; < 0 ⇒ pull inward. Direction is the
+        // unit vector from the root centroid (origin) to the node.
+        const float radial_err = target_radius - dist;
+        const float scale = radial_err * c_params.dag_bias_k / dist;
+        return vec3_scale(my_pos, scale);
+    }
+    // Node sits on the root centroid but should live on an outer shell: nudge it
+    // off the origin along a deterministic axis so the radial spring can engage.
+    if (target_radius > 0.0f) {
+        return make_float3(target_radius * c_params.dag_bias_k, 0.0f, 0.0f);
+    }
+    return make_float3(0.0f, 0.0f, 0.0f);
 }
 
 // CAS-based atomic min for float (maximum portability)
@@ -296,7 +338,10 @@ __global__ void force_pass_kernel(
     // field felt by visible nodes stays coherent (ADR-070 §Risks). nullptr /
     // mask_len 0 = evaluate every node (identical to the pre-D3.1 behaviour).
     const int* __restrict__ compute_mask,        // [mask_len] node indices to evaluate
-    const int mask_len)
+    const int mask_len,
+    // PHASE 2 DAG radial bias: per-node hierarchy rank (nullptr = no bias). Rank
+    // 0 = root, deeper = further out; < 0 = not in the hierarchy (no bias).
+    const float* __restrict__ node_rank)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (compute_mask != nullptr) {
@@ -633,10 +678,14 @@ __global__ void force_pass_kernel(
         }
     }
 
+    // PHASE 2: DAG radial hierarchy bias (radialout) — settle ranked nodes onto
+    // concentric shells around the root centroid. No-op when dag_bias_k <= 0.
+    total_force = vec3_add(total_force, dag_radial_bias(my_pos, node_rank, idx));
+
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;
     force_out_z[idx] = total_force.z;
-    
+
     // Record per-node constraint force telemetry
     if (node_constraint_force != nullptr) {
         node_constraint_force[idx] = total_constraint_force_magnitude;
@@ -750,10 +799,35 @@ __global__ void integrate_pass_kernel(
     // FA2 adaptive speed: previous-step forces (read this step, will be updated)
     float* __restrict__ prev_force_x,       // [num_nodes] force from prior step (in/out)
     float* __restrict__ prev_force_y,
-    float* __restrict__ prev_force_z)
+    float* __restrict__ prev_force_z,
+    // Per-node pinned mask (nullptr = nothing pinned). When pinned_mask[idx] != 0
+    // the node is HELD: its position/velocity integration is skipped this step so
+    // it stays exactly where the host placed it (client drag / anchor). Pinned
+    // nodes STILL exert repulsion/spring forces on their neighbours, because the
+    // force pass reads pos_in for every node regardless of pin state — only the
+    // integration of the pinned node itself is suppressed here.
+    const int* __restrict__ pinned_mask)    // [num_nodes] 0 = free, non-0 = pinned
 {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_nodes) return;
+
+    // Pinned nodes are held in place: copy position through unchanged, zero the
+    // velocity, and reset the FA2 prev-force accumulator so the node re-enters
+    // free integration cleanly on unpin (no stale swing/traction memory).
+    if (pinned_mask != nullptr && pinned_mask[idx] != 0) {
+        pos_out_x[idx] = pos_in_x[idx];
+        pos_out_y[idx] = pos_in_y[idx];
+        pos_out_z[idx] = pos_in_z[idx];
+        vel_out_x[idx] = 0.0f;
+        vel_out_y[idx] = 0.0f;
+        vel_out_z[idx] = 0.0f;
+        if (prev_force_x != nullptr) {
+            prev_force_x[idx] = 0.0f;
+            prev_force_y[idx] = 0.0f;
+            prev_force_z[idx] = 0.0f;
+        }
+        return;
+    }
 
     float3 pos = make_vec3(pos_in_x[idx], pos_in_y[idx], pos_in_z[idx]);
     float3 vel = make_vec3(vel_in_x[idx], vel_in_y[idx], vel_in_z[idx]);
@@ -2026,7 +2100,9 @@ __global__ void force_pass_with_stability_kernel(
     // ADR-070 D3.1 (P2) sparse compute mask (see force_pass_kernel). nullptr /
     // mask_len 0 = evaluate every node.
     const int* __restrict__ compute_mask,
-    const int mask_len)
+    const int mask_len,
+    // PHASE 2 DAG radial bias: per-node hierarchy rank (nullptr = no bias).
+    const float* __restrict__ node_rank)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (compute_mask != nullptr) {
@@ -2259,6 +2335,11 @@ __global__ void force_pass_with_stability_kernel(
             }
         }
     }
+
+    // PHASE 2: DAG radial hierarchy bias (radialout). Mirrors force_pass_kernel
+    // so the bias applies identically on the stability-gated hot path. No-op when
+    // dag_bias_k <= 0 or the node is unranked.
+    total_force = vec3_add(total_force, dag_radial_bias(my_pos, node_rank, idx));
 
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;

@@ -83,6 +83,11 @@ pub struct SimParams {
     pub scaling_ratio: f32,
     pub adaptive_speed: u32,
     pub global_speed: f32,
+
+    // DAG radial hierarchy bias (PHASE 2). `dag_bias_k` = 0 disables the term.
+    // Added at the end to preserve the existing repr(C) prefix layout.
+    pub dag_bias_k: f32,
+    pub dag_level_distance: f32,
 }
 
 // SAFETY: SimParams is repr(C) with only POD types; safe for GPU transfer.
@@ -150,17 +155,20 @@ impl SimParams {
             phase: SimulationPhase::Dynamic,
             mode: SimulationMode::Remote,
             settle_mode: SettleMode::default(),
-            // graph_separation_x / enable_dual_disc_layout are CPU-side projection
-            // params with no field in the GPU-aligned SimParams struct, so this
-            // reverse conversion cannot recover the live value. Source them from
-            // the canonical PhysicsSettings::default() rather than hardcoding.
+            // graph_separation_x / axis_compression_z / enable_dual_disc_layout
+            // are CPU-side projection params with no field in the GPU-aligned
+            // SimParams struct, so this reverse conversion cannot recover the live
+            // value. Source them from the canonical PhysicsSettings::default().
             graph_separation_x: PhysicsSettings::default().graph_separation_x,
+            axis_compression_z: PhysicsSettings::default().axis_compression_z,
             enable_dual_disc_layout: PhysicsSettings::default().enable_dual_disc_layout,
             layout_mode: LayoutMode::default(),
             lin_log_mode: self.lin_log_mode != 0,
             scaling_ratio: self.scaling_ratio,
             adaptive_speed: self.adaptive_speed != 0,
             global_speed: self.global_speed,
+            dag_bias_k: self.dag_bias_k,
+            dag_level_distance: self.dag_level_distance,
             // Per-population spring multipliers (LinLog identity). This GPU-side
             // struct has no per-population source, so default to 1.0.
             spring_k_knowledge: 1.0,
@@ -184,7 +192,7 @@ impl ToSimParams for SimulationParams {
 }
 
 // Compile-time size assertion: SimParams must match the CUDA struct exactly.
-const _: () = assert!(std::mem::size_of::<SimParams>() == 172);
+const _: () = assert!(std::mem::size_of::<SimParams>() == 180);
 
 impl From<&SimParams> for SimulationParams {
     fn from(params: &SimParams) -> Self {
@@ -261,6 +269,8 @@ impl From<&SimulationParams> for SimParams {
             scaling_ratio: params.scaling_ratio,
             adaptive_speed: if params.adaptive_speed { 1 } else { 0 },
             global_speed: params.global_speed,
+            dag_bias_k: params.dag_bias_k,
+            dag_level_distance: params.dag_level_distance,
         }
     }
 }
@@ -336,6 +346,8 @@ impl From<&PhysicsSettings> for SimParams {
             scaling_ratio: physics.scaling_ratio,
             adaptive_speed: if physics.adaptive_speed { 1 } else { 0 },
             global_speed: physics.global_speed,
+            dag_bias_k: physics.dag_bias_k,
+            dag_level_distance: physics.dag_level_distance,
         }
     }
 }

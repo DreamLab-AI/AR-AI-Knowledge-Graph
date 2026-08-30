@@ -11,6 +11,7 @@ pub use visionclaw_domain::models::node;
 // traits. `pub mod constraints` below re-exports from domain inside the
 // webxr-local file.
 pub mod constraints;
+pub mod force_channels;
 pub mod graph_export;
 pub mod graph_types;
 pub mod pagination;

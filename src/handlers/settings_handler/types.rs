@@ -375,12 +375,21 @@ pub struct PhysicsSettingsDTO {
     /// X-axis separation between knowledge and ontology graph populations (default 0 = merged)
     #[serde(default)]
     pub graph_separation_x: f32,
+    /// Continuous Z-scale factor (1.0 = no compression → fully 3D; clamp floor 0.05)
+    #[serde(default)]
+    pub axis_compression_z: f32,
     /// Opt-in canonical dual-disc display layout (default false → fully 3D)
     #[serde(default)]
     pub enable_dual_disc_layout: bool,
     /// Top-N node cap for the initial graph load (0/absent = built-in default 3000)
     #[serde(default)]
     pub initial_node_limit: u32,
+    /// DAG radial hierarchy bias strength (0 = off). Radialout tree layout.
+    #[serde(default)]
+    pub dag_bias_k: f32,
+    /// World-space radius per hierarchy level for the DAG radial bias (default 60).
+    #[serde(default)]
+    pub dag_level_distance: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

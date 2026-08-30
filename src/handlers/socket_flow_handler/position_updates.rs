@@ -1277,8 +1277,10 @@ pub(crate) fn handle_node_drag_update(
 
 /// Handle `nodeDragEnd` from client.
 ///
-/// Unpins the node, runs one final settle cycle with the node free, and
-/// broadcasts the resulting positions to all clients.
+/// Leaves the node PINNED in place at the drop position (persistent grab-and-place),
+/// runs one final settle cycle so neighbours relax around the held node, and
+/// broadcasts the resulting positions. The node stays anchored until an explicit
+/// `nodeUnpin` message (see [`handle_node_unpin`]).
 ///
 /// Expected message shape:
 /// ```json
@@ -1332,18 +1334,15 @@ pub(crate) fn handle_node_drag_end(
                 position: None,
             });
 
-        // 1b. Grab→spring: release the GPU pin so the node integrates freely again
-        //     and the surrounding springs settle it into its new resting place.
-        use crate::actors::messages::PinNodePositions;
-        if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
-            gpu_addr.do_send(PinNodePositions {
-                pins: Vec::new(),
-                unpin: vec![node_id],
-                reheat: false,
-            });
-        }
+        // 1b. Grab→pin-in-place: on drag-END the node STAYS pinned at the position
+        //     where it was dropped. It is NOT released here — it remains anchored
+        //     on the GPU (integration skipped, still exerting forces) until an
+        //     explicit `nodeUnpin` message (handle_node_unpin) clears it. This is
+        //     the persistent VR grab-and-place semantics (see task PHASE 1). The
+        //     node was already pinned at its final position by the last drag update,
+        //     so no further pin message is required here.
 
-        // 2. Run one final settle cycle with the node free
+        // 2. Run one final settle cycle so neighbours relax around the held node
         use crate::actors::messages::SimulationStep;
         let budget = std::time::Duration::from_millis(DRAG_SETTLE_BUDGET_MS);
         let settle_start = Instant::now();
@@ -1429,6 +1428,73 @@ pub(crate) fn handle_node_drag_end(
     }
 }
 
+/// Handle `nodeUnpin` from client — explicitly release a node that was pinned in
+/// place (e.g. by a prior grab-and-place). Clears the GPU pin so the node resumes
+/// free integration and the surrounding springs settle it into a new resting
+/// place. This is the counterpart to the persistent-pin `nodeDragEnd` semantics.
+///
+/// Expected message shape:
+/// ```json
+/// { "type": "nodeUnpin", "data": { "nodeId": 42 } }
+/// ```
+pub(crate) fn handle_node_unpin(
+    act: &mut SocketFlowServer,
+    msg: &serde_json::Value,
+    ctx: &mut <SocketFlowServer as Actor>::Context,
+) {
+    // VULN-01: Reject unauthenticated clients
+    if act.pubkey.is_none() {
+        warn!("[Unpin] Rejecting unpin from unauthenticated client");
+        return;
+    }
+
+    let data = match msg.get("data") {
+        Some(d) => d,
+        None => {
+            warn!("[Unpin] nodeUnpin missing 'data' field");
+            return;
+        }
+    };
+
+    // VULN-03: Validate nodeId fits in u32 (prevent silent truncation)
+    let node_id = match data.get("nodeId").and_then(|v| v.as_u64()) {
+        Some(id) if id <= u32::MAX as u64 => id as u32,
+        _ => {
+            warn!("[Unpin] Invalid or missing nodeId");
+            return;
+        }
+    };
+
+    info!("[Unpin] nodeUnpin: node_id={}", node_id);
+
+    // Clear any residual drag tracking (a client may unpin without a drag cycle).
+    act.dragged_nodes.remove(&node_id);
+    act.drag_last_update.remove(&node_id);
+
+    let app_state = act.app_state.clone();
+    let fut = async move {
+        use crate::actors::messages::PinNodePositions;
+        if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+            gpu_addr.do_send(PinNodePositions {
+                pins: Vec::new(),
+                unpin: vec![node_id],
+                // Mild reheat so the freed node visibly settles from its anchor.
+                reheat: true,
+            });
+        }
+    };
+    ctx.spawn(actix::fut::wrap_future::<_, SocketFlowServer>(fut).map(|_, _act, _ctx| {}));
+
+    let ack = serde_json::json!({
+        "type": "nodeUnpinAck",
+        "data": { "nodeId": node_id },
+        "timestamp": chrono::Utc::now().timestamp_millis()
+    });
+    if let Ok(msg_str) = serde_json::to_string(&ack) {
+        ctx.text(msg_str);
+    }
+}
+
 /// Periodic timeout checker: if no drag update has been received for a node
 /// within `drag_timeout_ms`, automatically unpin it (safety net for dropped
 /// connections or missed dragEnd messages).
@@ -1455,12 +1521,26 @@ fn check_drag_timeout(
             node_id, act.drag_timeout_ms
         );
 
-        // Synthesize a drag end
-        let end_msg = serde_json::json!({
-            "type": "nodeDragEnd",
-            "data": { "nodeId": node_id }
-        });
-        handle_node_drag_end(act, &end_msg, ctx);
+        // A timeout means the drag stalled or the connection dropped — this is a
+        // FAILURE path, not a deliberate drop, so the node must be RELEASED, not
+        // left permanently pinned. We must NOT route through handle_node_drag_end
+        // (which now pins-in-place): that would strand a stale anchor forever.
+        // Clear drag tracking and send an explicit unpin so the node integrates
+        // freely again.
+        act.dragged_nodes.remove(&node_id);
+        act.drag_last_update.remove(&node_id);
+        let app_state = act.app_state.clone();
+        let fut = async move {
+            use crate::actors::messages::PinNodePositions;
+            if let Some(gpu_addr) = app_state.get_gpu_compute_addr().await {
+                gpu_addr.do_send(PinNodePositions {
+                    pins: Vec::new(),
+                    unpin: vec![node_id],
+                    reheat: false,
+                });
+            }
+        };
+        ctx.spawn(actix::fut::wrap_future::<_, SocketFlowServer>(fut).map(|_, _act, _ctx| {}));
     } else {
         // Re-schedule check
         let timeout_ms = act.drag_timeout_ms;

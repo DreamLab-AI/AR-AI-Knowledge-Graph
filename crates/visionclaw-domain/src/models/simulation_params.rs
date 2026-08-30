@@ -27,6 +27,12 @@ fn default_global_speed() -> f32 {
 fn default_spring_pop_scale() -> f32 {
     1.0
 }
+fn default_dag_bias_k() -> f32 {
+    0.0
+}
+fn default_dag_level_distance() -> f32 {
+    60.0
+}
 
 /// Controls how the physics simulation converges.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -166,8 +172,15 @@ pub struct SimulationParams {
     #[serde(default)]
     pub graph_separation_x: f32,
 
-    /// Opt-in canonical dual-disc display layout (default OFF → fully 3D).
-    /// Replaces the removed `axis_compression_z` compression amount.
+    /// Continuous Z-scale factor (1.0 = no compression → fully 3D; down to 0.05).
+    /// Applied in the force sim as the Z multiplier; also drives the dual-disc
+    /// face thinness when `enable_dual_disc_layout` is on.
+    #[serde(default)]
+    pub axis_compression_z: f32,
+
+    /// Opt-in canonical dual-disc display layout (default OFF → fully 3D). Gates
+    /// only the disc re-centre projection; `axis_compression_z` is the
+    /// continuous Z compression applied in both modes.
     #[serde(default)]
     pub enable_dual_disc_layout: bool,
 
@@ -202,6 +215,16 @@ pub struct SimulationParams {
     pub spring_k_ontology: f32,
     #[serde(default = "default_spring_pop_scale")]
     pub spring_k_agent: f32,
+
+    /// DAG radial hierarchy bias strength (PHASE 2). `0` = off (default). Pulls
+    /// each ranked node toward a shell of radius `rank * dag_level_distance`
+    /// around the hierarchy root centroid (radialout layout).
+    #[serde(default = "default_dag_bias_k")]
+    pub dag_bias_k: f32,
+
+    /// World-space radius per hierarchy level for the DAG radial bias (default 60).
+    #[serde(default = "default_dag_level_distance")]
+    pub dag_level_distance: f32,
 }
 
 impl Default for SimulationParams {
@@ -327,6 +350,8 @@ impl SimulationParams {
             ("spring_k_knowledge", self.spring_k_knowledge),
             ("spring_k_ontology", self.spring_k_ontology),
             ("spring_k_agent", self.spring_k_agent),
+            ("dag_bias_k", self.dag_bias_k),
+            ("dag_level_distance", self.dag_level_distance),
         ];
         for &(name, value) in float_fields {
             if !value.is_finite() {
@@ -417,6 +442,7 @@ impl From<&PhysicsSettings> for SimulationParams {
             mode: SimulationMode::Remote,
             settle_mode: SettleMode::default(),
             graph_separation_x: physics.graph_separation_x,
+            axis_compression_z: physics.axis_compression_z,
             enable_dual_disc_layout: physics.enable_dual_disc_layout,
             layout_mode: LayoutMode::default(),
             lin_log_mode: physics.lin_log_mode,
@@ -426,6 +452,8 @@ impl From<&PhysicsSettings> for SimulationParams {
             spring_k_knowledge: physics.spring_k_knowledge,
             spring_k_ontology: physics.spring_k_ontology,
             spring_k_agent: physics.spring_k_agent,
+            dag_bias_k: physics.dag_bias_k,
+            dag_level_distance: physics.dag_level_distance,
         }
     }
 }
@@ -559,12 +587,14 @@ mod tests {
     fn test_layout_controls_propagate_from_physics_settings() {
         let mut physics = PhysicsSettings::default();
         physics.graph_separation_x = 700.0;
+        physics.axis_compression_z = 0.5;
         physics.enable_dual_disc_layout = true;
         physics.adaptive_speed = false;
 
         let params = SimulationParams::from(&physics);
 
         assert!((params.graph_separation_x - 700.0).abs() < f32::EPSILON);
+        assert!((params.axis_compression_z - 0.5).abs() < f32::EPSILON);
         assert!(params.enable_dual_disc_layout);
         assert!(!params.adaptive_speed);
     }
@@ -577,15 +607,18 @@ mod tests {
     fn test_physics_settings_camelcase_roundtrip_preserves_layout_controls() {
         let mut physics = PhysicsSettings::default();
         physics.graph_separation_x = 700.0;
+        physics.axis_compression_z = 0.5;
         physics.enable_dual_disc_layout = true;
         physics.adaptive_speed = false;
 
         let stored = serde_json::to_value(&physics).unwrap();
         // The stored object uses camelCase keys (serde rename_all).
         assert!(stored.get("graphSeparationX").is_some());
+        assert!(stored.get("axisCompressionZ").is_some());
 
         let loaded: PhysicsSettings = serde_json::from_value(stored).unwrap();
         assert!((loaded.graph_separation_x - 700.0).abs() < f32::EPSILON);
+        assert!((loaded.axis_compression_z - 0.5).abs() < f32::EPSILON);
         assert!(loaded.enable_dual_disc_layout);
         assert!(!loaded.adaptive_speed);
     }
@@ -639,15 +672,47 @@ mod tests {
         let mut stored = serde_json::to_value(&physics).unwrap();
         let obj = stored.as_object_mut().unwrap();
         obj.remove("graphSeparationX");
+        obj.remove("axisCompressionZ");
         obj.remove("enableDualDiscLayout");
         obj.remove("adaptiveSpeed");
         obj.insert("graph_separation_x".into(), serde_json::json!(700.0));
+        obj.insert("axis_compression_z".into(), serde_json::json!(0.5));
         obj.insert("enable_dual_disc_layout".into(), serde_json::json!(true));
         obj.insert("adaptive_speed".into(), serde_json::json!(false));
 
         let loaded: PhysicsSettings = serde_json::from_value(stored).unwrap();
         assert!((loaded.graph_separation_x - 700.0).abs() < f32::EPSILON);
+        assert!((loaded.axis_compression_z - 0.5).abs() < f32::EPSILON);
         assert!(loaded.enable_dual_disc_layout);
         assert!(!loaded.adaptive_speed);
+    }
+
+    // Round-trip / migration: an absent axisCompressionZ defaults to 1.0 (no
+    // compression), and a LEGACY blob still carrying the old 0.9 value loads
+    // verbatim as a gentle 0.9 z-scale (near-3D) — under the flipped semantic
+    // this does NOT resurrect the old flatten, so no migration heuristic runs.
+    #[test]
+    fn test_axis_compression_z_absent_defaults_and_legacy_value_loads_verbatim() {
+        // Absent axisCompressionZ → serde default 1.0 (no compression). Start from
+        // a full serialized default and remove just that key (PhysicsSettings has
+        // many required fields, so a bare {} would not deserialize).
+        let mut stored = serde_json::to_value(PhysicsSettings::default()).unwrap();
+        stored.as_object_mut().unwrap().remove("axisCompressionZ");
+        let loaded: PhysicsSettings = serde_json::from_value(stored).unwrap();
+        assert!((loaded.axis_compression_z - 1.0).abs() < f32::EPSILON);
+        assert!(!loaded.enable_dual_disc_layout);
+
+        // Legacy stored blob carrying the OLD 0.9 default and no
+        // enableDualDiscLayout: loads verbatim as a gentle 0.9 z-scale (near-3D),
+        // NOT the old flatten — dual-disc stays OFF, so no migration heuristic.
+        let mut legacy = serde_json::to_value(PhysicsSettings::default()).unwrap();
+        {
+            let o = legacy.as_object_mut().unwrap();
+            o.insert("axisCompressionZ".into(), serde_json::json!(0.9));
+            o.remove("enableDualDiscLayout");
+        }
+        let loaded: PhysicsSettings = serde_json::from_value(legacy).unwrap();
+        assert!((loaded.axis_compression_z - 0.9).abs() < f32::EPSILON);
+        assert!(!loaded.enable_dual_disc_layout);
     }
 }
