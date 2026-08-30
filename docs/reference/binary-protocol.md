@@ -18,8 +18,8 @@ Every binary frame is **little-endian**. There are two byte-0 dispatch
 surfaces:
 
 1. The **position stream**, dispatched on a leading one-byte *protocol
-   version* (`0x02` V2, `0x03` V3, `0x04` V4 delta). This is the only channel
-   that streams per-node position records.
+   version* (`0x02` V2, `0x03` V3, `0x04` V4 delta, `0x05` V5 = sequenced V3
+   body). This is the only channel that streams per-node position records.
 2. The **multiplexed message system**, dispatched on a one-byte *MessageType*
    header (`0x01`, `0x10`–`0x54`, `0xFF`) followed by a fixed envelope and a
    typed payload.
@@ -27,11 +27,12 @@ surfaces:
 ```mermaid
 flowchart TD
     Frame["Inbound binary frame"] --> B0{"Byte 0"}
-    B0 -->|"0x02 / 0x03 / 0x04"| PStream["Position stream<br/>(version dispatch)"]
+    B0 -->|"0x02 / 0x03 / 0x04 / 0x05"| PStream["Position stream<br/>(version dispatch)"]
     B0 -->|"0x01, 0x10-0x54, 0xFF"| Env["MessageType envelope"]
     PStream --> V2["V2 — 36 B/node"]
     PStream --> V3["V3 — 52 B/node (analytics tail)"]
     PStream --> V4["V4 delta — 20 B/changed node (default)"]
+    PStream --> V5["V5 — 8 B seq + V3 body"]
     Env --> Hdr["6-byte header<br/>type + version + u32 length"]
     Hdr --> Pay["Typed payload<br/>(agent / voice / sssp / sync)"]
 ```
@@ -140,6 +141,22 @@ re-detected.
 Analytics values change at recompute cadence (~0.1–1 Hz); consumers treat the
 tail as slowly varying. Each record carries position, velocity **and** the
 analytics tail — there is no separate per-frame analytics message.
+
+### V5 wrapper — sequenced V3 body
+
+Protocol **V5** (`0x05`) wraps a V3 body with an 8-byte broadcast sequence number
+so a receiver can detect dropped/reordered position broadcasts. It is a pure
+framing wrapper — the node records are byte-for-byte V3.
+
+```text
+[u8 version = 0x05][u64 broadcast_seq LE][ V3 node records — N × 52 bytes ]
+```
+
+Decoders dispatch on the version byte, skip the 8-byte sequence, and decode the
+remaining bytes as a V3 record array. The XR client does exactly this
+(`xr-client/rust/src/binary_protocol.rs`: `PROTOCOL_V5 = 0x05`,
+`V5_SEQ_BYTES = 8`). V5 is additive over V3 (ADR-102 §2, amended by ADR-137); a
+V3-only decoder still reads a `0x03` stream unchanged.
 
 ### Node ID and type flags
 

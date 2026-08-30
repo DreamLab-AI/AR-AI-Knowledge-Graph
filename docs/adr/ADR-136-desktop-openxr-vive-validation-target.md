@@ -83,5 +83,18 @@ pre-existing tiers** until those receipts exist. Decision 2 (Quest 3 remains the
 sole ship target; APK still frozen/unbuilt) is unchanged and confirmed. Substrate
 substitution per Decision 3 (controller-ray for pinch) is confirmed live.
 
-**Status of this ADR:** Accepted — target validated as a render vehicle; the
-canary-promotion clause of Decision 1 is not yet exercised.
+## Follow-on (2026-08-30 — `xr-vive-hardening`)
+
+The VIVE target proved its worth as more than a one-shot render receipt: the
+`xr-vive-hardening` branch used it to take the client from a capped-subset demo to
+a full-density (13,164 nodes / 145,692 edges) 90 fps client, all validated on this
+same VIVE Pro / Compat / NVIDIA 580 stack. Those changes — Rust render offload,
+runtime-derived quality budgets, `initialNodeLimit` dial, full-3D-default layout,
+Protocol V5 decode, and XR-safe (no-post-process) eye candy — are recorded in
+**ADR-137**. Every one of them respects the governing render constraint established
+above (Compat renderer, glow OFF, additive/`next_pass`-only effects). The formal
+copresence canaries remain unfired; nothing here promotes an M-item.
+
+**Status of this ADR:** Accepted — target validated as a render vehicle (and, per
+the 2026-08-30 follow-on, as the hardening/perf vehicle); the canary-promotion
+clause of Decision 1 is not yet exercised.

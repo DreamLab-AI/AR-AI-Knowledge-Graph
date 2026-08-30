@@ -209,6 +209,14 @@ Node id range: 0 .. 2^26-1 (67,108,863).  NODE_ID_MASK = 0x03FF_FFFF.
 The 28-byte/`0x42` layout in `binary-protocol.md` describes the **server-internal
 `BinaryNodeData` struct**, not the wire. The wire has been V3/52-byte since ADR-031.
 
+> **Amendment (2026-08-30, ADR-137).** The position stream now also emits a
+> **Protocol V5** wrapper: `[u8 version = 0x05][u64 broadcast_seq LE][ V3 body ]`,
+> i.e. a V3 frame (`0x03` + N×52-byte records) prefixed with an 8-byte broadcast
+> sequence number. The client decodes it by skipping the 8-byte sequence and
+> decoding the V3 body unchanged (`xr-client/rust/src/binary_protocol.rs:23-26,
+> 292-309`; `PROTOCOL_V5 = 0x05`, `V5_SEQ_BYTES = 8`). V5 is additive — a V3-only
+> decoder still works against a V3 stream. See `docs/reference/binary-protocol.md`.
+
 ## §5. Presence sibling-broadcast frame and the `local_id ↔ avatar` gap
 
 > **Update (2026-06-12 — PRD-019 task #28 shipped).** The *eager assignment +

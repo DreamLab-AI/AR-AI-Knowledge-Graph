@@ -1,6 +1,6 @@
 # PRD-008: XR Client Replacement — Native Quest 3 APK via Godot 4 + godot-rust + OpenXR
 
-**Status:** In Progress — scaffold, protocol, presence, interaction, LOD, avatar rendering, and testing feature-complete; **copresence layer (gaze, geometric agent avatars, proxemics, in-headset identity + intervention) implemented post-Phase-2 (gap-close 2026-07, ADR-130 D4)**. **First-ever working in-headset render achieved 2026-08-22 on an HTC VIVE Pro (desktop OpenXR / SteamVR, per ADR-136) — both eyes, live interaction, physics; see §7.4.** Still pending: the formal copresence canary session (M-items stay pre-`integrated`), LiveKit AAR JNI bridge, WebXR removal, soak testing, on-device profiling, and the Quest 3 APK cross-build (still frozen/unbuilt).
+**Status:** In Progress — scaffold, protocol, presence, interaction, LOD, avatar rendering, and testing feature-complete; **copresence layer (gaze, geometric agent avatars, proxemics, in-headset identity + intervention) implemented post-Phase-2 (gap-close 2026-07, ADR-130 D4)**. **First-ever working in-headset render achieved 2026-08-22 on an HTC VIVE Pro (desktop OpenXR / SteamVR, per ADR-136) — both eyes, live interaction, physics; see §7.4.** **Render path hardened to full density 2026-08-30 (`xr-vive-hardening`): Rust render offload → 13,164 nodes / 145,692 edges at 90 fps, topology-derived quality budgets, `initialNodeLimit` dial, full-3D-default layout, Protocol V5 decode, XR-safe eye candy, HUD wand-ray pointer + control panel + double-click document view; see §7.5 and ADR-137.** Still pending: the formal copresence canary session (M-items stay pre-`integrated`), LiveKit AAR JNI bridge, WebXR removal, soak testing, on-device profiling, and the Quest 3 APK cross-build (still frozen/unbuilt).
 **Priority:** P0 — current XR stack is silent-failing in production; the user-facing immersive path is effectively unshipped
 **Date:** 2026-05-02 (last updated 2026-08-22)
 **Author:** Architecture Audit (xr-godot-replacement swarm `swarm-1777757491161-nl2bbv`)
@@ -672,6 +672,46 @@ debug prints retained in the code.
 
 **Code:** committed to branch `xr-vive-runtime` (pushed to
 `DreamLab-AI/VisionClaw`), PR-ready for `main`; still WIP.
+
+### 7.5 VIVE render hardening (2026-08-30, branch `xr-vive-hardening`)
+
+The §7.4 bring-up rendered a capped subset with per-frame GDScript hot loops that
+collapsed at density (~90 ms/frame at full graph). The `xr-vive-hardening` branch
+made it production-shaped; the decisions are recorded in **ADR-137**.
+
+- **Rust render offload.** The position-hunt and MultiMesh buffer packing moved from
+  GDScript into a pure Rust `RenderStore` (`xr-client/rust/src/render_store.rs`),
+  wrapped by `BinaryProtocolClient` with `#[func]` adapters
+  (`build_node_buffer`/`build_edge_buffer`/`hunt`/`nodes_near`). Full density
+  (**13,164 nodes / 145,692 edges**) now renders at **90 fps** — the perf ladder is
+  GDScript 3k = 90 fps / 13k = ~11 fps → Rust 13k = 90 fps.
+- **Topology-derived budgets.** Node/edge draw budgets are derived from the received
+  topology (bounded by an absolute safety ceiling), replacing the hardcoded
+  640/3000 gates (`graph_scene.gd::_recompute_instance_budgets`).
+- **`initialNodeLimit` dial + 256 MiB WS cap.** Initial-load quality is now a settings
+  dial (`visualisation.graphs.logseq.physics.initial_node_limit`, applied server-side
+  in `socket_flow_handler/types.rs`; default 3000, ceiling 100 000) tunable via
+  `PUT /api/settings/physics`; the WebSocket receive limit is raised to 256 MiB
+  (`transport.rs`) so a full-graph load is not truncated.
+- **Full-3D default.** `axisCompressionZ` removed; dual-disc flatten made opt-in
+  (`enableDualDiscLayout` default OFF, `graph_separation_x = 100`). Natural 3D is the
+  shipped layout. The client sanitiser hard-rejects out-of-bounds records rather than
+  clamping (removing the edge-fan-on-clamp artefact).
+- **Protocol V5 decode.** Client decodes `[0x05][u64 broadcast_seq][V3 records]`
+  (ADR-102 amended; `binary-protocol.md`).
+- **XR-safe eye candy** (under the Compat no-post-process constraint): fresnel-halo
+  `next_pass` (`materials/node_halo.gdshader`), TIME-driven edge-flow shader
+  (`edge_flow.gdshader`), and centrality-driven node size tells.
+- **HUD.** Working **wand-ray pointer** (first working VR button input), operator
+  control panel (Reset Layout / Spread± / Edges± / NodeSize±), proximity-gated node
+  labels (pooled `Label3D`, 4 Hz, distance fade), and a **double-click → narrative­goldmine
+  page card** document view (`hud.gd`, `NG_PAGE_BASE`).
+
+**Still WIP:** the copresence canaries remain unfired (M-items still pre-`integrated`);
+the Quest 3 APK stays frozen; per-frame edge-endpoint tracking of moving nodes and
+adaptive-fit-during-grab remain follow-ups; glow parity is still sacrificed on Compat.
+
+**Code:** committed to branch `xr-vive-hardening`.
 
 ---
 

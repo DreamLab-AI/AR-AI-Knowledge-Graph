@@ -1,6 +1,6 @@
 # PRD-019: XR Transport Completion — Connecting the Native Client to the Live Backend
 
-**Status:** Delivered and extended (transport wired; `local_id ↔ avatar` mapping (#28) shipped server+client; analytics-tail rendering, edge topology, server-authoritative drag, haptics, importance-capped LOD, HUD mount and unbounded-backoff reconnect added 2026-06-12; 141 headless tests green) — on-device validation and LiveKit AAR remain open
+**Status:** Delivered and extended (transport wired; `local_id ↔ avatar` mapping (#28) shipped server+client; analytics-tail rendering, edge topology, server-authoritative drag, haptics, importance-capped LOD, HUD mount and unbounded-backoff reconnect added 2026-06-12; 141 headless tests green; **Protocol V5 wrapper decode `[0x05][u64 broadcast_seq][V3 records]` and a 256 MiB WS receive cap added 2026-08-30 on `xr-vive-hardening`, ADR-137**) — on-device validation and LiveKit AAR remain open
 **Priority:** P0 — the native XR client (PRD-008 / ADR-071) was feature-complete but unconnected; the immersive path was still unshipped in practice
 **Date:** 2026-06-08
 **Author:** XR transport completion pass (build-with-quality)

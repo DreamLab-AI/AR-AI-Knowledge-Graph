@@ -102,8 +102,12 @@ godot --path xr-client \
 - `XR_BACKEND_WS` — presence/graph WebSocket. Point at the dev backend
   (`ws://192.168.2.132:4000` on the LAN). **Use `:4000` directly**; nginx `:3001`
   does not proxy `/ws/presence`.
-- `XR_NOSTR_SECRET` — hex Nostr secret key for the presence challenge/response
-  handshake (any BIP-340 key in dev).
+- `XR_NOSTR_SECRET` — hex Nostr secret key. **Required** — besides the presence
+  challenge/response handshake it signs the NIP-98 `authenticate` on the graph
+  socket that gates node drag/pin (server-authoritative drag). Without it, presence
+  won't join and drags are rejected. Any BIP-340 key works in dev
+  (`graph_scene.gd:288` → `NostrAuth.create(OS.get_environment("XR_NOSTR_SECRET"))`;
+  `transport.rs:75`).
 
 ### Render constraints (learned the hard way, 2026-08-22)
 
@@ -138,7 +142,7 @@ Read by `scripts/graph_scene.gd`; the registration lives in
 
 | Class | Module | Signals |
 |---|---|---|
-| `BinaryProtocolClient` | `binary_protocol.rs` | `position_updated(node_id: u32, position: Vector3, velocity: Vector3)` |
+| `BinaryProtocolClient` | `binary_protocol.rs` (+ `render_store.rs`) | `position_updated(node_id: u32, position: Vector3, velocity: Vector3)` — also fronts the Rust **`RenderStore`** render offload via `#[func]` adapters (`build_node_buffer`, `build_edge_buffer`, `hunt`, `nodes_near`, `upsert`, `set_meta`); decodes Protocol V3 **and** the V5 wrapper (`0x05` + 8-byte broadcast seq) |
 | `PresenceClientNode` | `presence.rs` | `avatar_joined(did, display_name, avatar_id)`, `avatar_left(avatar_id)`, `avatar_pose_updated(avatar_id, head_pos, head_rot, has_left, has_right)`, `presence_kicked(reason)` |
 | `XrInteraction` | `interaction.rs` | `node_targeted(node_id, distance)`, `node_grabbed(node_id, position)`, `haptic_pulse(controller, intensity)` |
 | `LodPolicy` | `lod.rs` | (no signals; `should_recompute()` + `classify_distance()` getters) |
@@ -204,6 +208,53 @@ NVIDIA 580 open + native X11 + SteamVR** on HP-Desktop, VIVE Pro.
 - **Glow parity** — glow is off (Compat XR constraint); visual parity with the
   desktop client is outstanding.
 - Debug prints retained in the client (WIP branch).
+
+## VIVE render hardening (2026-08-30, branch `xr-vive-hardening`)
+
+The 2026-08-22 section above rendered a **capped subset** (640 nodes) with per-frame
+GDScript hot loops that collapsed at density. This branch made it full-density and
+production-shaped — decision record in
+[ADR-137](../docs/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md).
+
+**Architecture — render offload.** The per-frame position-hunt and MultiMesh buffer
+packing moved from GDScript into a pure Rust `RenderStore` (`rust/src/render_store.rs`),
+fronted by `BinaryProtocolClient`. GDScript now calls `build_node_buffer(ids, comp,
+0.7, 1.9)` / `build_edge_buffer(pairs, radius)` / `hunt(...)` and hands the returned
+`PackedFloat32Array` straight to the MultiMesh (layout: 12 transform + 4 colour + 4
+custom floats/node, matching `GraphScene.tscn`'s `use_colors`/`use_custom_data` flags).
+Node colour and the edge `scaled_local` basis are computed Rust-side. **Result:**
+13,164 nodes / 145,692 edges at **90 fps** (was ~11 fps in GDScript; GDScript held
+90 fps only to ~3k).
+
+**Budgets are topology-derived.** Node/edge draw budgets come from the received
+topology (bounded by a safety ceiling), not the old hardcoded 640/3000 gates
+(`graph_scene.gd::_recompute_instance_budgets`). Initial-load quality is the
+`initialNodeLimit` settings dial (`PUT /api/settings/physics`; default 3000, ceiling
+100 000), and the WS receive cap is 256 MiB so a full graph loads intact.
+
+**Layout is full-3D by default.** `axisCompressionZ` removed; dual-disc flatten is
+opt-in (`enableDualDiscLayout` default OFF). The sanitiser hard-rejects out-of-bounds
+records instead of clamping (no more edge-fan-on-clamp).
+
+**Controls (VR).**
+- **Wand-ray pointer** — the first working VR button input; a laser from the wand
+  drives the world-space HUD buttons (`RAY_IDLE_COLOR` cyan when tracking).
+- **Operator control panel** on the HUD: Reset Layout, Spread ±, Edges ±, NodeSize ±
+  (`hud.gd` `ControlsGrid`), live status line.
+- **Grab / drag** — ray/sphere pick, keep-distance; server-authoritative (NIP-98
+  signed, needs `XR_NOSTR_SECRET`).
+- **Double-click a node** → narrativegoldmine page card in the HUD document panel
+  (`hud.gd`, `NG_PAGE_BASE`; two grabs of the same node within `DOUBLE_CLICK_SEC`).
+- **Proximity node labels** — pooled `Label3D`, 4 Hz, distance-faded, shown only for
+  the nodes nearest the camera (`LABEL_*` constants; `nodes_near` query).
+
+**XR-safe eye candy** (no post-process — Compat/multiview constraint): fresnel-halo
+`next_pass` (`materials/node_halo.gdshader`), TIME-driven additive edge-flow shader
+(`materials/edge_flow.gdshader`), centrality-driven node size tells.
+
+**Still WIP:** copresence canaries unfired; Quest APK frozen; per-frame edge-endpoint
+tracking of moving nodes and adaptive-fit-during-grab are follow-ups; glow parity
+still sacrificed on Compat.
 
 ## Cross-references
 
