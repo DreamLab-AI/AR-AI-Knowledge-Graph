@@ -27,6 +27,7 @@ pub mod lod;
 pub mod ports;
 pub mod presence;
 pub mod proxemics;
+pub mod render_store;
 pub mod runtime;
 pub mod selection;
 pub mod signer;

@@ -101,14 +101,10 @@ var _eye_gaze_supported: bool = false
 var _lod_recompute: bool = false
 
 var _avatars: Dictionary = {}
-var _node_positions: Dictionary = {}
-# Authoritative server positions treated as optimistic targets; the rendered
-# _node_positions hunt toward these each frame (see _hunt_positions).
-var _node_targets: Dictionary = {}
-# Server-computed visual identity (community colour / centrality size /
-# anomaly tint), keyed by node id. Populated from node_visuals_updated.
-var _node_colors: Dictionary = {}
-var _node_sizes: Dictionary = {}
+# Node positions/targets now live in the Rust render store (BinaryProtocolClient):
+# it owns the hunt and packs the MultiMesh buffers, so the per-frame 13k-entry
+# GDScript loops are gone (PRD-008 perf). GDScript keeps only centrality (for the
+# LOD/edge selection domain) mirrored from the throttled node_visuals signal.
 var _node_centrality: Dictionary = {}
 # Running max centrality, used to normalise per-node size/halo tells. Monotonic
 # (never shrinks while a graph is loaded) so a settled top node keeps a stable
@@ -119,10 +115,14 @@ var _centrality_max: float = 0.0001
 # flat [src0, tgt0, src1, tgt1, ...].
 var _edge_pairs: PackedInt32Array = PackedInt32Array()
 
-# Rendered-subset cache rebuilt by _update_multimesh; reused by the
-# interaction ray so candidate lists never allocate twice per frame.
-var _render_ids: PackedInt32Array = PackedInt32Array()
-var _render_positions: PackedVector3Array = PackedVector3Array()
+# LOD-selected drawn node ids (topology-biased, budget-capped). Cached and only
+# recomputed when the selection domain changes (visuals/topology/budget) — the
+# per-frame buffer build reuses it. Passed straight to build_node_buffer.
+var _drawn_ids: PackedInt32Array = PackedInt32Array()
+var _selection_dirty: bool = true
+# Server-space target for the grabbed node, handed to the Rust hunt each frame so
+# the dragged node tracks the wand. Updated by _update_interaction.
+var _grab_target_server: Vector3 = Vector3.ZERO
 
 var _graph_ws_url: String = ""
 var _presence_ws_url: String = ""
@@ -271,7 +271,9 @@ func _ready() -> void:
 		_selection.connect("selection_made", Callable(self, "_on_selection_made"))
 
 	if _binary_client != null:
-		_binary_client.connect("position_updated", Callable(self, "_on_position_updated"))
+		# position_updated is intentionally NOT connected: positions live in the Rust
+		# render store now (no per-node signal storm). Only the throttled
+		# node_visuals_updated crosses the boundary, for the centrality mirror.
 		_binary_client.connect("connection_changed", Callable(self, "_on_connection_changed"))
 		_binary_client.connect("node_visuals_updated", Callable(self, "_on_node_visuals_updated"))
 		_binary_client.connect("topology_updated", Callable(self, "_on_topology_updated"))
@@ -527,11 +529,13 @@ func _connect_graph() -> void:
 		_binary_client.close()
 	# A reconnect may land on a restarted server with a different id space:
 	# stale positions/topology would mix with the fresh snapshot as orphan
-	# gems and phantom edges, so drop all graph state before re-dialling.
-	_node_positions.clear()
-	_node_targets.clear()
+	# gems and phantom edges, so drop all graph state before re-dialling. The
+	# Rust store is cleared inside connect_to_url (below); clear the GDScript
+	# mirror + selection here.
 	_node_centrality.clear()
 	_centrality_max = 0.0001
+	_drawn_ids = PackedInt32Array()
+	_selection_dirty = true
 	_edge_pairs = PackedInt32Array()
 	_edge_pairs_ranked = PackedInt32Array()
 	_edge_pairs_full = PackedInt32Array()
@@ -567,7 +571,11 @@ func _physics_process(delta: float) -> void:
 	_update_locomotion(delta)
 	_update_hud_grab()
 	_update_hud_pointer()
-	_hunt_positions()
+	# Rust owns the hunt now: one call eases all render positions toward their
+	# targets and pins the grabbed node to the wand — replaces the old GDScript
+	# per-node lerp over a 13k Dictionary.
+	if _binary_client != null and _binary_client.has_method("hunt"):
+		_binary_client.hunt(POSITION_HUNT_EASE, _grabbed_id, _grab_target_server)
 	_fit_graph_to_view(delta)
 	# At the desktop-Vive instance budgets the two multimesh rebuilds are the
 	# frame-cost hot spot (GDScript loops over ~6k instances). Alternate them so
@@ -795,32 +803,18 @@ const FIT_EASE: float = 0.06
 # change. Node/edge geometry compensates for `_graph_scale` so it never shrinks
 # to specks.
 func _fit_graph_to_view(_delta: float) -> void:
-	if graph_root == null or _node_positions.is_empty():
+	if graph_root == null or _binary_client == null or _binary_client.node_count() == 0:
 		return
 	_fit_frame += 1
 	if _fit_frame % FIT_RECOMPUTE_FRAMES == 0 or _fit_target_scale == 0.0:
-		# Collect positions per axis, EXCLUDING the grabbed node: a node held in
-		# hand is dragged far from the settled cloud, and letting it into the AABB
-		# inflates the fit so the whole graph rescales as you move ("edges scaling
-		# off when moved"). Robust 5th–95th percentile bounds per axis then stop a
-		# single stray outlier from driving the fit.
-		var xs: PackedFloat32Array = PackedFloat32Array()
-		var ys: PackedFloat32Array = PackedFloat32Array()
-		var zs: PackedFloat32Array = PackedFloat32Array()
-		for node_id: int in _node_positions:
-			if node_id == _grabbed_id:
-				continue
-			var pos: Vector3 = _node_positions[node_id]
-			xs.append(pos.x)
-			ys.append(pos.y)
-			zs.append(pos.z)
-		if xs.size() > 0:
-			var mn := Vector3(
-				_percentile(xs, 0.05), _percentile(ys, 0.05), _percentile(zs, 0.05)
-			)
-			var mx := Vector3(
-				_percentile(xs, 0.95), _percentile(ys, 0.95), _percentile(zs, 0.95)
-			)
+		# Robust 5th–95th percentile AABB, computed in Rust over the render store
+		# (excluding the grabbed node so a dragged outlier can't inflate the fit —
+		# "edges scaling off when moved"). Returns [minx,miny,minz,maxx,maxy,maxz]
+		# or empty.
+		var bb: PackedFloat32Array = _binary_client.render_aabb(0.05, 0.95, _grabbed_id)
+		if bb.size() == 6:
+			var mn := Vector3(bb[0], bb[1], bb[2])
+			var mx := Vector3(bb[3], bb[4], bb[5])
 			var span: Vector3 = mx - mn
 			var longest: float = maxf(span.x, maxf(span.y, span.z))
 			if longest >= 0.001:
@@ -866,124 +860,71 @@ func _percentile(values: PackedFloat32Array, q: float) -> float:
 const POSITION_HUNT_EASE: float = 0.06
 
 
-func _hunt_positions() -> void:
-	for node_id: int in _node_targets:
-		if node_id == _grabbed_id:
-			continue
-		var cur: Vector3 = _node_positions.get(node_id, _node_targets[node_id])
-		_node_positions[node_id] = cur.lerp(_node_targets[node_id], POSITION_HUNT_EASE)
+# Recompute the drawn-node selection (LOD budget + topology bias). Cached in
+# _drawn_ids and only rebuilt when the domain changes (visuals/topology/budget),
+# so the per-frame buffer build reuses it. Topology-coherence + budget logic is
+# unchanged; only the id SOURCE moved from _node_positions.keys() to the Rust store.
+func _recompute_drawn_ids() -> void:
+	if _binary_client == null:
+		_drawn_ids = PackedInt32Array()
+		return
+	var all_ids: PackedInt32Array = _binary_client.get_node_ids()
+	var n: int = all_ids.size()
+	if n <= _node_budget or _lod_policy == null or not _lod_policy.has_method("visible_subset"):
+		_drawn_ids = all_ids
+		return
+	# Over budget: bias edge-endpoint (topo) nodes so they win cap slots first
+	# (keeps drawn nodes coherent with drawable edges), spare slots to the highest
+	# centrality non-topo nodes.
+	var have_topo: bool = not _topo_ids.is_empty()
+	var centrality := PackedFloat32Array()
+	centrality.resize(n)
+	for i: int in range(n):
+		var c: float = _node_centrality.get(all_ids[i], 0.0)
+		if have_topo and _topo_ids.has(all_ids[i]):
+			c += TOPO_SELECT_BIAS
+		centrality[i] = c
+	var subset: PackedInt32Array = _lod_policy.visible_subset(centrality, _node_budget)
+	var out := PackedInt32Array()
+	out.resize(subset.size())
+	for j: int in range(subset.size()):
+		out[j] = all_ids[subset[j]]
+	_drawn_ids = out
 
 
+# Node MultiMesh: Rust packs the whole instance buffer (transform + colour +
+# custom) from the drawn ids; GDScript does a single buffer assignment. scale_comp
+# folds the GraphRoot fit-scale and the HUD node-size factor; the centrality size
+# tell + halo custom channel are computed in Rust.
 func _update_multimesh() -> void:
-	if nodes_multi == null or nodes_multi.multimesh == null:
+	if nodes_multi == null or nodes_multi.multimesh == null or _binary_client == null:
 		return
+	if _selection_dirty:
+		_recompute_drawn_ids()
+		_selection_dirty = false
+	var comp: float = NODE_WORLD_RADIUS * _node_size_factor / (NODE_MESH_RADIUS * _graph_scale)
+	var buf: PackedFloat32Array = _binary_client.build_node_buffer(_drawn_ids, comp, 0.7, 1.9)
 	var mm: MultiMesh = nodes_multi.multimesh
-	var ids: Array = _node_positions.keys()
-
-	# Importance cap: when the graph exceeds the Quest instance budget, keep
-	# the highest-centrality nodes (server analytics; nodes with no analytics
-	# yet rank 0 and drop first). TOPOLOGY COHERENCE: the position/visuals stream
-	# spans ALL ~13k nodes but the edge topology (initialGraphLoad) covers only a
-	# subset, so a pure top-centrality pick over all ids drifts toward nodes that
-	# have no edges → _update_edge_multimesh (both-endpoints-drawn) draws almost
-	# nothing. Bias edge-endpoint (topo) nodes so they win the cap first; spare
-	# slots then fall to the highest-centrality non-topo nodes. _topo_ids is built
-	# on topology arrival, not per frame.
-	# Only subset when the streamed node set actually exceeds the runtime budget;
-	# when the budget covers everything (budget >= node count) we draw them all and
-	# skip visible_subset entirely.
-	if ids.size() > _node_budget and _lod_policy != null and _lod_policy.has_method("visible_subset"):
-		var have_topo: bool = not _topo_ids.is_empty()
-		var centrality := PackedFloat32Array()
-		centrality.resize(ids.size())
-		for i: int in range(ids.size()):
-			var c: float = _node_centrality.get(ids[i], 0.0)
-			if have_topo and _topo_ids.has(ids[i]):
-				c += TOPO_SELECT_BIAS
-			centrality[i] = c
-		var subset: PackedInt32Array = _lod_policy.visible_subset(centrality, _node_budget)
-		var capped: Array = []
-		for idx: int in subset:
-			capped.append(ids[idx])
-		ids = capped
-
-	var count: int = ids.size()
+	var count: int = buf.size() / 20
 	if mm.instance_count != count:
-		print("GraphScene DEBUG: multimesh instance_count %d -> %d" % [mm.instance_count, count])
 		mm.instance_count = count
-	_render_ids.resize(count)
-	_render_positions.resize(count)
-	for i: int in range(count):
-		var node_id: int = ids[i]
-		var pos: Vector3 = _node_positions[node_id]
-		# Compensate the GraphRoot fit-scale so the node holds ~NODE_WORLD_RADIUS
-		# in the room, then apply a centrality SIZE tell: normalise centrality
-		# against the running max and map sqrt(norm) through lerp(0.7, 1.9) so
-		# important nodes read visibly bigger while low-centrality nodes don't
-		# vanish. sqrt lifts the low end so mid-tier nodes stay distinguishable.
-		var comp: float = NODE_WORLD_RADIUS * _node_size_factor / (NODE_MESH_RADIUS * _graph_scale)
-		var cen_norm: float = clampf(_node_centrality.get(node_id, 0.0) / _centrality_max, 0.0, 1.0)
-		var size: float = comp * lerpf(0.7, 1.9, sqrt(cen_norm))
-		var xf := Transform3D(Basis.IDENTITY.scaled(Vector3(size, size, size)), pos)
-		mm.set_instance_transform(i, xf)
-		mm.set_instance_color(i, _node_colors.get(node_id, Color(0.55, 0.65, 0.85)))
-		# Carry normalised centrality to the halo shader via INSTANCE_CUSTOM.r so
-		# the fake-bloom intensity scales mildly with importance (no extra buffers,
-		# no per-frame allocation — same loop that writes transform/colour).
-		mm.set_instance_custom_data(i, Color(cen_norm, 0.0, 0.0, 1.0))
-		_render_ids[i] = node_id
-		_render_positions[i] = pos
+	if count > 0:
+		mm.buffer = buf
 
 
+# Edge MultiMesh: Rust filters the ranked pairs to both-endpoints-drawn and packs
+# the rotated+scaled cylinder transforms; GDScript does a single buffer assignment.
 func _update_edge_multimesh() -> void:
-	if edges_multi == null or edges_multi.multimesh == null:
+	if edges_multi == null or edges_multi.multimesh == null or _binary_client == null:
 		return
+	var er: float = EDGE_WORLD_RADIUS / (EDGE_MESH_RADIUS * _graph_scale)
+	var buf: PackedFloat32Array = _binary_client.build_edge_buffer(_edge_pairs, er)
 	var mm: MultiMesh = edges_multi.multimesh
-	var pair_count: int = _edge_pairs.size() / 2
-	var written: int = 0
-	if mm.instance_count != pair_count:
-		mm.instance_count = pair_count
-	# Only draw an edge when BOTH endpoints are actually rendered (in the top-N
-	# displayed subset). Testing _node_positions instead would draw edges to the
-	# ~12k streamed-but-unrendered nodes, producing long streaks to invisible
-	# endpoints.
-	var shown := {}
-	for rid: int in _render_ids:
-		shown[rid] = true
-	for i: int in range(pair_count):
-		var src: int = _edge_pairs[i * 2]
-		var tgt: int = _edge_pairs[i * 2 + 1]
-		if not (shown.has(src) and shown.has(tgt)):
-			continue
-		var a: Vector3 = _node_positions[src]
-		var b: Vector3 = _node_positions[tgt]
-		var d: Vector3 = b - a
-		var length: float = d.length()
-		if length < 0.001:
-			continue
-		# Unit cylinder is Y-aligned: rotate Y onto the edge direction and stretch
-		# to the span, positioned at the midpoint. Build the rotation robustly —
-		# Quaternion(UP, dir) is degenerate when dir is (anti)parallel to UP, which
-		# for a Y-tall/thin layout is most edges, producing wrong/vertical tubes.
-		var dir: Vector3 = d / length
-		var q: Quaternion
-		var dp: float = Vector3.UP.dot(dir)
-		if dp > 0.9999:
-			q = Quaternion.IDENTITY
-		elif dp < -0.9999:
-			q = Quaternion(Vector3.RIGHT, PI)  # flip Y→-Y about X
-		else:
-			var axis: Vector3 = Vector3.UP.cross(dir).normalized()
-			q = Quaternion(axis, acos(clampf(dp, -1.0, 1.0)))
-		var er: float = EDGE_WORLD_RADIUS / (EDGE_MESH_RADIUS * _graph_scale)
-		# scaled_local: scale along the cylinder's own axes (Y = edge direction).
-		# Global scaled() shears the rotated basis into stretched shards.
-		var basis := Basis(q).scaled_local(Vector3(er, length, er))
-		mm.set_instance_transform(written, Transform3D(basis, a + d * 0.5))
-		written += 1
-	# Park any unfilled instances (endpoints not yet streamed) at zero scale.
-	for i: int in range(written, pair_count):
-		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3.ZERO), Vector3.ZERO))
+	var count: int = buf.size() / 12
+	if mm.instance_count != count:
+		mm.instance_count = count
+	if count > 0:
+		mm.buffer = buf
 
 
 # Feed controller rays into the Rust interaction policy and drive the
@@ -1004,16 +945,17 @@ func _update_interaction() -> void:
 			_pulse(_grab_controller, 0.3, 0.05)
 			_grabbed_id = -1
 			_grab_controller = null
+			_grab_target_server = Vector3.ZERO
 		else:
 			# Keep the node at the distance it was grabbed at (ride the ray), rather
 			# than snapping it to a fixed point in front of the wand. World→server
-			# because the server and _node_positions work in GraphRoot-local space.
+			# because the store works in GraphRoot-local space. The Rust hunt pins
+			# the grabbed node to _grab_target_server each frame (optimistic echo).
 			var ray_origin: Vector3 = _grab_controller.global_position
 			var ray_dir: Vector3 = -_grab_controller.global_transform.basis.z
 			var hand_world: Vector3 = ray_origin + ray_dir * _grab_distance
 			var hand_server: Vector3 = graph_root.global_transform.affine_inverse() * hand_world
-			_node_positions[_grabbed_id] = hand_server  # optimistic local echo
-			_node_targets[_grabbed_id] = hand_server
+			_grab_target_server = hand_server
 			if _binary_client.has_method("send_drag_update"):
 				_binary_client.send_drag_update(_grabbed_id, hand_server)
 		return
@@ -1030,19 +972,22 @@ func _update_interaction() -> void:
 		if pinch < 0.05:
 			continue
 		_grab_controller = controller
-		# Node render positions are in GraphRoot's scaled space; transform to world
-		# so the world-space wand ray and the interaction's metre-space thresholds
-		# actually intersect the nodes.
+		# Candidate ids + render positions come from the Rust store (the drawn
+		# subset from the last node buffer build). Positions are GraphRoot-local
+		# scaled space; transform to world so the world-space wand ray and the
+		# interaction's metre-space thresholds intersect the nodes.
+		var render_ids: PackedInt32Array = _binary_client.get_render_ids()
+		var render_positions: PackedVector3Array = _binary_client.get_render_positions()
 		var gxf: Transform3D = graph_root.global_transform
 		var world_positions := PackedVector3Array()
-		world_positions.resize(_render_positions.size())
-		for i: int in range(_render_positions.size()):
-			world_positions[i] = gxf * _render_positions[i]
+		world_positions.resize(render_positions.size())
+		for i: int in range(render_positions.size()):
+			world_positions[i] = gxf * render_positions[i]
 		_interaction.evaluate_ray(
 			controller.global_position,
 			-controller.global_transform.basis.z,
 			pinch,
-			_render_ids,
+			render_ids,
 			world_positions
 		)
 		break
@@ -1437,35 +1382,24 @@ func _on_presence_connection_changed(connected: bool) -> void:
 		_schedule_presence_reconnect()
 
 
-var _dbg_pos_frames: int = 0
-
-
-func _on_position_updated(node_id: int, position: Vector3, _velocity: Vector3) -> void:
-	# Server is authoritative — but never fight the local hand while dragging.
-	_dbg_pos_frames += 1
-	if _dbg_pos_frames == 1 or _dbg_pos_frames % 5000 == 0:
-		print("GraphScene DEBUG: position update #%d node=%d pos=%s" % [_dbg_pos_frames, node_id, position])
-	if node_id == _grabbed_id:
-		return
-	# Store as an optimistic target; the render position hunts toward it each
-	# frame (_hunt_positions). Seed the render position on first appearance so a
-	# new node doesn't ease in from the origin.
-	if not _node_positions.has(node_id):
-		_node_positions[node_id] = position
-	_node_targets[node_id] = position
-
-
+# position_updated is no longer emitted by the Rust client (the store owns
+# positions), so there is no _on_position_updated handler. Colours + centrality
+# arrive via the throttled node_visuals_updated below; positions never touch
+# GDScript.
 func _on_node_visuals_updated(node_id: int, community_id: int, centrality: float, anomaly: float) -> void:
-	_node_colors[node_id] = _community_color(community_id, anomaly, node_id)
-	_node_sizes[node_id] = clampf(0.5 + centrality * 1.5, 0.5, 2.0)
+	# Colour is now computed Rust-side inside build_node_buffer; GDScript keeps only
+	# centrality (for the LOD/edge selection domain) and marks the selection dirty
+	# so a new/changed node re-enters the drawn set.
 	_node_centrality[node_id] = centrality
 	_centrality_max = maxf(_centrality_max, centrality)
+	_selection_dirty = true
 	# Topology often arrives before centrality analytics, forcing the edge ranking
 	# onto its global-weight fallback. Re-rank ONCE — not per-frame — the moment
 	# centrality covers the nodes the cap will actually draw, so the rendered edge
 	# subset finally reflects the visible subgraph.
 	if not _edge_rerank_done and not _edge_pairs_full.is_empty():
-		var need: int = mini(_node_budget, maxi(1, _node_positions.size()))
+		var node_total: int = _binary_client.node_count() if _binary_client != null else 0
+		var need: int = mini(_node_budget, maxi(1, node_total))
 		if _node_centrality.size() >= need:
 			_rerank_edges(true)
 			_edge_rerank_done = true
@@ -1498,8 +1432,10 @@ func _on_topology_updated(_edge_count: int) -> void:
 	for i: int in range(_edge_pairs_full.size()):
 		_topo_ids[_edge_pairs_full[i]] = true
 	_recompute_instance_budgets()
+	_selection_dirty = true
+	var known: int = _binary_client.node_count() if _binary_client != null else 0
 	print("GraphScene DEBUG: topology arrived edges=%d nodes=%d positions_known=%d budgets=%d/%d" % [
-		_edge_weights_full.size(), _topo_ids.size(), _node_positions.size(), _node_budget, _edge_budget])
+		_edge_weights_full.size(), _topo_ids.size(), known, _node_budget, _edge_budget])
 	# preserve_show=false: a fresh topology defaults to showing all ranked edges.
 	_rerank_edges(false)
 
@@ -1513,6 +1449,7 @@ func _recompute_instance_budgets() -> void:
 	var topo_nodes: int = _topo_ids.size()
 	_node_budget = NODE_SAFETY_CEILING if topo_nodes <= 0 else mini(NODE_SAFETY_CEILING, topo_nodes)
 	_edge_budget = mini(EDGE_SAFETY_CEILING, _edge_weights_full.size())
+	_selection_dirty = true
 	if hud != null:
 		_refresh_controls_status()
 
@@ -1683,11 +1620,13 @@ func _on_node_grabbed(node_id: int, _position: Vector3) -> void:
 		return
 	_grabbed_id = node_id
 	print("GraphScene DEBUG: node_grabbed id=%d" % node_id)
+	# Node render position now lives in the Rust store.
+	var pos: Vector3 = _binary_client.node_position(node_id) if _binary_client != null else Vector3.ZERO
+	_grab_target_server = pos
 	# Remember how far along the ray the node was so the drag preserves depth.
 	if _grab_controller != null:
-		var node_world: Vector3 = graph_root.global_transform * _node_positions.get(node_id, Vector3.ZERO)
+		var node_world: Vector3 = graph_root.global_transform * pos
 		_grab_distance = clampf(_grab_controller.global_position.distance_to(node_world), 0.2, 6.0)
-	var pos: Vector3 = _node_positions.get(node_id, Vector3.ZERO)
 	if _binary_client != null and _binary_client.has_method("send_drag_start"):
 		_binary_client.send_drag_start(node_id, pos)
 	_pulse(_grab_controller, 0.6, 0.08)

@@ -391,6 +391,9 @@ pub struct BinaryProtocolClient {
     /// Latest edge topology from `initialGraphLoad`, flattened for Godot.
     edges_flat: Vec<i32>,
     edge_weights: Vec<f32>,
+    /// Hot-path render store: owns node targets/positions and packs the MultiMesh
+    /// instance buffers so GDScript never loops per-instance (PRD-008 perf).
+    store: crate::render_store::RenderStore,
     base: Base<RefCounted>,
 }
 
@@ -428,6 +431,7 @@ impl BinaryProtocolClient {
             visuals: std::collections::HashMap::new(),
             edges_flat: Vec::new(),
             edge_weights: Vec::new(),
+            store: crate::render_store::RenderStore::new(),
             base,
         })
     }
@@ -441,6 +445,7 @@ impl BinaryProtocolClient {
     #[func]
     fn connect_to_url(&mut self, url: GString, token: GString, nostr_secret_hex: GString) {
         self.visuals.clear();
+        self.store.clear();
         let (handle, outbound) = crate::transport::spawn_graph_stream(
             url.to_string(),
             token.to_string(),
@@ -537,6 +542,83 @@ impl BinaryProtocolClient {
     fn ingest(&mut self, payload: PackedByteArray) {
         self.emit_frame(payload.as_slice());
     }
+
+    // --- hot-path render API (PRD-008): the store owns positions; GDScript calls
+    // these per frame instead of looping per instance. ------------------------
+
+    /// Ease every render position toward its streamed target. `grab_id` < 0 means
+    /// no grab; otherwise that node is pinned to `grab_pos` (server space) so it
+    /// tracks the hand. Call once per poll (per frame).
+    #[func]
+    fn hunt(&mut self, ease: f32, grab_id: i64, grab_pos: Vector3) {
+        let gid = if grab_id < 0 { None } else { Some(grab_id as u32) };
+        self.store.hunt(ease, gid, [grab_pos.x, grab_pos.y, grab_pos.z]);
+    }
+
+    /// Pack the node MultiMesh buffer for the drawn `ids` (20 floats/instance:
+    /// transform + colour + custom). `scale_comp` folds GraphRoot scale + the HUD
+    /// node-size factor; size eases `size_lo..size_hi` by sqrt(centrality-norm).
+    #[func]
+    fn build_node_buffer(&mut self, ids: PackedInt32Array, scale_comp: f32, size_lo: f32, size_hi: f32) -> PackedFloat32Array {
+        let v = self.store.build_node_buffer(ids.as_slice(), scale_comp, size_lo, size_hi);
+        PackedFloat32Array::from(v.as_slice())
+    }
+
+    /// Pack the edge MultiMesh buffer for the ranked `pairs` (12 floats/instance).
+    /// Only edges with both endpoints in the last node buffer's drawn set survive.
+    #[func]
+    fn build_edge_buffer(&mut self, pairs: PackedInt32Array, radius_comp: f32) -> PackedFloat32Array {
+        let v = self.store.build_edge_buffer(pairs.as_slice(), radius_comp);
+        PackedFloat32Array::from(v.as_slice())
+    }
+
+    /// Drawn node ids from the last `build_node_buffer`, for the interaction ray.
+    #[func]
+    fn get_render_ids(&self) -> PackedInt32Array {
+        let ids: Vec<i32> = self.store.render_ids().iter().map(|&id| id as i32).collect();
+        PackedInt32Array::from(ids.as_slice())
+    }
+
+    /// Drawn render positions (server space) parallel to `get_render_ids()`.
+    #[func]
+    fn get_render_positions(&self) -> PackedVector3Array {
+        let mut out = PackedVector3Array::new();
+        for p in self.store.render_positions() {
+            out.push(Vector3::new(p[0], p[1], p[2]));
+        }
+        out
+    }
+
+    /// All node ids currently in the store (for the LOD/topology selection).
+    #[func]
+    fn get_node_ids(&self) -> PackedInt32Array {
+        let ids: Vec<i32> = self.store.all_ids().iter().map(|&id| id as i32).collect();
+        PackedInt32Array::from(ids.as_slice())
+    }
+
+    /// Node count in the store.
+    #[func]
+    fn node_count(&self) -> i64 {
+        self.store.len() as i64
+    }
+
+    /// Current render position of a node (ZERO if unknown) — used at grab start.
+    #[func]
+    fn node_position(&self, node_id: u32) -> Vector3 {
+        let p = self.store.position_of(node_id);
+        Vector3::new(p[0], p[1], p[2])
+    }
+
+    /// Per-axis percentile AABB `[minx,miny,minz,maxx,maxy,maxz]` over render
+    /// positions, excluding `exclude_id` (< 0 = none). Empty array when no nodes.
+    #[func]
+    fn render_aabb(&self, lo_q: f32, hi_q: f32, exclude_id: i64) -> PackedFloat32Array {
+        let excl = if exclude_id < 0 { None } else { Some(exclude_id as u32) };
+        match self.store.aabb_percentile(lo_q, hi_q, excl) {
+            Some(bb) => PackedFloat32Array::from(bb.as_slice()),
+            None => PackedFloat32Array::new(),
+        }
+    }
 }
 
 #[cfg(not(test))]
@@ -560,14 +642,13 @@ impl BinaryProtocolClient {
         let mut emit_buf: Vec<NodeUpdate> = Vec::new();
         ingest_frame(Bytes::copy_from_slice(bytes), |u| emit_buf.push(u));
         for u in emit_buf {
-            self.base_mut().emit_signal(
-                "position_updated",
-                &[
-                    Variant::from(u.node_id),
-                    Variant::from(Vector3::new(u.position[0], u.position[1], u.position[2])),
-                    Variant::from(Vector3::new(u.velocity[0], u.velocity[1], u.velocity[2])),
-                ],
-            );
+            // The Rust render store now owns positions (hunted per poll, packed into
+            // MultiMesh buffers) — no per-node position_updated signal, which at 13k
+            // nodes was a ~13k-emit-per-frame storm across the gdext boundary.
+            self.store
+                .upsert(u.node_id, u.position, u.community_id, u.anomaly, u.centrality);
+            // Visuals still surface to GDScript (throttled to quantised-key changes)
+            // so the scene keeps its centrality mirror for the LOD/edge selection.
             let key = VisualsKey::of(&u);
             if self.visuals.insert(u.node_id, key) != Some(key) {
                 self.base_mut().emit_signal(
