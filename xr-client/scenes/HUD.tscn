@@ -57,7 +57,7 @@ text = "FPS: --  MTP: --ms  Avatars: 0"
 [node name="ControlsSep" type="HSeparator" parent="HudViewport/HudControl/VBox"]
 
 [node name="ControlsHeader" type="Label" parent="HudViewport/HudControl/VBox"]
-text = "Controls"
+text = "Layout"
 
 [node name="ControlsGrid" type="GridContainer" parent="HudViewport/HudControl/VBox"]
 columns = 2
@@ -91,6 +91,34 @@ text = "Node Size +"
 [node name="NodeSizeMinusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid"]
 custom_minimum_size = Vector2(180, 56)
 text = "Node Size -"
+
+[node name="HierViewHeader" type="Label" parent="HudViewport/HudControl/VBox"]
+text = "Hierarchy & View"
+
+[node name="ControlsGrid2" type="GridContainer" parent="HudViewport/HudControl/VBox"]
+columns = 2
+
+[node name="HierarchyButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "Hierarchy: Off"
+
+[node name="UnpinAllButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "Unpin All"
+
+[node name="ShellsPlusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "Shells +"
+
+[node name="ShellsMinusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "Shells -"
+
+[node name="FlatToggleButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "View: 3D"
+
+[node name="Grid2Spacer" type="Control" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
 
 [node name="ControlsStatus" type="Label" parent="HudViewport/HudControl/VBox"]
 text = "repelK --  restLen --  edges --  node x--"

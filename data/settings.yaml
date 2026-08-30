@@ -165,7 +165,7 @@ visualisation:
         springK: 12.0
         globalSpeed: 0.4
         graphSeparationX: 0.0
-        axisCompressionZ: 0.9
+        axisCompressionZ: 1.0
         boundaryDamping: 0.95
         dt: 0.016
         temperature: 0.0
@@ -278,7 +278,7 @@ visualisation:
         springK: 12.0
         globalSpeed: 0.4
         graphSeparationX: 0.0
-        axisCompressionZ: 0.0
+        axisCompressionZ: 1.0
         boundaryDamping: 0.95
         dt: 0.016
         temperature: 0.0

@@ -126,8 +126,15 @@ export interface PhysicsSettings {
   // Dual-graph X-axis separation (knowledge ←→ ontology populations)
   graphSeparationX?: number;
 
-  // Single-axis Z compression for disk-style layouts (0=full 3D, 1=flat to z=0)
+  // Continuous single-axis Z scale for disk-style layouts. Default 1.0 = fully 3D;
+  // lower values compress toward the z=0 plane. Backend clamps to 0.05–1.0.
   axisCompressionZ?: number;
+  // Arrange knowledge + ontology populations as two facing discs (default false).
+  enableDualDiscLayout?: boolean;
+  // DAG radial rank-bias force strength — concentric hierarchy shells (default 0).
+  dagBiasK?: number;
+  // Radial distance between successive DAG hierarchy levels/shells (default 60).
+  dagLevelDistance?: number;
 }
 
 // Client-side interpolation/tweening settings.

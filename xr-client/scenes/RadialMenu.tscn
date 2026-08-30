@@ -1,0 +1,54 @@
+[gd_scene load_steps=5 format=3 uid="uid://b3xrradialmenu1"]
+
+[ext_resource type="Script" path="res://scripts/radial_menu.gd" id="1_radial"]
+
+[sub_resource type="QuadMesh" id="QuadMesh_radial"]
+size = Vector2(0.6, 0.6)
+
+[sub_resource type="ViewportTexture" id="ViewportTexture_radial"]
+resource_local_to_scene = true
+viewport_path = NodePath("MenuViewport")
+
+[sub_resource type="StandardMaterial3D" id="Mat_radial"]
+resource_local_to_scene = true
+transparency = 1
+shading_mode = 0
+albedo_texture = SubResource("ViewportTexture_radial")
+
+[node name="RadialMenu" type="Node3D"]
+script = ExtResource("1_radial")
+
+[node name="MenuViewport" type="SubViewport" parent="."]
+disable_3d = true
+transparent_bg = true
+size = Vector2i(1024, 1024)
+render_target_update_mode = 4
+
+[node name="MenuControl" type="Control" parent="MenuViewport"]
+custom_minimum_size = Vector2(1024, 1024)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Items" type="Control" parent="MenuViewport/MenuControl"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="OverflowSlider" type="HSlider" parent="MenuViewport/MenuControl"]
+visible = false
+anchor_left = 0.15
+anchor_top = 0.92
+anchor_right = 0.85
+anchor_bottom = 0.92
+offset_top = -16.0
+offset_bottom = 16.0
+min_value = 0.0
+max_value = 1.0
+step = 0.001
+
+[node name="MenuPanel" type="MeshInstance3D" parent="."]
+mesh = SubResource("QuadMesh_radial")
+material_override = SubResource("Mat_radial")

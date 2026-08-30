@@ -9,7 +9,7 @@ import manifestJson from '../settings-manifest.json';
 import legacyFixture from './legacy-paths.fixture.json';
 
 const EXPECTED_GROUP_COUNTS: Record<string, number> = {
-  motion: 48,
+  motion: 51,
   look: 29,
   labels: 10,
   quality: 32,
@@ -26,8 +26,23 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
  * Total registry field count: the 168 frozen legacy fields + the Agents group +
  * the two W-G phase-1 client-only groups (decisions, provenance).
  */
+/**
+ * Backend physics paths introduced by the Wave-1 immersive-layout additions
+ * (continuous Z compression already existed in the WP5 baseline; these three are
+ * new): dual-disc layout, DAG radial rank-bias force strength and level spacing.
+ * They post-date the frozen WP5 baseline, so the zero-drift test (c) excludes them
+ * from the migrated comparison and (c4) asserts them independently. All route to
+ * the physics bucket (serverBucketFor → 'physics').
+ */
+const WAVE1_LAYOUT_PATHS: string[] = [
+  'visualisation.graphs.logseq.physics.enableDualDiscLayout',
+  'visualisation.graphs.logseq.physics.dagBiasK',
+  'visualisation.graphs.logseq.physics.dagLevelDistance',
+];
+
 const TOTAL_FIELDS =
-  168 + EXPECTED_GROUP_COUNTS.agents + EXPECTED_GROUP_COUNTS.decisions + EXPECTED_GROUP_COUNTS.provenance;
+  168 + EXPECTED_GROUP_COUNTS.agents + EXPECTED_GROUP_COUNTS.decisions + EXPECTED_GROUP_COUNTS.provenance
+  + WAVE1_LAYOUT_PATHS.length;
 
 /**
  * Frozen client-only paths introduced by the W-G phase-1 Decisions/Provenance
@@ -134,10 +149,11 @@ describe('control-center settings registry', () => {
     const legacySet = new Set(legacyPaths());
     const agentSet = new Set(AGENT_GROUP_PATHS);
     const wgSet = new Set(WG_GROUP_PATHS);
+    const wave1Set = new Set(WAVE1_LAYOUT_PATHS);
     // Compare only the pre-existing (migrated) groups against the frozen baseline;
-    // the Agents group (c2) and the W-G groups (c3) post-date WP5 and are asserted
-    // independently.
-    const migratedPaths = ALL_PATHS.filter((p) => !agentSet.has(p) && !wgSet.has(p));
+    // the Agents group (c2), the W-G groups (c3) and the Wave-1 layout paths (c4)
+    // post-date WP5 and are asserted independently.
+    const migratedPaths = ALL_PATHS.filter((p) => !agentSet.has(p) && !wgSet.has(p) && !wave1Set.has(p));
     const migratedSet = new Set(migratedPaths);
 
     // No migrated path exists that is absent from the frozen legacy set.
@@ -181,6 +197,17 @@ describe('control-center settings registry', () => {
     expect(wgPaths.filter((p) => legacySet.has(p))).toEqual([]);
     // and they are all clientOnly (serverBucketFor → null): no backend routing
     for (const p of wgPaths) expect(serverBucketFor(p)).toBeNull();
+  });
+
+  it('(c4) the Wave-1 layout paths are registered on physics, disjoint from legacy', () => {
+    const legacySet = new Set(legacyPaths());
+    const registrySet = new Set(ALL_PATHS);
+    // every declared Wave-1 path is present exactly once in the registry
+    for (const p of WAVE1_LAYOUT_PATHS) expect(registrySet.has(p)).toBe(true);
+    // none collide with the frozen legacy baseline
+    expect(WAVE1_LAYOUT_PATHS.filter((p) => legacySet.has(p))).toEqual([]);
+    // and they all route to the physics bucket (not clientOnly)
+    for (const p of WAVE1_LAYOUT_PATHS) expect(serverBucketFor(p)).toBe('physics');
   });
 
   it('(d) every testid is unique', () => {

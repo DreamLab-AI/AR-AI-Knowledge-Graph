@@ -177,8 +177,8 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
   }
 
   // Dual-graph disc projection. The knowledge + ontology graphs flatten into two
-  // facing discs (axisCompressionZ, 0=3D blobs..1=flat discs) separated across a
-  // depth gap (graphSeparationX). This acts on the display projection, NOT the
+  // facing discs (axisCompressionZ, continuous Z-scale: 1.0=fully 3D blobs..0.05=flat
+  // discs) separated across a depth gap (graphSeparationX). This acts on the display projection, NOT the
   // force constants, so it is kept distinct from the repulsion rule above.
   // Handles e.g. "separate and flatten the two graphs" and
   // "reset the separation and flattening to zero" in a single PUT.
@@ -196,10 +196,10 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
 
     if (lower.includes('flatten') || /\bflat\b/.test(lower) || lower.includes('facing disc')
       || lower.includes('co-planar') || lower.includes('coplanar')) {
-      discBody.axisCompressionZ = toZero ? 0 : 0.9;
+      discBody.axisCompressionZ = toZero ? 1.0 : 0.05;
     } else if (lower.includes('unflatten') || lower.includes('un-flatten')
       || lower.includes('blob') || (lower.includes('3d') && lower.includes('graph'))) {
-      discBody.axisCompressionZ = 0;
+      discBody.axisCompressionZ = 1.0;
     }
 
     if (Object.keys(discBody).length > 0) {

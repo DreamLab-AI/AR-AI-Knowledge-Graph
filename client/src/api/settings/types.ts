@@ -48,6 +48,9 @@ export interface PhysicsSettings {
   ssspAlpha: number;
   graphSeparationX: number;
   axisCompressionZ: number;
+  enableDualDiscLayout: boolean;
+  dagBiasK: number;
+  dagLevelDistance: number;
 
   // --- Per-population spring strength (independent KG/ontology/agent layout control) ---
   // Literal kernel coefficient (1.0 == LinLog identity). Drives the GPU spring_scale buffer.

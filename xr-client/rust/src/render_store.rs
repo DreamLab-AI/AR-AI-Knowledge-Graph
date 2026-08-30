@@ -23,7 +23,55 @@
 //! `c0,c1,c2` and origin `o` it is `[c0.x,c1.x,c2.x,o.x, c0.y,c1.y,c2.y,o.y,
 //! c0.z,c1.z,c2.z,o.z]`.
 
-use std::collections::{HashMap, HashSet};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
+
+/// One `search_labels` match. `Ord` is defined so that a GREATER value is a WORSE
+/// result (higher rank tier, then lower centrality, then larger id) — a max-heap
+/// of these therefore has the worst-so-far on top, which is exactly what a bounded
+/// top-k keep-the-best-`max` selection pops. `into_sorted_vec()` then yields the
+/// survivors best-first.
+#[derive(Clone, Copy)]
+struct LabelHit {
+    /// 0 = prefix match, 1 = substring match (lower is better).
+    rank: u8,
+    centrality: f32,
+    id: u32,
+}
+
+impl LabelHit {
+    /// Worse-than ordering: bigger rank is worse; for equal rank, lower centrality
+    /// is worse; for equal centrality, larger id is worse (stable tie-break).
+    fn worseness(&self, other: &Self) -> Ordering {
+        self.rank
+            .cmp(&other.rank)
+            .then_with(|| {
+                // lower centrality = worse = "greater" in this ordering.
+                other
+                    .centrality
+                    .partial_cmp(&self.centrality)
+                    .unwrap_or(Ordering::Equal)
+            })
+            .then_with(|| self.id.cmp(&other.id))
+    }
+}
+
+impl Ord for LabelHit {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.worseness(other)
+    }
+}
+impl PartialOrd for LabelHit {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for LabelHit {
+    fn eq(&self, other: &Self) -> bool {
+        self.worseness(other) == Ordering::Equal
+    }
+}
+impl Eq for LabelHit {}
 
 /// Proximity-label metadata for one node (kept small — no full metadata map).
 #[derive(Default, Clone)]
@@ -32,6 +80,9 @@ struct NodeMeta {
     /// slugified label when empty).
     meta_id: String,
     label: String,
+    /// Lowercased `label`, precomputed at `set_meta` time so keystroke-driven
+    /// `search_labels` never re-lowercases every label per call.
+    label_lower: String,
     node_type: String,
     detail: String,
 }
@@ -202,11 +253,13 @@ impl RenderStore {
 
     /// Store a node's label metadata (from initialGraphLoad).
     pub fn set_meta(&mut self, node_id: u32, meta_id: String, label: String, node_type: String, detail: String) {
+        let label_lower = label.to_lowercase();
         self.meta.insert(
             node_id,
             NodeMeta {
                 meta_id,
                 label,
+                label_lower,
                 node_type,
                 detail,
             },
@@ -240,6 +293,63 @@ impl RenderStore {
                 parts.join(" · ")
             }
         }
+    }
+
+    /// Centrality for a node id (0.0 if unknown) — used to rank label search hits.
+    fn centrality_of(&self, node_id: u32) -> f32 {
+        self.id_index
+            .get(&node_id)
+            .map(|&s| self.centrality[s])
+            .unwrap_or(0.0)
+    }
+
+    /// Case-insensitive label search over the node metadata. Ranking:
+    /// prefix matches (label starts with `query`) rank before substring matches;
+    /// within each tier, higher centrality ranks first (stable id order breaks
+    /// remaining ties). Empty `query` or `max == 0` returns an empty vec.
+    /// Returns at most `max` node ids.
+    pub fn search_labels(&self, query: &str, max: usize) -> Vec<u32> {
+        if max == 0 {
+            return Vec::new();
+        }
+        let needle = query.trim().to_lowercase();
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        // Bounded top-k: keep at most `max` best hits in a max-heap (worst on top),
+        // so the working set never exceeds `max` and no full sort of all matches is
+        // needed. Labels are matched against the cached lowercase copy — no
+        // per-call allocation per label.
+        let mut heap: BinaryHeap<LabelHit> = BinaryHeap::with_capacity(max + 1);
+        for (&id, meta) in &self.meta {
+            let hay = &meta.label_lower;
+            if hay.is_empty() {
+                continue;
+            }
+            let rank = if hay.starts_with(&needle) {
+                0u8
+            } else if hay.contains(&needle) {
+                1u8
+            } else {
+                continue;
+            };
+            let hit = LabelHit {
+                rank,
+                centrality: self.centrality_of(id),
+                id,
+            };
+            if heap.len() < max {
+                heap.push(hit);
+            } else if let Some(worst) = heap.peek() {
+                // Replace the current worst only if this hit is strictly better.
+                if hit.worseness(worst) == Ordering::Less {
+                    heap.pop();
+                    heap.push(hit);
+                }
+            }
+        }
+        // into_sorted_vec yields ascending by Ord (= best-first here).
+        heap.into_sorted_vec().into_iter().map(|h| h.id).collect()
     }
 
     /// Ids of nodes within `radius` (server space) of `center`, nearest first,
@@ -569,6 +679,81 @@ mod tests {
         // Only node_type present.
         s.set_meta(2, "".into(), "Beta".into(), "agent".into(), "".into());
         assert_eq!(s.detail_of(2), "agent");
+    }
+
+    #[test]
+    fn search_labels_ranks_prefix_over_substring() {
+        let mut s = RenderStore::new();
+        // "Graph" is a prefix match; "Knowledge Graph" only a substring match.
+        s.set_meta(1, "".into(), "Knowledge Graph".into(), "page".into(), "".into());
+        s.set_meta(2, "".into(), "Graph Theory".into(), "page".into(), "".into());
+        let hits = s.search_labels("graph", 10);
+        assert_eq!(hits, vec![2, 1], "prefix match ranks before substring match");
+    }
+
+    #[test]
+    fn search_labels_is_case_insensitive() {
+        let mut s = RenderStore::new();
+        s.set_meta(1, "".into(), "OntoLogy".into(), "page".into(), "".into());
+        assert_eq!(s.search_labels("ONTOLOGY", 10), vec![1]);
+        assert_eq!(s.search_labels("onto", 10), vec![1]);
+        assert_eq!(s.search_labels("LOG", 10), vec![1]); // substring, mixed case
+    }
+
+    #[test]
+    fn search_labels_ties_break_by_centrality_desc() {
+        let mut s = RenderStore::new();
+        // Both prefix matches; centrality (from position upserts) orders them.
+        s.set_meta(1, "".into(), "Node Alpha".into(), "page".into(), "".into());
+        s.set_meta(2, "".into(), "Node Beta".into(), "page".into(), "".into());
+        s.set_meta(3, "".into(), "Node Gamma".into(), "page".into(), "".into());
+        s.upsert(1, [0.0; 3], 0, 0.0, 0.2);
+        s.upsert(2, [0.0; 3], 0, 0.0, 0.9);
+        s.upsert(3, [0.0; 3], 0, 0.0, 0.5);
+        assert_eq!(s.search_labels("node", 10), vec![2, 3, 1]);
+    }
+
+    #[test]
+    fn search_labels_respects_cap_and_empty_query() {
+        let mut s = RenderStore::new();
+        for i in 1..=5u32 {
+            s.set_meta(i, "".into(), format!("Item {i}"), "page".into(), "".into());
+        }
+        assert_eq!(s.search_labels("item", 2).len(), 2, "capped at max");
+        assert!(s.search_labels("", 10).is_empty(), "empty query → no hits");
+        assert!(s.search_labels("   ", 10).is_empty(), "whitespace query → no hits");
+        assert!(s.search_labels("item", 0).is_empty(), "max 0 → no hits");
+        assert!(s.search_labels("nonexistent", 10).is_empty());
+    }
+
+    #[test]
+    fn search_labels_bounded_topk_keeps_the_best_not_arbitrary() {
+        // Many matches, small cap: the bounded heap must return the globally best
+        // `max`, independent of HashMap iteration order. Two prefix matches (best
+        // tier) plus several substring matches; max=2 must return exactly the two
+        // prefix hits, ranked by centrality desc.
+        let mut s = RenderStore::new();
+        s.set_meta(1, "".into(), "Graph Alpha".into(), "page".into(), "".into()); // prefix
+        s.set_meta(2, "".into(), "Graph Beta".into(), "page".into(), "".into());  // prefix
+        for i in 3..=12u32 {
+            s.set_meta(i, "".into(), format!("A Knowledge Graph {i}"), "page".into(), "".into()); // substring
+        }
+        s.upsert(1, [0.0; 3], 0, 0.0, 0.3);
+        s.upsert(2, [0.0; 3], 0, 0.0, 0.9);
+        // give a substring match high centrality — must STILL lose to prefix tier.
+        s.upsert(5, [0.0; 3], 0, 0.0, 1.0);
+        let hits = s.search_labels("graph", 2);
+        assert_eq!(hits, vec![2, 1], "top-2 = the two prefix matches, centrality desc");
+    }
+
+    #[test]
+    fn search_labels_uses_cached_lowercase() {
+        // set_meta caches label_lower; a match on mixed case proves the cache is
+        // populated and used (not the raw label).
+        let mut s = RenderStore::new();
+        s.set_meta(1, "".into(), "MixedCaseLabel".into(), "page".into(), "".into());
+        assert_eq!(s.search_labels("mixedcase", 5), vec![1]);
+        assert_eq!(s.search_labels("CASELABEL", 5), vec![1]);
     }
 
     #[test]

@@ -47,7 +47,10 @@ export const DEFAULT_PHYSICS_SETTINGS: Partial<PhysicsSettings> = {
   adaptiveSpeed: true,
   ssspAlpha: 1.5,
   graphSeparationX: 0.0,
-  axisCompressionZ: 0.9,
+  axisCompressionZ: 1.0,
+  enableDualDiscLayout: false,
+  dagBiasK: 0.0,
+  dagLevelDistance: 60.0,
 
   // --- Per-population spring strength (independent KG/ontology/agent layout control) ---
   springKKnowledge: 1.0,

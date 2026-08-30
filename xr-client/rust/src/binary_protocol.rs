@@ -273,6 +273,38 @@ pub fn parse_agent_identities(text: &str) -> Vec<(u32, String)> {
     out
 }
 
+/// Build the outbound `nodeUnpin` text envelope for `node_id`. Pure (no Godot
+/// deps) so the wire shape is unit-tested directly. Server contract:
+/// `{"type":"nodeUnpin","data":{"nodeId":<id>}}` — the explicit release for a node
+/// pinned by a drag (drag-end now pins persistently via fx/fy/fz).
+pub fn build_node_unpin_msg(node_id: u32) -> String {
+    serde_json::json!({ "type": "nodeUnpin", "data": { "nodeId": node_id } }).to_string()
+}
+
+/// Server drag/pin routing literals. The server (`src/handlers/socket_flow_handler/
+/// message_routing.rs:80-87`) routes these message types by EXACT camelCase match;
+/// a snake_case `"node_drag_*"` type falls through unrouted and is silently dropped
+/// (server-authoritative drag/pin never fires). Keep these byte-identical to the
+/// server's `Some("nodeDragStart")` / `…Update` / `…End` arms.
+pub const DRAG_START_TYPE: &str = "nodeDragStart";
+pub const DRAG_UPDATE_TYPE: &str = "nodeDragUpdate";
+pub const DRAG_END_TYPE: &str = "nodeDragEnd";
+
+/// Build a drag message envelope. Pure (no Godot deps) so the wire shape is
+/// unit-tested directly. `position` present → `data.position {x,y,z}`; `None` →
+/// `data` carries only `nodeId`. Data field names are camelCase (`nodeId`,
+/// `position`) exactly as `position_updates.rs::handle_node_drag_*` reads them.
+pub fn build_drag_msg(msg_type: &str, node_id: u32, position: Option<[f32; 3]>) -> String {
+    let data = match position {
+        Some(p) => serde_json::json!({
+            "nodeId": node_id,
+            "position": { "x": p[0], "y": p[1], "z": p[2] },
+        }),
+        None => serde_json::json!({ "nodeId": node_id }),
+    };
+    serde_json::json!({ "type": msg_type, "data": data }).to_string()
+}
+
 /// Read a u32 from a JSON value that may be a number or a numeric string.
 fn json_u32(v: &serde_json::Value) -> Option<u32> {
     if let Some(n) = v.as_u64() {
@@ -599,18 +631,32 @@ impl BinaryProtocolClient {
     /// connection (`nostr_secret_hex` in `connect_to_url`).
     #[func]
     fn send_drag_start(&mut self, node_id: u32, position: Vector3) {
-        self.send_drag("node_drag_start", node_id, Some(position));
+        self.send_drag(DRAG_START_TYPE, node_id, Some(position));
     }
 
     #[func]
     fn send_drag_update(&mut self, node_id: u32, position: Vector3) {
-        self.send_drag("node_drag_update", node_id, Some(position));
+        self.send_drag(DRAG_UPDATE_TYPE, node_id, Some(position));
     }
 
-    /// End a drag: the server unpins the node and physics resumes ownership.
+    /// End a drag: the server PINS the node in place (persistent fx/fy/fz) until an
+    /// explicit `send_node_unpin`. (Backend semantics changed — drag-end no longer
+    /// releases the node; call `send_node_unpin` to hand it back to physics.)
     #[func]
     fn send_drag_end(&mut self, node_id: u32) {
-        self.send_drag("node_drag_end", node_id, None);
+        self.send_drag(DRAG_END_TYPE, node_id, None);
+    }
+
+    /// Explicitly unpin a node pinned by a prior drag-end, handing it back to
+    /// physics. Sends `{"type":"nodeUnpin","data":{"nodeId":<id>}}` over the same
+    /// outbound graph-socket channel `send_drag_*` uses. Requires the
+    /// NIP-98-authenticated connection (`nostr_secret_hex` in `connect_to_url`).
+    #[func]
+    fn send_node_unpin(&mut self, node_id: u32) {
+        let Some(tx) = self.outbound.as_ref() else {
+            return;
+        };
+        let _ = tx.send(build_node_unpin_msg(node_id));
     }
 
     /// Decode an explicit frame (e.g. captured fixture) and emit signals.
@@ -707,6 +753,16 @@ impl BinaryProtocolClient {
         PackedInt32Array::from(out.as_slice())
     }
 
+    /// Case-insensitive label search: node ids whose label matches `query`,
+    /// prefix matches ranked before substring matches, ties by centrality desc,
+    /// capped at `max`. Drives the wand search overlay (Wave 1).
+    #[func]
+    fn search_labels(&self, query: String, max: u32) -> PackedInt32Array {
+        let ids = self.store.search_labels(&query, max as usize);
+        let out: Vec<i32> = ids.into_iter().map(|id| id as i32).collect();
+        PackedInt32Array::from(out.as_slice())
+    }
+
     /// Primary label for a node (empty if unknown).
     #[func]
     fn label_of(&self, node_id: u32) -> GString {
@@ -733,15 +789,8 @@ impl BinaryProtocolClient {
         let Some(tx) = self.outbound.as_ref() else {
             return;
         };
-        let data = match position {
-            Some(p) => serde_json::json!({
-                "nodeId": node_id,
-                "position": { "x": p.x, "y": p.y, "z": p.z },
-            }),
-            None => serde_json::json!({ "nodeId": node_id }),
-        };
-        let msg = serde_json::json!({ "type": msg_type, "data": data });
-        let _ = tx.send(msg.to_string());
+        let pos = position.map(|p| [p.x, p.y, p.z]);
+        let _ = tx.send(build_drag_msg(msg_type, node_id, pos));
     }
 
     fn emit_frame(&mut self, bytes: &[u8]) {
@@ -1150,6 +1199,46 @@ mod tests {
         assert_eq!(ids[0], (1, did_a));
         // flag bits masked off -> node id 42
         assert_eq!(ids[1], (42, did_b));
+    }
+
+    #[test]
+    fn build_node_unpin_wire_shape() {
+        let msg = build_node_unpin_msg(42);
+        let v: serde_json::Value = serde_json::from_str(&msg).unwrap();
+        assert_eq!(v["type"], "nodeUnpin");
+        assert_eq!(v["data"]["nodeId"], 42);
+        // exactly the two documented keys under data
+        assert_eq!(v["data"].as_object().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn drag_messages_use_server_routing_literals() {
+        // These literals are hardcoded from the server routing table
+        // (src/handlers/socket_flow_handler/message_routing.rs:80-87). The server
+        // matches drag types by EXACT camelCase; the old snake_case
+        // "node_drag_*" fell through unrouted (server-authoritative drag was dead).
+        assert_eq!(DRAG_START_TYPE, "nodeDragStart");
+        assert_eq!(DRAG_UPDATE_TYPE, "nodeDragUpdate");
+        assert_eq!(DRAG_END_TYPE, "nodeDragEnd");
+
+        let start: serde_json::Value =
+            serde_json::from_str(&build_drag_msg(DRAG_START_TYPE, 7, Some([1.0, 2.0, 3.0]))).unwrap();
+        let update: serde_json::Value =
+            serde_json::from_str(&build_drag_msg(DRAG_UPDATE_TYPE, 7, Some([4.0, 5.0, 6.0]))).unwrap();
+        let end: serde_json::Value =
+            serde_json::from_str(&build_drag_msg(DRAG_END_TYPE, 7, None)).unwrap();
+
+        assert_eq!(start["type"], "nodeDragStart");
+        assert_eq!(update["type"], "nodeDragUpdate");
+        assert_eq!(end["type"], "nodeDragEnd");
+        // data field names are camelCase (position_updates.rs handle_node_drag_*).
+        assert_eq!(start["data"]["nodeId"], 7);
+        assert_eq!(start["data"]["position"]["x"], 1.0);
+        assert_eq!(start["data"]["position"]["y"], 2.0);
+        assert_eq!(start["data"]["position"]["z"], 3.0);
+        // drag-end carries only nodeId (no position field).
+        assert_eq!(end["data"]["nodeId"], 7);
+        assert!(end["data"].get("position").is_none());
     }
 
     #[test]

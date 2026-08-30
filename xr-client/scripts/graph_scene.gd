@@ -83,6 +83,10 @@ var _proxemics: RefCounted = null
 var _selection: RefCounted = null
 var _gaze_tracker: RefCounted = null
 var _nostr_auth: RefCounted = null
+# True when a real XR_NOSTR_SECRET was supplied — gates NIP-98 auth on the physics
+# HTTP writes (the dev bearer 401s in release builds where the token literal is
+# stripped from the binary).
+var _nostr_secret_present: bool = false
 
 # Agent embodiments (M3), keyed by agent id, distinct from human peer _avatars.
 var _agents: Dictionary = {}
@@ -187,6 +191,27 @@ var _physics_http: HTTPRequest = null
 var _physics_pending: bool = false
 # Runtime visual factors (client-side only, no HTTP).
 var _node_size_factor: float = 1.0
+# Hierarchy / view physics state (server-routed via _physics_http, same one-in-flight
+# gate as Spread). Seeded to the backend defaults: DAG rank-bias off, 60-unit shell
+# spacing, full 3D (axisCompressionZ 1.0). Committed only on a successful PUT dispatch.
+var _dag_bias_on: bool = false
+var _dag_level_distance: float = 60.0
+var _z_compression: float = 1.0
+const DAG_BIAS_ON_K: float = 0.6
+const DAG_LEVEL_DISTANCE_MIN: float = 20.0
+const DAG_LEVEL_DISTANCE_MAX: float = 200.0
+const DAG_LEVEL_DISTANCE_STEP: float = 20.0
+const Z_COMPRESSION_FLAT: float = 0.3
+const Z_COMPRESSION_FULL_3D: float = 1.0
+# Node ids this session's operator has pinned via a drag (drag-end adds; Unpin All
+# releases them but only removes each on its nodeUnpinAck so unacked ids can be
+# retried). Dictionary used as a set (id → true) for O(1) add/dedupe.
+var _pinned_ids: Dictionary = {}
+# Physics values staged at PUT-dispatch time, keyed by the script member var name
+# → intended value. They are committed (applied to the member vars) ONLY when the
+# PUT returns 2xx in _on_physics_completed; a 401/timeout/500 discards them so the
+# tracked state (and the HUD it drives) never diverges from the backend.
+var _physics_staged: Dictionary = {}
 # Full topology kept verbatim so the edge ranking can be recomputed once centrality
 # analytics arrive (topology often precedes them, which would otherwise pin the
 # ranking to the global-weight fallback forever).
@@ -285,7 +310,12 @@ func _ready() -> void:
 	_selection = SelectionArbiterNode.create()
 	_gaze_tracker = GazeTracker.create()
 	# One signing identity for both the graph socket and the intervention POST.
-	_nostr_auth = NostrAuth.create(OS.get_environment("XR_NOSTR_SECRET"))
+	# NostrAuth.create always returns a signer (ephemeral if the secret is empty),
+	# so track whether a REAL secret was supplied: only then can NIP-98 authenticate
+	# as a power user; otherwise we fall back to the dev bearer (dev flow).
+	var _nostr_secret := OS.get_environment("XR_NOSTR_SECRET").strip_edges()
+	_nostr_secret_present = not _nostr_secret.is_empty()
+	_nostr_auth = NostrAuth.create(_nostr_secret)
 
 	if _selection != null and _selection.has_signal("selection_made"):
 		_selection.connect("selection_made", Callable(self, "_on_selection_made"))
@@ -482,16 +512,83 @@ func _on_hud_control(action: String) -> void:
 			_node_size_factor = clampf(_node_size_factor * 1.25, NODE_SIZE_FACTOR_MIN, NODE_SIZE_FACTOR_MAX)
 		"node_size_minus":
 			_node_size_factor = clampf(_node_size_factor * 0.8, NODE_SIZE_FACTOR_MIN, NODE_SIZE_FACTOR_MAX)
+		"hierarchy_toggle":
+			_request_hierarchy_toggle()
+		"shells_plus":
+			_request_shells(DAG_LEVEL_DISTANCE_STEP)
+		"shells_minus":
+			_request_shells(-DAG_LEVEL_DISTANCE_STEP)
+		"flat_toggle":
+			_request_flat_toggle()
+		"unpin_all":
+			_unpin_all()
 		_:
 			push_warning("GraphScene: unknown HUD control '%s'" % action)
 	_refresh_controls_status()
 
 
 func _refresh_controls_status() -> void:
-	if hud != null and hud.has_method("set_controls_status"):
+	if hud == null:
+		return
+	if hud.has_method("set_controls_status"):
 		var busy: String = "  [busy]" if _physics_pending else ""
-		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d/%d  nodes<=%d  node×%.2f%s" % [
-			_repel_k, _rest_length, _edge_show_count, _edge_budget, _node_budget, _node_size_factor, busy])
+		var dag: String = "on" if _dag_bias_on else "off"
+		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d/%d  nodes<=%d  node×%.2f  dag %s/%.0f  z%.2f  pin %d%s" % [
+			_repel_k, _rest_length, _edge_show_count, _edge_budget, _node_budget, _node_size_factor,
+			dag, _dag_level_distance, _z_compression, _pinned_ids.size(), busy])
+	# Reflect the toggle/pin state on the button faces (press-only, no per-frame cost).
+	if hud.has_method("set_control_states"):
+		hud.set_control_states(_dag_bias_on, _z_compression < Z_COMPRESSION_FULL_3D, _pinned_ids.size())
+
+
+# Hierarchy toggle: PUT dagBiasK (0.6 on / 0.0 off). Same one-in-flight gate and
+# commit-only-on-dispatch discipline as Spread, so a busy/failed PUT never drifts
+# the tracked toggle state away from what the server last received.
+func _request_hierarchy_toggle() -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var want_on := not _dag_bias_on
+	var k: float = DAG_BIAS_ON_K if want_on else 0.0
+	if _put_physics_body({"dagBiasK": k}):
+		_physics_staged = {"_dag_bias_on": want_on}
+
+
+# Shells ±: nudge dagLevelDistance by ±20, clamped [20, 200]; commit only on dispatch.
+func _request_shells(delta: float) -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var d := clampf(_dag_level_distance + delta, DAG_LEVEL_DISTANCE_MIN, DAG_LEVEL_DISTANCE_MAX)
+	if is_equal_approx(d, _dag_level_distance):
+		return  # already at the clamp rail — no redundant PUT
+	if _put_physics_body({"dagLevelDistance": d}):
+		_physics_staged = {"_dag_level_distance": d}
+
+
+# 3D ↔ Flat: toggle axisCompressionZ between full 3D (1.0) and flat discs (0.3).
+func _request_flat_toggle() -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var z: float = Z_COMPRESSION_FLAT if _z_compression >= Z_COMPRESSION_FULL_3D else Z_COMPRESSION_FULL_3D
+	if _put_physics_body({"axisCompressionZ": z}):
+		_physics_staged = {"_z_compression": z}
+
+
+# Unpin every node this session pinned via a drag. No HTTP: each unpin rides the
+# existing outbound graph socket through the Rust client's send_node_unpin, which
+# sends {"type":"nodeUnpin",...} to hand the node back to physics. (drag-end now
+# PINS persistently, so releasing must go through this explicit unpin path.)
+func _unpin_all() -> void:
+	if _binary_client == null or not _binary_client.has_method("send_node_unpin"):
+		return
+	# Send an unpin for every tracked id but do NOT clear the set here: an id is
+	# removed only when its nodeUnpinAck arrives (see _on_graph_text). A
+	# disconnected/dropped send therefore keeps the id, so pressing Unpin All again
+	# retries the still-unacked ones.
+	for id: int in _pinned_ids.keys():
+		_binary_client.send_node_unpin(id)
 
 
 # Spread ±: compute the candidate params, and only COMMIT the tracked values if the
@@ -503,9 +600,10 @@ func _request_spread(repel_mul: float, rest_mul: float) -> void:
 		return
 	var rk := clampf(_repel_k * repel_mul, REPEL_K_MIN, REPEL_K_MAX)
 	var rl := clampf(_rest_length * rest_mul, REST_LENGTH_MIN, REST_LENGTH_MAX)
+	# Stage, don't commit: the tracked values flip only on a 2xx ack (see
+	# _on_physics_completed) so a failed PUT can't drift them off the server state.
 	if _put_physics_params(rk, rl):
-		_repel_k = rk
-		_rest_length = rl
+		_physics_staged = {"_repel_k": rk, "_rest_length": rl}
 
 
 func _request_physics_reset() -> void:
@@ -519,21 +617,46 @@ func _request_physics_reset() -> void:
 # the gate so the next press can dispatch.
 func _on_physics_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 	_physics_pending = false
-	if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
-		push_warning("GraphScene: physics request failed (result=%d code=%d)" % [result, response_code])
+	var ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300
+	if ok:
+		# Commit the staged values only now that the server has accepted them, so the
+		# tracked state matches the backend exactly.
+		for field: String in _physics_staged:
+			set(field, _physics_staged[field])
+	else:
+		push_warning("GraphScene: physics request failed (result=%d code=%d) — staged change discarded" % [result, response_code])
+	# Discard staged on either outcome: on failure the member vars were never
+	# touched, so the HUD stays in sync with the backend (no divergence).
+	_physics_staged = {}
 	_refresh_controls_status()
 
 
-# POST {base}/api/settings/physics/reset-layout with the dev bearer. Returns true
-# if the request was dispatched (gate then held until _on_physics_completed).
+# Authorization headers for a physics write to `url` with `method` (upper-case).
+# Primary: NIP-98 (`Nostr <b64>`) minted per request via the shared NostrAuth —
+# the URL must be the exact request URL incl. query so the server's tag check
+# passes. This is the same signing path hud.gd's decide POST uses. Falls back to
+# the legacy dev bearer (+ X-Nostr-Pubkey, which the server's Bearer path requires)
+# only when no real secret was supplied — the dev flow. In release builds the dev
+# bearer 401s, so a real secret is mandatory there.
+func _auth_headers(url: String, method: String) -> PackedStringArray:
+	var headers := PackedStringArray()
+	if _nostr_auth != null and _nostr_secret_present and _nostr_auth.has_method("nip98_header"):
+		headers.push_back("Authorization: %s" % str(_nostr_auth.nip98_header(url, method)))
+	else:
+		headers.push_back("Authorization: %s" % PHYSICS_BEARER)
+		if _nostr_auth != null and _nostr_auth.has_method("pubkey_hex"):
+			headers.push_back("X-Nostr-Pubkey: %s" % str(_nostr_auth.pubkey_hex()))
+	headers.push_back("Content-Type: application/json")
+	return headers
+
+
+# POST {base}/api/settings/physics/reset-layout. Returns true if the request was
+# dispatched (gate then held until _on_physics_completed).
 func _post_physics_reset() -> bool:
 	if _physics_http == null:
 		return false
 	var url := "%s/api/settings/physics/reset-layout" % _http_base()
-	var headers := PackedStringArray([
-		"Authorization: %s" % PHYSICS_BEARER,
-		"Content-Type: application/json",
-	])
+	var headers := _auth_headers(url, "POST")
 	var err := _physics_http.request(url, headers, HTTPClient.METHOD_POST, "{}")
 	if err != OK:
 		push_warning("GraphScene: reset-layout POST failed to start (%d)" % err)
@@ -543,16 +666,22 @@ func _post_physics_reset() -> bool:
 
 
 # PUT {base}/api/settings/physics?graph=logseq with the given params. Returns true
-# only if the request was dispatched.
+# only if the request was dispatched. Thin wrapper over _put_physics_body.
 func _put_physics_params(repel_k: float, rest_length: float) -> bool:
+	return _put_physics_body({"repelK": repel_k, "restLength": rest_length})
+
+
+# PUT {base}/api/settings/physics?graph=logseq with an arbitrary physics body.
+# Returns true only if the request was dispatched (gate then held until
+# _on_physics_completed). Shared by Spread and the Hierarchy/View controls so they
+# all honour the single-in-flight gate identically.
+func _put_physics_body(body: Dictionary) -> bool:
 	if _physics_http == null:
 		return false
+	if _physics_pending:
+		return false
 	var url := "%s/api/settings/physics?graph=logseq" % _http_base()
-	var headers := PackedStringArray([
-		"Authorization: %s" % PHYSICS_BEARER,
-		"Content-Type: application/json",
-	])
-	var body := {"repelK": repel_k, "restLength": rest_length}
+	var headers := _auth_headers(url, "PUT")
 	var err := _physics_http.request(url, headers, HTTPClient.METHOD_PUT, JSON.stringify(body))
 	if err != OK:
 		push_warning("GraphScene: physics PUT failed to start (%d)" % err)
@@ -1263,6 +1392,13 @@ func _update_interaction() -> void:
 		if trigger_now < GRAB_RELEASE or _grab_controller == null:
 			if _binary_client.has_method("send_drag_end"):
 				_binary_client.send_drag_end(_grabbed_id)
+			# Track the node this drag pinned so Unpin All can release it later. The
+			# server pins on drag; drag-end above is our own release of THIS node, but
+			# the operator may re-pin via a fresh drag — recording it keeps the Unpin
+			# All set authoritative for the session.
+			if _grabbed_id >= 0:
+				_pinned_ids[_grabbed_id] = true
+				_refresh_controls_status()
 			_pulse(_grab_controller, 0.3, 0.05)
 			_grabbed_id = -1
 			_grab_controller = null
@@ -1617,6 +1753,15 @@ func _on_graph_text(json: String) -> void:
 			var p: Variant = msg.get("payload", {})
 			if typeof(p) == TYPE_DICTIONARY:
 				_handle_broker_new_case(p)
+		"nodeUnpinAck":
+			# Server confirmed the release (position_updates.rs handle_node_unpin →
+			# {"type":"nodeUnpinAck","data":{"nodeId":N}}). Drop the id from the
+			# retry set only now; unacked ids stay so Unpin All can retry them.
+			var d: Variant = msg.get("data", {})
+			if typeof(d) == TYPE_DICTIONARY and d.has("nodeId"):
+				var nid: int = int(d["nodeId"])
+				if _pinned_ids.erase(nid):
+					_refresh_controls_status()
 
 
 func _handle_broker_new_case(payload: Dictionary) -> void:

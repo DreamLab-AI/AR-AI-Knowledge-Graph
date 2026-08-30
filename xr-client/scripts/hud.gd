@@ -30,6 +30,12 @@ extends Node3D
 @onready var edges_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/EdgesMinusButton
 @onready var node_size_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizePlusButton
 @onready var node_size_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizeMinusButton
+# Hierarchy & View group (second controls row).
+@onready var hierarchy_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/HierarchyButton
+@onready var unpin_all_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/UnpinAllButton
+@onready var shells_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/ShellsPlusButton
+@onready var shells_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/ShellsMinusButton
+@onready var flat_toggle_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FlatToggleButton
 @onready var controls_status: Label = $HudViewport/HudControl/VBox/ControlsStatus
 
 # Double-click document view (narrativegoldmine page card).
@@ -58,7 +64,8 @@ signal case_decided(case_id: String, outcome: String, accepted: bool)
 ## effect (physics POST/PUT, edge/node runtime factors); the HUD only reports the
 ## intent so all state lives in one place. `action` is one of: reset_layout,
 ## spread_plus, spread_minus, edges_plus, edges_minus, node_size_plus,
-## node_size_minus.
+## node_size_minus, hierarchy_toggle, shells_plus, shells_minus, flat_toggle,
+## unpin_all.
 signal control_pressed(action: String)
 
 const ACSP_GLOW_COLOR: Color = Color(1.0, 0.62, 0.12, 1.0)
@@ -104,6 +111,12 @@ func _ready() -> void:
 	edges_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "edges_minus"))
 	node_size_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_plus"))
 	node_size_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_minus"))
+	# Hierarchy & View group — same named-intent pattern; GraphScene owns the effect.
+	hierarchy_button.pressed.connect(func() -> void: emit_signal("control_pressed", "hierarchy_toggle"))
+	shells_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "shells_plus"))
+	shells_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "shells_minus"))
+	flat_toggle_button.pressed.connect(func() -> void: emit_signal("control_pressed", "flat_toggle"))
+	unpin_all_button.pressed.connect(func() -> void: emit_signal("control_pressed", "unpin_all"))
 	# Document view (double-click node → narrativegoldmine page card).
 	close_doc_button.pressed.connect(hide_document)
 	scroll_up_button.pressed.connect(func() -> void: doc_scroll.scroll_vertical -= DOC_SCROLL_STEP)
@@ -119,6 +132,19 @@ func _ready() -> void:
 func set_controls_status(text: String) -> void:
 	if controls_status != null:
 		controls_status.text = text
+
+
+## Reflect the Hierarchy/View toggle state and pinned-node count on the button
+## faces. GraphScene owns the state and calls this on press only — no per-frame
+## cost. `hierarchy_on` drives "Hierarchy: On/Off"; `is_flat` drives "View:
+## Flat/3D"; `pinned_count` annotates the Unpin All button.
+func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int) -> void:
+	if hierarchy_button != null:
+		hierarchy_button.text = "Hierarchy: On" if hierarchy_on else "Hierarchy: Off"
+	if flat_toggle_button != null:
+		flat_toggle_button.text = "View: Flat" if is_flat else "View: 3D"
+	if unpin_all_button != null:
+		unpin_all_button.text = "Unpin All (%d)" % pinned_count if pinned_count > 0 else "Unpin All"
 
 
 # --- Document view (double-click node → narrativegoldmine page card) ----------
