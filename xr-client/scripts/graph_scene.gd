@@ -663,6 +663,11 @@ func _connect_graph() -> void:
 	# real budgets.
 	_node_budget = NODE_SAFETY_CEILING
 	_edge_budget = EDGE_SAFETY_CEILING
+	# Graph-state clear: drop any two-hand manual latch so the fresh snapshot is
+	# re-fitted from scratch rather than inheriting a stale manual transform.
+	_manual_transform = false
+	_two_hand_active = false
+	_manip_session_base_scale = -1.0
 	if _binary_client.has_method("connect_to_url"):
 		_binary_client.connect_to_url(_graph_ws_url, _graph_token, _nostr_secret_hex)
 
@@ -687,6 +692,11 @@ func _physics_process(delta: float) -> void:
 	_update_locomotion(delta)
 	_update_hud_grab()
 	_update_hud_pointer()
+	# Two-hand pinch scale/rotate/move must run BEFORE _fit_graph_to_view: on its
+	# first engage it latches _manual_transform, which makes the adaptive fit
+	# early-return this same frame so the gesture — not the auto-fit — owns
+	# graph_root's transform.
+	_update_two_hand_manip(delta)
 	# Rust owns the hunt now: one call eases all render positions toward their
 	# targets and pins the grabbed node to the wand — replaces the old GDScript
 	# per-node lerp over a 13k Dictionary.
@@ -771,6 +781,10 @@ func _update_hud_grab() -> void:
 			_hud_grab_controller = null
 		else:
 			hud.global_transform = _hud_grab_controller.global_transform * _hud_grab_offset
+		return
+	# While a two-hand graph gesture owns both grips, don't let a hand that drifts
+	# near the panel start a HUD grab (which would abort the gesture next frame).
+	if _two_hand_active:
 		return
 	for controller: XRController3D in [left_controller, right_controller]:
 		if controller == null or not controller.get_is_active():
@@ -925,6 +939,11 @@ const FIT_EASE: float = 0.06
 # change. Node/edge geometry compensates for `_graph_scale` so it never shrinks
 # to specks.
 func _fit_graph_to_view(_delta: float) -> void:
+	# A two-hand manual gesture takes permanent authority over graph_root until a
+	# new topology (or graph-state clear) re-enables the fit. While latched, the
+	# adaptive easing must not fight the user's transform.
+	if _manual_transform:
+		return
 	if graph_root == null or _binary_client == null or _binary_client.node_count() == 0:
 		return
 	_fit_frame += 1
@@ -972,6 +991,180 @@ func _percentile(values: PackedFloat32Array, q: float) -> float:
 		return sorted[lo]
 	var frac: float = rank - float(lo)
 	return lerpf(sorted[lo], sorted[hi], frac)
+
+
+# --- Two-hand pinch: whole-graph scale / rotate / move -----------------------
+# Ported conceptually from Graph2VR's SphereInteraction.cs. When BOTH grips are
+# held — and neither hand is grabbing a node (_grabbed_id) nor the HUD panel
+# (_hud_grab_controller) — the graph locks into a manipulation session. At
+# gesture start we capture: the left→right controller vector, the hand midpoint,
+# graph_root's current world transform, and a world-space pivot at the render
+# AABB centre (server-space centre mapped through graph_root.global_transform).
+# Each frame the graph is:
+#   • scaled by (current inter-hand distance / initial), clamped to a sane band;
+#   • rotated by the full-3D shortest-arc rotation between the initial and
+#     current inter-hand vectors;
+#   • translated by the hand-midpoint delta,
+# all composed about the fixed world pivot onto the captured start transform:
+#   world = T(midDelta) · T(pivot) · R · S · T(-pivot) · startXform
+# The first engage latches `_manual_transform`, permanently disabling the
+# adaptive auto-fit easing until a new topology / graph-state clear re-enables
+# it. Accumulated rotation past ~90° re-baselines the reference frame — the same
+# drift guard Graph2VR applies — so quaternion error can't build up over a long
+# twist. Single-grip behaviour (HUD grab) is untouched: this only engages when
+# BOTH grips are past the engage threshold and no HUD/node grab is active.
+const GRIP_MANIP_ENGAGE: float = 0.7
+const GRIP_MANIP_RELEASE: float = 0.5
+const MANIP_DRIFT_RESET_RAD: float = 1.5707963   # ~90°
+# ABSOLUTE scale band, measured against the SESSION baseline (the auto-fit scale
+# captured the moment the manual latch first engages, held until the latch
+# clears). Clamping the absolute scale — not a per-gesture factor — stops
+# repeated 0.1× gestures from compounding the graph toward zero while auto-fit is
+# off, which would leave it unreachable with no way to grow it back.
+const MANIP_ABS_SCALE_MIN: float = 0.05          # ×session (fitted) baseline
+const MANIP_ABS_SCALE_MAX: float = 50.0          # ×session (fitted) baseline
+const MANIP_MIN_SPAN: float = 0.02               # hands too coincident → no axis
+
+var _two_hand_active: bool = false
+# Permanent authority latch: while true the adaptive fit is disabled and the
+# graph transform is whatever the last manual gesture left it at.
+var _manual_transform: bool = false
+# Reference frame captured at gesture start (re-baselined on drift reset).
+var _manip_start_xform: Transform3D = Transform3D.IDENTITY
+var _manip_pivot_world: Vector3 = Vector3.ZERO
+var _manip_init_vec: Vector3 = Vector3.ZERO
+var _manip_init_dist: float = 1.0
+var _manip_init_mid: Vector3 = Vector3.ZERO
+# graph_root's uniform scale at the moment the latch FIRST engaged (i.e. the
+# auto-fit scale). Persists across every gesture in the session until the latch
+# clears (new topology / graph-state clear); the absolute scale clamp is measured
+# against this so gestures can't ratchet the graph past the reachable band.
+# -1 => not yet captured this session.
+var _manip_session_base_scale: float = -1.0
+
+
+func _update_two_hand_manip(_delta: float) -> void:
+	var lc := left_controller
+	var rc := right_controller
+	# Eligible only when both wands are tracking and no competing grab owns a hand.
+	# A node grab uses the trigger and the HUD grab uses a single grip; either one
+	# taking a hand blocks the two-hand gesture (and vice versa).
+	var eligible: bool = lc != null and rc != null \
+		and lc.get_is_active() and rc.get_is_active() \
+		and _grabbed_id == -1 and _hud_grab_controller == null
+	if _two_hand_active:
+		# End when either grip relaxes below the release threshold, a wand drops
+		# out, or a grab claims a hand. Hysteresis: release < engage so a grip held
+		# near the threshold can't flicker the session on and off.
+		if not eligible \
+				or lc.get_float("grip") < GRIP_MANIP_RELEASE \
+				or rc.get_float("grip") < GRIP_MANIP_RELEASE:
+			_two_hand_active = false
+			return
+		_apply_two_hand_manip()
+		return
+	if not eligible:
+		return
+	if lc.get_float("grip") < GRIP_MANIP_ENGAGE or rc.get_float("grip") < GRIP_MANIP_ENGAGE:
+		return
+	_begin_two_hand_manip()
+
+
+# Lock the reference frame for a new manipulation session and take fit authority.
+func _begin_two_hand_manip() -> void:
+	if graph_root == null:
+		return
+	var lp: Vector3 = left_controller.global_position
+	var rp: Vector3 = right_controller.global_position
+	var vec: Vector3 = rp - lp
+	if vec.length() < MANIP_MIN_SPAN:
+		return  # hands coincident: no stable axis yet, wait a frame to engage
+	var start_xform: Transform3D = graph_root.global_transform
+	# Pivot = render AABB centre in server space → world through the live graph
+	# transform. -1 includes every node (nothing is grabbed during a manip).
+	var pivot: Vector3 = _manip_aabb_centre_world(start_xform)
+	_manip_start_xform = start_xform
+	_manip_pivot_world = pivot
+	_manip_init_vec = vec
+	_manip_init_dist = vec.length()
+	_manip_init_mid = (lp + rp) * 0.5
+	# Capture the session baseline ONCE, on the transition into the latched state —
+	# this is the auto-fit scale. Subsequent gestures within the same session reuse
+	# it, so the absolute clamp band is fixed relative to the fitted size and can't
+	# drift with gesture count.
+	if not _manual_transform or _manip_session_base_scale <= 0.0:
+		_manip_session_base_scale = _uniform_scale(start_xform)
+	_two_hand_active = true
+	_manual_transform = true  # permanently disable auto-fit until new topology
+	_pulse(left_controller, 0.4, 0.05)
+	_pulse(right_controller, 0.4, 0.05)
+
+
+# Recompute + apply the graph transform for the current controller poses.
+func _apply_two_hand_manip() -> void:
+	if graph_root == null:
+		return
+	var lp: Vector3 = left_controller.global_position
+	var rp: Vector3 = right_controller.global_position
+	var vec: Vector3 = rp - lp
+	var dist: float = vec.length()
+	if dist < MANIP_MIN_SPAN or _manip_init_dist < 0.001:
+		return
+	# Scale: change in inter-hand distance, then clamp the ABSOLUTE resulting scale
+	# to [MIN,MAX] × the SESSION baseline (not a per-gesture factor). start_scale
+	# folds in any prior drift-reset bake; the resulting absolute scale is
+	# start_scale × scale_factor, which we clamp and back-convert to a factor.
+	var start_scale: float = _uniform_scale(_manip_start_xform)
+	var scale_factor: float = dist / _manip_init_dist
+	if start_scale > 0.0001 and _manip_session_base_scale > 0.0:
+		var abs_target: float = start_scale * scale_factor
+		var abs_lo: float = MANIP_ABS_SCALE_MIN * _manip_session_base_scale
+		var abs_hi: float = MANIP_ABS_SCALE_MAX * _manip_session_base_scale
+		abs_target = clampf(abs_target, abs_lo, abs_hi)
+		scale_factor = abs_target / start_scale
+	# Full-3D shortest-arc rotation between the initial and current hand vectors.
+	var rot: Quaternion = Quaternion(_manip_init_vec.normalized(), vec.normalized())
+	# Translation from the hand-midpoint delta.
+	var mid: Vector3 = (lp + rp) * 0.5
+	var translate: Vector3 = mid - _manip_init_mid
+	# Compose about the world pivot: T(translate) · T(p) · R · S · T(-p) · start.
+	var p: Vector3 = _manip_pivot_world
+	var rs: Basis = Basis(rot) * Basis.IDENTITY.scaled(
+		Vector3(scale_factor, scale_factor, scale_factor))
+	var anchored := Transform3D(rs, p - rs * p)                 # T(p)·R·S·T(-p)
+	var manip := Transform3D(Basis.IDENTITY, translate) * anchored
+	# Apply THIS frame's full delta first (no dropped frame), then keep the
+	# node/edge apparent-size compensation in step with the new scale.
+	graph_root.global_transform = manip * _manip_start_xform
+	_graph_scale = _uniform_scale(graph_root.global_transform)
+	# Drift guard: once the accumulated twist passes ~90°, re-baseline from the
+	# JUST-APPLIED transform (not the previous frame's) so no delta is lost — the
+	# graph doesn't pop. init_vec := current vector, so next frame's rotation
+	# starts from identity again. Graph2VR resets its frame the same way.
+	if rot.get_angle() > MANIP_DRIFT_RESET_RAD:
+		_manip_start_xform = graph_root.global_transform
+		_manip_init_vec = vec
+		_manip_init_dist = dist
+		_manip_init_mid = mid
+		_manip_pivot_world = _manip_aabb_centre_world(graph_root.global_transform)
+
+
+# Render AABB centre (5th–95th pct, all nodes) mapped to world through `xform`.
+# Falls back to the transform origin if the store can't supply a box yet.
+func _manip_aabb_centre_world(xform: Transform3D) -> Vector3:
+	if _binary_client != null and _binary_client.has_method("render_aabb"):
+		var bb: PackedFloat32Array = _binary_client.render_aabb(0.05, 0.95, -1)
+		if bb.size() == 6:
+			var centre_server := Vector3(
+				(bb[0] + bb[3]) * 0.5, (bb[1] + bb[4]) * 0.5, (bb[2] + bb[5]) * 0.5)
+			return xform * centre_server
+	return xform.origin
+
+
+# Uniform scale magnitude of a transform's basis. The graph is only ever scaled
+# uniformly, so the x-axis length is representative (get_scale is always +ve).
+func _uniform_scale(xform: Transform3D) -> float:
+	return xform.basis.get_scale().x
 
 
 # Client-side optimistic position hunting: the server streams authoritative
@@ -1056,6 +1249,12 @@ func _update_edge_multimesh() -> void:
 func _update_interaction() -> void:
 	_ensure_controller_rays()
 	if _interaction == null or _binary_client == null:
+		return
+
+	# A two-hand graph gesture owns both hands: don't let a same-frame grip+trigger
+	# combination start a node grab underneath it. (An already-in-flight grab
+	# blocks the gesture from engaging, so this only suppresses NEW grabs.)
+	if _two_hand_active:
 		return
 
 	# Active drag: the grabbed node rides the grab controller's aim point.
@@ -1548,6 +1747,11 @@ func _on_topology_updated(_edge_count: int) -> void:
 	_edge_pairs_full = _binary_client.get_edges()
 	_edge_weights_full = _binary_client.get_edge_weights()
 	_edge_rerank_done = false
+	# A fresh topology is a new layout: release any two-hand manual latch so the
+	# adaptive fit re-frames the new graph automatically.
+	_manual_transform = false
+	_two_hand_active = false
+	_manip_session_base_scale = -1.0
 	# Endpoint-id set (built once here, not per frame): the LOD draw domain and the
 	# edge ranking domain are both restricted to these so they stay coherent.
 	_topo_ids = {}
