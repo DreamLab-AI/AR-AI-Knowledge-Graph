@@ -256,8 +256,74 @@ records instead of clamping (no more edge-fan-on-clamp).
 tracking of moving nodes and adaptive-fit-during-grab are follow-ups; glow parity
 still sacrificed on Compat.
 
+## Immersive interaction — Graph2VR-class controls (2026-08-30)
+
+Wave-1 (commit `92b2d9588`), the pinch-manipulation commit (`f7113226a`), the GPU
+pin/DAG/force-channel commit (`82abb6776`, [ADR-138](../docs/adr/ADR-138-gpu-force-channel-registry.md)),
+and the flagship working tree together add a full linked-data interaction
+vocabulary. Provenance and licence governance for the mined features:
+[ADR-139](../docs/adr/ADR-139-immersive-interaction-adoption-programme.md).
+
+**Controls (VR).**
+- **A / X face button → node radial menu.** Opens `RadialMenu`
+  (`scripts/radial_menu.gd`, `scenes/RadialMenu.tscn`) at the targeted node's
+  render position — arc-wedge items with an overflow slider when there are more
+  than a windowful, latch-safe close. Items are context-dependent (expand by
+  predicate, mark as variable, use as anchor, join, clear). Grip stays HUD-grab;
+  trigger stays grab/click — the face button was the free input.
+- **Both-grips pinch manipulation.** Holding **both grips** scales / rotates /
+  translates the whole graph about its bounding-sphere centroid
+  (`graph_scene.gd::_update_two_hand_manip`) — a Graph2VR-style two-hand transform.
+  A reference-frame reset avoids rotational drift. (This is why the fold-ladder
+  gesture is *not* both-grips — see the fold PRD §5.)
+- **Drag pins a node; Unpin All clears them.** A wand grab-drag now pins the node
+  **server-authoritatively** on release (`fx/fy/fz` held in the GPU integrator;
+  the node still exerts forces). Drag-timeout and disconnect send an explicit
+  `nodeUnpin` so no stale anchors linger. The HUD **Unpin All** button clears every
+  pin in the view. Pin bookkeeping is gated on the server's `nodeUnpinAck`.
+- **HUD Hierarchy / Shells± / 3D-Flat buttons** (`hud.gd` `ControlsGrid2`,
+  staged commit-on-2xx, NIP-98 auth with dev fallback):
+  - **Hierarchy** toggles the DAG radial rank-bias layout (`dagBiasK` / `dagLevelDistance`).
+  - **Shells ±** steps the layout's shell separation.
+  - **3D-Flat** toggles the dual-disc flatten (`enableDualDiscLayout`); `1.0 = fully 3D`.
+- **Search** — `search_labels` (cached-lowercase, bounded top-k) locates nodes by
+  label from the HUD.
+- **Variable marking `?vN`** (flagship query builder, `scripts/query_builder.gd`):
+  the radial *Mark as variable* action recolours a node and badges it `?v1`,
+  `?v2`, … (cyan/magenta query palette, shader rim glow). The marked pattern is a
+  graph query executed server-side; see the visual-query-builder PRD.
+- **Fold ladder `[Fold +]/[Fold −]`** (in build) — steps the density ladder
+  ∅→L1→L2→L3; see the fold-ladder PRD.
+
+> **Drag routing fix (shipped in `92b2d9588`).** Drag/pin was silently dead:
+> the client emitted **snake_case** drag messages while the server routes
+> **camelCase**. The client now emits `nodeDragStart` / `nodeDragUpdate` /
+> `nodeDragEnd` (with a routing-literal test), so server-authoritative drag/pin
+> actually works.
+
+**Pinning semantics.** A pin is an operator assertion that survives layout
+resettles: the integrator early-outs the pinned node's *position* update but keeps
+it in the force calculation, so its neighbours still respond to it. Pins are set on
+drag-end, released on explicit `nodeUnpin` (button, drag-timeout, or disconnect),
+and are **per-view** on the wire but server-authoritative in effect. The fold
+ladder honours pins — a pinned node is never folded away; it is promoted to its
+group's representative.
+
+**New backend endpoints the client speaks** (all under `/api/graph`, camelCase,
+`NODE_ID_MASK` on wire ids, `RateLimit::per_minute(120)` on the POSTs):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/graph/node/{id}/relations` | GET | Predicate counts for a node — populates the expand radial before fan-out |
+| `/api/graph/node/{id}/expand` | POST | Bounded top-k neighbourhood expansion along a chosen predicate/direction |
+| `/api/graph/fold?level=<0..3>` | GET | Fold plan (hidden ids + collapse groups) for the density ladder; optional `graph_type` / `pinned` |
+| `/api/graph/query/pattern` | POST | Visual-query pattern match over the live typed graph; `countOnly` for the live preview |
+
 ## Cross-references
 
+- **Mining provenance & governance**: [ADR-139](../docs/adr/ADR-139-immersive-interaction-adoption-programme.md)
+- **Fold ladder**: [PRD-fold-ladder-hierarchical-density](../docs/prd/PRD-fold-ladder-hierarchical-density.md)
+- **Visual query builder**: [prd-visual-query-builder-semantic-planes](../docs/prd/prd-visual-query-builder-semantic-planes.md)
 - **Wire format**: [`crates/visionclaw-xr-presence/src/wire.rs`](../crates/visionclaw-xr-presence/src/wire.rs) — opcode 0x43 single source of truth
 - **Bounded context**: [`docs/ddd-xr-godot-context.md`](../docs/ddd-xr-godot-context.md) BC22
 - **Threat model**: [`docs/xr-godot-threat-model.md`](../docs/xr-godot-threat-model.md)

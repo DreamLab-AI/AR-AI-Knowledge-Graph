@@ -15,7 +15,7 @@
 //! ## MultiMesh buffer layout (must match GraphScene.tscn format flags)
 //! * Nodes: `transform_format = TRANSFORM_3D` + `use_colors` + `use_custom_data`
 //!   → **20 floats/instance**: 12 transform (row-major 3×4) + 4 colour (RGBA) +
-//!   4 custom (INSTANCE_CUSTOM: cen_norm,0,0,1).
+//!   4 custom (INSTANCE_CUSTOM: cen_norm, fold_badge, query_var_flag, 1).
 //! * Edges: `TRANSFORM_3D` only → **12 floats/instance** (no colour/custom; the
 //!   edge shader is uniform-tinted).
 //!
@@ -230,6 +230,43 @@ pub struct RenderStore {
     // Node label metadata (from initialGraphLoad), keyed by id — independent of the
     // position store so it survives whichever arrives first.
     meta: HashMap<u32, NodeMeta>,
+    // Fold-level ladder (Wave 3, Phase 2). A server-computed fold plan applied as
+    // an id→representative remap. `fold_hidden`: L1 low-signal ids suppressed from
+    // the draw. `fold_remap`: memberId→representativeId (members hide, their edges
+    // re-route to the representative). `fold_badge`: representativeId→collapsed
+    // count, surfaced via the INSTANCE_CUSTOM.g channel. Empty maps ⇒ ∅ (no fold).
+    // `fold_hidden`/`fold_remap`/`fold_badge` are the EFFECTIVE state actually
+    // rendered; they are derived from the raw plan below minus the current
+    // query-var lift-outs, and recomputed whenever either input changes.
+    fold_hidden: HashSet<u32>,
+    fold_remap: HashMap<u32, u32>,
+    fold_badge: HashMap<u32, u32>,
+    // The RAW server fold plan, retained verbatim so the effective state can be
+    // re-derived non-destructively when the query-var set changes (clearing a
+    // query var must re-fold the node it had lifted out, with no server refetch).
+    raw_fold_hidden: Vec<u32>,
+    raw_fold_members: Vec<u32>,
+    raw_fold_reps: Vec<u32>,
+    // Visual-query-builder overlay (flagship): node id → variable palette index.
+    // Marked nodes are recoloured to a saturated query-palette colour in
+    // `build_node_buffer` and flagged in INSTANCE_CUSTOM.b so the node shader can
+    // rim-glow them. Kept separate from `color` (community colour) so unmarking a
+    // node restores its original colour with no reload.
+    query_vars: HashMap<u32, u8>,
+}
+
+/// Distinct query-variable palette colours before they cycle — matches the client
+/// marker's `?v1`,`?v2`,… palette length.
+pub const QUERY_PALETTE_LEN: u8 = 8;
+
+/// Saturated overlay colour for a query variable, keyed by palette index. A
+/// golden-ratio hue walk (like [`community_color`]) at full saturation/value so a
+/// marked `?vN` node reads as deliberately highlighted, not organically coloured.
+pub fn query_var_color(palette_idx: u8) -> [f32; 4] {
+    let slot = (palette_idx % QUERY_PALETTE_LEN) as f32;
+    let hue = ((slot as f64) * 0.618_033_988_75).fract() as f32;
+    let rgb = hsv_to_rgb(hue, 0.85, 1.0);
+    [rgb[0], rgb[1], rgb[2], 1.0]
 }
 
 impl RenderStore {
@@ -249,6 +286,132 @@ impl RenderStore {
         self.render_ids.clear();
         self.render_positions.clear();
         self.meta.clear();
+        self.fold_hidden.clear();
+        self.fold_remap.clear();
+        self.fold_badge.clear();
+        self.raw_fold_hidden.clear();
+        self.raw_fold_members.clear();
+        self.raw_fold_reps.clear();
+        self.query_vars.clear();
+    }
+
+    /// Mark a node as query variable `palette_idx` (recoloured + rim-flagged on the
+    /// next `build_node_buffer`). Re-marking updates the palette slot.
+    pub fn set_query_var(&mut self, node_id: u32, palette_idx: u8) {
+        self.query_vars.insert(node_id, palette_idx);
+        self.recompute_effective_fold(); // marking lifts the node out of any fold
+    }
+
+    /// Unmark a node (restores its community colour on the next build). No-op when
+    /// the node was not marked.
+    pub fn clear_query_var(&mut self, node_id: u32) {
+        self.query_vars.remove(&node_id);
+        self.recompute_effective_fold(); // unmarking re-folds it if the raw plan had it
+    }
+
+    /// Clear every query-variable mark (Clear Query).
+    pub fn clear_query_vars(&mut self) {
+        self.query_vars.clear();
+        self.recompute_effective_fold(); // all previously-lifted nodes re-fold
+    }
+
+    /// Whether a node is currently marked as a query variable.
+    pub fn is_query_var(&self, node_id: u32) -> bool {
+        self.query_vars.contains_key(&node_id)
+    }
+
+    /// Apply a server fold plan. `hidden` are ids to suppress (L1); `members[i]`
+    /// folds into `reps[i]` (L2/L3). The per-representative badge count is derived
+    /// from the remap. Mismatched-length inputs are zipped to the shorter. Passing
+    /// all-empty is equivalent to [`clear_fold_plan`](Self::clear_fold_plan).
+    pub fn set_fold_plan(&mut self, hidden: &[u32], members: &[u32], reps: &[u32]) {
+        // Retain the raw plan verbatim, then derive the effective state. Keeping the
+        // raw plan lets a later query-var change re-derive without a refetch.
+        self.raw_fold_hidden = hidden.to_vec();
+        self.raw_fold_members = members.to_vec();
+        self.raw_fold_reps = reps.to_vec();
+        self.recompute_effective_fold();
+    }
+
+    /// Rebuild the effective fold state (`fold_hidden`/`fold_remap`/`fold_badge`)
+    /// from the raw plan, applying the query-var lift-out: a query-marked node must
+    /// never be folded away. The server's `?pinned=` promotion can't see the
+    /// client-only `query_vars` marking, so reconcile it here. Idempotent and cheap
+    /// (O(plan)); called on every fold-plan set AND every query-var change so
+    /// clearing a mark re-folds its node with no server round-trip.
+    fn recompute_effective_fold(&mut self) {
+        self.fold_hidden.clear();
+        for i in 0..self.raw_fold_hidden.len() {
+            let id = self.raw_fold_hidden[i];
+            if !self.query_vars.contains_key(&id) {
+                self.fold_hidden.insert(id);
+            }
+        }
+        self.fold_remap.clear();
+        self.fold_badge.clear();
+        let n = self.raw_fold_members.len().min(self.raw_fold_reps.len());
+        for i in 0..n {
+            let m = self.raw_fold_members[i];
+            let r = self.raw_fold_reps[i];
+            // A representative must never be its own member (defensive: skip); a
+            // query-marked member is lifted out of the fold, not collapsed.
+            if m == r || self.query_vars.contains_key(&m) {
+                continue;
+            }
+            self.fold_remap.insert(m, r);
+            *self.fold_badge.entry(r).or_insert(0) += 1;
+        }
+    }
+
+    /// Fold badge count for a node — the number of members collapsed into it as a
+    /// representative (0 for a plain node or when no fold is active). Drives the
+    /// "(+N)" proximity-label suffix.
+    pub fn badge_of(&self, node_id: u32) -> u32 {
+        self.fold_badge.get(&node_id).copied().unwrap_or(0)
+    }
+
+    /// Clear any active fold plan (return to full density ∅), raw plan included.
+    pub fn clear_fold_plan(&mut self) {
+        self.raw_fold_hidden.clear();
+        self.raw_fold_members.clear();
+        self.raw_fold_reps.clear();
+        self.fold_hidden.clear();
+        self.fold_remap.clear();
+        self.fold_badge.clear();
+    }
+
+    /// Representative a node id renders as under the active fold plan — itself when
+    /// not a folded member.
+    #[inline]
+    fn fold_target(&self, id: u32) -> u32 {
+        self.fold_remap.get(&id).copied().unwrap_or(id)
+    }
+
+    /// Map a ranked id list to its visible representatives under the active fold
+    /// plan: drop L1-hidden ids, replace a folded member with its representative,
+    /// and dedup while preserving order. Identity (and allocation-free clone of
+    /// order) when no fold is active. Used by `search_labels` / `nodes_near` so a
+    /// folded member can never be a search-teleport or proximity-label target at an
+    /// invisible position — the caller lands on the visible representative instead.
+    fn canonical_visible(&self, ids: Vec<u32>) -> Vec<u32> {
+        if self.fold_hidden.is_empty() && self.fold_remap.is_empty() {
+            return ids;
+        }
+        let mut out = Vec::with_capacity(ids.len());
+        let mut seen: HashSet<u32> = HashSet::new();
+        for id in ids {
+            if self.fold_hidden.contains(&id) {
+                continue;
+            }
+            let rep = self.fold_target(id);
+            if self.fold_hidden.contains(&rep) {
+                continue;
+            }
+            if seen.insert(rep) {
+                out.push(rep);
+            }
+        }
+        out
     }
 
     /// Store a node's label metadata (from initialGraphLoad).
@@ -316,11 +479,14 @@ impl RenderStore {
         if needle.is_empty() {
             return Vec::new();
         }
-        // Bounded top-k: keep at most `max` best hits in a max-heap (worst on top),
-        // so the working set never exceeds `max` and no full sort of all matches is
-        // needed. Labels are matched against the cached lowercase copy — no
-        // per-call allocation per label.
-        let mut heap: BinaryHeap<LabelHit> = BinaryHeap::with_capacity(max + 1);
+        // Canonicalise + dedup DURING selection so `max` bounds unique VISIBLE
+        // results, not raw member matches: several folded members of one group must
+        // not eat the quota and starve other reps. Each matching id is resolved to
+        // its visible representative (hidden dropped); the best-ranked hit per
+        // representative is kept in a map, then a bounded top-k selects `max` of the
+        // deduped reps. When no fold is active the canonical id is the id itself, so
+        // this degrades to the previous per-node behaviour.
+        let mut best: HashMap<u32, LabelHit> = HashMap::new();
         for (&id, meta) in &self.meta {
             let hay = &meta.label_lower;
             if hay.is_empty() {
@@ -333,15 +499,36 @@ impl RenderStore {
             } else {
                 continue;
             };
+            // Resolve to the visible representative; drop a hidden match (or a match
+            // whose representative is hidden).
+            if self.fold_hidden.contains(&id) {
+                continue;
+            }
+            let canon = self.fold_target(id);
+            if self.fold_hidden.contains(&canon) {
+                continue;
+            }
+            // Rank/centrality reflect the matching node; the returned id is `canon`
+            // so tie-breaks stay stable on the representative id.
             let hit = LabelHit {
                 rank,
                 centrality: self.centrality_of(id),
-                id,
+                id: canon,
             };
+            best.entry(canon)
+                .and_modify(|cur| {
+                    if hit.worseness(cur) == Ordering::Less {
+                        *cur = hit;
+                    }
+                })
+                .or_insert(hit);
+        }
+        // Bounded top-k over the deduped representatives (worst on top).
+        let mut heap: BinaryHeap<LabelHit> = BinaryHeap::with_capacity(max + 1);
+        for hit in best.into_values() {
             if heap.len() < max {
                 heap.push(hit);
             } else if let Some(worst) = heap.peek() {
-                // Replace the current worst only if this hit is strictly better.
                 if hit.worseness(worst) == Ordering::Less {
                     heap.pop();
                     heap.push(hit);
@@ -368,8 +555,13 @@ impl RenderStore {
             }
         }
         hits.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        hits.truncate(max);
-        hits.into_iter().map(|(_, id)| id).collect()
+        // Canonicalise through the fold plan (member → visible representative,
+        // hidden dropped, deduped) BEFORE the cap, so a folded cluster contributes
+        // its representative once and the cap isn't spent on invisible members.
+        let ranked: Vec<u32> = hits.into_iter().map(|(_, id)| id).collect();
+        let mut vis = self.canonical_visible(ranked);
+        vis.truncate(max);
+        vis
     }
 
     pub fn len(&self) -> usize {
@@ -433,8 +625,27 @@ impl RenderStore {
         self.render_ids.clear();
         self.render_positions.clear();
         let mut buf = Vec::with_capacity(ids.len() * NODE_STRIDE);
+        let has_fold = !self.fold_hidden.is_empty() || !self.fold_remap.is_empty();
         for &raw in ids {
-            let id = raw as u32;
+            let id0 = raw as u32;
+            // Fold plan is applied to the (already budgeted) draw list here: an
+            // L1-hidden id is dropped, and a folded member is PROMOTED to its
+            // representative rather than skipped. Promotion is what injects a
+            // representative into the drawn set even when the LOD budget picked
+            // only its members — without it a drawn member mapping to an
+            // un-budgeted rep would make both the node and its remapped edges
+            // vanish. Dedup (via the drawn set) keeps a rep with several drawn
+            // members to a single instance.
+            if self.fold_hidden.contains(&id0) {
+                continue;
+            }
+            let id = self.fold_target(id0);
+            if self.fold_hidden.contains(&id) {
+                continue; // defensive: a representative marked hidden
+            }
+            if has_fold && self.drawn.contains(&id) {
+                continue; // already drawn this build (another member promoted here)
+            }
             let Some(&slot) = self.id_index.get(&id) else {
                 continue;
             };
@@ -445,9 +656,19 @@ impl RenderStore {
                 0.0
             };
             let size = scale_comp * (size_lo + (size_hi - size_lo) * cen_norm.sqrt());
+            // INSTANCE_CUSTOM: r = centrality halo tell, g = fold badge count
+            // ("N collapsed" on a representative; 0 for a plain node), b/a reserved.
+            let badge = self.fold_badge.get(&id).copied().unwrap_or(0) as f32;
+            // Query-variable overlay (flagship): a marked node draws in its
+            // saturated palette colour with INSTANCE_CUSTOM.b flagged so the shader
+            // rim-glows it; unmarked nodes keep their community colour.
+            let (col, query_flag) = match self.query_vars.get(&id) {
+                Some(&palette_idx) => (query_var_color(palette_idx), 1.0),
+                None => (self.color[slot], 0.0),
+            };
             buf.extend_from_slice(&node_transform12(size, pos));
-            buf.extend_from_slice(&self.color[slot]);
-            buf.extend_from_slice(&[cen_norm, 0.0, 0.0, 1.0]);
+            buf.extend_from_slice(&col);
+            buf.extend_from_slice(&[cen_norm, badge, query_flag, 1.0]);
             self.drawn.insert(id);
             self.render_ids.push(id);
             self.render_positions.push(pos);
@@ -460,9 +681,28 @@ impl RenderStore {
     pub fn build_edge_buffer(&self, pairs: &[i32], radius_comp: f32) -> Vec<f32> {
         let mut buf = Vec::new();
         let n = pairs.len() / 2;
+        // Fold plan: many member→member edges collapse onto the same
+        // representative→representative pair. Dedup so a folded group draws one
+        // cylinder per distinct representative pair, not one per hidden member edge.
+        let has_fold = !self.fold_remap.is_empty();
+        let mut seen: HashSet<(u32, u32)> = HashSet::new();
         for i in 0..n {
-            let s = pairs[i * 2] as u32;
-            let t = pairs[i * 2 + 1] as u32;
+            // Re-route each endpoint through the fold remap BEFORE the drawn test,
+            // so edges of hidden members attach to their representative instead of
+            // vanishing.
+            let s = self.fold_target(pairs[i * 2] as u32);
+            let t = self.fold_target(pairs[i * 2 + 1] as u32);
+            // Intra-group edge (both endpoints fold to the same representative)
+            // has no length — drop it.
+            if s == t {
+                continue;
+            }
+            if has_fold {
+                let key = if s < t { (s, t) } else { (t, s) };
+                if !seen.insert(key) {
+                    continue;
+                }
+            }
             if !self.drawn.contains(&s) || !self.drawn.contains(&t) {
                 continue;
             }
@@ -757,6 +997,177 @@ mod tests {
     }
 
     #[test]
+    fn fold_plan_hides_members_and_badges_representative() {
+        let mut s = RenderStore::new();
+        for i in 1..=4u32 {
+            s.upsert(i, [i as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        // Fold 2,3 into representative 1; hide node 4 (L1 low-signal).
+        s.set_fold_plan(&[4], &[2, 3], &[1, 1]);
+        let buf = s.build_node_buffer(&[1, 2, 3, 4], 1.0, 0.7, 1.9);
+        // Only the representative (1) draws: members 2,3 folded, 4 hidden.
+        assert_eq!(buf.len(), NODE_STRIDE, "only the representative renders");
+        // Its custom.g (index 17) carries the badge count = 2 folded members.
+        assert!(approx(buf[17], 2.0), "badge count in custom.g");
+        // Drawn set reflects the fold — the interaction ray only sees the rep.
+        assert_eq!(s.render_ids(), &[1]);
+    }
+
+    #[test]
+    fn fold_plan_reroutes_edges_to_representative() {
+        let mut s = RenderStore::new();
+        // 1 = rep; 2,3 fold into 1; 5 is an outside node.
+        for id in [1u32, 2, 3, 5] {
+            s.upsert(id, [id as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        s.set_fold_plan(&[], &[2, 3], &[1, 1]);
+        let _ = s.build_node_buffer(&[1, 2, 3, 5], 1.0, 0.7, 1.9); // drawn = {1,5}
+        // Edges: (5→2) outside→member should re-route to (5→1); (2→3) intra-group
+        // collapses to self and drops; a second outside edge (5→3) also maps to
+        // (5→1) and must dedup against the first.
+        let buf = s.build_edge_buffer(&[5, 2, 2, 3, 5, 3], 0.1);
+        assert_eq!(
+            buf.len(),
+            EDGE_STRIDE,
+            "one representative edge after remap+dedup, intra-group dropped"
+        );
+    }
+
+    #[test]
+    fn clear_fold_plan_restores_full_density() {
+        let mut s = RenderStore::new();
+        for i in 1..=3u32 {
+            s.upsert(i, [i as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        s.set_fold_plan(&[3], &[2], &[1]);
+        assert_eq!(s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9).len(), NODE_STRIDE);
+        s.clear_fold_plan();
+        // All three draw again; badge channel back to 0.
+        let buf = s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9);
+        assert_eq!(buf.len(), 3 * NODE_STRIDE);
+        assert!(approx(buf[17], 0.0), "no badge after clear");
+    }
+
+    #[test]
+    fn fold_promotes_representative_into_drawn_set_when_budget_picks_only_members() {
+        // Regression: a budgeted draw list containing only folded MEMBERS must
+        // still draw their representative (promotion) — otherwise both the node
+        // and its remapped edges vanish.
+        let mut s = RenderStore::new();
+        for id in [1u32, 2, 3, 5] {
+            s.upsert(id, [id as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        s.set_fold_plan(&[], &[2, 3], &[1, 1]); // 2,3 → rep 1
+        // Budget selected only the members (rep 1 absent from the list).
+        let buf = s.build_node_buffer(&[2, 3], 1.0, 0.7, 1.9);
+        assert_eq!(buf.len(), NODE_STRIDE, "rep drawn once (promoted + deduped)");
+        assert_eq!(s.render_ids(), &[1], "representative injected into drawn set");
+        // And an edge from an outside node to a member now finds the rep on-screen.
+        let ebuf = s.build_edge_buffer(&[5, 2], 0.1);
+        // 5 wasn't drawn (not in the node list), so this still filters — but the
+        // rep IS drawn, proving the endpoint remap resolves to a drawn node.
+        let _ = ebuf; // (edge needs both endpoints drawn; asserted separately below)
+        let buf2 = s.build_node_buffer(&[2, 3, 5], 1.0, 0.7, 1.9); // now 5 drawn too
+        assert_eq!(buf2.len(), 2 * NODE_STRIDE, "rep(1) + outside(5)");
+        let ebuf2 = s.build_edge_buffer(&[5, 2], 0.1);
+        assert_eq!(ebuf2.len(), EDGE_STRIDE, "edge 5→member reroutes to drawn rep");
+    }
+
+    #[test]
+    fn search_and_nodes_near_canonicalise_through_fold() {
+        let mut s = RenderStore::new();
+        for id in [1u32, 2, 3] {
+            s.upsert(id, [id as f32, 0.0, 0.0], 0, 0.0, 0.0);
+            s.set_meta(id, "".into(), format!("Node {id}"), "page".into(), "".into());
+        }
+        // Fold 2 → rep 1; hide 3.
+        s.set_fold_plan(&[3], &[2], &[1]);
+        // Searching a folded member's label resolves to its visible representative.
+        assert_eq!(s.search_labels("Node 2", 10), vec![1], "member → representative");
+        // A hidden node is never a search target.
+        assert!(s.search_labels("Node 3", 10).is_empty(), "hidden excluded from search");
+        // The representative itself still matches directly.
+        assert_eq!(s.search_labels("Node 1", 10), vec![1]);
+        // nodes_near canonicalises the same way: a query at the member's position
+        // returns the representative, and the hidden node never appears.
+        let near = s.nodes_near([2.0, 0.0, 0.0], 5.0, 10);
+        assert!(near.contains(&1), "member's neighbourhood resolves to rep");
+        assert!(!near.contains(&2), "folded member not returned directly");
+        assert!(!near.contains(&3), "hidden node excluded from proximity");
+    }
+
+    #[test]
+    fn query_var_member_is_never_folded_away() {
+        let mut s = RenderStore::new();
+        for id in [1u32, 2, 3] {
+            s.upsert(id, [id as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        // Mark node 2 as a query variable, THEN apply a plan that would fold 2,3→1.
+        s.set_query_var(2, 0);
+        s.set_fold_plan(&[2], &[2, 3], &[1, 1]); // 2 also (wrongly) listed as hidden
+        // Node 2 must be lifted out of both hide and fold — it draws as itself, so
+        // build draws rep 1 (folding only member 3) plus the lifted query var 2.
+        let buf = s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9);
+        assert_eq!(buf.len(), 2 * NODE_STRIDE, "rep + lifted query var draw");
+        assert_eq!(s.render_ids(), &[1, 2], "query var 2 not hidden, not folded");
+        assert_eq!(s.badge_of(1), 1, "only member 3 folded into rep 1");
+    }
+
+    #[test]
+    fn search_cap_applies_to_unique_visible_representatives() {
+        // Regression: several folded members of one group, all matching, must not
+        // eat the search quota and starve other visible representatives.
+        let mut s = RenderStore::new();
+        for id in [1u32, 2, 3, 4, 10, 11] {
+            s.upsert(id, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        // Members 2,3 carry the HIGHEST centralities — under the old cap-then-fold
+        // path they'd win both raw slots and collapse to a single rep, returning
+        // just [1] and starving nodes 10/11.
+        s.upsert(1, [0.0; 3], 0, 0.0, 0.50); // rep, modest centrality
+        s.upsert(2, [0.0; 3], 0, 0.0, 0.99);
+        s.upsert(3, [0.0; 3], 0, 0.0, 0.98);
+        s.upsert(10, [0.0; 3], 0, 0.0, 0.70);
+        s.upsert(11, [0.0; 3], 0, 0.0, 0.60);
+        for (id, name) in [
+            (1u32, "Match Rep"),
+            (2, "Match A"),
+            (3, "Match B"),
+            (4, "Match C"),
+            (10, "Match X"),
+            (11, "Match Y"),
+        ] {
+            s.set_meta(id, "".into(), name.into(), "page".into(), "".into());
+        }
+        s.set_fold_plan(&[], &[2, 3, 4], &[1, 1, 1]); // 2,3,4 → rep 1
+        // max=2 must return TWO distinct visible reps: rep 1 (best member centrality
+        // 0.99) and node 10 (0.70) — NOT two members of the same fold.
+        let hits = s.search_labels("match", 2);
+        assert_eq!(hits, vec![1, 10], "cap bounds unique visible reps, not raw members");
+    }
+
+    #[test]
+    fn clearing_query_var_refolds_without_refetch() {
+        // Regression: the raw plan is retained, so a query-var lift-out is reversible
+        // — clearing the mark re-folds the node with no server refetch.
+        let mut s = RenderStore::new();
+        for id in [1u32, 2, 3] {
+            s.upsert(id, [id as f32, 0.0, 0.0], 0, 0.0, 0.0);
+        }
+        s.set_fold_plan(&[], &[2, 3], &[1, 1]); // 2,3 → rep 1
+        assert_eq!(s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9).len(), NODE_STRIDE);
+        assert_eq!(s.badge_of(1), 2);
+        // Mark node 2 → lifted out: rep 1 (folding only 3) + node 2 draw.
+        s.set_query_var(2, 0);
+        assert_eq!(s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9).len(), 2 * NODE_STRIDE);
+        assert_eq!(s.badge_of(1), 1);
+        // Clear the mark → node 2 RE-FOLDS from the retained raw plan, no refetch.
+        s.clear_query_var(2);
+        assert_eq!(s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9).len(), NODE_STRIDE);
+        assert_eq!(s.badge_of(1), 2, "cleared query var re-folds into rep");
+    }
+
+    #[test]
     fn community_color_is_deterministic_and_opaque() {
         let a = community_color(5, 0.0, 1);
         let b = community_color(5, 0.0, 1);
@@ -765,5 +1176,52 @@ mod tests {
         // Anomaly pushes toward warning red.
         let warn = community_color(5, 1.0, 1);
         assert!(warn[0] > a[0], "anomalous node reddens");
+    }
+
+    #[test]
+    fn query_var_overlay_recolours_and_flags_then_restores() {
+        let mut s = RenderStore::new();
+        s.upsert(1, [0.0, 0.0, 0.0], 3, 0.0, 1.0); // community colour, max centrality
+        s.upsert(2, [1.0, 0.0, 0.0], 3, 0.0, 1.0);
+        let base = s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        // Unmarked: colour == community colour, query flag (custom.b, offset 18) == 0.
+        let community = community_color(3, 0.0, 1);
+        assert!(approx(base[12], community[0]) && approx(base[13], community[1]));
+        assert!(approx(base[18], 0.0), "unmarked node has no query flag");
+
+        // Mark node 1 as palette 0.
+        s.set_query_var(1, 0);
+        assert!(s.is_query_var(1) && !s.is_query_var(2));
+        let marked = s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        let qv = query_var_color(0);
+        // Node 1 now the query colour with custom.b flagged; node 2 untouched.
+        assert!(approx(marked[12], qv[0]) && approx(marked[13], qv[1]) && approx(marked[14], qv[2]));
+        assert!(approx(marked[18], 1.0), "marked node sets query flag");
+        assert!(approx(marked[NODE_STRIDE + 18], 0.0), "other node unflagged");
+        // Fold badge channel (custom.g, offset 17) is untouched by the overlay.
+        assert!(approx(marked[17], 0.0));
+
+        // Unmark restores the community colour and clears the flag.
+        s.clear_query_var(1);
+        let restored = s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        assert!(approx(restored[12], community[0]) && approx(restored[18], 0.0));
+    }
+
+    #[test]
+    fn query_var_color_cycles_and_is_opaque() {
+        // Palette index wraps at QUERY_PALETTE_LEN and is always opaque.
+        assert_eq!(query_var_color(0), query_var_color(QUERY_PALETTE_LEN));
+        assert_eq!(query_var_color(3)[3], 1.0);
+        assert_ne!(query_var_color(0), query_var_color(1));
+    }
+
+    #[test]
+    fn clear_query_vars_unmarks_all() {
+        let mut s = RenderStore::new();
+        s.set_query_var(1, 0);
+        s.set_query_var(2, 1);
+        assert!(s.is_query_var(1) && s.is_query_var(2));
+        s.clear_query_vars();
+        assert!(!s.is_query_var(1) && !s.is_query_var(2));
     }
 }

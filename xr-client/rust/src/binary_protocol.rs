@@ -694,6 +694,32 @@ impl BinaryProtocolClient {
         PackedFloat32Array::from(v.as_slice())
     }
 
+    /// Apply a server fold plan (Wave 3 fold-level ladder). `hidden` = ids to
+    /// suppress (L1); `members[i]` folds into `reps[i]` (L2/L3, parallel arrays).
+    /// The badge count per representative is derived from the remap. Members hide,
+    /// their edges re-route to the representative, and the representative shows a
+    /// "+N" badge via the INSTANCE_CUSTOM.g channel. Call `clear_fold_plan` (or
+    /// pass empty arrays) to return to full density.
+    #[func]
+    fn set_fold_plan(&mut self, hidden: PackedInt32Array, members: PackedInt32Array, reps: PackedInt32Array) {
+        let to_u32 = |a: &PackedInt32Array| -> Vec<u32> { a.as_slice().iter().map(|&x| x as u32).collect() };
+        self.store.set_fold_plan(&to_u32(&hidden), &to_u32(&members), &to_u32(&reps));
+    }
+
+    /// Clear the active fold plan (return to full density ∅).
+    #[func]
+    fn clear_fold_plan(&mut self) {
+        self.store.clear_fold_plan();
+    }
+
+    /// Fold badge count for a node — members collapsed into it as a representative
+    /// (0 when it is not a representative or no fold is active). Drives the
+    /// proximity-label "(+N)" suffix.
+    #[func]
+    fn fold_badge_of(&self, node_id: u32) -> i64 {
+        self.store.badge_of(node_id) as i64
+    }
+
     /// Drawn node ids from the last `build_node_buffer`, for the interaction ray.
     #[func]
     fn get_render_ids(&self) -> PackedInt32Array {
@@ -780,6 +806,34 @@ impl BinaryProtocolClient {
     #[func]
     fn meta_id_of(&self, node_id: u32) -> GString {
         GString::from(self.store.meta_id_of(node_id))
+    }
+
+    /// Mark a node as query variable `palette_idx` (visual query builder). The
+    /// node recolours to the query palette and rim-flags on the next node-buffer
+    /// build. Re-marking updates the palette slot.
+    #[func]
+    fn set_query_var(&mut self, node_id: u32, palette_idx: i64) {
+        let idx = palette_idx.rem_euclid(crate::render_store::QUERY_PALETTE_LEN as i64) as u8;
+        self.store.set_query_var(node_id, idx);
+    }
+
+    /// Unmark a query-variable node (restores its community colour). No-op if the
+    /// node was not marked.
+    #[func]
+    fn clear_query_var(&mut self, node_id: u32) {
+        self.store.clear_query_var(node_id);
+    }
+
+    /// Clear every query-variable mark (Clear Query).
+    #[func]
+    fn clear_query_vars(&mut self) {
+        self.store.clear_query_vars();
+    }
+
+    /// Whether a node is currently marked as a query variable.
+    #[func]
+    fn is_query_var(&self, node_id: u32) -> bool {
+        self.store.is_query_var(node_id)
     }
 }
 

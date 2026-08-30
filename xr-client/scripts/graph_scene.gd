@@ -212,6 +212,21 @@ var _pinned_ids: Dictionary = {}
 # PUT returns 2xx in _on_physics_completed; a 401/timeout/500 discards them so the
 # tracked state (and the HUD it drives) never diverges from the backend.
 var _physics_staged: Dictionary = {}
+
+# --- Fold-level ladder (Wave 3, Phase 2) ------------------------------------
+# Per-view density level: 0 = ∅ (everything), 1 = hide low-signal, 2 = fold
+# subclass chains, 3 = community fold. Local view state — NOT server-routed, so
+# two viewers of the same session can hold different fold levels (same posture
+# as _node_size_factor / _edge_show_count). Stepped via the HUD [Fold +]/[Fold -]
+# buttons; each step GETs /api/graph/fold and applies the plan to the Rust store.
+const FOLD_LEVEL_MIN: int = 0
+const FOLD_LEVEL_MAX: int = 3
+var _fold_level: int = 0
+var _fold_http: HTTPRequest = null
+# One fold fetch in flight at a time; the requested level is staged and committed
+# to _fold_level only on a 2xx, mirroring the physics one-in-flight discipline.
+var _fold_pending: bool = false
+var _fold_staged_level: int = 0
 # Full topology kept verbatim so the edge ranking can be recomputed once centrality
 # analytics arrive (topology often precedes them, which would otherwise pin the
 # ranking to the global-weight fallback forever).
@@ -267,6 +282,44 @@ const NODE_SIZE_FACTOR_MAX: float = 3.0
 const EDGE_SHOW_MIN: int = 200
 # Dev bearer the codebase uses for physics settings writes.
 const PHYSICS_BEARER: String = "Bearer dev-session-token"
+
+# Radial node context menu (flagship visual query builder). Shared node menu:
+# the A/X face button opens it on the wand-targeted node; its items combine the
+# query-builder "Mark as ?vN / Clear variable" actions with future Wave-2 expand
+# items. Instanced at runtime from RadialMenu.tscn so the scene file stays as-is.
+const RADIAL_SCENE_PATH := "res://scenes/RadialMenu.tscn"
+const RADIAL_QUAD: float = 0.6              # MenuPanel QuadMesh size (RadialMenu.tscn)
+var _radial: Node3D = null
+var _query := QueryBuilder.new()
+var _radial_ax_was_down: bool = false       # A/X edge-detect (open/close toggle)
+var _radial_pointer_controller: XRController3D = null  # controller aiming at the menu
+var _radial_trigger_was_down: bool = false  # menu-click edge-detect for a clean release
+var _radial_last_px: Vector2 = Vector2.ZERO
+var _radial_pick_capture: int = -1          # node id captured during an on-demand hover pick
+var _radial_picking: bool = false           # gate so _on_node_targeted routes to the pick
+
+# Live count preview (Phase C). A debounced countOnly POST to
+# /api/graph/query/pattern on every pattern change; mirrors the fold work's
+# staged-request discipline (single in-flight superseded by cancel_request, finite
+# timeout, staged commit on 2xx). -1 count = unknown/pending.
+const QUERY_DEBOUNCE_SEC: float = 0.4
+const QUERY_PREVIEW_LIMIT: int = 24
+var _query_http: HTTPRequest = null
+var _query_dirty: bool = false
+var _query_debounce: float = 0.0
+var _query_count: int = -1
+var _query_truncated: bool = false
+var _query_pending: bool = false
+# Monotonic pattern revision: bumped on every pattern change, captured at POST
+# time, and compared on completion so a stale in-flight count can't overwrite a
+# newer pattern's result.
+var _query_revision: int = 0
+var _query_sent_revision: int = -1
+# Per-frame pointer arbitration: a controller whose ray is nearer the radial menu
+# owns the radial (and yields the HUD); nearer the HUD owns the HUD. One trigger
+# pull can therefore never drive both overlapping panels.
+var _hud_owner: XRController3D = null
+var _radial_owner: XRController3D = null
 
 @onready var graph_root: Node3D = $GraphRoot
 @onready var nodes_multi: MultiMeshInstance3D = $GraphRoot/NodesMulti
@@ -343,6 +396,26 @@ func _ready() -> void:
 		_interaction.connect("node_targeted", Callable(self, "_on_node_targeted"))
 		_interaction.connect("node_grabbed", Callable(self, "_on_node_grabbed"))
 
+	# Instance the shared radial node menu (visual query builder + future expand).
+	var radial_scene: PackedScene = load(RADIAL_SCENE_PATH)
+	if radial_scene != null:
+		_radial = radial_scene.instantiate()
+		add_child(_radial)
+		if _radial.has_signal("item_selected"):
+			_radial.item_selected.connect(_on_radial_item_selected)
+
+	# Dedicated request for the live query-count preview (separate gate from the
+	# fold/physics/observe requests so none can block the others).
+	_query_http = HTTPRequest.new()
+	add_child(_query_http)
+	_query_http.request_completed.connect(_on_query_count_completed)
+	_query_http.timeout = 10.0
+	if hud != null:
+		if hud.has_signal("query_execute_pressed"):
+			hud.query_execute_pressed.connect(_execute_query)
+		if hud.has_signal("query_clear_pressed"):
+			hud.query_clear_pressed.connect(_clear_query)
+
 	# HTTPRequest for the M4-RAY liveness observe POST (created at runtime so the
 	# scene file stays script-only; the request is async and non-blocking).
 	_observe_http = HTTPRequest.new()
@@ -356,6 +429,13 @@ func _ready() -> void:
 	# guarantees it fires even on a stalled connection so the gate never latches.
 	_physics_http.request_completed.connect(_on_physics_completed)
 	_physics_http.timeout = 10.0
+
+	# Dedicated request for the fold-ladder GET (own gate, so a fold fetch never
+	# blocks or is blocked by the physics PUT path).
+	_fold_http = HTTPRequest.new()
+	add_child(_fold_http)
+	_fold_http.request_completed.connect(_on_fold_completed)
+	_fold_http.timeout = 10.0
 
 	_init_label_pool()
 	_probe_eye_gaze()
@@ -417,10 +497,17 @@ func _update_proximity_labels() -> void:
 	var shown: Array = []
 	if _grabbed_id != -1:
 		shown.append(_grabbed_id)
+	# Query variables are always labelled (with their ?vN badge), regardless of
+	# proximity, so the assembled pattern stays legible while the user works.
+	for mid: int in _query.marked_ids():
+		if shown.size() >= LABEL_POOL_SIZE:
+			break
+		if not shown.has(mid):
+			shown.append(mid)
 	for id: int in near:
 		if shown.size() >= LABEL_POOL_SIZE:
 			break
-		if id == _grabbed_id:
+		if shown.has(id):
 			continue
 		if _binary_client.label_of(id) != "":
 			shown.append(id)
@@ -436,14 +523,27 @@ func _update_proximity_labels() -> void:
 		anchor.visible = true
 		var title: Label3D = anchor.get_node("Title")
 		var detail: Label3D = anchor.get_node("Detail")
-		title.text = _binary_client.label_of(node_id)
+		# Prefix a query variable's label with its ?vN badge so a marked node reads
+		# as the variable it stands for.
+		var vlabel: String = _query.var_name(node_id)
+		if vlabel != "":
+			title.text = "%s  %s" % [vlabel, _binary_client.label_of(node_id)]
+		else:
+			title.text = _binary_client.label_of(node_id)
+		# Fold badge: a representative shows "(+N)" for the members collapsed into
+		# it — the label path is the primary consumer of the fold badge count (the
+		# halo shader also rings it via INSTANCE_CUSTOM.g).
+		if _binary_client.has_method("fold_badge_of"):
+			var badge: int = _binary_client.fold_badge_of(node_id)
+			if badge > 0:
+				title.text += "  (+%d)" % badge
 		var d: String = _binary_client.detail_of(node_id)
 		detail.text = d
 		detail.visible = d != ""
 		# Fade: full opacity within LABEL_INNER_M, linear to 0 at the radius edge.
-		# The grabbed node is always fully shown.
+		# The grabbed node and every query variable are always fully shown.
 		var a: float = 1.0
-		if node_id != _grabbed_id:
+		if node_id != _grabbed_id and not _query.is_marked(node_id):
 			var dist: float = cam_world.distance_to(world_pos)
 			a = clampf(
 				1.0 - (dist - LABEL_INNER_M) / maxf(LABEL_PROXIMITY_M - LABEL_INNER_M, 0.001),
@@ -520,6 +620,10 @@ func _on_hud_control(action: String) -> void:
 			_request_shells(-DAG_LEVEL_DISTANCE_STEP)
 		"flat_toggle":
 			_request_flat_toggle()
+		"fold_plus":
+			_request_fold(1)
+		"fold_minus":
+			_request_fold(-1)
 		"unpin_all":
 			_unpin_all()
 		_:
@@ -533,12 +637,96 @@ func _refresh_controls_status() -> void:
 	if hud.has_method("set_controls_status"):
 		var busy: String = "  [busy]" if _physics_pending else ""
 		var dag: String = "on" if _dag_bias_on else "off"
-		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d/%d  nodes<=%d  node×%.2f  dag %s/%.0f  z%.2f  pin %d%s" % [
+		var fold: String = "  [fold busy]" if _fold_pending else ""
+		hud.set_controls_status("repelK %.0f  restLen %.0f  edges %d/%d  nodes<=%d  node×%.2f  dag %s/%.0f  z%.2f  fold L%d  pin %d%s%s" % [
 			_repel_k, _rest_length, _edge_show_count, _edge_budget, _node_budget, _node_size_factor,
-			dag, _dag_level_distance, _z_compression, _pinned_ids.size(), busy])
+			dag, _dag_level_distance, _z_compression, _fold_level, _pinned_ids.size(), busy, fold])
 	# Reflect the toggle/pin state on the button faces (press-only, no per-frame cost).
 	if hud.has_method("set_control_states"):
 		hud.set_control_states(_dag_bias_on, _z_compression < Z_COMPRESSION_FULL_3D, _pinned_ids.size())
+	if hud.has_method("set_fold_state"):
+		hud.set_fold_state(_fold_level)
+
+
+# Fold ±: step the density ladder by `delta`, clamped [0,3]. GETs the server fold
+# plan for the target level (passing the current pinned ids so pinned nodes are
+# promoted to representatives) and commits _fold_level only on a 2xx, mirroring the
+# physics one-in-flight discipline. Level 0 short-circuits: clear the plan locally,
+# no HTTP needed.
+func _request_fold(delta: int) -> void:
+	if _fold_pending:
+		push_warning("GraphScene: fold change already in flight; ignoring")
+		return
+	var target: int = clampi(_fold_level + delta, FOLD_LEVEL_MIN, FOLD_LEVEL_MAX)
+	if target == _fold_level:
+		return  # already at a ladder rail — no redundant fetch
+	if target == 0:
+		# ∅: no groups to fetch — clear the plan directly and force one rebuild.
+		if _binary_client != null and _binary_client.has_method("clear_fold_plan"):
+			_binary_client.clear_fold_plan()
+		_fold_level = 0
+		_selection_dirty = true
+		return
+	if _fold_http == null:
+		return
+	var pinned_csv := _pinned_ids_csv()
+	var url := "%s/api/graph/fold?level=%d" % [_http_base(), target]
+	if pinned_csv != "":
+		url += "&pinned=" + pinned_csv
+	var headers := _auth_headers(url, "GET")
+	var err := _fold_http.request(url, headers, HTTPClient.METHOD_GET)
+	if err != OK:
+		push_warning("GraphScene: fold GET failed to start (%d)" % err)
+		return
+	_fold_pending = true
+	_fold_staged_level = target
+
+
+# Comma-separated list of this session's pinned node ids (empty when none), for
+# the fold endpoint's ?pinned= param so pinned nodes are promoted, never folded.
+func _pinned_ids_csv() -> String:
+	if _pinned_ids.is_empty():
+		return ""
+	var parts := PackedStringArray()
+	for id: int in _pinned_ids.keys():
+		parts.push_back(str(id))
+	return ",".join(parts)
+
+
+# Fold GET resolved. On 2xx, parse {hidden, groups:[{representativeId, memberIds,
+# ...}]} into flat (hidden, members, reps) arrays and hand them to the Rust store,
+# then commit _fold_level. Snap transition this phase (members vanish / appear
+# instantly); animation is Phase 3. A failed/timed-out fetch discards the staged
+# level so the tracked state never diverges from what was applied.
+func _on_fold_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	_fold_pending = false
+	var ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300
+	if not ok:
+		push_warning("GraphScene: fold request failed (result=%d code=%d)" % [result, response_code])
+		_refresh_controls_status()
+		return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_warning("GraphScene: fold response was not a JSON object")
+		_refresh_controls_status()
+		return
+	var hidden := PackedInt32Array()
+	for h: Variant in parsed.get("hidden", []):
+		hidden.push_back(int(h))
+	var members := PackedInt32Array()
+	var reps := PackedInt32Array()
+	for g: Variant in parsed.get("groups", []):
+		if typeof(g) != TYPE_DICTIONARY:
+			continue
+		var rep: int = int(g.get("representativeId", 0))
+		for m: Variant in g.get("memberIds", []):
+			members.push_back(int(m))
+			reps.push_back(rep)
+	if _binary_client != null and _binary_client.has_method("set_fold_plan"):
+		_binary_client.set_fold_plan(hidden, members, reps)
+	_fold_level = _fold_staged_level
+	_selection_dirty = true  # force one node/edge buffer rebuild with the new plan
+	_refresh_controls_status()
 
 
 # Hierarchy toggle: PUT dagBiasK (0.6 on / 0.0 off). Same one-in-flight gate and
@@ -820,7 +1008,10 @@ func _physics_process(delta: float) -> void:
 	_update_lod()
 	_update_locomotion(delta)
 	_update_hud_grab()
+	_arbitrate_pointers()
 	_update_hud_pointer()
+	_update_radial_menu()
+	_update_query_count(delta)
 	# Two-hand pinch scale/rotate/move must run BEFORE _fit_graph_to_view: on its
 	# first engage it latches _manual_transform, which makes the adaptive fit
 	# early-return this same frame so the gesture — not the auto-fit — owns
@@ -960,6 +1151,10 @@ func _update_hud_pointer() -> void:
 		if controller == null or not controller.get_is_active():
 			continue
 		if _grabbed_id != -1 and controller == _grab_controller:
+			continue
+		# Arbitration: this controller's ray is nearer the radial menu — it owns the
+		# radial, so the HUD yields it this frame.
+		if controller == _radial_owner:
 			continue
 		var uv := _ray_hit_hud_uv(controller, panel)
 		if uv.x >= 0.0:
@@ -1424,6 +1619,10 @@ func _update_interaction() -> void:
 		# that trigger pull is a button click. (Release of an already-held grab is
 		# handled above and is unaffected.)
 		if controller == _hud_pointer_controller:
+			continue
+		# Likewise a trigger pull aimed at the open radial menu is a menu click,
+		# not a node grab.
+		if controller == _radial_pointer_controller:
 			continue
 		var pinch: float = _controller_trigger(controller)
 		if pinch < 0.05:
@@ -2079,6 +2278,12 @@ func _on_voice_activity(avatar_id: String, active: bool) -> void:
 
 
 func _on_node_targeted(node_id: int, _distance: float) -> void:
+	# During an on-demand radial pick (A/X pressed), route the hit to the capture
+	# and skip the normal target side effects (haptic/print) — this is a query, not
+	# a hover.
+	if _radial_picking:
+		_radial_pick_capture = node_id
+		return
 	emit_signal("node_targeted_in_scene", node_id)
 	if node_id != _last_targeted_id:
 		print("GraphScene DEBUG: node_targeted id=%d dist=%.2f" % [node_id, _distance])
@@ -2151,3 +2356,330 @@ func _slugify(s: String) -> String:
 func _on_presence_kicked(reason: String) -> void:
 	push_warning("GraphScene: kicked from presence -- %s" % reason)
 	_schedule_presence_reconnect()
+
+
+# --- Radial node context menu (visual query builder, flagship) --------------
+#
+# The A/X face button opens a wand-operated radial menu ON the currently targeted
+# node; the menu items combine the query-builder mark/clear actions with any
+# extra (future Wave-2 expand) items. While open, the wand ray drives the menu's
+# SubViewport via its pointer_input API (trigger = click), exactly the way the
+# HUD pointer works. A/X toggles the menu closed.
+func _update_radial_menu() -> void:
+	if _radial == null:
+		return
+	# Edge-detect A/X on either controller.
+	var ax_down := false
+	var ax_ctrl: XRController3D = null
+	for controller: XRController3D in [right_controller, left_controller]:
+		if controller == null or not controller.get_is_active():
+			continue
+		if controller.is_button_pressed("ax_button"):
+			ax_down = true
+			ax_ctrl = controller
+			break
+	if ax_down and not _radial_ax_was_down:
+		if _radial.visible:
+			_radial.close()
+		else:
+			_open_radial_on_target(ax_ctrl)
+	_radial_ax_was_down = ax_down
+
+	# Drive the menu with the wand ray while it is open.
+	_radial_pointer_controller = null
+	if not _radial.visible:
+		return
+	var panel := _radial.get_node_or_null("MenuPanel") as Node3D
+	if panel == null:
+		return
+	var hit_uv := Vector2(-1.0, -1.0)
+	var hit_ctrl: XRController3D = null
+	for controller: XRController3D in [right_controller, left_controller]:
+		if controller == null or not controller.get_is_active():
+			continue
+		# Arbitration: this controller's ray is nearer the HUD — it owns the HUD, so
+		# the radial yields it this frame.
+		if controller == _hud_owner:
+			continue
+		var uv := _ray_hit_menu_uv(controller, panel)
+		if uv.x >= 0.0:
+			hit_uv = uv
+			hit_ctrl = controller
+			break
+	if hit_ctrl == null:
+		# Ray left the panel: release any held click at the last spot so the
+		# SubViewport button doesn't latch pressed.
+		if _radial_trigger_was_down:
+			_radial.pointer_input(_radial_last_px, false)
+			_radial_trigger_was_down = false
+		return
+	_radial_pointer_controller = hit_ctrl
+	_radial_last_px = hit_uv
+	var click := _controller_trigger(hit_ctrl) >= 0.6
+	_radial.pointer_input(hit_uv, click)
+	_radial_trigger_was_down = click
+
+
+# Open the radial on the node the given controller's ray is aimed at. No-op when
+# the ray isn't on a node.
+func _open_radial_on_target(controller: XRController3D) -> void:
+	if controller == null or _binary_client == null or graph_root == null:
+		return
+	var node_id := _pick_node_under_ray(controller)
+	if node_id < 0:
+		return
+	var items: Array = _query.build_node_menu_items(node_id)
+	var world_pos: Vector3 = graph_root.global_transform * _binary_client.node_position(node_id)
+	var cam: XRCamera3D = _find_xr_camera()
+	if cam != null:
+		# Float the panel slightly toward the user so it isn't buried in the node.
+		var to_cam: Vector3 = (cam.global_position - world_pos)
+		if to_cam.length() > 0.001:
+			world_pos += to_cam.normalized() * 0.15
+	_radial.open(items, world_pos)
+	# Face the user: the QuadMesh faces +Z, so aim -Z at the camera then flip.
+	if cam != null:
+		_radial.look_at(cam.global_position, Vector3.UP)
+		_radial.rotate_object_local(Vector3.UP, PI)
+	_pulse(controller, 0.3, 0.04)
+
+
+# Ray-pick the node under a controller without engaging a grab: evaluate the
+# interaction ray at zero pinch (emits node_targeted on a hit, never node_grabbed)
+# and capture the hit via _on_node_targeted. Returns the node id or -1 on a miss.
+func _pick_node_under_ray(controller: XRController3D) -> int:
+	if _interaction == null or _binary_client == null or graph_root == null:
+		return -1
+	var render_ids: PackedInt32Array = _binary_client.get_render_ids()
+	var render_positions: PackedVector3Array = _binary_client.get_render_positions()
+	var gxf: Transform3D = graph_root.global_transform
+	var world_positions := PackedVector3Array()
+	world_positions.resize(render_positions.size())
+	for i: int in range(render_positions.size()):
+		world_positions[i] = gxf * render_positions[i]
+	_radial_pick_capture = -1
+	_radial_picking = true
+	_interaction.evaluate_ray(
+		controller.global_position,
+		-controller.global_transform.basis.z,
+		0.0,
+		render_ids,
+		world_positions
+	)
+	_radial_picking = false
+	return _radial_pick_capture
+
+
+# Intersect a controller aim ray with the radial MenuPanel quad; returns viewport
+# UV (0..1, y-down) or (-1,-1) on a miss. Mirrors _ray_hit_hud_uv for the smaller
+# square panel.
+func _ray_hit_menu_uv(controller: XRController3D, panel: Node3D) -> Vector2:
+	var to_local: Transform3D = panel.global_transform.affine_inverse()
+	var o: Vector3 = to_local * controller.global_position
+	var d: Vector3 = (to_local.basis * (-controller.global_transform.basis.z)).normalized()
+	if absf(d.z) < 0.00001:
+		return Vector2(-1.0, -1.0)
+	var t: float = -o.z / d.z
+	if t < 0.0:
+		return Vector2(-1.0, -1.0)
+	var hit: Vector3 = o + d * t
+	var half: float = RADIAL_QUAD * 0.5
+	if absf(hit.x) > half or absf(hit.y) > half:
+		return Vector2(-1.0, -1.0)
+	var hit_world: Vector3 = panel.global_transform * hit
+	if controller.global_position.distance_to(hit_world) > RAY_LENGTH:
+		return Vector2(-1.0, -1.0)
+	var u: float = (hit.x + half) / RADIAL_QUAD
+	var v: float = 1.0 - (hit.y + half) / RADIAL_QUAD
+	return Vector2(u, v)
+
+
+# Route a chosen radial action. Action grammar: "qb_mark:<id>", "qb_unmark:<id>",
+# "qb_execute", "qb_clear" (query builder); other prefixes belong to future
+# Wave-2 providers. The menu closes itself after emitting (radial_menu.gd).
+func _on_radial_item_selected(action: String) -> void:
+	if action.begins_with("qb_mark:"):
+		_mark_query_var(int(action.substr(8)))
+	elif action.begins_with("qb_unmark:"):
+		_unmark_query_var(int(action.substr(10)))
+	elif action == "qb_clear":
+		_clear_query()
+	elif action == "qb_execute":
+		_execute_query()
+
+
+func _mark_query_var(node_id: int) -> void:
+	if _binary_client == null:
+		return
+	_query.mark(node_id)
+	if _binary_client.has_method("set_query_var"):
+		_binary_client.set_query_var(node_id, _query.palette_index(node_id))
+	_update_proximity_labels()
+	_mark_query_dirty()
+
+
+func _unmark_query_var(node_id: int) -> void:
+	if not _query.unmark(node_id):
+		return
+	if _binary_client != null and _binary_client.has_method("clear_query_var"):
+		_binary_client.clear_query_var(node_id)
+	_update_proximity_labels()
+	_mark_query_dirty()
+
+
+func _clear_query() -> void:
+	_query.clear()
+	if _binary_client != null and _binary_client.has_method("clear_query_vars"):
+		_binary_client.clear_query_vars()
+	_update_proximity_labels()
+	# Reset the preview and hide the HUD panel (no active query).
+	_query_dirty = false
+	_query_count = -1
+	_query_pending = false
+	_query_truncated = false
+	_refresh_query_hud()
+
+
+# --- Live count preview (Phase C) -------------------------------------------
+#
+# The active pattern is the set of visible-graph edges connecting marked nodes,
+# with marked nodes as query variables. On every pattern change we debounce ~400ms
+# then POST it countOnly to /api/graph/query/pattern; the returned bindingCount is
+# staged onto the HUD query panel. NB: the XR render store carries no per-edge
+# predicate, so edges are WILDCARD ("any") in v1 — a concrete-type toggle is
+# deferred to Phase D (see query_builder.gd::derive_triples).
+# Decide, once per frame, which panel each active controller's ray owns (nearer
+# panel wins), so the HUD and radial pointer handlers never both consume the same
+# trigger. Each controller is assigned to at most one panel; a full miss leaves it
+# unassigned. Right controller is considered first for a stable tie.
+func _arbitrate_pointers() -> void:
+	_hud_owner = null
+	_radial_owner = null
+	var hud_panel: Node3D = null
+	if hud != null:
+		hud_panel = hud.get_node_or_null("HudPanel") as Node3D
+	var radial_panel: Node3D = null
+	if _radial != null and _radial.visible:
+		radial_panel = _radial.get_node_or_null("MenuPanel") as Node3D
+	if hud_panel == null and radial_panel == null:
+		return
+	for controller: XRController3D in [right_controller, left_controller]:
+		if controller == null or not controller.get_is_active():
+			continue
+		var hud_d := _panel_ray_distance(controller, hud_panel, HUD_QUAD_W, HUD_QUAD_H)
+		var rad_d := _panel_ray_distance(controller, radial_panel, RADIAL_QUAD, RADIAL_QUAD)
+		if hud_d == INF and rad_d == INF:
+			continue
+		if rad_d <= hud_d:
+			if _radial_owner == null:
+				_radial_owner = controller
+		elif _hud_owner == null:
+			_hud_owner = controller
+
+
+# World distance from `controller` to where its aim ray hits the quad `panel`
+# (full sizes quad_w/quad_h), or INF on a miss / beyond reach. Shared by the
+# pointer arbitration; the per-panel UV helpers keep their own hit maths.
+func _panel_ray_distance(controller: XRController3D, panel: Node3D, quad_w: float, quad_h: float) -> float:
+	if controller == null or panel == null:
+		return INF
+	var to_local: Transform3D = panel.global_transform.affine_inverse()
+	var o: Vector3 = to_local * controller.global_position
+	var d: Vector3 = (to_local.basis * (-controller.global_transform.basis.z)).normalized()
+	if absf(d.z) < 0.00001:
+		return INF
+	var t: float = -o.z / d.z
+	if t < 0.0:
+		return INF
+	var hit: Vector3 = o + d * t
+	if absf(hit.x) > quad_w * 0.5 or absf(hit.y) > quad_h * 0.5:
+		return INF
+	var hit_world: Vector3 = panel.global_transform * hit
+	var dist: float = controller.global_position.distance_to(hit_world)
+	if dist > RAY_LENGTH:
+		return INF
+	return dist
+
+
+func _update_query_count(delta: float) -> void:
+	if not _query_dirty:
+		return
+	_query_debounce += delta
+	if _query_debounce < QUERY_DEBOUNCE_SEC:
+		return
+	_query_dirty = false
+	_send_query_count()
+
+
+# Mark the pattern changed: invalidate the shown count, bump the revision (so any
+# in-flight count is now stale), and restart the debounce.
+func _mark_query_dirty() -> void:
+	_query_dirty = true
+	_query_debounce = 0.0
+	_query_count = -1
+	_query_pending = true
+	_query_revision += 1
+	_refresh_query_hud()
+
+
+func _send_query_count() -> void:
+	if _query_http == null or _binary_client == null or not _query.is_active():
+		return
+	var payload: Dictionary = _query.build_pattern_payload(
+		_binary_client.get_edges(), true, QUERY_PREVIEW_LIMIT
+	)
+	var triples: Array = payload["triples"]
+	if triples.is_empty():
+		# Variables marked but none connected by a visible edge yet: 0 matches, no
+		# round-trip needed.
+		_query_count = 0
+		_query_truncated = false
+		_query_pending = false
+		_refresh_query_hud()
+		return
+	var url := "%s/api/graph/query/pattern" % _http_base()
+	var headers := _auth_headers(url, "POST")
+	_query_http.cancel_request()  # supersede any in-flight preview
+	var err := _query_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		push_warning("GraphScene: query count POST failed to start (%d)" % err)
+		return
+	_query_sent_revision = _query_revision
+	_query_pending = true
+	_refresh_query_hud()
+
+
+func _on_query_count_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	# Drop a stale completion: the pattern changed after this request was sent, so a
+	# newer count is pending/in-flight and owns the display.
+	if _query_sent_revision != _query_revision:
+		return
+	_query_pending = false
+	var ok := result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300
+	if ok:
+		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+		if typeof(parsed) == TYPE_DICTIONARY:
+			_query_count = int(parsed.get("bindingCount", 0))
+			_query_truncated = bool(parsed.get("truncated", false))
+	else:
+		push_warning("GraphScene: query count failed (result=%d code=%d)" % [result, response_code])
+	_refresh_query_hud()
+
+
+# Push the current summary + count to the HUD query panel (or hide it when no
+# query is active). Recomputes triples so the edge count in the summary is fresh.
+func _refresh_query_hud() -> void:
+	if hud == null or not hud.has_method("set_query_preview"):
+		return
+	if not _query.is_active():
+		if hud.has_method("hide_query_preview"):
+			hud.hide_query_preview()
+		return
+	if _binary_client != null:
+		_query.derive_triples(_binary_client.get_edges())
+	hud.set_query_preview(_query.pattern_summary(), _query_count, _query_pending, _query_truncated)
+
+
+func _execute_query() -> void:
+	# Execution + semantic planes are Phase D; Phase C records the intent.
+	print("GraphScene: execute query — Phase D (%d vars)" % _query.var_count())

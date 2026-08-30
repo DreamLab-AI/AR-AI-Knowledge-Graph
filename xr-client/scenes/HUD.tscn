@@ -118,6 +118,14 @@ text = "Shells -"
 custom_minimum_size = Vector2(180, 56)
 text = "View: 3D"
 
+[node name="FoldPlusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "Fold +"
+
+[node name="FoldMinusButton" type="Button" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
+custom_minimum_size = Vector2(180, 56)
+text = "Fold -"
+
 [node name="Grid2Spacer" type="Control" parent="HudViewport/HudControl/VBox/ControlsGrid2"]
 
 [node name="ControlsStatus" type="Label" parent="HudViewport/HudControl/VBox"]

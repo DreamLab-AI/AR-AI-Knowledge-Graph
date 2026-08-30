@@ -36,6 +36,8 @@ extends Node3D
 @onready var shells_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/ShellsPlusButton
 @onready var shells_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/ShellsMinusButton
 @onready var flat_toggle_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FlatToggleButton
+@onready var fold_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FoldPlusButton
+@onready var fold_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FoldMinusButton
 @onready var controls_status: Label = $HudViewport/HudControl/VBox/ControlsStatus
 
 # Double-click document view (narrativegoldmine page card).
@@ -67,6 +69,10 @@ signal case_decided(case_id: String, outcome: String, accepted: bool)
 ## node_size_minus, hierarchy_toggle, shells_plus, shells_minus, flat_toggle,
 ## unpin_all.
 signal control_pressed(action: String)
+## Visual query builder (flagship). GraphScene owns the query state + count fetch;
+## the HUD only surfaces the summary/count and re-broadcasts Execute/Clear intent.
+signal query_execute_pressed()
+signal query_clear_pressed()
 
 const ACSP_GLOW_COLOR: Color = Color(1.0, 0.62, 0.12, 1.0)
 # Hard cap on a single decide POST. A stalled request fires request_completed with
@@ -116,6 +122,8 @@ func _ready() -> void:
 	shells_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "shells_plus"))
 	shells_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "shells_minus"))
 	flat_toggle_button.pressed.connect(func() -> void: emit_signal("control_pressed", "flat_toggle"))
+	fold_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "fold_plus"))
+	fold_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "fold_minus"))
 	unpin_all_button.pressed.connect(func() -> void: emit_signal("control_pressed", "unpin_all"))
 	# Document view (double-click node → narrativegoldmine page card).
 	close_doc_button.pressed.connect(hide_document)
@@ -124,7 +132,78 @@ func _ready() -> void:
 	if doc_http != null:
 		doc_http.request_completed.connect(_on_doc_completed)
 		doc_http.timeout = DOC_TIMEOUT_SEC
+	_build_query_panel()
 	set_process(true)
+
+
+# --- Visual query builder panel (flagship) ----------------------------------
+#
+# Built programmatically under the existing HudControl/VBox so HUD.tscn is not
+# touched (it is under concurrent edit by the fold work). Hidden until a query is
+# active; GraphScene drives it via set_query_preview / hide_query_preview.
+var _query_panel: VBoxContainer = null
+var _query_summary_label: Label = null
+var _query_count_label: Label = null
+
+
+func _build_query_panel() -> void:
+	var vbox := get_node_or_null("HudViewport/HudControl/VBox")
+	if vbox == null:
+		return
+	_query_panel = VBoxContainer.new()
+	_query_panel.name = "QueryPanel"
+	var title := Label.new()
+	title.text = "Query Builder"
+	_query_panel.add_child(title)
+	_query_summary_label = Label.new()
+	_query_summary_label.name = "QuerySummary"
+	_query_panel.add_child(_query_summary_label)
+	_query_count_label = Label.new()
+	_query_count_label.name = "QueryCount"
+	_query_panel.add_child(_query_count_label)
+	var btns := HBoxContainer.new()
+	var exec := Button.new()
+	# Execute is a stub until Phase D — disabled + relabelled so it never no-ops.
+	if QueryBuilder.EXECUTE_ENABLED:
+		exec.text = "Execute"
+		exec.pressed.connect(func() -> void: emit_signal("query_execute_pressed"))
+	else:
+		exec.text = "Execute (soon)"
+		exec.disabled = true
+	var clr := Button.new()
+	clr.text = "Clear"
+	clr.pressed.connect(func() -> void: emit_signal("query_clear_pressed"))
+	btns.add_child(exec)
+	btns.add_child(clr)
+	_query_panel.add_child(btns)
+	vbox.add_child(_query_panel)
+	_query_panel.visible = false
+
+
+## Show/refresh the query preview. `summary` e.g. "2 vars · 1 edge". `count` < 0
+## means "unknown" (—); `pending` shows the in-flight spinner text; `truncated`
+## renders the count as a floor (≥ N) because the server scan hit its cap.
+func set_query_preview(summary: String, count: int, pending: bool, truncated: bool) -> void:
+	if _query_panel == null:
+		return
+	_query_panel.visible = true
+	if _query_summary_label != null:
+		_query_summary_label.text = summary
+	if _query_count_label != null:
+		if pending:
+			_query_count_label.text = "… counting"
+		elif count < 0:
+			_query_count_label.text = "—"
+		elif truncated:
+			_query_count_label.text = "≥ %d matches" % count
+		else:
+			_query_count_label.text = "%d matches" % count
+
+
+## Hide the query preview (no active query).
+func hide_query_preview() -> void:
+	if _query_panel != null:
+		_query_panel.visible = false
 
 
 ## Set by GraphScene after each control press: the current physics params, edge
@@ -145,6 +224,17 @@ func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int) ->
 		flat_toggle_button.text = "View: Flat" if is_flat else "View: 3D"
 	if unpin_all_button != null:
 		unpin_all_button.text = "Unpin All (%d)" % pinned_count if pinned_count > 0 else "Unpin All"
+
+
+## Reflect the fold-ladder level (Wave 3) on the Fold +/- button faces. `level`
+## is clamped [0,3]; Fold + disables at the top of the ladder, Fold - at ∅.
+## Press-only (no per-frame cost), same discipline as set_control_states.
+func set_fold_state(level: int) -> void:
+	if fold_plus_button != null:
+		fold_plus_button.text = "Fold + (L%d)" % level
+		fold_plus_button.disabled = level >= 3
+	if fold_minus_button != null:
+		fold_minus_button.disabled = level <= 0
 
 
 # --- Document view (double-click node → narrativegoldmine page card) ----------

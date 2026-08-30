@@ -22,6 +22,9 @@ use crate::handlers::utils::execute_in_thread;
 use hexser::{Hexserror, QueryHandler};
 use visionclaw_domain::models::graph::GraphData;
 
+/// Fold-level ladder (Wave 3) — server-side fold-plan computation.
+pub mod fold;
+
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SettlementState {
@@ -1059,6 +1062,416 @@ pub async fn expand_node(
     Ok(HttpResponse::Ok().json(response))
 }
 
+// ---------------------------------------------------------------------------
+// Visual query builder — pattern match (POST /api/graph/query/pattern)
+// ---------------------------------------------------------------------------
+//
+// The XR "visual query builder" marks nodes/edges of the *visible* graph as
+// query variables in-place; the marked pattern IS a query. This endpoint
+// enumerates the bindings of such a pattern over the live in-memory typed graph
+// — the same `Arc<GraphData>` snapshot the `/relations` and `/expand` reads use
+// (`fetch_graph_snapshot`), so a binding count matches exactly what the user
+// sees on screen. We deliberately DO NOT translate to SPARQL/oxigraph: that
+// store holds only the OWL ontology, not the graph node/edge instances, so its
+// counts would not equal the visible graph.
+//
+// A pattern is a list of directed triples `{src, edgeType, tgt}`. Each of `src`
+// and `tgt` is either a concrete node id (JSON number, masked with
+// `NODE_ID_MASK` to accept flagged XR wire ids) or a variable (JSON string, by
+// convention `?vN`). `edgeType` is either a concrete predicate (matched via
+// `edge_group_key`, so `"linked"`/empty matches untyped edges) or a wildcard
+// (`"*"` / `"any"`) matching any predicate. Named edge variables are NOT
+// supported in v1 — an edge is fixed or wildcard.
+//
+// A binding is an assignment of node variables to ids; because there are no
+// edge variables, two parallel edges between the same endpoints collapse to one
+// binding (deduped by the variable tuple). Concrete-only patterns yield exactly
+// one binding (satisfiable) or zero.
+
+const QUERY_DEFAULT_LIMIT: u32 = 24;
+const QUERY_MAX_LIMIT: u32 = 500;
+/// Max distinct bindings enumerated before the scan is cut short (`truncated`).
+const QUERY_SCAN_CAP: usize = 5000;
+/// Max candidate-edge examinations before the scan is cut short (`truncated`).
+/// Bounds worst-case work on wildcard-heavy patterns over 145k+ edges — the
+/// same DoS posture as `/expand`'s bounded heap.
+const QUERY_STEP_CAP: usize = 2_000_000;
+/// Max triples in one pattern. The join recurses one frame per triple, so this
+/// also bounds recursion depth (16 frames is negligible stack) — closing the
+/// "unbounded triples → stack overflow" hole. Far above any real pattern.
+const MAX_PATTERN_TRIPLES: usize = 16;
+/// Max distinct variables in one pattern (node + would-be edge vars).
+const MAX_PATTERN_VARS: usize = 8;
+
+/// One term of a pattern triple endpoint: a concrete id (number) or a variable
+/// (string). Untagged so the wire is `123` or `"?v1"` with no discriminator.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum PatternTerm {
+    Id(u32),
+    Var(String),
+}
+
+/// One directed pattern triple `src -[edgeType]-> tgt`.
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternTriple {
+    pub src: PatternTerm,
+    pub edge_type: String,
+    pub tgt: PatternTerm,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternQueryRequest {
+    pub triples: Vec<PatternTriple>,
+    pub limit: Option<u32>,
+    #[serde(default)]
+    pub count_only: bool,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternQueryResponse {
+    /// Node variable names in first-seen order (parallel to each binding's keys).
+    pub vars: Vec<String>,
+    /// Total distinct bindings found (capped at `QUERY_SCAN_CAP`).
+    pub binding_count: u32,
+    /// True when enumeration hit a scan/step cap and `binding_count` is a floor,
+    /// not the exact total.
+    pub truncated: bool,
+    /// Materialised bindings (var name → node id), at most `limit`. Empty when
+    /// `countOnly`. When `bindings.len() < binding_count` the caller is seeing
+    /// the first page.
+    pub bindings: Vec<std::collections::BTreeMap<String, u32>>,
+}
+
+/// Clamp an optional caller limit to `[1, QUERY_MAX_LIMIT]`, defaulting to
+/// `QUERY_DEFAULT_LIMIT` when absent or 0.
+fn clamp_query_limit(limit: Option<u32>) -> u32 {
+    match limit {
+        None | Some(0) => QUERY_DEFAULT_LIMIT,
+        Some(n) => n.min(QUERY_MAX_LIMIT),
+    }
+}
+
+/// True when an `edgeType` string denotes a wildcard predicate (`"*"`/`"any"`).
+fn is_wildcard_predicate(edge_type: &str) -> bool {
+    let t = edge_type.trim();
+    t == "*" || t.eq_ignore_ascii_case("any")
+}
+
+/// A pattern term resolved against the collected variable list: either a fixed
+/// (already masked) id, or an index into the `vars` vec.
+#[derive(Clone, Copy)]
+enum ResolvedTerm {
+    Id(u32),
+    Var(usize),
+}
+
+/// A resolved triple: endpoints as [`ResolvedTerm`]s, predicate as `Some(key)`
+/// (matched via `edge_group_key`) or `None` for wildcard.
+struct ResolvedTriple {
+    src: ResolvedTerm,
+    tgt: ResolvedTerm,
+    pred: Option<String>,
+}
+
+/// Resolve one wire term, interning variables into `vars` in first-seen order.
+fn resolve_term(
+    term: &PatternTerm,
+    mask: u32,
+    vars: &mut Vec<String>,
+    var_index: &mut HashMap<String, usize>,
+) -> Result<ResolvedTerm, String> {
+    match term {
+        PatternTerm::Id(id) => Ok(ResolvedTerm::Id(id & mask)),
+        PatternTerm::Var(name) => {
+            let name = name.trim().to_string();
+            if name.is_empty() {
+                return Err("variable name must be non-empty".to_string());
+            }
+            let idx = *var_index.entry(name.clone()).or_insert_with(|| {
+                vars.push(name.clone());
+                vars.len() - 1
+            });
+            Ok(ResolvedTerm::Var(idx))
+        }
+    }
+}
+
+/// If a term is already pinned to a concrete id (a literal id, or a variable
+/// already bound in `binding`), return it — used to pick the most selective
+/// candidate index for the next triple.
+fn known_id(term: &ResolvedTerm, binding: &[Option<u32>]) -> Option<u32> {
+    match term {
+        ResolvedTerm::Id(id) => Some(*id),
+        ResolvedTerm::Var(vi) => binding[*vi],
+    }
+}
+
+/// Mutable state carried through the backtracking join.
+struct Joiner<'a> {
+    edges: &'a [visionclaw_domain::models::edge::Edge],
+    by_source: &'a HashMap<u32, Vec<usize>>,
+    by_target: &'a HashMap<u32, Vec<usize>>,
+    by_pred: &'a HashMap<&'a str, Vec<usize>>,
+    all_indices: &'a [usize],
+    triples: &'a [ResolvedTriple],
+    seen: std::collections::HashSet<Vec<u32>>,
+    order: Vec<Vec<u32>>,
+    steps: usize,
+    hit_cap: bool,
+}
+
+impl<'a> Joiner<'a> {
+    /// Recurse over triple `ti`, extending `binding`. On a complete, previously
+    /// unseen assignment, record the variable tuple. Sets `hit_cap` (and stops)
+    /// when a scan/step cap is reached.
+    fn rec(&mut self, ti: usize, binding: &mut Vec<Option<u32>>) {
+        if self.hit_cap {
+            return;
+        }
+        if ti == self.triples.len() {
+            let tuple: Vec<u32> = binding.iter().map(|x| x.expect("all vars bound")).collect();
+            if self.seen.insert(tuple.clone()) {
+                self.order.push(tuple);
+                if self.order.len() >= QUERY_SCAN_CAP {
+                    self.hit_cap = true;
+                }
+            }
+            return;
+        }
+        let t = &self.triples[ti];
+        // Pick the most selective candidate set: pin on a known source, else a
+        // known target, else the predicate bucket, else (wildcard, both free)
+        // the whole edge list.
+        let cand: &[usize] = if let Some(id) = known_id(&t.src, binding) {
+            self.by_source.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+        } else if let Some(id) = known_id(&t.tgt, binding) {
+            self.by_target.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
+        } else if let Some(p) = &t.pred {
+            self.by_pred.get(p.as_str()).map(|v| v.as_slice()).unwrap_or(&[])
+        } else {
+            self.all_indices
+        };
+
+        for &ei in cand {
+            self.steps += 1;
+            if self.steps > QUERY_STEP_CAP {
+                self.hit_cap = true;
+                return;
+            }
+            let e = &self.edges[ei];
+            if let Some(p) = &t.pred {
+                if edge_group_key(e) != p.as_str() {
+                    continue;
+                }
+            }
+            // Bind/check source.
+            let mut bound_src: Option<usize> = None;
+            match &t.src {
+                ResolvedTerm::Id(id) => {
+                    if e.source != *id {
+                        continue;
+                    }
+                }
+                ResolvedTerm::Var(vi) => match binding[*vi] {
+                    Some(b) => {
+                        if e.source != b {
+                            continue;
+                        }
+                    }
+                    None => {
+                        binding[*vi] = Some(e.source);
+                        bound_src = Some(*vi);
+                    }
+                },
+            }
+            // Bind/check target (may reference the same var just bound above).
+            let mut bound_tgt: Option<usize> = None;
+            let mut ok = true;
+            match &t.tgt {
+                ResolvedTerm::Id(id) => {
+                    if e.target != *id {
+                        ok = false;
+                    }
+                }
+                ResolvedTerm::Var(vi) => match binding[*vi] {
+                    Some(b) => {
+                        if e.target != b {
+                            ok = false;
+                        }
+                    }
+                    None => {
+                        binding[*vi] = Some(e.target);
+                        bound_tgt = Some(*vi);
+                    }
+                },
+            }
+            if ok {
+                self.rec(ti + 1, binding);
+            }
+            if let Some(vi) = bound_tgt {
+                binding[vi] = None;
+            }
+            if let Some(vi) = bound_src {
+                binding[vi] = None;
+            }
+            if self.hit_cap {
+                return;
+            }
+        }
+    }
+}
+
+/// Pure pattern-match core: enumerate distinct variable bindings of `triples`
+/// over `edges`. `limit` caps the materialised `bindings` (ignored when
+/// `count_only`); `binding_count`/`truncated` are identical regardless of
+/// `count_only` (same enumeration), giving countOnly/full parity. Off-actor and
+/// unit-tested directly.
+fn match_pattern(
+    edges: &[visionclaw_domain::models::edge::Edge],
+    triples: &[PatternTriple],
+    limit: u32,
+    count_only: bool,
+) -> Result<PatternQueryResponse, String> {
+    if triples.is_empty() {
+        return Err("pattern must contain at least one triple".to_string());
+    }
+    // Hard shape caps (rejected as 400 by the handler). The join recurses one
+    // frame per triple, so bounding the triple count bounds recursion depth —
+    // `MAX_PATTERN_TRIPLES` frames is trivial stack, closing the "unbounded
+    // triples → stack overflow before the step cap" hole. A real visual-builder
+    // pattern is a handful of triples over a handful of variables; these caps sit
+    // far above any legitimate use.
+    if triples.len() > MAX_PATTERN_TRIPLES {
+        return Err(format!(
+            "pattern has {} triples; the maximum is {}",
+            triples.len(),
+            MAX_PATTERN_TRIPLES
+        ));
+    }
+
+    let mask = crate::utils::binary_protocol::NODE_ID_MASK;
+    let mut vars: Vec<String> = Vec::new();
+    let mut var_index: HashMap<String, usize> = HashMap::new();
+    let mut resolved: Vec<ResolvedTriple> = Vec::with_capacity(triples.len());
+    for t in triples {
+        let src = resolve_term(&t.src, mask, &mut vars, &mut var_index)?;
+        let tgt = resolve_term(&t.tgt, mask, &mut vars, &mut var_index)?;
+        if vars.len() > MAX_PATTERN_VARS {
+            return Err(format!(
+                "pattern has more than {} variables",
+                MAX_PATTERN_VARS
+            ));
+        }
+        let pred = if is_wildcard_predicate(&t.edge_type) {
+            None
+        } else if t.edge_type.trim().is_empty() {
+            // Empty predicate matches untyped edges (edge_group_key -> "linked").
+            Some(UNTYPED_EDGE_GROUP.to_string())
+        } else {
+            Some(t.edge_type.trim().to_string())
+        };
+        resolved.push(ResolvedTriple { src, tgt, pred });
+    }
+
+    // Static selectivity ordering: most-constrained triples first so the join
+    // prunes early. (Correctness is order-independent; this is a perf heuristic.)
+    resolved.sort_by(|a, b| {
+        fn score(t: &ResolvedTriple) -> u8 {
+            let s = matches!(t.src, ResolvedTerm::Id(_)) as u8;
+            let g = matches!(t.tgt, ResolvedTerm::Id(_)) as u8;
+            let p = t.pred.is_some() as u8;
+            s + g + p
+        }
+        score(b).cmp(&score(a))
+    });
+
+    // Indices over the edge slice (built once).
+    let mut by_source: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut by_target: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut by_pred: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, e) in edges.iter().enumerate() {
+        by_source.entry(e.source).or_default().push(i);
+        by_target.entry(e.target).or_default().push(i);
+        by_pred.entry(edge_group_key(e)).or_default().push(i);
+    }
+    let all_indices: Vec<usize> = (0..edges.len()).collect();
+
+    let mut joiner = Joiner {
+        edges,
+        by_source: &by_source,
+        by_target: &by_target,
+        by_pred: &by_pred,
+        all_indices: &all_indices,
+        triples: &resolved,
+        seen: std::collections::HashSet::new(),
+        order: Vec::new(),
+        steps: 0,
+        hit_cap: false,
+    };
+    let mut binding: Vec<Option<u32>> = vec![None; vars.len()];
+    joiner.rec(0, &mut binding);
+
+    let binding_count = joiner.order.len() as u32;
+    let truncated = joiner.hit_cap;
+    let bindings = if count_only {
+        Vec::new()
+    } else {
+        joiner
+            .order
+            .iter()
+            .take(limit as usize)
+            .map(|tuple| {
+                let mut m = std::collections::BTreeMap::new();
+                for (vi, name) in vars.iter().enumerate() {
+                    m.insert(name.clone(), tuple[vi]);
+                }
+                m
+            })
+            .collect()
+    };
+
+    Ok(PatternQueryResponse {
+        vars,
+        binding_count,
+        truncated,
+        bindings,
+    })
+}
+
+/// `POST /api/graph/query/pattern`
+///
+/// Enumerate bindings of a triple pattern over the live in-memory typed graph.
+/// Read-only. `countOnly:true` returns the count/truncated flags without
+/// materialising bindings (the HUD live-count-preview path). 400 on an empty
+/// pattern or an empty variable name.
+pub async fn query_pattern(
+    state: web::Data<AppState>,
+    body: web::Json<PatternQueryRequest>,
+) -> impl Responder {
+    let req = body.into_inner();
+    let limit = clamp_query_limit(req.limit);
+
+    let graph_data = match fetch_graph_snapshot(&state).await {
+        Ok(g) => g,
+        Err(e) => {
+            error!("Failed to get graph data for pattern query: {}", e);
+            return Ok::<HttpResponse, actix_web::Error>(
+                HttpResponse::InternalServerError()
+                    .json(serde_json::json!({"error": "Failed to retrieve graph data"})),
+            );
+        }
+    };
+
+    match match_pattern(&graph_data.edges, &req.triples, limit, req.count_only) {
+        Ok(response) => Ok(HttpResponse::Ok().json(response)),
+        Err(msg) => Ok(HttpResponse::BadRequest().json(serde_json::json!({"error": msg}))),
+    }
+}
+
 // Configure routes using snake_case
 /// SECURITY: Graph mutation operations require authentication
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -1074,6 +1487,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/data", web::get().to(get_graph_data))
             .route("/data/paginated", web::get().to(get_paginated_graph_data))
             .route("/positions", web::get().to(get_graph_positions))
+            // Fold-level ladder (Wave 3): read-only fold plan for a density
+            // level. Public read, same posture as the other `/graph` reads;
+            // computes a plan and mutates nothing.
+            .route("/fold", web::get().to(fold::get_fold_plan))
             .route(
                 "/auto-balance-notifications",
                 web::get().to(get_auto_balance_notifications),
@@ -1094,6 +1511,14 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                 web::resource("/node/{id}/expand")
                     .wrap(RateLimit::per_minute(120))
                     .route(web::post().to(expand_node)),
+            )
+            // Visual query builder pattern match — read-only, scans every edge
+            // (bounded), so it shares the tighter 120/min per-resource ceiling of
+            // the other Graph2VR reads rather than the 600/min scope default.
+            .service(
+                web::resource("/query/pattern")
+                    .wrap(RateLimit::per_minute(120))
+                    .route(web::post().to(query_pattern)),
             )
             // S2: `/update` triggers a full bulk reload — it re-fetches and
             // re-processes the entire upstream content source and rebuilds the graph
@@ -1160,6 +1585,237 @@ mod population_filter_tests {
         assert!(p.matches(Some("bot"), &md(&[])));
         assert!(p.matches(Some("page"), &md(&[("agentType", "coder")])));
         assert!(!p.matches(Some("page"), &md(&[])));
+    }
+}
+
+#[cfg(test)]
+mod pattern_query_tests {
+    use super::*;
+    use visionclaw_domain::models::edge::Edge;
+
+    // Directed fixture:
+    //   1 -[authored]->   2
+    //   1 -[authored]->   3
+    //   2 -[references]-> 4
+    //   3 -[references]-> 4
+    //   4 -[references]-> 1        (closes a cycle 1->2->4->1 and 1->3->4->1)
+    //   5 -[linked]---->  6        (untyped)
+    fn fx() -> Vec<Edge> {
+        vec![
+            Edge::new(1, 2, 1.0).with_edge_type("authored".to_string()),
+            Edge::new(1, 3, 1.0).with_edge_type("authored".to_string()),
+            Edge::new(2, 4, 1.0).with_edge_type("references".to_string()),
+            Edge::new(3, 4, 1.0).with_edge_type("references".to_string()),
+            Edge::new(4, 1, 1.0).with_edge_type("references".to_string()),
+            Edge::new(5, 6, 1.0), // untyped -> "linked"
+        ]
+    }
+
+    fn var(name: &str) -> PatternTerm {
+        PatternTerm::Var(name.to_string())
+    }
+    fn id(n: u32) -> PatternTerm {
+        PatternTerm::Id(n)
+    }
+    fn triple(s: PatternTerm, e: &str, t: PatternTerm) -> PatternTriple {
+        PatternTriple {
+            src: s,
+            edge_type: e.to_string(),
+            tgt: t,
+        }
+    }
+
+    #[test]
+    fn single_triple_binds_all_matching_edges() {
+        // ?a -[authored]-> ?b  => (1,2) and (1,3).
+        let pat = vec![triple(var("?a"), "authored", var("?b"))];
+        let r = match_pattern(&fx(), &pat, 24, false).unwrap();
+        assert_eq!(r.vars, vec!["?a", "?b"]);
+        assert_eq!(r.binding_count, 2);
+        assert!(!r.truncated);
+        let pairs: std::collections::HashSet<(u32, u32)> = r
+            .bindings
+            .iter()
+            .map(|m| (m["?a"], m["?b"]))
+            .collect();
+        assert_eq!(
+            pairs,
+            [(1, 2), (1, 3)].into_iter().collect()
+        );
+    }
+
+    #[test]
+    fn chain_join_threads_a_shared_variable() {
+        // 1 -[authored]-> ?b -[references]-> ?c
+        //   ?b in {2,3}; both reference 4 => (?b=2,?c=4),(?b=3,?c=4).
+        let pat = vec![
+            triple(id(1), "authored", var("?b")),
+            triple(var("?b"), "references", var("?c")),
+        ];
+        let r = match_pattern(&fx(), &pat, 24, false).unwrap();
+        assert_eq!(r.binding_count, 2);
+        for m in &r.bindings {
+            assert_eq!(m["?c"], 4);
+            assert!(m["?b"] == 2 || m["?b"] == 3);
+        }
+    }
+
+    #[test]
+    fn cycle_pattern_closes_back_to_anchor() {
+        // ?a -[authored]-> ?b -[references]-> ?c -[references]-> ?a
+        // Paths: 1->2->4->1 and 1->3->4->1  => 2 bindings, ?a bound to 1.
+        let pat = vec![
+            triple(var("?a"), "authored", var("?b")),
+            triple(var("?b"), "references", var("?c")),
+            triple(var("?c"), "references", var("?a")),
+        ];
+        let r = match_pattern(&fx(), &pat, 24, false).unwrap();
+        assert_eq!(r.binding_count, 2);
+        for m in &r.bindings {
+            assert_eq!(m["?a"], 1);
+            assert_eq!(m["?c"], 4);
+        }
+    }
+
+    #[test]
+    fn wildcard_edge_matches_any_predicate() {
+        // ?a -[*]-> ?b matches every edge; each edge is a distinct (a,b) pair
+        // here (no parallel edges) => 6 bindings.
+        let pat = vec![triple(var("?a"), "*", var("?b"))];
+        let r = match_pattern(&fx(), &pat, 24, false).unwrap();
+        assert_eq!(r.binding_count, 6);
+        // "any" is an equivalent wildcard spelling.
+        let r2 = match_pattern(&fx(), &[triple(var("?a"), "any", var("?b"))], 24, false).unwrap();
+        assert_eq!(r2.binding_count, 6);
+    }
+
+    #[test]
+    fn parallel_edges_collapse_to_one_binding() {
+        // Two predicates between the same pair; no edge variable => one binding.
+        let edges = vec![
+            Edge::new(1, 2, 1.0).with_edge_type("authored".to_string()),
+            Edge::new(1, 2, 1.0).with_edge_type("references".to_string()),
+        ];
+        let pat = vec![triple(var("?a"), "*", var("?b"))];
+        let r = match_pattern(&edges, &pat, 24, false).unwrap();
+        assert_eq!(r.binding_count, 1, "binding deduped by variable tuple");
+    }
+
+    #[test]
+    fn count_only_parity_with_full() {
+        let pat = vec![triple(var("?a"), "authored", var("?b"))];
+        let full = match_pattern(&fx(), &pat, 24, false).unwrap();
+        let counted = match_pattern(&fx(), &pat, 24, true).unwrap();
+        assert_eq!(counted.binding_count, full.binding_count);
+        assert_eq!(counted.truncated, full.truncated);
+        assert_eq!(counted.vars, full.vars);
+        assert!(counted.bindings.is_empty(), "countOnly omits bindings");
+    }
+
+    #[test]
+    fn limit_caps_returned_bindings_but_not_count() {
+        // 6 wildcard bindings, limit 2 => count 6, only 2 materialised, not
+        // truncated (the scan completed; the cap is presentation paging).
+        let pat = vec![triple(var("?a"), "*", var("?b"))];
+        let r = match_pattern(&fx(), &pat, 2, false).unwrap();
+        assert_eq!(r.binding_count, 6);
+        assert_eq!(r.bindings.len(), 2);
+        assert!(!r.truncated);
+    }
+
+    #[test]
+    fn clamp_query_limit_defaults_and_ceilings() {
+        assert_eq!(clamp_query_limit(None), QUERY_DEFAULT_LIMIT);
+        assert_eq!(clamp_query_limit(Some(0)), QUERY_DEFAULT_LIMIT);
+        assert_eq!(clamp_query_limit(Some(5)), 5);
+        assert_eq!(clamp_query_limit(Some(99999)), QUERY_MAX_LIMIT);
+    }
+
+    #[test]
+    fn scan_cap_sets_truncated() {
+        // A star of authored edges 0 -> 1..=N with N > QUERY_SCAN_CAP produces
+        // more distinct bindings than the cap, so enumeration is cut short.
+        let n = (QUERY_SCAN_CAP + 500) as u32;
+        let mut edges = Vec::with_capacity(n as usize);
+        for t in 1..=n {
+            edges.push(Edge::new(0, t, 1.0).with_edge_type("authored".to_string()));
+        }
+        let pat = vec![triple(var("?a"), "authored", var("?b"))];
+        let r = match_pattern(&edges, &pat, 24, false).unwrap();
+        assert!(r.truncated, "scan cap must set truncated");
+        assert_eq!(r.binding_count as usize, QUERY_SCAN_CAP);
+    }
+
+    #[test]
+    fn empty_pattern_is_rejected() {
+        let r = match_pattern(&fx(), &[], 24, false);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn too_many_triples_is_rejected() {
+        // A concrete chain longer than MAX_PATTERN_TRIPLES must be refused BEFORE
+        // any recursion (the stack-overflow guard), even with a tiny graph.
+        let pat: Vec<PatternTriple> = (0..(MAX_PATTERN_TRIPLES as u32 + 1))
+            .map(|i| triple(id(i), "authored", id(i + 1)))
+            .collect();
+        let r = match_pattern(&fx(), &pat, 24, false);
+        assert!(r.is_err(), "over-long pattern rejected");
+        assert!(r.unwrap_err().contains("triples"));
+    }
+
+    #[test]
+    fn max_triples_boundary_is_accepted() {
+        // Exactly MAX_PATTERN_TRIPLES is allowed (boundary, not off-by-one). Uses
+        // 2 vars so the var cap isn't the thing under test.
+        let pat: Vec<PatternTriple> = (0..MAX_PATTERN_TRIPLES)
+            .map(|_| triple(var("?a"), "authored", var("?b")))
+            .collect();
+        assert!(match_pattern(&fx(), &pat, 24, false).is_ok());
+    }
+
+    #[test]
+    fn too_many_variables_is_rejected() {
+        // MAX_PATTERN_VARS+1 distinct variables across single-edge triples.
+        let mut pat: Vec<PatternTriple> = Vec::new();
+        for i in 0..=(MAX_PATTERN_VARS as u32) {
+            pat.push(triple(var(&format!("?a{i}")), "authored", var(&format!("?b{i}"))));
+        }
+        let r = match_pattern(&fx(), &pat, 24, false);
+        assert!(r.is_err(), "over-many variables rejected");
+        assert!(r.unwrap_err().contains("variable"));
+    }
+
+    #[test]
+    fn empty_variable_name_is_rejected() {
+        let pat = vec![triple(var("  "), "authored", var("?b"))];
+        assert!(match_pattern(&fx(), &pat, 24, false).is_err());
+    }
+
+    #[test]
+    fn concrete_only_pattern_is_boolean() {
+        // A fully-concrete satisfiable triple => exactly one (empty) binding.
+        let sat = vec![triple(id(1), "authored", id(2))];
+        let r = match_pattern(&fx(), &sat, 24, false).unwrap();
+        assert_eq!(r.binding_count, 1);
+        assert!(r.vars.is_empty());
+        assert_eq!(r.bindings.len(), 1);
+        assert!(r.bindings[0].is_empty());
+        // Unsatisfiable => zero bindings.
+        let unsat = vec![triple(id(1), "authored", id(4))];
+        let r2 = match_pattern(&fx(), &unsat, 24, false).unwrap();
+        assert_eq!(r2.binding_count, 0);
+        assert!(r2.bindings.is_empty());
+    }
+
+    #[test]
+    fn empty_predicate_matches_untyped_edges() {
+        // Untyped edge 5 -> 6 is matched by an empty edgeType ("linked" group).
+        let pat = vec![triple(var("?a"), "", var("?b"))];
+        let r = match_pattern(&fx(), &pat, 24, false).unwrap();
+        assert_eq!(r.binding_count, 1);
+        assert_eq!(r.bindings[0]["?a"], 5);
+        assert_eq!(r.bindings[0]["?b"], 6);
     }
 }
 

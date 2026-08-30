@@ -47,6 +47,8 @@ Focused requirement records scoped to a single subsystem rather than a numbered 
 | [jss-parity-migration](jss-parity-migration.md) | JSS parity migration (solid-pod-rs v0.4.0 gate) |
 | [prd-bead-provenance-upgrade](prd-bead-provenance-upgrade.md) | Bead provenance system upgrade |
 | [prd-insight-migration-loop](prd-insight-migration-loop.md) | Insight migration loop (MVP) |
+| [prd-visual-query-builder-semantic-planes](prd-visual-query-builder-semantic-planes.md) | Visual query builder with semantic planes (Vive XR client) |
+| [PRD-fold-ladder-hierarchical-density](PRD-fold-ladder-hierarchical-density.md) | Fold-level ladder — hierarchical density management (XR + desktop) |
 
 ## See also
 
