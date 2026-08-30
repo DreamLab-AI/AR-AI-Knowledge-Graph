@@ -626,7 +626,9 @@ impl UnifiedGPUCompute {
                     compute_mask_ptr,
                     compute_mask_len,
                     // PHASE 2: per-node DAG rank for the radial hierarchy bias
-                    self.node_rank.as_device_ptr()
+                    self.node_rank.as_device_ptr(),
+                    // ADR-141 P2: per-node centered plane offset for the stratified-plane bias
+                    self.node_plane.as_device_ptr()
                 ))?;
             } else {
                 launch!(
@@ -665,7 +667,9 @@ impl UnifiedGPUCompute {
                     compute_mask_ptr,
                     compute_mask_len,
                     // PHASE 2: per-node DAG rank for the radial hierarchy bias
-                    self.node_rank.as_device_ptr()
+                    self.node_rank.as_device_ptr(),
+                    // ADR-141 P2: per-node centered plane offset for the stratified-plane bias
+                    self.node_plane.as_device_ptr()
                 ))?;
             }
         }

@@ -234,6 +234,8 @@ impl From<&crate::config::PhysicsSettings> for PhysicsSettingsDTO {
             initial_node_limit: settings.initial_node_limit,
             dag_bias_k: settings.dag_bias_k,
             dag_level_distance: settings.dag_level_distance,
+            plane_bias_k: settings.plane_bias_k,
+            plane_spacing: settings.plane_spacing,
         }
     }
 }

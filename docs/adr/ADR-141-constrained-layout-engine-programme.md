@@ -193,7 +193,7 @@ methods" axis:
   XR + desktop on `POST /api/layout/mode`, and delete the orphaned constraints handler.
   Ships: layout modes reach the kernel; both clients share one endpoint. *Status: **in progress** (2026-08-30).*
 - **Phase 2 — Stratified planes by type (P9).** New SF channel + per-type target-Z
-  buffer; XR HUD picker + desktop option. *XR room-scale flagship. Status: not started.*
+  buffer; XR HUD picker + desktop option. *XR room-scale flagship. Status: **in progress** (2026-08-30).*
 - **Phase 3 — Spherical shells + ego-radial (P8, P2).** Extend `dag_radial_bias`:
   type/depth-keyed shell radius; BFS-distance-from-focus mode. *Status: not started.*
 - **Phase 4 — Sugiyama layered + ontology alignment (P1 + P6).** CPU BFS/spectral rank
@@ -229,6 +229,45 @@ unwieldy (P2–P4 will pressure this).
   counterpart is required.** If a later phase surfaces agent-swarm layout that binds
   to agentbox session/identity contracts (cf. task #22), flag it then for an agentbox
   ADR-suite counterpart.
+
+### Phase 2 design note — plane assignment
+
+The stratified-plane term is a soft force channel (SF): a per-node `node_plane`
+buffer (centred float plane offset, `NaN` = unassigned) drives a Z-only Hooke spring
+`force.z += (node_plane[idx] * plane_spacing − pos.z) * plane_bias_k`, gated on
+`plane_bias_k > 0`. It mirrors the `node_rank`/`dag_radial_bias` machinery exactly
+(buffer alloc/grow/upload, appended as the last kernel arg after `node_rank` in both
+force kernels, added to `total_force` after `dag_radial_bias`). It **promotes the
+CPU `semantic_forces` Z-stratification onto the GPU hot loop** (Phase 0 finding: that
+logic existed only on the CPU path). The X/Y placement stays owned by the other forces
+— only Z is touched — so planes compose with any layout mode.
+
+Plane assignment maps node population → centred offset: **Knowledge → −1, Ontology →
+0 (central schema plane), Agent → +1**. This deliberately differs from the separate
+dual-disc CPU projection's Z-ordering (which centres Agents); the two are distinct
+layouts and need not agree. Extending the offset to finer ontology depth/type is a
+later refinement. `plane_bias_k` (default 0 = off) and `plane_spacing` (default 60)
+are new `PhysicsSettings` fields on the standard `/api/settings/physics` wire; desktop
+gets two sliders in the "Layout Forces" subgroup, XR gets a Planes on/off toggle +
+gap ± buttons in the HUD Graph tab.
+
+### Phase 2 status log
+
+- 2026-08-30 — **Phase 2 in progress.** Stratified-plane SF channel implemented:
+  `plane_bias_k`/`plane_spacing` appended to both `SimParams` structs (184→192, both
+  static_asserts); per-node `node_plane` buffer (alloc/grow/upload mirror `node_rank`,
+  NaN sentinel); `stratified_plane_bias` device fn + both kernel signatures + both
+  launch sites; CPU plane assignment from `node_population` on graph upload; new
+  `PhysicsSettings` wire fields; desktop sliders + XR HUD Planes toggle/gap buttons.
+  Gated `cargo check --features gpu,ontology,dev-auth` (nvcc) exit 0 — the 192-byte
+  struct + new kernel term + launch arg order all validated.
+- 2026-08-30 — Phase 2 codex correctness pass: added a `plane_spacing <= 0 ⇒ inert`
+  guard to the device fn so a zero/omitted spacing can never collapse all planes onto
+  z=0 (the settings DTO defaults spacing to 0 as "absent", mirroring `dag_level_distance`;
+  the kernel guard makes that self-safe regardless of wire path). Second codex note (a
+  `node_population` length-mismatch leaving the buffer stale) matches `node_rank`'s
+  established behaviour exactly — the buffer is NaN-reset on every grow, so a skipped
+  upload leaves it inert, not stale; left at parity by design. Re-verified nvcc-green.
 
 ## Status log
 

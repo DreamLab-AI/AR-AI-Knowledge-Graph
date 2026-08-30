@@ -33,6 +33,12 @@ fn default_dag_bias_k() -> f32 {
 fn default_dag_level_distance() -> f32 {
     60.0
 }
+fn default_plane_bias_k() -> f32 {
+    0.0
+}
+fn default_plane_spacing() -> f32 {
+    60.0
+}
 
 /// Controls how the physics simulation converges.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -225,6 +231,17 @@ pub struct SimulationParams {
     /// World-space radius per hierarchy level for the DAG radial bias (default 60).
     #[serde(default = "default_dag_level_distance")]
     pub dag_level_distance: f32,
+
+    /// Stratified-plane bias strength (ADR-141 P2). `0` = off (default). Springs
+    /// each node along Z toward its assigned plane (target_z = plane_offset *
+    /// plane_spacing), separating node types into parallel strata.
+    #[serde(default = "default_plane_bias_k")]
+    pub plane_bias_k: f32,
+
+    /// World-space Z distance per plane offset unit for the stratified-plane bias
+    /// (default 60).
+    #[serde(default = "default_plane_spacing")]
+    pub plane_spacing: f32,
 }
 
 impl Default for SimulationParams {
@@ -454,6 +471,8 @@ impl From<&PhysicsSettings> for SimulationParams {
             spring_k_agent: physics.spring_k_agent,
             dag_bias_k: physics.dag_bias_k,
             dag_level_distance: physics.dag_level_distance,
+            plane_bias_k: physics.plane_bias_k,
+            plane_spacing: physics.plane_spacing,
         }
     }
 }

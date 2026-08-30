@@ -78,6 +78,11 @@ pub struct UnifiedGPUCompute {
     // Populated via upload_node_rank; default -1.0 leaves the term inert.
     pub node_rank: DeviceBuffer<f32>,
 
+    // Per-node centered plane offset for the stratified-plane bias (ADR-141 P2).
+    // e.g. -1, 0, +1; NaN = not assigned to any plane (no bias applied).
+    // Populated via upload_node_plane; default NaN leaves the term inert.
+    pub node_plane: DeviceBuffer<f32>,
+
     pub edge_row_offsets: DeviceBuffer<i32>,
     pub edge_col_indices: DeviceBuffer<i32>,
     pub edge_weights: DeviceBuffer<f32>,
@@ -352,6 +357,7 @@ impl UnifiedGPUCompute {
         let spring_scale = DeviceBuffer::from_slice(&vec![1.0f32; num_nodes])?; // Default spring multiplier = 1.0
         let pinned_mask = DeviceBuffer::zeroed(num_nodes)?; // Default = 0 (no nodes pinned)
         let node_rank = DeviceBuffer::from_slice(&vec![-1.0f32; num_nodes])?; // -1 = unranked
+        let node_plane = DeviceBuffer::from_slice(&vec![f32::NAN; num_nodes])?; // NaN = unassigned
 
         let edge_row_offsets = DeviceBuffer::zeroed(num_nodes + 1)?;
         let edge_col_indices = DeviceBuffer::zeroed(num_edges)?;
@@ -455,6 +461,7 @@ impl UnifiedGPUCompute {
             node_graph_id,
             pinned_mask,
             node_rank,
+            node_plane,
             class_id,
             class_charge,
             class_mass,

@@ -94,6 +94,11 @@ pub struct SimParams {
     // the tail of `SimParams`; the seam P2–P4 branch on. Added at the end to
     // preserve the existing repr(C) prefix layout.
     pub layout_mode: u32,
+
+    // ADR-141 P2 stratified planes. `plane_bias_k` = 0 disables the term.
+    // Added at the end to preserve the existing repr(C) prefix layout.
+    pub plane_bias_k: f32,
+    pub plane_spacing: f32,
 }
 
 // SAFETY: SimParams is repr(C) with only POD types; safe for GPU transfer.
@@ -175,6 +180,8 @@ impl SimParams {
             global_speed: self.global_speed,
             dag_bias_k: self.dag_bias_k,
             dag_level_distance: self.dag_level_distance,
+            plane_bias_k: self.plane_bias_k,
+            plane_spacing: self.plane_spacing,
             // Per-population spring multipliers (LinLog identity). This GPU-side
             // struct has no per-population source, so default to 1.0.
             spring_k_knowledge: 1.0,
@@ -198,7 +205,7 @@ impl ToSimParams for SimulationParams {
 }
 
 // Compile-time size assertion: SimParams must match the CUDA struct exactly.
-const _: () = assert!(std::mem::size_of::<SimParams>() == 184);
+const _: () = assert!(std::mem::size_of::<SimParams>() == 192);
 
 impl From<&SimParams> for SimulationParams {
     fn from(params: &SimParams) -> Self {
@@ -278,6 +285,8 @@ impl From<&SimulationParams> for SimParams {
             dag_bias_k: params.dag_bias_k,
             dag_level_distance: params.dag_level_distance,
             layout_mode: params.layout_mode.as_gpu_u32(),
+            plane_bias_k: params.plane_bias_k,
+            plane_spacing: params.plane_spacing,
         }
     }
 }
@@ -359,6 +368,8 @@ impl From<&PhysicsSettings> for SimParams {
             // SimulationParams.layout_mode (set via POST /api/layout/mode). Default
             // to ForceDirected here so this wire path never silently forces a mode.
             layout_mode: LayoutMode::ForceDirected.as_gpu_u32(),
+            plane_bias_k: physics.plane_bias_k,
+            plane_spacing: physics.plane_spacing,
         }
     }
 }

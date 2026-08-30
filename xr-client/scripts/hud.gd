@@ -125,6 +125,7 @@ var _scroll_regions: Array = []      # scroll-region wrapper HBoxes (▲▼ visi
 var _controls_status: Label = null
 var _hierarchy_button: Button = null
 var _flat_toggle_button: Button = null
+var _planes_toggle_button: Button = null
 var _layout_mode_button: Button = null
 # Wave 2, Feature 3 — type show/hide toggles (Graph tab). Each tracks its own
 # visible bool so the label/tint reflects state; the class code is in the action.
@@ -309,6 +310,14 @@ func _build_graph_page() -> VBoxContainer:
 	g2.add_child(_fold_plus_button)
 	g2.add_child(_fold_minus_button)
 	page.add_child(g2)
+
+	page.add_child(_group_header("Planes"))
+	var g_planes := _grid(3)
+	_planes_toggle_button = _action_btn("Planes: Off", "planes_toggle", "Toggle the plane spring force that stratifies nodes into parallel planes by type")
+	g_planes.add_child(_planes_toggle_button)
+	g_planes.add_child(_action_btn("Plane Gap +", "plane_gap_plus", "Increase the gap between type planes"))
+	g_planes.add_child(_action_btn("Plane Gap -", "plane_gap_minus", "Decrease the gap between type planes"))
+	page.add_child(g_planes)
 
 	# ADR-141 Phase 1 — constrained-layout engine picker. Single cycling button
 	# steps through the backend LayoutMode enum; graph_scene POSTs /api/layout/mode.
@@ -656,7 +665,10 @@ func set_controls_status(text: String) -> void:
 
 ## Reflect the Hierarchy/View toggle state and pinned-node count on the button
 ## faces + Pins tab. Press-only, no per-frame cost.
-func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int) -> void:
+func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int, planes_on: bool = false) -> void:
+	if _planes_toggle_button != null:
+		_planes_toggle_button.text = "Planes: On" if planes_on else "Planes: Off"
+		_planes_toggle_button.add_theme_color_override("font_color", ACCENT if planes_on else IDLE)
 	if _hierarchy_button != null:
 		_hierarchy_button.text = "Hierarchy: On" if hierarchy_on else "Hierarchy: Off"
 		_hierarchy_button.add_theme_color_override("font_color", ACCENT if hierarchy_on else IDLE)

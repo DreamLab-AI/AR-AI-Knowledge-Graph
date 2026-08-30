@@ -90,9 +90,16 @@ struct SimParams {
     // per-mode force branches (stratified planes, spherical shells, Sugiyama Y-by-rank).
     // Added at the end to preserve the existing repr(C) prefix layout.
     unsigned int layout_mode;
+
+    // Stratified planes by type (ADR-141 P2). Springs each node's Z toward its
+    // assigned plane (target_z = node_plane[idx] * plane_spacing). plane_bias_k = 0
+    // disables the term entirely (default OFF). Added at the end to preserve the
+    // existing repr(C) prefix layout.
+    float plane_bias_k;         // Plane-bias spring strength; 0 = off
+    float plane_spacing;        // World-space Z distance per plane offset unit
 };
 
-static_assert(sizeof(SimParams) == 184, "SimParams size mismatch with Rust");
+static_assert(sizeof(SimParams) == 192, "SimParams size mismatch with Rust");
 
 // Global constant memory for simulation parameters
 __constant__ SimParams c_params;
@@ -207,6 +214,29 @@ __device__ inline float3 dag_radial_bias(float3 my_pos,
         return make_float3(target_radius * c_params.dag_bias_k, 0.0f, 0.0f);
     }
     return make_float3(0.0f, 0.0f, 0.0f);
+}
+
+// Stratified-plane bias (ADR-141 P2). Springs each node's Z toward its assigned
+// plane (target_z = node_plane[idx] * plane_spacing), separating node types into
+// parallel horizontal strata. node_plane[idx] = NaN ⇒ unassigned (no force);
+// plane_bias_k <= 0 ⇒ term disabled. plane_spacing <= 0 is also treated as disabled
+// so a zero/absent spacing (e.g. an omitted settings field) can never silently
+// collapse every plane onto z = 0. Only the Z axis is touched; X/Y placement stays
+// owned by the other forces.
+__device__ inline float3 stratified_plane_bias(float3 my_pos,
+                                               const float* __restrict__ node_plane,
+                                               int idx) {
+    if (node_plane == nullptr || c_params.plane_bias_k <= 0.0f
+        || c_params.plane_spacing <= 0.0f) {
+        return make_float3(0.0f, 0.0f, 0.0f);
+    }
+    const float plane = node_plane[idx];
+    if (!isfinite(plane)) {
+        return make_float3(0.0f, 0.0f, 0.0f);
+    }
+    const float target_z = plane * c_params.plane_spacing;
+    const float fz = (target_z - my_pos.z) * c_params.plane_bias_k;
+    return make_float3(0.0f, 0.0f, fz);
 }
 
 // CAS-based atomic min for float (maximum portability)
@@ -350,7 +380,10 @@ __global__ void force_pass_kernel(
     const int mask_len,
     // PHASE 2 DAG radial bias: per-node hierarchy rank (nullptr = no bias). Rank
     // 0 = root, deeper = further out; < 0 = not in the hierarchy (no bias).
-    const float* __restrict__ node_rank)
+    const float* __restrict__ node_rank,
+    // ADR-141 P2 stratified planes: per-node centered plane offset (nullptr =
+    // no bias). NaN = node not assigned to any plane (no force).
+    const float* __restrict__ node_plane)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (compute_mask != nullptr) {
@@ -690,6 +723,11 @@ __global__ void force_pass_kernel(
     // PHASE 2: DAG radial hierarchy bias (radialout) — settle ranked nodes onto
     // concentric shells around the root centroid. No-op when dag_bias_k <= 0.
     total_force = vec3_add(total_force, dag_radial_bias(my_pos, node_rank, idx));
+
+    // ADR-141 P2: stratified planes by type — spring each node's Z toward its
+    // assigned plane so node types separate into parallel strata. No-op when
+    // plane_bias_k <= 0 or the node is unassigned (NaN).
+    total_force = vec3_add(total_force, stratified_plane_bias(my_pos, node_plane, idx));
 
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;
@@ -2111,7 +2149,10 @@ __global__ void force_pass_with_stability_kernel(
     const int* __restrict__ compute_mask,
     const int mask_len,
     // PHASE 2 DAG radial bias: per-node hierarchy rank (nullptr = no bias).
-    const float* __restrict__ node_rank)
+    const float* __restrict__ node_rank,
+    // ADR-141 P2 stratified planes: per-node centered plane offset (nullptr =
+    // no bias). NaN = node not assigned to any plane (no force).
+    const float* __restrict__ node_plane)
 {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (compute_mask != nullptr) {
@@ -2349,6 +2390,11 @@ __global__ void force_pass_with_stability_kernel(
     // so the bias applies identically on the stability-gated hot path. No-op when
     // dag_bias_k <= 0 or the node is unranked.
     total_force = vec3_add(total_force, dag_radial_bias(my_pos, node_rank, idx));
+
+    // ADR-141 P2: stratified planes by type. Mirrors force_pass_kernel so the
+    // bias applies identically on the stability-gated hot path. No-op when
+    // plane_bias_k <= 0 or the node is unassigned (NaN).
+    total_force = vec3_add(total_force, stratified_plane_bias(my_pos, node_plane, idx));
 
     force_out_x[idx] = total_force.x;
     force_out_y[idx] = total_force.y;

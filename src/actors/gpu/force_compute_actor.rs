@@ -1208,6 +1208,33 @@ impl ForceComputeActor {
                     }
                 }
 
+                // ADR-141 P2: compute + upload per-node centered plane offsets for
+                // the stratified-plane bias. Each node's population maps to a target
+                // Z-plane (Knowledge = -1, Ontology = 0, Agent = +1), so node types
+                // separate into parallel horizontal strata. Unknown population = NaN
+                // (no force). The bias stays inert until planeBiasK > 0, so uploading
+                // planes unconditionally is safe and keeps them ready for a later toggle.
+                if self.node_population.len() == num_nodes {
+                    let planes: Vec<f32> = self
+                        .node_population
+                        .iter()
+                        .map(|pop| match pop {
+                            GraphPopulation::Knowledge => -1.0,
+                            GraphPopulation::Ontology => 0.0,
+                            GraphPopulation::Agent => 1.0,
+                        })
+                        .collect();
+                    match compute.upload_node_plane(&planes) {
+                        Ok(()) => info!(
+                            "ForceComputeActor: Uploaded stratified planes for {} nodes",
+                            planes.len()
+                        ),
+                        Err(e) => warn!("ForceComputeActor: node plane upload failed: {}", e),
+                    }
+                } else {
+                    debug!("ForceComputeActor: node_population len mismatch — planes left at NaN (bias inert)");
+                }
+
                 // Compute and upload degree weights for degree-weighted gravity.
                 // degree_weight[i] = log(1 + degree[i]), where degree is computed
                 // from the CSR row_offsets. This causes hubs to be pulled toward
@@ -2664,6 +2691,10 @@ impl Handler<UpdateSimulationParams> for ForceComputeActor {
             // silently drops DAG-only settings changes at the early return below.
             && (cur.dag_bias_k - msg.params.dag_bias_k).abs() < eps
             && (cur.dag_level_distance - msg.params.dag_level_distance).abs() < eps
+            // Stratified planes (ADR-141 P2) are GPU-relevant — omitting these fields
+            // silently drops plane-only settings changes at the early return below.
+            && (cur.plane_bias_k - msg.params.plane_bias_k).abs() < eps
+            && (cur.plane_spacing - msg.params.plane_spacing).abs() < eps
             // Layout mode (ADR-141 P1) is GPU-relevant — it rides SimParams.layout_mode.
             // Omitting it would silently drop a mode-only switch at the early return.
             && cur.layout_mode == msg.params.layout_mode;

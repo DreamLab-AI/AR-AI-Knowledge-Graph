@@ -61,6 +61,12 @@ fn default_dag_bias_k() -> f32 {
 fn default_dag_level_distance() -> f32 {
     60.0
 }
+fn default_plane_bias_k() -> f32 {
+    0.0
+}
+fn default_plane_spacing() -> f32 {
+    60.0
+}
 fn default_axis_compression_z() -> f32 {
     1.0
 }
@@ -359,6 +365,17 @@ pub struct PhysicsSettings {
     #[serde(default = "default_dag_level_distance", alias = "dag_level_distance")]
     pub dag_level_distance: f32,
 
+    /// Stratified-plane bias strength (ADR-141 P2). `0` = off (default). When
+    /// > 0, each node is sprung along Z toward its assigned plane (target_z =
+    /// plane_offset * plane_spacing), separating node types into parallel strata.
+    #[serde(default = "default_plane_bias_k", alias = "plane_bias_k")]
+    pub plane_bias_k: f32,
+
+    /// World-space Z distance per plane offset unit for the stratified-plane bias
+    /// (default 60). Larger = more separated strata.
+    #[serde(default = "default_plane_spacing", alias = "plane_spacing")]
+    pub plane_spacing: f32,
+
     /// FA2 base integration speed.
     #[serde(default = "default_global_speed", alias = "global_speed")]
     pub global_speed: f32,
@@ -445,6 +462,8 @@ impl Default for PhysicsSettings {
             global_speed: 0.4,
             dag_bias_k: default_dag_bias_k(),
             dag_level_distance: default_dag_level_distance(),
+            plane_bias_k: default_plane_bias_k(),
+            plane_spacing: default_plane_spacing(),
             spring_k_knowledge: 1.0,
             spring_k_ontology: 1.0,
             spring_k_agent: 1.0,

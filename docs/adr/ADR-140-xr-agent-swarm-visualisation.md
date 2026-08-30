@@ -75,6 +75,24 @@ tab loop (`hud.gd` `TAB_ORDER`/`_build_*_page`) are reusable as-is.
    the hover glide, a `build_beam_buffer()` on the reserved `AgentMulti`
    MultiMesh (restyled `edge_flow` material), and the Swarm roster — one buffer
    push per phase, GDScript never loops per instance.
+5. **Two agent representations, ROLE-SPLIT (queen decision).** The XR client keeps
+   *both* agent representations, with distinct, non-overlapping jobs:
+   - **Embodied graph-nodes = the ambient WORK layer (this ADR's P2/P3).** The
+     `KIND_AGENT` nodes in the graph hover to the node they are working on, glow
+     their status halo, and stream a work beam. This is the "agents inhabiting the
+     graph" affordance — keyed by the `0x23` wire id (`u32`).
+   - **Proxemics head-orbit `AgentAvatar` scene nodes = the CONVERSATION layer.**
+     The crystal-orb avatars orbiting the user on the Hall's-zones arc own only the
+     broker/intervention flow: cases, mutual-gaze, DID badges, tap-to-intervene.
+     They are keyed by `did:nostr` and driven by the broker JSON channel.
+   The two layers do not compete: one is *where the work is in the graph*, the
+   other is *who is asking you something, up close*. Unifying them (an avatar that
+   physically tracks its own working node) needs a `did:nostr ↔ 0x23 wire-id`
+   bridge that is **not built today** — `parse_agent_identities` can lift `u32→DID`
+   from `initialGraphLoad` `did_nostr`, but that field is not yet carried in the
+   live path and the `0x23` frame has no DID. When a producer carries agent
+   identity on both channels (see agentbox ADR-071), that bridge becomes the future
+   unifier; until then the role-split stands and neither layer waits on it.
 
 ## Phases (each shippable)
 
@@ -82,10 +100,14 @@ tab loop (`hud.gd` `TAB_ORDER`/`_build_*_page`) are reusable as-is.
   `agent_registry` (target, action, derived status, task-from-intent); diagnostics
   `#[func]`s (`agent_count`, `last_agent_action_age_ms`, `agent_actions_total`)
   verify liveness from the HP log before any visuals. 4 unit tests; XR crate green.
-- **P3 — Work beam.** `build_beam_buffer()` + restyled `edge_flow` on `AgentMulti`,
-  one thin cylinder per active agent→target, status code in `INSTANCE_CUSTOM.a`.
-- **P2 — Embodiment.** Hover-to-target in `hunt()` with deterministic orbit
-  fan-out; status→halo colour; proxemics arc fallback when idle.
+- **P3 — Work beam (SHIPPED).** `build_beam_buffer()` + restyled `edge_flow`
+  (`agent_beam`) on `AgentMulti`, one thin cylinder per active agent→target, status
+  code in `INSTANCE_CUSTOM.a`; target resolved through the fold plan and gated on
+  `drawn` (no beam into a hidden target); the beam flows agent→target.
+- **P2 — Embodiment (SHIPPED).** Hover-to-target in `hunt()` with deterministic
+  golden-angle orbit fan-out; status→halo colour in `build_node_buffer`. Idle/done
+  agents fall back to their **server layout target** (the graph-node layer's
+  fallback; the proxemics arc belongs to the conversation layer per decision 5).
 - **P5 — Swarm tab.** `_build_swarm_page()` roster (status dot, name/role, target
   label, task line); row tap → `teleport:agent:<id>` reusing the glide.
 - **P4 — Task line.** `current_task` in the proximity label / agent badge.

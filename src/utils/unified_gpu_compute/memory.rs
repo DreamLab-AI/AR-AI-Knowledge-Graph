@@ -182,6 +182,25 @@ impl UnifiedGPUCompute {
         Ok(())
     }
 
+    /// Upload per-node centered plane offsets for the stratified-plane bias
+    /// (ADR-141 P2). NaN = not assigned to any plane (no bias). Padded to the
+    /// allocated buffer with NaN so trailing over-allocated slots never receive
+    /// a bias.
+    pub fn upload_node_plane(&mut self, planes: &[f32]) -> Result<()> {
+        if planes.len() != self.num_nodes {
+            return Err(anyhow!(
+                "Node plane size mismatch: expected {} nodes, got {}",
+                self.num_nodes,
+                planes.len()
+            ));
+        }
+        let alloc = self.node_plane.len();
+        let mut padded = planes.to_vec();
+        padded.resize(alloc, f32::NAN);
+        checked_copy_from(&mut self.node_plane, &padded, "node_plane")?;
+        Ok(())
+    }
+
     pub fn upload_edges_csr(
         &mut self,
         row_offsets: &[i32],
@@ -501,6 +520,9 @@ impl UnifiedGPUCompute {
         // DAG rank buffer resized with positions; reset to -1 (unranked) — the
         // actor recomputes and re-uploads ranks after a graph upload.
         self.node_rank = DeviceBuffer::from_slice(&vec![-1.0f32; actual_new_nodes])?;
+        // Stratified-plane buffer resized with positions; reset to NaN (unassigned)
+        // — the actor recomputes and re-uploads planes after a graph upload.
+        self.node_plane = DeviceBuffer::from_slice(&vec![f32::NAN; actual_new_nodes])?;
 
         // Degree weight buffer must be resized with positions
         self.degree_weight = DeviceBuffer::from_slice(&vec![1.0f32; actual_new_nodes])?;

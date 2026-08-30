@@ -49,6 +49,7 @@ const NODE_MESH_RADIUS: float = 0.5
 const NODE_WORLD_RADIUS: float = 0.03         # ~3 cm node in the room
 const EDGE_MESH_RADIUS: float = 0.03
 const EDGE_WORLD_RADIUS: float = 0.0015       # ~1.5 mm edge tube
+const BEAM_MESH_RADIUS: float = 0.02          # agent_beam CylinderMesh authoring radius
 
 # Grab hysteresis: engagement is decided Rust-side (XrInteraction
 # ACTIVATION_THRESHOLD = 0.7); release happens here when the trigger falls
@@ -197,10 +198,15 @@ var _node_size_factor: float = 1.0
 var _dag_bias_on: bool = false
 var _dag_level_distance: float = 60.0
 var _z_compression: float = 1.0
+var _plane_bias_k := 0.0
+var _plane_spacing := 60.0
 const DAG_BIAS_ON_K: float = 0.6
 const DAG_LEVEL_DISTANCE_MIN: float = 20.0
 const DAG_LEVEL_DISTANCE_MAX: float = 200.0
 const DAG_LEVEL_DISTANCE_STEP: float = 20.0
+const PLANE_BIAS_ON_K: float = 1.0
+const PLANE_SPACING_MIN: float = 0.0
+const PLANE_SPACING_STEP: float = 20.0
 const Z_COMPRESSION_FLAT: float = 0.3
 const Z_COMPRESSION_FULL_3D: float = 1.0
 # ADR-141 Phase 1 — constrained-layout engine. Cycling picker over the backend
@@ -374,6 +380,9 @@ var _teleport_pulse_applied: bool = false
 @onready var graph_root: Node3D = $GraphRoot
 @onready var nodes_multi: MultiMeshInstance3D = $GraphRoot/NodesMulti
 @onready var edges_multi: MultiMeshInstance3D = $GraphRoot/EdgesMulti
+# Work-beam layer (ADR-140, Pillar 2 / P3): the reserved AgentMulti MultiMesh, now
+# carrying one cylinder per active agent→target-node beam (agent_beam material).
+@onready var agent_multi: MultiMeshInstance3D = $GraphRoot/AgentMulti
 @onready var avatar_spawner: Node3D = $GraphRoot/AvatarSpawner
 @onready var agent_spawner: Node3D = $GraphRoot/AgentSpawner
 @onready var left_controller: XRController3D = $XROrigin3D/LeftController
@@ -709,6 +718,12 @@ func _on_hud_control(action: String) -> void:
 			_request_shells(DAG_LEVEL_DISTANCE_STEP)
 		"shells_minus":
 			_request_shells(-DAG_LEVEL_DISTANCE_STEP)
+		"planes_toggle":
+			_request_planes_toggle()
+		"plane_gap_plus":
+			_request_plane_gap(PLANE_SPACING_STEP)
+		"plane_gap_minus":
+			_request_plane_gap(-PLANE_SPACING_STEP)
 		"flat_toggle":
 			_request_flat_toggle()
 		"layout_mode_cycle":
@@ -754,7 +769,7 @@ func _refresh_controls_status() -> void:
 			dag, _dag_level_distance, _z_compression, _fold_level, _pinned_ids.size(), busy, fold])
 	# Reflect the toggle/pin state on the button faces (press-only, no per-frame cost).
 	if hud.has_method("set_control_states"):
-		hud.set_control_states(_dag_bias_on, _z_compression < Z_COMPRESSION_FULL_3D, _pinned_ids.size())
+		hud.set_control_states(_dag_bias_on, _z_compression < Z_COMPRESSION_FULL_3D, _pinned_ids.size(), not is_zero_approx(_plane_bias_k))
 	if hud.has_method("set_layout_mode_label"):
 		hud.set_layout_mode_label(LAYOUT_MODE_LABELS[_layout_mode_idx])
 	if hud.has_method("set_fold_state"):
@@ -874,6 +889,30 @@ func _request_shells(delta: float) -> void:
 		return  # already at the clamp rail — no redundant PUT
 	if _put_physics_body({"dagLevelDistance": d}):
 		_physics_staged = {"_dag_level_distance": d}
+
+
+# Planes toggle: PUT planeBiasK (1.0 on / 0.0 off). Same one-in-flight gate and
+# commit-only-on-dispatch discipline as Hierarchy, so a busy/failed PUT never drifts
+# the tracked toggle state away from what the server last received.
+func _request_planes_toggle() -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var k: float = PLANE_BIAS_ON_K if is_zero_approx(_plane_bias_k) else 0.0
+	if _put_physics_body({"planeBiasK": k}):
+		_physics_staged = {"_plane_bias_k": k}
+
+
+# Plane Gap ±: nudge planeSpacing by ±20, clamped ≥ 0; commit only on dispatch.
+func _request_plane_gap(delta: float) -> void:
+	if _physics_pending:
+		push_warning("GraphScene: physics change already in flight; ignoring")
+		return
+	var s := maxf(_plane_spacing + delta, PLANE_SPACING_MIN)
+	if is_equal_approx(s, _plane_spacing):
+		return  # already at the clamp rail — no redundant PUT
+	if _put_physics_body({"planeSpacing": s}):
+		_physics_staged = {"_plane_spacing": s}
 
 
 # 3D ↔ Flat: toggle axisCompressionZ between full 3D (1.0) and flat discs (0.3).
@@ -1187,6 +1226,10 @@ func _physics_process(delta: float) -> void:
 		_update_multimesh()
 	else:
 		_update_edge_multimesh()
+	# Work beams (ADR-140, Pillar 2 / P3) refresh every frame: the buffer is a short
+	# walk of the agent registry (tens of instances), not the node/edge domain, so it
+	# is not part of the 45 Hz alternation — the flowing stream stays crisp at 90 Hz.
+	_update_beam_multimesh()
 	_update_interaction()
 	_update_agents(delta)
 	_update_selection(delta)
@@ -1721,6 +1764,28 @@ func _update_edge_multimesh() -> void:
 	var buf: PackedFloat32Array = _binary_client.build_edge_buffer(_edge_pairs, er)
 	var mm: MultiMesh = edges_multi.multimesh
 	var count: int = buf.size() / 12
+	if mm.instance_count != count:
+		mm.instance_count = count
+	if count > 0:
+		mm.buffer = buf
+
+
+# Work-beam MultiMesh (ADR-140, Pillar 2 / P3): Rust packs one cylinder per active
+# agent→target-node link (16 floats/instance, status code in INSTANCE_CUSTOM.a);
+# GDScript does a single buffer assignment. Beam count = live working/blocked agents
+# (tens, not thousands), so this runs every frame — the flowing stream stays crisp
+# and the build is a short walk of the agent registry, not the node domain.
+func _update_beam_multimesh() -> void:
+	if agent_multi == null or agent_multi.multimesh == null or _binary_client == null:
+		return
+	if not _binary_client.has_method("build_beam_buffer"):
+		return
+	# Beam cylinder mesh radius is 0.02; fold the GraphRoot fit-scale in so the beam
+	# keeps a constant world thickness as the graph is scaled by the two-hand gesture.
+	var br: float = EDGE_WORLD_RADIUS / (BEAM_MESH_RADIUS * _graph_scale)
+	var buf: PackedFloat32Array = _binary_client.build_beam_buffer(br)
+	var mm: MultiMesh = agent_multi.multimesh
+	var count: int = buf.size() / 16
 	if mm.instance_count != count:
 		mm.instance_count = count
 	if count > 0:

@@ -1,8 +1,10 @@
 shader_type spatial;
 // XR-safe agent WORK BEAM (VisionClaw ADR-140, Pillar 2). A fast, bright, directional
-// particle-like stream travelling along the cylinder's length (UV.y, 0 at the AGENT
-// end to 1 at the TARGET node) — the Rust render store orients each beam agent→target,
-// so the flow always reads as "this agent is acting on that node". Driven purely by
+// particle-like stream travelling the cylinder's length from the AGENT end to the
+// TARGET node — the Rust render store orients each beam's local +Y onto agent→target,
+// and the fragment derives a longitudinal L (0 at agent, 1 at target) from the side
+// UVs (see fragment()) so the flow always reads as "this agent is acting on that
+// node" regardless of Godot's cylinder UV convention. Driven purely by
 // TIME: zero per-frame GDScript/material touches. Restyle of edge_flow.gdshader — same
 // render_mode (safe on gl_compatibility + multiview), but INSTANCE_CUSTOM.a now carries
 // the AGENT STATUS CODE (1 working / 2 blocked) rather than the edge relation grammar.
@@ -39,13 +41,23 @@ void fragment() {
 	bool is_blocked = v_status > 1.5; // code 2 = blocked; 1 = working
 	float speed = stream_speed * (is_blocked ? blocked_speed_scale : 1.0);
 
-	// UV.y runs agent(0)→target(1). Tile it into `stream_heads` segments and run a
-	// travelling pulse within each, so multiple hot cores flow toward the node.
-	float seg = fract(UV.y * stream_heads);
+	// Godot CylinderMesh UV: the SIDE surface runs UV.y = 0 at the +Y (top) rim to
+	// UV.y = 0.5 at the −Y (bottom) rim; the two end caps occupy UV.y ∈ (0.5, 1.0].
+	// edge_transform12 maps the mesh's local +Y onto the AGENT→TARGET direction, so
+	// the +Y rim (UV.y = 0) sits at the TARGET and the −Y rim (UV.y = 0.5) at the
+	// AGENT. Define a longitudinal coordinate L that is 0 at the agent and 1 at the
+	// target: L = 1 − UV.y*2  ⇒  agent(UV.y=0.5)→0, target(UV.y=0)→1. A head at
+	// parameter `head` (0→1 over time) then travels agent→target, the correct flow.
+	// Only the side (UV.y ≤ 0.5) streams; caps render base tint so their squashed
+	// UVs never inject spurious pulses.
+	bool is_side = UV.y <= 0.5;
+	float uL = clamp(1.0 - UV.y * 2.0, 0.0, 1.0);
+
+	float seg = fract(uL * stream_heads);
 	float head = fract(TIME * speed);
 	float d = abs(seg - head);
 	d = min(d, 1.0 - d); // wrap so heads loop seamlessly along the beam
-	float pulse = smoothstep(head_width, 0.0, d);
+	float pulse = is_side ? smoothstep(head_width, 0.0, d) : 0.0;
 
 	vec3 tint = is_blocked ? blocked_color : working_color;
 	ALBEDO = tint * (1.0 + pulse * (head_gain - 1.0));

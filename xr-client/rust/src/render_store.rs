@@ -373,6 +373,41 @@ pub fn agent_status_code(status: &str) -> u8 {
     }
 }
 
+/// Status halo colour (Pillar 3) for an agent node, keyed by the derived status
+/// code. Applied in `build_node_buffer` (overriding the community colour) and used
+/// by the Swarm roster dot (P5): idle = calm slate, working = the beam's green,
+/// blocked = the beam's amber-red, done = cool cyan-white.
+pub fn agent_status_color(status: u8) -> [f32; 4] {
+    match status {
+        AGENT_WORKING => [0.30, 0.90, 0.72, 1.0],
+        AGENT_BLOCKED => [1.0, 0.35, 0.20, 1.0],
+        AGENT_DONE => [0.60, 0.85, 1.0, 1.0],
+        _ => [0.50, 0.58, 0.68, 1.0], // idle / unknown
+    }
+}
+
+/// Embodiment (Pillar 1): how far, in server space, an active agent node hovers
+/// from the node it is working on (node render radius ≈ 0.5, so ~1.5 keeps the
+/// agent just outside the target) and how much it lifts above it.
+const HOVER_RADIUS: f32 = 1.5;
+const HOVER_LIFT: f32 = 0.5;
+
+/// Minimum halo (INSTANCE_CUSTOM.r rim-glow tell) forced on an agent node so its
+/// status colour always reads as a glowing inhabitant, regardless of centrality.
+const AGENT_HALO_MIN: f32 = 0.7;
+
+/// Deterministic hover point around a target node for an agent, so multiple agents
+/// on one node fan out around it instead of stacking. Golden-angle walk keyed by
+/// the agent id spreads them evenly on a ring, lifted slightly above the node.
+fn agent_hover_offset(target: [f32; 3], agent_id: u32, radius: f32) -> [f32; 3] {
+    let a = (agent_id as f32) * 2.399_963_2; // golden angle (rad)
+    [
+        target[0] + radius * a.cos(),
+        target[1] + radius * HOVER_LIFT,
+        target[2] + radius * a.sin(),
+    ]
+}
+
 /// One live agent's work state (Pillar 1-3 data plane). Populated from the
 /// binary `0x23 AGENT_ACTION` beam frame (`target_node_id` + `action_type`) and
 /// refined by the JSON `state` channel (`status`/`current_task`). Pure data; the
@@ -1091,6 +1126,30 @@ impl RenderStore {
             let reps: HashSet<u32> = self.folding.values().copied().collect();
             reps.into_iter().map(|r| (r, self.position_of(r))).collect()
         };
+        // Embodiment (Pillar 1): an active agent NODE eases toward a HOVER point near
+        // the node it is working on, instead of its server layout target — so the
+        // agent visibly glides to inhabit its work (and the beam origin follows it
+        // home). Idle/done agents, and agents whose target position is unknown, keep
+        // their server target (the proxemics/layout fallback). Snapshot the hover
+        // points first (reads other slots) to avoid clashing with the per-slot write.
+        let hover: HashMap<u32, [f32; 3]> = if self.agent_registry.is_empty() {
+            HashMap::new()
+        } else {
+            let mut m = HashMap::new();
+            for (&aid, rec) in &self.agent_registry {
+                if !Self::beam_active(rec.status) || rec.target_node_id == 0 {
+                    continue;
+                }
+                if !self.id_index.contains_key(&aid) {
+                    continue; // agent has no node in the store — nothing to move
+                }
+                let target = self.edge_endpoint(rec.target_node_id);
+                if let Some(&ts) = self.id_index.get(&target) {
+                    m.insert(aid, agent_hover_offset(self.positions[ts], aid, HOVER_RADIUS));
+                }
+            }
+            m
+        };
         for slot in 0..self.ids.len() {
             let id = self.ids[slot];
             if Some(id) == grab_id {
@@ -1099,11 +1158,16 @@ impl RenderStore {
                 continue;
             }
             let p = self.positions[slot];
-            // A member folding IN chases its representative; everything else (incl.
-            // members folding OUT, which are seeded at the rep) eases to its target.
-            let t = match self.folding.get(&id) {
-                Some(rep) => rep_pos.get(rep).copied().unwrap_or(p),
-                None => self.targets[slot],
+            // Priority: a grabbed node is pinned (above); an active agent hovers at
+            // its target; a member folding IN chases its representative; everything
+            // else (incl. members folding OUT, seeded at the rep) eases to its target.
+            let t = if let Some(&hp) = hover.get(&id) {
+                hp
+            } else {
+                match self.folding.get(&id) {
+                    Some(rep) => rep_pos.get(rep).copied().unwrap_or(p),
+                    None => self.targets[slot],
+                }
             };
             self.positions[slot] = [
                 p[0] + (t[0] - p[0]) * ease,
@@ -1211,13 +1275,24 @@ impl RenderStore {
         // INSTANCE_CUSTOM: r = centrality halo tell, g = fold badge count
         // ("N collapsed" on a representative; 0 for a plain node), b = query flag.
         let badge = self.fold_badge.get(&id).copied().unwrap_or(0) as f32;
-        let (col, query_flag) = match self.query_vars.get(&id) {
+        let (mut col, query_flag) = match self.query_vars.get(&id) {
             Some(&palette_idx) => (query_var_color(palette_idx), 1.0),
             None => (self.color[slot], 0.0),
         };
+        // Status halo (Pillar 3): an agent node is coloured by its derived status
+        // (working/blocked/done/idle) with a floored halo so it always reads as a
+        // deliberate, glowing inhabitant — unless it is query-marked, which wins
+        // (an explicit user selection outranks the ambient status tint).
+        let mut halo = cen_norm;
+        if query_flag == 0.0 {
+            if let Some(rec) = self.agent_registry.get(&id) {
+                col = agent_status_color(rec.status);
+                halo = halo.max(AGENT_HALO_MIN);
+            }
+        }
         buf.extend_from_slice(&node_transform12(size, pos));
         buf.extend_from_slice(&col);
-        buf.extend_from_slice(&[cen_norm, badge, query_flag, 1.0]);
+        buf.extend_from_slice(&[halo, badge, query_flag, 1.0]);
         self.drawn.insert(id);
         self.render_ids.push(id);
         self.render_positions.push(pos);
@@ -1301,10 +1376,19 @@ impl RenderStore {
             if !Self::beam_active(rec.status) || rec.target_node_id == 0 {
                 continue;
             }
-            let (Some(&as_), Some(&ts)) = (
-                self.id_index.get(&agent_id),
-                self.id_index.get(&rec.target_node_id),
-            ) else {
+            // Resolve the target through the fold plan (a folded member's beam must
+            // land on its representative, not a hidden member) and require the
+            // resolved target to be actually DRAWN — `drawn` already encodes the
+            // fold plan, the type-visibility filter, and the LOD budget, exactly as
+            // build_edge_buffer's gate. This stops a hidden/folded/culled target
+            // from receiving a beam into empty space.
+            let target = self.edge_endpoint(rec.target_node_id);
+            if !self.drawn.contains(&target) {
+                continue;
+            }
+            let (Some(&as_), Some(&ts)) =
+                (self.id_index.get(&agent_id), self.id_index.get(&target))
+            else {
                 continue;
             };
             if let Some(tf) = edge_transform12(self.positions[as_], self.positions[ts], radius_comp)
@@ -1447,9 +1531,12 @@ mod tests {
         // A 0x23 action makes agent 5 WORKING on node 20, agent 6 on the unknown 30.
         s.record_agent_action(5, 20, 0, 100, "reading");
         s.record_agent_action(6, 30, 0, 100, "");
+        // Beams gate on the target being DRAWN; draw agent+target (30 is unknown so
+        // it never enters the drawn set even if listed).
+        s.build_node_buffer(&[5, 6, 20, 30], 1.0, 0.7, 1.9);
 
         let buf = s.build_beam_buffer(1.0);
-        // Only agent 5 draws: agent 6's target is not in the store yet.
+        // Only agent 5 draws: agent 6's target (30) has no position / is not drawn.
         assert_eq!(buf.len(), EDGE_STRIDE_TYPED, "one beam, stride 16");
         // INSTANCE_CUSTOM.a (index 15) carries the status code = WORKING.
         assert!(approx(buf[15], AGENT_WORKING as f32));
@@ -1461,6 +1548,99 @@ mod tests {
         let blocked = s.build_beam_buffer(1.0);
         assert_eq!(blocked.len(), EDGE_STRIDE_TYPED, "blocked agent still beams");
         assert!(approx(blocked[15], AGENT_BLOCKED as f32));
+    }
+
+    #[test]
+    fn active_agent_hovers_toward_its_target_not_its_server_position() {
+        let mut s = RenderStore::new();
+        // Agent 5 sits at the origin (server target = origin); target node 20 far away.
+        s.upsert(5, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.upsert(20, [10.0, 0.0, 0.0], 0, 0.0, 0.0);
+        // Idle agent: hunt keeps it at its server target (origin).
+        s.record_agent_action(5, 20, 0, 100, "");
+        s.set_agent_state(5, "idle", "");
+        for _ in 0..32 {
+            s.hunt(0.5, None, [0.0, 0.0, 0.0]);
+        }
+        let idle_pos = s.position_of(5);
+        assert!(approx(idle_pos[0], 0.0), "idle agent stays at its server position");
+
+        // Now WORKING: it must glide toward the hover ring around node 20 (x≫0).
+        s.set_agent_state(5, "busy", "");
+        for _ in 0..64 {
+            s.hunt(0.5, None, [0.0, 0.0, 0.0]);
+        }
+        let work_pos = s.position_of(5);
+        let expected = agent_hover_offset([10.0, 0.0, 0.0], 5, HOVER_RADIUS);
+        assert!(work_pos[0] > 5.0, "working agent glided toward its target node");
+        assert!(approx(work_pos[0], expected[0]), "settled on the hover ring x");
+        assert!(approx(work_pos[1], expected[1]), "hover lifts above the node");
+    }
+
+    #[test]
+    fn agent_node_is_coloured_and_haloed_by_status() {
+        let mut s = RenderStore::new();
+        s.upsert(5, [0.0, 0.0, 0.0], 7, 0.0, 0.0); // community 7 → some community colour
+        s.record_agent_action(5, 20, 0, 100, "");
+        s.set_agent_state(5, "blocked", "");
+        let buf = s.build_node_buffer(&[5], 1.0, 0.7, 1.9);
+        assert_eq!(buf.len(), NODE_STRIDE);
+        // Colour (floats 12..16) is the BLOCKED status colour, not the community hue.
+        let blocked = agent_status_color(AGENT_BLOCKED);
+        assert!(approx(buf[12], blocked[0]) && approx(buf[13], blocked[1]));
+        // INSTANCE_CUSTOM.r (float 16) is floored to the agent halo minimum.
+        assert!(buf[16] >= AGENT_HALO_MIN - 1e-6, "agent node forced to glow its status");
+    }
+
+    #[test]
+    fn beam_requires_drawn_target_and_follows_fold() {
+        let mut s = RenderStore::new();
+        s.upsert(5, [0.0, 0.0, 0.0], 0, 0.0, 0.0); // agent
+        s.upsert(20, [0.0, 4.0, 0.0], 0, 0.0, 0.0); // target member
+        s.upsert(21, [3.0, 4.0, 0.0], 0, 0.0, 0.0); // fold representative
+        s.record_agent_action(5, 20, 0, 100, "working");
+
+        // (a) Target known but NOT drawn yet ⇒ no beam (no beam into an unrendered node).
+        assert!(
+            s.build_beam_buffer(1.0).is_empty(),
+            "target not drawn ⇒ no beam"
+        );
+
+        // (b) Draw agent + target ⇒ beam appears, landing on node 20.
+        s.build_node_buffer(&[5, 20], 1.0, 0.7, 1.9);
+        assert_eq!(s.build_beam_buffer(1.0).len(), EDGE_STRIDE_TYPED);
+
+        // (c) Fold node 20 (member) into representative 21, then SETTLE the fold-in
+        // animation (mid-transition the member is still drawn in transit, so the beam
+        // correctly follows the live member; only once settled does 20 hide and its
+        // edges/beam re-route to the representative). After settling: 20 hidden, 21
+        // draws, and the beam must land on the representative.
+        s.set_fold_plan(&[], &[20], &[21]);
+        settle(&mut s);
+        let buf = s.build_node_buffer(&[5, 21], 1.0, 0.7, 1.9); // 20 hidden, 21 the rep
+        assert!(!buf.is_empty());
+        let beam = s.build_beam_buffer(1.0);
+        assert_eq!(beam.len(), EDGE_STRIDE_TYPED, "beam re-routes to the fold rep");
+        // Reconstruct the beam's TARGET endpoint (independent of where the P2 hover
+        // has moved the agent end): row-major 3x4 ⇒ translation o = midpoint at
+        // (buf[3],buf[7],buf[11]); column c1 = dir*len at (buf[1],buf[5],buf[9]); so
+        // target b = o + 0.5*c1. It must land on the representative (21) at (3,4,0),
+        // NOT the hidden member (20) at (0,4,0).
+        let bx = beam[3] + 0.5 * beam[1];
+        let by = beam[7] + 0.5 * beam[5];
+        let rep = s.position_of(21);
+        assert!(approx(bx, rep[0]) && approx(by, rep[1]), "beam target end is the fold rep");
+        assert!(approx(rep[0], 3.0), "sanity: rep sits at x=3, member was at x=0");
+
+        // (d) Re-fold 20 onto a representative that is NOT drawn ⇒ no beam (20 stays
+        // hidden and resolves to the undrawn rep 99).
+        s.set_fold_plan(&[], &[20], &[99]); // 99 has no position and isn't drawn
+        settle(&mut s);
+        s.build_node_buffer(&[5], 1.0, 0.7, 1.9);
+        assert!(
+            s.build_beam_buffer(1.0).is_empty(),
+            "folded onto an undrawn rep ⇒ no beam into empty space"
+        );
     }
 
     /// Drive the hunt to convergence so fold-in/out transitions settle to their end

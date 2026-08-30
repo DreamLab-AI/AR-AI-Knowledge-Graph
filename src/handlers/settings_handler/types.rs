@@ -390,6 +390,12 @@ pub struct PhysicsSettingsDTO {
     /// World-space radius per hierarchy level for the DAG radial bias (default 60).
     #[serde(default)]
     pub dag_level_distance: f32,
+    /// Stratified-plane bias strength (0 = off). Separates node types into strata.
+    #[serde(default)]
+    pub plane_bias_k: f32,
+    /// World-space Z distance per plane offset unit for the stratified-plane bias (default 60).
+    #[serde(default)]
+    pub plane_spacing: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
