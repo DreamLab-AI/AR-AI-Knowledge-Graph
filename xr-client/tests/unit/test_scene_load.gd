@@ -257,7 +257,7 @@ func test_hud_set_avatar_count():
 	# Let _process run to update the label.
 	await get_tree().process_frame
 
-	var debug_stats: Label = hud.get_node("HudViewport/HudControl/VBox/DebugStats")
+	var debug_stats: Label = hud.get_node("HudViewport/HudControl/Root/Tabs/SessionPage/DebugStats")
 	assert_true(debug_stats.text.contains("Avatars: 5"), "debug stats must show avatar count")
 
 	hud.queue_free()
@@ -275,7 +275,7 @@ func test_hud_set_mtp_ms():
 
 	await get_tree().process_frame
 
-	var debug_stats: Label = hud.get_node("HudViewport/HudControl/VBox/DebugStats")
+	var debug_stats: Label = hud.get_node("HudViewport/HudControl/Root/Tabs/SessionPage/DebugStats")
 	assert_true(debug_stats.text.contains("MTP: 12.5ms"), "debug stats must show MTP value")
 
 	hud.queue_free()
@@ -291,7 +291,7 @@ func test_hud_connection_status():
 	hud._on_connection_status(true)
 	await get_tree().process_frame
 
-	var debug_stats: Label = hud.get_node("HudViewport/HudControl/VBox/DebugStats")
+	var debug_stats: Label = hud.get_node("HudViewport/HudControl/Root/Tabs/SessionPage/DebugStats")
 	assert_true(debug_stats.text.contains("Net: OK"), "connected status shows OK")
 
 	hud._on_connection_status(false)

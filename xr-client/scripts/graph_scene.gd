@@ -271,7 +271,10 @@ var _hud_last_px: Vector2 = Vector2.ZERO
 var _hud_pointer_controller: XRController3D = null
 # QuadMesh_hud size (HUD.tscn HudPanel) — the ray→UV mapping needs the panel extent.
 const HUD_QUAD_W: float = 1.4
-const HUD_QUAD_H: float = 0.9
+# HUD.tscn QuadMesh_hud height. 0.875 gives aspect 1.6, matching the 1280×800
+# SubViewport exactly so the ray→UV mapping below is undistorted (task #20 redesign;
+# was 0.9 against a 1024×640 viewport — a latent aspect mismatch).
+const HUD_QUAD_H: float = 0.875
 # Physics param clamps.
 const REPEL_K_MIN: float = 20.0
 const REPEL_K_MAX: float = 1000.0
@@ -290,7 +293,8 @@ const PHYSICS_BEARER: String = "Bearer dev-session-token"
 const RADIAL_SCENE_PATH := "res://scenes/RadialMenu.tscn"
 const RADIAL_QUAD: float = 0.6              # MenuPanel QuadMesh size (RadialMenu.tscn)
 var _radial: Node3D = null
-var _query := QueryBuilder.new()
+const QueryBuilderScript := preload("res://scripts/query_builder.gd")
+var _query := QueryBuilderScript.new()
 var _radial_ax_was_down: bool = false       # A/X edge-detect (open/close toggle)
 var _radial_pointer_controller: XRController3D = null  # controller aiming at the menu
 var _radial_trigger_was_down: bool = false  # menu-click edge-detect for a clean release
@@ -587,7 +591,15 @@ func _wire_hud() -> void:
 		hud.configure_intervention(_http_base(), _nostr_auth)
 	if hud.has_signal("control_pressed"):
 		hud.control_pressed.connect(_on_hud_control)
+	if hud.has_signal("reconnect_pressed"):
+		hud.reconnect_pressed.connect(_on_hud_reconnect)
 	_refresh_controls_status()
+
+
+# Operator pressed Reconnect on the Session tab: force-reconnect both sockets now.
+func _on_hud_reconnect() -> void:
+	_reset_reconnect_state()
+	_attempt_connect()
 
 
 # HUD control-panel actions. Physics actions POST/PUT to the backend on the
@@ -646,6 +658,9 @@ func _refresh_controls_status() -> void:
 		hud.set_control_states(_dag_bias_on, _z_compression < Z_COMPRESSION_FULL_3D, _pinned_ids.size())
 	if hud.has_method("set_fold_state"):
 		hud.set_fold_state(_fold_level)
+	# Populate the Pins tab list (cheap; press/ack-only, no per-frame cost).
+	if hud.has_method("set_pinned_ids"):
+		hud.set_pinned_ids(_pinned_ids.keys())
 
 
 # Fold ±: step the density ladder by `delta`, clamped [0,3]. GETs the server fold
@@ -1106,12 +1121,18 @@ func _update_hud_grab() -> void:
 	# near the panel start a HUD grab (which would abort the gesture next frame).
 	if _two_hand_active:
 		return
+	# Measure to the VISIBLE panel, not the HUD root: HudPanel sits ~0.7 m out on
+	# the root's local -Z, so a wand touching the panel is well beyond 0.4 m from
+	# the root origin (grip-move was dead). Fall back to the root if the panel is
+	# missing.
+	var panel := hud.get_node_or_null("HudPanel") as Node3D
+	var panel_pos: Vector3 = panel.global_position if panel != null else hud.global_position
 	for controller: XRController3D in [left_controller, right_controller]:
 		if controller == null or not controller.get_is_active():
 			continue
 		if controller.get_float("grip") < 0.7:
 			continue
-		if controller.global_position.distance_to(hud.global_position) < 0.4:
+		if controller.global_position.distance_to(panel_pos) < 0.4:
 			_hud_grab_controller = controller
 			_hud_grab_offset = controller.global_transform.affine_inverse() * hud.global_transform
 			_pulse(controller, 0.4, 0.05)
@@ -2570,11 +2591,16 @@ func _arbitrate_pointers() -> void:
 		var rad_d := _panel_ray_distance(controller, radial_panel, RADIAL_QUAD, RADIAL_QUAD)
 		if hud_d == INF and rad_d == INF:
 			continue
+		# Nearer panel wins. Assign explicitly per branch: when the HUD is nearer
+		# (rad_d > hud_d) _hud_owner MUST be set — an elif nested under the
+		# radial-nearer branch would leave the HUD unowned and let both panels
+		# consume one trigger.
 		if rad_d <= hud_d:
 			if _radial_owner == null:
 				_radial_owner = controller
-		elif _hud_owner == null:
-			_hud_owner = controller
+		else:
+			if _hud_owner == null:
+				_hud_owner = controller
 
 
 # World distance from `controller` to where its aim ray hits the quad `panel`

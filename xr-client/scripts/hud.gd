@@ -1,17 +1,34 @@
 extends Node3D
 
-## In-headset HUD. The visible half of M2 (PRD-023 WP-9 / COM-18): a per-agent
-## intervention panel bound to the same broker decide path the desktop uses, an
-## ambient ACSP open-case indicator, and the gaze-dwell charging reticle. All
-## decision logic and signing stay in Rust (NostrAuth); this script only wires
-## signals to scene nodes and issues the cold decide POST.
+## In-headset HUD — VR control centre (redesign, task #20).
+##
+## A tabbed panel rendered into a SubViewport (1280×800) shown on a world-space
+## quad (HudPanel, 1.40×0.875 — aspect 1.6, matched to the viewport so the wand
+## ray → UV mapping in graph_scene.gd is undistorted). The tab pages, header and
+## hover-hint bar are built PROGRAMMATICALLY under HudControl so the layout is one
+## source of truth and every control fits its page (no below-the-fold overflow —
+## the pre-redesign single-VBox stacked 34 controls past the 640px fold with no
+## scroll, hiding the flat-toggle, fold ladder, status and query builder).
+##
+## The intervention panel, ACSP indicator, dwell reticle and document card remain
+## as .tscn OVERLAY nodes (they interrupt any tab). All decision logic/signing
+## stays in Rust (NostrAuth); this script wires signals to nodes and issues the
+## cold decide POST.
+##
+## STABLE NODE PATHS (for the flagship rebases — task #18 query builder, #19 fold
+## ladder — target these; do not assume the old VBox layout):
+##   HudViewport/HudControl/Root/Header            — persistent header row
+##   HudViewport/HudControl/Root/TabBar            — wand-clickable tab buttons
+##   HudViewport/HudControl/Root/Tabs              — page host (one visible page)
+##   HudViewport/HudControl/Root/Tabs/GraphPage    — physics/layout controls
+##   HudViewport/HudControl/Root/Tabs/QueryPage    — visual query builder
+##   HudViewport/HudControl/Root/Tabs/PinsPage     — pinned nodes + Unpin All
+##   HudViewport/HudControl/Root/Tabs/SessionPage  — room/mute/connection/debug
+##   HudViewport/HudControl/Root/Tabs/HelpPage     — controller cheat-sheet
+##   HudViewport/HudControl/Root/HintBar           — hover-hint strip (bottom)
 
-@onready var room_label: Label = $HudViewport/HudControl/VBox/RoomLabel
-@onready var room_entry: LineEdit = $HudViewport/HudControl/VBox/RoomEntry
-@onready var join_button: Button = $HudViewport/HudControl/VBox/JoinButton
-@onready var mute_toggle: CheckButton = $HudViewport/HudControl/VBox/MuteToggle
-@onready var debug_stats: Label = $HudViewport/HudControl/VBox/DebugStats
-
+# --- Overlay nodes (kept in HUD.tscn — paths unchanged) ----------------------
+@onready var hud_control: Control = $HudViewport/HudControl
 @onready var acsp_label: Label = $HudViewport/HudControl/AcspIndicator/AcspLabel
 @onready var acsp_glow: ColorRect = $HudViewport/HudControl/AcspIndicator/AcspGlow
 @onready var intervention_panel: PanelContainer = $HudViewport/HudControl/InterventionPanel
@@ -22,25 +39,7 @@ extends Node3D
 @onready var dwell_reticle: Control = $HudViewport/HudControl/DwellReticle
 @onready var decide_http: HTTPRequest = $DecideHttp
 
-# Operator control-panel buttons + live status line.
-@onready var reset_layout_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/ResetLayoutButton
-@onready var spread_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/SpreadPlusButton
-@onready var spread_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/SpreadMinusButton
-@onready var edges_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/EdgesPlusButton
-@onready var edges_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/EdgesMinusButton
-@onready var node_size_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizePlusButton
-@onready var node_size_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid/NodeSizeMinusButton
-# Hierarchy & View group (second controls row).
-@onready var hierarchy_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/HierarchyButton
-@onready var unpin_all_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/UnpinAllButton
-@onready var shells_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/ShellsPlusButton
-@onready var shells_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/ShellsMinusButton
-@onready var flat_toggle_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FlatToggleButton
-@onready var fold_plus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FoldPlusButton
-@onready var fold_minus_button: Button = $HudViewport/HudControl/VBox/ControlsGrid2/FoldMinusButton
-@onready var controls_status: Label = $HudViewport/HudControl/VBox/ControlsStatus
-
-# Double-click document view (narrativegoldmine page card).
+# Double-click document view (narrativegoldmine page card) — kept in HUD.tscn.
 @onready var document_panel: PanelContainer = $HudViewport/HudControl/DocumentPanel
 @onready var doc_title_label: Label = $HudViewport/HudControl/DocumentPanel/DVBox/DHeader/DocTitle
 @onready var close_doc_button: Button = $HudViewport/HudControl/DocumentPanel/DVBox/DHeader/CloseDocButton
@@ -55,6 +54,18 @@ const DOC_TIMEOUT_SEC: float = 10.0
 const DOC_SCROLL_STEP: int = 140
 var _doc_title: String = ""
 
+# --- Layout constants --------------------------------------------------------
+const BTN_H: int = 56                       # min wand hit-target height
+const MARGIN: int = 24
+const HEADER_H: int = 48
+const TABBAR_H: int = 56
+const HINTBAR_H: int = 44
+const HINT_META: StringName = &"hint"
+const HINT_DEFAULT: String = "Point at a control for help"
+const ACCENT: Color = Color(0.55, 0.80, 1.0)          # active tab / on-state
+const IDLE: Color = Color(0.62, 0.66, 0.75)           # inactive tab
+
+# --- Signals (ALL preserved — GraphScene wiring depends on these) ------------
 signal join_requested(room_urn: String)
 signal mute_toggled(muted: bool)
 ## Emitted the instant the operator approves/denies — the M2 intervention intent,
@@ -67,12 +78,14 @@ signal case_decided(case_id: String, outcome: String, accepted: bool)
 ## intent so all state lives in one place. `action` is one of: reset_layout,
 ## spread_plus, spread_minus, edges_plus, edges_minus, node_size_plus,
 ## node_size_minus, hierarchy_toggle, shells_plus, shells_minus, flat_toggle,
-## unpin_all.
+## fold_plus, fold_minus, unpin_all.
 signal control_pressed(action: String)
 ## Visual query builder (flagship). GraphScene owns the query state + count fetch;
 ## the HUD only surfaces the summary/count and re-broadcasts Execute/Clear intent.
 signal query_execute_pressed()
 signal query_clear_pressed()
+## Emitted when the operator asks to reconnect the graph/presence sockets.
+signal reconnect_pressed()
 
 const ACSP_GLOW_COLOR: Color = Color(1.0, 0.62, 0.12, 1.0)
 # Hard cap on a single decide POST. A stalled request fires request_completed with
@@ -95,98 +108,530 @@ var _pending_case_id: String = ""
 var _open_case_count: int = 0
 var _pulse_time: float = 0.0
 
+# --- Built-UI node references (assigned in _build_ui) -------------------------
+var _root: VBoxContainer = null
+var _tabs_host: Control = null
+var _hint_bar: Label = null
+var _conn_dot: Label = null
+var _room_header: Label = null
+var _fps_header: Label = null
+var _pages: Dictionary = {}          # tab id → page Control
+var _tab_buttons: Dictionary = {}    # tab id → Button
+var _active_tab: String = "graph"
+var _overflow_warned: Dictionary = {}
+var _scroll_regions: Array = []      # scroll-region wrapper HBoxes (▲▼ visibility)
+
+# Graph-page controls needing live state / status.
+var _controls_status: Label = null
+var _hierarchy_button: Button = null
+var _flat_toggle_button: Button = null
+var _fold_plus_button: Button = null
+var _fold_minus_button: Button = null
+# Query page.
+var _query_summary_label: Label = null
+var _query_count_label: Label = null
+var _query_vars_list: VBoxContainer = null
+# Pins page.
+var _pins_count_label: Label = null
+var _unpin_all_button: Button = null
+var _pins_list: VBoxContainer = null
+# Session page.
+var _room_label: Label = null
+var _room_entry: LineEdit = null
+var _mute_toggle: CheckButton = null
+var _debug_stats: Label = null
+var _conn_status_label: Label = null
+
+const TAB_ORDER: Array[String] = ["graph", "query", "pins", "session", "help"]
+const TAB_LABELS: Dictionary = {
+	"graph": "Graph", "query": "Query", "pins": "Pins", "session": "Session", "help": "Help",
+}
+
 
 func _ready() -> void:
-	join_button.pressed.connect(_on_join_pressed)
-	mute_toggle.toggled.connect(_on_mute_toggled)
+	_build_ui()
+	# Overlay wiring (nodes from HUD.tscn).
 	approve_button.pressed.connect(_on_approve_pressed)
 	deny_button.pressed.connect(_on_deny_pressed)
 	if decide_http != null:
 		decide_http.request_completed.connect(_on_decide_completed)
 		# Bound every decide POST: without a finite timeout a stalled connection
 		# never fires request_completed, so _pending_case_id would block the
-		# decision gate forever. On timeout Godot still fires request_completed
-		# with result == RESULT_TIMEOUT, which clears the gate below.
+		# decision gate forever.
 		decide_http.timeout = DECIDE_TIMEOUT_SEC
-	# Operator controls: each button just re-broadcasts a named intent; GraphScene
-	# owns the effect. Bound with the action name so there's no per-button handler.
-	reset_layout_button.pressed.connect(func() -> void: emit_signal("control_pressed", "reset_layout"))
-	spread_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "spread_plus"))
-	spread_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "spread_minus"))
-	edges_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "edges_plus"))
-	edges_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "edges_minus"))
-	node_size_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_plus"))
-	node_size_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "node_size_minus"))
-	# Hierarchy & View group — same named-intent pattern; GraphScene owns the effect.
-	hierarchy_button.pressed.connect(func() -> void: emit_signal("control_pressed", "hierarchy_toggle"))
-	shells_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "shells_plus"))
-	shells_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "shells_minus"))
-	flat_toggle_button.pressed.connect(func() -> void: emit_signal("control_pressed", "flat_toggle"))
-	fold_plus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "fold_plus"))
-	fold_minus_button.pressed.connect(func() -> void: emit_signal("control_pressed", "fold_minus"))
-	unpin_all_button.pressed.connect(func() -> void: emit_signal("control_pressed", "unpin_all"))
-	# Document view (double-click node → narrativegoldmine page card).
 	close_doc_button.pressed.connect(hide_document)
 	scroll_up_button.pressed.connect(func() -> void: doc_scroll.scroll_vertical -= DOC_SCROLL_STEP)
 	scroll_down_button.pressed.connect(func() -> void: doc_scroll.scroll_vertical += DOC_SCROLL_STEP)
+	# Hints on the overlay controls too (their hover-hints resolve the same way).
+	approve_button.set_meta(HINT_META, "Approve this case")
+	deny_button.set_meta(HINT_META, "Deny this case")
+	close_doc_button.set_meta(HINT_META, "Close the page card")
+	scroll_up_button.set_meta(HINT_META, "Scroll the page up")
+	scroll_down_button.set_meta(HINT_META, "Scroll the page down")
 	if doc_http != null:
 		doc_http.request_completed.connect(_on_doc_completed)
 		doc_http.timeout = DOC_TIMEOUT_SEC
-	_build_query_panel()
+	_show_tab("graph")
 	set_process(true)
 
 
-# --- Visual query builder panel (flagship) ----------------------------------
-#
-# Built programmatically under the existing HudControl/VBox so HUD.tscn is not
-# touched (it is under concurrent edit by the fold work). Hidden until a query is
-# active; GraphScene drives it via set_query_preview / hide_query_preview.
-var _query_panel: VBoxContainer = null
-var _query_summary_label: Label = null
-var _query_count_label: Label = null
+# --- UI construction ---------------------------------------------------------
+
+func _build_ui() -> void:
+	# One base font size for the whole panel so text is legible on the 1.4m quad in
+	# VR (default theme font is tuned for desktop and reads tiny at headset scale).
+	var theme := Theme.new()
+	theme.default_font_size = 28
+	hud_control.theme = theme
+
+	_root = VBoxContainer.new()
+	_root.name = "Root"
+	# _root is a child of the (non-container) HudControl, so anchors apply: fill it
+	# minus a uniform margin.
+	_root.anchor_right = 1.0
+	_root.anchor_bottom = 1.0
+	_root.offset_left = MARGIN
+	_root.offset_top = MARGIN
+	_root.offset_right = -MARGIN
+	_root.offset_bottom = -MARGIN
+	_root.add_theme_constant_override("separation", 10)
+	hud_control.add_child(_root)
+
+	_build_header()
+	_build_tab_bar()
+	_build_pages_host()
+	_build_hint_bar()
 
 
-func _build_query_panel() -> void:
-	var vbox := get_node_or_null("HudViewport/HudControl/VBox")
-	if vbox == null:
-		return
-	_query_panel = VBoxContainer.new()
-	_query_panel.name = "QueryPanel"
-	var title := Label.new()
-	title.text = "Query Builder"
-	_query_panel.add_child(title)
-	_query_summary_label = Label.new()
-	_query_summary_label.name = "QuerySummary"
-	_query_panel.add_child(_query_summary_label)
-	_query_count_label = Label.new()
-	_query_count_label.name = "QueryCount"
-	_query_panel.add_child(_query_count_label)
-	var btns := HBoxContainer.new()
+func _build_header() -> void:
+	var header := HBoxContainer.new()
+	header.name = "Header"
+	header.custom_minimum_size = Vector2(0, HEADER_H)
+	header.add_theme_constant_override("separation", 16)
+	_conn_dot = _mk_label("● OFF", "Graph socket connection status")
+	_conn_dot.add_theme_color_override("font_color", Color(0.9, 0.35, 0.3))
+	_room_header = _mk_label("Room: -", "Current collaboration room")
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fps_header = _mk_label("FPS --", "Render framerate")
+	header.add_child(_conn_dot)
+	header.add_child(_room_header)
+	header.add_child(spacer)
+	header.add_child(_fps_header)
+	_root.add_child(header)
+	_root.add_child(_hsep())
+
+
+func _build_tab_bar() -> void:
+	var bar := HBoxContainer.new()
+	bar.name = "TabBar"
+	bar.custom_minimum_size = Vector2(0, TABBAR_H)
+	bar.add_theme_constant_override("separation", 8)
+	for id: String in TAB_ORDER:
+		var b := Button.new()
+		b.text = TAB_LABELS[id]
+		b.custom_minimum_size = Vector2(0, TABBAR_H)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.set_meta(HINT_META, "Show the %s tab" % TAB_LABELS[id])
+		b.pressed.connect(_show_tab.bind(id))
+		bar.add_child(b)
+		_tab_buttons[id] = b
+	_root.add_child(bar)
+
+
+func _build_pages_host() -> void:
+	_tabs_host = Control.new()
+	_tabs_host.name = "Tabs"
+	_tabs_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tabs_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_tabs_host.clip_contents = true
+	_root.add_child(_tabs_host)
+
+	_pages["graph"] = _build_graph_page()
+	_pages["query"] = _build_query_page()
+	_pages["pins"] = _build_pins_page()
+	_pages["session"] = _build_session_page()
+	_pages["help"] = _build_help_page()
+	for id: String in _pages:
+		var page: Control = _pages[id]
+		page.name = "%sPage" % TAB_LABELS[id]
+		# Pages fill the (non-container) Tabs host via anchors.
+		page.anchor_right = 1.0
+		page.anchor_bottom = 1.0
+		page.visible = false
+		_tabs_host.add_child(page)
+
+
+func _build_hint_bar() -> void:
+	_root.add_child(_hsep())
+	_hint_bar = Label.new()
+	_hint_bar.name = "HintBar"
+	_hint_bar.custom_minimum_size = Vector2(0, HINTBAR_H)
+	_hint_bar.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hint_bar.text = "ⓘ " + HINT_DEFAULT
+	_hint_bar.add_theme_color_override("font_color", ACCENT)
+	_root.add_child(_hint_bar)
+
+
+# --- Pages -------------------------------------------------------------------
+
+func _build_graph_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+	page.add_child(_group_header("Layout"))
+	var g1 := _grid(3)
+	g1.add_child(_action_btn("Reset Layout", "reset_layout", "Re-randomise positions & reset physics to safe defaults"))
+	g1.add_child(_action_btn("Spread +", "spread_plus", "Push nodes apart (increase repulsion)"))
+	g1.add_child(_action_btn("Spread -", "spread_minus", "Pull nodes together (decrease repulsion)"))
+	g1.add_child(_action_btn("Edges +", "edges_plus", "Show more edges"))
+	g1.add_child(_action_btn("Edges -", "edges_minus", "Show fewer edges"))
+	g1.add_child(_action_btn("Node +", "node_size_plus", "Enlarge node markers"))
+	g1.add_child(_action_btn("Node -", "node_size_minus", "Shrink node markers"))
+	page.add_child(g1)
+
+	page.add_child(_group_header("Hierarchy & View"))
+	var g2 := _grid(3)
+	_hierarchy_button = _action_btn("Hierarchy: Off", "hierarchy_toggle", "Toggle the DAG radial rank-bias force (concentric shells)")
+	_flat_toggle_button = _action_btn("View: 3D", "flat_toggle", "Toggle between full 3D and flat facing discs")
+	_fold_plus_button = _action_btn("Fold + (L0)", "fold_plus", "Collapse detail up one fold level (denser)")
+	_fold_minus_button = _action_btn("Fold -", "fold_minus", "Expand detail down one fold level")
+	g2.add_child(_hierarchy_button)
+	g2.add_child(_action_btn("Shells +", "shells_plus", "Increase spacing between hierarchy shells"))
+	g2.add_child(_action_btn("Shells -", "shells_minus", "Decrease spacing between hierarchy shells"))
+	g2.add_child(_flat_toggle_button)
+	g2.add_child(_fold_plus_button)
+	g2.add_child(_fold_minus_button)
+	page.add_child(g2)
+
+	page.add_child(_group_header("Status"))
+	_controls_status = _mk_label("repelK --  restLen --  edges --  node x--", "Live physics & layout state")
+	_controls_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(_controls_status)
+	return page
+
+
+func _build_query_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+	page.add_child(_group_header("Query Builder"))
+	_query_summary_label = _mk_label("No active query", "Pattern of the query you are building")
+	page.add_child(_query_summary_label)
+	_query_count_label = _mk_label("—", "Live match count for the current pattern")
+	page.add_child(_query_count_label)
+	var region := _scroll_region(300)
+	_query_vars_list = VBoxContainer.new()
+	_query_vars_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_query_vars_list.add_child(_mk_label("(mark nodes with A/X on a wand)", "Marked query variables appear here"))
+	(region.get_meta("scroll") as ScrollContainer).add_child(_query_vars_list)
+	page.add_child(region)
+	var btns := _grid(2)
+	var exec_enabled: bool = _execute_enabled()
 	var exec := Button.new()
-	# Execute is a stub until Phase D — disabled + relabelled so it never no-ops.
-	if QueryBuilder.EXECUTE_ENABLED:
+	exec.custom_minimum_size = Vector2(0, BTN_H)
+	exec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if exec_enabled:
 		exec.text = "Execute"
+		exec.set_meta(HINT_META, "Run the query and jump to the results")
 		exec.pressed.connect(func() -> void: emit_signal("query_execute_pressed"))
 	else:
 		exec.text = "Execute (soon)"
 		exec.disabled = true
+		exec.set_meta(HINT_META, "Query execution ships in a later phase")
 	var clr := Button.new()
 	clr.text = "Clear"
+	clr.custom_minimum_size = Vector2(0, BTN_H)
+	clr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clr.set_meta(HINT_META, "Clear all marked variables and the pattern")
 	clr.pressed.connect(func() -> void: emit_signal("query_clear_pressed"))
 	btns.add_child(exec)
 	btns.add_child(clr)
-	_query_panel.add_child(btns)
-	vbox.add_child(_query_panel)
-	_query_panel.visible = false
+	page.add_child(btns)
+	return page
+
+
+func _build_pins_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+	page.add_child(_group_header("Pinned Nodes"))
+	_pins_count_label = _mk_label("0 pinned", "Nodes you have pinned this session")
+	page.add_child(_pins_count_label)
+	_unpin_all_button = _action_btn("Unpin All", "unpin_all", "Release every node you pinned (hands them back to physics)")
+	page.add_child(_unpin_all_button)
+	var region := _scroll_region(360)
+	_pins_list = VBoxContainer.new()
+	_pins_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pins_list.add_child(_mk_label("(none pinned — grab & release a node to pin it)", "Pinned node ids appear here"))
+	(region.get_meta("scroll") as ScrollContainer).add_child(_pins_list)
+	page.add_child(region)
+	return page
+
+
+func _build_session_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+	page.add_child(_group_header("Session"))
+	_room_label = _mk_label("Room: -", "Current room")
+	page.add_child(_room_label)
+	_room_entry = LineEdit.new()
+	_room_entry.placeholder_text = "urn:visionclaw:room:sha256-12-..."
+	_room_entry.custom_minimum_size = Vector2(0, BTN_H)
+	_room_entry.set_meta(HINT_META, "Type or paste a room URN, then Join")
+	page.add_child(_room_entry)
+	var join := Button.new()
+	join.text = "Join Room"
+	join.custom_minimum_size = Vector2(0, BTN_H)
+	join.set_meta(HINT_META, "Join the room in the field above")
+	join.pressed.connect(_on_join_pressed)
+	page.add_child(join)
+	_mute_toggle = CheckButton.new()
+	_mute_toggle.text = "Mute"
+	_mute_toggle.custom_minimum_size = Vector2(0, BTN_H)
+	_mute_toggle.set_meta(HINT_META, "Mute / unmute your microphone")
+	_mute_toggle.toggled.connect(_on_mute_toggled)
+	page.add_child(_mute_toggle)
+	_conn_status_label = _mk_label("Connection: off", "Graph socket state")
+	page.add_child(_conn_status_label)
+	var reconnect := Button.new()
+	reconnect.text = "Reconnect"
+	reconnect.custom_minimum_size = Vector2(0, BTN_H)
+	reconnect.set_meta(HINT_META, "Force-reconnect the graph & presence sockets")
+	reconnect.pressed.connect(func() -> void: emit_signal("reconnect_pressed"))
+	page.add_child(reconnect)
+	_debug_stats = _mk_label("FPS: --  MTP: --ms  Avatars: 0  Net: OFF", "Render & network diagnostics")
+	_debug_stats.name = "DebugStats"
+	page.add_child(_debug_stats)
+	return page
+
+
+func _build_help_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+	page.add_child(_group_header("Vive Wand — Controls"))
+	var region := _scroll_region(500)
+	var rt := RichTextLabel.new()
+	rt.bbcode_enabled = true
+	rt.fit_content = true
+	rt.scroll_active = false
+	rt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rt.set_meta(HINT_META, "Every wand binding")
+	rt.text = _cheat_sheet_bbcode()
+	(region.get_meta("scroll") as ScrollContainer).add_child(rt)
+	page.add_child(region)
+	return page
+
+
+func _cheat_sheet_bbcode() -> String:
+	var rows: Array[Array] = [
+		["[b]NODE[/b]", ""],
+		["Trigger — point at a node & pull", "Grab it"],
+		["…release the trigger", "Pins the node in place"],
+		["Trigger — double-pull on a node", "Open its page card"],
+		["A / X button", "Node menu (mark variable…)"],
+		["", ""],
+		["[b]GRAPH[/b]", ""],
+		["BOTH grips (two hands)", "Seize the whole graph"],
+		["  hands apart / together", "Scale"],
+		["  twist your hands", "Rotate"],
+		["  move hands together", "Carry"],
+		["", ""],
+		["[b]PANEL & MOVE[/b]", ""],
+		["One grip while near this panel", "Pick up & move the panel"],
+		["Trackpad / thumbstick", "Fly through the graph"],
+		["Point at the panel + trigger", "Click a button"],
+	]
+	var lines: Array[String] = []
+	for r: Array in rows:
+		if String(r[1]).is_empty():
+			lines.append(String(r[0]))
+		else:
+			lines.append("%s  [color=#8fd0ff]→[/color]  %s" % [r[0], r[1]])
+	return "\n".join(lines)
+
+
+# --- Small builders ----------------------------------------------------------
+
+func _mk_label(text: String, hint: String) -> Label:
+	var l := Label.new()
+	l.text = text
+	if not hint.is_empty():
+		l.set_meta(HINT_META, hint)
+	return l
+
+
+func _group_header(text: String) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_color_override("font_color", ACCENT)
+	return l
+
+
+func _hsep() -> HSeparator:
+	return HSeparator.new()
+
+
+func _grid(cols: int) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = cols
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	g.add_theme_constant_override("h_separation", 8)
+	g.add_theme_constant_override("v_separation", 8)
+	return g
+
+
+# A button that re-broadcasts a named control_pressed intent (GraphScene owns the
+# effect). Carries a hover hint and a ≥56px hit target.
+func _action_btn(text: String, action: String, hint: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(0, BTN_H)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.set_meta(HINT_META, hint)
+	b.pressed.connect(func() -> void: emit_signal("control_pressed", action))
+	return b
+
+
+# A fixed-height scroll region for a legitimately-unbounded list: an inner
+# ScrollContainer (wand drag-scrolls it natively) plus a ▲/▼ button column for
+# wand pointing. The wrapper HBox is what you add to the page; retrieve the inner
+# ScrollContainer via `wrapper.get_meta("scroll")` to add content. The ▲▼ column
+# is shown only when content overflows the container (see _update_scroll_arrows).
+func _scroll_region(height: int) -> HBoxContainer:
+	var wrap := HBoxContainer.new()
+	wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wrap.custom_minimum_size = Vector2(0, height)
+	wrap.add_theme_constant_override("separation", 6)
+	var sc := ScrollContainer.new()
+	sc.custom_minimum_size = Vector2(0, height)
+	sc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	wrap.add_child(sc)
+	var arrows := VBoxContainer.new()
+	arrows.add_theme_constant_override("separation", 6)
+	var up := Button.new()
+	up.text = "▲"
+	up.custom_minimum_size = Vector2(72, BTN_H)
+	up.set_meta(HINT_META, "Scroll up")
+	up.pressed.connect(func() -> void: sc.scroll_vertical -= DOC_SCROLL_STEP)
+	var dn := Button.new()
+	dn.text = "▼"
+	dn.custom_minimum_size = Vector2(72, BTN_H)
+	dn.set_meta(HINT_META, "Scroll down")
+	dn.pressed.connect(func() -> void: sc.scroll_vertical += DOC_SCROLL_STEP)
+	arrows.add_child(up)
+	arrows.add_child(dn)
+	wrap.add_child(arrows)
+	wrap.set_meta("scroll", sc)
+	wrap.set_meta("arrows", arrows)
+	_scroll_regions.append(wrap)
+	return wrap
+
+
+# Show a scroll region's ▲▼ column only when its content overflows the container.
+# Cheap; called deferred on tab switch (and once after build).
+func _update_scroll_arrows() -> void:
+	for wrap: HBoxContainer in _scroll_regions:
+		if not is_instance_valid(wrap):
+			continue
+		var sc: ScrollContainer = wrap.get_meta("scroll")
+		var arrows: Control = wrap.get_meta("arrows")
+		if sc == null or arrows == null or sc.get_child_count() == 0:
+			continue
+		var content_h: float = sc.get_child(0).get_combined_minimum_size().y
+		arrows.visible = content_h > sc.size.y + 1.0
+
+
+func _execute_enabled() -> bool:
+	# query_builder.gd owns the EXECUTE_ENABLED gate (Execute is a stub until a
+	# later phase). Matches the proven pre-redesign access pattern.
+	return preload("res://scripts/query_builder.gd").EXECUTE_ENABLED
+
+
+# --- Tab switching -----------------------------------------------------------
+
+## Show a tab by id (graph|query|pins|session|help). Hides the others, highlights
+## the active tab button, and runs the dev-only overflow guard for the shown page.
+func _show_tab(id: String) -> void:
+	if not _pages.has(id):
+		return
+	_active_tab = id
+	for pid: String in _pages:
+		(_pages[pid] as Control).visible = pid == id
+	for tid: String in _tab_buttons:
+		var b: Button = _tab_buttons[tid]
+		b.add_theme_color_override("font_color", ACCENT if tid == id else IDLE)
+	call_deferred("_check_overflow", id)
+	call_deferred("_update_scroll_arrows")
+
+
+# Overlay shield: while a full-panel overlay (Document card or Intervention panel)
+# is up, hide the tab root so a stray wand ray can't click a control BEHIND the
+# overlay (the overlays previously only became visible, leaving the tabs live and
+# clickable underneath). The active tab is preserved — restoring just re-shows the
+# root with the same page selected.
+func _refresh_overlay_shield() -> void:
+	if _root == null:
+		return
+	var overlay_up := (document_panel != null and document_panel.visible) \
+		or (intervention_panel != null and intervention_panel.visible)
+	_root.visible = not overlay_up
+
+
+# Dev-only layout-overflow guard: warn ONCE per tab per session if a page's
+# content min-height exceeds its host, so the pre-redesign "below the fold" bug
+# (controls rendered past the viewport with no scroll) cannot silently return.
+# ScrollContainers are exempt (their overflow is intentional). Stripped in release.
+func _check_overflow(id: String) -> void:
+	if not OS.is_debug_build() or _overflow_warned.has(id):
+		return
+	var page: Control = _pages.get(id, null)
+	if page == null or _tabs_host == null:
+		return
+	var need: float = page.get_combined_minimum_size().y
+	var have: float = _tabs_host.size.y
+	if have > 1.0 and need > have + 1.0:
+		_overflow_warned[id] = true
+		push_warning("[HUD overflow] tab '%s' needs %.0fpx but page host is %.0fpx — content below the fold" % [id, need, have])
+
+
+# --- Public API (signatures preserved) --------------------------------------
+
+## Set by GraphScene after each control press: the current physics params, edge
+## count and node-size factor. Called on press only — no per-frame cost.
+func set_controls_status(text: String) -> void:
+	if _controls_status != null:
+		_controls_status.text = text
+
+
+## Reflect the Hierarchy/View toggle state and pinned-node count on the button
+## faces + Pins tab. Press-only, no per-frame cost.
+func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int) -> void:
+	if _hierarchy_button != null:
+		_hierarchy_button.text = "Hierarchy: On" if hierarchy_on else "Hierarchy: Off"
+		_hierarchy_button.add_theme_color_override("font_color", ACCENT if hierarchy_on else IDLE)
+	if _flat_toggle_button != null:
+		_flat_toggle_button.text = "View: Flat" if is_flat else "View: 3D"
+		_flat_toggle_button.add_theme_color_override("font_color", ACCENT if is_flat else IDLE)
+	if _unpin_all_button != null:
+		_unpin_all_button.text = "Unpin All (%d)" % pinned_count if pinned_count > 0 else "Unpin All"
+	if _pins_count_label != null:
+		_pins_count_label.text = "%d pinned" % pinned_count
+
+
+## Reflect the fold-ladder level (Wave 3) on the Fold +/- button faces. `level`
+## is clamped [0,3]; Fold + disables at the top of the ladder, Fold - at ∅.
+func set_fold_state(level: int) -> void:
+	if _fold_plus_button != null:
+		_fold_plus_button.text = "Fold + (L%d)" % level
+		_fold_plus_button.disabled = level >= 3
+	if _fold_minus_button != null:
+		_fold_minus_button.disabled = level <= 0
 
 
 ## Show/refresh the query preview. `summary` e.g. "2 vars · 1 edge". `count` < 0
-## means "unknown" (—); `pending` shows the in-flight spinner text; `truncated`
-## renders the count as a floor (≥ N) because the server scan hit its cap.
+## means unknown (—); `pending` shows the counting spinner; `truncated` renders a
+## floor (≥ N) because the server scan hit its cap.
 func set_query_preview(summary: String, count: int, pending: bool, truncated: bool) -> void:
-	if _query_panel == null:
-		return
-	_query_panel.visible = true
 	if _query_summary_label != null:
 		_query_summary_label.text = summary
 	if _query_count_label != null:
@@ -200,41 +645,51 @@ func set_query_preview(summary: String, count: int, pending: bool, truncated: bo
 			_query_count_label.text = "%d matches" % count
 
 
-## Hide the query preview (no active query).
+## Clear the query preview (no active query).
 func hide_query_preview() -> void:
-	if _query_panel != null:
-		_query_panel.visible = false
+	if _query_summary_label != null:
+		_query_summary_label.text = "No active query"
+	if _query_count_label != null:
+		_query_count_label.text = "—"
 
 
-## Set by GraphScene after each control press: the current physics params, edge
-## count shown, and node-size factor. Called on press only — no per-frame cost.
-func set_controls_status(text: String) -> void:
-	if controls_status != null:
-		controls_status.text = text
+## Optional hook for the query-builder flagship (task #18): populate the marked-
+## variable rows. Each entry is a Dictionary {var: String, label: String}. Safe to
+## omit — the list shows a placeholder until called.
+func set_marked_vars(rows: Array) -> void:
+	if _query_vars_list == null:
+		return
+	for c in _query_vars_list.get_children():
+		c.queue_free()
+	if rows.is_empty():
+		_query_vars_list.add_child(_mk_label("(mark nodes with A/X on a wand)", "Marked query variables appear here"))
+		call_deferred("_update_scroll_arrows")
+		return
+	for r: Variant in rows:
+		if typeof(r) != TYPE_DICTIONARY:
+			continue
+		var v := str((r as Dictionary).get("var", "?"))
+		var lbl := str((r as Dictionary).get("label", ""))
+		_query_vars_list.add_child(_mk_label("?%s  ·  %s" % [v, lbl], "Marked variable %s" % v))
+	# List height changed → recompute ▲▼ visibility once the new rows have laid out.
+	call_deferred("_update_scroll_arrows")
 
 
-## Reflect the Hierarchy/View toggle state and pinned-node count on the button
-## faces. GraphScene owns the state and calls this on press only — no per-frame
-## cost. `hierarchy_on` drives "Hierarchy: On/Off"; `is_flat` drives "View:
-## Flat/3D"; `pinned_count` annotates the Unpin All button.
-func set_control_states(hierarchy_on: bool, is_flat: bool, pinned_count: int) -> void:
-	if hierarchy_button != null:
-		hierarchy_button.text = "Hierarchy: On" if hierarchy_on else "Hierarchy: Off"
-	if flat_toggle_button != null:
-		flat_toggle_button.text = "View: Flat" if is_flat else "View: 3D"
-	if unpin_all_button != null:
-		unpin_all_button.text = "Unpin All (%d)" % pinned_count if pinned_count > 0 else "Unpin All"
-
-
-## Reflect the fold-ladder level (Wave 3) on the Fold +/- button faces. `level`
-## is clamped [0,3]; Fold + disables at the top of the ladder, Fold - at ∅.
-## Press-only (no per-frame cost), same discipline as set_control_states.
-func set_fold_state(level: int) -> void:
-	if fold_plus_button != null:
-		fold_plus_button.text = "Fold + (L%d)" % level
-		fold_plus_button.disabled = level >= 3
-	if fold_minus_button != null:
-		fold_minus_button.disabled = level <= 0
+## Optional hook: populate the Pins tab list from the pinned node ids. Cheap —
+## call on pin/unpin only. Rows show the id (label lookup stays GraphScene-side).
+func set_pinned_ids(ids: Array) -> void:
+	if _pins_list == null:
+		return
+	for c in _pins_list.get_children():
+		c.queue_free()
+	if ids.is_empty():
+		_pins_list.add_child(_mk_label("(none pinned — grab & release a node to pin it)", "Pinned node ids appear here"))
+		call_deferred("_update_scroll_arrows")
+		return
+	for id: Variant in ids:
+		_pins_list.add_child(_mk_label("• node %d" % int(id), "Pinned node %d — Unpin All releases it" % int(id)))
+	# List height changed → recompute ▲▼ visibility once the new rows have laid out.
+	call_deferred("_update_scroll_arrows")
 
 
 # --- Document view (double-click node → narrativegoldmine page card) ----------
@@ -245,6 +700,7 @@ func show_document(title: String, slug: String) -> void:
 	_doc_title = title
 	if document_panel != null:
 		document_panel.visible = true
+	_refresh_overlay_shield()
 	if doc_title_label != null:
 		doc_title_label.text = title
 	if doc_text != null:
@@ -253,7 +709,6 @@ func show_document(title: String, slug: String) -> void:
 		doc_scroll.scroll_vertical = 0
 	if doc_http == null:
 		return
-	# One request at a time; a new open cancels the previous fetch.
 	doc_http.cancel_request()
 	var url := "%s%s.json" % [NG_PAGE_BASE, slug.uri_encode()]
 	var err := doc_http.request(url)
@@ -265,6 +720,7 @@ func show_document(title: String, slug: String) -> void:
 func hide_document() -> void:
 	if document_panel != null:
 		document_panel.visible = false
+	_refresh_overlay_shield()
 
 
 func _on_doc_completed(
@@ -292,7 +748,6 @@ func render_ng_card(fallback_title: String, data: Dictionary) -> String:
 	var lines: Array = []
 	var title: String = _dict_str(data, "title", fallback_title)
 	lines.append("[font_size=34][b]%s[/b][/font_size]" % _bb(title))
-	# Subtitle: domain · entityType · maturity · quality score (present fields only).
 	var sub: Array = []
 	var domain := _dict_str(data, "domain", "")
 	if domain != "":
@@ -307,19 +762,16 @@ func render_ng_card(fallback_title: String, data: Dictionary) -> String:
 		sub.append("quality %.2f" % float(data["qualityScore"]))
 	if not sub.is_empty():
 		lines.append("[color=#8fa6c8]%s[/color]" % _bb(" · ".join(sub)))
-	# Definition.
 	var definition := _dict_str(data, "definition", "")
 	if definition != "":
 		lines.append("")
 		lines.append(_bb(definition))
-	# Relationships (defensive shape: dicts predicate→target, or plain strings).
 	var rels: Array = _rel_lines(data.get("relationships", []))
 	if not rels.is_empty():
 		lines.append("")
 		lines.append("[b]Relationships[/b]")
 		for r: String in rels:
 			lines.append("  • %s" % _bb(r))
-	# Links: wikilinks + backlinks, capped.
 	var wl: Array = _link_chips(data.get("wikilinks", []), 10)
 	var bl: Array = _link_chips(data.get("backlinks", []), 10)
 	if not wl.is_empty() or not bl.is_empty():
@@ -332,8 +784,6 @@ func render_ng_card(fallback_title: String, data: Dictionary) -> String:
 	return "\n".join(lines)
 
 
-# Coloured, escaped chips from a link array (strings or {title/label/slug} dicts),
-# capped at `cap` with a "+N more" tail.
 func _link_chips(arr: Variant, cap: int) -> Array:
 	var out: Array = []
 	if not (arr is Array):
@@ -350,7 +800,6 @@ func _link_chips(arr: Variant, cap: int) -> Array:
 	return out
 
 
-# Relationship lines: "predicate → target" from dicts, or the raw string.
 func _rel_lines(arr: Variant) -> Array:
 	var out: Array = []
 	if not (arr is Array):
@@ -373,7 +822,6 @@ func _rel_lines(arr: Variant) -> Array:
 	return out
 
 
-# Best-effort display name from a string or a dict with title/label/slug.
 func _any_name(v: Variant) -> String:
 	if v is String:
 		return v
@@ -394,13 +842,20 @@ func _bb(s: String) -> String:
 
 
 func _process(delta: float) -> void:
+	# Header + Session diagnostics (per-frame, cheap).
 	var conn_str: String = "OK" if _connected else "OFF"
-	debug_stats.text = "FPS: %d  MTP: %.1fms  Avatars: %d  Net: %s" % [
-		Engine.get_frames_per_second(),
-		_mtp_ms,
-		_avatar_count,
-		conn_str,
-	]
+	if _fps_header != null:
+		_fps_header.text = "FPS %d" % Engine.get_frames_per_second()
+	if _debug_stats != null:
+		_debug_stats.text = "FPS: %d  MTP: %.1fms  Avatars: %d  Net: %s" % [
+			Engine.get_frames_per_second(), _mtp_ms, _avatar_count, conn_str,
+		]
+	# Hover-hint bar: resolve the control under the (synthetic) wand pointer via
+	# gui_get_hovered_control — which the pushed InputEventMouseMotion updates, so
+	# it tracks the ray. Godot's idle tooltip never fires for our synthetic pointer,
+	# hence this custom always-visible bar.
+	if _hint_bar != null:
+		_hint_bar.text = "ⓘ " + _resolve_hint()
 	# Ambient ACSP glow: pulse amber while cases are open, transparent when clear.
 	if acsp_glow != null:
 		if _open_case_count > 0:
@@ -409,6 +864,22 @@ func _process(delta: float) -> void:
 			acsp_glow.color = Color(ACSP_GLOW_COLOR.r, ACSP_GLOW_COLOR.g, ACSP_GLOW_COLOR.b, a)
 		else:
 			acsp_glow.color = Color(ACSP_GLOW_COLOR.r, ACSP_GLOW_COLOR.g, ACSP_GLOW_COLOR.b, 0.0)
+
+
+# Walk from the hovered control up its ancestors to the nearest node carrying a
+# "hint" meta; fall back to the default. Public-ish for tests.
+func _resolve_hint() -> String:
+	if hud_control == null:
+		return HINT_DEFAULT
+	var vp := hud_control.get_viewport()
+	if vp == null:
+		return HINT_DEFAULT
+	var node: Node = vp.gui_get_hovered_control()
+	while node != null:
+		if node.has_meta(HINT_META):
+			return str(node.get_meta(HINT_META))
+		node = node.get_parent()
+	return HINT_DEFAULT
 
 
 func set_avatar_count(count: int) -> void:
@@ -421,15 +892,27 @@ func set_mtp_ms(ms: float) -> void:
 
 func _on_connection_status(connected: bool) -> void:
 	_connected = connected
+	if _conn_dot != null:
+		_conn_dot.text = "● OK" if connected else "● OFF"
+		_conn_dot.add_theme_color_override("font_color",
+			Color(0.4, 0.85, 0.45) if connected else Color(0.9, 0.35, 0.3))
+	if _conn_status_label != null:
+		_conn_status_label.text = "Connection: on" if connected else "Connection: off"
 
 
 func _on_join_pressed() -> void:
-	var urn := room_entry.text.strip_edges()
+	if _room_entry == null:
+		return
+	var urn := _room_entry.text.strip_edges()
 	if urn.is_empty():
 		push_warning("Empty room URN")
 		return
 	emit_signal("join_requested", urn)
-	room_label.text = "Room: %s" % urn
+	var label := "Room: %s" % urn
+	if _room_label != null:
+		_room_label.text = label
+	if _room_header != null:
+		_room_header.text = label
 
 
 func _on_mute_toggled(state: bool) -> void:
@@ -440,15 +923,13 @@ func _on_mute_toggled(state: bool) -> void:
 
 ## Wire the decide path. `http_base` is the visionclaw-server origin (scheme +
 ## host + port, no trailing slash); `nostr_auth` is the Rust NostrAuth that mints
-## the NIP-98 header so the POST authenticates against the same power-user gate
-## the desktop control centre uses.
+## the NIP-98 header.
 func configure_intervention(http_base: String, nostr_auth: RefCounted) -> void:
 	_http_base = http_base.rstrip("/")
 	_nostr_auth = nostr_auth
 
 
-## Show the intervention panel for a broker case awaiting the operator's
-## approval (driven by a broker:new_case event on the selected agent).
+## Show the intervention panel for a broker case awaiting the operator's approval.
 func show_case(case_id: String, summary: String) -> void:
 	_current_case_id = case_id
 	if case_title != null:
@@ -457,16 +938,17 @@ func show_case(case_id: String, summary: String) -> void:
 		case_summary.text = summary
 	if intervention_panel != null:
 		intervention_panel.visible = true
+	_refresh_overlay_shield()
 
 
 func clear_case() -> void:
 	_current_case_id = ""
 	if intervention_panel != null:
 		intervention_panel.visible = false
+	_refresh_overlay_shield()
 
 
-## Ambient ACSP indicator: the count of open broker cases (from broker:new_case /
-## broker:case_decided events).
+## Ambient ACSP indicator: the count of open broker cases.
 func set_case_count(count: int) -> void:
 	_open_case_count = maxi(count, 0)
 	if acsp_label != null:
@@ -495,31 +977,21 @@ func deny_selected_case() -> void:
 	_submit_decision("reject")
 
 
-# POST the decision to the shared broker decide core through the same route the
-# desktop operator uses (enrichment_proposals_handler::decide_as_operator,
-# power-user-gated). Signing happens Rust-side; the header carries a single-use
-# NIP-98 event. The decision intent is emitted immediately so the loop is
-# observable even before the round-trip resolves.
+# POST the decision to the shared broker decide core (power-user-gated). Signing
+# is Rust-side (single-use NIP-98). The intent is emitted immediately so the loop
+# is observable even before the round-trip resolves.
 func _submit_decision(outcome: String) -> void:
 	if _current_case_id.is_empty():
 		push_warning("HUD: no case selected for decision")
 		return
-	# Reject overlapping submissions: the single DecideHttp is one-in-flight, so a
-	# second dispatch would return ERR_BUSY *after* we'd already overwritten the
-	# pending case id — the first (still live) request would then complete under
-	# the second case's identity while the second never went out. Only one decide
-	# may be in flight; a new one is ignored until the current resolves.
 	if not _pending_case_id.is_empty():
 		push_warning("HUD: a decision is already in flight; ignoring new submission")
 		return
 	var case_id := _current_case_id
-	# Intent is observable immediately, independent of the HTTP round-trip.
 	emit_signal("decision_submitted", case_id, outcome)
-
 	if _nostr_auth == null or _http_base.is_empty() or decide_http == null:
 		push_warning("HUD: intervention not configured; decision not dispatched")
 		return
-
 	var url := "%s/api/broker/cases/%s/decide" % [_http_base, case_id]
 	var auth: String = _nostr_auth.nip98_header(url, "POST")
 	var pubkey: String = _nostr_auth.pubkey_hex()
@@ -536,9 +1008,6 @@ func _submit_decision(outcome: String) -> void:
 	if err != OK:
 		push_warning("HUD: decide request failed to start (%d)" % err)
 		return
-	# Record the in-flight attribution ONLY once the request has actually
-	# launched, so a failed/busy dispatch never leaves stale pending state that a
-	# later completion would mis-attribute.
 	_last_outcome = outcome
 	_pending_case_id = case_id
 
@@ -549,22 +1018,13 @@ func _on_decide_completed(
 	_headers: PackedStringArray,
 	_body: PackedByteArray
 ) -> void:
-	# A verdict counts only when the transport itself succeeded (result ==
-	# RESULT_SUCCESS) AND the server returned 2xx. A timeout / connection failure
-	# reports a non-SUCCESS result with response_code 0 — treat as not accepted,
-	# but still release the gate so the operator can retry.
 	var transport_ok := result == HTTPRequest.RESULT_SUCCESS
 	var accepted := transport_ok and response_code >= 200 and response_code < 300
-	# Attribute the verdict to the in-flight case, not the (possibly swapped)
-	# on-screen case. Clearing _pending_case_id here (on ANY completion, including
-	# timeout/failure) is what reopens the decision gate.
 	var decided_case := _pending_case_id
 	_pending_case_id = ""
 	if not accepted:
 		push_warning("HUD: decide failed for %s (result=%d code=%d)" % [
 			decided_case, result, response_code])
 	emit_signal("case_decided", decided_case, _last_outcome, accepted)
-	# Only dismiss the panel if it is still showing the case we just decided;
-	# a newer case shown mid-flight must stay visible.
 	if accepted and _current_case_id == decided_case:
 		clear_case()
