@@ -99,6 +99,13 @@ pub struct SimParams {
     // Added at the end to preserve the existing repr(C) prefix layout.
     pub plane_bias_k: f32,
     pub plane_spacing: f32,
+
+    // ADR-141 P3 radial shell centre. The dag_radial_bias term springs each node
+    // onto its shell around this point; (0,0,0) = origin = legacy DAG behaviour.
+    // Added at the end to preserve the existing repr(C) prefix layout.
+    pub radial_center_x: f32,
+    pub radial_center_y: f32,
+    pub radial_center_z: f32,
 }
 
 // SAFETY: SimParams is repr(C) with only POD types; safe for GPU transfer.
@@ -182,6 +189,11 @@ impl SimParams {
             dag_level_distance: self.dag_level_distance,
             plane_bias_k: self.plane_bias_k,
             plane_spacing: self.plane_spacing,
+            radial_center: [
+                self.radial_center_x,
+                self.radial_center_y,
+                self.radial_center_z,
+            ],
             // Per-population spring multipliers (LinLog identity). This GPU-side
             // struct has no per-population source, so default to 1.0.
             spring_k_knowledge: 1.0,
@@ -205,7 +217,7 @@ impl ToSimParams for SimulationParams {
 }
 
 // Compile-time size assertion: SimParams must match the CUDA struct exactly.
-const _: () = assert!(std::mem::size_of::<SimParams>() == 192);
+const _: () = assert!(std::mem::size_of::<SimParams>() == 204);
 
 impl From<&SimParams> for SimulationParams {
     fn from(params: &SimParams) -> Self {
@@ -287,6 +299,9 @@ impl From<&SimulationParams> for SimParams {
             layout_mode: params.layout_mode.as_gpu_u32(),
             plane_bias_k: params.plane_bias_k,
             plane_spacing: params.plane_spacing,
+            radial_center_x: params.radial_center[0],
+            radial_center_y: params.radial_center[1],
+            radial_center_z: params.radial_center[2],
         }
     }
 }
@@ -370,6 +385,12 @@ impl From<&PhysicsSettings> for SimParams {
             layout_mode: LayoutMode::ForceDirected.as_gpu_u32(),
             plane_bias_k: physics.plane_bias_k,
             plane_spacing: physics.plane_spacing,
+            // PhysicsSettings carries no radial centre — it is actor-authoritative
+            // (owned by SetRadialLayout). Default to the origin so this wire path
+            // never resets an active radial centre back to nothing.
+            radial_center_x: 0.0,
+            radial_center_y: 0.0,
+            radial_center_z: 0.0,
         }
     }
 }

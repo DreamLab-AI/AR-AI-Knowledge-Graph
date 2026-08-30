@@ -39,6 +39,9 @@ fn default_plane_bias_k() -> f32 {
 fn default_plane_spacing() -> f32 {
     60.0
 }
+fn default_radial_center() -> [f32; 3] {
+    [0.0, 0.0, 0.0]
+}
 
 /// Controls how the physics simulation converges.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -242,6 +245,14 @@ pub struct SimulationParams {
     /// (default 60).
     #[serde(default = "default_plane_spacing")]
     pub plane_spacing: f32,
+
+    /// Radial shell centre (ADR-141 P3) for the `dag_radial_bias` term. Default
+    /// `[0,0,0]` = origin = legacy DAG behaviour. This is NOT a PhysicsSettings /
+    /// wire field: it is actor-authoritative, owned by the `SetRadialLayout`
+    /// message (RadialMode::Ego centres it on the focus node's live position), and
+    /// a settings PUT must never reset it.
+    #[serde(default = "default_radial_center")]
+    pub radial_center: [f32; 3],
 }
 
 impl Default for SimulationParams {
@@ -473,6 +484,8 @@ impl From<&PhysicsSettings> for SimulationParams {
             dag_level_distance: physics.dag_level_distance,
             plane_bias_k: physics.plane_bias_k,
             plane_spacing: physics.plane_spacing,
+            // Actor-authoritative (SetRadialLayout); PhysicsSettings has no source.
+            radial_center: default_radial_center(),
         }
     }
 }

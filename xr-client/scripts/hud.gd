@@ -143,6 +143,8 @@ var _query_vars_list: VBoxContainer = null
 var _pins_count_label: Label = null
 var _unpin_all_button: Button = null
 var _pins_list: VBoxContainer = null
+var _swarm_list: VBoxContainer = null
+var _swarm_count_label: Label = null
 # Session page.
 var _room_label: Label = null
 var _room_entry: LineEdit = null
@@ -150,9 +152,19 @@ var _mute_toggle: CheckButton = null
 var _debug_stats: Label = null
 var _conn_status_label: Label = null
 
-const TAB_ORDER: Array[String] = ["graph", "query", "pins", "session", "help"]
+const TAB_ORDER: Array[String] = ["graph", "query", "pins", "swarm", "session", "help"]
 const TAB_LABELS: Dictionary = {
-	"graph": "Graph", "query": "Query", "pins": "Pins", "session": "Session", "help": "Help",
+	"graph": "Graph", "query": "Query", "pins": "Pins", "swarm": "Swarm", "session": "Session", "help": "Help",
+}
+
+# Agent status → roster dot colour (ADR-140, Pillar 3). Mirrors
+# render_store::agent_status_color: idle slate / working green / blocked amber-red /
+# done cyan-white.
+const SWARM_STATUS_COLORS: Dictionary = {
+	0: Color(0.50, 0.58, 0.68),
+	1: Color(0.30, 0.90, 0.72),
+	2: Color(1.0, 0.35, 0.20),
+	3: Color(0.60, 0.85, 1.0),
 }
 
 
@@ -258,6 +270,7 @@ func _build_pages_host() -> void:
 	_pages["graph"] = _build_graph_page()
 	_pages["query"] = _build_query_page()
 	_pages["pins"] = _build_pins_page()
+	_pages["swarm"] = _build_swarm_page()
 	_pages["session"] = _build_session_page()
 	_pages["help"] = _build_help_page()
 	for id: String in _pages:
@@ -402,6 +415,76 @@ func _build_pins_page() -> VBoxContainer:
 	(region.get_meta("scroll") as ScrollContainer).add_child(_pins_list)
 	page.add_child(region)
 	return page
+
+
+# Swarm tab (ADR-140, Pillar 4 / P5): the roster of live agents — a status dot,
+# name → target-node label, and the current task line, each row tap-to-teleport.
+# GraphScene pushes the roster via set_swarm_roster(); this page is pure layout.
+func _build_swarm_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+	page.add_child(_group_header("Agent Swarm"))
+	_swarm_count_label = _mk_label("0 agents", "Live agents working the graph")
+	page.add_child(_swarm_count_label)
+	var region := _scroll_region(360)
+	_swarm_list = VBoxContainer.new()
+	_swarm_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_swarm_list.add_child(_mk_label("(no agents active)", "Agents appear here as they work"))
+	(region.get_meta("scroll") as ScrollContainer).add_child(_swarm_list)
+	page.add_child(region)
+	return page
+
+
+func _swarm_status_color(status: int) -> Color:
+	return SWARM_STATUS_COLORS.get(status, SWARM_STATUS_COLORS[0])
+
+
+# Build one roster row: [● dot] [Name → Target] teleport button, with the task line
+# beneath. Tap emits control_pressed("teleport:<agent_id>") — agent wire ids ARE
+# node ids, so GraphScene's existing _teleport_to_node glide handles it unchanged.
+func _mk_swarm_row(r: Dictionary) -> Control:
+	var row := VBoxContainer.new()
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 6)
+	var dot := Label.new()
+	dot.text = "●"
+	dot.add_theme_color_override("font_color", _swarm_status_color(int(r.get("status", 0))))
+	head.add_child(dot)
+	var aid := int(r.get("id", 0))
+	var name_s: String = str(r.get("name", ""))
+	if name_s == "":
+		name_s = "agent %d" % aid
+	var target_s: String = str(r.get("target", ""))
+	var btn := Button.new()
+	btn.text = "%s → %s" % [name_s, target_s if target_s != "" else "…"]
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.set_meta(HINT_META, "Teleport to %s" % name_s)
+	btn.pressed.connect(func() -> void: emit_signal("control_pressed", "teleport:%d" % aid))
+	head.add_child(btn)
+	row.add_child(head)
+	var task_s: String = str(r.get("task", ""))
+	if task_s != "":
+		row.add_child(_mk_label("    ⚙ %s" % task_s, "Current task"))
+	return row
+
+
+## Populate the Swarm tab from the live agent roster. `rows` is an Array of
+## Dictionaries {id:int, name:String, status:int, target:String, task:String}.
+## Cheap — GraphScene calls this at ~4 Hz and only when the roster changed.
+func set_swarm_roster(rows: Array) -> void:
+	if _swarm_list == null:
+		return
+	for c in _swarm_list.get_children():
+		c.queue_free()
+	if _swarm_count_label != null:
+		_swarm_count_label.text = "%d agent%s" % [rows.size(), "" if rows.size() == 1 else "s"]
+	if rows.is_empty():
+		_swarm_list.add_child(_mk_label("(no agents active)", "Agents appear here as they work"))
+		call_deferred("_update_scroll_arrows")
+		return
+	for r: Variant in rows:
+		_swarm_list.add_child(_mk_swarm_row(r as Dictionary))
+	call_deferred("_update_scroll_arrows")
 
 
 func _build_session_page() -> VBoxContainer:

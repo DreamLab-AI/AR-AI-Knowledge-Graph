@@ -626,6 +626,13 @@ func _update_proximity_labels() -> void:
 			if badge > 0:
 				title.text += "  (+%d)" % badge
 		var d: String = _binary_client.detail_of(node_id)
+		# Agent task line (ADR-140, Pillar 3 / P4): if this node is an agent with a
+		# current task, surface it in the proximity Detail line so the swarm's work
+		# reads at a glance up close — takes precedence over the generic node detail.
+		if _binary_client.has_method("agent_task"):
+			var task: String = _binary_client.agent_task(node_id)
+			if task != "":
+				d = "⚙ %s" % task
 		detail.text = d
 		detail.visible = d != ""
 		# Fade: full opacity within LABEL_INNER_M, linear to 0 at the radius edge.
@@ -1241,6 +1248,7 @@ func _physics_process(delta: float) -> void:
 	if _label_accum >= LABEL_UPDATE_SEC:
 		_label_accum -= LABEL_UPDATE_SEC
 		_update_proximity_labels()
+		_update_swarm_roster()
 
 
 # Trackpad/stick locomotion: slide the XR rig through the graph. Either wand's
@@ -2046,6 +2054,45 @@ func _resolve_agent_arc() -> void:
 	_last_solve_pos = user_pos
 	_last_solve_forward = user_fwd
 	_last_solve_count = count
+
+
+# Swarm tab roster (ADR-140, Pillar 4 / P5). Built from the Rust agent registry
+# (#[func]s agent_ids/agent_status/agent_target_node/agent_task) and pushed to the
+# HUD at the ~4 Hz label cadence, but only when the roster actually changed (a cheap
+# signature diff avoids rebuilding the row UI every tick). Agent wire ids ARE node
+# ids, so each row's tap → "teleport:<id>" reuses the existing node-teleport glide.
+var _swarm_sig: String = ""
+
+
+func _update_swarm_roster() -> void:
+	if hud == null or not hud.has_method("set_swarm_roster"):
+		return
+	if _binary_client == null or not _binary_client.has_method("agent_ids"):
+		return
+	var ids: PackedInt32Array = _binary_client.agent_ids()
+	var rows: Array = []
+	var sig := PackedStringArray()
+	for id: int in ids:
+		var target_id: int = _binary_client.agent_target_node(id)
+		var target_label: String = ""
+		if target_id >= 0:
+			target_label = _binary_client.label_of(target_id)
+		var status: int = _binary_client.agent_status(id)
+		var task: String = _binary_client.agent_task(id)
+		rows.append({
+			"id": id,
+			"name": _binary_client.label_of(id),
+			"status": status,
+			"target": target_label,
+			"task": task,
+		})
+		# Name is in the signature so a late-arriving label refreshes its row.
+		sig.append("%d:%s:%d:%s:%s" % [id, _binary_client.label_of(id), status, target_label, task])
+	var joined := "|".join(sig)
+	if joined == _swarm_sig:
+		return
+	_swarm_sig = joined
+	hud.set_swarm_roster(rows)
 
 
 func _update_agents(delta: float) -> void:

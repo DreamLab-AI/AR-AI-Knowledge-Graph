@@ -27,6 +27,28 @@ impl Default for LayoutMode {
     }
 }
 
+/// Source keying the radial shells of the `dag_radial_bias` term (ADR-141 P3).
+/// The shell radius per node is `key * dag_level_distance`; only the CPU-side key
+/// source (and, for Ego, the shell centre) differs between modes. The GPU term is
+/// unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RadialMode {
+    /// Shell key = DAG hierarchy rank (existing behaviour); centre = origin.
+    DagRank,
+    /// Shell key = node-type tier (Agent inner → Knowledge → Ontology outer);
+    /// centre = origin.
+    TypeTier,
+    /// Shell key = BFS hop-distance from a focus node; centre = focus position.
+    Ego,
+}
+
+impl Default for RadialMode {
+    fn default() -> Self {
+        RadialMode::DagRank
+    }
+}
+
 impl LayoutMode {
     /// Stable discriminant uploaded to the GPU-aligned `SimParams.layout_mode`
     /// field (ADR-141 P1). The kernel branches on this to select per-mode force

@@ -108,9 +108,14 @@ tab loop (`hud.gd` `TAB_ORDER`/`_build_*_page`) are reusable as-is.
   golden-angle orbit fan-out; status→halo colour in `build_node_buffer`. Idle/done
   agents fall back to their **server layout target** (the graph-node layer's
   fallback; the proxemics arc belongs to the conversation layer per decision 5).
-- **P5 — Swarm tab.** `_build_swarm_page()` roster (status dot, name/role, target
-  label, task line); row tap → `teleport:agent:<id>` reusing the glide.
-- **P4 — Task line.** `current_task` in the proximity label / agent badge.
+- **P5 — Swarm tab (SHIPPED).** A data-driven `Swarm` HUD tab: `_build_swarm_page()`
+  + `set_swarm_roster()` render one row per live agent (status dot, name → target
+  label, task line) from the registry `#[func]`s; row tap → `teleport:<agent_id>`.
+  Agent wire ids ARE node ids, so the tap reuses the node-teleport glide unchanged;
+  GraphScene pushes the roster at ~4 Hz only when a signature diff shows a change.
+- **P4 — Task line (SHIPPED).** An agent node's `current_task` (from the `0x23`
+  intent) surfaces in the proximity-label Detail line, taking precedence over the
+  generic node detail so the swarm's work reads at a glance up close.
 - **Follow-up (server).** A real status/task producer: an `agent:state`
   `BroadcastMessage` text frame (built like `broker:new_case`) emitted from the
   agent-state producer, riding the existing `/wss` text path → GDScript calls the

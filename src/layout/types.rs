@@ -4,5 +4,5 @@
 //! `LayoutMode` enum (etc.) only recompile the domain crate plus the linker.
 
 pub use visionclaw_domain::types::layout::{
-    ConstraintZone, LayoutMode, LayoutModeConfig, LayoutStatus,
+    ConstraintZone, LayoutMode, LayoutModeConfig, LayoutStatus, RadialMode,
 };

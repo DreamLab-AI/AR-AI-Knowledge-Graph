@@ -765,3 +765,17 @@ pub struct EmitPhysicsEvent {
 pub struct SetLayoutMode {
     pub mode: crate::layout::types::LayoutMode,
 }
+
+/// Re-key the `dag_radial_bias` radial shells (ADR-141 P3). Selects the per-node
+/// shell KEY source (DAG rank / node-type tier / BFS ego-distance) and, for the
+/// Ego mode, centres the shells on `focus_node`'s live position. The key vec is
+/// uploaded via the existing `node_rank` buffer and the shell centre is set on the
+/// actor-authoritative `SimulationParams.radial_center`; the change is committed
+/// through the same `UpdateSimulationParams` path as `SetLayoutMode` so validation,
+/// resync and reheat behave identically. `focus_node` is required for `Ego`.
+#[derive(Message, Debug, Clone)]
+#[rtype(result = "Result<(), String>")]
+pub struct SetRadialLayout {
+    pub mode: crate::layout::types::RadialMode,
+    pub focus_node: Option<u32>,
+}

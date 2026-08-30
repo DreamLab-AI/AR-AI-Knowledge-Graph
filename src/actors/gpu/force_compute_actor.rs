@@ -286,6 +286,20 @@ pub struct ForceComputeActor {
     /// Indexed by GPU buffer index. Populated during graph upload from node_type field.
     node_population: Vec<GraphPopulation>,
 
+    /// ADR-141 P3: cached DAG hierarchy ranks (the `node_rank` key vec computed at
+    /// upload). Retained so `SetRadialLayout { DagRank }` can re-key on demand
+    /// without recomputing. `-1.0` = unranked. Empty until the first graph upload.
+    dag_ranks: Vec<f32>,
+
+    /// ADR-141 P3: undirected neighbour indices (GPU index → neighbour GPU indices)
+    /// for the RadialMode::Ego BFS hop-distance. Built from the same edge loop that
+    /// forms the CSR adjacency. Empty until the first graph upload.
+    graph_adjacency: Vec<Vec<u32>>,
+
+    /// ADR-141 P3: node-id → GPU index map, so `SetRadialLayout { Ego }` can resolve
+    /// a focus node id to its buffer index. Empty until the first graph upload.
+    radial_node_index: std::collections::HashMap<u32, usize>,
+
     /// Graph data waiting to be uploaded to GPU (set by InitializeGPU/UpdateGPUGraphData,
     /// consumed when shared_context becomes available)
     pending_graph_data: Option<Arc<visionclaw_domain::models::graph::GraphData>>,
@@ -400,6 +414,9 @@ impl ForceComputeActor {
             node_id_buffer: Vec::with_capacity(10000),
             gpu_index_to_node_id: Vec::new(),
             node_population: Vec::new(),
+            dag_ranks: Vec::new(),
+            graph_adjacency: Vec::new(),
+            radial_node_index: std::collections::HashMap::new(),
             pinned_nodes: std::collections::HashMap::new(),
             pinned_mask_dirty: false,
             pending_graph_data: None,
@@ -614,6 +631,34 @@ impl ForceComputeActor {
         }
 
         ranks
+    }
+
+    /// ADR-141 P3: BFS hop-distance from `focus` over the undirected `adjacency`
+    /// (GPU index → neighbour GPU indices). Used as the radial shell KEY for
+    /// RadialMode::Ego. The focus node gets distance `0.0`, each reachable node its
+    /// hop count, and unreachable nodes `-1.0` (no radial force, matching the
+    /// `dag_radial_bias` key < 0 convention). Pure/actor-free for unit testing.
+    fn compute_ego_distances(num_nodes: usize, adjacency: &[Vec<u32>], focus: usize) -> Vec<f32> {
+        let mut dist = vec![-1.0f32; num_nodes];
+        if focus >= num_nodes {
+            return dist;
+        }
+        let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+        dist[focus] = 0.0;
+        queue.push_back(focus);
+        while let Some(node) = queue.pop_front() {
+            let next = dist[node] + 1.0;
+            if let Some(neighbours) = adjacency.get(node) {
+                for &n in neighbours {
+                    let n = n as usize;
+                    if n < num_nodes && dist[n] < 0.0 {
+                        dist[n] = next;
+                        queue.push_back(n);
+                    }
+                }
+            }
+        }
+        dist
     }
 
     /// Rebuild and upload the GPU pinned mask from `pinned_nodes` when dirty.
@@ -963,6 +1008,10 @@ impl ForceComputeActor {
             pop_counts[0], pop_counts[1], pop_counts[2]
         );
 
+        // ADR-141 P3: retain node-id → GPU-index map for on-demand radial re-keying
+        // (SetRadialLayout resolves a focus node id to its buffer index via this).
+        self.radial_node_index = node_indices.clone();
+
         let mut positions_x: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.x).collect();
         let mut positions_y: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.y).collect();
         let mut positions_z: Vec<f32> = graph_data.nodes.iter().map(|n| n.data.z).collect();
@@ -979,6 +1028,13 @@ impl ForceComputeActor {
                 }
             }
         }
+
+        // ADR-141 P3: retain the undirected neighbour indices for the
+        // RadialMode::Ego BFS hop-distance (weightless projection of adjacency_lists).
+        self.graph_adjacency = adjacency_lists
+            .iter()
+            .map(|adj| adj.iter().map(|&(t, _w)| t).collect())
+            .collect();
 
         let mut row_offsets = vec![0u32; num_nodes + 1];
         let mut col_indices = Vec::new();
@@ -1196,6 +1252,9 @@ impl ForceComputeActor {
                         let ranks = Self::compute_dag_ranks(num_nodes, &hierarchy_edges);
                         let ranked = ranks.iter().filter(|&&r| r >= 0.0).count();
                         let max_rank = ranks.iter().cloned().fold(-1.0f32, f32::max);
+                        // ADR-141 P3: cache ranks so SetRadialLayout { DagRank } can
+                        // re-key on demand without recomputing.
+                        self.dag_ranks = ranks.clone();
                         match compute.upload_node_rank(&ranks) {
                             Ok(()) => info!(
                                 "ForceComputeActor: Uploaded DAG ranks — {} hierarchy edges, {} ranked nodes, max rank {}",
@@ -1204,6 +1263,9 @@ impl ForceComputeActor {
                             Err(e) => warn!("ForceComputeActor: DAG rank upload failed: {}", e),
                         }
                     } else {
+                        // No hierarchy → all-unranked cache so a later DagRank re-key
+                        // is inert rather than reading a stale prior-graph vec.
+                        self.dag_ranks = vec![-1.0; num_nodes];
                         debug!("ForceComputeActor: No hierarchy edges — DAG ranks left at -1 (bias inert)");
                     }
                 }

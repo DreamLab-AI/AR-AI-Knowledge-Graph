@@ -97,9 +97,17 @@ struct SimParams {
     // existing repr(C) prefix layout.
     float plane_bias_k;         // Plane-bias spring strength; 0 = off
     float plane_spacing;        // World-space Z distance per plane offset unit
+
+    // Radial shell centre (ADR-141 P3). The dag_radial_bias term springs each node
+    // onto its shell around this point instead of the hard-coded world origin.
+    // (0,0,0) = origin = legacy DAG behaviour. Added at the end to preserve the
+    // existing repr(C) prefix layout.
+    float radial_center_x;
+    float radial_center_y;
+    float radial_center_z;
 };
 
-static_assert(sizeof(SimParams) == 192, "SimParams size mismatch with Rust");
+static_assert(sizeof(SimParams) == 204, "SimParams size mismatch with Rust");
 
 // Global constant memory for simulation parameters
 __constant__ SimParams c_params;
@@ -181,14 +189,17 @@ __device__ inline float3 vec3_clamp(float3 v, float limit) {
     return v;
 }
 
-// DAG radial hierarchy bias (radialout). Returns the force pulling `my_pos`
-// toward the shell of radius `rank * dag_level_distance` centred on the world
-// origin (the hierarchy-root centroid approximation — center gravity already
-// gathers rank-0 roots near the origin). A node with rank < 0 (not in the
-// hierarchy / unreachable) or a disabled bias (dag_bias_k <= 0) gets zero force.
-// The term is a Hooke spring on the radial error, so ranked nodes settle onto
-// concentric shells (root at centre, deeper ranks further out) without
-// disturbing their angular placement, which the other forces still own.
+// Radial shell bias (radialout). Returns the force pulling `my_pos` toward the
+// shell of radius `node_rank[idx] * dag_level_distance` centred on the settable
+// point `radial_center` (ADR-141 P3). The centre defaults to the world origin
+// (0,0,0), which reproduces the legacy DAG-rank behaviour where center gravity
+// gathers rank-0 roots near the origin. The per-node shell KEY lives in the
+// existing `node_rank` buffer and is re-filled CPU-side per RadialMode (DAG rank,
+// node-type tier, or BFS ego-distance). A node with key < 0 (unassigned /
+// unreachable) or a disabled bias (dag_bias_k <= 0) gets zero force. The term is
+// a Hooke spring on the radial error, so keyed nodes settle onto concentric
+// shells (key 0 at the centre, larger keys further out) without disturbing their
+// angular placement, which the other forces still own.
 __device__ inline float3 dag_radial_bias(float3 my_pos,
                                          const float* __restrict__ node_rank,
                                          int idx) {
@@ -199,14 +210,18 @@ __device__ inline float3 dag_radial_bias(float3 my_pos,
     if (rank < 0.0f) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
+    const float3 center = make_float3(c_params.radial_center_x,
+                                      c_params.radial_center_y,
+                                      c_params.radial_center_z);
+    const float3 delta = vec3_sub(my_pos, center);
     const float target_radius = rank * c_params.dag_level_distance;
-    const float dist = vec3_length(my_pos);
+    const float dist = vec3_length(delta);
     if (dist > 1e-6f) {
         // Radial error > 0 ⇒ push outward; < 0 ⇒ pull inward. Direction is the
-        // unit vector from the root centroid (origin) to the node.
+        // unit vector from the shell centre to the node.
         const float radial_err = target_radius - dist;
         const float scale = radial_err * c_params.dag_bias_k / dist;
-        return vec3_scale(my_pos, scale);
+        return vec3_scale(delta, scale);
     }
     // Node sits on the root centroid but should live on an outer shell: nudge it
     // off the origin along a deterministic axis so the radial spring can engage.
