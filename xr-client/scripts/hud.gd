@@ -249,6 +249,7 @@ func _build_tab_bar() -> void:
 	bar.add_theme_constant_override("separation", 8)
 	for id: String in TAB_ORDER:
 		var b := Button.new()
+		b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS # see _action_btn
 		b.text = TAB_LABELS[id]
 		b.custom_minimum_size = Vector2(0, TABBAR_H)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -630,6 +631,10 @@ func _action_btn(text: String, action: String, hint: String) -> Button:
 	b.custom_minimum_size = Vector2(0, BTN_H)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.set_meta(HINT_META, hint)
+	# Fire on PRESS, not release: pulling the Vive trigger jolts the ray 20-30px,
+	# so a release-mode button often sees the release land outside itself and
+	# silently cancels the click (observed live 2026-08-31).
+	b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	b.pressed.connect(func() -> void: emit_signal("control_pressed", action))
 	return b
 
@@ -639,6 +644,7 @@ func _action_btn(text: String, action: String, hint: String) -> Button:
 # emits control_pressed "type_toggle:<key>:<1|0>" so GraphScene drives the store.
 func _type_toggle_btn(label: String, key: String) -> Button:
 	var b := Button.new()
+	b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS # see _action_btn
 	b.custom_minimum_size = Vector2(0, BTN_H)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.set_meta(HINT_META, "Show / hide all %s nodes" % label.to_lower())
