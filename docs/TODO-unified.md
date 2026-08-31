@@ -19,6 +19,33 @@ The six unblock states:
 
 ---
 
+## ⭐ Open now — the whole remaining list (at a glance)
+
+Everything in §1–§8 is **done** except the four rows flagged below; §9–§12 are the
+live work. This board is the complete set of what's open — jump to the cited
+section for detail. (Paused here 2026-08-31 by operator request.)
+
+**ADR governance — §9 (decision written, code owed):**
+- **Quick win:** `G-6` `did:nostr:local` fail-open abort (S).
+- **Proposed records to build:** `G-1` dev-auth build guard · `G-2` boot-profile assertion · `G-3` federation CI fixture · `G-4` mirror-egress boundary · `G-5` secret custody + key split.
+- **Larger / parked:** `G-7` provenance durability (L) · `G-8` replay-cache DoS · `G-9` Loom `:8084` audit · `G-10` LAN-door threat model *(posture)* · `G-11` session-bearer sunset *(posture)* · `G-12` AoE token rebuild *(the one live HIGH)* · `G-13` PTX hardening · `G-14` supersession graph + ID namespacing · `G-15` status-axis lattice *(posture)*.
+
+**Operator tocks — live-session §3:** `L-1` envelope canary fires · `L-2` diversity canary (needs 2nd model family) · `L-3` ADR-117 clamp · `L-4` ADR-119 telemetry · `L-5`/`X-6` on-headset XR · `L-6` mobile bridge.
+
+**Posture decisions — §4:** `T-1` relay expose + mobile bridge · `T-4` held surfaces (git pods, payments, Solid OIDC, pod MCP, kernel pip) · `T-5` remote `crashbug` delete · `T-6` agentbox image rebuild window.
+
+**Data-floor — §5:** `D-1` flip `feed_routing` after the observation window.
+
+**External — §6:** `E-1` ComfyUI service · `E-4` Nagual QE (upstream sqlx 0.9).
+
+**Doc-accuracy — §12:** `DOC-1` rest-api phantom endpoints · `DOC-2` CUDA kernel-count truth · `DOC-3` `installation.md` refresh.
+
+**Near-closed (one operator confirm):** `C-11` branch pool (9 left) · `C-13` logseq narrativegoldmine (ADR-NG-002 P2 + minor).
+
+**Frozen — §7 (do not reopen without a new ADR):** listed for completeness; not open work.
+
+---
+
 ## 0. Consolidated sources (this is the single index — 2026-08-31)
 
 Every backlog across the two repos now funnels here. Disposition of each source found in the 2026-08-31 sweep:
@@ -58,7 +85,7 @@ Every backlog across the two repos now funnels here. Disposition of each source 
 | C-8 | ~~Env consolidation execution~~ **DONE 2026-07-22 (Tick 1)** | agentbox | .env.example now 107 keys per the plan; wizard knows CERAMIC_API_KEY; retired templates carry deprecation pointers; plan stamped EXECUTED. |
 | C-9 | ~~GPU-1/GPU-2 nix library-path fix~~ **DONE 2026-08-31 (verified live in T-6 round-2 rebuild)** | agentbox | Wrappers baked (057304da5): `ffmpeg`/`blender`/`qgis`/colmap/lichtfeld resolve to `-gpuwrapped` store paths; live `h264_nvenc` encode succeeded in the rebuilt container; nvidia-smi sees all 3 GPUs (A6000 + 2× RTX 6000 Ada); full graphics stack now injected (`/etc/vulkan/icd.d/nvidia_icd.json`, libGLX/EGL — the `NVIDIA_VISIBLE_DEVICES=void` env var is a cosmetic leftover, allocation is real). **Accepted limitation:** Vulkan `vkCreateInstance` → `VK_ERROR_INCOMPATIBLE_DRIVER` (-9) — nixpkgs-glibc vs host-driver (610.57) userland mismatch (nixGL-class problem); CUDA unaffected because libcuda's deliberately minimal deps are why the LD_LIBRARY_PATH suffix wrapper suffices. Disposition: graphics/Vulkan workloads run in Debian-userland sidecars (`browsercontainer`, `xr-runtime`); Blender uses CUDA/OptiX for Cycles, so nothing is lost in-agentbox. Revisit only on a concrete in-agentbox Vulkan need (nixGL wrapper pinned to host driver version). |
 | C-10 | ~~Minor follow-ups~~ **DONE 2026-07-22 (Tick 1)** | agentbox | XINFERENCE_ENDPOINT host-side fallback; browser.md renamed with stub; backlog Done section updated. |
-| C-11 | Branch graveyard triage — **partial: 123 branches triaged 2026-08-31; 4 disposed, 3 kept, 116 operator-gated** | VisionClaw | Triage of all 123 non-`main` local branches (evidence: `docs/gap-close-evidence/branch-triage-2026-08-31.md`). Outcome — (a) MERGED deleted: 1 (`xr-vive-runtime`); (b) SUPERSEDED archive-tagged+deleted: 3 (`archive/deprecated-docs`, `worktree-agent-a7c66ae9b4265894b`, `new-docs`→already-archived); (c) VALUABLE kept, need owner decision: 3 (`refactor/kg-node-rename` 63-commit KGNode refactor, `report/soundings-qe-audit`, `impl/khive-investigation`); (d) **116 branches are a locked `/batch` worktree pool** (antigravity/codex/deepseek/gemma/loom-raw/ollama lanes) — fully merged but checked-out+locked, so `branch -d` refuses them. **Operator-gated (T-5):** confirm pool idle, then bulk `git worktree remove --force` + branch delete. Tags/deletes local only, not pushed. |
+| C-11 | Branch graveyard triage — **near-closed: pool cleaned, 9 local branches remain (was 123/116-gated)** | VisionClaw | The 116-branch locked `/batch` worktree pool (antigravity/codex/deepseek/gemma/loom-raw/ollama lanes) has been cleared — `git branch` now shows **9** (verified 2026-08-31). Triage evidence: `docs/gap-close-evidence/branch-triage-2026-08-31.md`. Remaining: the 3 VALUABLE-kept branches still need an owner keep/merge/drop decision (`refactor/kg-node-rename` 63-commit KGNode refactor, `report/soundings-qe-audit`, `impl/khive-investigation`). Closes on that confirmation. |
 | C-12 | ~~CI clippy debt — main is red~~ **DONE (verified 2026-08-15)** | VisionClaw | Cleared by intervening pushes since the 2026-07-23 observation: blocking jobs green on the last three main CI runs (receipts: runs 31877215531 @ af21095d1, 31877367976 @ d03c2519d, both success 2026-08-15). A worktree sweep found nothing left to fix. |
 | C-13 | narrativegoldmine follow-ups (logseq repo) — **partial: ADR-NG-002 P1 IRI-integrity gate landed 2026-08-15** (logseq b23061587: baseline-aware gate live in publish workflow, 30 slug-divergences repaired at source, 3,998 missing-concept IRIs baselined as authoring backlog; V-1's dangling-parent case is now caught by the same ratchet; ADR-NG-002 P2 Loom reload trigger still open) | logseq | From PRD-NG-001 closeout 2026-07-23: edge-label off/hover/on feature (needs NGG1 v2 per-edge predicate strings + renderer — control removed as dead until then); TRAVERSE neighbourhood query-builder (M, same format bump); DQ report page precomputed by pipeline (S–M); "equivalent SPARQL" tab (S–M); V-1 21 dangling parent slugs (emit validator + alias resolution); V-2 6 duplicate labels (corpus); V-3 ARCHITECTURE.md key-numbers refresh (restrictions 2.4k→38.6k). External validation receipt: `logseq/docs/validation/external-validation-rdf-studio-2026-07-23.md`. |
 
@@ -179,6 +206,16 @@ future ADR revision, not a code tick. Listed so the register is the complete ind
 
 - **agentbox code-execution** (`agentbox/docs/developer/code-as-harness.md` §Open Questions): kernel scope per-session vs per-worktree, pip-install policy, kernel GPU access, cross-session state persistence, lesson-quality threshold, Voyager discovery surface — all deferred to ADR-018/019 revisions.
 - **DDD contributor enablement** (`docs/explanation/ddd-contributor-enablement-context.md` §Open Questions): cross-device workspace identity, suggestion-acceptance graph mutation timing, skill-version retirement propagation, inbox PII/GDPR retention (ADR-041 append-only vs ADR-052 contributor-owned), multi-partner lineage roots.
+
+## 12. Doc-accuracy residue (`code-gap` — small)
+
+Survived the §10 review; concrete doc-vs-code drift, low priority, no decision owed.
+
+| # | Entry | Repo | Detail |
+|---|---|---|---|
+| DOC-1 | rest-api.md phantom endpoints | VisionClaw | `docs/reference/rest-api.md` still documents ~30 broker/workflow REST endpoints that don't exist (34 broker/workflow mentions as of 2026-08-31). Decide: delete the tables or implement. |
+| DOC-2 | CUDA kernel-count truth | VisionClaw | Docs variously claim 37/39/92 kernels; `crates/visionclaw-gpu/src/cuda_sources/*.cu` hold **83** `__global__` decls. Bless one counting method and align the claims. |
+| DOC-3 | installation.md stale narrative | VisionClaw | `docs/tutorials/installation.md` carries a stale `docker ps` narrative (not re-verified this pass). Refresh against the current compose. |
 
 ---
 
