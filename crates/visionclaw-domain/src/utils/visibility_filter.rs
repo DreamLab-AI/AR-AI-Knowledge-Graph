@@ -2,7 +2,8 @@
 //!
 //! Pure, framework-free implementation of the binary-position-encoder
 //! visibility filter. The handler layer (`socket_flow_handler::position_updates`)
-//! owns the env-flag gate (`PUBKEY_VISIBILITY_FILTER`, default OFF) and the wire
+//! owns the env-flag gate (`PUBKEY_VISIBILITY_FILTER`, default ON — secure by
+//! default; opt out with 0/false/off/no) and the wire
 //! encoding; this module owns the load-bearing set logic so it is unit-testable
 //! without linking the CUDA-bearing monolith.
 //!
@@ -154,7 +155,11 @@ mod tests {
         let dropped = apply_drop_set(&mut nodes, &drop);
         assert_eq!(dropped, 2);
         let kept: Vec<u32> = nodes.iter().map(|(id, _)| *id).collect();
-        assert_eq!(kept, vec![10, 11], "non-owner private nodes must be dropped");
+        assert_eq!(
+            kept,
+            vec![10, 11],
+            "non-owner private nodes must be dropped"
+        );
     }
 
     #[test]

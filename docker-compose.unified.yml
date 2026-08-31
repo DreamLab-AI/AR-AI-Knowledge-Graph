@@ -78,6 +78,12 @@ services:
       RBAC_PUBLIC_READS: "${RBAC_PUBLIC_READS:-1}"
       RBAC_ALLOW_OWNERLESS: "${RBAC_ALLOW_OWNERLESS:-1}"
       RBAC_OWNER_PUBKEY: "${RBAC_OWNER_PUBKEY:-}"
+      # ADR-060 pubkey-visibility drop-set filter. Default ON (secure by
+      # default): private nodes not owned by the session pubkey are dropped from
+      # the wire frame for anonymous/unauthorised sessions. Public nodes are
+      # unaffected, so this is behaviour-neutral for all-public deployments.
+      # Opt out with 0/false/off/no.
+      PUBKEY_VISIBILITY_FILTER: "${PUBKEY_VISIBILITY_FILTER:-1}"
       # Solid pod storage (embedded solid-pod-rs)
       SOLID_DATA_ROOT: ${SOLID_DATA_ROOT:-/data/solid}
       # Nostr bead provenance bridge — scoped to visionclaw only (privkey must not leak to other containers)

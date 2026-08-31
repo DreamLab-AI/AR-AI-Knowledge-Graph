@@ -1159,7 +1159,9 @@ func deny_selected_case() -> void:
 
 
 # POST the decision to the shared broker decide core (power-user-gated). Signing
-# is Rust-side (single-use NIP-98). The intent is emitted immediately so the loop
+# is Rust-side: each NIP-98 token is single-use, enforced by a server-side replay
+# cache that rejects any event id presented twice within its validity window (on
+# top of the ±60s freshness gate). The intent is emitted immediately so the loop
 # is observable even before the round-trip resolves.
 func _submit_decision(outcome: String) -> void:
 	if _current_case_id.is_empty():

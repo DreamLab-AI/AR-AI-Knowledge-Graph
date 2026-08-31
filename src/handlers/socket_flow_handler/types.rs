@@ -329,14 +329,8 @@ impl SocketFlowServer {
         // load too. `caller_pubkey == None` (anon, e.g. the Godot client) with the
         // filter enabled fails closed to public-only nodes.
         let caller_pubkey = self.pubkey.clone();
-        let visibility_filter_on = std::env::var("PUBKEY_VISIBILITY_FILTER")
-            .map(|v| {
-                matches!(
-                    v.trim().to_ascii_lowercase().as_str(),
-                    "1" | "true" | "yes" | "on"
-                )
-            })
-            .unwrap_or(false);
+        // Shared parse-once helper: default ON, explicit falsy tokens opt out.
+        let visibility_filter_on = super::position_updates::pubkey_visibility_filter_enabled();
 
         // codex round-2 HIGH: initiating a sync bumps the generation, invalidating
         // any older in-flight sync. This task captures `my_generation`; if the

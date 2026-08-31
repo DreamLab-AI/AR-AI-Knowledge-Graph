@@ -1,6 +1,7 @@
 use actix::prelude::*;
 use actix_web_actors::ws;
 use log::{debug, info, trace, warn};
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use crate::utils::binary_protocol;
@@ -15,26 +16,47 @@ pub(crate) use visionclaw_domain::utils::visibility_filter::{
 
 /// Env flag gating the ADR-060 pubkey-visibility drop-set filter.
 ///
-/// Default OFF: when unset (or set to anything other than a recognised truthy
-/// token) the position encoder ships every node exactly as before, with ADR-050
-/// bit-29 opacification the only privacy layer. When enabled, nodes that are
-/// private and not owned by the session pubkey are dropped from the wire frame
-/// entirely (ADR-059 §Phase-4). Fail-closed: anonymous + flag on ⇒ public-only.
-const PUBKEY_VISIBILITY_FILTER_ENV: &str = "PUBKEY_VISIBILITY_FILTER";
+/// Default ON: when unset (absent env) the filter is active, so private nodes
+/// not owned by the session pubkey are dropped from the wire frame entirely
+/// (ADR-059 §Phase-4) on top of the ADR-050 bit-29 opacification layer.
+/// Fail-closed: anonymous + default ⇒ public-only. The posture is
+/// operator-overridable via an explicit opt-out ("0"/"false"/"off"/"no").
+/// Note: public nodes are unaffected by the filter, so default-on is
+/// behaviour-neutral for all-public deployments.
+pub(crate) const PUBKEY_VISIBILITY_FILTER_ENV: &str = "PUBKEY_VISIBILITY_FILTER";
+
+/// Pure truth table for the visibility flag, independent of the environment.
+///
+/// Secure by default: returns `true` (filter ON) for an absent value and for any
+/// unrecognised token; only an explicit falsy token ("0"/"false"/"off"/"no",
+/// case-insensitive, surrounding whitespace ignored) turns the filter OFF. Kept
+/// pure so it is exhaustively unit-testable without touching process env.
+pub(crate) fn parse_visibility_flag(raw: Option<&str>) -> bool {
+    match raw {
+        Some(v) => !matches!(
+            v.trim().to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
+        None => true,
+    }
+}
+
+/// Cached result of the first env read (genuine parse-once).
+static VISIBILITY_FILTER_ENABLED: OnceLock<bool> = OnceLock::new();
 
 /// Whether the ADR-060 drop-set filter is enabled for this process.
 ///
-/// Matches the file's other env-flag idioms (parse-once, default to the safe
-/// pre-existing behaviour on any unexpected value).
-fn pubkey_visibility_filter_enabled() -> bool {
-    std::env::var(PUBKEY_VISIBILITY_FILTER_ENV)
-        .map(|v| {
-            matches!(
-                v.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        })
-        .unwrap_or(false)
+/// Shared by every site that gates on the filter (here and [`super::types`]).
+/// The `PUBKEY_VISIBILITY_FILTER` env var is read **once** on first call and the
+/// result cached for the process lifetime via [`VISIBILITY_FILTER_ENABLED`];
+/// runtime env mutations after that first read are intentionally ignored (the
+/// posture is fixed on first use — the `OnceLock` captures the environment at
+/// the first call, which may be later than process start). Truth table lives in
+/// [`parse_visibility_flag`].
+pub(crate) fn pubkey_visibility_filter_enabled() -> bool {
+    *VISIBILITY_FILTER_ENABLED.get_or_init(|| {
+        parse_visibility_flag(std::env::var(PUBKEY_VISIBILITY_FILTER_ENV).ok().as_deref())
+    })
 }
 
 /// Project a graph node's ADR-050 visibility primitives onto its flagged wire id.
@@ -1550,5 +1572,37 @@ fn check_drag_timeout(
                 check_drag_timeout(act, node_id, ctx);
             },
         );
+    }
+}
+
+#[cfg(test)]
+mod visibility_flag_tests {
+    use super::parse_visibility_flag;
+
+    /// Exhaustively exercise the secure-by-default truth table. Pure: no process
+    /// env is touched, so this is race-free and can run in parallel with anything.
+    #[test]
+    fn parse_visibility_flag_defaults_on_and_honours_opt_out() {
+        // Absent value ⇒ filter ON (secure by default).
+        assert!(
+            parse_visibility_flag(None),
+            "absent value must default the filter ON"
+        );
+
+        // Explicit truthy / unrecognised tokens keep it ON (fail-safe).
+        for on in ["1", "true", "on", "yes", "TRUE", "  1  ", "banana", ""] {
+            assert!(
+                parse_visibility_flag(Some(on)),
+                "{on:?} must leave the filter ON"
+            );
+        }
+
+        // Explicit falsy tokens are the only way to opt out.
+        for off in ["0", "false", "off", "no", "FALSE", "  off  ", "No"] {
+            assert!(
+                !parse_visibility_flag(Some(off)),
+                "{off:?} must turn the filter OFF"
+            );
+        }
     }
 }

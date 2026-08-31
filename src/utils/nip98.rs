@@ -11,6 +11,9 @@ use log::debug;
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 /// NIP-98 HTTP Auth event kind (references RFC 7235)
@@ -151,9 +154,127 @@ pub fn extract_pubkey_from_token(token: &str) -> Option<String> {
 }
 
 /// Maximum age for NIP-98 tokens (60 seconds).
-/// Tight window prevents replay attacks. Clients with clock skew beyond
-/// this threshold will receive 401s and must re-authenticate.
+///
+/// Replay resistance is a two-layer scheme, not the window alone:
+///  1. **Freshness window** — the token's `created_at` must fall within
+///     ±`TOKEN_MAX_AGE_SECONDS` of the server clock (see the symmetric check in
+///     [`validate_nip98_token`]). This bounds how long a captured token is worth
+///     replaying at all. Clients with clock skew beyond this threshold receive
+///     401s and must re-authenticate.
+///  2. **Single-use cache** — after full validation succeeds, the event id is
+///     atomically recorded in a process-wide cache (see [`REPLAY_CACHE`]); a
+///     second presentation of the same id within its validity window is rejected
+///     with [`Nip98ValidationError::TokenReplayed`]. Layer 1 alone cannot stop a
+///     replay inside the 60s window — this layer closes that gap.
 const TOKEN_MAX_AGE_SECONDS: i64 = 60;
+
+/// Time-to-live for a spent event id in the replay cache.
+///
+/// Set to `2 × TOKEN_MAX_AGE_SECONDS` so an entry outlives the entire window in
+/// which its token could still pass the freshness check (a token created at
+/// `now + TOKEN_MAX_AGE_SECONDS` remains valid until `now + 2×`). Once an id is
+/// older than this it can no longer be replayed successfully anyway (the
+/// freshness check would reject it), so the entry is safe to prune.
+const REPLAY_CACHE_TTL: Duration = Duration::from_secs(2 * TOKEN_MAX_AGE_SECONDS as u64);
+
+/// Soft cap on cache size that triggers an opportunistic prune on insert.
+/// The map is small in practice (bounded by request rate × TTL), so an O(n)
+/// sweep is cheap; this only guards against pathological growth.
+const REPLAY_CACHE_PRUNE_THRESHOLD: usize = 4096;
+
+/// Hard capacity ceiling. Even after pruning every expired entry, if the live
+/// set still sits at this many ids we refuse to record more and fail the claim
+/// with [`Nip98ValidationError::ReplayCacheFull`].
+///
+/// Rationale (fail-closed under flood): an attacker who can mint cheap, valid
+/// signatures would otherwise grow the map at `request-rate × TTL` unbounded.
+/// Rejecting new auth when full is safe — today every `Nip98ValidationError`
+/// surfaces through the callers' generic auth-failure path (401); the distinct
+/// variant exists so a future caller can map capacity exhaustion to 503
+/// without disturbing the replay semantics. We must **not** evict the oldest
+/// live entry to make room: that would let a flooder purge a genuine,
+/// still-valid id from the cache and re-enable the very replay this layer
+/// exists to prevent. Bounded memory beats availability here.
+const REPLAY_CACHE_MAX_ENTRIES: usize = 100_000;
+
+/// Process-wide single-use cache mapping a spent NIP-98 event id to the
+/// **monotonic** [`Instant`] at which it was first accepted. Guarded by a
+/// `Mutex` so the check-and-insert in [`validate_nip98_token`] is atomic (no
+/// TOCTOU).
+///
+/// `Instant` (not wall-clock) is deliberate: a backward system-clock step must
+/// never extend an entry's lifetime or stall pruning. Wall-clock Unix time is
+/// used only for the event-freshness window, which legitimately tracks the
+/// signer's declared `created_at`.
+///
+/// **Single-process deployment invariant:** this cache is process-local by
+/// design. Replay protection does **not** span replicas — horizontal scaling
+/// requires shared storage (e.g. Redis) or sticky routing so every presentation
+/// of a given token lands on the same process. See
+/// `docs/next/SECURITY-profiles.md` invariant 4.
+static REPLAY_CACHE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+
+fn replay_cache() -> &'static Mutex<HashMap<String, Instant>> {
+    REPLAY_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Atomically claim an event id as spent.
+///
+/// Returns:
+///  - `Ok(())` if the id had not been seen (or its prior entry has expired) and
+///    is now recorded;
+///  - `Err(TokenReplayed)` if a still-live entry already exists;
+///  - `Err(ReplayCacheFull)` if the cache is at its hard capacity even after
+///    pruning expired entries.
+///
+/// The whole check-prune-cap-insert sequence runs under the cache lock, so two
+/// concurrent validations of the same token cannot both win. `now` is a
+/// monotonic reference instant (injected for testability); production passes
+/// `Instant::now()`.
+fn claim_event_id(event_id: &str, now: Instant) -> Result<(), Nip98ValidationError> {
+    let mut cache = replay_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    claim_in(&mut cache, event_id, now, REPLAY_CACHE_MAX_ENTRIES)
+}
+
+/// Lock-free inner claim logic operating on an explicit map and capacity so the
+/// cap boundary is unit-testable without flooding the process-global cache.
+/// Callers must hold whatever lock guards `cache` for the whole call.
+fn claim_in(
+    cache: &mut HashMap<String, Instant>,
+    event_id: &str,
+    now: Instant,
+    max_entries: usize,
+) -> Result<(), Nip98ValidationError> {
+    // A prior entry only counts as a replay while it is still within its TTL.
+    // An expired entry is treated as absent and overwritten below.
+    // `saturating_duration_since` clamps to zero if `now` precedes `seen_at`
+    // (belt-and-braces; monotonic instants should never go backwards).
+    if let Some(&seen_at) = cache.get(event_id) {
+        if now.saturating_duration_since(seen_at) < REPLAY_CACHE_TTL {
+            return Err(Nip98ValidationError::TokenReplayed);
+        }
+    }
+
+    // Opportunistic O(n) prune of expired entries once the map grows large.
+    // Clamped to the capacity so the cap check below never fires while expired
+    // entries could have been reclaimed (matters when `max_entries` is small,
+    // e.g. under test; in production the threshold is well below the cap).
+    if cache.len() >= REPLAY_CACHE_PRUNE_THRESHOLD.min(max_entries) {
+        cache.retain(|_, &mut seen_at| now.saturating_duration_since(seen_at) < REPLAY_CACHE_TTL);
+    }
+
+    // Hard capacity guard, checked AFTER pruning expired entries so a transient
+    // burst that has since aged out does not wedge the cache. If we are still at
+    // the ceiling every remaining entry is live — fail closed rather than evict.
+    if cache.len() >= max_entries {
+        return Err(Nip98ValidationError::ReplayCacheFull);
+    }
+
+    cache.insert(event_id.to_string(), now);
+    Ok(())
+}
 
 /// Result of NIP-98 token validation
 #[derive(Debug, Clone)]
@@ -192,6 +313,10 @@ pub enum Nip98ValidationError {
     InvalidSignature,
     #[error("Failed to verify event: {0}")]
     VerificationFailed(String),
+    #[error("Token replayed: this NIP-98 event id has already been used")]
+    TokenReplayed,
+    #[error("Replay cache at capacity: refusing new authentication (retry shortly)")]
+    ReplayCacheFull,
 }
 
 /// Validate a NIP-98 token from an Authorization header
@@ -300,6 +425,14 @@ pub fn validate_nip98_token(
     nostr_event
         .verify()
         .map_err(|_| Nip98ValidationError::InvalidSignature)?;
+
+    // Single-use enforcement (layer 2 of replay resistance). Only claim the id
+    // once every other check has passed, so a malformed/forged token can never
+    // burn a legitimate id. The claim keys on a monotonic `Instant` (not the
+    // wall-clock `now` used for the freshness window) so a backward clock step
+    // cannot extend entry lifetimes. This check-and-insert is atomic under the
+    // cache lock, closing the replay gap the ±60s window leaves open.
+    claim_event_id(&nip98_event.id, Instant::now())?;
 
     debug!(
         "Validated NIP-98 token for {} {} (pubkey: {}...)",
@@ -435,6 +568,7 @@ fn urls_match(expected: &str, actual: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn test_generate_nip98_token() {
@@ -719,5 +853,276 @@ mod tests {
         let result = validate_nip98_token(&token, url, method, None);
 
         assert!(result.is_ok(), "validation failed: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_replay_same_token_rejected() {
+        // A fully-valid token must succeed exactly once. Presenting the identical
+        // event a second time within its validity window is a replay and must be
+        // rejected by the single-use cache, even though every other check (fresh
+        // timestamp, matching URL/method, valid signature) still passes.
+        let keys = Keys::generate();
+        let url = "http://localhost:3030/pods/replay/";
+        let method = "GET";
+        let config = Nip98Config {
+            url: url.to_string(),
+            method: method.to_string(),
+            body: None,
+        };
+
+        let token = generate_nip98_token(&keys, &config).expect("failed to generate token");
+
+        let first = validate_nip98_token(&token, url, method, None);
+        assert!(first.is_ok(), "first use should succeed: {:?}", first.err());
+
+        let second = validate_nip98_token(&token, url, method, None);
+        assert!(
+            matches!(second, Err(Nip98ValidationError::TokenReplayed)),
+            "second use must be rejected as replay, got {second:?}"
+        );
+    }
+
+    #[test]
+    fn test_claim_event_id_distinct_ids_unaffected() {
+        // Distinct event ids never collide: claiming one must not block another.
+        let now = Instant::now();
+        let id_a = "distinct-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let id_b = "distinct-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+        assert!(claim_event_id(id_a, now).is_ok(), "first id should be free");
+        assert!(
+            claim_event_id(id_b, now).is_ok(),
+            "a different id must be unaffected by the first"
+        );
+        // Re-claiming the first within its TTL is still a replay.
+        assert!(matches!(
+            claim_event_id(id_a, now + Duration::from_secs(1)),
+            Err(Nip98ValidationError::TokenReplayed)
+        ));
+    }
+
+    #[test]
+    fn test_claim_event_id_expires_after_window() {
+        // An entry older than the cache TTL is treated as absent: the id becomes
+        // claimable again. (In practice the freshness window would already reject
+        // such a stale token, but the cache must not leak entries forever.)
+        // Uses monotonic `Instant` offsets — a backward wall-clock step cannot
+        // perturb this.
+        let now = Instant::now();
+        let id = "expiring-cccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+        assert!(claim_event_id(id, now).is_ok(), "initial claim should succeed");
+
+        // Within the TTL → still a replay.
+        assert!(matches!(
+            claim_event_id(id, now + REPLAY_CACHE_TTL - Duration::from_secs(1)),
+            Err(Nip98ValidationError::TokenReplayed)
+        ));
+
+        // At/after the TTL boundary → the old entry has expired, so it is
+        // accepted again (and re-recorded at the new timestamp).
+        assert!(
+            claim_event_id(id, now + REPLAY_CACHE_TTL).is_ok(),
+            "expired entry must be reclaimable"
+        );
+    }
+
+    #[test]
+    fn test_claim_in_cap_boundary_fails_closed() {
+        // Pin the hard-cap semantics on an ISOLATED map (not the process-global
+        // cache) so this test neither floods other tests nor needs 100k inserts.
+        let now = Instant::now();
+        let mut cache: HashMap<String, Instant> = HashMap::new();
+        let cap = 2;
+
+        assert!(claim_in(&mut cache, "cap-id-1", now, cap).is_ok());
+        assert!(claim_in(&mut cache, "cap-id-2", now, cap).is_ok());
+
+        // At capacity with only LIVE entries: a fresh id must be rejected
+        // (fail closed), never admitted by evicting a live entry.
+        assert!(matches!(
+            claim_in(&mut cache, "cap-id-3", now, cap),
+            Err(Nip98ValidationError::ReplayCacheFull)
+        ));
+        assert_eq!(cache.len(), cap, "rejected claim must not grow the map");
+        assert!(
+            cache.contains_key("cap-id-1") && cache.contains_key("cap-id-2"),
+            "live entries must never be evicted to admit a new claim"
+        );
+
+        // A replay of an already-cached id still reports TokenReplayed (the
+        // replay check precedes the capacity check).
+        assert!(matches!(
+            claim_in(&mut cache, "cap-id-1", now + Duration::from_secs(1), cap),
+            Err(Nip98ValidationError::TokenReplayed)
+        ));
+
+        // Once the resident entries expire, pruning frees capacity and new
+        // claims are admitted again.
+        let after_ttl = now + REPLAY_CACHE_TTL;
+        assert!(
+            claim_in(&mut cache, "cap-id-3", after_ttl, cap).is_ok(),
+            "expired entries must free capacity for new claims"
+        );
+    }
+
+    #[test]
+    fn test_claim_event_id_atomic_under_concurrency() {
+        // Race N threads claiming the SAME id through a barrier so they collide
+        // as tightly as the scheduler allows. Exactly one must win; the rest must
+        // see TokenReplayed. Proves the check-and-insert is atomic (no TOCTOU).
+        use std::sync::{Arc, Barrier};
+
+        const THREADS: usize = 16;
+        let id = "concurrent-dddddddddddddddddddddddddddddddddddddddddddddddd";
+        let now = Instant::now();
+        let barrier = Arc::new(Barrier::new(THREADS));
+
+        let handles: Vec<_> = (0..THREADS)
+            .map(|_| {
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    claim_event_id(id, now)
+                })
+            })
+            .collect();
+
+        let mut ok = 0usize;
+        let mut replayed = 0usize;
+        for h in handles {
+            match h.join().expect("thread panicked") {
+                Ok(()) => ok += 1,
+                Err(Nip98ValidationError::TokenReplayed) => replayed += 1,
+                Err(other) => panic!("unexpected error: {other:?}"),
+            }
+        }
+
+        assert_eq!(ok, 1, "exactly one claim must win, got {ok}");
+        assert_eq!(
+            replayed,
+            THREADS - 1,
+            "all other claims must be rejected as replays, got {replayed}"
+        );
+    }
+
+    /// Corrupt the `sig` field of a signed token while preserving its event id
+    /// (the Nostr id is the hash of the *unsigned* fields, so flipping the
+    /// signature does not change it). Lets us prove a signature failure carrying
+    /// id X does not consume X.
+    fn token_with_broken_signature(keys: &Keys, url: &str, method: &str) -> (String, String) {
+        let config = Nip98Config {
+            url: url.to_string(),
+            method: method.to_string(),
+            body: None,
+        };
+        let token = generate_nip98_token(keys, &config).expect("generate");
+        let decoded = BASE64.decode(&token).expect("decode");
+        let mut event: Nip98Event =
+            serde_json::from_str(&String::from_utf8(decoded).expect("utf8")).expect("parse");
+        let id = event.id.clone();
+
+        // Flip the leading hex nibble of the signature — still valid hex, but no
+        // longer a signature over this event, so `verify()` fails.
+        let mut sig_chars: Vec<char> = event.sig.chars().collect();
+        sig_chars[0] = if sig_chars[0] == '0' { '1' } else { '0' };
+        event.sig = sig_chars.into_iter().collect();
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        (BASE64.encode(json.as_bytes()), id)
+    }
+
+    #[test]
+    fn test_invalid_signature_does_not_burn_id() {
+        // A tampered signature must fail with InvalidSignature AND leave the id
+        // unclaimed, so the legitimate holder can still use their token.
+        let keys = Keys::generate();
+        let url = "http://localhost:3030/pods/burn-sig/";
+        let method = "GET";
+
+        let (bad_token, id) = token_with_broken_signature(&keys, url, method);
+        let bad = validate_nip98_token(&bad_token, url, method, None);
+        assert!(
+            matches!(bad, Err(Nip98ValidationError::InvalidSignature)),
+            "tampered token must fail signature check, got {bad:?}"
+        );
+
+        // The id must still be free — prove it via a direct claim.
+        assert!(
+            claim_event_id(&id, Instant::now()).is_ok(),
+            "a failed-signature validation must not consume the event id"
+        );
+    }
+
+    #[test]
+    fn test_failed_checks_do_not_burn_id() {
+        // URL-, method-, and freshness-failures all short-circuit before the
+        // single-use claim, so none of them may consume the token's id. Each
+        // sub-case uses a FRESH keypair: two NIP-98 events with identical content
+        // signed in the same wall-clock second hash to the same event id, which
+        // would otherwise cross-contaminate the cases.
+        let url = "http://localhost:3030/pods/burn-checks/";
+        let method = "GET";
+        let config = Nip98Config {
+            url: url.to_string(),
+            method: method.to_string(),
+            body: None,
+        };
+
+        // URL mismatch: fails before the claim, so the correct-URL retry succeeds
+        // and only then is the id consumed (a subsequent replay is rejected).
+        let keys_url = Keys::generate();
+        let token = generate_nip98_token(&keys_url, &config).expect("generate");
+        assert!(matches!(
+            validate_nip98_token(&token, "http://localhost:3030/pods/other/", method, None),
+            Err(Nip98ValidationError::UrlMismatch { .. })
+        ));
+        assert!(
+            validate_nip98_token(&token, url, method, None).is_ok(),
+            "url-mismatch failure must not consume the id"
+        );
+        assert!(
+            matches!(
+                validate_nip98_token(&token, url, method, None),
+                Err(Nip98ValidationError::TokenReplayed)
+            ),
+            "the id must be consumed only by the successful validation"
+        );
+
+        // Method mismatch on a fresh keypair.
+        let keys_method = Keys::generate();
+        let token2 = generate_nip98_token(&keys_method, &config).expect("generate");
+        let id2 = extract_id(&token2);
+        assert!(matches!(
+            validate_nip98_token(&token2, url, "POST", None),
+            Err(Nip98ValidationError::MethodMismatch { .. })
+        ));
+        assert!(
+            claim_event_id(&id2, Instant::now()).is_ok(),
+            "method-mismatch failure must not consume the id"
+        );
+
+        // Stale timestamp — a token far in the past fails freshness before the
+        // claim, so its id stays free.
+        let keys_stale = Keys::generate();
+        let stale =
+            signed_token_with_offset(&keys_stale, url, method, -(TOKEN_MAX_AGE_SECONDS + 120));
+        let id_stale = extract_id(&stale);
+        assert!(matches!(
+            validate_nip98_token(&stale, url, method, None),
+            Err(Nip98ValidationError::TokenExpired(_))
+        ));
+        assert!(
+            claim_event_id(&id_stale, Instant::now()).is_ok(),
+            "stale-timestamp failure must not consume the id"
+        );
+    }
+
+    /// Decode a token and return its event id (test helper).
+    fn extract_id(token: &str) -> String {
+        let decoded = BASE64.decode(token).expect("decode");
+        let event: Nip98Event =
+            serde_json::from_str(&String::from_utf8(decoded).expect("utf8")).expect("parse");
+        event.id
     }
 }
