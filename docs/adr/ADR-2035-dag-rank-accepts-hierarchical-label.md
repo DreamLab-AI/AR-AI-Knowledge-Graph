@@ -7,12 +7,13 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: e0f8cd896
+verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_paths: [src/actors/gpu/force_compute_actor.rs]
 owner: jjohare
 review_trigger: an ingest change that stops collapsing subclass provenance to the generic 'hierarchical' label, or reintroduces domain-membership edges under that same label
 repo: visionclaw
 domain: XR-client
-lineage: distils legacy ADR-141 (constrained-layout engine) and ADR-138 (GPU force-channel registry); fix landed 73540faa0
+lineage: distils legacy ADR-141 (constrained-layout engine) and ADR-138 (GPU force-channel registry); label-accept landed 73540faa0, stale doc-comment corrected eac01130
 ---
 
 # ADR-2035 — DAG-rank detection accepts the collapsed 'hierarchical' edge label
@@ -47,6 +48,7 @@ structure — that is the trade this deployment takes because its ingest does no
 
 ## Verification
 
-Re-checked at `e0f8cd896`: `src/actors/gpu/force_compute_actor.rs:586` the `matches!`
-set includes `"hierarchical" | "HIERARCHICAL"`; inline comment `:581–583` states the
-rationale; stale doc-comment confirmed at `:576–579`. Fix landed in commit 73540faa0.
+Re-verified at `eac01130`: `src/actors/gpu/force_compute_actor.rs:586` the `matches!`
+set includes `"hierarchical" | "HIERARCHICAL"`; the doc-comment at `:576–579` —
+previously stale, asserting the label was EXCLUDED — was corrected in this change to
+state it IS accepted, so code and comment now agree.

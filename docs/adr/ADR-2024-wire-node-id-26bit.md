@@ -34,28 +34,29 @@ ID (`NODE_ID_MASK = 0x03FFFFFF`, ceiling 2^26-1), bits 26-31 are type flags
 (bit 31 agent, bit 30 knowledge, bits 26-28 ontology subtypes). This wire ID is
 ephemeral and render-only — it is never a durable identifier and never persisted
 as one. Flag setters mask the ID and OR the flag; decode strips flags via
-`& NODE_ID_MASK`. The 26-bit ceiling is asserted with `debug_assert!` only, so
-release builds silently truncate an over-range ID to its low 26 bits. This
-forecloses shipping a URN on the hot path; it does **not** yet foreclose the V1
-truncation failure mode in release.
+`& NODE_ID_MASK`. The 26-bit ceiling is asserted with `debug_assert!` (fail-fast
+in debug); release builds additionally emit a `log::error!` before masking an
+over-range ID to its low 26 bits, so the historical V1 truncation is now **loud,
+not silent**. This forecloses shipping a URN on the hot path.
 
 ## Consequences
 
 - Per-frame payloads stay compact and the client reads node type without a
   lookup.
-- Open hardening: the ceiling guard is debug-only, so a >2^26 ID in a release
-  build reintroduces the historical silent-truncation corruption. Promote the
-  `debug_assert` to a runtime guard (reject/log) before node counts approach the
-  ceiling.
+- The release guard logs (`error!`) but still truncates: an over-range ID is now
+  loud, not silently corrupt, though truncation remains the failure mode above
+  2^26. A hard reject (Result-returning setters) is the next step if node counts
+  ever approach the ceiling.
 - Only three type classes fit the reserved bits; a fourth top-level class needs a
   new bit and a protocol bump.
 
 ## Verification
 
-Re-checked at `e0f8cd896`: `src/utils/binary_protocol.rs:14-26` — flag masks and
-`NODE_ID_MASK = 0x03FFFFFF`; `set_agent_flag`/`set_knowledge_flag` at `:117-137`
-`debug_assert!` the ceiling then unconditionally `(id & NODE_ID_MASK) | FLAG`;
-decode strips via `& NODE_ID_MASK` (`clear_all_flags` `:143-145`,
-`get_actual_node_id` `:155-157`). The release-truncation gap is confirmed: no
-runtime guard exists, hence `implementation_status: complete` with the hardening
-tracked by `review_trigger`.
+Re-verified at `eac01130`: `src/utils/binary_protocol.rs` — flag masks and
+`NODE_ID_MASK = 0x03FFFFFF`; the five `set_*_flag` setters (agent, knowledge, and
+three ontology subtypes) `debug_assert!` the ceiling, then — in every build —
+`if node_id > NODE_ID_MASK { error!(…) }` before `(id & NODE_ID_MASK) | FLAG`, so
+the release path now logs the overflow instead of truncating silently; decode
+strips via `& NODE_ID_MASK` (`clear_all_flags`, `get_actual_node_id`). The
+silent-truncation gap is closed (loud, not silent); a hard reject remains the
+open hardening tracked by `review_trigger`.
