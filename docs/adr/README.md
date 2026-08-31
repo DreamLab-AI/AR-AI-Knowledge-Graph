@@ -31,10 +31,42 @@ legacy-number redirect table).
 governing document **in the same change**, and regenerate this index
 (`node scripts/adr-index-gen.js docs/adr` — it fails CI on invalid frontmatter).
 
-_3 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
+_35 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 
-| ID | Title | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
-|----|-------|------|----------|------|------------|------------|---------------|-------|------|
-| [ADR-2001](ADR-2001-corpus-consolidation.md) | Consolidate the documentation corpus onto a thin living ADR series | 2026-08-31 | accepted | partial | staged | — | — | jjohare | visionclaw |
-| [ADR-2002](ADR-2002-nip98-single-use-replay-cache.md) | NIP-98 replay protection is a two-layer scheme with a single-use cache | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
-| [ADR-2003](ADR-2003-visibility-filter-default-on.md) | The pubkey visibility filter defaults ON | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| ID | Title | Domain | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
+|----|-------|--------|------|----------|------|------------|------------|---------------|-------|------|
+| [ADR-2001](ADR-2001-corpus-consolidation.md) | Consolidate the documentation corpus onto a thin living ADR series | — | 2026-08-31 | accepted | partial | staged | — | — | jjohare | visionclaw |
+| [ADR-2002](ADR-2002-nip98-single-use-replay-cache.md) | NIP-98 replay protection is a two-layer scheme with a single-use cache | — | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2003](ADR-2003-visibility-filter-default-on.md) | The pubkey visibility filter defaults ON | — | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2004](ADR-2004-oxigraph-sqlite-persistence.md) | Embedded Oxigraph plus per-writer SQLite is the sole persistence substrate | BASELINE-architecture | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2005](ADR-2005-hexagonal-crate-split.md) | Hexagonal split of the webxr monolith into a thin root binary plus visionclaw crates | BASELINE-architecture | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
+| [ADR-2006](ADR-2006-acsp-human-approval.md) | Human-approval flows go through the stateless ACSP forum surface | BASELINE-architecture | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2007](ADR-2007-gpu-coordinator-supervisors.md) | GPUManagerActor is a coordinator over four subsystem supervisors on a context bus | BASELINE-architecture | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2008](ADR-2008-dev-image-recompiles.md) | The development image recompiles the Rust backend on container start | BASELINE-architecture | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2009](ADR-2009-dual-request-auth-realms.md) | Two request-auth realms coexist — NIP-98 signatures and login-derived session bearers | IDENTITY-authority-chain | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2010](ADR-2010-rbac-lattice-atomic-mutations.md) | Four-tier pubkey-bound RBAC lattice (Editor default, fail-closed to Viewer) with atomic role mutations | IDENTITY-authority-chain | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2011](ADR-2011-central-rbac-gate.md) | One central RbacGate covers the whole /api scope; writes gate at WriteGraph, not mere Authenticated | IDENTITY-authority-chain | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2012](ADR-2012-dev-bypass-triple-gated.md) | The dev-session-token bypass is triple-gated and RBAC report-mode needs a dated ack; both unreachable in release | IDENTITY-authority-chain | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2013](ADR-2013-federation-delegation-deferred.md) | Federated (OIDC) and delegated-agent (NIP-26) identity are both deferred; the secp256k1 signature chain is the sole realm | IDENTITY-authority-chain | 2026-08-31 | accepted | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2014](ADR-2014-public-kg-inclusion-gate.md) | GitHub `public:: true` gates KG inclusion; `owl:class::` bypasses it | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2015](ADR-2015-derived-writeback-fence.md) | Derived-writeback fence — only `:summary`/`:observed` are writable | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2016](ADR-2016-provenance-append-only.md) | GRAPH_PROVENANCE is append-only (INSERT DATA only) | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2017](ADR-2017-write-master-backup-posture.md) | One write-master per data class; disposable derived projections; SQLite-only online backup | DATA-authority-erasure | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
+| [ADR-2018](ADR-2018-frozen-52-byte-v3-record-v5-envelope.md) | The graph frame is a frozen 52-byte inline-analytics V3 record wrapped additively by the V5 sequence envelope | PROTOCOL-registry | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2019](ADR-2019-tag-byte-registry-governed-dispatch.md) | Tag byte 0 is registry-governed — it selects the codec, rejects unknown tags, and is allocated across disjoint per-socket spaces | PROTOCOL-registry | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2020](ADR-2020-agent-copresence-additive-sibling-opcode.md) | Agent co-presence is an additive sibling opcode, not an extension of the pose frame | PROTOCOL-registry | 2026-08-31 | accepted | complete | staged | — | — | jjohare | visionclaw |
+| [ADR-2021](ADR-2021-typed-urn-mint-parse-dual.md) | Durable urn:visionclaw IDs are minted only through typed fail-closed constructors, with mint split from resolve | IDENTIFIER-taxonomy | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2022](ADR-2022-did-nostr-hex-identity.md) | Identity is a did:nostr hex pubkey — no agent URN kind, hex x-only canonical, npub display-only | IDENTIFIER-taxonomy | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2023](ADR-2023-sha256-12-content-address.md) | Content address is sha256-12, byte-identical to the agentbox sha12() contract | IDENTIFIER-taxonomy | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2024](ADR-2024-wire-node-id-26bit.md) | Wire node-ID is an ephemeral 26-bit u32 with reserved type-flag bits, not a URN | IDENTIFIER-taxonomy | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2025](ADR-2025-cross-from-agentbox-closed-map.md) | cross_from_agentbox is a closed kind-map that returns None, never a synthetic ID, for unmapped URNs | IDENTIFIER-taxonomy | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2026](ADR-2026-fail-closed-security-posture.md) | Fail-closed security posture — flag absence widens nothing, release aborts on promoted dev-auth | SECURITY-profiles | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2027](ADR-2027-three-deployment-profiles.md) | Three named deployment profiles, with the shipped compose booting demo-open | SECURITY-profiles | 2026-08-31 | accepted | partial | staged | — | — | jjohare | visionclaw |
+| [ADR-2028](ADR-2028-simparams-212-byte-abi.md) | SimParams is a size-locked 212-byte repr(C) raw-copy ABI, grown tail-append only | GPU-wire-abi | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2029](ADR-2029-force-channel-flag-derivation.md) | Force channels map over the flat struct; execution.rs is the flag authority and ENABLE_CONSTRAINTS is residency-owned | GPU-wire-abi | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
+| [ADR-2030](ADR-2030-ptx-isa-downgrade.md) | PTX ISA is text-rewritten to .version 9.0 at build time | GPU-wire-abi | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2032](ADR-2032-godot-native-compatibility-renderer.md) | Native Godot 4 + godot-rust + OpenXR client on a forced Compatibility renderer | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2033](ADR-2033-hud-buttons-fire-on-press.md) | HUD buttons fire on press, not release | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2034](ADR-2034-renderstore-instance-math-stride-16.md) | The Rust RenderStore owns per-frame instance math under a server-which/client-where authority split | XR-client | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
+| [ADR-2035](ADR-2035-dag-rank-accepts-hierarchical-label.md) | DAG-rank detection accepts the collapsed 'hierarchical' edge label | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2036](ADR-2036-defensive-openxr-boot.md) | Defensive OpenXR boot — query eye-gaze capability and degrade, never blind-bind | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
