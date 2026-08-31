@@ -1803,7 +1803,11 @@ func _update_edge_multimesh() -> void:
 	var er: float = EDGE_WORLD_RADIUS / (EDGE_MESH_RADIUS * _graph_scale)
 	var buf: PackedFloat32Array = _binary_client.build_edge_buffer(_edge_pairs, er)
 	var mm: MultiMesh = edges_multi.multimesh
-	var count: int = buf.size() / 12
+	# 16 floats/instance: 12 transform + 4 INSTANCE_CUSTOM (style code in .a).
+	# MultiMesh_edges has use_custom_data=true, so the resource stride is 16 — the
+	# builder packs 16 (see render_store::build_edge_buffer). A /12 divisor here
+	# mis-sizes instance_count, so set_buffer rejects every frame and edges vanish.
+	var count: int = buf.size() / 16
 	if mm.instance_count != count:
 		mm.instance_count = count
 	if count > 0:
