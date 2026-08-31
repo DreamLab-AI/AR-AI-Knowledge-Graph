@@ -7,7 +7,8 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: e0f8cd896
+verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_paths: [src/utils/binary_protocol.rs]
 owner: jjohare
 review_trigger: node count approaching 2^26, or promotion of the debug_assert ceiling to a runtime guard
 repo: visionclaw

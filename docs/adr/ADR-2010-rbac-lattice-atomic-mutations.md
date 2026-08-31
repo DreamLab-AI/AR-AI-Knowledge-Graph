@@ -7,7 +7,8 @@ implementation_status: complete
 activation_status: live
 supersedes: []                   # legacy ADR-142/ADR-094 distilled — not in this tree; see lineage
 superseded_by: []
-verified_commit: e0f8cd896
+verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_paths: [src/models/rbac.rs, src/services/role_store.rs, src/utils/auth.rs]
 owner: jjohare
 review_trigger: adoption of a multi-user-locked deployment, or any change to default_authenticated() or the last-Owner guard
 repo: visionclaw

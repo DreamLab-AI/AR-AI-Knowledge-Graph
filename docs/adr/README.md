@@ -34,7 +34,7 @@ governing document **in the same change**, and regenerate this index
 edges, and stale `verified_commit`+`verified_paths` claims all fail the
 build).
 
-_35 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
+_38 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 
 | ID | Title | Domain | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
 |----|-------|--------|------|----------|------|------------|------------|---------------|-------|------|
@@ -68,8 +68,11 @@ _35 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2028](ADR-2028-simparams-212-byte-abi.md) | SimParams is a size-locked 212-byte repr(C) raw-copy ABI, grown tail-append only | GPU-wire-abi | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2029](ADR-2029-force-channel-flag-derivation.md) | Force channels map over the flat struct; execution.rs is the flag authority and ENABLE_CONSTRAINTS is residency-owned | GPU-wire-abi | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
 | [ADR-2030](ADR-2030-ptx-isa-downgrade.md) | PTX ISA is text-rewritten to .version 9.0 at build time | GPU-wire-abi | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2031](ADR-2031-withdrawn-reserved.md) | Withdrawn — number reserved, no decision recorded | — | 2026-08-31 | rejected | none | inactive | — | — | jjohare | visionclaw |
 | [ADR-2032](ADR-2032-godot-native-compatibility-renderer.md) | Native Godot 4 + godot-rust + OpenXR client on a forced Compatibility renderer | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2033](ADR-2033-hud-buttons-fire-on-press.md) | HUD buttons fire on press, not release | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2034](ADR-2034-renderstore-instance-math-stride-16.md) | The Rust RenderStore owns per-frame instance math under a server-which/client-where authority split | XR-client | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
 | [ADR-2035](ADR-2035-dag-rank-accepts-hierarchical-label.md) | DAG-rank detection accepts the collapsed 'hierarchical' edge label | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2036](ADR-2036-defensive-openxr-boot.md) | Defensive OpenXR boot — query eye-gaze capability and degrade, never blind-bind | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2037](ADR-2037-production-build-excludes-dev-auth.md) | Production release images are built without the dev-auth cargo feature, asserted in CI | SECURITY-profiles | 2026-08-31 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2038](ADR-2038-boot-time-profile-assertion.md) | Boot-time deployment-profile assertion with illegal-combination abort | SECURITY-profiles | 2026-08-31 | proposed | none | inactive | — | — | jjohare | visionclaw |

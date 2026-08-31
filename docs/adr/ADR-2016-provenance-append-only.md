@@ -7,7 +7,8 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: e0f8cd896
+verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_paths: [crates/visionclaw-adapters/src/provenance_emitter.rs, crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs, src/services/ontology_mutation_service.rs]
 owner: jjohare
 review_trigger: a GDPR/right-to-erasure obligation landing on provenance-recorded subjects, or introduction of a redaction/crypto-shred mechanism
 repo: visionclaw

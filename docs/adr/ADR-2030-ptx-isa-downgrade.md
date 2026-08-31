@@ -7,7 +7,8 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: e0f8cd896
+verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_paths: [crates/visionclaw-gpu/build.rs]
 owner: jjohare
 review_trigger: host driver gains support for a newer PTX ISA, or nvcc changes its .version emission
 repo: visionclaw

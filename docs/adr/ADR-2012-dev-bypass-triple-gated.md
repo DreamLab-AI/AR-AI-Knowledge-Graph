@@ -7,7 +7,8 @@ implementation_status: complete
 activation_status: live
 supersedes: []                   # legacy ADR-011 dev-bypass clause distilled — not in this tree; see lineage
 superseded_by: []
-verified_commit: e0f8cd896
+verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_paths: [src/utils/auth.rs, src/middleware/rbac_gate.rs]
 owner: jjohare
 review_trigger: any change to the dev-auth feature gate, DEV_AUTH_LOOPBACK handling, or the report-mode ack check
 repo: visionclaw
