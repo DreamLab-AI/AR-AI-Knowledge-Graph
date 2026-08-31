@@ -78,6 +78,12 @@ services:
       RBAC_PUBLIC_READS: "${RBAC_PUBLIC_READS:-1}"
       RBAC_ALLOW_OWNERLESS: "${RBAC_ALLOW_OWNERLESS:-1}"
       RBAC_OWNER_PUBKEY: "${RBAC_OWNER_PUBKEY:-}"
+      #  - RBAC_DEFAULT_ROLE: role for authenticated pubkeys with no explicit
+      #    assignment. 'editor' (default) preserves pre-RBAC write access for
+      #    any valid signer; 'viewer' is the multi-user-locked posture (unknown
+      #    signers read only until granted a role). Unrecognised values fail
+      #    closed to viewer.
+      RBAC_DEFAULT_ROLE: "${RBAC_DEFAULT_ROLE:-editor}"
       # ADR-060 pubkey-visibility drop-set filter. Default ON (secure by
       # default): private nodes not owned by the session pubkey are dropped from
       # the wire frame for anonymous/unauthorised sessions. Public nodes are

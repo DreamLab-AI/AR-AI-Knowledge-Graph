@@ -10,7 +10,7 @@ use cust::event::{Event, EventFlags};
 use cust::memory::{CopyDestination, DeviceBuffer};
 use cust::module::Module;
 use cust::stream::{Stream, StreamFlags};
-use log::{info, warn};
+use log::{error, info};
 
 /// Frames between community-label refreshes (Leiden/Louvain) for force cohesion.
 /// Detection is topology-driven (modularity over CSR adjacency) with host-side
@@ -280,12 +280,17 @@ impl UnifiedGPUCompute {
             anyhow!("{}\n{}", error_msg, diagnosis)
         })?;
 
+        // Secondary-module load failures degrade the feature rather than the
+        // whole GPU actor, but must be unmissable in logs (ADR-2030 follow-up:
+        // a silent None here previously read as "feature absent" rather than
+        // "feature broken").
         let clustering_module = if let Some(clustering_ptx_content) = clustering_ptx {
             if let Err(e) =
                 crate::utils::gpu_diagnostics::validate_ptx_content(clustering_ptx_content)
             {
-                warn!(
-                    "Clustering PTX validation failed: {}. Continuing without clustering support.",
+                error!(
+                    "GPU DEGRADED: clustering PTX validation failed: {}. \
+                     Clustering analytics are DISABLED for this process.",
                     e
                 );
                 None
@@ -296,7 +301,11 @@ impl UnifiedGPUCompute {
                         Some(module)
                     }
                     Err(e) => {
-                        warn!("Failed to load clustering module: {}. Continuing without clustering support.", e);
+                        error!(
+                            "GPU DEGRADED: clustering module load failed: {}. \
+                             Clustering analytics are DISABLED for this process.",
+                            e
+                        );
                         None
                     }
                 }
@@ -307,8 +316,9 @@ impl UnifiedGPUCompute {
 
         let apsp_module = if let Some(apsp_ptx_content) = apsp_ptx {
             if let Err(e) = crate::utils::gpu_diagnostics::validate_ptx_content(apsp_ptx_content) {
-                warn!(
-                    "APSP PTX validation failed: {}. Continuing without GPU APSP support.",
+                error!(
+                    "GPU DEGRADED: APSP PTX validation failed: {}. \
+                     GPU APSP is DISABLED for this process.",
                     e
                 );
                 None
@@ -319,8 +329,9 @@ impl UnifiedGPUCompute {
                         Some(module)
                     }
                     Err(e) => {
-                        warn!(
-                            "Failed to load APSP module: {}. Continuing without GPU APSP support.",
+                        error!(
+                            "GPU DEGRADED: APSP module load failed: {}. \
+                             GPU APSP is DISABLED for this process.",
                             e
                         );
                         None

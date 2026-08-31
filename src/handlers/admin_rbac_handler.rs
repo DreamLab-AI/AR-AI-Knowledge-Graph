@@ -188,9 +188,13 @@ pub async fn revoke_role(
     match store.revoke_checked(&target_pubkey, caller_role).await {
         Ok(removed) => {
             info!("RBAC: {caller} revoked explicit role for {target_pubkey} (existed={removed})");
+            // Report the target's actual post-revoke effective role — a
+            // power-user target reverts to Admin, not the configured default.
+            let target_is_power = nostr.is_power_user(&target_pubkey).await;
+            let reverted_to = store.effective_role(&target_pubkey, target_is_power).await;
             HttpResponse::Ok().json(serde_json::json!({
                 "pubkey": target_pubkey,
-                "reverted_to": UserRole::default_authenticated(),
+                "reverted_to": reverted_to,
                 "had_explicit_role": removed,
             }))
         }

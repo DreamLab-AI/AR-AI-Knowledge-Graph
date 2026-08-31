@@ -8,6 +8,7 @@ on:
       - 'README.md'
       - 'CHANGELOG.md'
       - 'AGENTS.md'
+      - 'scripts/adr-index-gen.js'
       - '.github/workflows/docs-ci.yml'
   pull_request:
     branches: [main]
@@ -16,8 +17,20 @@ on:
       - 'README.md'
       - 'CHANGELOG.md'
       - 'AGENTS.md'
+      - 'scripts/adr-index-gen.js'
 
 jobs:
+  validate-adr-ledger:
+    name: Validate ADR ledger (frontmatter, reciprocity, staleness)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository (full history — staleness gate diffs old commits)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate ADR frontmatter, supersession reciprocity, verified_commit staleness
+        run: node scripts/adr-index-gen.js docs/adr --check
+
   validate-documentation:
     name: Validate Documentation Quality
     runs-on: ubuntu-latest

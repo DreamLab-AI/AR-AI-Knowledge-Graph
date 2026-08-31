@@ -55,9 +55,12 @@ optionality are governed structurally, not by these named vars (see divergences)
 ### Default-role & RBAC lattice
 
 - Effective role precedence: explicit assignment → `Admin` if power-user → else
-  `default_authenticated()` = **`Editor`** (`src/models/rbac.rs:68`,
-  `src/services/role_store.rs:194-203`). An *unassigned but authenticated* pubkey
-  is therefore an Editor — a write-capable identity by default.
+  the configured unassigned-signer default: **`RBAC_DEFAULT_ROLE`**
+  (`editor`|`viewer`, parsed fail-closed in `src/services/role_store.rs`
+  `parse_default_role`), defaulting to **`Editor`** for pre-RBAC compatibility.
+  Under `viewer`, an *unassigned but authenticated* pubkey reads only until an
+  Admin grants a role. Unrecognised values (including `admin`/`owner`) fail
+  closed to `viewer` — the env var can narrow access, never widen it.
 - Any error in role lookup **fails closed to `Viewer`**, never up
   (`src/services/role_store.rs:204-208`).
 - `/api` gate policy (`rbac_gate.rs:133-169`): public allowlist
@@ -100,6 +103,7 @@ Each profile is an **exact** flag set. Anything not listed takes its code defaul
 | `RBAC_PUBLIC_READS` | `1` | `0` | `0` |
 | `RBAC_ALLOW_OWNERLESS` | `1` | `1` | `0` |
 | `RBAC_OWNER_PUBKEY` | unset | set (64-hex) | set (64-hex) |
+| `RBAC_DEFAULT_ROLE` | `editor` | `editor` | `viewer` |
 | `PUBKEY_VISIBILITY_FILTER` | `1` | `1` | `1` |
 | `RBAC_GATE_MODE` | enforce | enforce | enforce |
 | `APP_ENV` | `production` | `production` | `production` |
@@ -115,10 +119,9 @@ Each profile is an **exact** flag set. Anything not listed takes its code defaul
   controls who can authenticate.
 - **`multi-user-locked`** — hardened multi-tenant. Owner mandatory
   (`RBAC_ALLOW_OWNERLESS=0` ⇒ hard-fail without an Owner), no anonymous reads,
-  visibility filter on. **Note:** even here the unassigned-authenticated-⇒-Editor
-  default (`rbac.rs:68`) means any pubkey that can produce a valid NIP-98 event is
-  an Editor. True least-privilege multi-user requires flipping
-  `default_authenticated()` to `Viewer` — tracked as an open item, not yet a flag.
+  visibility filter on, and `RBAC_DEFAULT_ROLE=viewer` so an unknown-but-valid
+  NIP-98 signer is read-only until an Admin grants a role (least-privilege
+  admission; closes the former open item where any valid signer was an Editor).
 
 ### Illegal combinations
 

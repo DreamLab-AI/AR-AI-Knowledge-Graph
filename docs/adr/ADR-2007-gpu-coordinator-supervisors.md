@@ -38,9 +38,13 @@ subsystems receive context without coupling to each other.
 
 - A crash in one subsystem no longer downs the others; restart backoff is
   per-supervisor.
-- The analytics kernels the AnalyticsSupervisor carries are not all trustworthy
-  — several ship compiled-and-enabled but known-broken (cross-ref ADR-2031); the
-  topology is sound even where a kernel's output is not.
+- The analytics kernels the AnalyticsSupervisor carries are code-fixed but not
+  all output-validated — legacy ADR-031's "known-broken" list is stale in the
+  good direction (Louvain D1 fix, PageRank D8 fix; Landmark-APSP remains
+  compile-quarantined). Per-kernel evidence: `docs/GPU-wire-abi.md`
+  §"Analytics kernel trust status". Residual work is output validation
+  (benchmarks), not disablement; the topology is sound independent of any
+  kernel's output quality.
 - One more indirection layer (bus + supervisors) to trace for a GPU call versus
   the old single actor.
 

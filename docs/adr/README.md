@@ -29,7 +29,10 @@ legacy-number redirect table).
 **Making a decision:** copy [`TEMPLATE.md`](TEMPLATE.md) to `ADR-NNNN-slug.md`
 (next free number), fill the three-axis status honestly, update the affected
 governing document **in the same change**, and regenerate this index
-(`node scripts/adr-index-gen.js docs/adr` — it fails CI on invalid frontmatter).
+(`node scripts/adr-index-gen.js docs/adr` — CI-enforced via
+`.github/workflows/docs-ci.yml`: invalid frontmatter, asymmetric supersession
+edges, and stale `verified_commit`+`verified_paths` claims all fail the
+build).
 
 _35 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 

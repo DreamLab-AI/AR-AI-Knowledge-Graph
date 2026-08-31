@@ -28,8 +28,11 @@ or the last-Owner guard, permitting escalation or sole-Owner lockout.
 ## Decision
 
 Persisted per-pubkey roles form an `Owner(4) > Admin(3) > Editor(2) > Viewer(1)` lattice.
-An authenticated-but-unassigned pubkey resolves to `Editor` (`default_authenticated()`), preserving
-the pre-RBAC grant; any lookup error — including an unparseable stored role — **fails closed to
+An authenticated-but-unassigned pubkey resolves to the **configured default role**:
+`RBAC_DEFAULT_ROLE` = `editor` (default, preserving the pre-RBAC grant) or `viewer`
+(least-privilege admission for multi-user-locked deployments); unrecognised values — including
+`admin`/`owner` — parse fail-closed to `Viewer`, so the env var can narrow access but never
+widen it. Any lookup error — including an unparseable stored role — **fails closed to
 `Viewer`**, never up. `assign_checked`/`revoke_checked` fold the current-role read, the
 `can_assign` privilege check, and the last-Owner guard into a single SQLite transaction, so
 escalation and sole-Owner lockout are structurally impossible (TOCTOU-free). This forecloses
@@ -37,8 +40,9 @@ role logic scattered across handlers and any code path that reads then writes a 
 
 ## Consequences
 
-- New authenticated pubkeys can write the graph immediately (Editor); a locked-down deployment
-  must explicitly assign `Viewer` — flagged for reconsideration under a multi-user-locked profile.
+- Under the shipped `editor` default, new authenticated pubkeys can write the graph immediately;
+  the multi-user-locked profile sets `RBAC_DEFAULT_ROLE=viewer` so unknown signers are read-only
+  until granted a role (closes the former open item — SECURITY ADR-2027 profile table).
 - A role-store outage denies rather than grants (Viewer), trading availability for safety.
 - Role mutations run inside a transaction, so a busy store can contend; the guarantee is atomicity,
   not throughput.
@@ -46,9 +50,12 @@ role logic scattered across handlers and any code path that reads then writes a 
 
 ## Verification
 
-Re-checked at `e0f8cd896`: `src/models/rbac.rs:68-69` `default_authenticated()` returns `Editor`
-with the rationale comment `:62-66`; `src/services/role_store.rs:194` `effective_role` returns
-`default_authenticated()` on an empty row (`:201`) and `Viewer` on `Err` (`:206`);
+Re-checked at `e0f8cd896`, default-role facet updated 2026-08-31 (see commit for this change):
+`src/models/rbac.rs` `default_authenticated()` returns `Editor` with the rationale comment;
+`src/services/role_store.rs` `parse_default_role` maps `RBAC_DEFAULT_ROLE` to
+`editor`/`viewer` and fails closed to `Viewer` on any other value (unit-tested:
+`default_role_parse_lattice`, `unassigned_default_is_store_configured_not_hardcoded`);
+`effective_role` returns the constructed default on an empty row and `Viewer` on `Err`;
 `assign_checked` (`:243`) enforces `can_assign` at `:266`/`:272` and `LastOwner` at `:287`;
 `revoke_checked` (`:310`) enforces `can_assign` `:330` and `LastOwner` `:342`, all inside one
 transaction folded through `TxOutcome`. `src/utils/auth.rs:60` `resolve_access_level` maps roles

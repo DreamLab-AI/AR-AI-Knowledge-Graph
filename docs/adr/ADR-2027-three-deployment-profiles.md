@@ -31,9 +31,11 @@ RBAC lattice and flags; ADR-011 defined the auth exceptions each profile honours
 
 Security posture is exactly three ratified profiles — **demo-open**,
 **single-tenant**, **multi-user-locked** — each an exact flag set, with any flag
-left unlisted taking its fail-closed code default (ADR-2026). The three composable
+left unlisted taking its fail-closed code default (ADR-2026). The four composable
 flags are `RBAC_PUBLIC_READS` (`rbac_gate.rs`), `RBAC_ALLOW_OWNERLESS`
-(`main.rs`), and `PUBKEY_VISIBILITY_FILTER` (`position_updates.rs`).
+(`main.rs`), `RBAC_DEFAULT_ROLE` (`role_store.rs`, added 2026-08-31 — the
+multi-user-locked profile sets `viewer` so unknown signers cannot write), and
+`PUBKEY_VISIBILITY_FILTER` (`position_updates.rs`).
 `docker-compose.unified.yml` realises demo-open by inverting two fail-closed code
 defaults (`RBAC_PUBLIC_READS:-1`, `RBAC_ALLOW_OWNERLESS:-1`). Any combination
 outside the three profiles is unsupported. This forecloses ad-hoc flag mixes

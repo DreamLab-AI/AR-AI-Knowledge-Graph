@@ -32,6 +32,14 @@ pub const RBAC_OWNER_PUBKEY_ENV: &str = "RBAC_OWNER_PUBKEY";
 /// fail-closed startup error (see `main.rs`).
 pub const RBAC_ALLOW_OWNERLESS_ENV: &str = "RBAC_ALLOW_OWNERLESS";
 
+/// Role granted to an authenticated pubkey with no explicit assignment.
+/// Accepted values: `editor` (compatibility default — preserves pre-RBAC
+/// behaviour where every authenticated user could write) and `viewer`
+/// (multi-user-locked posture: unknown signers read only until an Admin
+/// grants a role). Any other value fails closed to `viewer` with an error
+/// log — a typo must never widen access.
+pub const RBAC_DEFAULT_ROLE_ENV: &str = "RBAC_DEFAULT_ROLE";
+
 /// Column DDL shared by the initial `CREATE TABLE` and the legacy-migration
 /// rebuild. `CHECK`-constrained: `role` is confined to the canonical lattice and
 /// `pubkey` to a 64-char lowercase-hex string.
@@ -91,6 +99,55 @@ pub struct RoleAssignment {
 /// SQLite-backed store mapping pubkeys to [`UserRole`]s.
 pub struct RoleStore {
     conn: Arc<Connection>,
+    /// Role for authenticated-but-unassigned pubkeys, resolved once at
+    /// construction from [`RBAC_DEFAULT_ROLE_ENV`]. See
+    /// [`resolve_default_role`] for the parse/fail-closed rules.
+    default_role: UserRole,
+}
+
+/// Parse an [`RBAC_DEFAULT_ROLE_ENV`] value into the unassigned-signer
+/// default role.
+///
+/// - `None` (unset) / explicitly empty `""` → `Editor` (ADR-2010 compatibility
+///   default; compose `${VAR:-editor}` interpolation makes empty ≡ unset)
+/// - `editor` → `Editor`; `viewer` → `Viewer` (case-insensitive, trimmed)
+/// - anything else present — including whitespace-only — → **fail closed** to
+///   `Viewer` with an error log. `admin` and `owner` are deliberately rejected
+///   here too: an env var must never be able to mass-grant elevated access.
+fn parse_default_role(value: Option<&str>) -> UserRole {
+    match value {
+        None => UserRole::default_authenticated(),
+        Some("") => UserRole::default_authenticated(),
+        Some(raw) => match raw.trim().to_ascii_lowercase().as_str() {
+            "editor" => UserRole::Editor,
+            "viewer" => UserRole::Viewer,
+            other => {
+                error!(
+                    "RBAC: {RBAC_DEFAULT_ROLE_ENV}='{other}' is not one of \
+                     'editor'|'viewer'; failing closed to Viewer"
+                );
+                UserRole::Viewer
+            }
+        },
+    }
+}
+
+/// Read and parse [`RBAC_DEFAULT_ROLE_ENV`] from the process environment.
+/// A present-but-non-UTF-8 value is a *present invalid* value and fails closed
+/// to `Viewer` — it must not be conflated with "unset" (which would widen to
+/// Editor).
+fn resolve_default_role() -> UserRole {
+    match std::env::var(RBAC_DEFAULT_ROLE_ENV) {
+        Ok(v) => parse_default_role(Some(&v)),
+        Err(std::env::VarError::NotPresent) => parse_default_role(None),
+        Err(std::env::VarError::NotUnicode(_)) => {
+            error!(
+                "RBAC: {RBAC_DEFAULT_ROLE_ENV} is set but not valid UTF-8; \
+                 failing closed to Viewer"
+            );
+            UserRole::Viewer
+        }
+    }
 }
 
 impl RoleStore {
@@ -155,7 +212,20 @@ impl RoleStore {
                 info!("RBAC: migrated legacy user_roles table to constrained schema ({kept} rows)");
             }
         }
-        Ok(Self { conn })
+        let default_role = resolve_default_role();
+        if default_role != UserRole::default_authenticated() {
+            info!(
+                "RBAC: unassigned-signer default role is {} (via {RBAC_DEFAULT_ROLE_ENV})",
+                default_role.as_str()
+            );
+        }
+        Ok(Self { conn, default_role })
+    }
+
+    /// The role an authenticated-but-unassigned pubkey resolves to, as
+    /// configured by [`RBAC_DEFAULT_ROLE_ENV`] at construction.
+    pub fn configured_default(&self) -> UserRole {
+        self.default_role
     }
 
     /// Resolve the explicit role for `pubkey`, or `None` if unassigned. A row
@@ -188,9 +258,9 @@ impl RoleStore {
     /// Resolve the *effective* role for an authenticated user.
     ///
     /// Precedence: explicit assignment → `Admin` for legacy power users → else
-    /// [`UserRole::default_authenticated`] (`Editor`). **Fails closed** to
-    /// `Viewer` on any error (including an invalid stored role) — never up to
-    /// Admin/power-user.
+    /// the configured unassigned-signer default ([`RBAC_DEFAULT_ROLE_ENV`],
+    /// `Editor` unless overridden). **Fails closed** to `Viewer` on any error
+    /// (including an invalid stored role) — never up to Admin/power-user.
     pub async fn effective_role(&self, pubkey: &str, is_power_user: bool) -> UserRole {
         match self.get(pubkey).await {
             Ok(Some(role)) => role,
@@ -198,7 +268,7 @@ impl RoleStore {
                 if is_power_user {
                     UserRole::Admin
                 } else {
-                    UserRole::default_authenticated()
+                    self.default_role
                 }
             }
             Err(e) => {
@@ -546,6 +616,40 @@ mod tests {
     async fn unassigned_user_gets_editor_default() {
         let store = mem_store().await;
         assert_eq!(store.get(PK_A).await.unwrap(), None);
+        assert_eq!(store.effective_role(PK_A, false).await, UserRole::Editor);
+    }
+
+    #[test]
+    fn default_role_parse_lattice() {
+        // Unset and explicitly-empty preserve the ADR-2010 compatibility
+        // default (compose `${VAR:-editor}` makes empty ≡ unset).
+        assert_eq!(parse_default_role(None), UserRole::Editor);
+        assert_eq!(parse_default_role(Some("")), UserRole::Editor);
+        // Explicit values, case-insensitive.
+        assert_eq!(parse_default_role(Some("editor")), UserRole::Editor);
+        assert_eq!(parse_default_role(Some("Viewer")), UserRole::Viewer);
+        assert_eq!(parse_default_role(Some(" viewer ")), UserRole::Viewer);
+        // Present-but-garbage fails CLOSED to Viewer — an env var must never
+        // widen access. Whitespace-only is present garbage, not "unset".
+        assert_eq!(parse_default_role(Some("  ")), UserRole::Viewer);
+        assert_eq!(parse_default_role(Some("admin")), UserRole::Viewer);
+        assert_eq!(parse_default_role(Some("owner")), UserRole::Viewer);
+        assert_eq!(parse_default_role(Some("banana")), UserRole::Viewer);
+    }
+
+    #[tokio::test]
+    async fn unassigned_default_is_store_configured_not_hardcoded() {
+        // The store's Ok(None) branch must consult the constructed default,
+        // not UserRole::default_authenticated() directly.
+        let conn = Connection::open_in_memory().await.expect("open db");
+        let mut store = RoleStore::new(Arc::new(conn)).await.expect("create");
+        store.default_role = UserRole::Viewer;
+        assert_eq!(store.effective_role(PK_A, false).await, UserRole::Viewer);
+        assert_eq!(store.configured_default(), UserRole::Viewer);
+        // Power-user precedence is unaffected by the default.
+        assert_eq!(store.effective_role(PK_PU, true).await, UserRole::Admin);
+        // An explicit assignment still wins over the default.
+        store.set(PK_A, UserRole::Editor, None).await.unwrap();
         assert_eq!(store.effective_role(PK_A, false).await, UserRole::Editor);
     }
 
