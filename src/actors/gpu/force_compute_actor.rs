@@ -570,13 +570,14 @@ impl ForceComputeActor {
     /// True only for relation strings with explicit class-subsumption provenance
     /// (`rdfs:subClassOf`, child → parent), usable for hierarchy ranking.
     ///
-    /// The accept set is deliberately narrow. `SemanticEdgeType::Hierarchical` is
-    /// far too broad — it folds in the SYMMETRIC `equivalent_class` / `same_as`
+    /// The accept set stays narrow on the enum side. `SemanticEdgeType::Hierarchical`
+    /// is far too broad — it folds in the SYMMETRIC `equivalent_class` / `same_as`
     /// (no parent/child) and the separate property hierarchy `sub_property_of`.
-    /// The generic `"hierarchical"` string is also EXCLUDED: GitHub
-    /// domain-membership edges reuse that label, so accepting it would fabricate
-    /// ranks from non-subclass structure. Only explicit subclass provenance
-    /// counts. Pure/actor-free for unit testing.
+    /// The generic `"hierarchical"` string, however, IS accepted: it is the
+    /// collapsed subclass label this deployment's ingest writes (matching the fold
+    /// endpoint), so without it the DAG ranks stay unranked and Radial: DAG /
+    /// Hierarchy go silently inert. Beyond that string, only explicit subclass
+    /// provenance counts. Pure/actor-free for unit testing.
     fn is_directed_hierarchy_relation(rel: &str) -> bool {
         // "hierarchical" is the collapsed label this deployment's ingest writes
         // (same accept the fold endpoint needed — see fold.rs); without it the

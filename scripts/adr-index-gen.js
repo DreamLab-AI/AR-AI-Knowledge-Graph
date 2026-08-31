@@ -111,9 +111,14 @@ function main() {
     // from value-level checks (empty scalars, enum membership) — it is a form.
     const isTemplate = fm.id === TEMPLATE_ID;
     if (!isTemplate) {
-      // required scalars must be non-empty (list fields may legitimately be empty)
+      // required scalars must be non-empty (list fields may legitimately be
+      // empty). A proposed/rejected record has verified nothing yet — an empty
+      // verified_commit is its honest state, so it is exempt for those statuses
+      // (it carries no verified_paths, so the staleness gate stays inert too).
+      const unbuilt = fm.decision_status === 'proposed' || fm.decision_status === 'rejected';
       for (const field of REQUIRED_FIELDS) {
         if (field === 'supersedes' || field === 'superseded_by') continue;
+        if (field === 'verified_commit' && unbuilt) continue;
         if (field in fm && String(fm[field]).trim() === '') {
           fail(`${rel}: required field '${field}' is empty`); errors++;
         }

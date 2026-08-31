@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::types::vec3::Vec3Data;
 use crate::utils::socket_flow_messages::BinaryNodeData;
-use log::{debug, trace};
+use log::{debug, error, trace};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -122,6 +122,12 @@ pub fn set_agent_flag(node_id: u32) -> u32 {
         node_id,
         NODE_ID_MASK
     );
+    if node_id > NODE_ID_MASK {
+        error!(
+            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
+            node_id
+        );
+    }
     (node_id & NODE_ID_MASK) | AGENT_NODE_FLAG
 }
 
@@ -133,6 +139,12 @@ pub fn set_knowledge_flag(node_id: u32) -> u32 {
         node_id,
         NODE_ID_MASK
     );
+    if node_id > NODE_ID_MASK {
+        error!(
+            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
+            node_id
+        );
+    }
     (node_id & NODE_ID_MASK) | KNOWLEDGE_NODE_FLAG
 }
 
@@ -190,6 +202,12 @@ pub fn set_ontology_class_flag(node_id: u32) -> u32 {
         node_id,
         NODE_ID_MASK
     );
+    if node_id > NODE_ID_MASK {
+        error!(
+            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
+            node_id
+        );
+    }
     (node_id & NODE_ID_MASK) | ONTOLOGY_CLASS_FLAG
 }
 
@@ -201,6 +219,12 @@ pub fn set_ontology_individual_flag(node_id: u32) -> u32 {
         node_id,
         NODE_ID_MASK
     );
+    if node_id > NODE_ID_MASK {
+        error!(
+            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
+            node_id
+        );
+    }
     (node_id & NODE_ID_MASK) | ONTOLOGY_INDIVIDUAL_FLAG
 }
 
@@ -212,6 +236,12 @@ pub fn set_ontology_property_flag(node_id: u32) -> u32 {
         node_id,
         NODE_ID_MASK
     );
+    if node_id > NODE_ID_MASK {
+        error!(
+            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
+            node_id
+        );
+    }
     (node_id & NODE_ID_MASK) | ONTOLOGY_PROPERTY_FLAG
 }
 
