@@ -13,7 +13,7 @@ mod integration_tests {
     use std::collections::HashMap;
 
     #[cfg(feature = "ontology")]
-    use visionclaw_server::handlers::ontology_handler::config as ontology_config;
+    use visionclaw_server::handlers::api_handler::ontology::config as ontology_config;
 
     #[cfg(feature = "ontology")]
     use visionclaw_server::services::owl_validator::{GraphEdge, GraphNode, PropertyGraph};

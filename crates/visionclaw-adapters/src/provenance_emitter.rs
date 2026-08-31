@@ -415,14 +415,16 @@ fn fetch_provenance_node(store: &Store, entity: &str) -> Result<ProvenanceNode, 
     if let oxigraph::sparql::QueryResults::Solutions(solutions) = results {
         for solution in solutions {
             let s = solution.map_err(|e| ProvenanceError::Store(e.to_string()))?;
-            node.subject.get_or_insert_with(|| term_to_string(s.get("subject")));
+            node.subject
+                .get_or_insert_with(|| term_to_string(s.get("subject")));
             node.generated_by
                 .get_or_insert_with(|| term_to_string(s.get("activity")));
             node.attributed_to
                 .get_or_insert_with(|| term_to_string(s.get("agent")));
             node.generated_at
                 .get_or_insert_with(|| term_to_string(s.get("generatedAt")));
-            node.action.get_or_insert_with(|| term_to_string(s.get("action")));
+            node.action
+                .get_or_insert_with(|| term_to_string(s.get("action")));
             node.derivation
                 .get_or_insert_with(|| term_to_string(s.get("derivation")));
             if let Some(parent) = optional_term(s.get("parent")) {
@@ -669,7 +671,10 @@ mod tests {
         reify_activity(&store, &record).expect("reify");
 
         let ask = |q: &str| -> bool {
-            matches!(store.query(q), Ok(oxigraph::sparql::QueryResults::Boolean(true)))
+            matches!(
+                store.query(q),
+                Ok(oxigraph::sparql::QueryResults::Boolean(true))
+            )
         };
         let g = GRAPH_PROVENANCE;
         let act = &record.activity_urn;
@@ -679,9 +684,15 @@ mod tests {
         let p = "http://www.w3.org/ns/prov#";
         let rdft = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
-        assert!(ask(&format!("ASK {{ GRAPH <{g}> {{ <{act}> <{rdft}> <{p}Activity> }} }}")));
-        assert!(ask(&format!("ASK {{ GRAPH <{g}> {{ <{agent}> <{rdft}> <{p}Agent> }} }}")));
-        assert!(ask(&format!("ASK {{ GRAPH <{g}> {{ <{gen}> <{rdft}> <{p}Entity> }} }}")));
+        assert!(ask(&format!(
+            "ASK {{ GRAPH <{g}> {{ <{act}> <{rdft}> <{p}Activity> }} }}"
+        )));
+        assert!(ask(&format!(
+            "ASK {{ GRAPH <{g}> {{ <{agent}> <{rdft}> <{p}Agent> }} }}"
+        )));
+        assert!(ask(&format!(
+            "ASK {{ GRAPH <{g}> {{ <{gen}> <{rdft}> <{p}Entity> }} }}"
+        )));
         assert!(ask(&format!(
             "ASK {{ GRAPH <{g}> {{ <{gen}> <{p}wasGeneratedBy> <{act}> }} }}"
         )));
@@ -712,8 +723,14 @@ mod tests {
             .iter()
             .find(|n| &n.entity == gen)
             .expect("generated entity node present");
-        assert_eq!(node.generated_by.as_deref(), Some(record.activity_urn.as_str()));
-        assert_eq!(node.attributed_to.as_deref(), Some(record.agent_did.as_str()));
+        assert_eq!(
+            node.generated_by.as_deref(),
+            Some(record.activity_urn.as_str())
+        );
+        assert_eq!(
+            node.attributed_to.as_deref(),
+            Some(record.agent_did.as_str())
+        );
         assert!(node.generated_at.is_some());
         assert!(node.derived_from.contains(record.used.as_ref().unwrap()));
     }
