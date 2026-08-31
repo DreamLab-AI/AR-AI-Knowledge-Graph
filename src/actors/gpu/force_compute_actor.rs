@@ -578,7 +578,13 @@ impl ForceComputeActor {
     /// ranks from non-subclass structure. Only explicit subclass provenance
     /// counts. Pure/actor-free for unit testing.
     fn is_directed_hierarchy_relation(rel: &str) -> bool {
-        matches!(rel, "is_subclass_of" | "subclass_of" | "SUBCLASS_OF")
+        // "hierarchical" is the collapsed label this deployment's ingest writes
+        // (same accept the fold endpoint needed — see fold.rs); without it the
+        // DAG ranks stay unranked and Radial: DAG / Hierarchy are silently inert.
+        matches!(
+            rel,
+            "is_subclass_of" | "subclass_of" | "SUBCLASS_OF" | "hierarchical" | "HIERARCHICAL"
+        )
     }
 
     fn compute_dag_ranks(num_nodes: usize, hierarchy_edges: &[(usize, usize)]) -> Vec<f32> {
@@ -2701,7 +2707,11 @@ impl Handler<SetLayoutMode> for ForceComputeActor {
             params.layer_bias_k
         );
 
-        <Self as Handler<UpdateSimulationParams>>::handle(self, UpdateSimulationParams { params }, ctx)
+        <Self as Handler<UpdateSimulationParams>>::handle(
+            self,
+            UpdateSimulationParams { params },
+            ctx,
+        )
     }
 }
 
@@ -2767,8 +2777,7 @@ impl Handler<SetRadialLayout> for ForceComputeActor {
                     .radial_node_index
                     .get(&focus)
                     .ok_or_else(|| "focus node not in graph".to_string())?;
-                let keys =
-                    Self::compute_ego_distances(num_nodes, &self.graph_adjacency, focus_idx);
+                let keys = Self::compute_ego_distances(num_nodes, &self.graph_adjacency, focus_idx);
                 // Centre the shells on the focus node's live position; fall back to
                 // the origin if positions are unreadable.
                 let mut center = [0.0f32, 0.0, 0.0];
@@ -2823,8 +2832,11 @@ impl Handler<SetRadialLayout> for ForceComputeActor {
             msg.mode, msg.focus_node, center[0], center[1], center[2], params.dag_bias_k
         );
 
-        let result =
-            <Self as Handler<UpdateSimulationParams>>::handle(self, UpdateSimulationParams { params }, ctx);
+        let result = <Self as Handler<UpdateSimulationParams>>::handle(
+            self,
+            UpdateSimulationParams { params },
+            ctx,
+        );
 
         // Re-keying the shells only changes the per-node node_rank buffer (already
         // uploaded above), which UpdateSimulationParams' idempotency guard cannot see
@@ -2845,7 +2857,11 @@ impl Handler<SetRadialLayout> for ForceComputeActor {
 impl Handler<UpdateSimulationParams> for ForceComputeActor {
     type Result = Result<(), String>;
 
-    fn handle(&mut self, mut msg: UpdateSimulationParams, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        mut msg: UpdateSimulationParams,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         // Layout mode is owned exclusively by SetLayoutMode. A settings-driven update
         // is built via `PhysicsSettings -> SimulationParams`, which cannot recover the
         // mode (PhysicsSettings has no mode field) and so defaults it to ForceDirected.
@@ -4398,7 +4414,10 @@ mod pinning_tests {
         let mut pinned: HashMap<u32, Vec3> = HashMap::new();
         FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
         let changed = FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
-        assert!(!changed, "re-pinning identical position must not report a change");
+        assert!(
+            !changed,
+            "re-pinning identical position must not report a change"
+        );
     }
 
     #[test]
@@ -4406,7 +4425,10 @@ mod pinning_tests {
         let mut pinned: HashMap<u32, Vec3> = HashMap::new();
         FCA::apply_pin_ops(&mut pinned, &[(7, [1.0, 2.0, 3.0])], &[]);
         let changed = FCA::apply_pin_ops(&mut pinned, &[(7, [9.0, 9.0, 9.0])], &[]);
-        assert!(changed, "moving a pinned node to a new position must report a change");
+        assert!(
+            changed,
+            "moving a pinned node to a new position must report a change"
+        );
         assert_eq!(pinned.get(&7), Some(&Vec3::new(9.0, 9.0, 9.0)));
     }
 
@@ -4423,7 +4445,10 @@ mod pinning_tests {
     fn unpin_absent_node_is_not_a_change() {
         let mut pinned: HashMap<u32, Vec3> = HashMap::new();
         let changed = FCA::apply_pin_ops(&mut pinned, &[], &[42]);
-        assert!(!changed, "unpinning a node that was never pinned is a no-op");
+        assert!(
+            !changed,
+            "unpinning a node that was never pinned is a no-op"
+        );
     }
 
     #[test]
@@ -4738,7 +4763,14 @@ mod z_scale_tests {
         let centroids = [(0.0f32, 0.0f32); 3];
         let mut p = Vec3::new(0.0, 0.0, 10.0);
         let face_scale = clamp_z_scale(0.1);
-        project_node_xy(&mut p, GraphPopulation::Agent, &centroids, 0.0, face_scale, 0.0);
+        project_node_xy(
+            &mut p,
+            GraphPopulation::Agent,
+            &centroids,
+            0.0,
+            face_scale,
+            0.0,
+        );
         assert!((p.z - 1.0).abs() < 1e-6);
     }
 }
