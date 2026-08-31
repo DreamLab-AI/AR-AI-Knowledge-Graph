@@ -1,7 +1,7 @@
 # Unified TODO — VisionClaw + agentbox
 
 **Status:** Living document (single combined register — supersedes split tracking)
-**Last refreshed:** 2026-08-31 (was frozen 2026-07-22; refreshed for the ADR-137–141 XR/layout landing)
+**Last refreshed:** 2026-08-31 (consolidation sweep: absorbed the ADR consultant-panel roadmap as §9, reviewed + folded the stale 2026-06-12 `todo.md` hand-off as §10, indexed design open-questions as §11 — see §0 for the full source manifest)
 **Created:** 2026-07-22, from the doc-drift audit (`docs/audit-doc-drift-2026-07-22.md`, ADR-131) and the agentbox backlog/audit (`agentbox/docs/developer/backlog.md`, `agentbox/docs/reference/audit-2026-07-15.md`)
 **Governed by:** [PRD-024 Final-Mile Closeout](prd/PRD-024-final-mile-closeout.md), [ADR-133](adr/ADR-133-final-mile-sprint.md)
 **Rule:** every entry carries exactly one unblock state. Mislabelling a state is itself a defect (the REC-9 rule). Remove entries when done; closures need evidence files.
@@ -16,6 +16,24 @@ The six unblock states:
 | `posture` | Deliberately held closed; a decision, not a gap | Operator decides (deciding "stay closed" also closes the entry — re-date it) |
 | `data-floor` | Waiting on samples/corpus to accumulate | The clock; check floor, then flip |
 | `external` | Blocked outside both repos | Upstream/network change |
+
+---
+
+## 0. Consolidated sources (this is the single index — 2026-08-31)
+
+Every backlog across the two repos now funnels here. Disposition of each source found in the 2026-08-31 sweep:
+
+| Source | Repo | Disposition |
+|---|---|---|
+| `docs/TODO-unified.md` (this file) | VisionClaw | **Canonical register.** Everything below. |
+| `docs/ROADMAP-consultant-panel-2026-08-31.md` | VisionClaw | Five-model ADR gap-analysis. Open items pulled into **§9**. |
+| `agentbox/docs/developer/backlog.md` | agentbox | Subordinate (self-declared). Live items reflected here; stale items retired in place. |
+| `todo.md` (repo root) | VisionClaw | Stale 2026-06-12 session hand-off. Unique live candidates pulled into **§10** (liveness-unverified); file reduced to a redirect stub. |
+| `agentbox/docs/developer/code-as-harness.md` §Open Questions | agentbox | Design questions (ADR-018/019 revisions). Pointer in **§11**. |
+| `docs/explanation/ddd-contributor-enablement-context.md` §Open Questions | VisionClaw | Design questions (DDD/BC). Pointer in **§11**. |
+| tutorial/how-to "Next Steps" endings | both | Doc-local, not project backlog — excluded. |
+| `agentbox/skills/.../khive-v2-roadmap.md` | agentbox | About an external project (KHIVE) — excluded. |
+| `docs/archive/**`, `agentbox/docs/archive/**` | both | Frozen history — not authority (see §7). |
 
 ---
 
@@ -102,6 +120,65 @@ remains open (folds into L-5).
 | X-4 | Agent-swarm XR visualisation — **P1 DONE (ADR-140)** | `code-gap` | `0x23 AGENT_ACTION` consume side (`AgentBeamActor`/`BeamCoalescer`), embodied agents, work beams, HUD Swarm tab. ADR status is Proposed (P1 shipped); later phases open. |
 | X-5 | ~~Constrained-layout engine programme~~ **P1–P4 DONE (ADR-141)** | `code-gap` | Sugiyama layers, stratified planes, spherical shells, ego-radial `RadialModes`; `POST /api/layout/mode` + `/api/layout/radial`. P5/P6 deferred by the ADR. Also lands the visual query builder (`POST /api/graph/query/pattern`) and fold ladder (`GET /api/graph/fold`), plus the V5 wire wrapper. |
 | X-6 | On-headset validation of the new XR features | `live-session` | The ADR-137–141 client work is Monado/desktop-OpenXR proven; physical Vive/Quest on-device observation of render offload, immersive interaction, and swarm beams folds into L-5 (P2-M6 discipline). |
+
+---
+
+## 9. ADR governance backlog (consultant panel 2026-08-31)
+
+From the five-model gap analysis (`docs/ROADMAP-consultant-panel-2026-08-31.md`).
+This session **closed** P0-1 (staleness gate armed on 31 records), the two
+code-with-defect fixes (node-ID overflow guard, ADR-2035 doc-comment), and the
+ADR-2031 tombstone. Five gaps were **converted to `proposed` records** (decision
+written, code owed): the "code-gap" rows below whose entry names an ADR carry a
+ratified-but-unbuilt decision, so the design round-trip is already done.
+
+| # | Entry | State | Detail |
+|---|---|---|---|
+| G-1 | dev-auth build guard (VC ADR-2037) | `code-gap` | CI/image assertion that production binaries carry the real `enforce_release_env_hygiene`, not the `#[cfg(feature="dev-auth")]` no-op stub (`src/main.rs:169`). Small; closes a verified release-security hole. |
+| G-2 | Boot-time profile assertion (VC ADR-2038) | `code-gap` | Boot selector + abort on the ADR-2003 illegal combo (`RBAC_PUBLIC_READS=1`+`PUBKEY_VISIBILITY_FILTER=0`); production defaults to multi-user-locked. Stops demo-open reaching prod. The `RBAC_DEFAULT_ROLE=viewer` lever already shipped (8e78a9d19). |
+| G-3 | Cross-repo federation CI fixture (AB ADR-2025) | `code-gap` | Shared sha12/hex-identity byte-parity test run in **both** repos' CI so an agentbox helper change can't silently break the visionclaw join. |
+| G-4 | Session-mirror egress boundary (AB ADR-2026) | `code-gap`→`posture` | Inspect `config/hooks/nostr-live-mirror.cjs`; decide transcript redaction before NIP-59 wrap; make `AGENTBOX_LIVE_MIRROR=0` fail-**closed**. The sovereignty/privacy hole. |
+| G-5 | Secret custody + publisher-key split (AB ADR-2027) | `code-gap`+`ops-action` | Custodian/rotation/revocation per load-bearing secret; execute the pending ADR-040 D3 publisher-key split (compromise window = one build-deploy cycle). |
+| G-6 | `did:nostr:local` fail-open abort (AB ADR-2011) | `code-gap` | **Quick win (S):** abort boot on failed key derivation instead of minting the non-canonical placeholder into storage. |
+| G-7 | Provenance durability + estate erasure (VC ADR-2016/2017) | `code-gap` | (L) Back up the Oxigraph provenance store (or dual-write to a backed-up SQLite), and scope the redaction/crypto-shred erasure path ADR-2016 defers. |
+| G-8 | Replay-cache DoS mitigation (VC ADR-2002, AB ADR-2009) | `code-gap` | Per-pubkey admission/rate-limit ahead of `ReplayCacheFull`; consider replica-coordinated replay state. |
+| G-9 | Loom `:8084` exposure audit (AB ADR-2023) | `ops-action` | Verify the plaintext model door isn't LAN-reachable beyond intended consumers; bind/authenticate if it is. |
+| G-10 | Sanctioned LAN-door threat model (AB ADR-2009/2013) | `posture`+`ops-action` | Per-door decision for the nine `0.0.0.0` publishes (raw CDP `9222` first); bind to loopback or authenticate. Operationally disruptive — deliberately parked. |
+| G-11 | Session-bearer sunset (VC ADR-2009) | `posture` | Deprecate the replayable UUID bearer realm — blocked on the React client signing requests; parked (breaks client until then). |
+| G-12 | AoE token activation (AB ADR-2002/2009) | `ops-action` | The one genuinely **live** HIGH exposure: the running box is `--auth none` pending a T-6-style agentbox rebuild; reconcile AB-2002/AB-2009 on activation. |
+| G-13 | PTX splice hardening (VC ADR-2030) | `code-gap` | Make the PTX `.version` rewrite fail on unexpected headers; pin/attest the bundled fallback. |
+| G-14 | Type + populate supersession graph; namespace ADR IDs per repo | `code-gap` | The reciprocity CI check still governs an empty graph (all 59 `supersedes: []`); `VC-2022`/`AB-2022` collide with no repo qualifier. Editorial (L). |
+| G-15 | Define the status-axis lattice | `posture` | Owner convention call: make incoherent triples (e.g. `complete`+admitted-defect, `none`+enforced-freeze like AB-2019) unrepresentable. Declined to flip unilaterally this session. |
+
+## 10. 2026-06-12 hand-off review (`todo.md`, verified 2026-08-31)
+
+The root `todo.md` was a June session hand-off predating the final-mile sprint.
+Reviewed against current code during this consolidation — most of it has landed:
+
+| June work-queue item | Verified state 2026-08-31 | Disposition |
+|---|---|---|
+| PRD-015 payments Phase 1 (pay402, gate, payer) | `lib/pay402.js` + `middleware/payment-gate.js` + `tests/contract/pay402/` exist; `[payments]=on` in agentbox.toml | **Built.** Enabling is posture (T-4, parked until counterparty). |
+| Spend-approval ACSP case (kind-31402) | Payments plane shipped; approval reuses the ElevationActor pattern | Folds into T-4 posture. |
+| Elevation loop operations (VC) | `src/actors/elevation_actor.rs` built + wired in `app_state.rs` | Code **done**; live-fire is L-1. |
+| BC20 receipt/activity crossing (agentbox) | `receipt-minter.js:108` is the production `crossOutbound` caller the note said was missing | **Closed.** |
+| XR on-device validation | Tracked as X-6 / L-5 | Already in register. |
+| Unauth `GET /api/graph/data` (FINDING-1) | `rbac_gate.rs:344` maps it to `None` deliberately, with a test | **Governed posture** (demo-open reads), not a bug; safety governed by G-2. |
+| `protocol-matrix.md` 0x42/36B claim | Zero hits — corrected | **Fixed.** |
+| `rest-api.md` ~30 broker/workflow endpoints | 34 broker/workflow mentions still present | **Still live** — `code-gap`/doc: delete phantom tables or implement. |
+| CUDA kernel-count truth (docs say 37/39/92) | 83 `__global__` in cuda sources now | **Still live** — `code-gap`/doc: bless one counting method, align claims. |
+| `installation.md` stale `docker ps` narrative | Not re-verified this pass | Carry as doc-debris `code-gap` (low). |
+
+**Residue that survives review → tracked as:** DOC-1 (`rest-api.md` phantom endpoints), DOC-2 (CUDA kernel-count truth), DOC-3 (`installation.md` refresh). Small doc-accuracy `code-gap`s; `todo.md` reduced to a redirect stub.
+
+Note: **C-11** (branch graveyard) is now effectively resolved — local branches are down to **9** (from the 123/116-gated pool); close it on the next operator confirmation.
+
+## 11. Design open-questions (pointers, not action items)
+
+Unresolved *design* questions living with their governing docs; each is owned by a
+future ADR revision, not a code tick. Listed so the register is the complete index:
+
+- **agentbox code-execution** (`agentbox/docs/developer/code-as-harness.md` §Open Questions): kernel scope per-session vs per-worktree, pip-install policy, kernel GPU access, cross-session state persistence, lesson-quality threshold, Voyager discovery surface — all deferred to ADR-018/019 revisions.
+- **DDD contributor enablement** (`docs/explanation/ddd-contributor-enablement-context.md` §Open Questions): cross-device workspace identity, suggestion-acceptance graph mutation timing, skill-version retirement propagation, inbox PII/GDPR retention (ADR-041 append-only vs ADR-052 contributor-owned), multi-partner lineage roots.
 
 ---
 
