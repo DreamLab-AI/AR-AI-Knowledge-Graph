@@ -107,6 +107,22 @@ pub(crate) fn handle_authenticate(
             // the dev-auth feature is on.
             #[cfg(any(debug_assertions, feature = "dev-auth"))]
             {
+                // Same single gate as REST: only when the handshake marked this
+                // connection dev-bypass-eligible (DEV_AUTH_LOOPBACK=1 + loopback
+                // peer). Never accept the literal token ungated.
+                if token == "dev-session-token" && !act.dev_bypass_ok {
+                    warn!(
+                        "dev-auth: rejected WS dev-session-token — requires DEV_AUTH_LOOPBACK=1 and a loopback peer"
+                    );
+                    let response = serde_json::json!({
+                        "type": "authenticate_error",
+                        "error": "dev-session-token not permitted (requires loopback + DEV_AUTH_LOOPBACK)",
+                    });
+                    if let Ok(msg_str) = serde_json::to_string(&response) {
+                        ctx.text(msg_str);
+                    }
+                    return;
+                }
                 if token == "dev-session-token" {
                     act.pubkey = Some(pubkey.clone());
                     act.is_power_user = true;

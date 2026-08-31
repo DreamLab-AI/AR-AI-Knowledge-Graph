@@ -15,6 +15,7 @@ pub mod force_channels;
 pub mod graph_export;
 pub mod graph_types;
 pub mod pagination;
+pub mod rbac;
 pub mod protected_settings;
 pub mod ragflow_chat;
 pub mod simulation_params;

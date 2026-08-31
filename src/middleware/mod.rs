@@ -2,12 +2,14 @@
 
 pub mod auth;
 pub mod public_demo;
+pub mod rbac_gate;
 pub mod rate_limit;
 pub mod timeout;
 pub mod validation;
 
 pub use auth::{get_authenticated_user, AuthenticatedUser, RequireAuth};
 pub use public_demo::PublicDemoGuard;
+pub use rbac_gate::RbacGate;
 pub use rate_limit::{RateLimit, RateLimitConfig};
 pub use timeout::{TimeoutConfig, TimeoutMiddleware};
 pub use validation::{validators, ValidateInput, ValidationConfig};

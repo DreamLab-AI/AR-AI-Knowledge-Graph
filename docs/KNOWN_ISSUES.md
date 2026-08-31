@@ -19,7 +19,24 @@ None currently active.
 
 ## P2 Issues (Degraded Feature)
 
-### AUTH-001: Enterprise SSO — Partial (RBAC Implemented, OIDC Pending)
+### AUTH-001: Enterprise SSO — Native RBAC Resolved (OIDC/SAML Still Pending)
+
+> Resolution (2026-08-31, ADR-142): the Nostr-native multi-user RBAC half of
+> AUTH-001 is now **implemented on `main`** — not the branch-only
+> `enterprise_auth.rs`, but a fresh port bound to the NIP-98-verified pubkey
+> (the user's DID) rather than the spoofable `X-Enterprise-Role` header. A
+> persisted four-tier lattice (`Owner > Admin > Editor > Viewer`,
+> `src/models/rbac.rs`) is stored per-pubkey in SQLite
+> (`src/services/role_store.rs`), resolved by the existing `verify_access`, and
+> enforced centrally by the `RbacGate` middleware over the whole `/api` scope
+> (`src/middleware/rbac_gate.rs`) — closing the unauthenticated-mutation gap.
+> Role management lives at `/api/admin/rbac/*`
+> (`src/handlers/admin_rbac_handler.rs`). The **remaining** gap is only the
+> enterprise-IdP federation (OIDC/SAML/SCIM, ADR-040 Phase 1/2), which stays
+> parked. The four-tier `Admin > Broker > Auditor > Contributor` /
+> `X-Enterprise-Role` design described below was **never adopted** — it was a
+> reference only; the shipped taxonomy is `Owner/Admin/Editor/Viewer`. See
+> [ADR-142](adr/ADR-142-multi-user-rbac.md).
 
 > Correction (2026-07-22 doc-drift audit): the entry below asserts that
 > `src/middleware/enterprise_auth.rs` (the four-tier Admin > Broker > Auditor >
@@ -33,7 +50,7 @@ None currently active.
 > claims below as branch-only. Tracked in
 > [ADR-131](adr/ADR-131-doc-drift-reconciliation-2026-07.md) §3 (AUTH-001).
 
-**Status**: Partially resolved — ADR-040 accepted, RBAC middleware implemented, OIDC integration pending
+**Status**: Native multi-user RBAC resolved-by-implementation (ADR-142, 2026-08-31); OIDC/SAML SSO federation still pending (ADR-040 Phase 1)
 **Impact**: VisionClaw's enterprise RBAC middleware (`src/middleware/enterprise_auth.rs`) now supports two authentication paths: (1) NIP-98 Schnorr signature verification with pubkey-to-role resolution via `Nip98RoleResolver` (enabled by the `nip98-auth` compile-time feature), and (2) `X-Enterprise-Role` header extraction for dev/gateway deployments. The four-tier role hierarchy (Admin > Broker > Auditor > Contributor) is enforced on all enterprise-gated routes.
 
 **Remaining gap**: Full OIDC/SAML SSO integration (ADR-040 Phase 1) is not yet implemented. Enterprise users cannot log in via Entra ID, Okta, or Google Workspace. The server-side ephemeral Nostr keypair delegation (OIDC session to secp256k1 key) described in ADR-040 remains unimplemented. SCIM provisioning (ADR-040 Phase 2) is deferred.

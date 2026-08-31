@@ -15,6 +15,7 @@ pub mod mcp_relay_manager;
 pub mod multi_mcp_agent_discovery;
 pub mod natural_language_query_service;
 pub mod nostr_service;
+pub mod role_store;
 pub mod owl_validator;
 pub mod parsers;
 pub mod perplexity_service;

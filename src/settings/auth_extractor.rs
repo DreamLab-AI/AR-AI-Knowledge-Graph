@@ -24,7 +24,16 @@ fn try_dev_bypass(req: &HttpRequest) -> Option<AuthenticatedUser> {
         .get("Authorization")
         .and_then(|h| h.to_str().ok())?;
     if auth == "Bearer dev-session-token" {
-        debug!("dev-auth: Bearer dev-session-token accepted (dev build)");
+        // Route through the single shared gate: dev build + DEV_AUTH_LOOPBACK=1 +
+        // loopback peer. Never accept the literal token ungated.
+        if !crate::utils::auth::dev_bypass_permitted(req) {
+            warn!(
+                "dev-auth: rejected Bearer dev-session-token — requires DEV_AUTH_LOOPBACK=1 and a loopback peer (peer={:?})",
+                req.peer_addr()
+            );
+            return None;
+        }
+        debug!("dev-auth: Bearer dev-session-token accepted (loopback + DEV_AUTH_LOOPBACK)");
         let pubkey = req
             .headers()
             .get("X-Nostr-Pubkey")
@@ -187,8 +196,18 @@ impl FromRequest for AuthenticatedUser {
         #[cfg(any(debug_assertions, feature = "dev-auth"))]
         {
             if token == "dev-session-token" {
+                if !crate::utils::auth::dev_bypass_permitted(req) {
+                    warn!(
+                        "dev-auth: rejected dev-session-token for pubkey {} — requires DEV_AUTH_LOOPBACK=1 and a loopback peer (peer={:?})",
+                        pubkey,
+                        req.peer_addr()
+                    );
+                    return Box::pin(async {
+                        Err(ErrorUnauthorized("Invalid or expired session"))
+                    });
+                }
                 debug!(
-                    "dev-auth: Bearer dev-session-token accepted for pubkey: {} (dev build)",
+                    "dev-auth: Bearer dev-session-token accepted for pubkey: {} (loopback + DEV_AUTH_LOOPBACK)",
                     pubkey
                 );
                 return Box::pin(async move {
@@ -264,5 +283,38 @@ mod tests {
             is_power_user: false,
         };
         assert!(regular_user.require_power_user().is_err());
+    }
+
+    /// The REST extractor's dev-token path must go through the same loopback +
+    /// opt-in gate: a `Bearer dev-session-token` from a non-loopback peer, or
+    /// without `DEV_AUTH_LOOPBACK=1`, yields no `AuthenticatedUser`. Cases run
+    /// sequentially — they share a process env var.
+    #[cfg(any(debug_assertions, feature = "dev-auth"))]
+    #[test]
+    fn try_dev_bypass_is_loopback_and_optin_gated() {
+        use actix_web::test::TestRequest;
+
+        let build = |peer: &str| {
+            TestRequest::default()
+                .insert_header(("Authorization", "Bearer dev-session-token"))
+                .peer_addr(peer.parse().unwrap())
+                .to_http_request()
+        };
+
+        std::env::set_var("DEV_AUTH_LOOPBACK", "1");
+        assert!(
+            try_dev_bypass(&build("127.0.0.1:5000")).is_some(),
+            "loopback + opt-in must yield a dev user"
+        );
+        assert!(
+            try_dev_bypass(&build("203.0.113.7:5000")).is_none(),
+            "non-loopback peer must be refused even with opt-in"
+        );
+
+        std::env::remove_var("DEV_AUTH_LOOPBACK");
+        assert!(
+            try_dev_bypass(&build("127.0.0.1:5000")).is_none(),
+            "no opt-in must refuse even from loopback"
+        );
     }
 }

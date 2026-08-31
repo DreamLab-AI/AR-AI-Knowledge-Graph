@@ -68,6 +68,16 @@ services:
       DOCKER_ENV: ${DOCKER_ENV:-true}
       # Dev-only: bypass Nostr auth for settings writes (never set in production)
       SETTINGS_AUTH_BYPASS: "${SETTINGS_AUTH_BYPASS:-false}"
+      # ADR-142 multi-user RBAC (defaults are fail-closed; these preserve the
+      # current single-operator behaviour *visibly*):
+      #  - RBAC_PUBLIC_READS=1 keeps anonymous /api GET reads open (client fetches
+      #    graph data pre-auth). Set to 0 to require auth on every read.
+      #  - RBAC_ALLOW_OWNERLESS=1 permits startup with no Owner assigned (the
+      #    POWER_USER_PUBKEYS→Admin fallback is the intended reality here). Once
+      #    an Owner is bootstrapped via RBAC_OWNER_PUBKEY, set this to 0.
+      RBAC_PUBLIC_READS: "${RBAC_PUBLIC_READS:-1}"
+      RBAC_ALLOW_OWNERLESS: "${RBAC_ALLOW_OWNERLESS:-1}"
+      RBAC_OWNER_PUBKEY: "${RBAC_OWNER_PUBKEY:-}"
       # Solid pod storage (embedded solid-pod-rs)
       SOLID_DATA_ROOT: ${SOLID_DATA_ROOT:-/data/solid}
       # Nostr bead provenance bridge — scoped to visionclaw only (privkey must not leak to other containers)

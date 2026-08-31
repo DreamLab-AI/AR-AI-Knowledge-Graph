@@ -6,8 +6,9 @@ use visionclaw_server::actors::messages::ReloadGraphFromDatabase;
 use visionclaw_server::{
     config::AppFullSettings,
     handlers::{
-        admin_sync_handler, api_handler, bots_visualization_handler, client_log_handler,
-        client_messages_handler, consolidated_health_handler, graph_export_handler,
+        admin_rbac_handler, admin_sync_handler, api_handler, bots_visualization_handler,
+        client_log_handler, client_messages_handler, consolidated_health_handler,
+        graph_export_handler,
         mcp_relay_handler::mcp_relay_handler,
         metrics_handler, multi_mcp_websocket_handler, nostr_handler, pages_handler,
         presence_handler::{
@@ -689,6 +690,81 @@ async fn main() -> std::io::Result<()> {
     }
 
     let app_state_data = web::Data::new(app_state);
+
+    // ADR-142 multi-user RBAC: build the pubkey→role store over the settings
+    // SQLite connection, bootstrap the Owner from RBAC_OWNER_PUBKEY, and install
+    // it as the process-global that `verify_access` / the `/api` RbacGate
+    // consult. Non-fatal on failure — auth degrades to the legacy power-user
+    // mapping rather than taking the server down.
+    {
+        use visionclaw_server::services::role_store::{
+            set_global_role_store, RoleStore, RBAC_ALLOW_OWNERLESS_ENV,
+        };
+        let conn = app_state_data
+            .sqlite_settings_repository
+            .connection()
+            .clone();
+        match RoleStore::new(conn).await {
+            Ok(store) => {
+                if let Err(e) = store.bootstrap_owner_from_env().await {
+                    warn!("[rbac] Owner bootstrap failed: {e}");
+                }
+                // Fail closed on an owner-less store (Codex review [MED]): with no
+                // Owner, nobody can ever grant Admin/Owner — a permanent lockout.
+                // Legacy single-user deployments (where the POWER_USER_PUBKEYS →
+                // Admin fallback is the intended reality) opt out explicitly with
+                // RBAC_ALLOW_OWNERLESS=1.
+                let allow_ownerless = std::env::var(RBAC_ALLOW_OWNERLESS_ENV)
+                    .map(|v| v.trim() == "1" || v.trim().eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                match store.has_owner().await {
+                    Ok(true) => {}
+                    Ok(false) if allow_ownerless => {
+                        warn!(
+                            "[rbac] no Owner assigned but {RBAC_ALLOW_OWNERLESS_ENV}=1 — \
+                             running owner-less; role management (grant Admin/Owner) is \
+                             unavailable, only the POWER_USER_PUBKEYS→Admin fallback applies"
+                        );
+                    }
+                    Ok(false) => {
+                        error!(
+                            "[rbac] FATAL: no Owner is assigned. Set RBAC_OWNER_PUBKEY=<64-hex \
+                             pubkey> to bootstrap one, or RBAC_ALLOW_OWNERLESS=1 to permit a \
+                             legacy owner-less deployment. Refusing to start (fail-closed)."
+                        );
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::PermissionDenied,
+                            "RBAC: no Owner assigned and RBAC_ALLOW_OWNERLESS not set",
+                        ));
+                    }
+                    Err(e) => {
+                        error!("[rbac] FATAL: could not determine Owner presence: {e}");
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("RBAC: owner check failed: {e}"),
+                        ));
+                    }
+                }
+                if set_global_role_store(std::sync::Arc::new(store)).is_err() {
+                    warn!("[rbac] global role store already initialised");
+                } else {
+                    info!("[rbac] multi-user role store initialised (ADR-142)");
+                }
+            }
+            Err(e) => {
+                // Fail closed (Codex round-2): a failed store init previously
+                // continued WITHOUT the store, so `verify_access` silently fell
+                // back to the legacy power-user→Admin mapping — a fail-OPEN
+                // downgrade. Refuse to start instead.
+                error!("[rbac] FATAL: failed to initialise role store: {e}");
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("RBAC: role store initialisation failed: {e}"),
+                ));
+            }
+        }
+    }
+
     let validation_service = web::Data::new(validation_handler::ValidationService::new());
 
     // Initialize PhysicsService so POST /api/physics/reset and related endpoints work.
@@ -929,8 +1005,17 @@ async fn main() -> std::io::Result<()> {
                     // PUBLIC_DEMO=read-only, reject every mutating method on the
                     // whole /api scope with 403. Inert (passthrough) by default.
                     .wrap(visionclaw_server::middleware::PublicDemoGuard::from_env())
+                    // ADR-142 multi-user RBAC: central gate over the whole /api
+                    // scope. Public reads pass through; mutations require an
+                    // authenticated Editor+, /api/settings writes require
+                    // WriteSettings, and /api/admin/* requires Admin. Auth
+                    // endpoints (/api/auth/*) and client-logs are allowlisted.
+                    // Mode via RBAC_GATE_MODE (enforce|report; default enforce).
+                    .wrap(visionclaw_server::middleware::RbacGate::from_env())
                     // Client logs route - registered early to avoid scope conflicts
                     .route("/client-logs", web::post().to(client_log_handler::handle_client_logs))
+                    // ADR-142: RBAC admin management surface (/api/admin/rbac/*)
+                    .configure(admin_rbac_handler::configure_routes)
                     .service(
                         web::scope("/settings")
                             .wrap(RateLimit::per_minute(60))

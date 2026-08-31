@@ -81,6 +81,13 @@ pub struct SocketFlowServer {
     // Authentication state
     pub(crate) pubkey: Option<String>,
     pub(crate) is_power_user: bool,
+    /// Whether the dev-session-token bypass is permitted for THIS connection —
+    /// computed once at the WS handshake from the peer address + env opt-in via
+    /// `crate::utils::auth::dev_bypass_permitted_for_addr`, so the WS auth path
+    /// routes through the same single gate as the REST paths. Always `false` in
+    /// release builds. (ADR-142 hardening, Codex round-2.)
+    #[allow(dead_code)] // only read in dev/dev-auth builds
+    pub(crate) dev_bypass_ok: bool,
     // HTTP-equivalent URL of the WebSocket connection (for NIP-98 validation)
     pub(crate) connection_url: String,
 
@@ -191,6 +198,7 @@ impl SocketFlowServer {
             state_synced: false,
             pubkey: None,
             is_power_user: false,
+            dev_bypass_ok: false,
             connection_url: String::new(),
             dragged_nodes: HashSet::new(),
             drag_last_update: HashMap::new(),
@@ -342,7 +350,6 @@ impl SocketFlowServer {
         actix::spawn(async move {
             let is_current = || sync_generation_is_current(&sync_generation, my_generation);
 
-
             if let Ok(Ok(graph_data)) = app_state
                 .graph_service_addr
                 .send(crate::actors::messages::GetGraphData)
@@ -401,7 +408,12 @@ impl SocketFlowServer {
                     // default (3000), and any value is clamped to a sanity ceiling
                     // (100_000) so a client can raise it up to the full graph.
                     let initial_node_limit = resolve_initial_node_limit(
-                        settings.visualisation.graphs.logseq.physics.initial_node_limit,
+                        settings
+                            .visualisation
+                            .graphs
+                            .logseq
+                            .physics
+                            .initial_node_limit,
                     );
 
                     // Send new InitialGraphLoad message with LIMITED node set for fast initial render
@@ -454,10 +466,7 @@ impl SocketFlowServer {
                         });
 
                         let filtered_nodes: Vec<&visionclaw_domain::models::node::Node> =
-                            sorted_nodes
-                                .into_iter()
-                                .take(initial_node_limit)
-                                .collect();
+                            sorted_nodes.into_iter().take(initial_node_limit).collect();
 
                         let filtered_node_ids: HashSet<u32> =
                             filtered_nodes.iter().map(|n| n.id).collect();
@@ -819,8 +828,14 @@ mod sync_generation_tests {
         // Sync B (e.g. post-auth) starts while A is still in flight.
         let b = gen.fetch_add(1, SeqCst) + 1;
         // A must now detect it is stale; B is still current.
-        assert!(!sync_generation_is_current(&gen, a), "stale sync A must be discarded");
-        assert!(sync_generation_is_current(&gen, b), "fresh sync B must deliver");
+        assert!(
+            !sync_generation_is_current(&gen, a),
+            "stale sync A must be discarded"
+        );
+        assert!(
+            sync_generation_is_current(&gen, b),
+            "fresh sync B must deliver"
+        );
     }
 
     #[test]

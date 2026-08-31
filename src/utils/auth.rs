@@ -51,6 +51,54 @@ impl AccessLevel {
     }
 }
 
+/// Resolve a caller's effective [`AccessLevel`] from their persisted RBAC role
+/// (ADR-142). When the process-global [`RoleStore`](crate::services::role_store)
+/// is installed, the pubkey's four-tier role (Owner/Admin/Editor/Viewer) drives
+/// the level; otherwise we fall back to the legacy binary mapping
+/// (`is_power_user` → Admin, else Authenticated) so nothing regresses in
+/// contexts that never initialised the store (e.g. unit tests).
+async fn resolve_access_level(pubkey: &str, is_power_user: bool) -> AccessLevel {
+    match crate::services::role_store::global_role_store() {
+        Some(store) => store
+            .effective_role(pubkey, is_power_user)
+            .await
+            .to_access_level(),
+        None => {
+            if is_power_user {
+                AccessLevel::Admin
+            } else {
+                AccessLevel::Authenticated
+            }
+        }
+    }
+}
+
+/// Whether the dev-session-token bypass may fire for a request from `peer`.
+/// Requires the explicit `DEV_AUTH_LOOPBACK=1` opt-in AND a loopback peer
+/// address. This is the **single** gate every dev-token acceptance path routes
+/// through (REST extractor, middleware, WS handshake), so no path can accept the
+/// literal token ungated. Compiled only into dev/`dev-auth` builds.
+#[cfg(any(debug_assertions, feature = "dev-auth"))]
+pub fn dev_bypass_permitted_for_addr(peer: Option<std::net::SocketAddr>) -> bool {
+    let opt_in = std::env::var("DEV_AUTH_LOOPBACK")
+        .map(|v| v.trim() == "1" || v.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if !opt_in {
+        return false;
+    }
+    match peer {
+        Some(addr) => addr.ip().is_loopback(),
+        // No peer address (e.g. some proxy configs) — fail closed.
+        None => false,
+    }
+}
+
+/// Convenience wrapper resolving the peer address from an [`HttpRequest`].
+#[cfg(any(debug_assertions, feature = "dev-auth"))]
+pub fn dev_bypass_permitted(req: &HttpRequest) -> bool {
+    dev_bypass_permitted_for_addr(req.peer_addr())
+}
+
 pub async fn verify_access(
     req: &HttpRequest,
     nostr_service: &NostrService,
@@ -63,7 +111,15 @@ pub async fn verify_access(
         .unwrap_or(&Uuid::new_v4().to_string())
         .to_string();
 
-    // --- Dev bypass (dev builds only) ---
+    // --- Dev bypass (dev builds only, loopback + explicit opt-in) ---
+    //
+    // Codex review [HIGH]: `Bearer dev-session-token` previously satisfied the
+    // whole lattice (incl. Admin) with an arbitrary `X-Nostr-Pubkey`, in any
+    // debug build, from any peer. It is now triple-gated: compile-time
+    // (`debug_assertions`/`dev-auth`), an explicit runtime opt-in
+    // (`DEV_AUTH_LOOPBACK=1`), AND the request must originate from a loopback
+    // peer address. A remote attacker on a debug deployment can no longer reach
+    // it even if they guess the header.
     #[cfg(any(debug_assertions, feature = "dev-auth"))]
     {
         if let Some(auth_value) = req
@@ -72,14 +128,23 @@ pub async fn verify_access(
             .and_then(|h| h.to_str().ok())
         {
             if auth_value == "Bearer dev-session-token" {
-                debug!("dev-auth: Bearer dev-session-token accepted in middleware (dev build)");
-                let pubkey = req
-                    .headers()
-                    .get("X-Nostr-Pubkey")
-                    .and_then(|h| h.to_str().ok())
-                    .unwrap_or("dev-user")
-                    .to_string();
-                return Ok(pubkey);
+                if dev_bypass_permitted(req) {
+                    let pubkey = req
+                        .headers()
+                        .get("X-Nostr-Pubkey")
+                        .and_then(|h| h.to_str().ok())
+                        .unwrap_or("dev-user")
+                        .to_string();
+                    debug!(
+                        "dev-auth: Bearer dev-session-token accepted (loopback + DEV_AUTH_LOOPBACK) for {pubkey}"
+                    );
+                    return Ok(pubkey);
+                } else {
+                    warn!(
+                        "dev-auth: rejected dev-session-token — requires DEV_AUTH_LOOPBACK=1 and a loopback peer (peer={:?})",
+                        req.peer_addr()
+                    );
+                }
             }
         }
     }
@@ -125,12 +190,10 @@ pub async fn verify_access(
                         pubkey = %user.pubkey,
                         "NIP-98 auth successful"
                     );
-                    // Determine the user's effective access level
-                    let user_level = if user.is_power_user {
-                        AccessLevel::Admin
-                    } else {
-                        AccessLevel::Authenticated
-                    };
+                    // Determine the user's effective access level from their
+                    // persisted RBAC role (ADR-142), falling back to the legacy
+                    // power-user mapping when the store is absent.
+                    let user_level = resolve_access_level(&user.pubkey, user.is_power_user).await;
                     if user_level.has_permission(&required_level) {
                         return Ok(user.pubkey);
                     } else {
@@ -202,13 +265,10 @@ pub async fn verify_access(
         "Session validated successfully"
     );
 
-    // Determine the user's effective access level from their role
+    // Determine the user's effective access level from their persisted RBAC
+    // role (ADR-142), falling back to the legacy power-user mapping.
     let is_power = nostr_service.is_power_user(&pubkey).await;
-    let user_level = if is_power {
-        AccessLevel::Admin
-    } else {
-        AccessLevel::Authenticated
-    };
+    let user_level = resolve_access_level(&pubkey, is_power).await;
 
     if user_level.has_permission(&required_level) {
         debug!(
@@ -279,6 +339,42 @@ pub async fn verify_admin(
     nostr_service: &NostrService,
 ) -> Result<String, HttpResponse> {
     verify_access(req, nostr_service, AccessLevel::Admin).await
+}
+
+#[cfg(all(test, any(debug_assertions, feature = "dev-auth")))]
+mod dev_bypass_tests {
+    use super::dev_bypass_permitted;
+    use actix_web::test::TestRequest;
+
+    /// Loopback + opt-in permits; non-loopback OR missing opt-in refuses. Cases
+    /// run sequentially in one test because they mutate a shared process env var
+    /// (parallel tests would race on it).
+    #[test]
+    fn dev_bypass_requires_loopback_and_optin() {
+        let loopback = "127.0.0.1:5000".parse().unwrap();
+        let remote = "203.0.113.7:5000".parse().unwrap();
+
+        // Opt-in set: loopback allowed, remote refused.
+        std::env::set_var("DEV_AUTH_LOOPBACK", "1");
+        let req_lo = TestRequest::default().peer_addr(loopback).to_http_request();
+        assert!(
+            dev_bypass_permitted(&req_lo),
+            "loopback + opt-in must permit"
+        );
+        let req_rem = TestRequest::default().peer_addr(remote).to_http_request();
+        assert!(
+            !dev_bypass_permitted(&req_rem),
+            "remote peer must be refused even with opt-in"
+        );
+
+        // Opt-in unset: even loopback is refused.
+        std::env::remove_var("DEV_AUTH_LOOPBACK");
+        let req_lo2 = TestRequest::default().peer_addr(loopback).to_http_request();
+        assert!(
+            !dev_bypass_permitted(&req_lo2),
+            "loopback without opt-in must be refused"
+        );
+    }
 }
 
 #[cfg(test)]
