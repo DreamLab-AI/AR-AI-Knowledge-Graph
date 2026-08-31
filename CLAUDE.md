@@ -1,5 +1,19 @@
 # Claude Code Configuration — Claude Flow V3
 
+## Architecture ground truth (consolidated 2026-08-31)
+
+The ADR pack for any domain = **its living governing document in `docs/` + the
+`docs/adr/` ledger records that amend it**. The living docs (BASELINE-architecture,
+IDENTITY-authority-chain, DATA-authority-erasure, PROTOCOL-registry,
+IDENTIFIER-taxonomy, SECURITY-profiles, GPU-wire-abi, XR-client) are normative:
+their *Invariants* are the compliance surface. Lookup order: governing doc → its
+`file:line` citations → `docs/adr/` ledger → `docs/archive/` **for rationale only,
+never authority** (frozen pre-consolidation corpus; redirect table in
+`docs/MIGRATION-plan.md`). New decisions: one-page record from `docs/adr/TEMPLATE.md`
++ update the governing doc in the same change + `node scripts/adr-index-gen.js docs/adr`.
+Domain routing table: `docs/adr/README.md`. Agentbox mirrors this shape under
+`agentbox/docs/`.
+
 ## Memory first
 
 Search RuVector memory before starting non-trivial work and store what worked afterwards — that is how patterns propagate between agents and sessions:
