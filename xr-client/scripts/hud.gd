@@ -338,7 +338,9 @@ func _build_graph_page() -> VBoxContainer:
 # now fit; keep the height arithmetic in mind before adding groups here.
 func _build_layout_page() -> VBoxContainer:
 	var page := VBoxContainer.new()
-	page.add_theme_constant_override("separation", 8)
+	# 3 (not the usual 8): four groups put this page at 564px with the default
+	# separation — 32px past the 532px host. Tighter separation buys ~35px.
+	page.add_theme_constant_override("separation", 3)
 
 	page.add_child(_group_header("Hierarchy & View"))
 	var g2 := _grid(3)
