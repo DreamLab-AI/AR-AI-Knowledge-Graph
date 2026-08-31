@@ -152,9 +152,9 @@ var _mute_toggle: CheckButton = null
 var _debug_stats: Label = null
 var _conn_status_label: Label = null
 
-const TAB_ORDER: Array[String] = ["graph", "query", "pins", "swarm", "session", "help"]
+const TAB_ORDER: Array[String] = ["graph", "layout", "query", "pins", "swarm", "session", "help"]
 const TAB_LABELS: Dictionary = {
-	"graph": "Graph", "query": "Query", "pins": "Pins", "swarm": "Swarm", "session": "Session", "help": "Help",
+	"graph": "Graph", "layout": "Layout", "query": "Query", "pins": "Pins", "swarm": "Swarm", "session": "Session", "help": "Help",
 }
 
 # Agent status → roster dot colour (ADR-140, Pillar 3). Mirrors
@@ -268,6 +268,7 @@ func _build_pages_host() -> void:
 	_root.add_child(_tabs_host)
 
 	_pages["graph"] = _build_graph_page()
+	_pages["layout"] = _build_layout_page()
 	_pages["query"] = _build_query_page()
 	_pages["pins"] = _build_pins_page()
 	_pages["swarm"] = _build_swarm_page()
@@ -310,6 +311,35 @@ func _build_graph_page() -> VBoxContainer:
 	g1.add_child(_action_btn("Node -", "node_size_minus", "Shrink node markers"))
 	page.add_child(g1)
 
+	# Wave 2, Feature 3 — type show/hide filter. One wand-clickable toggle per node
+	# class; pressing flips visibility and emits control_pressed
+	# "type_toggle:<class>:<0|1>" (1 = now visible). graph_scene forwards to the
+	# render store's set_type_visible.
+	page.add_child(_group_header("Node Types"))
+	var g3 := _grid(3)
+	_type_knowledge_button = _type_toggle_btn("Knowledge", "knowledge")
+	_type_ontology_button = _type_toggle_btn("Ontology", "ontology")
+	_type_agent_button = _type_toggle_btn("Agents", "agent")
+	g3.add_child(_type_knowledge_button)
+	g3.add_child(_type_ontology_button)
+	g3.add_child(_type_agent_button)
+	page.add_child(g3)
+
+	page.add_child(_group_header("Status"))
+	_controls_status = _mk_label("repelK --  restLen --  edges --  node x--", "Live physics & layout state")
+	_controls_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	page.add_child(_controls_status)
+	return page
+
+
+# ADR-141 constrained-layout controls. Split out of the Graph tab 2026-08-31:
+# the combined page needed 1050px in a 532px host, hiding everything below the
+# Planes group (the overflow guard warned, but only into the log). Both tabs
+# now fit; keep the height arithmetic in mind before adding groups here.
+func _build_layout_page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 8)
+
 	page.add_child(_group_header("Hierarchy & View"))
 	var g2 := _grid(3)
 	_hierarchy_button = _action_btn("Hierarchy: Off", "hierarchy_toggle", "Toggle the DAG radial rank-bias force (concentric shells)")
@@ -349,25 +379,6 @@ func _build_graph_page() -> VBoxContainer:
 	_layout_mode_button = _action_btn("Layout: Force", "layout_mode_cycle", "Cycle graph layout mode (force, hierarchical, radial, spectral, temporal, clustered)")
 	g_layout.add_child(_layout_mode_button)
 	page.add_child(g_layout)
-
-	# Wave 2, Feature 3 — type show/hide filter. One wand-clickable toggle per node
-	# class; pressing flips visibility and emits control_pressed
-	# "type_toggle:<class>:<0|1>" (1 = now visible). graph_scene forwards to the
-	# render store's set_type_visible.
-	page.add_child(_group_header("Node Types"))
-	var g3 := _grid(3)
-	_type_knowledge_button = _type_toggle_btn("Knowledge", "knowledge")
-	_type_ontology_button = _type_toggle_btn("Ontology", "ontology")
-	_type_agent_button = _type_toggle_btn("Agents", "agent")
-	g3.add_child(_type_knowledge_button)
-	g3.add_child(_type_ontology_button)
-	g3.add_child(_type_agent_button)
-	page.add_child(g3)
-
-	page.add_child(_group_header("Status"))
-	_controls_status = _mk_label("repelK --  restLen --  edges --  node x--", "Live physics & layout state")
-	_controls_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	page.add_child(_controls_status)
 	return page
 
 
