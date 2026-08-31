@@ -2,8 +2,10 @@
 
 # Architecture Decision Records
 
-_1 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/next/adr`.
+_3 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 
 | ID | Title | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
 |----|-------|------|----------|------|------------|------------|---------------|-------|------|
 | [ADR-2001](ADR-2001-corpus-consolidation.md) | Consolidate the documentation corpus onto a thin living ADR series | 2026-08-31 | accepted | partial | staged | — | — | jjohare | visionclaw |
+| [ADR-2002](ADR-2002-nip98-single-use-replay-cache.md) | NIP-98 replay protection is a two-layer scheme with a single-use cache | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2003](ADR-2003-visibility-filter-default-on.md) | The pubkey visibility filter defaults ON | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |

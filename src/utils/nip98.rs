@@ -211,7 +211,7 @@ const REPLAY_CACHE_MAX_ENTRIES: usize = 100_000;
 /// design. Replay protection does **not** span replicas — horizontal scaling
 /// requires shared storage (e.g. Redis) or sticky routing so every presentation
 /// of a given token lands on the same process. See
-/// `docs/next/SECURITY-profiles.md` invariant 4.
+/// `docs/SECURITY-profiles.md` invariant 4.
 static REPLAY_CACHE: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
 
 fn replay_cache() -> &'static Mutex<HashMap<String, Instant>> {

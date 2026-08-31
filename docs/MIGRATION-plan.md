@@ -7,10 +7,10 @@
 ## 1. Rationale
 
 The legacy `docs/{adr,prd,ddd}` (this repo) and `agentbox/docs/reference/{adr,prd,ddd}` corpora
-have drifted from the code. The living successor set is `docs/next/` — eight authority documents
+have drifted from the code. The living successor set is `docs/` — eight authority documents
 (BASELINE-architecture, DATA-authority-erasure, GPU-wire-abi, IDENTIFIER-taxonomy,
 IDENTITY-authority-chain, PROTOCOL-registry, SECURITY-profiles, XR-client) plus a fresh
-`docs/next/adr/` ledger. We freeze the legacy trees in place under `archive/` so history and
+`docs/adr/` ledger. We freeze the legacy trees in place under `archive/` so history and
 cross-references survive, then repoint (or archive-qualify) the code comments that cite them.
 
 The cut is a single `git mv` commit per repo so it reverts cleanly (see §6).
@@ -41,8 +41,8 @@ Commit message:
 ```
 docs: cut legacy adr/prd/ddd to archive/ (2026-08-31)
 
-Freezes drifted decision corpora under archive/. Living docs now in docs/next/.
-Single mv commit — revert this to roll back (see docs/next/MIGRATION-plan.md §6).
+Freezes drifted decision corpora under archive/. Living docs now in docs/.
+Single mv commit — revert this to roll back (see docs/MIGRATION-plan.md §6).
 ```
 
 ## 3. Tombstone README content
@@ -58,19 +58,19 @@ ADR / PRD / DDD and `<REPO>` label):
 These <KIND> records drifted from the code and were retired in the archive cut of
 2026-08-31. They are kept read-only for history and to resolve inbound cross-references.
 
-The living decision surface is **`docs/next/`**:
-- Architecture baseline .......... docs/next/BASELINE-architecture.md
-- Identity / authority chain ...... docs/next/IDENTITY-authority-chain.md
-- Identifier taxonomy ............. docs/next/IDENTIFIER-taxonomy.md
-- Data authority & erasure ........ docs/next/DATA-authority-erasure.md
-- Protocol registry .............. docs/next/PROTOCOL-registry.md
-- GPU wire ABI ................... docs/next/GPU-wire-abi.md
-- Security profiles .............. docs/next/SECURITY-profiles.md
-- XR client ...................... docs/next/XR-client.md
-- New ADR ledger ................. docs/next/adr/
+The living decision surface is **`docs/`**:
+- Architecture baseline .......... docs/BASELINE-architecture.md
+- Identity / authority chain ...... docs/IDENTITY-authority-chain.md
+- Identifier taxonomy ............. docs/IDENTIFIER-taxonomy.md
+- Data authority & erasure ........ docs/DATA-authority-erasure.md
+- Protocol registry .............. docs/PROTOCOL-registry.md
+- GPU wire ABI ................... docs/GPU-wire-abi.md
+- Security profiles .............. docs/SECURITY-profiles.md
+- XR client ...................... docs/XR-client.md
+- New ADR ledger ................. docs/adr/
 
-New decisions go in `docs/next/adr/` using `docs/next/adr/TEMPLATE.md`.
-See `docs/next/MIGRATION-plan.md` for the redirect table mapping legacy numbers here.
+New decisions go in `docs/adr/` using `docs/adr/TEMPLATE.md`.
+See `docs/MIGRATION-plan.md` for the redirect table mapping legacy numbers here.
 ```
 
 Six files total: `docs/archive/{adr,prd,ddd}/README.md` and
@@ -153,15 +153,15 @@ Their ADR strings are incidental and must not be edited.
 The operator reads and ticks each living doc before the cut executes. The cut is authorised only
 when every box is ticked.
 
-- [ ] `docs/next/BASELINE-architecture.md` read and accepted as the architecture authority
-- [ ] `docs/next/IDENTITY-authority-chain.md` read and accepted
-- [ ] `docs/next/IDENTIFIER-taxonomy.md` read and accepted
-- [ ] `docs/next/DATA-authority-erasure.md` read and accepted
-- [ ] `docs/next/PROTOCOL-registry.md` read and accepted
-- [ ] `docs/next/GPU-wire-abi.md` read and accepted
-- [ ] `docs/next/SECURITY-profiles.md` read and accepted
-- [ ] `docs/next/XR-client.md` read and accepted
-- [ ] `docs/next/adr/TEMPLATE.md` confirmed as the new-decision template
+- [ ] `docs/BASELINE-architecture.md` read and accepted as the architecture authority
+- [ ] `docs/IDENTITY-authority-chain.md` read and accepted
+- [ ] `docs/IDENTIFIER-taxonomy.md` read and accepted
+- [ ] `docs/DATA-authority-erasure.md` read and accepted
+- [ ] `docs/PROTOCOL-registry.md` read and accepted
+- [ ] `docs/GPU-wire-abi.md` read and accepted
+- [ ] `docs/SECURITY-profiles.md` read and accepted
+- [ ] `docs/XR-client.md` read and accepted
+- [ ] `docs/adr/TEMPLATE.md` confirmed as the new-decision template
 - [ ] Redirect table (§4) reviewed; short-form ambiguities (ADR-01/02/06/07/08/10/11) assigned
 - [ ] Tombstone README text (§3) approved
 - [ ] Operator authorises the `git mv` commit(s) in §2

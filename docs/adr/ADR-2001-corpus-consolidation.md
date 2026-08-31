@@ -46,5 +46,5 @@ implementation_status = partial: this ADR, the two `TEMPLATE.md` files, and
 `scripts/adr-index-gen.js` exist and the generator validates this tree and emits
 the index; the legacy 241-file archive has not yet been physically relocated.
 Established at verified_commit 73540faa0 by running
-`node scripts/adr-index-gen.js docs/next/adr` (exit 0) and confirming a
+`node scripts/adr-index-gen.js docs/adr` (exit 0) and confirming a
 deliberately broken fixture exits 1.
