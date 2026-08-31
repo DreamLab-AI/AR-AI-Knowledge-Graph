@@ -37,7 +37,7 @@ The graph store is the embedded Oxigraph triple store backed by SQLite (ADR-11).
 | Client | 465 TypeScript/TSX files (422 non-test, ~103K LOC); 16 feature modules |
 | Ontology | Whelk-rs OWL 2 EL + SHACL-lite + JSON-LD validation + PROV-O provenance (PRD-022); 7 MCP ontology tools |
 | Wire protocol | Full-snapshot V3 (52 B/node) / V5 (V3 body + 8-byte broadcast seq) — **delta encoding prohibited by design** (BROADCAST-001); clients tween to server targets |
-| Decision record | ~98 ADRs (ADR-011..127), plus PRDs and DDD context maps |
+| Decision record | 117 ADRs (ADR-011..141, with early records folded), 22 PRDs (to PRD-025), 13 DDD context maps |
 
 ## Documentation map
 
@@ -52,12 +52,11 @@ Documentation follows the [Diátaxis](https://diataxis.fr/) framework — each q
 | Decisions | Architecture Decision Records governing every major design choice | [adr/](adr/) |
 | Formal record | Product Requirements, Domain-Driven Design context maps, and ADRs | [prd/](prd/) · [ddd/](ddd/) · [adr/](adr/) |
 
-### Common entry points
+### Entry points by audience
 
-- New here? Start with [What is VisionClaw?](tutorials/what-is-visionclaw.md), then [Installation](tutorials/installation.md) and [Your first graph](tutorials/first-graph.md).
-- Building against the API? See [REST API](reference/rest-api.md), [WebSocket protocol](reference/websocket-protocol.md), and [Binary protocol](reference/binary-protocol.md).
-- Understanding the system? Read [System overview](explanation/system-overview.md), [Backend architecture](explanation/backend-architecture.md), and [Physics & GPU engine](explanation/physics-gpu-engine.md).
-- Operating it in production? See [Deployment](how-to/deployment.md) and the [operations runbooks](how-to/operations/README.md).
+- **New user** — Start with [What is VisionClaw?](tutorials/what-is-visionclaw.md), then [Installation](tutorials/installation.md), [Your first graph](tutorials/first-graph.md), and the [navigation guide](how-to/navigation-guide.md).
+- **Developer** — Building against the API: [REST API](reference/rest-api.md), [WebSocket protocol](reference/websocket-protocol.md), [Binary protocol](reference/binary-protocol.md). Understanding the internals: [System overview](explanation/system-overview.md), [Backend architecture](explanation/backend-architecture.md), [Client architecture](explanation/client-architecture.md), and [Physics & GPU engine](explanation/physics-gpu-engine.md). Contributing: [CONTRIBUTING](CONTRIBUTING.md) and the [development guide](how-to/development.md).
+- **Operator** — Running it in production: [Deployment](how-to/deployment.md), the [operations runbooks](how-to/operations/README.md), [Configuration reference](reference/configuration.md), [Known issues](KNOWN_ISSUES.md), and the [pre-demo security audit (2026-08-21)](security/PRE-DEMO-SECURITY-AUDIT-2026-08-21.md).
 
 ## Known issues
 

@@ -1,0 +1,41 @@
+graph TB
+    AppSup[AppSupervisor]
+
+    subgraph "Existing enterprise actors"
+      TaskOrch[TaskOrchestratorActor]
+      BrokerSup[BrokerSupervisor]
+    end
+
+    subgraph "New — BC18 Contributor Enablement"
+      StudioSup[ContributorStudioSupervisor]
+      ContextAsm[ContextAssemblyActor]
+      OntGuide[OntologyGuidanceActor]
+      PartOrch[PartnerOrchestrationActor]
+      ShareOrch[ShareOrchestratorActor]
+    end
+
+    subgraph "New — BC19 Skill Lifecycle"
+      SkillReg[SkillRegistrySupervisor]
+      DojoDisc[DojoDiscoveryActor]
+      SkillEval[SkillEvaluationActor]
+      SkillCompat[SkillCompatibilityScanner]
+    end
+
+    subgraph "New — peer of TaskOrchestrator"
+      AutoOrch[AutomationOrchestratorActor]
+    end
+
+    AppSup --> TaskOrch
+    AppSup --> BrokerSup
+    AppSup --> StudioSup
+    AppSup --> SkillReg
+    AppSup --> AutoOrch
+
+    StudioSup --> ContextAsm
+    StudioSup --> OntGuide
+    StudioSup --> PartOrch
+    StudioSup --> ShareOrch
+
+    SkillReg --> DojoDisc
+    SkillReg --> SkillEval
+    SkillReg --> SkillCompat

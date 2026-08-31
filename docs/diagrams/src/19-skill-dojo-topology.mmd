@@ -1,0 +1,23 @@
+sequenceDiagram
+    participant C as Contributor (Studio UI)
+    participant AI as AI Partner Lane
+    participant SP as skill_publish MCP tool
+    participant Pod as Contributor's Pod
+    participant TI as publicTypeIndex.jsonld
+    participant DDA as DojoDiscoveryActor (peer)
+    participant PeerUI as Peer's Dojo UI
+
+    C->>AI: "Publish my working brief flow"
+    AI->>AI: Draft SKILL.md (Tier 2 Haiku)
+    AI->>AI: Draft eval suite (Tier 3 Sonnet)
+    AI-->>C: Preview in skill editor
+    C->>SP: Confirm publish
+    SP->>Pod: PUT /public/skills/{slug}/SKILL.md
+    SP->>Pod: PUT /public/skills/{slug}/skill.jsonld
+    SP->>Pod: PUT /public/skills/{slug}/skill.evals.jsonl
+    SP->>SP: NIP-98 sign content_hash
+    SP->>TI: Upsert registration (urn:solid:AgentSkill)
+    SP-->>C: {skill_uri, signature}
+    Pod-->>DDA: Solid Notification (CREATE /public/skills/{slug}/)
+    DDA->>DDA: Update SkillIndex (Neo4j read model)
+    DDA-->>PeerUI: WebSocket push "new skill available"

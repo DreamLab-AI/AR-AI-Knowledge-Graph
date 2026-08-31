@@ -1,0 +1,32 @@
+graph TB
+    subgraph API["REST — ADR-141 layout programme"]
+        M1[POST /api/layout/mode]
+        M2[POST /api/layout/radial]
+    end
+
+    subgraph Msg["Actor messages (physics_messages.rs)"]
+        SM["SetLayoutMode(mode: LayoutMode)"]
+        SR["SetRadialMode(mode: RadialMode)"]
+        USP[UpdateSimulationParams<br/>shared validation path]
+    end
+
+    subgraph Reg["engine_for(LayoutMode) — src/physics/engines/mod.rs"]
+        direction TB
+        E1[ForceDirected → ForceDirectedEngine]
+        E2[Hierarchical → HierarchicalEngine]
+        E3[Radial → CircularEngine]
+        E4[Spectral → StressMajorizationEngine]
+        E5[Temporal → GeographicEngine]
+        E6[Clustered → StressMajorizationEngine]
+    end
+
+    ENG["Box dyn LayoutEngine<br/>drives per-step positions"]
+
+    M1 --> SM --> USP
+    M2 --> SR --> USP
+    USP --> E1 & E2 & E3 & E4 & E5 & E6
+    E1 & E2 & E3 & E4 & E5 & E6 --> ENG
+    ENG --> GPU[GPUComputeActor<br/>position integration]
+
+    note1[["Legacy variants (Radial/Spectral/<br/>Temporal/Clustered) map onto the<br/>ADR-01 D5 five-engine set;<br/>exhaustive match = compile-time gate<br/>when a variant is added."]]
+    E6 -.-> note1

@@ -1,6 +1,7 @@
 # Unified TODO — VisionClaw + agentbox
 
 **Status:** Living document (single combined register — supersedes split tracking)
+**Last refreshed:** 2026-08-31 (was frozen 2026-07-22; refreshed for the ADR-137–141 XR/layout landing)
 **Created:** 2026-07-22, from the doc-drift audit (`docs/audit-doc-drift-2026-07-22.md`, ADR-131) and the agentbox backlog/audit (`agentbox/docs/developer/backlog.md`, `agentbox/docs/reference/audit-2026-07-15.md`)
 **Governed by:** [PRD-024 Final-Mile Closeout](prd/PRD-024-final-mile-closeout.md), [ADR-133](adr/ADR-133-final-mile-sprint.md)
 **Rule:** every entry carries exactly one unblock state. Mislabelling a state is itself a defect (the REC-9 rule). Remove entries when done; closures need evidence files.
@@ -29,7 +30,7 @@ The six unblock states:
 
 | # | Entry | Repo | Detail |
 |---|---|---|---|
-| C-1 | XR residue removal **after** the Tock-2 decision | VisionClaw | `quest3AutoDetector.ts` (live `setXRMode` caller at :143), `client/src/services/vircadia/` (5 files + 2 bridges), XR settings schema (`settings.ts:339,782,822`), platformManager XR surface, Vircadia compose service. Blocked-by: T-2 (posture). |
+| C-1 | ~~XR residue removal after the Tock-2 decision~~ **OBSOLETE 2026-08-31** | VisionClaw | Superseded by the shipped native XR client (Godot + gdext + OpenXR, ADR-071/ADR-136/ADR-137). The keep-or-delete question this entry planned around the old browser-AR path is moot: XR now ships as a first-class native client with its own `RenderStore` render path (ADR-137), immersive interaction (ADR-139), and agent-swarm visualisation (ADR-140). Any remaining `vircadia`/browser-AR residue is dead code to be swept opportunistically, not a decision-blocked workstream. Closes with T-2. |
 | C-2 | AUTH-001 execution after Tock-2 decision | VisionClaw | Either merge `sprint-3/jss-cut-scaffold`'s `enterprise_auth.rs` (four-tier RBAC) to main, or close AUTH-001 as banner-resolved. Branch preserved at `6520d6f2e`. Blocked-by: T-2. |
 | C-3 | SQLite backup workstream | VisionClaw | Exposed by the PRD-014 correction: the deleted "Neo4j daily backup" checkbox masked that `data/{kpi,enrichment,settings}.sqlite3` have **no backup at all**. Scripts + runbook + restore test. |
 | C-4 | `tree-search-coder` author-or-disarm | agentbox | Gate armed (`ENABLE_TREE_SEARCH_CODER=true`) but skill never authored. Author per ADR-020 §tree-search / PRD-008 §3.3, or flip the gate off for manifest honesty. Decision at Tock-2, execution as tick. |
@@ -59,7 +60,7 @@ The six unblock states:
 | # | Entry | Detail |
 |---|---|---|
 | T-1 | Relay exposure chain | Step 1 DONE 2026-07-22: `allowed_pubkeys` populated (operator human key, visionclaw-server, beema, RedDread¹, junkiejarvis, mobile phone key) — **baked at nix build, inert until the T-6 image rebuild**. Remaining: `expose = true` → `mobile_bridge.enabled = true`. ¹RedDread = presumed "house admin" (third D1 admin); remove if misidentified. Note: `[sovereign_mesh.operator].pubkey_hex` still carries the visionclaw-server key — same ADR-040 D3 key-split defect as the forum config; fix via that runbook, not piecemeal. |
-| T-2 | XR residue: keep Quest 3 browser-AR path or delete it | Decides C-1 scope. `quest3AutoDetector` is the sole reason platformManager XR surface survives. |
+| T-2 | ~~XR residue: keep Quest 3 browser-AR path or delete it~~ **DECIDED 2026-08-31 — delete** | Resolved by the native XR client shipping (ADR-137 render offload lands the Rust `RenderStore` path; ADR-139 immersive interaction; ADR-140 agent-swarm XR). The browser-AR path is superseded, not kept. C-1 is now an opportunistic dead-code sweep, not a blocked decision. |
 | T-3 | AUTH-001: merge four-tier RBAC or stay coarse | Decides C-2. KNOWN_ISSUES banner (2026-07-22) documents current truth. |
 | T-4 | Remaining held surfaces | Multi-user DIDs, git pods/host gateway, payments (parked until counterparty), Solid OIDC issuer, pod MCP surface, kernel pip. Re-date if still deferred. |
 | T-5 | Remote `crashbug` deletion | Local branch deleted + `archive/crashbug` tag exists; deleting `dreamlab-github/crashbug` is a push — operator authorises. |
@@ -85,6 +86,22 @@ The six unblock states:
 ## 7. Cleanly deferred (frozen — do not reopen without a new ADR)
 
 ADR-073..085 window (Nostr relay federation mesh, forum extraction, website-kit cutover — frozen by closeout 2026-07-03, except ADR-074/075/076/077 which were never frozen), ADR-122/123 (two-speed writeback routing, voice sign-off), RVF file store (KNOWN_ISSUES AGENT-001 — honest "not implemented"), XR APK cross-build + LiveKit Android AAR (sprint-scale, PRD-008 §5.5).
+
+## 8. Landed 2026-08-31 — XR immersive-interaction + layout programme (ADR-137–141)
+
+Recorded here for the register's completeness; code is shipped and reflected in
+both CHANGELOGs, `docs/reference/rest-api.md`, and the new developer reference
+`docs/reference/render-store-and-force-channels.md`. Only on-headset observation
+remains open (folds into L-5).
+
+| # | Entry | State | Detail |
+|---|---|---|---|
+| X-1 | ~~XR render offload + runtime quality dials~~ **DONE (ADR-137)** | `code-gap` | Per-frame hunt + MultiMesh packing moved GDScript→Rust `RenderStore` (`xr-client/rust/src/render_store.rs`); topology-derived draw budgets; `initialNodeLimit` dial; 256 MiB receive cap; full-3D layout default. 90 fps at 13,164 nodes / 145,692 edges. |
+| X-2 | ~~GPU force-channel registry + pinned-node mask~~ **DONE (ADR-138)** | `code-gap` | `ForceChannel` mapping-layer registry (`src/models/force_channels.rs`); GPU `pinned_mask` buffer masks pinned nodes out of integration while still exerting force on neighbours (`visionclaw_unified.cu:933,941`; `force_compute_actor.rs`). Array-backed `SimParams` refactor is the deferred step 2 (not owed now). |
+| X-3 | ~~Graph2VR-class immersive interaction~~ **DONE (ADR-139)** | `code-gap` | Two-hand pinch scale/rotate, radial menu, in-graph search, node expansion API — clean-room re-implementations, no external code vendored. |
+| X-4 | Agent-swarm XR visualisation — **P1 DONE (ADR-140)** | `code-gap` | `0x23 AGENT_ACTION` consume side (`AgentBeamActor`/`BeamCoalescer`), embodied agents, work beams, HUD Swarm tab. ADR status is Proposed (P1 shipped); later phases open. |
+| X-5 | ~~Constrained-layout engine programme~~ **P1–P4 DONE (ADR-141)** | `code-gap` | Sugiyama layers, stratified planes, spherical shells, ego-radial `RadialModes`; `POST /api/layout/mode` + `/api/layout/radial`. P5/P6 deferred by the ADR. Also lands the visual query builder (`POST /api/graph/query/pattern`) and fold ladder (`GET /api/graph/fold`), plus the V5 wire wrapper. |
+| X-6 | On-headset validation of the new XR features | `live-session` | The ADR-137–141 client work is Monado/desktop-OpenXR proven; physical Vive/Quest on-device observation of render offload, immersive interaction, and swarm beams folds into L-5 (P2-M6 discipline). |
 
 ---
 

@@ -36,6 +36,9 @@ day-to-day delivery have been archived; what remains is the evergreen requiremen
 | [PRD-019](PRD-019-xr-transport-completion.md) | XR transport completion — connecting the native client to the live backend |
 | [PRD-020](PRD-020-pervasive-ontology-agentbox-augmentation.md) | Pervasive ontology ↔ Agentbox augmentation |
 | [PRD-022](PRD-022-semantic-trust-layer.md) | Semantic trust layer — W3C shape validation, provenance reification, relay-mediated federation |
+| [PRD-023](PRD-023-gap-close-visionclaw.md) | Gap-Close Sprint — VisionClaw slice |
+| [PRD-024](PRD-024-final-mile-closeout.md) | Final-Mile Closeout |
+| [PRD-025](PRD-025-ontology-loom-and-connector-platform.md) | Ontology Loom & Connector Platform — portable reasoning node + deferred distillation |
 
 ## Subsystem PRDs
 
@@ -49,6 +52,13 @@ Focused requirement records scoped to a single subsystem rather than a numbered 
 | [prd-insight-migration-loop](prd-insight-migration-loop.md) | Insight migration loop (MVP) |
 | [prd-visual-query-builder-semantic-planes](prd-visual-query-builder-semantic-planes.md) | Visual query builder with semantic planes (Vive XR client) |
 | [PRD-fold-ladder-hierarchical-density](PRD-fold-ladder-hierarchical-density.md) | Fold-level ladder — hierarchical density management (XR + desktop) |
+
+## Gap-close evidence
+
+Per-item evidence records for the gap-close sprints (PRD-023 / PRD-024) are indexed
+in two places: [`gap-close-evidence/`](gap-close-evidence/README.md) (PRD-scoped
+items) and [`docs/gap-close-evidence/`](../gap-close-evidence/README.md) (XR /
+client-side items).
 
 ## See also
 

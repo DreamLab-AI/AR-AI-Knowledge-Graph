@@ -5,7 +5,7 @@ status: proposed
 date: 2026-08-11
 authors: VisionFlow operator (did:nostr:jjohare) + opus exploration mesh
 linked_adrs: [ADR-135 (loom façade + deferred distillation decisions)]
-linked_ddd: docs/ddd/ddd-ontology-connector-context.md
+linked_ddd: docs/ddd/ddd-ontology-loom-context.md
 relates: [
   PRD-020 (pervasive ontology augmentation),
   VisionClaw PRD-022 (semantic-trust-layer),
@@ -33,8 +33,8 @@ supersedes: "PRD-025 connector-platform draft (pre-Loom reframe); this is the op
 **Status:** Proposed (adversarially reviewed; operator-reframed 2026-08-11 — see §12)
 **Date:** 2026-08-11
 **Owner:** VisionFlow operator (Dr J. O'Hare, did:nostr:jjohare)
-**Companion decisions:** VisionClaw [ADR-135](../adr/ADR-135-ontology-loom-facade-and-deferred-distillation.md); agentbox ADR-051 (harness-side loom-client decisions, proposed)
-**Bounded context:** [ddd-ontology-connector-context.md](../ddd/ddd-ontology-connector-context.md) (BC24 — OntologyConnector)
+**Companion decisions:** VisionClaw [ADR-135](../adr/ADR-135-ontology-loom-node.md); agentbox ADR-051 (harness-side loom-client decisions, proposed)
+**Bounded context:** [ddd-ontology-loom-context.md](../ddd/ddd-ontology-loom-context.md) (BC24 — OntologyLoom)
 
 > **EXECUTION NOTE (read first).** This is a **design + workstream plan**. It changes no
 > VisionClaw / agentbox / logseq / HP code by itself; implementation is the WS-A…WS-J build
@@ -571,7 +571,7 @@ Liveness is proven by observation, not by "wired". Boot completion is **NOT** li
 
 ## 11. DDD & cross-references
 
-**BC24 — OntologyConnector** (`docs/ddd/ddd-ontology-connector-context.md`), **honestly
+**BC24 — OntologyLoom** (`docs/ddd/ddd-ontology-loom-context.md`), **honestly
 scoped**: a *deferred-distillation subdomain extending BC21*, not a sprawling new context.
 
 - **Aggregates:** `DistillationJob` (job-URN-anchored lifecycle), `ResultEnvelope` (signed,

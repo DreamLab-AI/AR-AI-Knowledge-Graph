@@ -61,6 +61,40 @@ cp upgraded/01-three-layer-mesh.png ./01-three-layer-mesh.png
 
 The `generate-image` tool lives at `~/.claude/skills/art/tools/generate-image.ts` and is invoked via `bun run` with `--reference-image` for image-to-image style transfer, `--model nano-banana-pro` (`gemini-3-pro-image-preview`), `--size 2K`, `--aspect-ratio 16:9`.
 
+## Technical diagrams (diffable Mermaid → SVG, no Nano-Banana)
+
+Diagrams 13+ are **technical**, not marketing heroes: committed `.mmd` source under
+`src/`, rendered to **SVG** via the browsercontainer sidecar
+(`agentbox/scripts/mmdc-sidecar.sh -i src/<n>.mmd -o <n>.svg -t dark`). They are the
+diffable source of truth and are edited/re-rendered directly — no image upscaling
+step. Old small PNGs for 13–20 moved to `../archive/diagrams/` (2026-08, Lane C).
+
+| # | Diagram | Source | SVG | ADR |
+|---|---------|--------|-----|-----|
+| 13 | ADR-057 actor supervision tree | `src/13-adr057-share-state-transitions.mmd` | `13-adr057-share-state-transitions.svg` | ADR-057 |
+| 14 | Skill lifecycle state machine | `src/14-adr057-skill-lifecycle.mmd` | `14-adr057-skill-lifecycle.svg` | ADR-057 |
+| 15 | BC18/BC19 context map (+ACL) | `src/15-ddd-context-map.mmd` | `15-ddd-context-map.svg` | DDD ctx |
+| 16 | Cross-context relationship map | `src/16-ddd-acl-flow.mmd` | `16-ddd-acl-flow.svg` | DDD ctx |
+| 17 | Mesh-promotion sequence | `src/17-ddd-mesh-promotion-sequence.mmd` | `17-ddd-mesh-promotion-sequence.svg` | DDD ctx |
+| 18 | Skill retirement sequence | `src/18-skill-retirement-sequence.mmd` | `18-skill-retirement-sequence.svg` | dojo |
+| 19 | Skill Dojo publish topology | `src/19-skill-dojo-topology.mmd` | `19-skill-dojo-topology.svg` | dojo |
+| 20 | Skill evaluation lifecycle | `src/20-skill-eval-lifecycle.mmd` | `20-skill-eval-lifecycle.svg` | dojo |
+| 21 | Force-channel registry + pin mask | `src/21-force-channel-pin-mask.mmd` | `21-force-channel-pin-mask.svg` | ADR-138 |
+| 22 | Layout-mode engine registry | `src/22-layout-mode-engine-registry.mmd` | `22-layout-mode-engine-registry.svg` | ADR-141 |
+
+Diagrams **21–22** are the 2026-08 gap-analysis additions (Lane C): the ADR-138
+physics substrate (10 named force channels, feature-flag/strength gating, and the
+GPU pinned-node mask that anchors dragged nodes — the substrate for the
+`interface-sequences.md §5a` drag/pin flow) and the ADR-141 layout programme
+(`SetLayoutMode`/`SetRadialMode` → `engine_for()` five-engine registry). Chosen as
+highest-value because both underpin the landed Graph2VR/layout wave yet had no
+architecture diagram; verified against `src/models/force_channels.rs`,
+`src/actors/gpu/force_compute_actor.rs`, and `src/physics/engines/mod.rs`.
+
+Interaction/swarm **sequence** diagrams (node drag→GPU pin, agent-beam `0x23`
+broadcast, visual query builder) live inline in
+[`interface-sequences.md`](interface-sequences.md) §5 as diffable mermaid blocks.
+
 ## When to Add a New Diagram
 
 Add a new diagram when a README section has high conceptual density but no visual aid — e.g., a new architectural pattern, a new governance flow, a new subsystem with ≥4 components. Do **not** add a diagram for every list or table; they should earn their space by communicating structure that prose cannot.

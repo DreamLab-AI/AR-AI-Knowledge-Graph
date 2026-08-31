@@ -160,6 +160,48 @@ Physics settings are server-authoritative: the backend's GPU layout is the singl
 
 Particle and environment effects are implemented in a Rust crate compiled to WASM and bridged into the R3F scene through a thin TypeScript layer (`scene-effects-bridge.ts` → `useWasmSceneEffects` → `WasmSceneEffects`). The bridge follows the same zero-copy discipline as the position pipeline: the Rust module exposes raw pointers via `get_*_ptr()` / `get_*_len()`, and the bridge constructs `Float32Array` views directly over `WebAssembly.Memory.buffer`. The views stay valid only while the WASM heap is not reallocated, so effect code avoids growing memory while views are held.
 
+## Graph navigation and growth
+
+The pipeline above draws the graph; a second, canvas-level control surface lets the
+user *navigate and grow* it by direct manipulation, adopted from the Graph2VR-class
+interaction programme ([ADR-139](../adr/ADR-139-immersive-interaction-adoption-programme.md))
+and shared, contract-for-contract, with the immersive client. All of it rides the
+node/expand/relations/fold/pattern REST routes — the wire shapes live in
+[reference/rest-api.md](../reference/rest-api.md), not here.
+
+- **Click-to-focus / fit.** Selecting a node, a search hit, or a transcript line
+  dispatches the `visionclaw:search` CustomEvent; `useGraphSelection` sets the
+  pulsing highlight and eases the camera along `flyToTargetRef`. The coordinate-free
+  bridge `cameraFocus.ts` lets HTML panels outside the R3F canvas fly the camera
+  without importing Three.js internals (`focusNodeById`, and the shared
+  `resolveNodeWorldPosition` SAB lookup GraphManager reuses for beam targets).
+- **Page-card panel + additive expansion.** `NodeDetailPanel.tsx` shows a node's
+  definition, `subClassOf` parents, typed relationships, lazily-fetched source
+  page-card, and connected nodes. `NodeContextMenu.tsx` implements the
+  predicate-count-first model: `GET /api/graph/node/{id}/relations` first, then a
+  chosen `POST /api/graph/node/{id}/expand` **additively merges** the returned
+  nodes/edges into the live graph with no reload (typed wrapper
+  `client/src/api/graphExpandApi.ts`).
+- **Visual query builder.** Node marks assemble triple patterns that `POST` to
+  `/api/graph/query/pattern` (max 16 triples / 8 variables); matches highlight in the
+  scene.
+- **Fold ladder.** `GET /api/graph/fold` returns level 0–3 fold plans (groups of
+  `{representativeId, memberIds, badge, kind}`) that collapse and re-expand density.
+- **Agent-action beams.** `TransientBeamsLayer` renders the ephemeral `0x23
+  AGENT_ACTION` beams (agent → target node) streamed over `/wss`, styled by the
+  Agents settings group described in [Control Center](control-center.md).
+
+The immersive client is a **separate native binary** (Godot + godot-rust), not this
+renderer. It reaches the same visual result through a different substrate: its
+per-frame position-hunt and MultiMesh packing are offloaded to a Rust **`RenderStore`**
+([ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md),
+`xr-client/rust/src/render_store.rs`) — the XR analogue of this client's
+SharedArrayBuffer hot path — and it decodes the same binary stream including the V5
+sequenced wrapper. ADR-137's runtime quality dials (the `initialNodeLimit` settings
+dial and runtime-derived instance budgets that replace hardcoded caps, plus full-3D
+layout as the default) are shared settings that both clients honour. Full detail is
+in [XR Architecture](xr-architecture.md).
+
 ## See also
 
 - [System Overview](system-overview.md) — how the client sits within the whole VisionClaw system.
@@ -169,4 +211,7 @@ Particle and environment effects are implemented in a Rust crate compiled to WAS
 - [Control Center](control-center.md) — the settings UI that writes into that pipeline.
 - [XR Architecture](xr-architecture.md) — the separate native immersive client.
 - [Binary protocol reference](../reference/binary-protocol.md) and [WebSocket protocol reference](../reference/websocket-protocol.md) — wire-level detail.
+- [Control Center](control-center.md) — the settings overlay and the desktop graph-interaction trio in full.
+- [REST API reference](../reference/rest-api.md) — the node/expand/relations/fold/pattern and layout routes the navigation surfaces call.
 - Governing ADRs: [ADR-012 WebSocket store decomposition](../adr/ADR-012-websocket-store-decomposition.md), [ADR-013 render performance](../adr/ADR-013-render-performance.md), [ADR-031 GPU analytics correctness and wiring](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-039 settings consolidation](../adr/ADR-039-settings-consolidation.md), [ADR-061 binary protocol unification](../adr/ADR-061-binary-protocol-unification.md).
+- Interaction and layout programme ADRs: [ADR-137 XR render offload + runtime quality dials](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md), [ADR-138 GPU force-channel registry](../adr/ADR-138-gpu-force-channel-registry.md), [ADR-139 immersive interaction adoption](../adr/ADR-139-immersive-interaction-adoption-programme.md), [ADR-140 XR agent-swarm visualisation](../adr/ADR-140-xr-agent-swarm-visualisation.md), [ADR-141 constrained-layout engine programme](../adr/ADR-141-constrained-layout-engine-programme.md).

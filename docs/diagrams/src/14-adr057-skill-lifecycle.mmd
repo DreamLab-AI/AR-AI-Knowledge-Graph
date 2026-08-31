@@ -1,0 +1,13 @@
+stateDiagram-v2
+    [*] --> Draft: skill scaffolded\n(SKILL.md in /private/skills/)
+    Draft --> Personal: contributor begins using,\nfirst invocation recorded
+    Personal --> TeamShared: share_intent(target=team) approved,\n/shared/{team}/skills/ updated
+    Personal --> Draft: contributor deletes
+    TeamShared --> Benchmarked: SkillEvalSuite runs pass,\nSkillBenchmark recorded
+    Benchmarked --> MeshCandidate: share_intent(target=mesh) opens\nBrokerCase (contributor_mesh_share, subject_kind=skill)
+    MeshCandidate --> Promoted: broker approves,\n/public/skills/ updated,\nType Index registered
+    MeshCandidate --> TeamShared: broker rejects with reason
+    Promoted --> Retired: drift detector fires OR\nexplicit retire
+    TeamShared --> Retired: explicit retire
+    Personal --> Retired: explicit retire
+    Retired --> [*]

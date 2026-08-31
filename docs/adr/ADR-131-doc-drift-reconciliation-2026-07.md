@@ -19,7 +19,7 @@ body is retained for history, per the append-only culture.
 A six-axis adversarial doc-drift audit (neo4j-migration, phantom-actors,
 binary-protocol, xr-client, missing-docs, deferred-vaporware — 13 agents, 47
 claims verified: 22 ACCURATE, 22 DOCS_STALE, 4 CODE_GAP, 4 BOTH_DRIFTED; full
-plan in [`docs/audit-doc-drift-2026-07-22.md`](../audit-doc-drift-2026-07-22.md))
+plan in [`docs/audit-doc-drift-2026-07-22.md`](../archive/audit-doc-drift-2026-07-22.md))
 found the **code correct and consistent on the load-bearing facts** — Oxigraph +
 SQLite are the sole store; no BrokerActor / ServerNostrActor / Neo4j on `main`;
 the 52-byte V3 position wire is live — but the **doc corpus** carrying:

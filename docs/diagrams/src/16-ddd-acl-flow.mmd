@@ -1,0 +1,39 @@
+graph TB
+    subgraph Mesh["Management Mesh"]
+        BC11[Judgment Broker\nBC11]
+        BC12[Workflow Lifecycle\nBC12]
+        BC13[Insight Discovery\nBC13]
+        BC15[KPI Observability\nBC15]
+        BC17[Policy Engine\nBC17]
+    end
+
+    subgraph Stratum["Contributor AI Support Stratum"]
+        BC18[Contributor Enablement\nBC18 · CORE]
+        BC19[Skill Lifecycle\nBC19 · SUPPORTING]
+    end
+
+    subgraph Substrate["Substrate"]
+        BC2[Graph Data\nBC2]
+        BC7[Ontology & Reasoning\nBC7]
+        BC8[Agent/Bot Management\nBC8]
+        BC14[Enterprise Identity\nBC14]
+        BC30[Agent Memory Pods\nADR-030]
+    end
+
+    BC2  -->|"WorkspaceFocus input"| BC18
+    BC7  -->|"GuidanceSuggestion feed"| BC18
+    BC14 -->|"WebID · role · delegation"| BC18
+    BC30 -->|"episodic memory read"| BC18
+    BC13 -->|"precedent surfaced"| BC18
+
+    BC18 -->|"ShareIntent → BrokerCase"| BC11
+    BC18 -->|"ShareIntent → WorkflowProposal"| BC12
+    BC18 -->|"WorkArtifact candidate"| BC13
+    BC18 -->|"contributor events"| BC15
+    BC18 -->|"ShareIntent policy eval"| BC17
+
+    BC19 -->|"installed skills"| BC18
+    BC19 -->|"promoted patterns"| BC12
+    BC19 -->|"skill metrics"| BC15
+    BC19 -->|"benchmark runs"| BC8
+    BC13 -->|"skill recommendation"| BC19

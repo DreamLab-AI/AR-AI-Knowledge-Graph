@@ -2,7 +2,7 @@
 title: Known Issues
 description: Active P1/P2 issues in VisionClaw — read before debugging unexpected behaviour
 category: reference
-updated-date: 2026-05-05
+updated-date: 2026-08-31
 ---
 
 # Known Issues

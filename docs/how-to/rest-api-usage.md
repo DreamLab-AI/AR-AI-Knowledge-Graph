@@ -326,6 +326,111 @@ const flags = await apiCall('/analytics/feature-flags')
 if (!flags.gpu_enabled) console.warn('GPU analytics unavailable — falling back')
 ```
 
+### 3g. Explore a node's relations, then expand one predicate
+
+These graph-navigation endpoints are **public reads** — no `Authorization`
+header required — so plain `curl` works. They back both the desktop expansion
+menu and the XR node menu. See
+[REST API Reference §graph](../reference/rest-api.md#post-apigraphnodeidexpand)
+for the full schema.
+
+Step 1 — ask what a node is connected to, grouped by predicate and direction:
+
+```bash
+curl -s http://localhost:4000/api/graph/node/42/relations | jq .
+# {
+#   "outgoing": [ { "edgeType": "references", "label": "references", "count": 12 } ],
+#   "incoming": [ { "edgeType": "authored",   "label": "authored by", "count": 3 } ]
+# }
+```
+
+Step 2 — pull the neighbours along one predicate/direction (additive expansion):
+
+```bash
+curl -s -X POST http://localhost:4000/api/graph/node/42/expand \
+  -H 'Content-Type: application/json' \
+  -d '{ "edgeType": "references", "direction": "outgoing", "limit": 25 }' | jq .
+# {
+#   "nodes": [ { "id": 88, "metadataId": "…", "label": "…", "nodeType": "page" } ],
+#   "edges": [ { "source": 42, "target": 88, "edgeType": "references", "weight": 1.0 } ]
+# }
+```
+
+Merge `nodes`/`edges` into your current view; ids are `u32`, so `String()`-coerce
+before comparing.
+
+### 3h. Drive the semantic fold ladder
+
+`GET /api/graph/fold` returns the collapse/expand plan for a fold level (0–3),
+the same plan the XR **Fold +/-** buttons apply:
+
+```bash
+curl -s 'http://localhost:4000/api/graph/fold?level=2&graphType=knowledge' | jq .
+# {
+#   "level": 2, "graphType": "knowledge", "generation": 7,
+#   "hidden": [ 101, 102, … ],
+#   "groups": [ { "representativeId": 55, "memberIds": [56,57], "badge": "3", "kind": "subclass" } ],
+#   "analyticsNodes": [ … ],
+#   "hierarchyEdges": [ … ]
+# }
+```
+
+Levels: `0` everything, `1` hide low-signal, `2` fold subclass chains, `3`
+community fold. Pass `pinned` as a CSV of node ids to keep them visible through
+the fold. `graphType` is `knowledge`, `ontology`, or `agent`.
+
+### 3i. Run a triple-pattern query
+
+Match a structural pattern and read the variable bindings back
+(max 16 triples, 8 variables):
+
+```bash
+curl -s -X POST http://localhost:4000/api/graph/query/pattern \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "triples": [
+          { "src": "?person", "edgeType": "authored",  "tgt": "?doc" },
+          { "src": "?doc",    "edgeType": "references", "tgt": 42 }
+        ],
+        "limit": 24, "countOnly": false
+      }' | jq .
+# { "vars": ["?person","?doc"], "bindingCount": 3, "truncated": false,
+#   "bindings": [ { "?person": 17, "?doc": 88 }, … ] }
+```
+
+Set `"countOnly": true` for just `bindingCount` — the cheap preview the visual
+query builder issues on every pattern change. See
+[Building Graph Queries](features/natural-language-queries.md).
+
+### 3j. Switch the layout mode
+
+`POST /api/layout/mode` selects the global layout. GPU modes
+(`forceDirected`, `hierarchical`, `radial`, `clustered`) return an empty
+`positions` array — positions stream over the WebSocket — while CPU modes
+(`spectral`, `temporal`) return computed positions inline:
+
+```bash
+curl -s -X POST http://localhost:4000/api/layout/mode \
+  -H 'Content-Type: application/json' \
+  -d '{ "mode": "hierarchical", "transitionMs": 500 }' | jq .
+# { "success": true, "mode": "hierarchical", "transitionMs": 500, "positions": [] }
+```
+
+### 3k. Configure the radial layout
+
+`POST /api/layout/radial` tunes the radial arrangement — rank the DAG
+(`dagRank`), tier by node type (`typeTier`), or centre on a focus node (`ego`):
+
+```bash
+curl -s -X POST http://localhost:4000/api/layout/radial \
+  -H 'Content-Type: application/json' \
+  -d '{ "mode": "ego", "focusNode": 42, "transitionMs": 500 }' | jq .
+# { "success": true, "mode": "ego", "focusNode": 42, "transitionMs": 500 }
+```
+
+`focusNode` is required for `ego` and ignored for `dagRank`/`typeTier`. Full
+schema: [REST API Reference §layout](../reference/rest-api.md#post-apilayoutmode).
+
 ---
 
 ## 4. Combining REST + WebSocket

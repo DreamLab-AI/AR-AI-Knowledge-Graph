@@ -285,7 +285,7 @@ sequenceDiagram
     SFH->>SFH: ClientCoordinatorActor.do_send(AuthenticateClient { client_id, pubkey, ... })
     SFH-->>WS: JSON { type: "authenticate_success", pubkey, is_power_user }
     WS-->>C: authenticate_success
-    Note over C,SFH: Drag operations (nodeDragStart/Update/End)<br/>check act.pubkey.is_none() and reject<br/>unauthenticated clients (VULN-01 guard)
+    Note over C,SFH: Post-auth, the drag/pin verbs (nodeDragStart/Update/End,<br/>nodeUnpin) all re-check act.pubkey.is_none() and reject<br/>unauthenticated clients (VULN-01 guard).<br/>Full GPU-pin flow → §5a; two-hand pinch is client-local.
 ```
 
 ### 4d. Solid Pod Login / Init
@@ -323,7 +323,162 @@ sequenceDiagram
 
 ---
 
-## 5. Audit Findings
+## 5. Interaction & Swarm Surfaces (2026-08 wave)
+
+Diagrams for the capabilities landed by the Graph2VR / swarm / query-builder
+wave (ADR-138 pinned-node mask + force-channel registry, ADR-139 Graph2VR
+two-hand manipulation, ADR-140 XR agent swarm `0x23` beams, visual query
+builder `/api/graph/query/pattern`). Message names verified against
+`src/handlers/socket_flow_handler/message_routing.rs` and the client transport
+(`client/src/features/graph/hooks/useGraphEventHandlers.ts`).
+
+### 5a. Node Drag → GPU Pin → Broadcast → Unpin
+
+Grab-and-place is server-authoritative (ADR-03 D7): the client no longer pins in
+the graph worker; every drag verb is a JSON WebSocket message that drives a GPU
+`PinNodePositions { pins, unpin }` and (on move/end) a `BroadcastNodePositions`
+re-entry so co-present clients see the held node. `nodeDragEnd` leaves the node
+**pinned in place**; only an explicit `nodeUnpin` (or the drag-timeout safety
+net) releases it. Two-hand pinch is a separate **client-local** workspace
+scale/rotate (Graph2VR, `interactionModes/vrArMode.ts` → `scaleWorkspace`) that
+sends no server message and is shown as the dashed local branch.
+
+```mermaid
+sequenceDiagram
+    participant U as Pointer / XR controller
+    participant EH as useGraphEventHandlers<br/>client/src/features/graph/hooks/useGraphEventHandlers.ts
+    participant WS as WebSocket (/wss)
+    participant SFH as SocketFlowServer actor<br/>src/handlers/socket_flow_handler/position_updates.rs
+    participant GPU as GPUComputeActor
+    participant CCM as ClientCoordinatorActor
+    participant OC as Other clients
+
+    Note over U,EH: Two-hand pinch → scaleWorkspace()<br/>(client-local scale/rotate, no server msg)
+
+    U->>EH: grab node (drag start)
+    EH->>WS: sendMessage("nodeDragStart",<br/>{ nodeId, position })
+    WS->>SFH: handle_node_drag_start() — pubkey guard
+    SFH->>GPU: PinNodePositions { pins:[(id,[x,y,z])], unpin:[] }
+    SFH-->>WS: { type: "nodeDragStartAck", data:{ nodeId } }
+
+    loop drag move (throttled ~POSITION_UPDATE_THROTTLE_MS)
+        U->>EH: pointer move
+        EH->>WS: sendMessage("nodeDragUpdate",<br/>{ nodeId, position, timestamp })
+        WS->>SFH: handle_node_drag_update() — pubkey guard
+        SFH->>GPU: PinNodePositions { pins:[(id,pos)], unpin:[] }<br/>(re-pin at new position)
+        SFH->>CCM: BroadcastNodePositions { positions }
+        CCM->>OC: 52-byte V3/V5 position frame
+    end
+
+    U->>EH: release (drag end)
+    EH->>WS: sendMessage("nodeDragEnd", { nodeId })
+    WS->>SFH: handle_node_drag_end() — pubkey guard
+    Note over SFH,GPU: Node stays PINNED at drop position.<br/>One final settle cycle relaxes neighbours.
+    SFH->>CCM: BroadcastNodePositions { positions }
+    CCM->>OC: settled frame
+    SFH-->>WS: { type: "nodeDragEndAck", data:{ nodeId } }
+
+    opt explicit release (or drag_timeout auto-unpin safety net)
+        U->>EH: unpin gesture
+        EH->>WS: sendMessage("nodeUnpin", { data:{ nodeId } })
+        WS->>SFH: handle_node_unpin() — pubkey guard
+        SFH->>GPU: PinNodePositions { pins:[], unpin:[id] }
+        SFH-->>WS: { type: "nodeUnpinAck", data:{ nodeId } }
+    end
+```
+
+### 5b. Agent-Beam `0x23 AGENT_ACTION` Broadcast → XR Beam Render
+
+Embodied agent actions (ADR-140 / ADR-059 Phase 2b). The `agent_events` ingest
+publishes each `AgentActionEnvelope` to the process-global `agent_events::hub`.
+`AgentBeamActor` subscribes, coalesces a burst into one `BeamCoalescer`,
+identity-blindly projects each envelope onto a flag-stamped action
+(`project_action` → `to_binary_event`), and encodes the whole backlog as ONE
+multi-action `0x23` frame (`encode_agent_actions`). It rides the existing binary
+fan-out via `BroadcastAgentActionFrame` → `ClientCoordinatorActor.broadcast_to_all`
+— no new client registry. On the client, the frame's lead tag
+(`MessageType.AGENT_ACTION`) routes it to `handleAgentActionTagged`, which
+decodes to transient beams pushed into `transientBeamStore`; `TransientBeamsLayer`
+renders and ages them out.
+
+```mermaid
+sequenceDiagram
+    participant ING as agent_events ingest<br/>(publishes AgentActionEnvelope)
+    participant HUB as agent_events::hub<br/>(process-global broadcast)
+    participant ABA as AgentBeamActor<br/>src/actors/agent_beam_actor.rs
+    participant CO as BeamCoalescer<br/>(bounded, coalescing)
+    participant CCM as ClientCoordinatorActor
+    participant BP as store/websocket/binaryProtocol.ts
+    participant TBS as transientBeamStore
+    participant TBL as TransientBeamsLayer (R3F)
+
+    ING->>HUB: publish(AgentActionEnvelope)
+    HUB->>ABA: recv envelope(s) — burst
+    loop drain burst (< MAX_COALESCE_PER_FLUSH)
+        ABA->>CO: push(project_action(env))<br/>flag-stamped AgentActionEvent
+    end
+    ABA->>CO: encode_pending()
+    CO-->>ABA: one multi-action 0x23 frame<br/>[0x23][count:u16][(len:u16)(event 15B+payload)]…
+    ABA->>CCM: try_send(BroadcastAgentActionFrame(frame))
+    Note over ABA,CCM: On full mailbox: HOLD backlog,<br/>coalesce into next frame (bounded backpressure)
+    CCM->>CCM: broadcast_to_all(frame)<br/>→ per-client SendToClientBinary
+    CCM->>BP: 0x23 binary frame (ArrayBuffer)
+    BP->>BP: firstByte === MessageType.AGENT_ACTION<br/>→ handleAgentActionTagged()
+    BP->>BP: decodeAgentActions(data.slice(1))
+    BP->>TBS: pushTransientBeams(actions)
+    Note over BP: also emit('agent-action') →<br/>live transcript + attention heat
+    TBS->>TBS: admit beams (FIFO cap, per-beam TTL)
+    TBL->>TBS: useTransientBeams(): beams + prune
+    TBL->>TBL: render beam to targetNodeId,<br/>animate opacity over durationMs, prune expired
+```
+
+### 5c. Visual Query Builder — Mark → countOnly Preview → Execute → Planes
+
+The visual query builder (ADR-141 wave) turns a marked sub-graph into a triple
+pattern and enumerates its bindings over the live in-memory typed graph via
+`POST /api/graph/query/pattern` (`src/handlers/api_handler/graph/mod.rs:1451`,
+read-only, 120/min). The HUD first sends `countOnly:true` for a live
+binding-count preview (no bindings materialised), then re-sends with
+`countOnly:false` on execute to page the bindings, which the client renders as
+semantic planes / highlights over the resolved node ids.
+
+```mermaid
+sequenceDiagram
+    participant U as User (HUD / query builder)
+    participant QB as Query builder (client)
+    participant API as POST /api/graph/query/pattern
+    participant QP as query_pattern handler<br/>src/handlers/api_handler/graph/mod.rs:1451
+    participant MP as match_pattern (pure core)<br/>graph/mod.rs:1333
+    participant GSA as GraphStateActor (snapshot)
+    participant R as Semantic planes / highlight layer
+
+    U->>QB: mark nodes/edges, build triples<br/>[src, edgeType, tgt] (concrete ids or vars)
+
+    loop live preview on each edit
+        QB->>API: triples + countOnly true
+        API->>QP: web::Json<PatternQueryRequest>
+        QP->>GSA: fetch_graph_snapshot()
+        GSA-->>QP: GraphData { edges }
+        QP->>MP: match_pattern(edges, triples, limit, count_only=true)
+        MP-->>QP: PatternQueryResponse vars, bindingCount,<br/>truncated, bindings empty
+        QP-->>QB: 200 bindingCount + truncated
+        QB->>U: show live count ~N matches<br/>+ truncated floor flag
+    end
+
+    U->>QB: Execute
+    QB->>API: triples + limit + countOnly false
+    API->>QP: same path
+    QP->>MP: match_pattern(..., count_only=false)
+    MP-->>QP: PatternQueryResponse vars, bindingCount,<br/>truncated, bindings var-to-nodeId
+    QP-->>QB: 200 vars + bindings (first page, capped at limit)
+    QB->>R: project bindings to semantic planes<br/>over resolved node ids
+    R->>U: highlighted planes / result set
+    Note over QB,R: 400 on empty pattern or empty var name.<br/>bindingCount is a floor when truncated (scan cap)
+```
+
+---
+
+## 6. Audit Findings
 
 ### F-1 — Unauthenticated Read on /api/graph/data
 

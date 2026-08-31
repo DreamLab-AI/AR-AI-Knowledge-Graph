@@ -84,6 +84,20 @@ The 44 handlers live in `src/application/`, grouped into five domains:
 
 Each domain exposes its directives in `directives.rs` and its queries in `queries.rs`; the `graph` domain is query-only (it reads the live actor-held graph). The split is 19 `DirectiveHandler` to 25 `QueryHandler` across the five modules.
 
+### Graph-navigation and layout route handlers
+
+Not every read is a hexser handler. The graph-navigation and layout surfaces that the desktop and XR clients drive are **actix-web route handlers** on the driving side that read live, actor-held graph state directly (query-only, no directive/event path). They were added for the Graph2VR-class interaction and constrained-layout programmes; the wire shapes are documented in [reference/rest-api.md](../reference/rest-api.md) (§"Node navigation, fold, and pattern-query routes" and §"Layout Endpoints"), so only the code map is given here:
+
+| Route(s) | Handler | Source |
+|---|---|---|
+| `GET /api/graph/node/{id}/relations` | `get_node_relations` | `src/handlers/api_handler/graph/mod.rs` |
+| `POST /api/graph/node/{id}/expand` | `expand_neighbours` (predicate-count-first, additive merge) | `src/handlers/api_handler/graph/mod.rs` |
+| `GET /api/graph/fold` | `fold::get_fold_plan` (level 0–3 fold ladder) | `src/handlers/api_handler/graph/fold.rs` |
+| `POST /api/graph/query/pattern` | `query_pattern` (triple patterns, ≤16 triples / 8 vars) | `src/handlers/api_handler/graph/mod.rs` |
+| `GET /api/layout/modes`, `POST /api/layout/mode`, `POST /api/layout/radial`, `GET /api/layout/status`, `POST /api/layout/zones` | `configure_layout_routes` — `set_layout_mode`, `set_radial_layout` (ADR-141) | `src/handlers/layout_handler.rs` |
+
+The layout routes are the API face of the [ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md) constrained-layout programme: `set_layout_mode` selects one of `forceDirected`/`hierarchical`/`radial`/`spectral`/`temporal`/`clustered`, and `set_radial_layout` re-keys the GPU radial-bias term through a `SetRadialLayout` actor message with `RadialMode` `dagRank`/`typeTier`/`ego` (`crates/visionclaw-domain/src/types/layout.rs`). GPU-resident modes route into the physics actor; the CPU one-shot modes (spectral/temporal) compute placement in the handler. The `expand`/`relations` handlers implement the "ask what relations exist, then pull one predicate" model shared with the XR radial menu.
+
 ### Directive lifecycle
 
 ```mermaid
@@ -210,4 +224,4 @@ The boundary is deliberate: ports keep the domain testable and technology-agnost
 - [Physics & GPU Engine](physics-gpu-engine.md) — the CUDA layout engine behind the GPU adapters
 - [Technology Choices](technology-choices.md) — Rust, Actix-Web, Oxigraph rationale
 - [REST API reference](../reference/rest-api.md) · [WebSocket protocol](../reference/websocket-protocol.md) · [Binary protocol](../reference/binary-protocol.md)
-- Governing decisions: [ADR-089 — CQRS Dead Bus Removal](../adr/ADR-089-cqrs-bus-removal.md) · [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md)
+- Governing decisions: [ADR-089 — CQRS Dead Bus Removal](../adr/ADR-089-cqrs-bus-removal.md) · [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md) · [ADR-141 — Constrained-Layout Engine Programme](../adr/ADR-141-constrained-layout-engine-programme.md) (the layout route handlers)

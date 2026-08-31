@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### XR immersive-interaction + constrained-layout programme (ADR-137–141)
+
+Landed the week of 2026-08-31 across the Godot/OpenXR client, the GPU layout
+engine, and the REST/wire surfaces. New endpoint families are catalogued in
+`docs/reference/rest-api.md`; RenderStore + force-channel internals in
+`docs/reference/render-store-and-force-channels.md`.
+
+#### Added
+
+- **XR render offload + runtime quality dials (ADR-137).** Per-frame position
+  hunt and MultiMesh buffer packing moved from GDScript to a pure-Rust
+  `RenderStore` (`xr-client/rust/src/render_store.rs`), exposed via
+  `BinaryProtocolClient` — full density (13,164 nodes / 145,692 edges) at 90 fps.
+  Draw budgets derived from received topology (was hardcoded 640/3000);
+  initial-load quality is now the `initialNodeLimit` settings dial on
+  `/api/settings/physics`; WebSocket receive cap raised to 256 MiB. Full-3D force
+  layout is the default (`axisCompressionZ` removed; dual-disc flatten opt-in via
+  `enableDualDiscLayout`, default OFF).
+- **V5 wire protocol.** Client decodes the V5 position wrapper
+  (`[0x05][u64 broadcast_seq][V3 records]`); see `docs/reference/binary-protocol.md`.
+- **GPU force-channel registry + pinned-node mask (ADR-138).** Bounded
+  `ForceChannel` enum (`src/models/force_channels.rs`) mapping each named channel
+  to existing `SimParams` scalars + feature-flag bits (mapping-layer seam toward a
+  later array-backed `SimParams`); adds the pinned-node bitmask and DAG
+  radial-bias channel, with zero change to struct layout, CUDA kernels, or the
+  settings wire.
+- **Graph2VR-class immersive interaction (ADR-139).** Two-hand pinch
+  scale/rotate, radial menu, in-graph search, node expansion API — adopted into
+  the Godot/OpenXR client as ideas-level / clean-room re-implementations against
+  VisionClaw's own RenderStore, CUDA kernels, and Graph V3 wire (no external code
+  or assets vendored).
+- **Agent-swarm visualisation in XR (ADR-140, P1 shipped).** Consumes the
+  `0x23 AGENT_ACTION` frames (`AgentBeamActor`/`BeamCoalescer`): embodied agent
+  capsules hover near their target node, directional work beams, 4-channel status
+  halo, and a HUD Swarm tab with tap-to-teleport. Server/XR motion-authority
+  split means zero server change; all per-frame cost stays in the RenderStore.
+- **Constrained-layout engine programme (ADR-141, P1–P4 complete).** 13-pattern
+  taxonomy: Sugiyama layers, stratified planes, spherical shells, ego-radial
+  `RadialModes`. New endpoints `POST /api/layout/mode`, `POST /api/layout/radial`.
+- **Visual query builder** — `POST /api/graph/query/pattern` (graph-pattern query
+  over the semantic planes).
+- **Fold ladder** — `GET /api/graph/fold` (hierarchical-density fold levels;
+  application layer is the ADR-137 RenderStore).
+
 ### Judgment Broker: kernel ported, `BrokerActor` transport superseded (gap-close REC-2 — ADR-130 Decision 2)
 
 Branch `gap-close/2026-07`. Closes the REC-2 register gap on the architecture

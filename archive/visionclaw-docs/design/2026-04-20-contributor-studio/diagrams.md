@@ -58,17 +58,24 @@ mmdc -i source.mmd \
 
 ## Index
 
-| # | Diagram | Rendered | Mermaid source | Type |
-|---|---------|----------|----------------|------|
-| 12 | Stratum layering (substrate / stratum / mesh) — **hero, upcycled via Nano Banana 2** | [`docs/diagrams/12-contributor-stratum-layering.png`](../../diagrams/12-contributor-stratum-layering.png) | `docs/explanation/contributor-support-stratum.md` (mermaid block 1) | Block / TB |
-| 13 | Share-state transition matrix (Private → Team → Mesh) | [`docs/diagrams/13-adr057-share-state-transitions.png`](../../diagrams/13-adr057-share-state-transitions.png) | `docs/adr/ADR-057-contributor-enablement-platform.md` (mermaid block 1) | Block / TB |
-| 14 | Skill lifecycle state machine (Draft → Retired) | [`docs/diagrams/14-adr057-skill-lifecycle.png`](../../diagrams/14-adr057-skill-lifecycle.png) | `docs/adr/ADR-057-contributor-enablement-platform.md` (mermaid block 2) | stateDiagram-v2 |
-| 15 | BC18 / BC19 context map (19 bounded contexts) | [`docs/diagrams/15-ddd-context-map.png`](../../diagrams/15-ddd-context-map.png) | `docs/explanation/ddd-contributor-enablement-context.md` (mermaid block 1) | Block / TB |
-| 16 | ACL flow across contexts (6 anti-corruption layers) | [`docs/diagrams/16-ddd-acl-flow.png`](../../diagrams/16-ddd-acl-flow.png) | `docs/explanation/ddd-contributor-enablement-context.md` (mermaid block 2) | sequenceDiagram |
-| 17 | Mesh-promotion sequence (ShareIntent → BrokerCase) | [`docs/diagrams/17-ddd-mesh-promotion-sequence.png`](../../diagrams/17-ddd-mesh-promotion-sequence.png) | `docs/explanation/ddd-contributor-enablement-context.md` (mermaid block 3) | sequenceDiagram |
-| 18 | Skill retirement sequence (RetirementAdvisor → archive) | [`docs/diagrams/18-skill-retirement-sequence.png`](../../diagrams/18-skill-retirement-sequence.png) | `docs/design/2026-04-20-contributor-studio/02-skill-dojo-and-evals.md` (mermaid block 1) | sequenceDiagram |
-| 19 | Skill Dojo topology (DojoDiscoveryActor + pod index) | [`docs/diagrams/19-skill-dojo-topology.png`](../../diagrams/19-skill-dojo-topology.png) | `docs/design/2026-04-20-contributor-studio/02-skill-dojo-and-evals.md` (mermaid block 2) | stateDiagram-v2 |
-| 20 | Skill evaluation lifecycle (`SkillEvaluationActor`) | [`docs/diagrams/20-skill-eval-lifecycle.png`](../../diagrams/20-skill-eval-lifecycle.png) | `docs/design/2026-04-20-contributor-studio/02-skill-dojo-and-evals.md` (mermaid block 3) | sequenceDiagram |
+> **2026-08 upgrade (Lane C):** diagrams 13–20 now have committed diffable Mermaid
+> sources under `docs/diagrams/src/*.mmd` (extracted verbatim from the doc blocks
+> below) and are published as **SVG** (rendered via `mmdc-sidecar.sh -t dark`).
+> The old small PNGs moved to `docs/archive/diagrams/`. Type labels below are
+> corrected to the actual block content. Re-render: `mmdc-sidecar.sh -i
+> docs/diagrams/src/<n>.mmd -o docs/diagrams/<n>.svg -t dark`.
+
+| # | Diagram | Published SVG | Committed source | Original block | Type |
+|---|---------|----------------|------------------|----------------|------|
+| 12 | Stratum layering (substrate / stratum / mesh) — **hero, upcycled via Nano Banana 2** | [`docs/diagrams/12-contributor-stratum-layering.png`](../../diagrams/12-contributor-stratum-layering.png) | — (hero, no `.mmd`) | `docs/explanation/contributor-support-stratum.md` (block 1) | Block / TB |
+| 13 | ADR-057 actor supervision tree (BC18/BC19 supervisors) | [`docs/diagrams/13-adr057-share-state-transitions.svg`](../../diagrams/13-adr057-share-state-transitions.svg) | [`src/13-adr057-share-state-transitions.mmd`](../../diagrams/src/13-adr057-share-state-transitions.mmd) | ADR-057 (block 1) | graph / TB |
+| 14 | Skill lifecycle state machine (Draft → Retired) | [`docs/diagrams/14-adr057-skill-lifecycle.svg`](../../diagrams/14-adr057-skill-lifecycle.svg) | [`src/14-adr057-skill-lifecycle.mmd`](../../diagrams/src/14-adr057-skill-lifecycle.mmd) | ADR-057 (block 2) | stateDiagram-v2 |
+| 15 | BC18 / BC19 context map (19 bounded contexts + ACL) | [`docs/diagrams/15-ddd-context-map.svg`](../../diagrams/15-ddd-context-map.svg) | [`src/15-ddd-context-map.mmd`](../../diagrams/src/15-ddd-context-map.mmd) | ddd-contributor-enablement-context (block 1) | graph / TD |
+| 16 | Cross-context relationship map (ACL edges BC18/BC19 ↔ mesh/substrate) | [`docs/diagrams/16-ddd-acl-flow.svg`](../../diagrams/16-ddd-acl-flow.svg) | [`src/16-ddd-acl-flow.mmd`](../../diagrams/src/16-ddd-acl-flow.mmd) | ddd-contributor-enablement-context (block 2) | graph / TB |
+| 17 | Mesh-promotion sequence (ShareIntent → BrokerCase) | [`docs/diagrams/17-ddd-mesh-promotion-sequence.svg`](../../diagrams/17-ddd-mesh-promotion-sequence.svg) | [`src/17-ddd-mesh-promotion-sequence.mmd`](../../diagrams/src/17-ddd-mesh-promotion-sequence.mmd) | ddd-contributor-enablement-context (block 3) | sequenceDiagram |
+| 18 | Skill retirement sequence (RetirementAdvisor → archive) | [`docs/diagrams/18-skill-retirement-sequence.svg`](../../diagrams/18-skill-retirement-sequence.svg) | [`src/18-skill-retirement-sequence.mmd`](../../diagrams/src/18-skill-retirement-sequence.mmd) | 02-skill-dojo-and-evals (block 3) | sequenceDiagram |
+| 19 | Skill Dojo publish topology (skill_publish → DojoDiscoveryActor + Type Index) | [`docs/diagrams/19-skill-dojo-topology.svg`](../../diagrams/19-skill-dojo-topology.svg) | [`src/19-skill-dojo-topology.mmd`](../../diagrams/src/19-skill-dojo-topology.mmd) | 02-skill-dojo-and-evals (block 1) | sequenceDiagram |
+| 20 | Skill evaluation lifecycle (`SkillEvaluationActor`) | [`docs/diagrams/20-skill-eval-lifecycle.svg`](../../diagrams/20-skill-eval-lifecycle.svg) | [`src/20-skill-eval-lifecycle.mmd`](../../diagrams/src/20-skill-eval-lifecycle.mmd) | 02-skill-dojo-and-evals (block 2) | stateDiagram-v2 |
 
 ## Hero-diagram upcycle
 

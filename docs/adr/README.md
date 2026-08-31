@@ -14,7 +14,7 @@ revised by writing a new ADR that supersedes the old one, never by rewriting
 history in place. Superseded records move to [`superseded/`](superseded/) and keep
 a forward pointer to whatever replaced them.
 
-The numbering runs ADR-011 through ADR-129 with gaps (early consolidation records
+The numbering runs ADR-011 through ADR-141 with gaps (early consolidation records
 ADR-001..010 and ADR-015..026 were folded into later ones). Sections below group the
 records by theme; within a theme they are ordered by number. Status is read from
 each record's own `## Status` block, so it reflects the decision's real lifecycle
@@ -26,6 +26,11 @@ state — `Proposed`, `Accepted`, `Ratified`, `Implementing`, `Implemented`, or
 > (ADR-113/115–120) from shipping code, added ADR-131 (this sweep's own record)
 > and ADR-132 (the originating Neo4j-removal decision). See
 > [ADR-131](ADR-131-doc-drift-reconciliation-2026-07.md).
+>
+> Update (2026-08-30): the corpus now extends to **ADR-141** — ADR-133 (final-mile
+> sprint), ADR-134 (voice-plane relocation), ADR-135 (ontology loom node), ADR-136
+> (desktop OpenXR VIVE validation target), and the XR/layout wave ADR-137–141 have
+> landed. Every ADR 011–141 has a row in the themed tables below.
 
 ## Numbering collisions and supersession
 
@@ -144,6 +149,7 @@ governed ontology writeback loop. See [Ontology pipeline](../explanation/ontolog
 | [122](ADR-122-two-speed-writeback-governance-routing.md) | Two-Speed Writeback — Governance Routing by Epistemic Class | Deferred (frozen 2026-07-03) |
 | [123](ADR-123-voice-mediated-governance-signoff.md) | Voice-Mediated Governance — Conversational Sign-Off | Deferred (frozen 2026-07-03) |
 | [127](ADR-127-semantic-trust-layer.md) | Semantic Trust Layer — SHACL in Oxigraph, PROV-O, SPARQL Federation | Accepted |
+| [135](ADR-135-ontology-loom-node.md) | Ontology Loom Node + Deferred-Distillation Job Pattern (model-swappable façade) | Accepted |
 
 ## Solid / Pod & Sovereignty
 
@@ -180,9 +186,11 @@ handshake and removal of the legacy enterprise dashboard. See
 | [047](ADR-047-wasm-visualization-components.md) | WASM Visualization Components | Implemented |
 | [071](ADR-071-godot-rust-xr-replacement.md) | Godot 4 + godot-rust + OpenXR Native APK as the XR Client | Accepted |
 | [102](ADR-102-xr-client-backend-transport-completion.md) | XR Client ↔ Backend Transport Completion (Graph V3 + Presence) | Accepted |
+| [136](ADR-136-desktop-openxr-vive-validation-target.md) | Desktop OpenXR (VIVE Pro / SteamVR) as the Close-Out Validation Target | Accepted |
 | [137](ADR-137-xr-render-offload-and-runtime-quality-dials.md) | XR Render Offload, Runtime Quality Dials, and Full-3D-Default Layout | Accepted (2026-08-30) |
 | [138](ADR-138-gpu-force-channel-registry.md) | GPU Force-Channel Registry — Mapping Layer Now, Array-Backed SimParams Later | Accepted (2026-08-30) |
 | [139](ADR-139-immersive-interaction-adoption-programme.md) | Immersive Interaction Adoption Programme — Graph2VR-class Feature Mining | Accepted (2026-08-30) |
+| [140](ADR-140-xr-agent-swarm-visualisation.md) | XR Agent-Swarm Visualisation — Embodied Agents, Work Beams, Swarm Tab | Proposed (P1 shipped) |
 | [141](ADR-141-constrained-layout-engine-programme.md) | Constrained-Layout Engine Programme — 13-Pattern Taxonomy → Phased GPU + Estate Upgrade | Accepted (2026-08-30) |
 | [103](ADR-103-enterprise-dashboard-removal.md) | Enterprise Dashboard Removal — Migration to Nostr Forum | Accepted |
 | [126](ADR-126-omb-adoption-posture.md) | XR/MR Interface — OMB Adoption Posture | Proposed |
@@ -241,7 +249,9 @@ cutover, QE policy, secrets management, infographics and contracts. See
 | [111](ADR-111-ecosystem-infographic-modernisation.md) | Ecosystem Infographic Modernisation — diagram-as-code | Proposed |
 | [124](ADR-124-smart-contract-features-web-contracts.md) | Smart-Contract Features — Web-Contracts on a Single-Use-Seal Through-Line | Implemented |
 | [128](ADR-128-build-out-canonical-gitmark-blocktrails.md) | Build-Out — Adopt gitmark/blocktrails as the Web-Contract Substrate | Accepted |
+| [130](ADR-130-gap-close-visionclaw-decisions.md) | Gap-Close Sprint — VisionClaw Decisions | Proposed |
 | [131](ADR-131-doc-drift-reconciliation-2026-07.md) | Documentation-Drift Reconciliation Sweep (2026-07-22) | Accepted |
+| [133](ADR-133-final-mile-sprint.md) | Final-Mile Sprint — Tick-Tock Alternation Between Swarm and Operator | Accepted (2026-07-22) |
 
 ### RVF integration set
 

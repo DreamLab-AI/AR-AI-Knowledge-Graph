@@ -21,6 +21,17 @@ of by implementation area. This page explains the design thesis, the component m
 and the registry that keeps it honest against the backend. The governing decision is
 [ADR-129](../adr/ADR-129-control-center-reimagination.md).
 
+VisionClaw now has **three** control surfaces, and this page covers all three: the
+React desktop Control Center below (the bulk of the page); the **desktop graph-
+interaction trio** — click-to-focus/fit, the node page-card panel, and additive
+predicate expansion — that turns the canvas itself into a control surface
+([§Desktop graph-interaction trio](#the-desktop-graph-interaction-trio)); and the
+**XR HUD control centre**, the headset's own tabbed, wand-operated equivalent
+([§XR HUD control centre](#the-xr-hud-control-centre)). The desktop trio and the XR
+HUD both descend from the Graph2VR-class interaction programme
+([ADR-139](../adr/ADR-139-immersive-interaction-adoption-programme.md)) and the XR
+agent-swarm work ([ADR-140](../adr/ADR-140-xr-agent-swarm-visualisation.md)).
+
 ## Design thesis
 
 Three commitments shape every part of the rebuild:
@@ -364,8 +375,76 @@ polls while collapsed. Everything is read directly from stores/services, so
 - **`?` help hotkey has no subscriber.** `useControlCenterHotkeys` broadcasts
   `controlcenter:help` on `?`, but no component currently listens for it.
 
+## The desktop graph-interaction trio
+
+The glass overlay above configures the scene; a second, distinct control surface
+lives on the canvas itself, letting the user *navigate and grow* the graph by direct
+manipulation. Three co-operating affordances make up the trio, all riding the
+node/expand/relations REST routes documented in
+[reference/rest-api.md](../reference/rest-api.md) rather than re-implementing wire
+shapes:
+
+- **Click-to-focus / fit.** Clicking a node (or a search hit, or a transcript line)
+  dispatches the established `visionclaw:search` CustomEvent; `useGraphSelection`
+  consumes it to set the pulsing wave-scale highlight and ease the camera along
+  `flyToTargetRef`. The coordinate-free bridge is `cameraFocus.ts`
+  (`focusNodeById` masks the wire id and dispatches; `resolveNodeWorldPosition`
+  is the shared SAB position lookup GraphManager also uses for beam targets), so
+  HTML panels outside the R3F canvas can fly the camera without importing any
+  Three.js internals.
+- **Node page-card panel.** `NodeDetailPanel.tsx` is the near-opaque detail card
+  (`rgba(10,10,30,0.92)`, deliberately outside the `cc-glass` system) that shows a
+  node's definition, ontology parents (`subClassOf`), typed relationships, source
+  page-card (`SourcePageCard`, fetched lazily), and up to 30 connected nodes;
+  clicking a neighbour re-fires the focus event so the panel doubles as a navigator.
+- **Additive predicate expansion.** `NodeContextMenu.tsx` follows the Graph2VR
+  "predicate-count-first" model: it first `GET`s `/api/graph/node/{id}/relations`
+  to ask *what relations this node has and how many of each*, then a chosen
+  item `POST`s `/api/graph/node/{id}/expand` for just the neighbours along that one
+  predicate/direction and **additively merges** the returned nodes/edges into the
+  live graph — no reload, no re-layout thrash. The typed client wrapper is
+  `client/src/api/graphExpandApi.ts`. The same routes back the XR client's radial
+  expansion ([XR Architecture §5](xr-architecture.md)), so desktop and headset grow
+  the graph through one contract.
+
+The visual **query builder** is the fourth canvas-level surface: node marks assemble
+triple patterns that `POST` to `/api/graph/query/pattern` (max 16 triples / 8
+variables); see [Client Architecture](client-architecture.md) and
+[reference/rest-api.md](../reference/rest-api.md).
+
+## The XR HUD control centre
+
+The headset has its own control centre — not a port of the React overlay but a
+world-anchored, wand-operated equivalent rebuilt on the same "one control surface"
+thesis ([ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md)
+discipline: zero per-frame GDScript). `xr-client/scripts/hud.gd` draws a single
+wand-grabbable quad whose SubViewport hosts a tabbed `Control` tree; a wand ray hit-
+tests the viewport exactly as it does the radial menu. It replaces a pre-redesign
+single-VBox that stacked 34 controls past the 640 px fold. The tab order
+(`hud.gd:155`) is **Graph / Query / Pins / Swarm / Session / Help**:
+
+| Tab | Role |
+|---|---|
+| **Graph** | Physics/layout controls and the six layout modes + node-type show/hide filters ([ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md)) |
+| **Query** | The in-graph visual query builder (triple-pattern marks → `/api/graph/query/pattern`) |
+| **Pins** | Pinned-node roster and pin/unpin controls |
+| **Swarm** | Agent-swarm roster with tap-to-teleport and the four status→dot colours (idle slate / working green / blocked amber-red / done cyan-white, `hud.gd:161`) — the HUD half of [ADR-140](../adr/ADR-140-xr-agent-swarm-visualisation.md)'s embodied-swarm work |
+| **Session** | Room picker, mute, presence status |
+| **Help** | The "Vive Wand — Controls" controller cheat-sheet |
+
+Every control carries a minimum 56 px wand hit-target height (`BTN_H`). The Agents
+group of the *desktop* Control Center (hotkey 9, above) and this XR Swarm tab are
+siblings: the desktop group owns agent look-and-feel *settings*
+(`visualisation.graphs.visionclaw.*` / `graphTypeVisuals.agent.*`, including the
+action-beam radius/opacity fed to `TransientBeamsLayer` for the `0x23 AGENT_ACTION`
+beams), while the XR Swarm tab is a live *roster and teleport* surface. Full XR
+detail — embodiment, work beams, the RenderStore offload — is in
+[XR Architecture](xr-architecture.md).
+
 ## See also
 
+- [XR Architecture](xr-architecture.md) — the immersive client, its tabbed HUD, and
+  the embodied agent-swarm work the Swarm tab surfaces.
 - [Client Architecture](client-architecture.md) — the renderer, WASM bridge, and
   binary position pipeline this UI sits on top of; unchanged by this rebuild.
 - [Physics & GPU Engine](physics-gpu-engine.md) — what the Motion & Forces group's
@@ -374,7 +453,12 @@ polls while collapsed. Everything is read directly from stores/services, so
   protocol, a separate concern from the client-side agent status/spawner surface
   described here.
 - [ADR-129: Control Center Re-imagination](../adr/ADR-129-control-center-reimagination.md)
-  — the governing decision.
+  — the governing decision for the desktop overlay.
+- [ADR-139: Immersive interaction adoption programme](../adr/ADR-139-immersive-interaction-adoption-programme.md)
+  and [ADR-140: XR agent-swarm visualisation](../adr/ADR-140-xr-agent-swarm-visualisation.md)
+  — the desktop trio and the XR HUD control centre (including the Swarm tab).
+- [ADR-141: Constrained-layout engine programme](../adr/ADR-141-constrained-layout-engine-programme.md)
+  — the layout modes the HUD Graph tab and the Motion & Forces group both drive.
 - [ADR-046: Enterprise UI Architecture](../adr/ADR-046-enterprise-ui-architecture.md)
   — a historical, superseded-by-removal (ADR-103) enterprise sidebar proposal;
   unrelated to this rebuild but referenced here because it describes the same

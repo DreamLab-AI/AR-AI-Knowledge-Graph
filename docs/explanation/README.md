@@ -21,6 +21,7 @@ How the running system is layered, from the CUDA force engine up to the browser 
 |------|------------------|
 | [System Overview](system-overview.md) | End-to-end tour — how a Logseq note becomes a GPU-laid-out node in the browser and on Quest 3. The 10,000-foot map. |
 | [Backend Architecture](backend-architecture.md) | The hexagonal Rust core — 8 workspace crates, 9 ports / 12 adapters, 44 hexser handlers (19 directive + 25 query), no CQRS bus. |
+| [Backend CQRS Pattern](backend-cqrs-pattern.md) | The directive/query handler split and why the CQRS message bus was removed (ADR-089) in favour of direct dispatch. |
 | [Actor Hierarchy](actor-hierarchy.md) | The 45 Actix actors (19 service + 16 GPU + 10 WebSocket session) and how messages flow between supervisors. |
 | [Client Architecture](client-architecture.md) | The TypeScript/React client (465 files, 16 feature modules), WebGL/WebGPU rendering, and the binary position pipeline. |
 | [Control Center](control-center.md) | The glass-overlay settings UI — macro dials, semantic groups, the frozen dot-path registry, and the command-palette reveal flow — that replaced the docked `IntegratedControlPanel`. |
@@ -76,6 +77,8 @@ VisionClaw as a coordination platform, and how it composes with the agentbox sub
 | [Ecosystem Convergence](ecosystem-convergence.md) | The convergence of the knowledge-graph, agent, and pod ecosystems. |
 | [Solid Sidecar Architecture](solid-sidecar-architecture.md) | The Solid pod sidecar (:8484) and the URN → Solid resource mapping. |
 | [User & Agent Pod Design](user-agent-pod-design.md) | Per-user and per-agent pod design and data ownership. |
+| [Contributor Support Stratum](contributor-support-stratum.md) | The contributor AI-support layer — how the enablement stratum sits over the mesh (PRD-003 / ADR-057). |
+| [Blender MCP Unified Architecture](blender-mcp-unified-architecture.md) | The unified Blender-MCP integration surface for 3D asset generation and scene assembly. |
 
 ---
 

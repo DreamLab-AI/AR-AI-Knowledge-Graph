@@ -22,10 +22,13 @@ sprint notes have been archived; what remains is the evergreen context map.
 | [ddd-bead-provenance-context](ddd-bead-provenance-context.md) | Bead provenance bounded context |
 | [ddd-binary-protocol-context](ddd-binary-protocol-context.md) | Binary protocol bounded context |
 | [ddd-feature-engineering-context](ddd-feature-engineering-context.md) | Feature engineering pipeline context |
+| [ddd-final-mile-closeout-context](ddd-final-mile-closeout-context.md) | Final-mile closeout bounded context |
+| [ddd-gap-close-visionclaw-context](ddd-gap-close-visionclaw-context.md) | Gap-close VisionClaw bounded context |
 | [ddd-graph-cognition-context](ddd-graph-cognition-context.md) | Graph cognition bounded context |
 | [ddd-mesh-federation-context](ddd-mesh-federation-context.md) | Mesh federation bounded-context map |
 | [ddd-nostr-mobile-bridge-context](ddd-nostr-mobile-bridge-context.md) | Nostr mobile agent bridge bounded context |
 | [ddd-ontology-augmentation-context](ddd-ontology-augmentation-context.md) | Ontology augmentation bounded context |
+| [ddd-ontology-loom-context](ddd-ontology-loom-context.md) | Ontology Loom bounded context (BC24 — corpus lifecycle + model-swappable façade) |
 | [ddd-semantic-trust-layer-context](ddd-semantic-trust-layer-context.md) | Semantic trust layer bounded context |
 | [ddd-xr-godot-context](ddd-xr-godot-context.md) | XR Godot bounded context (BC22) |
 

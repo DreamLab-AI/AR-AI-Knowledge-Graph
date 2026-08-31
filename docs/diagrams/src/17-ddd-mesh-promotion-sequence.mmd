@@ -1,0 +1,27 @@
+sequenceDiagram
+    participant C as Contributor
+    participant Studio as BC18 Studio
+    participant CAS as ContextAssemblyService
+    participant Sensei as OntologyGuidanceService
+    participant BC7 as Ontology
+    participant BC30 as Agent Memory Pods
+    participant Pod as Contributor Pod
+    participant BC13 as Insight Discovery
+    participant BC11 as Broker
+
+    C->>Studio: Open workspace (focus: project X)
+    Studio->>CAS: Assemble focus
+    CAS->>BC7: Query ontology neighbours
+    CAS->>BC30: Read recent episodes
+    BC7-->>CAS: axioms, classes
+    BC30-->>CAS: episodic summary
+    CAS-->>Studio: WorkspaceFocus
+    Studio->>Sensei: Request guidance
+    Sensei-->>Studio: 3 suggestions (canonical term, precedent, skill)
+    C->>Studio: Accept canonical-term suggestion
+    Studio->>BC13: SuggestionAccepted (published event)
+    C->>Studio: Save artifact with public:: marker
+    Studio->>Pod: Write under /public/kg/ (double-gated)
+    Studio->>BC13: WorkArtifactCreated (candidate signal)
+    Note over BC13: Pattern detection across signals
+    BC13-->>BC11: MigrationCandidateSurfaced

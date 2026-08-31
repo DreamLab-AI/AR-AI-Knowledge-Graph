@@ -1,0 +1,39 @@
+graph TB
+    subgraph Params["SimParams (per-step uniform block)"]
+        SP[SimParams<br/>strengths · feature_flags]
+    end
+
+    subgraph Registry["ForceChannel registry — ADR-138 (src/models/force_channels.rs, 10 channels)"]
+        direction TB
+        C1[Repulsion<br/>gate ENABLE_REPULSION]
+        C2[Separation<br/>gate strength &gt; 0]
+        C3[Spring<br/>gate ENABLE_SPRINGS]
+        C4[Centering<br/>gate ENABLE_CENTERING]
+        C5[Gravity<br/>gate strength &gt; 0]
+        C6[ClusterCohesion<br/>gate strength &gt; 0]
+        C7[Constraints<br/>gate ENABLE_CONSTRAINTS]
+        C8[DagRadialBias<br/>gate strength &gt; 0]
+        C9[Annealing<br/>ramp cap]
+        C10[Boundary<br/>gate strength &gt; 0]
+    end
+
+    subgraph GPU["GPUComputeActor / force_compute_actor.rs"]
+        KRN[Force kernel<br/>accumulate enabled channels]
+        PM[pinned_nodes map<br/>node_id → Vec3]
+        PMD{pinned_mask_dirty?}
+        MASK[per-node GPU pin mask<br/>rebuilt + uploaded]
+        INT[integrate step<br/>position_velocity_buffer]
+        OVR[overwrite pinned entries<br/>to fixed world position]
+    end
+
+    SP --> C1 & C2 & C3 & C4 & C5 & C6 & C7 & C8 & C9 & C10
+    C1 & C2 & C3 & C4 & C5 & C6 & C7 & C8 & C9 & C10 --> KRN
+    KRN --> INT
+    PM --> PMD
+    PMD -->|dirty| MASK
+    MASK --> OVR
+    INT --> OVR
+    OVR --> OUT[broadcast positions<br/>52-byte V3/V5 frame]
+
+    note1[["nodeDragStart/Update pin via<br/>PinNodePositions{pins}; nodeDragEnd<br/>leaves pinned; nodeUnpin clears mask.<br/>See interface-sequences §5a"]]
+    PM -.-> note1

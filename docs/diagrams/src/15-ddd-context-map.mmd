@@ -1,0 +1,36 @@
+graph TD
+    subgraph Mesh["MANAGEMENT MESH (governance)"]
+        BC11["BC11 Broker"]
+        BC12["BC12 Workflow"]
+        BC13["BC13 Insight"]
+        BC15["BC15 KPI"]
+        BC17["BC17 Policy"]
+    end
+
+    subgraph Stratum["CONTRIBUTOR AI SUPPORT STRATUM"]
+        BC18["BC18 Contributor Enablement<br/>Studio · Sensei · Dojo<br/>Share · Automations"]
+        BC19["BC19 Skill Lifecycle<br/>Package · Version · Eval<br/>Benchmark · Distribution"]
+        BC18 --> BC19
+    end
+
+    subgraph Substrate["SUBSTRATE (core, supporting, generic)"]
+        BC2["BC2 Graph Data"]
+        BC7["BC7 Ontology"]
+        BC14["BC14 Identity"]
+        BC13b["BC13 Insight"]
+        BC8["BC8 Agent/Bot"]
+        BC30["BC30 Agent Memory Pods"]
+        BC2 --- BC7 --- BC14
+        BC13b --- BC8 --- BC30
+    end
+
+    BC18 -->|"ShareIntent"| BC11
+    BC18 -->|"promoted skills"| BC12
+    BC18 -->|"proposals"| BC12
+    BC13 -->|"candidates"| BC18
+    BC18 -->|"WorkArtifact sig"| BC13
+    BC18 -->|"activation events"| BC15
+    BC18 -->|"ShareIntent eval"| BC17
+
+    ACL["═══ ANTI-CORRUPTION LAYER ═══"]
+    Stratum --> ACL --> Substrate

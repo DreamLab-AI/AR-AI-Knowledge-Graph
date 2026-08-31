@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant RA as RetirementAdvisor
+    participant M as Maintainer Inbox
+    participant SO as ShareOrchestrator
+    participant Pod as Contributor Pod
+    participant TI as publicTypeIndex
+    participant DDA as Peer DojoDiscoveryActor
+
+    RA->>M: SkillRetirementProposed {skill_uri, reason, evidence}
+    M-->>M: 14-day grace period
+    alt Maintainer confirms or ignores
+        M->>SO: retire
+        SO->>Pod: MOVE /public/skills/{slug}/ → /public/skills/{slug}/archive/
+        SO->>Pod: Write archive/retirement.jsonld
+        SO->>TI: Remove urn:solid:AgentSkill registration
+        SO-->>DDA: Solid Notification (DELETE + UPDATE)
+        DDA->>DDA: Mark skill "retired" in SkillIndex
+    else Maintainer rejects
+        M->>RA: SkillRetirementRejected {reason}
+        RA->>RA: Reschedule check in 60 days
+    end

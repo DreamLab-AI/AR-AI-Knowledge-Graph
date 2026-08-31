@@ -1,0 +1,11 @@
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Allocating: EvalRunRequested
+    Allocating --> Running: worker acquired
+    Running --> Grading: all cases complete
+    Grading --> Analysing: per-case grades written
+    Analysing --> Recording: regression signal computed
+    Recording --> Idle: SkillBenchmarkCompleted emitted
+    Running --> Failed: executor fault
+    Grading --> Failed: grader fault
+    Failed --> Idle: event logged, no retry

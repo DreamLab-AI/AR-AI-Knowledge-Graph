@@ -1,3 +1,5 @@
+> **Archived 2026-08-31.** Point-in-time landing snapshot predating ADR-137–141; superseded by the shipped code and the updated CHANGELOGs. Retained for provenance.
+
 # ADR Landing Plan — Corrected Against Verification Mesh (2026-08-21)
 
 Source: 39 verified ADR survey verdicts (VisionClaw `docs/adr` + agentbox `docs/reference/adr`), each with evidence citations, plus a completeness-critic coverage list. Every claim below is traceable to that evidence. UK English.

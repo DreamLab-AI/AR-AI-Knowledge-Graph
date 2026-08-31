@@ -15,6 +15,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > enrichment-decide handler (`services::broker_events`) over the multiplexed graph
 > socket. Read "`BrokerActor`" below as "the broker governance publisher".
 
+## [Unreleased] - 2026-08-31
+
+### Added — XR immersive-interaction + layout programme (ADR-137–141)
+
+The week's landing across the Godot/OpenXR client, the GPU layout engine, and
+the REST/wire surfaces. New endpoint families are documented in
+`docs/reference/rest-api.md`; the RenderStore and force-channel registry have a
+dedicated developer reference at
+`docs/reference/render-store-and-force-channels.md`.
+
+- **XR render offload + runtime quality dials (ADR-137).** Per-frame position
+  hunt and MultiMesh buffer packing moved out of GDScript into a pure-Rust
+  `RenderStore` (`xr-client/rust/src/render_store.rs`) exposed through
+  `BinaryProtocolClient`; full density (13,164 nodes / 145,692 edges) now renders
+  at 90 fps (was ~11 fps in GDScript). Draw budgets are derived from the received
+  topology rather than the hardcoded 640/3000 gates; initial-load quality is a
+  settings dial (`initialNodeLimit` on `/api/settings/physics`, replacing the
+  compiled-in `DEFAULT_INITIAL_NODE_LIMIT`); WebSocket receive cap raised to
+  256 MiB. Full-3D force layout is now the default — `axisCompressionZ` removed,
+  dual-disc flatten opt-in (`enableDualDiscLayout`, default OFF).
+- **V5 wire protocol.** The client decodes the V5 position wrapper
+  (`[0x05][u64 broadcast_seq][V3 records]`); documented in
+  `docs/reference/binary-protocol.md`. WebSocket upgrade `frame_size` raised so
+  large V5 broadcasts are not truncated.
+- **GPU force-channel registry (ADR-138).** A bounded `ForceChannel` enum
+  (`src/models/force_channels.rs`) mapping each named channel to the existing
+  `SimParams` scalar field(s) and feature-flag bit(s) — one enumerable
+  "what channels exist / on-off / strength" registry with zero change to the
+  struct layout, CUDA kernels, or settings wire (the migration seam toward the
+  later array-backed `SimParams` refactor). Includes the pinned-node bitmask and
+  DAG radial-bias channel.
+- **Graph2VR-class immersive interaction (ADR-139).** Two-hand pinch
+  scale/rotate, radial menu, in-graph search, and a node expansion API adopted
+  into the Godot/OpenXR client (ideas-level / clean-room mining record — no
+  external code or assets vendored; every feature re-implemented against
+  VisionClaw's own `RenderStore`, CUDA kernels, and Graph V3 wire).
+- **Agent-swarm visualisation in XR (ADR-140, P1 shipped).** Consumes the
+  `0x23 AGENT_ACTION` frames (`AgentBeamActor`/`BeamCoalescer`, server side):
+  embodied agent capsules hover near their target node, directional work beams
+  stream agent→node, 4-channel status halo, and a Swarm tab on the HUD control
+  centre with tap-to-teleport. Motion-authority split — server owns *which* node
+  + status, XR client owns *where in the room* — so zero server change. All
+  per-frame cost stays in the Rust RenderStore.
+- **Constrained-layout engine programme (ADR-141, P1–P4 complete; P5/P6
+  deferred).** 13-pattern taxonomy audited and mapped to soft force channel / hard
+  projection / CPU one-shot placement methods: Sugiyama layers, stratified planes,
+  spherical shells, and ego-radial `RadialModes`. New endpoints
+  `POST /api/layout/mode` and `POST /api/layout/radial`.
+- **Visual query builder.** `POST /api/graph/query/pattern` — build a graph
+  pattern query against the semantic planes.
+- **Fold ladder.** `GET /api/graph/fold` — hierarchical-density fold levels; the
+  fold application layer is the ADR-137 `RenderStore`.
+
 ## [Unreleased] - 2026-08-15
 
 ### Added — Semantic-trust gap closures (PRD-022 WS-1/WS-2, PRD-010 G4)
@@ -220,7 +273,7 @@ green; per-workstream detail in the commit messages):
 ## [Unreleased] - 2026-04-12
 
 ### Added
-- Layout mode system with 6 algorithms (ADR-031)
+- Layout mode system with 6 algorithms (ADR-141; corrected 2026-08-31 from the mis-attributed ADR-031 — ADR-031 defines only the `LayoutMode` enum, the constrained-layout engine programme that lands the algorithms is ADR-141)
 - ForceAtlas2 LinLog kernel for community-revealing layout
 - Spectral, Hierarchical, Radial, Temporal, Clustered layout engines
 - PageRank HTTP API endpoints (compute/result/clear)

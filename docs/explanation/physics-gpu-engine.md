@@ -216,6 +216,69 @@ hard-codes literals on the hot path.
 
 ---
 
+## Pinned nodes and the force-channel registry
+
+Two structural additions sit alongside the force pipeline: a GPU-resident mask that
+freezes individual nodes, and an enumerable registry that names every force term.
+
+### Pinned-node mask
+
+Interactive drags and layout pins need a node held at a fixed position without
+freezing the rest of the graph. The engine carries a per-node **pinned mask**
+(`pinned_mask: DeviceBuffer<i32>`, `src/utils/unified_gpu_compute/construction.rs`)
+uploaded from the host via `upload_pinned_mask` (`memory.rs:151`): `0` = free,
+non-zero = pinned. The mask is handed to the integrate kernel
+(`execution.rs`, `pinned_mask.as_device_ptr()`), which **skips integration for a
+pinned node** — holding it at its host-supplied position — while the node still
+exerts repulsion and spring forces on its neighbours, so a dragged or pinned node
+perturbs the layout around it exactly as expected. The host source of truth is
+`PhysicsOrchestratorActor::user_pinned_nodes` (`src/actors/physics_orchestrator_actor.rs`),
+populated by `PinNodePositions` from server-authoritative drags. The mask slice is
+padded to the allocated buffer length with `0`, so over-allocated trailing slots
+never read as pinned. This is the pinned-node half of
+[ADR-138](../adr/ADR-138-gpu-force-channel-registry.md).
+
+### Force-channel registry
+
+The layout's force terms are configured through a flat, `repr(C)`, 180-byte
+`SimParams` struct of ad-hoc scalars (`repel_k`, `spring_k`, `center_gravity_k`, …)
+plus a `feature_flags` bitset. That layout offers no enumerable "what channels
+exist, are they on, and how strong are they" view, and nothing forces a new kernel
+term to be registered anywhere. [ADR-138](../adr/ADR-138-gpu-force-channel-registry.md)
+adds a **named force-channel registry** as a *mapping layer* over the existing
+struct — the migration seam toward an eventual array-backed `SimParams`, with **zero**
+change to the struct layout, the CUDA kernels, or the settings wire.
+
+The registry is a bounded `ForceChannel` enum (`src/models/force_channels.rs`) whose
+`ALL` array enumerates the ten live channels in a stable order: **Repulsion,
+Separation, Spring, Centering, Gravity, ClusterCohesion, Constraints, DagRadialBias,
+Annealing, Boundary**. Each channel maps to the *existing* backing scalar
+(`strength_of`) and, where applicable, a `FeatureFlags` bit (`feature_flag`);
+`ForceChannel::state` reads a `{enabled, strength}` view out of `SimParams` — flag-
+gated channels reflect their bit, the rest reflect `strength > 0` (the same test the
+kernels apply) — and `ForceChannel::apply` writes it back preserving kernel
+semantics. When the array-backed refactor lands, only the bodies of `state`/`apply`
+change; every caller keeps working. The `DagRadialBias` channel (`dag_bias_k`, fed by
+the per-node DAG rank in `upload_node_rank`) is the GPU term the radial layout modes
+of [ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md) re-key.
+
+### Render offload and runtime quality dials
+
+[ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md) is a client-
+side decision but it changes two things this engine's output must respect. First,
+**runtime-derived instance budgets**: clients now size their node/edge draw budgets
+from the received topology (bounded by a safety ceiling) rather than the old
+hardcoded caps, so the engine's full broadcast is not silently clipped downstream.
+Second, **initial-load quality is a settings dial** — `initialNodeLimit`
+(`/api/settings/physics`) replaces the compiled-in initial node limit, and full-3D
+layout is the default (`axisCompressionZ` removed; the dual-disc flatten is opt-in).
+The immersive client offloads its per-frame position-hunt and buffer packing to a
+Rust `RenderStore` (`xr-client/rust/src/render_store.rs`); see
+[XR Architecture](xr-architecture.md) for that path. The server-side display-only
+disc projection described below is unchanged.
+
+---
+
 ## Semantic forces from the ontology
 
 The base physics layout is shaped by the OWL ontology. The `SemanticForcesActor`
@@ -320,4 +383,4 @@ roughly 10K nodes. Above that, the GPU is required for sub-frame step times.
 - [Ontology Pipeline](ontology-pipeline.md) — how OWL axioms become GPU constraints
 - [Physics Parameters](../reference/physics-parameters.md) — every tunable and its bounds
 - [Binary Protocol](../reference/binary-protocol.md) · [WebSocket Protocol](../reference/websocket-protocol.md) — how positions reach clients
-- Governing ADRs: [ADR-031 — GPU Analytics Correctness and Wiring](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md)
+- Governing ADRs: [ADR-031 — GPU Analytics Correctness and Wiring](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-137 — XR Render Offload and Runtime Quality Dials](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md), [ADR-138 — GPU Force-Channel Registry](../adr/ADR-138-gpu-force-channel-registry.md), [ADR-141 — Constrained-Layout Engine Programme](../adr/ADR-141-constrained-layout-engine-programme.md)

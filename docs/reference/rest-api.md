@@ -3,8 +3,8 @@ title: VisionClaw REST API Reference
 description: Complete REST API reference for VisionClaw, covering graph data, settings, authentication, ontology, pathfinding, and Solid Pod endpoints
 category: reference
 tags: [api, rest, http, endpoints, nip-98, sovereign-mesh]
-updated-date: 2026-05-05
-adr-references: [ADR-028-ext, ADR-050, ADR-051, ADR-052, ADR-072]
+updated-date: 2026-08-31
+adr-references: [ADR-028-ext, ADR-050, ADR-051, ADR-052, ADR-072, ADR-138, ADR-140, ADR-141]
 ---
 
 # VisionClaw REST API Reference
@@ -55,9 +55,14 @@ graph LR
     L --> L3["gaps"]
     L --> L4["batch, index, train, materialize"]
 
+    A --> N["/api/layout/*"]
     B --> B1["data, data/paginated"]
     B --> B2["positions"]
     B --> B3["update, refresh"]
+    B --> B4["node/:id/relations, node/:id/expand"]
+    B --> B5["fold, query/pattern"]
+    N --> N1["mode"]
+    N --> N2["radial"]
     C --> C1["physics, rendering, ..."]
     C --> C2["user/filter"]
     D --> D1["hierarchy"]
@@ -391,6 +396,235 @@ Additional read routes registered in the same live scope (`src/handlers/api_hand
 There is **no `GET /api/graph/stats`, `GET/POST/DELETE /api/graph/node(s)`, or per-node CRUD endpoint reachable at runtime.**
 
 `src/handlers/graph_state_handler.rs:422-433` does define a second `web::scope("/graph")` with `/statistics`, `/nodes`, `/nodes/{id}` (GET/PUT/DELETE), `/edges`, `/edges/{id}`, `/positions/batch`, and it is wired via `.configure()` in `api_handler/mod.rs:128` — but it registers **after** the `/graph` scope above (`api_handler/mod.rs:124`), and actix-web gives the first-registered scope with a given prefix exclusive ownership of that prefix (a documented gotcha called out inline at `api_handler/graph/mod.rs:673-676`: *"actix-web claims a route prefix for the FIRST registered `web::scope("/graph")` and routes defined in later same-prefix scopes return 404"*). So `graph_state_handler`'s node/edge/statistics routes compile and are registered, but are **shadowed and unreachable in practice** — any request to them 404s inside the first `/graph` scope's router before ever reaching the handler code. Treat them as dead code, not a usable API surface, until the scope conflict is resolved in Rust.
+
+### Node navigation, fold, and pattern-query routes
+
+These read/compute routes back the desktop expansion trio, the XR fold ladder, and
+the visual query builder. All are **public reads** in the same live `/graph` scope
+(`src/handlers/api_handler/graph/mod.rs`), so no auth is required; the per-node and
+pattern routes carry a per-resource `RateLimit::per_minute(120)` on top of the
+scope's 600/min ceiling. The same DoS-bounded heap that guards `/graph/data`
+applies — result sets are hard-capped server-side (see individual caps below).
+
+| Method | Path | Auth | Rate limit | Handler |
+|--------|------|------|-----------|---------|
+| GET | `/api/graph/node/{id}/relations` | None | 120/min | `get_node_relations` (`mod.rs:989`) |
+| POST | `/api/graph/node/{id}/expand` | None | 120/min | `expand_node` (`mod.rs:1020`) |
+| GET | `/api/graph/fold` | None | 600/min (scope) | `fold::get_fold_plan` (`fold.rs:569`) |
+| POST | `/api/graph/query/pattern` | None | 120/min | `query_pattern` (`mod.rs:1451`) |
+
+#### GET /api/graph/node/{id}/relations
+
+Summarise a node's edges grouped by edge type and direction. `{id}` is a `u32`
+node id (masked with `NODE_ID_MASK` before lookup). No query params, no body.
+
+**Response** (200 OK) — `RelationsResponse` (`mod.rs:726-730`):
+
+```json
+{
+  "outgoing": [
+    { "edgeType": "LINKS_TO", "label": "links to", "count": 12 }
+  ],
+  "incoming": [
+    { "edgeType": "SUBCLASS_OF", "label": "subclass of", "count": 3 }
+  ]
+}
+```
+
+Each `RelationCount` (`mod.rs:718-724`) carries `edgeType` (string), `label`
+(string), `count` (u32). Errors: `404 {"error": "Node {id} not found"}`;
+`500 {"error": "Failed to retrieve graph data"}`.
+
+#### POST /api/graph/node/{id}/expand
+
+Fetch the neighbours reachable from `{id}` along one edge type in one direction —
+the additive-expansion primitive behind the desktop "expand" action and the XR
+grab-to-reveal flow. `{id}` is a masked `u32`.
+
+**Request body** — `ExpandRequest` (`mod.rs:776-782`):
+
+```json
+{ "edgeType": "LINKS_TO", "direction": "outgoing", "limit": 25 }
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `edgeType` | string | Yes | Edge type to traverse |
+| `direction` | `"outgoing"` \| `"incoming"` | Yes | Traversal direction |
+| `limit` | integer | No | Clamped to `[1, 500]`; `0` or absent ⇒ default 25 |
+
+**Response** (200 OK) — `ExpandResponse` (`mod.rs:810-814`):
+
+```json
+{
+  "nodes": [
+    { "id": 42, "metadataId": "design-patterns.md", "label": "Design Patterns", "nodeType": "page" }
+  ],
+  "edges": [
+    { "source": 7, "target": 42, "edgeType": "LINKS_TO", "weight": 1.0 }
+  ]
+}
+```
+
+`ExpandNode` (`mod.rs:791-799`): `id` (u32), `metadataId` (string), `label`
+(string), `nodeType` (string, omitted when absent). `ExpandEdge`
+(`mod.rs:801-808`): `source`/`target` (u32), `edgeType` (string), `weight`
+(f32). Errors: 404 / 500 as above.
+
+#### GET /api/graph/fold
+
+Return the collapse/expand plan for the semantic fold ladder (the XR
+level-of-detail control). Given a fold level, the handler computes which nodes to
+hide and which representative "group" nodes to show in their place.
+
+**Query params** — `FoldQuery` (`fold.rs:72-83`):
+
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `level` | integer | 0 | Clamped to `[0, 3]` |
+| `graphType` | string | — | `knowledge` \| `ontology` \| `agent` |
+| `pinned` | string | — | Comma-separated node ids to hold visible |
+
+**Response** (200 OK) — `FoldPlan` (`fold.rs:97-112`):
+
+```json
+{
+  "level": 2,
+  "graphType": "ontology",
+  "generation": 41,
+  "hidden": [102, 103, 210],
+  "groups": [
+    { "representativeId": 55, "memberIds": [102, 103], "badge": 2, "kind": "subclass" }
+  ],
+  "analyticsNodes": 128,
+  "hierarchyEdges": 64
+}
+```
+
+`generation` (u64) versions the plan so a client can discard stale ladders.
+`FoldGroup.kind` (`fold.rs:87-94`) is `"subclass"` (ontology hierarchy) or
+`"community"` (detected cluster). Errors: `500 {"error": "Failed to retrieve
+graph data"}`.
+
+#### POST /api/graph/query/pattern
+
+Evaluate a small conjunctive triple pattern against the graph — the wire form the
+visual query builder emits. Each triple links two terms (a concrete node id or a
+`?variable`) by edge type; the handler returns variable bindings.
+
+**Request body** — `PatternQueryRequest` (`mod.rs:1124-1131`):
+
+```json
+{
+  "triples": [
+    { "src": 42, "edgeType": "LINKS_TO", "tgt": "?doc" },
+    { "src": "?doc", "edgeType": "AUTHORED_BY", "tgt": "?author" }
+  ],
+  "limit": 24,
+  "countOnly": false
+}
+```
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `triples` | array of `{ src, edgeType, tgt }` | `src`/`tgt` are either a node id (JSON number) or a variable (JSON string, e.g. `"?doc"`). Max 16 triples, max 8 distinct variables |
+| `limit` | integer | Clamped `[1, 500]`, default 24 |
+| `countOnly` | boolean | `true` returns only `bindingCount`, skipping the binding rows |
+
+**Response** (200 OK) — `PatternQueryResponse` (`mod.rs:1133-1147`):
+
+```json
+{
+  "vars": ["?doc", "?author"],
+  "bindingCount": 2,
+  "truncated": false,
+  "bindings": [
+    { "?doc": 91, "?author": 205 }
+  ]
+}
+```
+
+`bindings` maps each variable name to a node id. `truncated` is `true` when the
+result hit `limit`. Server-side scan caps (`mod.rs:1094-1104`):
+`QUERY_SCAN_CAP = 5000` candidates, `QUERY_STEP_CAP = 2_000_000` join steps.
+Errors: `400 {"error": ...}` for an empty pattern or empty variable name;
+`500` on graph-fetch failure.
+
+---
+
+## Layout Endpoints
+
+Configured in `src/handlers/layout_handler.rs` (`web::scope("/layout")`
+mounted under `/api` at `src/main.rs:1038`). The layout scope carries **no auth
+wrap and no rate limit** — both routes are public compute calls that hand work to
+the GPU layout actor. They implement the ADR-141 layout programme (Sugiyama
+layers, stratified/spherical modes, ego-radial RadialModes). Both take an untyped
+JSON body and answer with an ad-hoc `{"success": ...}` envelope.
+
+### POST /api/layout/mode
+
+Switch the active graph layout algorithm. Handler `set_layout_mode`
+(`layout_handler.rs:15`).
+
+**Request body**:
+
+```json
+{ "mode": "forceDirected", "transitionMs": 500 }
+```
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `mode` | string | `"forceDirected"` | `LayoutMode` (`layout.rs:9-22`): `forceDirected`, `hierarchical`, `radial`, `spectral`, `temporal`, `clustered`. Unknown values fall back to `forceDirected` |
+| `transitionMs` | integer | 500 | Animation duration for the client transition |
+
+**Response** — GPU-resident modes (`forceDirected`, `radial`, `clustered`) run on
+the GPU actor and return an empty `positions` array (the client reads new
+positions off the binary position stream):
+
+```json
+{ "success": true, "mode": "radial", "transitionMs": 500, "positions": [] }
+```
+
+CPU one-shot modes (`spectral`, `temporal`) compute positions inline and return
+them:
+
+```json
+{
+  "success": true,
+  "mode": "spectral",
+  "transitionMs": 500,
+  "positions": [ { "id": 42, "x": 1.0, "y": 2.0, "z": 0.0 } ]
+}
+```
+
+On failure: `{"success": false, "mode": "...", "error": "Failed to apply layout mode: ..."}`.
+
+### POST /api/layout/radial
+
+Apply an ego-radial / stratified radial arrangement. Handler `set_radial_layout`
+(`layout_handler.rs:139`).
+
+**Request body**:
+
+```json
+{ "mode": "dagRank", "focusNode": 42, "transitionMs": 500 }
+```
+
+| Field | Type | Default | Notes |
+|-------|------|---------|-------|
+| `mode` | string | `"dagRank"` | `RadialMode` (`layout.rs:36-44`): `dagRank` (rank by DAG depth), `typeTier` (tier by node type), `ego` (rings around a focus node) |
+| `focusNode` | integer | — | Optional ego-centre node id (used by `ego` mode) |
+| `transitionMs` | integer | 500 | Transition duration |
+
+**Response**:
+
+```json
+{ "success": true, "mode": "ego", "focusNode": 42, "transitionMs": 500 }
+```
+
+Unknown modes are **not** rejected at the HTTP layer — they return `200` with
+`{"success": false, "mode": "...", "error": "..."}` (`layout_handler.rs:158-164`),
+as does an actor-reject or unavailable GPU actor.
 
 ---
 

@@ -23,7 +23,7 @@ thesis. It also extends the identity contexts defined in
 pipeline contexts defined in [`ddd-semantic-pipeline.md`](ddd-semantic-pipeline.md).
 
 The enterprise contexts implement the six workstreams from the
-[Enterprise PRD](../../presentation/enterprise-prd.md): Judgment Broker
+[Enterprise PRD](../prd/PRD-002-enterprise-ui.md): Judgment Broker
 Workbench, Insight Ingestion Loop, Organisational KPI & Observability,
 Enterprise Identity & Access, Discovery Connectors, and Provenance, Policy,
 and Digital Twin Reframing.
