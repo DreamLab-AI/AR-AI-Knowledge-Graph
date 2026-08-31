@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: 542d63d1d8e28fb2af1dce420635e7a1cee165f6
 verified_paths: [src/models/force_channels.rs, src/utils/unified_gpu_compute/execution.rs, src/models/simulation_params.rs]
 owner: jjohare
 review_trigger: array-backed force-term refactor (deferred step 2), or any new host→GPU conversion path
@@ -55,3 +55,6 @@ and tests `only_constraints_is_read_only` / `constraints_apply_is_a_noop` (from 
 (lines 903–904), calls `to_sim_params()` then overwrites the word (lines 912–913).
 `From`/`to_sim_params` impls at `simulation_params.rs:222,236,319`. Mapping layer present;
 array-backed refactor absent — implementation is partial as recorded.
+Re-verified at `542d63d1d` after the ADR-141 formatting sweep (test-only line
+wrapping of a `constraint_max_force_per_node` assertion in `force_channels.rs`) —
+the flag-derivation semantics are unchanged.

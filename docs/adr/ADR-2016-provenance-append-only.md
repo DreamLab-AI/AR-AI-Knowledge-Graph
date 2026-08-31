@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: 542d63d1d8e28fb2af1dce420635e7a1cee165f6
 verified_paths: [crates/visionclaw-adapters/src/provenance_emitter.rs, crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs, src/services/ontology_mutation_service.rs]
 owner: jjohare
 review_trigger: a GDPR/right-to-erasure obligation landing on provenance-recorded subjects, or introduction of a redaction/crypto-shred mechanism
@@ -63,3 +63,6 @@ Two call sites reach `reify_activity`: `oxigraph_ontology_repository.rs:646`
 called directly, bypassing `emit_provenance`) — both resolve to the same
 insert-only primitive, so the append-only property holds across both paths
 even though `emit_provenance` is not the sole entry point.
+Re-verified at `542d63d1d` after the ADR-141 formatting sweep (test-only line
+wrapping in `ontology_mutation_service.rs` `provenance_wiring_tests`) — the
+append-only invariant is unchanged.

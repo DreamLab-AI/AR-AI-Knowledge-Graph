@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: 542d63d1d8e28fb2af1dce420635e7a1cee165f6
 verified_paths: [Cargo.toml, src/actors, crates/visionclaw-actors/src]
 owner: jjohare
 review_trigger: completion of the actor extraction into crates/visionclaw-actors, or a new subsystem that does not map to an existing crate layer
@@ -52,4 +52,6 @@ members; `exclude` lists `xr-client/rust` and `agentbox/crates/headroom-napi`.
 The extraction is measurably partial: `src/actors/*.rs` has 25 files against 4 in
 `crates/visionclaw-actors/src/` (the mint plan recorded 11 — extraction has not
 advanced, so `implementation: partial` is if anything sharpened). Verified at
-`e0f8cd896`.
+`e0f8cd896`; re-verified at `542d63d1d` after the ADR-141 formatting sweep
+reordered `pub use` re-exports in `src/actors/messages/mod.rs` — semantics
+unchanged.
