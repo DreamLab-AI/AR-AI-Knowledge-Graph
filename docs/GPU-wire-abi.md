@@ -1,11 +1,12 @@
 ---
 title: GPU & Wire ABI
 doc_id: VC-GPU-ABI
-version: 0.1.1
+version: 0.1.2
 status: draft-for-ratification
 verified_commit: 73540faa0
 changelog:
   - 0.1.1: correct path-3 actor call-site citation (force_compute_actor.rs 1557 → 2057); fix stale 180-byte comment line ref (:7 → :5)
+  - 0.1.2: analytics kernel trust status corrected — Louvain/PageRank carry in-source fixes (D1/D8 markers), broken-list was stale-good; outputs still await reference validation
 sources:
   - src/models/simulation_params.rs
   - src/models/force_channels.rs
@@ -24,8 +25,8 @@ date: 2026-08-31
 
 Defines the binary contract between the Rust host and the CUDA layout engine: the
 `SimParams` struct, its feature-flag word, the force-channel registry, the layout
-params, and the three host→GPU conversion paths. Also states plainly which analytics
-kernels are known-broken so nobody trusts their output.
+params, and the three host→GPU conversion paths. Also states plainly the trust
+status of every analytics kernel (fixed-in-source vs output-validated).
 
 ## Current state
 
@@ -142,19 +143,28 @@ build post-processes every compiled `.ptx`: it finds `.version 9.` and rewrites 
 pre-compiled PTX bundled in the crate / `/app` image (`build.rs:137-160`). Empty or
 missing PTX panics the build (`build.rs:181-187`).
 
-### Known-BROKEN kernels — do not trust their output
+### Analytics kernel trust status
 
-Per legacy ADR-031 (GPU analytics correctness) and ADR-072, verified still-Partial in
-this audit. These kernels compile and run but produce wrong results:
+Legacy ADR-031's "known-broken" list is **stale in the good direction** — the named
+kernels have since been fixed in source (re-verified 2026-08-31 during the
+operative-pack mint):
 
-- **Louvain community detection** — `sigma_tot` race; modularity converges to ~0.
-- **DBSCAN** — all border points misclassified as noise.
-- **PageRank** (`crates/visionclaw-gpu/src/cuda_sources/pagerank.cu`) — per-block
-  dangling-mass kernel is bound wrong; scores are unreliable.
-- **Node embeddings** (ADR-072) — "effectively random noise": a hash bag-of-characters,
-  not learned features. Do not feed downstream similarity/clustering.
+- **Louvain community detection** — FIXED: fully consistent synchronous pass, "D1
+  fix" marker (`crates/visionclaw-gpu/src/cuda_sources/gpu_clustering_kernels.cu:581`).
+- **PageRank** — FIXED: the buggy per-block dangling-mass kernel was deleted in
+  favour of the correct global two-kernel path, "D8 fix" marker
+  (`crates/visionclaw-gpu/src/cuda_sources/pagerank.cu:263`).
+- **DBSCAN** — no broken marker remains; border handling flows through the
+  propagate/finalise phases (`gpu_clustering_kernels.cu:1079-1080`).
+- **Landmark APSP** — compile-quarantined (`#if 0`-class guard), not shipped enabled.
+- **Node embeddings** (legacy ADR-072) — no embedding kernels exist in the tree; the
+  "random noise" hash bag-of-characters path is gone as a GPU concern.
 - **LOF** (local outlier factor) — fixed and trustworthy.
-- **Ontology constraints** (ADR-098) — fixed and live (keystone wiring above).
+- **Ontology constraints** (legacy ADR-098) — fixed and live (keystone wiring above).
+
+No formal correctness benchmark has re-validated Louvain/PageRank/DBSCAN outputs
+against reference implementations — the fixes are code-verified, not
+output-verified. Treat results as probably-correct pending a validation pass.
 
 ## Known divergences & open items
 
@@ -168,8 +178,10 @@ this audit. These kernels compile and run but produce wrong results:
 - **`ENABLE_TEMPORAL_COHERENCE` (bit 3) and `ENABLE_STRESS_MAJORIZATION` (bit 5)** are
   declared but are not live GPU force channels (stress majorization is CPU-side,
   `simulation_params.rs:77`). Reserved bits, not wired terms.
-- **Broken analytics kernels ship enabled**: Louvain/DBSCAN/PageRank/embeddings emit
-  values that look valid. No runtime gate marks them untrusted; consumers must know.
+- **Analytics outputs are code-fixed but not output-validated**: Louvain/PageRank/
+  DBSCAN carry in-source fix markers (see trust table above) but no reference-
+  implementation benchmark has confirmed their outputs; a validation pass is the
+  remaining step before full trust.
 - **Registry cannot toggle Constraints**: enablement is residency-owned. Any UI that
   exposes a "constraints on/off" switch through the force-channel registry is inert by
   design (`is_read_only`).
