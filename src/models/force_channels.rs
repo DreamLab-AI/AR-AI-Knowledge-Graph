@@ -390,7 +390,10 @@ mod tests {
                 strength: 0.0,
             },
         );
-        assert_eq!(p.constraint_max_force_per_node, 42.0, "scalar must be untouched");
+        assert_eq!(
+            p.constraint_max_force_per_node, 42.0,
+            "scalar must be untouched"
+        );
         assert_ne!(
             p.feature_flags & FeatureFlags::ENABLE_CONSTRAINTS,
             0,

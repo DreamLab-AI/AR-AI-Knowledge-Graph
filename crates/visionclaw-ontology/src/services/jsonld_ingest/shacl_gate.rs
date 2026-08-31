@@ -279,7 +279,10 @@ mod tests {
     fn violation_blocks_in_enforcing_mode() {
         let mut report = ShaclGateReport::default();
         gate_block(&orphan_agent(), 3, GateMode::Enforcing, &mut report);
-        assert!(!report.is_valid(), "missing pubkey must block in enforcing mode");
+        assert!(
+            !report.is_valid(),
+            "missing pubkey must block in enforcing mode"
+        );
         assert_eq!(report.violation_count(), 1);
         let v = &report
             .violations
@@ -310,7 +313,10 @@ mod tests {
         });
         let mut report = ShaclGateReport::default();
         gate_block(&entry, 0, GateMode::Enforcing, &mut report);
-        assert!(report.is_valid(), "a warning must not block even in enforcing mode");
+        assert!(
+            report.is_valid(),
+            "a warning must not block even in enforcing mode"
+        );
         assert_eq!(report.warning_count(), 1);
         assert_eq!(report.violation_count(), 0);
     }
@@ -330,7 +336,11 @@ mod tests {
         let mut report = ShaclGateReport::default();
         gate_block(&block, 0, GateMode::Enforcing, &mut report);
         assert_eq!(report.shapes_checked, 2);
-        assert_eq!(report.violation_count(), 1, "only the second agent violates");
+        assert_eq!(
+            report.violation_count(),
+            1,
+            "only the second agent violates"
+        );
         assert_eq!(
             report.violations[0].focus_node.as_deref(),
             Some("urn:visionclaw:agent:run-y")

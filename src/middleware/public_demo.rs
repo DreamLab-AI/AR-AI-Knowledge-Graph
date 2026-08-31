@@ -132,55 +132,50 @@ mod tests {
             App::new().service(
                 web::scope("/api")
                     .wrap(guard(true))
-                    .route("/x", web::post().to(|| async { HttpResponse::Ok().body("mutated") }))
-                    .route("/x", web::get().to(|| async { HttpResponse::Ok().body("read") })),
+                    .route(
+                        "/x",
+                        web::post().to(|| async { HttpResponse::Ok().body("mutated") }),
+                    )
+                    .route(
+                        "/x",
+                        web::get().to(|| async { HttpResponse::Ok().body("read") }),
+                    ),
             ),
         )
         .await;
 
-        let resp = test::call_service(
-            &app,
-            test::TestRequest::post().uri("/api/x").to_request(),
-        )
-        .await;
+        let resp =
+            test::call_service(&app, test::TestRequest::post().uri("/api/x").to_request()).await;
         assert_eq!(resp.status(), 403);
     }
 
     #[actix_web::test]
     async fn allows_get_when_enabled() {
-        let app = test::init_service(
-            App::new().service(
-                web::scope("/api")
-                    .wrap(guard(true))
-                    .route("/x", web::get().to(|| async { HttpResponse::Ok().body("read") })),
+        let app = test::init_service(App::new().service(
+            web::scope("/api").wrap(guard(true)).route(
+                "/x",
+                web::get().to(|| async { HttpResponse::Ok().body("read") }),
             ),
-        )
+        ))
         .await;
 
-        let resp = test::call_service(
-            &app,
-            test::TestRequest::get().uri("/api/x").to_request(),
-        )
-        .await;
+        let resp =
+            test::call_service(&app, test::TestRequest::get().uri("/api/x").to_request()).await;
         assert!(resp.status().is_success());
     }
 
     #[actix_web::test]
     async fn passthrough_when_disabled() {
-        let app = test::init_service(
-            App::new().service(
-                web::scope("/api")
-                    .wrap(guard(false))
-                    .route("/x", web::post().to(|| async { HttpResponse::Ok().body("mutated") })),
+        let app = test::init_service(App::new().service(
+            web::scope("/api").wrap(guard(false)).route(
+                "/x",
+                web::post().to(|| async { HttpResponse::Ok().body("mutated") }),
             ),
-        )
+        ))
         .await;
 
-        let resp = test::call_service(
-            &app,
-            test::TestRequest::post().uri("/api/x").to_request(),
-        )
-        .await;
+        let resp =
+            test::call_service(&app, test::TestRequest::post().uri("/api/x").to_request()).await;
         assert!(resp.status().is_success());
     }
 }

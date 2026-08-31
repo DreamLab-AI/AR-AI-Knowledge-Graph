@@ -15,11 +15,11 @@ pub mod mcp_relay_manager;
 pub mod multi_mcp_agent_discovery;
 pub mod natural_language_query_service;
 pub mod nostr_service;
-pub mod role_store;
 pub mod owl_validator;
 pub mod parsers;
 pub mod perplexity_service;
 pub mod ragflow_service;
+pub mod role_store;
 pub mod schema_service;
 pub mod semantic_analyzer;
 pub mod semantic_pathfinding_service;
@@ -31,13 +31,13 @@ pub mod voice_intent_client;
 // low-confidence / under-specified spoken command for a clarification turn
 // instead of dispatching it.
 pub mod edge_classifier;
+pub mod inferred_edge_materialiser;
 pub mod ontology_class_index;
 pub mod ontology_content_analyzer;
 pub mod ontology_converter;
 pub mod ontology_enrichment_service;
 pub mod ontology_file_cache;
 pub mod ontology_mutation_service;
-pub mod inferred_edge_materialiser;
 pub mod ontology_pipeline_service;
 pub mod ontology_query_service;
 pub mod ontology_reasoner;

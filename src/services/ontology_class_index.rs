@@ -167,12 +167,7 @@ pub struct CanaryReport {
 #[async_trait]
 pub trait ClassIndexStore: Send + Sync {
     /// Store one summary. `Err(String)` on any failure (fail-open at the caller).
-    async fn store_summary(
-        &self,
-        namespace: &str,
-        key: &str,
-        value: &str,
-    ) -> Result<(), String>;
+    async fn store_summary(&self, namespace: &str, key: &str, value: &str) -> Result<(), String>;
 
     /// Semantic-search the namespace, returning the hit count.
     async fn search(&self, namespace: &str, query: &str, limit: usize) -> Result<usize, String>;
@@ -198,12 +193,7 @@ impl RuVectorMemoryStore {
 
 #[async_trait]
 impl ClassIndexStore for RuVectorMemoryStore {
-    async fn store_summary(
-        &self,
-        namespace: &str,
-        key: &str,
-        value: &str,
-    ) -> Result<(), String> {
+    async fn store_summary(&self, namespace: &str, key: &str, value: &str) -> Result<(), String> {
         self.client
             .memory_store(namespace, key, value)
             .await
@@ -643,7 +633,10 @@ mod tests {
         c.preferred_term = Some("Wordy".to_string());
         c.description = Some("lorem ipsum ".repeat(200)); // ~2400 chars
         let s = condense_class(&c);
-        assert!(s.summary.len() <= SUMMARY_CHAR_BUDGET + 3, "clamped ~budget");
+        assert!(
+            s.summary.len() <= SUMMARY_CHAR_BUDGET + 3,
+            "clamped ~budget"
+        );
         assert!(s.summary.ends_with('…'), "truncation marker present");
         // No mid-word split: the char before the ellipsis is not alphanumeric-cut.
         assert!(!s.summary.contains("loremipsum"));

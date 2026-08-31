@@ -1069,7 +1069,10 @@ mod provenance_wiring_tests {
         );
 
         // The query surface walks the chain for the entity.
-        let chain = repo.provenance_for_entity(iri.to_string(), 8).await.unwrap();
+        let chain = repo
+            .provenance_for_entity(iri.to_string(), 8)
+            .await
+            .unwrap();
         assert_eq!(chain.root, iri);
         let node = chain
             .nodes
@@ -1099,7 +1102,10 @@ mod provenance_wiring_tests {
             .expect("ok");
 
         let repo = OxigraphOntologyRepository::from_store(Arc::clone(&store));
-        let chain = repo.provenance_for_entity(iri.to_string(), 4).await.unwrap();
+        let chain = repo
+            .provenance_for_entity(iri.to_string(), 4)
+            .await
+            .unwrap();
         assert_eq!(chain.root, iri, "root URN preserved verbatim");
         assert!(
             chain.nodes.iter().any(|n| n.entity == iri),

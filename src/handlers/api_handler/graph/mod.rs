@@ -763,7 +763,11 @@ fn aggregate_relations(
             })
             .collect();
         // Heaviest predicate-count first; alphabetical by type on ties.
-        v.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.edge_type.cmp(&b.edge_type)));
+        v.sort_by(|a, b| {
+            b.count
+                .cmp(&a.count)
+                .then_with(|| a.edge_type.cmp(&b.edge_type))
+        });
         v
     }
 
@@ -959,9 +963,7 @@ where
 /// cost and a DoS lever. We instead resolve the actor address from the
 /// supervisor and `send` the `GetGraphData` actor message asynchronously. The
 /// result is an `Arc<GraphData>` clone — cheap, no graph copy.
-async fn fetch_graph_snapshot(
-    state: &web::Data<AppState>,
-) -> Result<Arc<GraphData>, String> {
+async fn fetch_graph_snapshot(state: &web::Data<AppState>) -> Result<Arc<GraphData>, String> {
     use crate::actors::messages::{GetGraphData as ActorGetGraphData, GetGraphStateActor};
 
     let actor = state
@@ -1043,8 +1045,7 @@ pub async fn expand_node(
     }
 
     // Index nodes by id for neighbour resolution.
-    let node_index: HashMap<u32, &Node> =
-        graph_data.nodes.iter().map(|n| (n.id, n)).collect();
+    let node_index: HashMap<u32, &Node> = graph_data.nodes.iter().map(|n| (n.id, n)).collect();
 
     let response = expand_neighbours(
         &graph_data.edges,
@@ -1053,9 +1054,13 @@ pub async fn expand_node(
         req.direction,
         limit,
         |nid| {
-            node_index
-                .get(&nid)
-                .map(|n| (n.metadata_id.as_str(), n.label.as_str(), n.node_type.clone()))
+            node_index.get(&nid).map(|n| {
+                (
+                    n.metadata_id.as_str(),
+                    n.label.as_str(),
+                    n.node_type.clone(),
+                )
+            })
         },
     );
 
@@ -1251,7 +1256,10 @@ impl<'a> Joiner<'a> {
         } else if let Some(id) = known_id(&t.tgt, binding) {
             self.by_target.get(&id).map(|v| v.as_slice()).unwrap_or(&[])
         } else if let Some(p) = &t.pred {
-            self.by_pred.get(p.as_str()).map(|v| v.as_slice()).unwrap_or(&[])
+            self.by_pred
+                .get(p.as_str())
+                .map(|v| v.as_slice())
+                .unwrap_or(&[])
         } else {
             self.all_indices
         };
@@ -1633,15 +1641,9 @@ mod pattern_query_tests {
         assert_eq!(r.vars, vec!["?a", "?b"]);
         assert_eq!(r.binding_count, 2);
         assert!(!r.truncated);
-        let pairs: std::collections::HashSet<(u32, u32)> = r
-            .bindings
-            .iter()
-            .map(|m| (m["?a"], m["?b"]))
-            .collect();
-        assert_eq!(
-            pairs,
-            [(1, 2), (1, 3)].into_iter().collect()
-        );
+        let pairs: std::collections::HashSet<(u32, u32)> =
+            r.bindings.iter().map(|m| (m["?a"], m["?b"])).collect();
+        assert_eq!(pairs, [(1, 2), (1, 3)].into_iter().collect());
     }
 
     #[test]
@@ -1779,7 +1781,11 @@ mod pattern_query_tests {
         // MAX_PATTERN_VARS+1 distinct variables across single-edge triples.
         let mut pat: Vec<PatternTriple> = Vec::new();
         for i in 0..=(MAX_PATTERN_VARS as u32) {
-            pat.push(triple(var(&format!("?a{i}")), "authored", var(&format!("?b{i}"))));
+            pat.push(triple(
+                var(&format!("?a{i}")),
+                "authored",
+                var(&format!("?b{i}")),
+            ));
         }
         let r = match_pattern(&fx(), &pat, 24, false);
         assert!(r.is_err(), "over-many variables rejected");
@@ -2038,14 +2044,19 @@ mod relations_expand_tests {
             Edge::new(1, 20, 0.9).with_edge_type("implements".to_string()),
             Edge::new(1, 30, 0.6).with_edge_type("implements".to_string()),
         ];
-        let resp = expand_neighbours(&edges, 1, "implements", ExpandDirection::Outgoing, 2, |nid| {
-            match nid {
+        let resp = expand_neighbours(
+            &edges,
+            1,
+            "implements",
+            ExpandDirection::Outgoing,
+            2,
+            |nid| match nid {
                 10 => Some(("m10", "Ten", None)),
                 20 => Some(("m20", "Twenty", None)),
                 30 => Some(("m30", "Thirty", None)),
                 _ => None,
-            }
-        });
+            },
+        );
         assert_eq!(resp.edges.len(), 2);
         assert_eq!(resp.edges[0].target, 20); // 0.9
         assert_eq!(resp.edges[1].target, 30); // 0.6

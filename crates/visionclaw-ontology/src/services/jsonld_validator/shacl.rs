@@ -389,8 +389,7 @@ pub fn parse_shapes(name: &str, ttl: &str) -> Result<Vec<NodeShapeHandle>, Shacl
     use oxigraph::io::{RdfFormat, RdfParser};
     use oxigraph::store::Store;
 
-    let store =
-        Store::new().map_err(|e| ShaclLoadError(format!("store init ({name}): {e}")))?;
+    let store = Store::new().map_err(|e| ShaclLoadError(format!("store init ({name}): {e}")))?;
     let parser = RdfParser::from_format(RdfFormat::Turtle);
     store
         .load_from_reader(parser, ttl.as_bytes())
@@ -454,7 +453,10 @@ impl From<Vec<NodeShapeHandle>> for ShapesGraph {
 }
 
 fn first<'a>(idx: &'a Index, subj: &str, pred: &str) -> Option<&'a ObjVal> {
-    idx.get(subj)?.iter().find(|(p, _)| p == pred).map(|(_, o)| o)
+    idx.get(subj)?
+        .iter()
+        .find(|(p, _)| p == pred)
+        .map(|(_, o)| o)
 }
 
 fn build_node_shape(
@@ -718,7 +720,10 @@ fn looks_like_iri(s: &str) -> bool {
     !s.is_empty()
         && !s.chars().any(|c| c.is_whitespace() || c.is_control())
         && s.contains(':')
-        && s.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+        && s.chars()
+            .next()
+            .map(|c| c.is_ascii_alphabetic())
+            .unwrap_or(false)
 }
 
 /// Does the value satisfy the declared `sh:datatype`?
@@ -849,7 +854,10 @@ mod tests {
             "vc:agent_pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             "rdfs:label": "Agent X"
         });
-        assert!(g.validate_entry(&entry).is_empty(), "valid agent node must pass");
+        assert!(
+            g.validate_entry(&entry).is_empty(),
+            "valid agent node must pass"
+        );
     }
 
     #[test]
@@ -966,7 +974,10 @@ mod tests {
             "vc:public": true,
             "rdfs:label": "Foo"
         });
-        assert!(g.validate_entry(&entry).is_empty(), "valid knowledge node must pass");
+        assert!(
+            g.validate_entry(&entry).is_empty(),
+            "valid knowledge node must pass"
+        );
     }
 
     #[test]
@@ -1024,8 +1035,9 @@ mod tests {
         });
         let findings = g.validate_entry(&entry);
         assert!(
-            findings.iter().any(|f| f.path == "prov:wasGeneratedBy"
-                && f.constraint == "sh:minCount"),
+            findings
+                .iter()
+                .any(|f| f.path == "prov:wasGeneratedBy" && f.constraint == "sh:minCount"),
             "missing prov:wasGeneratedBy must be a violation: {findings:?}"
         );
         assert!(

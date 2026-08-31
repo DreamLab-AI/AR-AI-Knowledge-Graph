@@ -490,8 +490,7 @@ mod tests {
         let constraints = map_axioms_to_constraints(&axioms, &mut resolver);
 
         // Two DISTANCE attractions + one sibling ALIGNMENT.
-        let alignments: Vec<&ConstraintData> =
-            constraints.iter().filter(|c| c.kind == 7).collect();
+        let alignments: Vec<&ConstraintData> = constraints.iter().filter(|c| c.kind == 7).collect();
         assert_eq!(alignments.len(), 1, "one sibling-alignment constraint");
         let a = alignments[0];
         assert_eq!(a.kind, 7, "sibling alignment maps to live ALIGNMENT = 7");

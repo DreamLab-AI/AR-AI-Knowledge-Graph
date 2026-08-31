@@ -285,10 +285,7 @@ fn subclass_groups(visible: &HashSet<u32>, edges: &[Edge]) -> Vec<FoldGroup> {
     let mut ids: Vec<u32> = Vec::new();
     let mut sub_edges: Vec<(u32, u32)> = Vec::new(); // (child=source, parent=target)
     for e in edges {
-        let is_sub = e
-            .edge_type
-            .as_deref()
-            .is_some_and(is_subclass_relation);
+        let is_sub = e.edge_type.as_deref().is_some_and(is_subclass_relation);
         if !is_sub || !visible.contains(&e.source) || !visible.contains(&e.target) {
             continue;
         }
@@ -346,10 +343,7 @@ fn subclass_groups(visible: &HashSet<u32>, edges: &[Edge]) -> Vec<FoldGroup> {
 /// a subclass group). Each `community_id != 0` with ≥2 members folds into its
 /// medoid — the member with highest centrality (min id breaks ties). Groups
 /// sorted by `representative_id`; members sorted.
-fn community_groups(
-    eligible: &[u32],
-    analytics: &HashMap<u32, Analytics>,
-) -> Vec<FoldGroup> {
+fn community_groups(eligible: &[u32], analytics: &HashMap<u32, Analytics>) -> Vec<FoldGroup> {
     let mut by_comm: HashMap<u32, Vec<u32>> = HashMap::new();
     for &id in eligible {
         if let Some(a) = analytics.get(&id) {
@@ -483,7 +477,11 @@ fn apply_pins(base: &FoldBase, pinned: &HashSet<u32>) -> (Vec<u32>, Vec<FoldGrou
         all.push(g.representative_id);
         all.extend(g.member_ids.iter().copied());
 
-        let pins_here: Vec<u32> = all.iter().copied().filter(|id| pinned.contains(id)).collect();
+        let pins_here: Vec<u32> = all
+            .iter()
+            .copied()
+            .filter(|id| pinned.contains(id))
+            .collect();
         if pins_here.is_empty() {
             groups.push(g.clone());
             continue;
@@ -550,12 +548,16 @@ fn base_plan_memoised(
         if let Some(hit) = cache.get(&key) {
             return hit.clone();
         }
-        let plan = Arc::new(compute_base_plan(level, nodes, edges, analytics, graph_type));
+        let plan = Arc::new(compute_base_plan(
+            level, nodes, edges, analytics, graph_type,
+        ));
         cache.insert(key, plan.clone());
         return plan;
     }
     // Poisoned lock: compute without caching rather than fail the request.
-    Arc::new(compute_base_plan(level, nodes, edges, analytics, graph_type))
+    Arc::new(compute_base_plan(
+        level, nodes, edges, analytics, graph_type,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -712,14 +714,21 @@ mod tests {
             edge(1, 2, "structural"),
         ];
         let base = compute_base_plan(2, &nodes, &edges, &HashMap::new(), None);
-        assert!(base.groups.is_empty(), "non-hierarchy relations do not fold");
+        assert!(
+            base.groups.is_empty(),
+            "non-hierarchy relations do not fold"
+        );
     }
 
     #[test]
     fn collapsed_hierarchical_label_folds() {
         // Live deployments carry the COLLAPSED `hierarchical` semantic label (not
         // the raw `subclass_of`); it must fold, else L2 does nothing in production.
-        let nodes = vec![node(1, "owl_class"), node(2, "owl_class"), node(3, "owl_class")];
+        let nodes = vec![
+            node(1, "owl_class"),
+            node(2, "owl_class"),
+            node(3, "owl_class"),
+        ];
         let edges = vec![edge(2, 1, "hierarchical"), edge(3, 2, "hierarchical")];
         let base = compute_base_plan(2, &nodes, &edges, &HashMap::new(), None);
         assert_eq!(base.groups.len(), 1, "hierarchical chain folds");
@@ -744,8 +753,14 @@ mod tests {
         ];
         // Empty analytics → degree fallback. Node 5 (degree 0) is bottom-quartile.
         let base = compute_base_plan(1, &nodes, &edges, &HashMap::new(), None);
-        assert!(base.hidden.contains(&5), "isolated node hidden via degree fallback");
-        assert!(!base.hidden.is_empty(), "degree fallback produces a non-empty L1");
+        assert!(
+            base.hidden.contains(&5),
+            "isolated node hidden via degree fallback"
+        );
+        assert!(
+            !base.hidden.is_empty(),
+            "degree fallback produces a non-empty L1"
+        );
     }
 
     #[test]

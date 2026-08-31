@@ -507,12 +507,13 @@ impl OntologyPipelineService {
         let mut resolve_cache: HashMap<String, Vec<u32>> = HashMap::new();
         let mut candidates: Vec<(u32, u32)> = Vec::new();
         for (child_iri, parent_iri) in &immediate {
-            let child_ids = Self::resolve_nodes(graph_repo.as_ref(), &mut resolve_cache,child_iri).await;
+            let child_ids =
+                Self::resolve_nodes(graph_repo.as_ref(), &mut resolve_cache, child_iri).await;
             if child_ids.is_empty() {
                 continue;
             }
             let parent_ids =
-                Self::resolve_nodes(graph_repo.as_ref(), &mut resolve_cache,parent_iri).await;
+                Self::resolve_nodes(graph_repo.as_ref(), &mut resolve_cache, parent_iri).await;
             for &c in &child_ids {
                 for &p in &parent_ids {
                     candidates.push((c, p));

@@ -106,9 +106,7 @@ pub fn immediate_inferred_parents(
             // Drop P if some OTHER ancestor Q of `child` has P as its own ancestor
             // (then P is a grandparent-or-higher via Q, not immediate).
             let redundant = ancestors.iter().any(|q| {
-                q != p
-                    && q != child
-                    && child_to_ancestors.get(q).is_some_and(|qa| qa.contains(p))
+                q != p && q != child && child_to_ancestors.get(q).is_some_and(|qa| qa.contains(p))
             });
             if !redundant {
                 out.push((child.clone(), p.clone()));
@@ -203,7 +201,11 @@ mod tests {
         // (deterministic sorted order), other children unaffected.
         let cands = [(1, 5), (1, 4), (1, 3), (1, 2), (1, 6), (9, 8)];
         let got = select_inferred_edges(&cands, &asserted, 2);
-        assert_eq!(got, vec![(1, 2), (1, 3), (9, 8)], "cap=2 per child, deterministic");
+        assert_eq!(
+            got,
+            vec![(1, 2), (1, 3), (9, 8)],
+            "cap=2 per child, deterministic"
+        );
     }
 
     #[test]
@@ -255,12 +257,18 @@ mod tests {
         // ancestors {B, C} and B its ancestor {C}. Reduction must keep A→B (drop
         // A→C, since C is an ancestor of B) and B→C.
         let mut m: HashMap<String, HashSet<String>> = HashMap::new();
-        m.insert("A".into(), ["B", "C"].iter().map(|s| s.to_string()).collect());
+        m.insert(
+            "A".into(),
+            ["B", "C"].iter().map(|s| s.to_string()).collect(),
+        );
         m.insert("B".into(), ["C"].iter().map(|s| s.to_string()).collect());
         let got = immediate_inferred_parents(&m);
         assert_eq!(
             got,
-            vec![("A".to_string(), "B".to_string()), ("B".to_string(), "C".to_string())],
+            vec![
+                ("A".to_string(), "B".to_string()),
+                ("B".to_string(), "C".to_string())
+            ],
             "A→C (grandparent) is reduced out; immediate parents only"
         );
     }
@@ -270,7 +278,10 @@ mod tests {
         // Diamond: D ⊑ B, D ⊑ C, B ⊑ A, C ⊑ A. D's transitive ancestors {A,B,C}.
         // Immediate parents of D are B and C (A is reachable via both → dropped).
         let mut m: HashMap<String, HashSet<String>> = HashMap::new();
-        m.insert("D".into(), ["A", "B", "C"].iter().map(|s| s.to_string()).collect());
+        m.insert(
+            "D".into(),
+            ["A", "B", "C"].iter().map(|s| s.to_string()).collect(),
+        );
         m.insert("B".into(), ["A"].iter().map(|s| s.to_string()).collect());
         m.insert("C".into(), ["A"].iter().map(|s| s.to_string()).collect());
         let got = immediate_inferred_parents(&m);
@@ -292,12 +303,19 @@ mod tests {
         // asserted edge must be dropped, so the materialised Edge (whose id is
         // `source-target`) can never collide with and overwrite the asserted edge.
         let asserted_graph = vec![edge(10, 20, "hierarchical")]; // asserted 10⊑20
-        let cfg = InferredMaterialisationConfig { enabled: true, max_parents_per_child: 8 };
+        let cfg = InferredMaterialisationConfig {
+            enabled: true,
+            max_parents_per_child: 8,
+        };
         // Candidate (10,20) mirrors the asserted edge exactly; (20,10) is the
         // reverse; only (10,30) is genuinely new.
         let out = materialise(&[(10, 20), (20, 10), (10, 30)], &asserted_graph, &cfg);
         let pairs: Vec<(u32, u32)> = out.iter().map(|e| (e.source, e.target)).collect();
-        assert_eq!(pairs, vec![(10, 30)], "asserted pair (both dirs) never re-emitted");
+        assert_eq!(
+            pairs,
+            vec![(10, 30)],
+            "asserted pair (both dirs) never re-emitted"
+        );
         // And the surviving edge's id does not collide with the asserted edge's id.
         assert_ne!(out[0].id, edge(10, 20, "hierarchical").id);
     }
@@ -309,9 +327,15 @@ mod tests {
         let current: Vec<Edge> = (0..7548u32)
             .map(|i| edge(i, i + 1, "hierarchical"))
             .collect();
-        let cfg = InferredMaterialisationConfig { enabled: true, max_parents_per_child: 8 };
+        let cfg = InferredMaterialisationConfig {
+            enabled: true,
+            max_parents_per_child: 8,
+        };
         let cands: Vec<(u32, u32)> = (0..7548u32).map(|i| (i, i + 1)).collect();
         let out = materialise(&cands, &current, &cfg);
-        assert!(out.is_empty(), "all candidates already asserted → no new edges");
+        assert!(
+            out.is_empty(),
+            "all candidates already asserted → no new edges"
+        );
     }
 }

@@ -364,11 +364,7 @@ mod tests {
     #[test]
     fn max_is_taken_over_all_nodes() {
         // Node 1 is in two stretched constraints; its summed magnitude dominates.
-        let pos = vec![
-            [0.0, 0.0, 0.0],
-            [20.0, 0.0, 0.0],
-            [20.0, 40.0, 0.0],
-        ];
+        let pos = vec![[0.0, 0.0, 0.0], [20.0, 0.0, 0.0], [20.0, 40.0, 0.0]];
         let cons = vec![
             ci(KIND_DISTANCE, &[0, 1], &[10.0], 1.0), // node1 gets 10
             ci(KIND_DISTANCE, &[1, 2], &[10.0], 1.0), // node1 gets |−(40−10)|=30
@@ -402,8 +398,8 @@ mod tests {
         pos.insert(11, [f32::NAN, 0.0, 0.0]); // bad
         pos.insert(12, [1.0, 2.0, 3.0]);
         let cons = vec![
-            ci(KIND_DISTANCE, &[10, 12], &[10.0], 1.0), // ok
-            ci(KIND_DISTANCE, &[10, 11], &[10.0], 1.0), // touches NaN → reject
+            ci(KIND_DISTANCE, &[10, 12], &[10.0], 1.0),  // ok
+            ci(KIND_DISTANCE, &[10, 11], &[10.0], 1.0),  // touches NaN → reject
             ci(KIND_SEPARATION, &[11, 12], &[3.0], 1.0), // touches NaN → reject
         ];
         let (kept, rejected) = partition_finite_constraints(&cons, &pos);

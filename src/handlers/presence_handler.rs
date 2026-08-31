@@ -547,6 +547,9 @@ mod nonce_tests {
 
     #[test]
     fn seen_nonce_cache_is_bounded() {
-        assert_eq!(new_seen_nonce_cache().lock().unwrap().cap().get(), SEEN_NONCE_CAPACITY);
+        assert_eq!(
+            new_seen_nonce_cache().lock().unwrap().cap().get(),
+            SEEN_NONCE_CAPACITY
+        );
     }
 }

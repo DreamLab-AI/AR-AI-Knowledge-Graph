@@ -140,7 +140,10 @@ pub async fn set_radial_layout(
     data: web::Data<AppState>,
     body: web::Json<serde_json::Value>,
 ) -> Result<HttpResponse> {
-    let mode_str = body.get("mode").and_then(|m| m.as_str()).unwrap_or("dagRank");
+    let mode_str = body
+        .get("mode")
+        .and_then(|m| m.as_str())
+        .unwrap_or("dagRank");
     let focus_node = body
         .get("focusNode")
         .and_then(|f| f.as_u64())
@@ -152,17 +155,18 @@ pub async fn set_radial_layout(
 
     // Reject an unrecognised mode instead of silently running the default and
     // returning success — a typo'd mode string must not read as applied.
-    let mode: RadialMode =
-        match serde_json::from_value(serde_json::Value::String(mode_str.to_string())) {
-            Ok(m) => m,
-            Err(_) => {
-                return ok_json!(serde_json::json!({
-                    "success": false,
-                    "mode": mode_str,
-                    "error": format!("unknown radial mode '{}' (expected dagRank|typeTier|ego)", mode_str)
-                }));
-            }
-        };
+    let mode: RadialMode = match serde_json::from_value(serde_json::Value::String(
+        mode_str.to_string(),
+    )) {
+        Ok(m) => m,
+        Err(_) => {
+            return ok_json!(serde_json::json!({
+                "success": false,
+                "mode": mode_str,
+                "error": format!("unknown radial mode '{}' (expected dagRank|typeTier|ego)", mode_str)
+            }));
+        }
+    };
 
     if let Some(addr) = data.get_gpu_compute_addr().await {
         use crate::actors::messages::SetRadialLayout;
