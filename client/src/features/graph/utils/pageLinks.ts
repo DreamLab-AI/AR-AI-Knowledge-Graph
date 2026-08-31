@@ -30,13 +30,17 @@ interface PageLinkSource {
   metadata?: Record<string, unknown> | null;
 }
 
-/** Resolve a node to its narrativegoldmine page URL, or null when nothing
- *  identifies the page. Explicit metadata URLs always win. */
-export function nodePageUrl(node: PageLinkSource): string | null {
+/**
+ * Resolve a node to the bare narrativegoldmine page slug (the `api/pages/<slug>`
+ * key), or null when nothing identifies the page. Shared by `nodePageUrl` (link
+ * target) and the graph↔source panel (which fetches `api/pages/<slug>.json`).
+ *
+ * Returns null when an explicit absolute page URL is the only identifier, since
+ * that is not slug-shaped — callers wanting a fetchable slug should treat null
+ * as "no source card available".
+ */
+export function nodePageSlug(node: PageLinkSource): string | null {
   const meta = (node.metadata ?? {}) as Record<string, unknown>;
-
-  const explicit = (meta.page_url ?? meta.pageUrl ?? meta.url) as string | undefined;
-  if (explicit) return explicit;
 
   const iri = (meta.page_iri ?? meta.class_iri) as string | undefined;
   const identifier =
@@ -46,10 +50,24 @@ export function nodePageUrl(node: PageLinkSource): string | null {
     (iri && iri.includes(':') ? iri.slice(iri.lastIndexOf(':') + 1) : undefined) ??
     node.label;
 
+  // Same normalisation as nodePageUrl: slugifyLabel is idempotent on real slugs
+  // and repairs title-shaped metadataIds ("Blockchain" → "blockchain").
+  const slug = identifier ? slugifyLabel(identifier) : undefined;
+  return slug ? slug : null;
+}
+
+/** Resolve a node to its narrativegoldmine page URL, or null when nothing
+ *  identifies the page. Explicit metadata URLs always win. */
+export function nodePageUrl(node: PageLinkSource): string | null {
+  const meta = (node.metadata ?? {}) as Record<string, unknown>;
+
+  const explicit = (meta.page_url ?? meta.pageUrl ?? meta.url) as string | undefined;
+  if (explicit) return explicit;
+
   // Some populations carry a title-shaped metadataId ("Blockchain" from the
   // file stem) rather than the kebab slug. slugifyLabel is idempotent on
   // real slugs ("modular-blockchain" → itself), so normalising every
   // identifier is safe and repairs the title-shaped ones.
-  const slug = identifier ? slugifyLabel(identifier) : undefined;
+  const slug = nodePageSlug(node);
   return slug ? `${PAGE_BASE}${encodeURIComponent(slug)}` : null;
 }

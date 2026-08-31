@@ -18,8 +18,24 @@ export interface GraphSelectionOptions {
 export interface GraphSelectionReturn {
   selectedNodeId: string | null
   setSelectedNodeId: React.Dispatch<React.SetStateAction<string | null>>
+  /** Camera destination for the eased fly-to (node position + size-scaled standoff). */
   flyToTargetRef: React.MutableRefObject<THREE.Vector3 | null>
+  /** The node centre the camera + controls should look at during the fly-to. */
+  flyToLookAtRef: React.MutableRefObject<THREE.Vector3 | null>
   flyToProgressRef: React.MutableRefObject<number>
+}
+
+/**
+ * Camera standoff distance scaled by a node's apparent visual size. Bigger nodes
+ * (more connections / larger metadata.size) get a proportionally larger standoff
+ * so the framing is consistent regardless of node scale. Bounded to a sane
+ * world-unit range. Mirrors the KG scaling shape (base + sqrt(degree)) without
+ * pulling the full computeNodeScale dependency graph into the selection hook.
+ */
+function computeStandoff(node: GraphNode, degree: number): number {
+  const sizeHint = Number(node.metadata?.size) || 1
+  const scale = Math.max(1, sizeHint + Math.sqrt(Math.max(0, degree)) * 0.8)
+  return Math.min(120, Math.max(14, scale * 6))
 }
 
 /**
@@ -53,7 +69,40 @@ export function useGraphSelection(opts: GraphSelectionOptions): GraphSelectionRe
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const flyToTargetRef  = useRef<THREE.Vector3 | null>(null)
+  const flyToLookAtRef  = useRef<THREE.Vector3 | null>(null)
   const flyToProgressRef = useRef(0)
+  // Guards the click-to-focus effect so it fires once per selection CHANGE, not
+  // on every graphData tick (the position stream churns graphData constantly).
+  const lastFocusedIdRef = useRef<string | null>(null)
+
+  /** Resolve a node's current world position: live SAB first, static fallback. */
+  const resolveNodePos = (node: GraphNode): THREE.Vector3 | null => {
+    const idx = nodeIdToIndexMap.get(String(node.id))
+    const positions = nodePositionsRef.current
+    if (idx !== undefined && positions && idx * 3 + 2 < positions.length) {
+      return new THREE.Vector3(positions[idx * 3], positions[idx * 3 + 1], positions[idx * 3 + 2])
+    }
+    if (node.position) return new THREE.Vector3(node.position.x, node.position.y, node.position.z)
+    return null
+  }
+
+  /** Start an eased camera fly-to that looks at `node` and approaches it along
+   *  the current view direction, standing off by a size-scaled distance. */
+  const focusCameraOnNode = (node: GraphNode): void => {
+    const targetPos = resolveNodePos(node)
+    if (!targetPos) return
+    const degree = connectionCountMap.get(String(node.id)) || 0
+    const standoff = computeStandoff(node, degree)
+    // Keep the current viewing direction: approach from where the camera already
+    // is, just closer. Falls back to a default offset when the camera sits on top
+    // of the node (degenerate zero-length direction).
+    const dir = new THREE.Vector3().subVectors(camera.position, targetPos)
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0.3, 1)
+    dir.normalize().multiplyScalar(standoff)
+    flyToLookAtRef.current = targetPos.clone()
+    flyToTargetRef.current = targetPos.clone().add(dir)
+    flyToProgressRef.current = 0
+  }
 
   // Dispatch visionclaw:node-selected when selection changes
   useEffect(() => {
@@ -91,6 +140,18 @@ export function useGraphSelection(opts: GraphSelectionOptions): GraphSelectionRe
     }))
   }, [selectedNodeId, graphData.nodes, graphData.edges, connectionCountMap])
 
+  // Click-to-focus: when the selection changes (node click, neighbour click, or
+  // search), ease the camera to look at + approach the node. Guarded by
+  // lastFocusedIdRef so the constant graphData churn from the position stream
+  // does not re-trigger a fly every frame.
+  useEffect(() => {
+    if (!selectedNodeId) { lastFocusedIdRef.current = null; return }
+    if (selectedNodeId === lastFocusedIdRef.current) return
+    lastFocusedIdRef.current = selectedNodeId
+    const node = graphData.nodes.find(n => String(n.id) === selectedNodeId)
+    if (node) focusCameraOnNode(node)
+  }, [selectedNodeId, graphData.nodes, nodeIdToIndexMap, connectionCountMap, camera])
+
   // Search and deselect event listeners
   useEffect(() => {
     const handleSearch = (event: Event) => {
@@ -114,22 +175,13 @@ export function useGraphSelection(opts: GraphSelectionOptions): GraphSelectionRe
       }
       if (!targetNode) return
 
-      setSelectedNodeId(String(targetNode.id))
-
-      const idx = nodeIdToIndexMap.get(String(targetNode.id))
-      const positions = nodePositionsRef.current
-      let targetPos: THREE.Vector3 | null = null
-
-      if (idx !== undefined && positions && idx * 3 + 2 < positions.length) {
-        targetPos = new THREE.Vector3(positions[idx * 3], positions[idx * 3 + 1], positions[idx * 3 + 2])
-      } else if (targetNode.position) {
-        targetPos = new THREE.Vector3(targetNode.position.x, targetNode.position.y, targetNode.position.z)
-      }
-
-      if (targetPos) {
-        const offset = new THREE.Vector3().subVectors(camera.position, targetPos).normalize().multiplyScalar(25)
-        flyToTargetRef.current = targetPos.clone().add(offset)
-        flyToProgressRef.current = 0
+      // Selecting the node triggers the click-to-focus effect above, which
+      // performs the size-scaled eased fly-to. If the same node is re-searched
+      // (selection unchanged), fly explicitly since the effect would no-op.
+      if (String(targetNode.id) === selectedNodeId) {
+        focusCameraOnNode(targetNode)
+      } else {
+        setSelectedNodeId(String(targetNode.id))
       }
     }
 
@@ -141,7 +193,7 @@ export function useGraphSelection(opts: GraphSelectionOptions): GraphSelectionRe
       window.removeEventListener('visionclaw:search', handleSearch)
       window.removeEventListener('visionclaw:node-deselect', handleDeselect)
     }
-  }, [graphData.nodes, nodeIdToIndexMap, camera, nodePositionsRef])
+  }, [graphData.nodes, nodeIdToIndexMap, connectionCountMap, camera, nodePositionsRef, selectedNodeId])
 
-  return { selectedNodeId, setSelectedNodeId, flyToTargetRef, flyToProgressRef }
+  return { selectedNodeId, setSelectedNodeId, flyToTargetRef, flyToLookAtRef, flyToProgressRef }
 }

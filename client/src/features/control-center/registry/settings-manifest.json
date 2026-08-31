@@ -1,14 +1,14 @@
 {
   "version": "1.0",
   "generatedFrom": "settingsRegistry.ts",
-  "count": 220,
+  "count": 224,
   "groups": [
     {
       "id": "motion",
       "label": "Motion & Forces",
       "testid": "group-motion",
       "hotkey": "1",
-      "fieldCount": 51
+      "fieldCount": 55
     },
     {
       "id": "look",
@@ -555,6 +555,62 @@
       "control": "slider",
       "group": "motion",
       "label": "Hierarchy shell spacing",
+      "clientOnly": false,
+      "server": "physics",
+      "subgroup": "Layout Forces",
+      "min": 10,
+      "max": 200,
+      "step": 10
+    },
+    {
+      "key": "planeBiasK",
+      "path": "visualisation.graphs.logseq.physics.planeBiasK",
+      "testid": "setting-visualisation.graphs.logseq.physics.planeBiasK",
+      "control": "slider",
+      "group": "motion",
+      "label": "Plane Bias (type strata)",
+      "clientOnly": false,
+      "server": "physics",
+      "subgroup": "Layout Forces",
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "planeSpacing",
+      "path": "visualisation.graphs.logseq.physics.planeSpacing",
+      "testid": "setting-visualisation.graphs.logseq.physics.planeSpacing",
+      "control": "slider",
+      "group": "motion",
+      "label": "Plane Spacing",
+      "clientOnly": false,
+      "server": "physics",
+      "subgroup": "Layout Forces",
+      "min": 10,
+      "max": 200,
+      "step": 10
+    },
+    {
+      "key": "layerBiasK",
+      "path": "visualisation.graphs.logseq.physics.layerBiasK",
+      "testid": "setting-visualisation.graphs.logseq.physics.layerBiasK",
+      "control": "slider",
+      "group": "motion",
+      "label": "Sugiyama layer force",
+      "clientOnly": false,
+      "server": "physics",
+      "subgroup": "Layout Forces",
+      "min": 0,
+      "max": 2,
+      "step": 0.05
+    },
+    {
+      "key": "layerSpacing",
+      "path": "visualisation.graphs.logseq.physics.layerSpacing",
+      "testid": "setting-visualisation.graphs.logseq.physics.layerSpacing",
+      "control": "slider",
+      "group": "motion",
+      "label": "Sugiyama layer spacing",
       "clientOnly": false,
       "server": "physics",
       "subgroup": "Layout Forces",

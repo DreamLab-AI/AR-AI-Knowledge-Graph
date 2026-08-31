@@ -350,6 +350,60 @@ describe('GraphDataManager', () => {
     });
   });
 
+  // ---- mergeGraphData (additive expansion) ----
+
+  describe('mergeGraphData', () => {
+    it('additively merges new nodes/edges while preserving existing ones', async () => {
+      await graphDataManager.setGraphData({
+        nodes: [{ id: '1', label: 'Anchor', position: { x: 10, y: 0, z: 0 } }],
+        edges: [],
+      });
+
+      // Expansion payload uses NUMERIC ids (the id-coercion trap): merge must
+      // String()-coerce so they key the same string-keyed topology.
+      // Live worker/SAB anchor position (far from the stale cached {10,0,0}) —
+      // the merge must seed from THIS, not the cached node.position.
+      const added = await graphDataManager.mergeGraphData(
+        [
+          { id: '2' as any, label: 'Neighbour', position: { x: 0, y: 0, z: 0 } },
+          { id: '1' as any, label: 'Anchor dup', position: { x: 0, y: 0, z: 0 } }, // existing → skipped
+        ] as Node[],
+        [{ id: '1-2-rel', source: '1', target: '2', label: 'rel' } as any],
+        '1',
+        { x: 500, y: 0, z: 0 },
+      );
+
+      expect(added.nodesAdded).toBe(1);
+      expect(added.edgesAdded).toBe(1);
+
+      const data = graphDataManager.getLastGraphData();
+      expect(data?.nodes.length).toBe(2);
+      // Existing anchor kept its position untouched.
+      const anchor = data?.nodes.find(n => String(n.id) === '1');
+      expect(anchor?.position).toEqual({ x: 10, y: 0, z: 0 });
+      // New node seeded near the LIVE anchor position (~500), not the origin
+      // and not the stale cached {10}.
+      const neighbour = data?.nodes.find(n => String(n.id) === '2');
+      expect(neighbour).toBeDefined();
+      const p = neighbour!.position;
+      expect(p.x === 0 && p.y === 0 && p.z === 0).toBe(false);
+      expect(Math.abs(p.x - 500)).toBeLessThan(50); // seeded around the live x≈500
+    });
+
+    it('is a no-op when nothing new is supplied', async () => {
+      await graphDataManager.setGraphData({
+        nodes: [{ id: '1', label: 'Anchor', position: { x: 0, y: 0, z: 0 } }],
+        edges: [],
+      });
+      const added = await graphDataManager.mergeGraphData(
+        [{ id: '1' as any, label: 'dup', position: { x: 0, y: 0, z: 0 } }] as Node[],
+        [],
+        '1',
+      );
+      expect(added).toEqual({ nodesAdded: 0, edgesAdded: 0 });
+    });
+  });
+
   // ---- ensureNodeHasValidPosition ----
 
   describe('ensureNodeHasValidPosition', () => {

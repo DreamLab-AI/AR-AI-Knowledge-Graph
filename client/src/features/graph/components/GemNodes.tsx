@@ -74,6 +74,8 @@ export interface GemNodesProps {
   onPointerUp: (event: ThreeEvent<PointerEvent>) => void;
   onPointerMissed: () => void;
   onDoubleClick: (event: ThreeEvent<MouseEvent>) => void;
+  /** Right-click a node — used by the additive-expansion context menu. */
+  onContextMenu?: (event: ThreeEvent<MouseEvent>) => void;
   selectedNodeId: string | null;
   /** Live drag state ref — when set, the dragged node uses this position instead of SAB */
   dragDataRef?: React.MutableRefObject<{
@@ -149,7 +151,7 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
   const {
     nodes, graphMode, perNodeVisualModeMap, nodePositionsRef,
     connectionCountMap, hierarchyMap, settings, ssspResult,
-    onPointerDown, onPointerMove, onPointerUp, onPointerMissed, onDoubleClick,
+    onPointerDown, onPointerMove, onPointerUp, onPointerMissed, onDoubleClick, onContextMenu,
     selectedNodeId, forceMode, instanceIdBase,
   } = props;
 
@@ -1082,6 +1084,7 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
       onPointerUp={onPointerUp}
       onPointerMissed={onPointerMissed}
       onDoubleClick={(e: ThreeEvent<MouseEvent>) => onDoubleClick(shiftInstanceId(e))}
+      onContextMenu={onContextMenu ? (e: ThreeEvent<MouseEvent>) => onContextMenu(shiftInstanceId(e)) : undefined}
     />
   );
 };

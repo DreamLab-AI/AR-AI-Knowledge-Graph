@@ -1,7 +1,30 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { graphDataManager, type GraphData, type Node } from '../managers/graphDataManager';
 import { useSettingsStore } from '../../../store/settingsStore';
-import { nodePageUrl } from '../utils/pageLinks';
+import { nodePageUrl, nodePageSlug } from '../utils/pageLinks';
+import { createLogger } from '../../../utils/loggerConfig';
+
+const logger = createLogger('NodeDetailPanel');
+
+/** Reference to a related page: shared shape across subClassOf / relationships. */
+interface PageRef { id?: string; label?: string; slug?: string }
+
+/**
+ * Subset of the narrativegoldmine `api/pages/<slug>.json` card the panel renders.
+ * The site is the source-of-truth page store; this mirrors the fields we surface.
+ */
+interface SourcePageCard {
+  title?: string;
+  definition?: string;
+  domain?: string;
+  maturity?: string;
+  subClassOf?: PageRef[];
+  relationships?: Record<string, PageRef[]>;
+  backlinks?: PageRef[];
+  wikilinks?: PageRef[];
+}
+
+const NGM_PAGES_BASE = 'https://narrativegoldmine.com/api/pages/';
 
 /**
  * Assertion-version attribution (ADR-049) threaded into the node-selected event
@@ -39,6 +62,10 @@ export const NodeDetailPanel: React.FC = () => {
     s => s.settings?.provenance?.showAttribution ?? false
   );
 
+  // Graph↔source panel: the narrativegoldmine page card for the selected node.
+  const [sourceCard, setSourceCard] = useState<SourcePageCard | null>(null);
+  const [sourceStatus, setSourceStatus] = useState<'idle' | 'loading' | 'error' | 'missing' | 'ready'>('idle');
+
   const handleNodeSelected = useCallback((event: Event) => {
     const customEvent = event as CustomEvent<NodeSelectionDetail | null>;
     const payload = customEvent.detail;
@@ -49,6 +76,38 @@ export const NodeDetailPanel: React.FC = () => {
       setVisible(false);
     }
   }, []);
+
+  // Fetch the source page card whenever the selection changes. Keyed on nodeId so
+  // it refetches per selection. Fail-open: any error → 'error'/'missing', never
+  // throws into the panel. An in-flight guard drops stale responses.
+  useEffect(() => {
+    if (!detail) { setSourceCard(null); setSourceStatus('idle'); return; }
+    const slug = nodePageSlug(detail as Parameters<typeof nodePageSlug>[0]);
+    if (!slug) { setSourceCard(null); setSourceStatus('missing'); return; }
+
+    let cancelled = false;
+    setSourceCard(null);
+    setSourceStatus('loading');
+    const url = `${NGM_PAGES_BASE}${encodeURIComponent(slug)}.json`;
+    fetch(url, { headers: { Accept: 'application/json' } })
+      .then(res => {
+        if (res.status === 404) { if (!cancelled) setSourceStatus('missing'); return null; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((json: SourcePageCard | null) => {
+        if (cancelled || json === null) return;
+        setSourceCard(json);
+        setSourceStatus('ready');
+      })
+      .catch(err => {
+        if (cancelled) return;
+        logger.warn(`Source page fetch failed for "${slug}":`, err);
+        setSourceStatus('error');
+      });
+
+    return () => { cancelled = true; };
+  }, [detail]);
 
   useEffect(() => {
     window.addEventListener('visionclaw:node-selected', handleNodeSelected);
@@ -218,6 +277,9 @@ export const NodeDetailPanel: React.FC = () => {
           </div>
         )}
 
+        {/* Graph↔source panel — narrativegoldmine page card for this node */}
+        <SourceSection status={sourceStatus} card={sourceCard} />
+
         {/* Neighbors */}
         {detail.neighbors.length > 0 && (
           <div>
@@ -293,6 +355,134 @@ export const NodeDetailPanel: React.FC = () => {
     </div>
   );
 };
+
+const sectionHeadingStyle: React.CSSProperties = {
+  margin: '0 0 8px',
+  fontSize: 12,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: 0.5,
+  color: '#888',
+};
+
+/** Fly to a related page's node by label (reuses the search focus contract). */
+function focusByLabel(label?: string) {
+  if (!label) return;
+  window.dispatchEvent(new CustomEvent('visionclaw:search', { detail: { query: label } }));
+}
+
+/**
+ * Renders the narrativegoldmine source card synced to the current selection:
+ * definition, ontology parents (subClassOf), typed relationships, and links.
+ * Related entities are clickable — they refocus the graph on the matching node.
+ */
+const SourceSection: React.FC<{ status: string; card: SourcePageCard | null }> = ({ status, card }) => {
+  if (status === 'loading') {
+    return <div style={{ marginBottom: 14, color: '#888', fontSize: 12 }}>Loading source page…</div>;
+  }
+  if (status === 'missing') {
+    return <div style={{ marginBottom: 14, color: '#777', fontSize: 12 }}>No source page for this node.</div>;
+  }
+  if (status === 'error') {
+    return <div style={{ marginBottom: 14, color: '#e6a24a', fontSize: 12 }}>Source page unavailable.</div>;
+  }
+  if (status !== 'ready' || !card) return null;
+
+  const relationships = card.relationships || {};
+  const relEntries = Object.entries(relationships).filter(([, v]) => Array.isArray(v) && v.length > 0);
+  const links = (card.backlinks || []).concat(card.wikilinks || []);
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <h3 style={sectionHeadingStyle}>Source Page</h3>
+
+      {(card.domain || card.maturity) && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          {card.domain && <Badge label="Domain" value={card.domain} />}
+          {card.maturity && <Badge label="Maturity" value={card.maturity} />}
+        </div>
+      )}
+
+      {card.definition && (
+        <div style={{
+          backgroundColor: 'rgba(78, 205, 196, 0.06)',
+          borderLeft: '2px solid rgba(78, 205, 196, 0.4)',
+          borderRadius: 4,
+          padding: '8px 10px',
+          marginBottom: 12,
+          lineHeight: 1.5,
+          fontSize: 12,
+          color: '#cfe6e3',
+        }}>
+          {card.definition}
+        </div>
+      )}
+
+      {card.subClassOf && card.subClassOf.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: '#777', fontSize: 11, marginBottom: 4 }}>Subclass of</div>
+          <RefChips refs={card.subClassOf} />
+        </div>
+      )}
+
+      {relEntries.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ color: '#777', fontSize: 11, marginBottom: 6 }}>Relationships</div>
+          {relEntries.map(([predicate, refs]) => (
+            <div key={predicate} style={{ marginBottom: 6 }}>
+              <span style={{ color: '#6fdca0', fontSize: 11, marginRight: 6 }}>{prettifyPredicate(predicate)}</span>
+              <RefChips refs={refs} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {links.length > 0 && (
+        <div>
+          <div style={{ color: '#777', fontSize: 11, marginBottom: 4 }}>Links ({links.length})</div>
+          <RefChips refs={links.slice(0, 24)} />
+          {links.length > 24 && (
+            <span style={{ color: '#666', fontSize: 11 }}> …and {links.length - 24} more</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** Clickable chips for related page refs; clicking refocuses the graph. */
+const RefChips: React.FC<{ refs: PageRef[] }> = ({ refs }) => (
+  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    {refs.map((r, i) => (
+      <button
+        key={`${r.id ?? r.slug ?? r.label ?? i}`}
+        onClick={() => focusByLabel(r.label)}
+        title={`Focus "${r.label ?? ''}"`}
+        style={{
+          background: 'rgba(142, 207, 255, 0.08)',
+          border: '1px solid rgba(142, 207, 255, 0.2)',
+          borderRadius: 4,
+          color: '#8ecfff',
+          cursor: 'pointer',
+          padding: '3px 8px',
+          fontSize: 11,
+          fontFamily: 'inherit',
+          maxWidth: 160,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {r.label ?? r.slug ?? r.id}
+      </button>
+    ))}
+  </div>
+);
+
+/** camelCase predicate → spaced words ("dependsOn" → "depends on"). */
+function prettifyPredicate(p: string): string {
+  return p.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').toLowerCase();
+}
 
 const Badge: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <span style={{

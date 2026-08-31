@@ -9,7 +9,7 @@ import manifestJson from '../settings-manifest.json';
 import legacyFixture from './legacy-paths.fixture.json';
 
 const EXPECTED_GROUP_COUNTS: Record<string, number> = {
-  motion: 51,
+  motion: 55,
   look: 29,
   labels: 10,
   quality: 32,
@@ -38,6 +38,11 @@ const WAVE1_LAYOUT_PATHS: string[] = [
   'visualisation.graphs.logseq.physics.enableDualDiscLayout',
   'visualisation.graphs.logseq.physics.dagBiasK',
   'visualisation.graphs.logseq.physics.dagLevelDistance',
+  // ADR-141 layout programme (P2/P4): stratified planes + Sugiyama layers.
+  'visualisation.graphs.logseq.physics.planeBiasK',
+  'visualisation.graphs.logseq.physics.planeSpacing',
+  'visualisation.graphs.logseq.physics.layerBiasK',
+  'visualisation.graphs.logseq.physics.layerSpacing',
 ];
 
 const TOTAL_FIELDS =

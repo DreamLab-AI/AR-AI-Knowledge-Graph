@@ -7,6 +7,7 @@ import { BrowserSupportWarning } from '../components/BrowserSupportWarning';
 import { AudioInputService } from '../services/AudioInputService';
 import { graphDataManager, type GraphData } from '../features/graph/managers/graphDataManager';
 import { NodeDetailPanel } from '../features/graph/components/NodeDetailPanel';
+import { NodeContextMenu } from '../features/graph/components/NodeContextMenu';
 import { AgentOpsSurface } from '../features/control-center/agents/AgentOpsSurface';
 import { AcspCaseQueue } from '../features/control-center/governance/AcspCaseQueue';
 import { KpiPanel } from '../features/control-center/kpi/KpiPanel';
@@ -87,6 +88,9 @@ const MainLayoutContent: React.FC = () => {
 
       {/* Node detail slide-in panel — driven by visionclaw:node-selected events */}
       <NodeDetailPanel />
+
+      {/* Right-click additive-expansion menu — driven by visionclaw:node-contextmenu */}
+      <NodeContextMenu />
 
       {/* D2/D8 (PRD-023 WP-3): per-agent steering + swarm observability, opened
           behind an agent-node selection or the ambient "Agents" pill. */}

@@ -307,6 +307,101 @@ class GraphDataManager {
     await this.setGraphData({ nodes: current.nodes, edges });
   }
 
+  /**
+   * Additive expansion merge (Graph2VR desktop migration). Merges freshly
+   * fetched nodes/edges into the current graph WITHOUT re-laying-out the
+   * existing population: every existing node object is preserved verbatim (its
+   * live position, metadata, and worker index stay put), and only genuinely new
+   * nodes are appended. New nodes are seeded near the anchor so physics settles
+   * just the additions instead of teleporting them from the origin.
+   *
+   * Id-type discipline (a known trap here): expansion payload ids are numeric
+   * u32; every comparison and map key is String()-coerced to match the
+   * string-keyed topology.
+   *
+   * @param anchorPosition The anchor's LIVE world position (from the worker/SAB
+   *   buffer, captured at right-click time). Required to avoid seeding from the
+   *   stale cached `node.position` — the origin-spawn / zero-length-edge trap
+   *   this codebase has hit before (physics owns positions post-load; the cached
+   *   value is the initial-load snapshot, not where the node currently is).
+   *   Falls back to the cached anchor position, then the origin, when absent.
+   * @returns counts of nodes/edges actually added (post-dedup).
+   */
+  public async mergeGraphData(
+    newNodes: Node[],
+    newEdges: Edge[],
+    anchorNodeId?: string,
+    anchorPosition?: { x: number; y: number; z: number },
+  ): Promise<{ nodesAdded: number; edgesAdded: number }> {
+    const current = this.lastGraphData ?? { nodes: [], edges: [] };
+
+    const existingNodeIds = new Set(current.nodes.map(n => String(n.id)));
+    const cachedAnchor = anchorNodeId
+      ? current.nodes.find(n => String(n.id) === String(anchorNodeId))
+      : undefined;
+    // Prefer the live worker/SAB position passed by the caller; the cached
+    // node.position is a last resort (it may be the stale load-time value).
+    const anchorPos = anchorPosition ?? cachedAnchor?.position ?? { x: 0, y: 0, z: 0 };
+
+    // Seed new nodes on a small jittered shell around the anchor. Deterministic
+    // enough to avoid a degenerate all-at-one-point cluster, cheap, and
+    // physics-friendly (the settler pulls them onto their edges from here).
+    const SEED_RADIUS = 12;
+    const addedNodes: Node[] = [];
+    let seedIndex = 0;
+    for (const node of newNodes) {
+      const id = String(node.id);
+      if (existingNodeIds.has(id)) continue;
+      existingNodeIds.add(id);
+      const angle = seedIndex * 2.399963; // golden angle — even angular spread
+      const ring = 1 + Math.floor(seedIndex / 8);
+      seedIndex++;
+      const seeded: Node = {
+        ...node,
+        id,
+        position: node.position && (node.position.x || node.position.y || node.position.z)
+          ? node.position
+          : {
+              x: anchorPos.x + Math.cos(angle) * SEED_RADIUS * ring * 0.4,
+              y: anchorPos.y + Math.sin(angle * 1.7) * SEED_RADIUS * 0.5,
+              z: anchorPos.z + Math.sin(angle) * SEED_RADIUS * ring * 0.4,
+            },
+      };
+      addedNodes.push(seeded);
+    }
+
+    // Merge edges, deduped by id (fall back to a source-target-type key when the
+    // payload omits ids). Existing edges are kept untouched.
+    const edgeKey = (e: Edge): string =>
+      e.id ?? `${String(e.source)}-${String(e.target)}-${e.edgeType ?? e.label ?? ''}`;
+    const existingEdgeKeys = new Set(current.edges.map(edgeKey));
+    const addedEdges: Edge[] = [];
+    for (const edge of newEdges) {
+      const normalised: Edge = { ...edge, source: String(edge.source), target: String(edge.target) };
+      const key = edgeKey(normalised);
+      if (existingEdgeKeys.has(key)) continue;
+      existingEdgeKeys.add(key);
+      addedEdges.push(normalised);
+    }
+
+    if (addedNodes.length === 0 && addedEdges.length === 0) {
+      return { nodesAdded: 0, edgesAdded: 0 };
+    }
+
+    await this.setGraphData({
+      nodes: [...current.nodes, ...addedNodes],
+      edges: [...current.edges, ...addedEdges],
+    });
+
+    if (debugState.isEnabled()) {
+      logger.info(
+        `[expansion] additive merge: +${addedNodes.length} nodes, +${addedEdges.length} edges ` +
+          `(anchor=${anchorNodeId ?? 'none'})`,
+      );
+    }
+    return { nodesAdded: addedNodes.length, edgesAdded: addedEdges.length };
+  }
+
   public async removeNode(nodeId: string): Promise<void> {
     const numericId = this.nodeIdMap.get(nodeId);
     const current = this.lastGraphData ?? { nodes: [], edges: [] };

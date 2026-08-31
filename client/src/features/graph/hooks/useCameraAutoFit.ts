@@ -36,14 +36,20 @@ function fitCameraToBounds(
 
   // Guard against degenerate bounding box (all nodes at same point)
   const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z, 1); // floor at 1 to avoid div-by-zero
-
   const center = box.getCenter(new THREE.Vector3());
 
-  // Compute ideal camera distance from FOV and bounding sphere
-  const fov = camera.fov * (Math.PI / 180);
-  const halfFov = fov / 2;
-  const distance = (maxDim / (2 * Math.tan(halfFov))) * 1.5; // 1.5x padding
+  // Fit the graph's bounding SPHERE against BOTH frustum constraints. Using only
+  // maxDim + vertical FOV clips wide graphs on tall (aspect < 1) canvases — the
+  // horizontal FOV is the tighter limit there. Derive the horizontal half-FOV
+  // from the vertical one and the camera aspect, then back off far enough that
+  // the bounding sphere fits inside whichever constraint is tighter.
+  const radius = Math.max(0.5 * size.length(), 1); // sphere radius, floored
+  const halfFovV = (camera.fov * (Math.PI / 180)) / 2;
+  const aspect = camera.aspect > 0 ? camera.aspect : 1;
+  const halfFovH = Math.atan(Math.tan(halfFovV) * aspect);
+  const distV = radius / Math.sin(halfFovV);
+  const distH = radius / Math.sin(halfFovH);
+  const distance = Math.max(distV, distH) * 1.2; // 1.2x padding around the sphere fit
 
   // Position camera looking from a slight elevation angle for better 3D perception
   const cameraOffset = new THREE.Vector3(0, distance * 0.3, distance);
@@ -58,7 +64,7 @@ function fitCameraToBounds(
 
   logger.info(
     `Camera auto-fit: center=(${center.x.toFixed(1)}, ${center.y.toFixed(1)}, ${center.z.toFixed(1)}), ` +
-    `maxDim=${maxDim.toFixed(1)}, distance=${distance.toFixed(1)}, nodes=${count}`
+    `radius=${radius.toFixed(1)}, aspect=${aspect.toFixed(2)}, distance=${distance.toFixed(1)}, nodes=${count}`
   );
 }
 

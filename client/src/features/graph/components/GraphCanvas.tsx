@@ -40,6 +40,44 @@ import TimelineScrubber from './TimelineScrubber';
 // Store and utils
 import { useSettingsStore } from '../../../store/settingsStore';
 import { graphDataManager, type GraphData } from '../managers/graphDataManager';
+import { CAMERA_FIT_EVENT } from '../hooks/useCameraAutoFit';
+
+// ============================================================================
+// Fit-view control — frames the whole graph bbox on demand
+// ============================================================================
+//
+// Dispatches CAMERA_FIT_EVENT, which useCameraAutoFit (inside the Canvas) picks
+// up and uses to reframe the camera around the node bounding box. HTML overlay
+// so it lives outside the R3F tree, matching the LayoutModeIndicator pattern.
+const FitViewButton: React.FC = () => {
+  const handleFit = () => window.dispatchEvent(new CustomEvent(CAMERA_FIT_EVENT));
+  return (
+    <button
+      onClick={handleFit}
+      aria-label="Fit graph to view"
+      title="Fit view (frame the whole graph)"
+      style={{
+        position: 'absolute',
+        bottom: '14px',
+        right: '14px',
+        zIndex: 100,
+        backgroundColor: 'rgba(10, 10, 30, 0.7)',
+        color: 'rgba(255,255,255,0.85)',
+        padding: '6px 12px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontFamily: '"Inter", "Segoe UI", sans-serif',
+        border: '1px solid rgba(255,255,255,0.15)',
+        cursor: 'pointer',
+        backdropFilter: 'blur(8px)',
+        pointerEvents: 'auto',
+        userSelect: 'none',
+      }}
+    >
+      ⤢ Fit view
+    </button>
+  );
+};
 
 // ============================================================================
 // Layout Mode Indicator — displays current layout mode above the canvas
@@ -473,6 +511,9 @@ const GraphCanvas: React.FC = () => {
 
             {/* Layout mode indicator — rendered in HTML overlay above the canvas */}
             <LayoutModeIndicator />
+
+            {/* Fit-view control — reframes the camera on the whole graph bbox */}
+            {canvasReady && nodeCount > 0 && <FitViewButton />}
 
             {/* Bi-temporal provenance timeline (ADR-049) — bottom-docked overlay,
                 mounted only when the client-only provenance.enableTimeline flag is on. */}

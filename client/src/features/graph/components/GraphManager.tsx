@@ -20,7 +20,7 @@ import { useBotsData } from '../../bots/contexts/BotsDataContext'
 import { useGraphVisualState, type GraphVisualMode } from '../hooks/useGraphVisualState'
 import { useGraphFiltering } from '../hooks/useGraphFiltering'
 import { useFpsMonitor } from '../hooks/useFpsMonitor'
-import { useCameraAutoFit } from '../hooks/useCameraAutoFit'
+import { useCameraAutoFit, CAMERA_FIT_EVENT } from '../hooks/useCameraAutoFit'
 import { InstancedLabels } from './InstancedLabels'
 import { layoutApi, type LayoutPosition } from '../../../api/layoutApi'
 import { type GraphData } from '../managers/graphDataManager'
@@ -233,6 +233,7 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   })
 
   const { camera, size } = useThree()
+  const controls = useThree(s => s.controls)
   const nodeSettings = logseqSettings?.nodes || settings?.visualisation?.nodes
 
   useEffect(() => {
@@ -314,7 +315,7 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   })
 
   // === Selection state + camera fly-to + search events ===
-  const { selectedNodeId, setSelectedNodeId, flyToTargetRef, flyToProgressRef } = useGraphSelection({
+  const { selectedNodeId, setSelectedNodeId, flyToTargetRef, flyToLookAtRef, flyToProgressRef } = useGraphSelection({
     graphData,
     nodeIdToIndexMap,
     nodePositionsRef,
@@ -322,16 +323,79 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
     camera,
   })
 
+  // Fly-to interpolation state: captured start endpoints + which destination we
+  // captured them for (object identity distinguishes a NEW fly). Interpolating
+  // captured-start → destination by eased progress (rather than a fractional
+  // per-frame lerp) guarantees the camera actually reaches the destination.
+  const flyStartPosRef = useRef<THREE.Vector3 | null>(null)
+  const flyStartTargetRef = useRef<THREE.Vector3 | null>(null)
+  const flyCapturedForRef = useRef<THREE.Vector3 | null>(null)
+
+  const cancelFlyTo = useCallback(() => {
+    flyToTargetRef.current = null
+    flyToLookAtRef.current = null
+    flyCapturedForRef.current = null
+    flyStartPosRef.current = null
+    flyStartTargetRef.current = null
+  }, [flyToTargetRef, flyToLookAtRef])
+
+  // Cancel an in-flight fly-to on any user camera interaction (OrbitControls
+  // 'start') or an explicit Fit request, so the animation never fights the user
+  // or a reframe. OrbitControls extends EventDispatcher; guard for the ref shape.
+  useEffect(() => {
+    const ctl = controls as unknown as {
+      addEventListener?: (t: string, f: () => void) => void
+      removeEventListener?: (t: string, f: () => void) => void
+    } | null
+    const onFit = () => cancelFlyTo()
+    window.addEventListener(CAMERA_FIT_EVENT, onFit)
+    ctl?.addEventListener?.('start', cancelFlyTo)
+    return () => {
+      window.removeEventListener(CAMERA_FIT_EVENT, onFit)
+      ctl?.removeEventListener?.('start', cancelFlyTo)
+    }
+  }, [controls, cancelFlyTo])
+
   // === Priority -2 useFrame: SAB reads, layout transition LERP, label pos, camera fly-to ===
   useFrame((state, delta) => {
     animationStateRef.current.time = state.clock.elapsedTime
 
-    // Camera fly-to animation
+    // Camera fly-to animation (click-to-focus / search). ~600ms envelope. Both
+    // the camera position and the OrbitControls pivot are interpolated from a
+    // captured start toward the destination by eased progress, then snapped
+    // exactly at completion so the camera truly arrives.
     if (flyToTargetRef.current) {
-      flyToProgressRef.current = Math.min(1, flyToProgressRef.current + delta * 2.0)
-      const eased = 1 - Math.pow(1 - flyToProgressRef.current, 3)
-      camera.position.lerp(flyToTargetRef.current, eased * 0.08)
-      if (flyToProgressRef.current >= 1) flyToTargetRef.current = null
+      const dest = flyToTargetRef.current
+      const lookAt = flyToLookAtRef.current
+      const ctl = controls as unknown as { target?: THREE.Vector3; update?: () => void } | null
+
+      // Capture start endpoints once per new fly (destination object identity).
+      if (flyCapturedForRef.current !== dest) {
+        flyCapturedForRef.current = dest
+        flyStartPosRef.current = camera.position.clone()
+        flyStartTargetRef.current = ctl?.target
+          ? ctl.target.clone()
+          : camera.getWorldDirection(new THREE.Vector3()).add(camera.position)
+      }
+
+      flyToProgressRef.current = Math.min(1, flyToProgressRef.current + delta / 0.6)
+      const p = flyToProgressRef.current
+      const eased = 1 - Math.pow(1 - p, 3)
+
+      if (flyStartPosRef.current) camera.position.lerpVectors(flyStartPosRef.current, dest, eased)
+      if (lookAt && ctl?.target && flyStartTargetRef.current) {
+        ctl.target.lerpVectors(flyStartTargetRef.current, lookAt, eased)
+        ctl.update?.()
+      } else if (lookAt) {
+        camera.lookAt(lookAt)
+      }
+
+      if (p >= 1) {
+        camera.position.copy(dest)
+        if (lookAt && ctl?.target) { ctl.target.copy(lookAt); ctl.update?.() }
+        else if (lookAt) camera.lookAt(lookAt)
+        cancelFlyTo()
+      }
     }
 
     // Periodic label frustum refresh (~4 updates/sec at 60fps)
@@ -508,6 +572,33 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
     }
   }, [typeFilteredNodes, hierarchyMap, expansionState])
 
+  // Right-click a node → dispatch the additive-expansion context menu. The menu
+  // itself lives in an HTML overlay (NodeContextMenu, mounted in MainLayout); we
+  // only surface which node was hit plus the screen coordinates to anchor it.
+  const handleNodeContextMenu = useCallback((event: ThreeEvent<MouseEvent>) => {
+    if (event.instanceId === undefined || event.instanceId >= typeFilteredNodes.length) return
+    event.stopPropagation()
+    // Suppress the browser's native context menu over the canvas.
+    event.nativeEvent?.preventDefault?.()
+    const node = typeFilteredNodes[event.instanceId]
+    if (!node) return
+    // Resolve the node's LIVE world position from the SAB buffer (physics owns
+    // positions post-load) so additive-merge seeds new nodes from where the
+    // anchor actually IS, not its stale cached load-time position.
+    const livePos = resolveNodeWorldPosition(
+      Number(node.id), nodeIdToIndexMap, nodePositionsRef.current,
+    ) ?? node.position ?? null
+    window.dispatchEvent(new CustomEvent('visionclaw:node-contextmenu', {
+      detail: {
+        nodeId: String(node.id),
+        label: node.label,
+        x: event.nativeEvent?.clientX ?? 0,
+        y: event.nativeEvent?.clientY ?? 0,
+        position: livePos,
+      },
+    }))
+  }, [typeFilteredNodes, nodeIdToIndexMap])
+
   // One mesh per population. Empty populations render nothing (no wasted mesh).
   // `base` must match the contiguous ordering of typeFilteredNodes above.
   const populationMeshes: Array<{
@@ -543,6 +634,7 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
             onPointerUp={(event: any) => handlePointerUp(event)}
             onPointerMissed={handlePointerMissed}
             onDoubleClick={handleNodeDoubleClick}
+            onContextMenu={handleNodeContextMenu}
             selectedNodeId={selectedNodeId}
           />
         )
