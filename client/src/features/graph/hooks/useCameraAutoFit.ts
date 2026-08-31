@@ -24,15 +24,28 @@ function fitCameraToBounds(
 ): void {
   if (nodeCount === 0 || positions.length < 3) return;
 
-  const box = new THREE.Box3();
-  const point = new THREE.Vector3();
-
   const count = Math.min(nodeCount, Math.floor(positions.length / 3));
+
+  // Percentile bounds (5th–95th per axis): the live layout carries a handful of
+  // far outliers (observed |p| up to ~3000 against a ~400 core), and a raw
+  // min/max bbox fits THOSE, shrinking the visible graph to nothing — the same
+  // trap the XR adaptive fit hit. Sorting three axis arrays is fine at fit
+  // frequency (user-initiated, not per-frame).
+  const xs = new Float32Array(count);
+  const ys = new Float32Array(count);
+  const zs = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
-    point.set(positions[i3], positions[i3 + 1], positions[i3 + 2]);
-    box.expandByPoint(point);
+    xs[i] = positions[i * 3];
+    ys[i] = positions[i * 3 + 1];
+    zs[i] = positions[i * 3 + 2];
   }
+  xs.sort(); ys.sort(); zs.sort();
+  const lo = Math.floor(count * 0.05);
+  const hi = Math.max(lo, Math.ceil(count * 0.95) - 1);
+  const box = new THREE.Box3(
+    new THREE.Vector3(xs[lo], ys[lo], zs[lo]),
+    new THREE.Vector3(xs[hi], ys[hi], zs[hi]),
+  );
 
   // Guard against degenerate bounding box (all nodes at same point)
   const size = box.getSize(new THREE.Vector3());
