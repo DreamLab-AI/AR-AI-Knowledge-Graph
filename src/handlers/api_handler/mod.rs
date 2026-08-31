@@ -4,7 +4,6 @@ pub mod files;
 pub mod graph;
 pub mod ontology;
 pub mod ontology_physics;
-pub mod quest3;
 // pub mod sessions;
 pub mod semantic_forces;
 pub mod visualisation;
@@ -130,7 +129,6 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         // ontology_handler are now imported into ontology::config).
         .configure(bots::config)
         .configure(analytics::config)
-        .configure(quest3::config)
         .configure(crate::handlers::nostr_handler::config)
         // OLD settings_handler disabled - using new SettingsActor routes from visionclaw_server::settings::api
         // .configure(crate::handlers::settings_handler::config)

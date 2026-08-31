@@ -4,7 +4,6 @@ import { ApplicationModeProvider } from '../contexts/ApplicationModeContext';
 import { useSettingsStore } from '../store/settingsStore';
 import { createLogger } from '../utils/loggerConfig';
 import MainLayout from './MainLayout';
-import { useQuest3Integration } from '../hooks/useQuest3Integration';
 import { BotsDataProvider } from '../features/bots/contexts/BotsDataContext';
 import { CommandPalette } from '../features/command-palette/components/CommandPalette';
 import { initializeCommandPalette } from '../features/command-palette/defaultCommands';
@@ -19,9 +18,6 @@ import { DebugControlPanel } from '../components/DebugControlPanel';
 import { ConnectionWarning } from '../components/ConnectionWarning';
 import { useAutoBalanceNotifications } from '../hooks/useAutoBalanceNotifications';
 import ErrorBoundary from '../components/ErrorBoundary';
-import { remoteLogger } from '../services/remoteLogger';
-import { VircadiaProvider } from '../contexts/VircadiaContext';
-import { VircadiaBridgesProvider } from '../contexts/VircadiaBridgesContext';
 import { useNostrAuth } from '../hooks/useNostrAuth';
 import { OnboardingWizard } from '../components/OnboardingWizard';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -30,11 +26,6 @@ import solidPodService from '../services/SolidPodService';
 
 const logger = createLogger('App');
 
-// Initialize remote logging for Quest 3 debugging
-if (typeof window !== 'undefined') {
-  remoteLogger.logXRInfo();
-}
-
 function App() {
   const [initializationState, setInitializationState] = useState<'loading' | 'initialized' | 'error'>('loading');
   const [initializationError, setInitializationError] = useState<Error | null>(null);
@@ -42,11 +33,6 @@ function App() {
 
   // Auth state
   const { authenticated, isLoading: isAuthLoading, user } = useNostrAuth();
-
-  const { shouldUseQuest3Layout, isQuest3Detected, autoStartSuccessful } = useQuest3Integration({
-    enableAutoStart: false
-  });
-
 
   const botsConnectionStatus = useBotsWebSocketIntegration();
 
@@ -155,16 +141,14 @@ function App() {
       case 'initialized':
         return (
           <BotsDataProvider>
-            <VircadiaBridgesProvider enableBotsBridge={true} enableGraphBridge={false}>
-              <MainLayout />
-            </VircadiaBridgesProvider>
+            <MainLayout />
           </BotsDataProvider>
         );
     }
   };
 
   return (
-    <VircadiaProvider autoConnect={false}>
+    <>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-white focus:text-black">Skip to graph</a>
       <TooltipProvider delayDuration={300} skipDelayDuration={100}>
         <HelpProvider>
@@ -190,7 +174,7 @@ function App() {
           </OnboardingProvider>
         </HelpProvider>
       </TooltipProvider>
-    </VircadiaProvider>
+    </>
   );
 }
 
