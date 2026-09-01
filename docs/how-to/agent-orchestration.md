@@ -131,7 +131,7 @@ The core graph and physics engine:
 Hosts Claude Code and skill execution:
 
 - Claude Code with MCP protocol
-- 83 specialist skills installed at `/home/devuser/.claude/skills/`
+- Curated specialist skills projected into `/home/devuser/.claude/skills/`
 - Polyglot runtime (Python, Node.js, Rust, Deno)
 - Docker socket mounted for container management
 - MCP TCP server (port 9500) and WebSocket (port 3002)
@@ -141,6 +141,29 @@ Hosts Claude Code and skill execution:
 - Docker socket: `/var/run/docker.sock` (container management)
 - Shared workspace volume with VisionClaw container
 - Bridge to GUI container via TCP ports 9876–9878
+
+#### Current Claude routing and Fable 5.1 constraints
+
+Agentbox owns the executable model routing; VisionClaw consumes that agent
+surface and should not duplicate model pins in its own service configuration.
+As of 2026-09-01, the Agentbox routing baseline is:
+
+- `claude-fable-5-1` for architecture, difficult implementation escalation,
+  security analysis, and debugging
+- `claude-opus-5` for design and testing escalation
+- `claude-sonnet-5` for specification, review, and release work
+- `claude-haiku-4-5-20251001` only where the dated low-cost snapshot is an
+  intentional direct-API worker
+
+Fable 5.1 uses always-on adaptive thinking. Code that maintains Anthropic
+multi-turn histories must keep them append-only and replay thinking blocks
+unchanged; it must not edit prior turns or force tool choice. Agent prompts for
+long-running VisionClaw operations should request concise progress updates,
+allow independent tool calls to be batched, require completion of already
+authorised work without asking again, and prefer targeted edits and tests.
+The authoritative pins and routing table live in
+`agentbox/agentbox.toml`; the harness guidance lives in
+`agentbox/CLAUDE.md`.
 
 ### GUI Tools Container
 
