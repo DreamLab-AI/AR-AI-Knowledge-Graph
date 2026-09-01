@@ -271,6 +271,21 @@ async fn main() -> std::io::Result<()> {
         info!("Telemetry logger initialized with directory: {}", log_dir);
     }
 
+    // Dev-mode banner: if the LAN-local full auth bypass is armed, say so LOUDLY
+    // and repeatedly — an unauthenticated write door must never be silent. This
+    // codepath exists only in dev/`dev-auth` builds; release stubs it out and
+    // `enforce_release_env_hygiene()` already hard-failed the boot above if the
+    // env var was present.
+    #[cfg(any(debug_assertions, feature = "dev-auth"))]
+    if visionclaw_server::utils::auth::dev_full_bypass_active() {
+        warn!("╔══════════════════════════════════════════════════════════════════╗");
+        warn!("║  VISIONCLAW_DEV_MODE=1 — LAN-LOCAL AUTH BYPASS ACTIVE             ║");
+        warn!("║  Every request is granted dev-admin ({}).      ║", visionclaw_server::utils::auth::DEV_MODE_PUBKEY);
+        warn!("║  NO NIP-98 / token / peer check. Dev headset only — NEVER expose  ║");
+        warn!("║  this port beyond the trusted LAN. Absent from release binaries.  ║");
+        warn!("╚══════════════════════════════════════════════════════════════════╝");
+    }
+
     let settings = match AppFullSettings::new() {
         Ok(s) => {
             info!(

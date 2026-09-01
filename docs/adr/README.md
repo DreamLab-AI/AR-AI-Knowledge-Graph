@@ -34,7 +34,7 @@ governing document **in the same change**, and regenerate this index
 edges, and stale `verified_commit`+`verified_paths` claims all fail the
 build).
 
-_38 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
+_39 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 
 | ID | Title | Domain | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
 |----|-------|--------|------|----------|------|------------|------------|---------------|-------|------|
@@ -76,3 +76,4 @@ _38 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2036](ADR-2036-defensive-openxr-boot.md) | Defensive OpenXR boot — query eye-gaze capability and degrade, never blind-bind | XR-client | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2037](ADR-2037-production-build-excludes-dev-auth.md) | Production release images are built without the dev-auth cargo feature, asserted in CI | SECURITY-profiles | 2026-08-31 | proposed | none | inactive | — | — | jjohare | visionclaw |
 | [ADR-2038](ADR-2038-boot-time-profile-assertion.md) | Boot-time deployment-profile assertion with illegal-combination abort | SECURITY-profiles | 2026-08-31 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2039](ADR-2039-visionclaw-dev-mode-lan-local-bypass.md) | VISIONCLAW_DEV_MODE — a peer-agnostic LAN-local full auth bypass for a 100%-local dev headset | SECURITY-profiles | 2026-09-01 | proposed | complete | inactive | — | — | jjohare | visionclaw |

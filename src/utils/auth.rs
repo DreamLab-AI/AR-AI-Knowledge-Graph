@@ -73,6 +73,46 @@ async fn resolve_access_level(pubkey: &str, is_power_user: bool) -> AccessLevel 
     }
 }
 
+/// Synthetic principal returned by the LAN-local dev-mode bypass. Not a real
+/// Nostr pubkey — it is a clearly-labelled sentinel so provenance/audit rows are
+/// unambiguous about which writes came in unauthenticated on a dev headset.
+pub const DEV_MODE_PUBKEY: &str = "dev-mode-local-admin";
+
+/// Whether the **LAN-local full bypass** is active: every request is treated as
+/// an authenticated dev admin, with NO NIP-98 signature, dev-token header, or
+/// peer-origin check. This is the "desktop dev mode" for a 100%-local headset
+/// (e.g. the HP over the rail) where per-request Nostr signing is pure friction
+/// and the LAN itself is the trust boundary.
+///
+/// Triple-gated exactly like the loopback dev-token path, minus the peer check:
+///   1. **Compile-time** — the reading code exists only in
+///      `debug_assertions`/`dev-auth` builds; the release stub returns `false`
+///      and `main::enforce_release_env_hygiene` *hard-fails at boot* if
+///      `VISIONCLAW_DEV_MODE` is even present (ADR-06 §D11).
+///   2. **Runtime opt-in** — off unless `VISIONCLAW_DEV_MODE=1` (or `true`).
+///
+/// Deliberately peer-agnostic: behind Docker port-publishing the backend sees
+/// the bridge-gateway SNAT address, not the real HP, so a loopback/CIDR gate
+/// cannot express "trust my LAN headset". The compile-gate + release-refusal is
+/// what keeps this from ever reaching production.
+#[cfg(any(debug_assertions, feature = "dev-auth"))]
+pub fn dev_full_bypass_active() -> bool {
+    std::env::var("VISIONCLAW_DEV_MODE")
+        .map(|v| {
+            let t = v.trim();
+            t == "1" || t.eq_ignore_ascii_case("true")
+        })
+        .unwrap_or(false)
+}
+
+/// Release-build stub: the full-bypass codepath is absent from the binary, so it
+/// can never fire regardless of env. (Belt-and-braces with the boot refusal.)
+#[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+#[inline(always)]
+pub fn dev_full_bypass_active() -> bool {
+    false
+}
+
 /// Whether the dev-session-token bypass may fire for a request from `peer`.
 /// Requires the explicit `DEV_AUTH_LOOPBACK=1` opt-in AND a loopback peer
 /// address. This is the **single** gate every dev-token acceptance path routes
@@ -110,6 +150,24 @@ pub async fn verify_access(
         .and_then(|v| v.to_str().ok())
         .unwrap_or(&Uuid::new_v4().to_string())
         .to_string();
+
+    // --- LAN-local full dev bypass (dev builds only, VISIONCLAW_DEV_MODE=1) ---
+    //
+    // Peer-agnostic: grants an authenticated dev-admin identity to EVERY request
+    // with no signature/token/peer check, so a 100%-local headset (the HP over
+    // the rail) has zero auth friction. This is the single REST chokepoint —
+    // both `RbacGate` (/api) and `RequireAuth` delegate here — so one early
+    // return covers every REST write door. Compile-gated + boot-refused in
+    // release (see `dev_full_bypass_active` and `enforce_release_env_hygiene`).
+    if dev_full_bypass_active() {
+        debug!(
+            request_id = %request_id,
+            "dev-mode: VISIONCLAW_DEV_MODE full bypass — granting {:?} as {}",
+            required_level,
+            DEV_MODE_PUBKEY
+        );
+        return Ok(DEV_MODE_PUBKEY.to_string());
+    }
 
     // --- Dev bypass (dev builds only, loopback + explicit opt-in) ---
     //
@@ -374,6 +432,34 @@ mod dev_bypass_tests {
             !dev_bypass_permitted(&req_lo2),
             "loopback without opt-in must be refused"
         );
+    }
+
+    /// VISIONCLAW_DEV_MODE gates the LAN-local full bypass and is peer-agnostic:
+    /// only `1`/`true` arm it; anything else (incl. unset) is off. Sequential —
+    /// mutates a shared process env var.
+    #[test]
+    fn dev_full_bypass_respects_env_flag() {
+        use super::dev_full_bypass_active;
+
+        std::env::remove_var("VISIONCLAW_DEV_MODE");
+        assert!(!dev_full_bypass_active(), "unset must be off");
+
+        std::env::set_var("VISIONCLAW_DEV_MODE", "1");
+        assert!(dev_full_bypass_active(), "=1 must arm");
+
+        std::env::set_var("VISIONCLAW_DEV_MODE", "true");
+        assert!(dev_full_bypass_active(), "=true must arm");
+
+        std::env::set_var("VISIONCLAW_DEV_MODE", " TRUE ");
+        assert!(dev_full_bypass_active(), "whitespace/case-insensitive must arm");
+
+        std::env::set_var("VISIONCLAW_DEV_MODE", "0");
+        assert!(!dev_full_bypass_active(), "=0 must be off");
+
+        std::env::set_var("VISIONCLAW_DEV_MODE", "yes");
+        assert!(!dev_full_bypass_active(), "non-1/true must be off");
+
+        std::env::remove_var("VISIONCLAW_DEV_MODE");
     }
 }
 

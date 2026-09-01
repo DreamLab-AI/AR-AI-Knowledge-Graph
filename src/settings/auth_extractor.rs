@@ -19,6 +19,16 @@ use crate::services::nostr_service::NostrService;
 /// argv can re-enable bypass at runtime.
 #[cfg(any(debug_assertions, feature = "dev-auth"))]
 fn try_dev_bypass(req: &HttpRequest) -> Option<AuthenticatedUser> {
+    // LAN-local full dev mode (VISIONCLAW_DEV_MODE=1): grant dev admin to every
+    // request with no header/signature/peer check — the settings-write parity of
+    // the REST `verify_access` full bypass. See `utils::auth::dev_full_bypass_active`.
+    if crate::utils::auth::dev_full_bypass_active() {
+        debug!("dev-mode: VISIONCLAW_DEV_MODE full bypass — settings extractor granting dev admin");
+        return Some(AuthenticatedUser {
+            pubkey: crate::utils::auth::DEV_MODE_PUBKEY.to_string(),
+            is_power_user: true,
+        });
+    }
     let auth = req
         .headers()
         .get("Authorization")

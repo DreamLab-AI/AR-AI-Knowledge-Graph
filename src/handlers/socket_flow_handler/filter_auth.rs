@@ -14,6 +14,51 @@ pub(crate) fn handle_authenticate(
 ) {
     info!("Client sent authenticate message");
 
+    // LAN-local full dev mode (VISIONCLAW_DEV_MODE=1): accept the authenticate
+    // frame as dev admin with no NIP-98/token verification — the WS parity of the
+    // REST full bypass. This grants power_user the moment the client sends its
+    // `authenticate` frame (the Godot XR client always does), NOT passively at
+    // TCP-connect; a client that never authenticates stays anon, same as normal
+    // mode. The 403-ing HUD write buttons are REST and are covered unconditionally
+    // by `verify_access` regardless of this WS path — this only lets the owner's
+    // private nodes render and ungates WS-side writes (filter_update). Dev builds
+    // only; stripped and boot-refused in release. See `utils::auth::dev_full_bypass_active`.
+    #[cfg(any(debug_assertions, feature = "dev-auth"))]
+    {
+        if crate::utils::auth::dev_full_bypass_active() {
+            let pubkey = crate::utils::auth::DEV_MODE_PUBKEY.to_string();
+            act.pubkey = Some(pubkey.clone());
+            act.is_power_user = true;
+            // identity changed — invalidate any in-flight (pre-auth) sync.
+            act.bump_sync_generation();
+            if let Some(cid) = act.client_id {
+                use crate::actors::messages::AuthenticateClient;
+                act.client_manager_addr.do_send(AuthenticateClient {
+                    client_id: cid,
+                    pubkey: pubkey.clone(),
+                    is_power_user: true,
+                    ephemeral: false,
+                });
+            }
+            let response = serde_json::json!({
+                "type": "authenticate_success",
+                "pubkey": pubkey,
+                "is_power_user": true,
+                "timestamp": chrono::Utc::now().timestamp_millis()
+            });
+            if let Ok(msg_str) = serde_json::to_string(&response) {
+                ctx.text(msg_str);
+            }
+            info!(
+                "dev-mode: VISIONCLAW_DEV_MODE full bypass — WS authenticated as {} (power_user)",
+                pubkey
+            );
+            // re-push a fresh filtered sync now that pubkey is set.
+            act.send_full_state_sync(ctx);
+            return;
+        }
+    }
+
     if let Some(event_b64) = msg.get("event").and_then(|e| e.as_str()) {
         // --- NIP-98 path: { type: "authenticate", event: "<base64>" } ---
         let nostr_service = act.app_state.nostr_service.clone();
