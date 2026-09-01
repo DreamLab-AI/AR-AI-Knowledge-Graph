@@ -258,3 +258,9 @@ agentdb.rvf.lock
 scripts/whelk-rs/
 voice-stack/unmute/
 .khive-source/
+
+# Ephemeral SQLite WAL/SHM sidecar files (runtime state, never track)
+*.sqlite3-wal
+*.sqlite3-shm
+# Session scratch dir
+scratchpad/
