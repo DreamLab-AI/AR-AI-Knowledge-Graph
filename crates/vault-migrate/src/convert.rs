@@ -77,14 +77,36 @@ fn convert_inner(text: &str, page_name: Option<&str>) -> PageResult {
     //    leaf is a converter artefact and is removed here so a second run
     //    repairs an already-converted vault (`title_echo_removed`). An
     //    author-supplied title that differs from both is never touched.
+    //    Exception: when the page's own first H1 confirms the title (e.g.
+    //    `A/B Testing`, `TCP/IP` — the slash is part of the real name), it is
+    //    a genuine display title and is kept; without it Obsidian would show
+    //    only the leaf.
     if let Some(name) = page_name {
         let echoes = matches!(
             fm.map.get("title"),
             Some(Value::Scalar(t)) if t == name || t == inferred_title(name)
         );
         if echoes {
-            fm.map.remove("title");
-            stats.title_echo_removed += 1;
+            let h1 = rest[consumed..]
+                .iter()
+                .find_map(|l| l.strip_prefix("# ").map(|t| t.trim()));
+            let confirmed = matches!((fm.map.get("title"), h1), (Some(Value::Scalar(t)), Some(h)) if t == h);
+            if !confirmed {
+                fm.map.remove("title");
+                stats.title_echo_removed += 1;
+            }
+        }
+        // A namespace page whose own H1 is the full slashed name (`# TCP/IP`)
+        // needs that H1 as its display title, or Obsidian shows only `IP`.
+        // The H1 is the page's authored title, so carrying it is not writing
+        // the identity into `title`; flat pages and leaf-titled pages get none.
+        if !fm.map.contains_key("title") && name != inferred_title(name) {
+            let h1 = rest[consumed..]
+                .iter()
+                .find_map(|l| l.strip_prefix("# ").map(|t| t.trim()));
+            if h1 == Some(name) {
+                fm.map.insert("title".into(), Value::Scalar(name.to_string()));
+            }
         }
     }
 
@@ -168,6 +190,31 @@ mod tests {
         assert!(r.content.starts_with("---\npublic: true\n---\n"));
         assert!(!r.content.contains("title:"));
         assert_eq!(r.stats.title_echo_removed, 0);
+    }
+
+    #[test]
+    fn a_title_confirmed_by_the_h1_is_a_real_title_and_is_kept() {
+        // The slash is part of the genuine name: `A/B Testing`, `TCP/IP`.
+        let src = "---\npublic: true\ntitle: A/B Testing\n---\n\n# A/B Testing\nbody\n";
+        let r = convert_page(src, "A/B Testing");
+        assert!(r.content.contains("title: A/B Testing"));
+        assert_eq!(r.stats.title_echo_removed, 0);
+        let src = "public:: true\ntitle:: TCP/IP\n\n# TCP/IP\n";
+        let r = convert_page(src, "TCP/IP");
+        assert!(r.content.contains("title: TCP/IP"));
+    }
+
+    #[test]
+    fn a_namespace_page_whose_h1_is_the_slashed_name_gets_it_as_title() {
+        let r = convert_page("public:: true\n\n# TCP/IP\n", "TCP/IP");
+        assert!(r.content.contains("title: TCP/IP"));
+        // leaf-titled namespace page: Obsidian infers `Child` already
+        let r = convert_page("public:: true\n\n# Child\n", "Ns/Child");
+        assert!(!r.content.contains("\ntitle: "));
+        // idempotent: a second run keeps it (H1 confirms) — no echo removal
+        let r2 = convert_page(&convert_page("public:: true\n\n# TCP/IP\n", "TCP/IP").content, "TCP/IP");
+        assert!(r2.content.contains("title: TCP/IP"));
+        assert_eq!(r2.stats.title_echo_removed, 0);
     }
 
     #[test]
