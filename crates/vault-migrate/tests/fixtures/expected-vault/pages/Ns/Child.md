@@ -1,6 +1,5 @@
 ---
 public: true
-title: Ns/Child
 ---
 
 # Child

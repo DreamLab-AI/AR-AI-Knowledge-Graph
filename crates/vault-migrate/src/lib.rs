@@ -397,6 +397,7 @@ fn tally(rep: &mut Report, s: &convert::PageStats) {
     rep.rules.asset_paths += s.counts.asset_paths + s.frontmatter_asset_paths;
     rep.rules.collapsed_dropped += s.collapsed_dropped;
     rep.rules.id_dropped += s.id_dropped;
+    rep.rules.title_echo_removed += s.title_echo_removed;
 }
 
 fn collect_leftovers(
@@ -514,8 +515,10 @@ fn rename_moved_originals(
         }
     }
     for (old, new_path) in moves {
+        let old_len = fs::metadata(old).map(|m| m.len()).unwrap_or(0);
         match fs::metadata(&new_path) {
-            Ok(m) if m.len() > 0 => {
+            // A zero-byte original legitimately renames to a zero-byte page.
+            Ok(m) if m.len() > 0 || old_len == 0 => {
                 if let Err(e) = fs::remove_file(old) {
                     errors.push(format!("removing superseded {}: {e}", old.display()));
                 }

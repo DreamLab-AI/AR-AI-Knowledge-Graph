@@ -11,6 +11,9 @@ pub struct PageStats {
     pub already_obsidian: bool,
     pub collapsed_dropped: usize,
     pub id_dropped: usize,
+    /// `title:` values that merely echoed the page identity (or its leaf),
+    /// removed as converter artefacts.
+    pub title_echo_removed: usize,
     /// Asset targets rewritten inside frontmatter values (V1), counted into
     /// the same `asset_paths` rule as the body ones.
     pub frontmatter_asset_paths: usize,
@@ -68,13 +71,20 @@ fn convert_inner(text: &str, page_name: Option<&str>) -> PageResult {
         None => mapped,
     };
 
-    // 4. Namespace pages need an explicit title: Obsidian would infer only the
-    //    leaf. An author-supplied `title` is never overridden.
+    // 4. `title` is a DISPLAY value (V2), never the identity. An earlier
+    //    converter release wrote the page's identity path into `title:` for
+    //    namespace pages; a `title` that merely echoes the identity or its
+    //    leaf is a converter artefact and is removed here so a second run
+    //    repairs an already-converted vault (`title_echo_removed`). An
+    //    author-supplied title that differs from both is never touched.
     if let Some(name) = page_name {
-        if name != inferred_title(name) {
-            fm.map
-                .entry("title".to_string())
-                .or_insert_with(|| Value::Scalar(name.to_string()));
+        let echoes = matches!(
+            fm.map.get("title"),
+            Some(Value::Scalar(t)) if t == name || t == inferred_title(name)
+        );
+        if echoes {
+            fm.map.remove("title");
+            stats.title_echo_removed += 1;
         }
     }
 
@@ -151,10 +161,24 @@ mod tests {
     }
 
     #[test]
-    fn namespace_page_gains_an_explicit_title() {
+    fn namespace_page_gains_no_title() {
+        // `title` is display-only (V2); the identity path is never written.
         let src = "public:: true\n\n# T\n";
         let r = convert_page(src, "Ns/Title");
-        assert!(r.content.starts_with("---\npublic: true\ntitle: Ns/Title\n---\n"));
+        assert!(r.content.starts_with("---\npublic: true\n---\n"));
+        assert!(!r.content.contains("title:"));
+        assert_eq!(r.stats.title_echo_removed, 0);
+    }
+
+    #[test]
+    fn a_title_echoing_the_identity_is_repaired_on_rerun() {
+        for echo in ["Ns/Title", "Title"] {
+            let src = format!("---\npublic: true\ntitle: {echo}\n---\n\n# T\nbody\n");
+            let r = convert_page(&src, "Ns/Title");
+            assert!(!r.content.contains("title:"), "{echo}");
+            assert_eq!(r.stats.title_echo_removed, 1);
+            assert!(r.stats.already_obsidian);
+        }
     }
 
     #[test]
@@ -175,14 +199,14 @@ mod tests {
         // The real podcast-page shape: only `public:: true` is leading.
         let src = "public:: true\n\n# Title\n\ntitle:: Body Level\nsource:: AI Daily Brief\n";
         let r = convert_page(src, "podcast-evidence/x");
-        assert!(r.content.contains("title: podcast-evidence/x"));
+        assert!(!r.content.contains("\ntitle: "));
         assert!(r.content.contains("\ntitle:: Body Level\n"));
         assert_eq!(r.stats.leftovers.body_properties, 2);
     }
 
     #[test]
     fn already_converted_page_is_a_no_op() {
-        let src = "---\npublic: true\ntitle: Ns/Title\n---\n\n# T\nbody\n";
+        let src = "---\npublic: true\ntitle: Kept Display Title\n---\n\n# T\nbody\n";
         let r = convert_page(src, "Ns/Title");
         assert_eq!(r.content, src);
         assert!(r.stats.already_obsidian);

@@ -79,7 +79,7 @@ fn report_counts_match_the_fixture_rules() {
 
     assert_eq!(rep.pages_total, 10);
     assert_eq!(rep.pages_already_obsidian, 1);
-    assert_eq!(rep.pages_converted, 9);
+    assert_eq!(rep.pages_converted, 10, "the already-converted page is rewritten once to drop its title echo");
 
     let r = &rep.rules;
     assert_eq!(r.public_true, 9, "one fixture page is public:: false");
@@ -92,6 +92,7 @@ fn report_counts_match_the_fixture_rules() {
     assert_eq!(r.asset_paths, 3, "2 in the body + 1 in a property value; the fenced one is excluded");
     assert_eq!(r.collapsed_dropped, 2, "one leading, one body-level");
     assert_eq!(r.id_dropped, 1);
+    assert_eq!(r.title_echo_removed, 1, "Already Converted.md carried `title: Already Converted`");
 
     let l = &rep.leftovers;
     assert_eq!(l.block_refs.len(), 2);

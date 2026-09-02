@@ -24,6 +24,7 @@ pub struct Rules {
     pub asset_paths: usize,
     pub collapsed_dropped: usize,
     pub id_dropped: usize,
+    pub title_echo_removed: usize,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
