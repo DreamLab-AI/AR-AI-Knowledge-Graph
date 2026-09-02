@@ -14,6 +14,9 @@ pub struct PageStats {
     /// `title:` values that merely echoed the page identity (or its leaf),
     /// removed as converter artefacts.
     pub title_echo_removed: usize,
+    /// Pages with no `public` key whose body carried `public:: true` and
+    /// were promoted to `public: true` (pre-vault reader parity).
+    pub public_promoted_from_body: usize,
     /// Asset targets rewritten inside frontmatter values (V1), counted into
     /// the same `asset_paths` rule as the body ones.
     pub frontmatter_asset_paths: usize,
@@ -134,6 +137,18 @@ fn convert_inner(text: &str, page_name: Option<&str>) -> PageResult {
         }
     }
 
+    // 4c. One-time promotion: a page with no `public` key at all whose body
+    //     carries `public:: true` (outliner pages that open with an H1, then
+    //     `- public:: true`) was public under the pre-vault reader, which
+    //     accepted the marker anywhere. The vault gate reads frontmatter only,
+    //     so promote it here rather than silently privatising it. The body
+    //     line is left in place (it is now inert content).
+    let body_lines_for_scan = &rest[consumed..];
+    if !fm.map.contains_key("public") && body::body_declares_public(body_lines_for_scan) {
+        fm.map.insert("public".into(), Value::Bool(true));
+        stats.public_promoted_from_body += 1;
+    }
+
     stats.public_true = matches!(fm.map.get("public"), Some(Value::Bool(true)));
     stats.has_aliases = matches!(fm.map.get("aliases"), Some(Value::List(v)) if !v.is_empty());
 
@@ -215,6 +230,25 @@ mod tests {
         let r2 = convert_page(&convert_page("public:: true\n\n# TCP/IP\n", "TCP/IP").content, "TCP/IP");
         assert!(r2.content.contains("title: TCP/IP"));
         assert_eq!(r2.stats.title_echo_removed, 0);
+    }
+
+    #[test]
+    fn a_body_level_public_marker_under_an_h1_is_promoted_once() {
+        let src = "# Trust Attitudes\n- public:: true\n\t- KPMG\n";
+        let r = convert_page(src, "Trust Attitudes");
+        assert!(r.content.starts_with("---\npublic: true\n---\n"));
+        assert!(r.content.contains("- public:: true"), "body line stays as inert content");
+        assert_eq!(r.stats.public_promoted_from_body, 1);
+        assert!(r.stats.public_true);
+        // idempotent: second run has the key and promotes nothing
+        let r2 = convert_page(&r.content, "Trust Attitudes");
+        assert_eq!(r2.content, r.content);
+        assert_eq!(r2.stats.public_promoted_from_body, 0);
+        // an explicit public: false is never overridden, and a fenced marker never counts
+        let r3 = convert_page("---\npublic: false\n---\n\n- public:: true\n", "X");
+        assert!(r3.content.contains("public: false"));
+        let r4 = convert_page("# T\n```\npublic:: true\n```\n", "T");
+        assert!(!r4.content.contains("public: true"));
     }
 
     #[test]

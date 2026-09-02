@@ -398,6 +398,7 @@ fn tally(rep: &mut Report, s: &convert::PageStats) {
     rep.rules.collapsed_dropped += s.collapsed_dropped;
     rep.rules.id_dropped += s.id_dropped;
     rep.rules.title_echo_removed += s.title_echo_removed;
+    rep.rules.public_promoted_from_body += s.public_promoted_from_body;
 }
 
 fn collect_leftovers(

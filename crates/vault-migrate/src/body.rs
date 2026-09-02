@@ -97,6 +97,28 @@ impl FenceState {
     }
 }
 
+/// True when the body (outside code fences) carries a Logseq `public:: true`
+/// line — as a bare line or an outliner bullet at any depth. Used by the
+/// converter's one-time promotion rule: the pre-vault reader accepted the
+/// marker anywhere, so a page whose only marker sits under an H1 must not be
+/// silently privatised by the leading-block-only gate (V4).
+pub fn body_declares_public(body: &[&str]) -> bool {
+    let mut fence = FenceState::default();
+    for line in body {
+        if fence.feed(line) || fence.inside() {
+            continue;
+        }
+        let t = line.trim_start();
+        let t = t.strip_prefix('-').map(str::trim_start).unwrap_or(t);
+        if let Some(rest) = t.strip_prefix("public::") {
+            if rest.trim().eq_ignore_ascii_case("true") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Convert `#[[multi word]]` to `#multi-word`: case is preserved, runs of
 /// whitespace collapse to a single hyphen (Obsidian tags cannot contain spaces).
 fn tagify(inner: &str) -> String {

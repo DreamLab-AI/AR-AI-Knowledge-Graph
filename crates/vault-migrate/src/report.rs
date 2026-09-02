@@ -25,6 +25,7 @@ pub struct Rules {
     pub collapsed_dropped: usize,
     pub id_dropped: usize,
     pub title_echo_removed: usize,
+    pub public_promoted_from_body: usize,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
