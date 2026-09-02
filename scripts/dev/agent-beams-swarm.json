@@ -1,0 +1,8 @@
+{"nodes":[
+ {"id":"queen-fable","name":"Fable 5.1 queen","type":"queen","status":"active","x":0,"y":220,"z":0,"health":100,"workload":0.6,"cpu_usage":35,"memory_usage":40},
+ {"id":"opus-ontology","name":"Opus ontology worker","type":"researcher","status":"active","x":180,"y":120,"z":90,"health":100,"workload":0.7,"cpu_usage":55,"memory_usage":45},
+ {"id":"opus-physics","name":"Opus physics worker","type":"coder","status":"active","x":-170,"y":140,"z":110,"health":100,"workload":0.5,"cpu_usage":40,"memory_usage":35},
+ {"id":"sonnet-research-1","name":"Sonnet researcher 1","type":"researcher","status":"active","x":140,"y":-160,"z":-120,"health":100,"workload":0.4,"cpu_usage":30,"memory_usage":30},
+ {"id":"sonnet-research-2","name":"Sonnet researcher 2","type":"researcher","status":"active","x":-150,"y":-150,"z":140,"health":100,"workload":0.4,"cpu_usage":30,"memory_usage":30},
+ {"id":"vault-migrate","name":"vault-migrate worker","type":"coder","status":"idle","x":0,"y":-200,"z":-60,"health":100,"workload":0.1,"cpu_usage":5,"memory_usage":20}
+],"edges":[]}

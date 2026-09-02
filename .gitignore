@@ -264,3 +264,7 @@ voice-stack/unmute/
 *.sqlite3-shm
 # Session scratch dir
 scratchpad/
+
+# session recordings / stills dropped in the root for hand-off (moved off by the owner)
+/xr-capture-*.mp4
+/xr-screenshot-*.png
