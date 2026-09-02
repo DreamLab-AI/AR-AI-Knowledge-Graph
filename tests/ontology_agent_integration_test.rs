@@ -329,12 +329,12 @@ async fn test_propose_create_generates_valid_result() {
     assert!(!result.markdown_preview.is_empty());
     assert!(
         result.pr_url.is_none(),
-        "PR should not be created without LOGSEQ_PRIVATE_REPO_GITHUB"
+        "PR should not be created without PRIVATE_REPO_GITHUB_PAT"
     );
     match result.status {
         ProposalStatus::Staged => {}
         _ => panic!(
-            "Expected Staged status without LOGSEQ_PRIVATE_REPO_GITHUB, got: {:?}",
+            "Expected Staged status without PRIVATE_REPO_GITHUB_PAT, got: {:?}",
             result.status
         ),
     }

@@ -125,7 +125,7 @@ struct PrStateResponse {
 
 impl GitHubPRService {
     pub fn new() -> Self {
-        let token = env::var("LOGSEQ_PRIVATE_REPO_GITHUB").unwrap_or_default();
+        let token = crate::services::github::config::github_token_from_env().unwrap_or_default();
         let owner = env::var("GITHUB_OWNER")
             .or_else(|_| env::var("GITHUB_REPO_OWNER"))
             .unwrap_or_else(|_| {
@@ -165,7 +165,7 @@ impl GitHubPRService {
     /// logs loudly (degraded-visible) when this is false, because without it the
     /// merge poll can never resolve a PR to `concept_elevated`.
     pub fn has_github_token() -> bool {
-        !env::var("LOGSEQ_PRIVATE_REPO_GITHUB")
+        !crate::services::github::config::github_token_from_env()
             .unwrap_or_default()
             .is_empty()
     }
@@ -207,7 +207,7 @@ impl GitHubPRService {
     pub async fn pr_state(&self, pr_ref: &str) -> Result<PrState, String> {
         if self.token.is_empty() {
             return Err(
-                "LOGSEQ_PRIVATE_REPO_GITHUB not configured — cannot poll PR state".to_string(),
+                "PRIVATE_REPO_GITHUB_PAT not configured — cannot poll PR state".to_string(),
             );
         }
         let number = Self::pr_number_from_ref(pr_ref)
@@ -279,7 +279,7 @@ impl GitHubPRService {
         agent_ctx: &AgentContext,
     ) -> Result<String, String> {
         if self.token.is_empty() {
-            return Err("LOGSEQ_PRIVATE_REPO_GITHUB not configured — cannot create PR".to_string());
+            return Err("PRIVATE_REPO_GITHUB_PAT not configured — cannot create PR".to_string());
         }
 
         info!("Creating ontology PR: '{}' for file '{}'", title, file_path);

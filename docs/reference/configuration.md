@@ -131,7 +131,7 @@ with an `### OntologyBlock` contributes ontology data regardless of visibility.
 | `GITHUB_BASE_PATHS` | string (CSV) | `${GITHUB_BASE_PATH}` | Multiple ingest roots. |
 | `GITHUB_API_VERSION` | string | `v3` | GitHub REST API version header. |
 | `GITHUB_RATE_LIMIT` | boolean | `true` | Honour GitHub rate-limit headers and back off. |
-| `LOGSEQ_PRIVATE_REPO_GITHUB` | string | `""` | Optional private corpus repository reference (the vault repo, still named `logseq` on GitHub). |
+| `PRIVATE_REPO_GITHUB_PAT` | string | `""` | GitHub token for the private corpus repo (`jjohare/visionGraph`). Fine-grained: Contents read/write, Pull requests read/write, Metadata read. Legacy name `LOGSEQ_PRIVATE_REPO_GITHUB` still accepted for one release. |
 | `FORCE_FULL_SYNC` | boolean | `false` | Bypass SHA1 incremental filtering and reprocess every file. Reset to `false` after a one-off full reload. |
 
 ---

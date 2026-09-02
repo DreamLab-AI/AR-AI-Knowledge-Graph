@@ -19,6 +19,31 @@ impl fmt::Display for GitHubConfigError {
 
 impl Error for GitHubConfigError {}
 
+/// Environment variable carrying the GitHub token for the corpus repository.
+pub const GITHUB_TOKEN_ENV: &str = "PRIVATE_REPO_GITHUB_PAT";
+/// Pre-2026-09-02 name, accepted for one release so a stale `.env` still works.
+pub const GITHUB_TOKEN_ENV_LEGACY: &str = "LOGSEQ_PRIVATE_REPO_GITHUB";
+
+/// The GitHub token, from `PRIVATE_REPO_GITHUB_PAT` or, failing that, the
+/// legacy `LOGSEQ_PRIVATE_REPO_GITHUB`. `None` when neither is set; an empty
+/// value counts as set (callers validate emptiness themselves).
+pub fn github_token_from_env() -> Option<String> {
+    match env::var(GITHUB_TOKEN_ENV) {
+        Ok(v) => Some(v),
+        Err(_) => match env::var(GITHUB_TOKEN_ENV_LEGACY) {
+            Ok(v) => {
+                log::warn!(
+                    "{} is deprecated; rename it to {} (accepted for one release)",
+                    GITHUB_TOKEN_ENV_LEGACY,
+                    GITHUB_TOKEN_ENV
+                );
+                Some(v)
+            }
+            Err(_) => None,
+        },
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GitHubConfig {
     pub token: String,
@@ -55,10 +80,8 @@ impl GitHubConfig {
     }
 
     pub fn from_env() -> Result<Self, GitHubConfigError> {
-        let token = env::var("LOGSEQ_PRIVATE_REPO_GITHUB")
-            .map_err(|_| {
-                GitHubConfigError::MissingEnvVar("LOGSEQ_PRIVATE_REPO_GITHUB".to_string())
-            })?
+        let token = github_token_from_env()
+            .ok_or_else(|| GitHubConfigError::MissingEnvVar(GITHUB_TOKEN_ENV.to_string()))?
             .trim_start_matches('=')
             .to_string();
 
@@ -154,6 +177,7 @@ mod tests {
     #[test]
     fn test_missing_required_vars() {
         let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("PRIVATE_REPO_GITHUB_PAT");
         env::remove_var("LOGSEQ_PRIVATE_REPO_GITHUB");
         env::remove_var("GITHUB_OWNER");
         env::remove_var("GITHUB_REPO");
@@ -161,7 +185,7 @@ mod tests {
 
         match GitHubConfig::from_env() {
             Err(GitHubConfigError::MissingEnvVar(var)) => {
-                assert_eq!(var, "LOGSEQ_PRIVATE_REPO_GITHUB");
+                assert_eq!(var, "PRIVATE_REPO_GITHUB_PAT");
             }
             other => {
                 panic!("Expected MissingEnvVar error, got: {:?}", other);
@@ -172,7 +196,7 @@ mod tests {
     #[test]
     fn test_empty_values() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("LOGSEQ_PRIVATE_REPO_GITHUB", "");
+        env::set_var("PRIVATE_REPO_GITHUB_PAT", "");
         env::set_var("GITHUB_OWNER", "owner");
         env::set_var("GITHUB_REPO", "repo");
         env::set_var("GITHUB_BASE_PATH", "path");
@@ -190,7 +214,7 @@ mod tests {
     #[test]
     fn test_valid_config() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("LOGSEQ_PRIVATE_REPO_GITHUB", "token");
+        env::set_var("PRIVATE_REPO_GITHUB_PAT", "token");
         env::set_var("GITHUB_OWNER", "owner");
         env::set_var("GITHUB_REPO", "repo");
         env::set_var("GITHUB_BASE_PATH", "path");
@@ -212,7 +236,7 @@ mod tests {
     #[test]
     fn test_optional_settings() {
         let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("LOGSEQ_PRIVATE_REPO_GITHUB", "token");
+        env::set_var("PRIVATE_REPO_GITHUB_PAT", "token");
         env::set_var("GITHUB_OWNER", "owner");
         env::set_var("GITHUB_REPO", "repo");
         env::set_var("GITHUB_BASE_PATH", "path");

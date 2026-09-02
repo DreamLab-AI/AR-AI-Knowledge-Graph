@@ -265,7 +265,7 @@ impl Actor for DecisionElevationActor {
         if GitHubPRService::has_github_token() {
             info!("[DecisionElevation] GOV-2 merge poll armed (every {}s) — merged PRs fire decision_elevated", PR_POLL_INTERVAL.as_secs());
         } else {
-            warn!("[DecisionElevation] GOV-2 DEGRADED: no GitHub token (LOGSEQ_PRIVATE_REPO_GITHUB) — elevation PRs cannot be opened and merge polling cannot resolve; decision_elevated will never fire until a token is configured");
+            warn!("[DecisionElevation] GOV-2 DEGRADED: no GitHub token (PRIVATE_REPO_GITHUB_PAT) — elevation PRs cannot be opened and merge polling cannot resolve; decision_elevated will never fire until a token is configured");
         }
         ctx.run_interval(PR_POLL_INTERVAL, |_act, ctx| {
             ctx.address().do_send(PollPrs);
@@ -474,7 +474,7 @@ impl Handler<PollPrs> for DecisionElevationActor {
         }
         if !GitHubPRService::has_github_token() {
             warn!(
-                "[DecisionElevation] GOV-2 merge poll DEGRADED: {} PR(s) tracked but no GitHub token; decision_elevated cannot fire until LOGSEQ_PRIVATE_REPO_GITHUB is configured",
+                "[DecisionElevation] GOV-2 merge poll DEGRADED: {} PR(s) tracked but no GitHub token; decision_elevated cannot fire until PRIVATE_REPO_GITHUB_PAT is configured",
                 self.elevating.len()
             );
             return;
