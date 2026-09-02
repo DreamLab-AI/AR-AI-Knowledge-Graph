@@ -33,6 +33,10 @@ https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
 ---
 
+## What it is
+
+**Agent swarms are invisible. VisionClaw is a room you can stand inside and watch them work.** A curated corpus of plain markdown is reasoned into a formal ontology, settled as a 3D graph under GPU physics, and rendered on the desktop and in a headset, with agents acting inside it. Judgment stays with a person who signs.
+
 Hierarchy was a way of routing information through people. When AI makes that routing nearly free, the human job changes from router to **judgment broker**: the person who decides at the intersections machines cannot own. VisionClaw is the engine that makes that job visible. Four pieces do the work:
 
 | Pillar | What ships | Where to read more |
