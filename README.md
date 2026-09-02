@@ -4,11 +4,11 @@
 
 ### Watch here, judge there — the flagship engine of the Dynamic Agentic Mesh
 
-**An Obsidian vault as the knowledge corpus · OWL 2 reasoning · CUDA force physics · immersive 3D and XR · embodied agent swarms**
+**An Obsidian vault as the knowledge corpus · OWL 2 EL reasoning · CUDA force physics · immersive 3D and XR · embodied agent swarms**
 
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0--only-blue?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-2021-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
-[![CUDA](https://img.shields.io/badge/CUDA-13.1-76B900?style=flat-square&logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
+[![CUDA](https://img.shields.io/badge/CUDA-13-76B900?style=flat-square&logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
 [![Docs](https://img.shields.io/badge/Docs-Di%C3%A1taxis-4A90D9?style=flat-square)](docs/README.md)
 [![Corpus](https://img.shields.io/badge/corpus-Obsidian%20vault-7C3AED?style=flat-square&logo=obsidian&logoColor=white)](docs/VAULT-corpus-format.md)
 
@@ -16,14 +16,14 @@
 
 <br/>
 
-*A live agent swarm embodied in the knowledge graph — status-driven capsules, per-swarm tinting, and real-time action beams from agents to the concepts they touch. Inside the VIVE Pro headset, 2 September 2026, on the Obsidian-vault corpus.*
+*Inside a VIVE Pro headset on 2 September 2026: a six-agent swarm embodied in the knowledge graph, every tool call drawn as a beam from the agent to the concept it touched.*
 
 https://github.com/user-attachments/assets/ffb75de6-8961-40f7-b73d-847c8ec8bb50
 
-**Full clip:** [`2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 1280×720, 25 fps, 68 MB, no audio.
+**Full clip:** [`2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) (109 s, 1280×720, 68 MB, no audio)
 
 <details>
-<summary>Earlier hero clip (desktop client)</summary>
+<summary>Earlier clip: the desktop client</summary>
 
 https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
@@ -33,167 +33,106 @@ https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
 ---
 
-> **Agent swarms are invisible; VisionClaw makes them something you can stand inside and watch.** It reasons over a curated corpus with an OWL 2 EL engine (Whelk, 5,975 classes), settles the result as a 3D graph under GPU physics, and renders agents acting inside it — desktop and Quest 3 alike, every agent action drawn as a beam to the concept it touched. It observes and never signs: the engine you can watch is deliberately not the surface that can commit.
+Hierarchy was a way of routing information through people. When AI makes that routing nearly free, the human job changes from router to **judgment broker**: the person who decides at the intersections machines cannot own. VisionClaw is the engine that makes that job visible. Four pieces do the work:
+
+| Pillar | What ships | Where to read more |
+|---|---|---|
+| **Grounding** | An Obsidian vault of markdown pages ([`jjohare/visionGraph`](https://github.com/jjohare/visionGraph)) compiles losslessly into an OWL 2 EL ontology; the Whelk reasoner classifies every proposed change before it enters the graph. In VisionClaw's own evaluation the ontology lifted F1 from 0.350 to 0.770 on the strongest model tested and cut hallucination from 0.529 to 0.177 across seven models. | [Ontology pipeline](docs/explanation/ontology-pipeline.md) · [Eval data](archive/visionclaw-docs/eval/) · [Vault contract](docs/VAULT-corpus-format.md) |
+| **Embodiment** | 82 CUDA kernels turn subclass, part-of and bridge relations into attraction and repulsion, so the shape of the graph is the shape of the knowledge. The same broadcast feeds a React Three Fiber desktop client and a Godot OpenXR client; a node grabbed in one moves in the other. | [GPU wire ABI](docs/GPU-wire-abi.md) · [XR client](docs/XR-client.md) |
+| **Judgment broker** | Agents propose; a human answers on the [forum](https://github.com/DreamLab-AI/nostr-rust-forum) with a signed decision. Today this is one case queue (ontology concept elevation, five concurrent cases); the Status table says how far that is from the design. | [Insight loop](docs/explanation/insight-migration-loop.md) · [Status](#status-and-remaining-work) |
+| **Identity spine** | One `did:nostr` keypair is login, access-control principal, provenance author and DID subject. The contract is owned upstream in the identity chain, and VisionClaw is one consumer of it. | [Identity chain](docs/IDENTITY-authority-chain.md) |
+
+This shape has a name, **neurosymbolic**: probabilistic agents bounded by formal, machine-checkable semantics. VisionClaw runs that pattern today and lists its gaps below.
 
 ---
 
-## The system running — 2 September 2026
+## Where it sits in the mesh
 
-The corpus moved from Logseq to an Obsidian vault ([`jjohare/visionGraph`](https://github.com/jjohare/visionGraph), private) on this date, and the same session exercised all three surfaces on the same graph: the vault in Obsidian, the desktop client, and the VIVE Pro headset with a live agent swarm. The contract behind it is [`docs/VAULT-corpus-format.md`](docs/VAULT-corpus-format.md); the close-out evidence is in [`docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md`](docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md).
+VisionClaw is the embodiment-and-observation layer of the **Dynamic Agentic Mesh**, the coordination substrate DreamLab AI builds on Nostr events. It was built last, on top of the identity, data sovereignty and signing surface that live in sibling repos; [VisionFlow](https://github.com/DreamLab-AI/VisionFlow) holds the cross-repository canon.
 
-| Obsidian — the authored corpus | Desktop client — the same graph, reasoned |
-|---|---|
-| ![Obsidian graph view of the knowledge vault with the SPARQL page selected](docs/screenshots/2026-09-02-obsidian-graph-view.jpg) | ![VisionClaw desktop client with the Ontology panel open on the SPARQL class](docs/screenshots/2026-09-02-desktop-ontology-panel.jpg) |
-| The `knowledge/` vault open in Obsidian, graph view, the **SPARQL** page selected. Every note is plain markdown with YAML frontmatter; `public: true` or an `owl-class` key is what admits a page to the knowledge graph. Agents read and write the same files, and the `[vault]` section in agentbox is the single path authority. | The desktop client on the identical corpus: 13,165 nodes, 145k edges, GPU force layout. The Ontology panel is focused on `urn:ngm:class:sparql`, the formal class the vault page maps to, with TBox/ABox scope, the server-side population filter and inferred edges available. Grabbing a node in either client moves it in the other; positions are server truth. |
+![DreamLab AI ecosystem at a glance: the five substrates, the engine, and the scale](docs/diagrams/linkedInEcosystem.png)
 
-*Inside the headset: the clip at the top of this page. Full-quality version: [`docs/assets/media/2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 1280×720, 25 fps, 68 MB, no audio (the capture was silent).* A six-agent swarm (a Fable 5.1 queen, Opus workers, Sonnet researchers) is embodied as capsules in the graph; each tool call they make becomes a beam from the agent to the node it touched, shaped and coloured by verb (query, link, update, transform, create, delete), with the SPARQL class as the busiest target. The same `0x23 AGENT_ACTION` frames reach the desktop client, where the Agents dock shows the swarm and the KPI tile counts the actions. How to reproduce: [`docs/how-to/operations/agent-beams-dev-driver.md`](docs/how-to/operations/agent-beams-dev-driver.md).
-
----
-
-## What it is, and why it exists
-
-Hierarchy was an information-routing protocol bounded by human bandwidth. As AI collapses the cost of that routing toward zero, the human role is not deleted — it is promoted from **router** to **judgment broker**: the person who decides at the intersections the machines cannot own.
-
-VisionClaw is the flagship engine that makes that promotion legible. It ingests an Obsidian-vault knowledge corpus from GitHub, reasons over it with an OWL 2 EL inference engine (Whelk-rs, 5,975 classes), settles the result as a 3D graph under GPU physics where semantic relationships become attraction and repulsion, and renders it verbatim on the desktop and inside a Quest 3 headset. Agents act **inside** that graph, and every action they take is drawn as a beam from the agent to the concept it touched.
-
-In 2026 the industry arrived at this design under the name **neurosymbolic AI**: probabilistic agents bounded by formal, machine-checkable semantics. VisionClaw is that pattern shipped, not proposed. The ontology is a live constraint surface — Whelk gates proposed knowledge before it enters the graph — and the grounding lift is measured: F1 0.770 with the ontology against 0.350 without on the strongest model tested, hallucination cut from 0.529 to 0.177 across seven models ([published eval](archive/visionclaw-docs/eval/report.pdf)).
-
-That is the whole design in one line: **VisionClaw observes, it never signs a decision.** It shows an agent working; the [forum](https://github.com/DreamLab-AI/nostr-rust-forum) is where a human answers with a cryptographic signature. Observation and authority are kept apart on purpose — the engine you can watch is not the surface that can commit. Where that separation is only partly wired, the [Status](#status--remaining-work) section says so, dated and pinned to [`docs/TODO-unified.md`](docs/TODO-unified.md).
-
-![DreamLab AI Ecosystem](docs/diagrams/linkedInEcosystem.png)
-
----
-
-## Where it sits in the ecosystem
-
-VisionClaw is one of seven repositories in the **Dynamic Agentic Mesh** — the coordination substrate DreamLab AI has built on Nostr events since 2022. VisionClaw is the embodiment-and-observation layer. It does not own identity, data sovereignty, or the signing surface; those are separate repos, each graded honestly against its own code.
+*The August 2026 infographic. A few internals it shows predate the Obsidian migration; the tables below are current.*
 
 | Repo | Role in the mesh |
 |---|---|
-| **VisionClaw** *(this repo)* | Flagship engine — ontology-grounded immersive 3D knowledge graph, GPU physics, agent embodiment |
-| [VisionFlow](https://github.com/DreamLab-AI/VisionFlow) | Ecosystem canon — ADRs, PRDs, compatibility matrix, vision report, marketing site |
-| [agentbox](https://github.com/DreamLab-AI/agentbox) | Sovereign agent runtime — Nix-built container, `did:nostr` identities, 116 skills, RuVector memory *(git submodule of this repo)* |
-| [nostr-rust-forum](https://github.com/DreamLab-AI/nostr-rust-forum) | The one place a human decision gets signed — governance surface, ACSP relay |
-| [solid-pod-rs](https://github.com/DreamLab-AI/solid-pod-rs) | Personal-data-sovereignty layer — Rust Solid pod server |
-| [narrativegoldmine](https://github.com/DreamLab-AI/knowledgeGraph) | Corpus source and readable front door — 7,457 public pages as an open dataset, the pipeline that builds them, rendered at [narrativegoldmine.com](https://narrativegoldmine.com) |
-| [dreamlab-ai-website](https://github.com/DreamLab-AI/dreamlab-ai-website) | The commercial face — thin consumer of the forum kit |
-
-Each sibling in its own words:
+| **VisionClaw** *(this repo)* | Flagship engine: ontology-grounded immersive knowledge graph, GPU physics, agent embodiment |
+| [VisionFlow](https://github.com/DreamLab-AI/VisionFlow) | Canon: ADRs, PRDs, compatibility matrix, the vision report |
+| [agentbox](https://github.com/DreamLab-AI/agentbox) | Sovereign agent runtime: Nix-built container, `did:nostr` per agent, 124 skills, RuVector memory, Rune markdown TUI over the vault *(git submodule here)* |
+| [nostr-rust-forum](https://github.com/DreamLab-AI/nostr-rust-forum) | The one place a human decision gets signed |
+| [solid-pod-rs](https://github.com/DreamLab-AI/solid-pod-rs) | Personal-data sovereignty: a Rust Solid pod server |
+| [narrativegoldmine](https://github.com/DreamLab-AI/knowledgeGraph) | The readable front door: 8,433 public pages (the count before the vault split) as an open dataset, rendered at [narrativegoldmine.com](https://narrativegoldmine.com) |
+| [dreamlab-ai-website](https://github.com/DreamLab-AI/dreamlab-ai-website) | The commercial face, a thin consumer of the forum kit |
 
 <details>
-<summary><b>VisionFlow</b> — <em>Ecosystem canon — ADRs, PRDs, compatibility matrix, vision report, marketing site</em></summary>
-<br/>
+<summary>Two more pieces VisionClaw depends on</summary>
 
-> **Six honest systems can still assemble one collective lie — VisionFlow is the canon that stops that.** It holds the ADRs, PRDs, compatibility matrix and honest status ledger for a seven-repo human–AI mesh built on one wager: AI collapses the cost of routing information, so the human is promoted from router to judgment broker. This repo ships words, not runtime — and it is graded on their accuracy.
+**The Ontology Loom.** A portable node that grounds any OpenAI-compatible LLM in the corpus behind one stable URL, so the model can be swapped without touching a consumer. On the synthetic corpus a static ontology scaffold raised grounded recall to about 0.94 on both models tested (Gemma 0.15 → 0.94, Muse 0.27 → 0.94) at three to six times lower latency. It runs as one node; the connector platform is unbuilt. Design: [PRD-025](docs/archive/prd/PRD-025-ontology-loom-and-connector-platform.md) · [ADR-135](docs/archive/adr/ADR-135-ontology-loom-node.md) (archived rationale) · deployment: [DreamLab-AI/loom](https://github.com/DreamLab-AI/loom).
 
-</details>
-
-<details>
-<summary><b>agentbox</b> — <em>Sovereign agent runtime — Nix-built container, <code>did:nostr</code> identities, 116 skills, RuVector memory</em></summary>
-<br/>
-
-> **An agent runtime you can't reproduce is an audit you can't run — Agentbox is a byte-for-byte reproducible Nix container driven by one TOML manifest.** Every agent is minted its own `did:nostr` key at spawn, every durable write passes a privacy filter into a cryptographic audit trail, and what agents may touch is bounded by explicit fail-closed gates. Reproduce the runtime, audit every action, control every capability.
+**The dream cycle.** A nightly [dream engine](https://github.com/DreamLab-AI/dream-engine) proposes evidence-gated changes to VisionClaw's own code as draft PRs and stops there. A person merges.
 
 </details>
-
-<details>
-<summary><b>nostr-rust-forum</b> — <em>The one place a human decision gets signed — governance surface, ACSP relay</em></summary>
-<br/>
-
-> **Machine coordination is cheap; accountable decisions are not — this forum is the one place in the mesh where a decision gets signed.** Humans and agents are the same kind of participant: each holds a `did:nostr` keypair and publishes Schnorr-signed events to an immutable log, so every governance outcome carries a human signature by construction. The kit ships vanilla — one TOML file stands up a community, no forking.
-
-</details>
-
-<details>
-<summary><b>solid-pod-rs</b> — <em>Personal-data-sovereignty layer — Rust Solid pod server</em></summary>
-<br/>
-
-> **Your data's exit right should sit in the floor, not be granted at the door — solid-pod-rs gives every human and agent a self-owned RDF pod under their own key.** A Rust-native Solid Protocol server with WAC access control and `did:nostr` identity; every write is a git-mark commit and high-value writes anchor to Bitcoin. Standards-based sovereignty: leave at any time, and take everything with you.
-
-</details>
-
-<details>
-<summary><b>narrativegoldmine</b> — <em>Corpus source and readable front door — open dataset, pipeline, rendered viewer</em></summary>
-<br/>
-
-> **8,100+ ordinary markdown pages (an Obsidian vault since September 2026) that compile losslessly into a formal OWL 2 ontology — pure TBox, every page a class, zero individuals by design.** Corpus, pipeline, viewer and method ship as one open release (ODbL-1.0 data, AGPL-3.0 pipeline) published at narrativegoldmine.com; siblings reason over it (VisionClaw) and serve it as measured LLM grounding (Loom, ~0.94 grounded recall), and third-party extractors such as OntoCast stage RDF into it as governed, reviewable candidates. Rigorous curation is amortised once and reused per query — this repo is the once.
-
-</details>
-
-<details>
-<summary><b>dreamlab-ai-website</b> — <em>The commercial face — thin consumer of the forum kit</em></summary>
-<br/>
-
-> **The commercial face of the mesh, running on the mesh's own rails.** A React marketing site and a Rust/Leptos WASM community forum share one Cloudflare-edge origin, end-to-end encrypted where it matters. It is deliberately a thin consumer of the nostr-rust-forum kit — branding and zone config live here, the protocol lives upstream — living proof the kit stands up a real community without a fork.
-
-</details>
-
-<details>
-<summary><b>Loom</b> — <em>Ontology-grounding façade — any LLM answers from your corpus, verifiably</em></summary>
-<br/>
-
-> **Your LLM doesn't know your data — Loom makes any LLM answer from it, verifiably.** Point any OpenAI-compatible client at one URL and every answer is grounded in your curated, reasoner-checked private corpus: recall on in-domain questions rises from as low as 0.15 to ~0.94, faster than the bare model, with every claim traceable to a corpus generation. The model is just a URL behind the door — swap it for the next one and nothing else changes, because the knowledge lives in the corpus you govern, not the weights you rent.
-
-</details>
-
-**Self-improvement.** The same watch-here/judge-there boundary runs on the engine's own code: a nightly [dream cycle](https://github.com/DreamLab-AI/dream-engine) proposes evidence-gated changes as draft PRs — it observes and proposes, it never signs the merge.
-
-**The Ontology Loom.** A portable node that grounds an LLM's answers in the DreamLab ontology behind a stable, model-swappable façade — the model is a URL behind an OpenAI-compatible endpoint, swappable without any change to a consumer. Its design lives in this repo as the keystone decision ([PRD-025](docs/prd/PRD-025-ontology-loom-and-connector-platform.md) · [ADR-135](docs/adr/ADR-135-ontology-loom-node.md)): the Loom re-homes the corpus lifecycle out of this real-time engine — it *consumes* the reasoned generations the [knowledgeGraph](https://github.com/DreamLab-AI/knowledgeGraph) pipeline publishes and *serves* them as grounding. Measured on the synthetic corpus, a static ontology scaffold lifts grounded recall to ~0.94 on both models tested — Gemma 0.15→0.94 (+0.79, CI[0.68, 0.89]) and Muse 0.27→0.94 (+0.67, CI[0.53, 0.80]) — at ~3–6× lower latency; prose scaffolding adds nothing, and agentic tool-traversal stays model-dependent (Gemma 0.97, Muse 0.65). It is a **node**, not yet a platform — that word is earned when a second distillation provider lands. Reference deployment (live): [DreamLab-AI/loom](https://github.com/DreamLab-AI/loom).
-
-**Industry convergence.** In July 2026 Block (Jack Dorsey) launched [Buzz](https://github.com/block/buzz), a self-hosted, Nostr-native team-chat + AI-agent + git platform in Rust. It independently arrives at the same substrate this ecosystem has been building since 2022: Nostr events as source of truth, agents as first-class signed participants, kind-based extensibility. That convergence validates the direction. What VisionClaw adds on top, and Buzz does not have, is exactly this repo's remit: OWL 2 EL / KG ontology grounding, immersive 3D embodiment of agent action, and the closed memory/learning loops feeding [RuVector](#status--remaining-work).
 
 ---
 
 ## Architecture
 
 ```mermaid
-flowchart TB
-    subgraph Client["Clients (shared R3F renderer)"]
-        Desktop["Desktop graph (React Three Fiber, WebGPU/WebGL)"]
-        XR["Quest 3 XR client (Godot 4 + godot-rust + OpenXR)"]
+flowchart LR
+    subgraph Corpus["Corpus (Obsidian vault, GitHub)"]
+        Vault["knowledge/ + working/ vaults\nYAML frontmatter · JSON-LD fences"]
     end
 
-    subgraph Server["Rust backend (Actix-web, hexagonal)"]
-        Handlers["44 hexser handlers (19 directive / 25 query)"]
-        Actors["35 Actix actors (supervised)"]
-        Ontology["OWL 2 EL pipeline (Whelk-rs)"]
-        Elevation["ElevationActor (judgment-broker case queue)"]
+    subgraph Server["Rust backend (Actix, hexagonal crates)"]
+        Sync["GitHub sync → PageMeta gate\n+ wikilink resolution"]
+        Whelk["OWL 2 EL (Whelk)\nintegrity → consistency → governance"]
+        Elev["ElevationActor\n(judgment-broker case queue)"]
+        Ingest["/wss/agent-events ingest\n→ 0x23 AGENT_ACTION beams"]
         MCP["MCP ontology tools"]
     end
 
-    subgraph Data["Data layer"]
-        Oxigraph[("Oxigraph + SQLite (SPARQL)")]
-        RuVector[("RuVector Postgres (pgvector + HNSW)")]
-        Solid["Embedded Solid pod (solid-pod-rs)"]
+    subgraph Data["VisionClaw store"]
+        Oxi[("Oxigraph + SQLite\nSPARQL, PROV-O ledger")]
     end
 
-    subgraph GPU["GPU compute (CUDA 13.1)"]
-        Physics["Force + semantic physics"]
-        Analytics["Clustering, PageRank, anomaly"]
+    subgraph Ext["Mesh stores (separate services)"]
+        RuV[("RuVector Postgres\npgvector + HNSW")]
+        Pod["Solid pod (solid-pod-rs)"]
+    end
+
+    subgraph GPU["CUDA 13"]
+        Phys["82 kernels: force + semantic physics,\nclustering, PageRank, anomaly"]
+    end
+
+    subgraph Clients["Clients"]
+        Web["Desktop: React Three Fiber\n(WebGPU / WebGL)"]
+        XR["Godot 4 + godot-rust + OpenXR\nVIVE Pro (validated) · Quest 3 APK"]
     end
 
     subgraph Mesh["Mesh peers"]
-        AB["agentbox (agent runtime)"]
-        Forum["nostr-rust-forum (signs decisions)"]
+        AB["agentbox\nagents, hooks, Rune TUI"]
+        Forum["nostr-rust-forum\nsigns decisions (ACSP)"]
+        Loom["Ontology Loom\nLLM grounding façade"]
     end
 
-    Client <-->|"binary V3/V5 + REST"| Server
-    Server <--> Oxigraph
-    Server <--> RuVector
-    Server <--> Solid
-    Server <--> GPU
-    MCP <--> AB
-    Elevation -->|"broker cases (ACSP 31402)"| Forum
-    Forum -->|"signed decision (31403)"| Elevation
-
-    style Client fill:#e1f5ff,stroke:#0288d1
-    style Server fill:#fff3e0,stroke:#ff9800
-    style Data fill:#f3e5f5,stroke:#9c27b0
-    style GPU fill:#e8f5e9,stroke:#4caf50
-    style Mesh fill:#ede7f6,stroke:#7e57c1
+    Vault --> Sync --> Oxi
+    Oxi <-->|"classify, persist inferences"| Whelk
+    Oxi --> Phys
+    Phys -->|"binary V3/V5 snapshots"| Web
+    Phys -->|"binary V3/V5 snapshots"| XR
+    Ingest --> Web
+    Ingest --> XR
+    AB -->|"agent actions"| Ingest
+    AB <--> MCP
+    Elev -->|"case 31402"| Forum
+    Forum -->|"signed decision 31403"| Elev
+    Elev -->|"approved page"| Vault
+    Server <-->|"MCP memory tools"| RuV
+    Server <--> Pod
+    Loom -.->|"reads published corpus"| Vault
 ```
 
-The backend is a Cargo workspace: eight extracted crates (`contracts → domain → {gpu, ontology, protocol} → adapters → actors → xr-presence → visionclaw-server`), 428 Rust files, hexagonal boundaries (9 ports / 12 adapters), direct hexser dispatch — no CQRS bus (ADR-089). Neo4j is fully removed; Oxigraph + SQLite is the single canonical store ([ADR-132](docs/adr/ADR-132-neo4j-removal-oxigraph-adoption.md)). Full detail: [System overview](docs/explanation/system-overview.md) · [Bounded contexts](docs/explanation/bounded-contexts.md).
+A Cargo workspace of extracted crates makes up the backend (`contracts → domain → {gpu, ontology, protocol} → adapters → actors → xr-presence → server`) with hexagonal boundaries and direct dispatch, no CQRS bus. Oxigraph plus SQLite is the single canonical store ([ADR-2004](docs/adr/ADR-2004-oxigraph-sqlite-persistence.md)); the governing documents for stores, identity, data ownership, wire protocol, identifiers, security profiles, GPU ABI, the XR client and the corpus are indexed in [`docs/adr/README.md`](docs/adr/README.md). Longer reads: [System overview](docs/explanation/system-overview.md) · [Bounded contexts](docs/explanation/bounded-contexts.md).
 
 ---
 
@@ -201,31 +140,49 @@ The backend is a Cargo workspace: eight extracted crates (`contracts → domain 
 
 ```bash
 git clone https://github.com/DreamLab-AI/VisionClaw.git
-cd VisionClaw && cp .env.example .env
+cd VisionClaw && cp env.example .env     # set GITHUB_REPO, GITHUB_BASE_PATH, PRIVATE_REPO_GITHUB_PAT
 ./scripts/launch.sh up dev
 ```
 
-`./scripts/launch.sh up dev` is the canonical launcher. The explicit fallback is `docker compose -f docker-compose.unified.yml --profile dev up -d` — `docker-compose.unified.yml` is the only compose file shipped.
+`./scripts/launch.sh up dev` is the canonical launcher; the explicit form is `docker compose -f docker-compose.unified.yml --profile dev up -d`. The dev image compiles the Rust backend on first start (a few minutes), then:
 
-| Service | URL | Description |
-|:--------|:----|:------------|
-| Frontend | http://localhost:3001 | 3D knowledge-graph interface (via nginx) |
-| API | http://localhost:4000/api | REST + WebSocket (Rust / Actix-web) |
-| Solid pod | http://localhost:8484 | Embedded Solid pod server (solid-pod-rs) |
+| Service | URL |
+|:--------|:----|
+| Desktop client | http://localhost:3001 |
+| REST + WebSocket API | http://localhost:4000/api |
 
 <details>
-<summary><strong>Native Rust + CUDA build (optional GPU)</strong></summary>
+<summary>Native build with CUDA, and the XR client</summary>
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-git clone https://github.com/DreamLab-AI/VisionClaw.git
-cd VisionClaw && cp .env.example .env
 cargo build --release --features gpu
 cd client && npm install && npm run build && cd ..
 ./target/release/visionclaw-server
 ```
 
-Requires the CUDA 13.1 toolkit. See the [Deployment guide](docs/how-to/deployment.md) for full GPU setup. The native XR client (`xr-client/`) builds separately as a Quest 3 APK, not a compose service — see [Quest 3 setup](docs/how-to/xr-quest3-setup.md).
+Needs a CUDA 13 toolkit; see the [deployment guide](docs/how-to/deployment.md). The Godot client in `xr-client/` builds separately: as a desktop OpenXR app (the path validated on a VIVE Pro) or as a Quest 3 APK ([XR client doc](docs/XR-client.md) · [Quest 3 setup](docs/how-to/xr-quest3-setup.md)).
+
+</details>
+
+---
+
+## Running on 2 September 2026
+
+On this date the corpus moved from Logseq to an Obsidian vault, and one session exercised all three surfaces on the same graph. The engineering record is [`docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md`](docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md).
+
+| The vault in Obsidian | The desktop client |
+|---|---|
+| ![Obsidian graph view of the knowledge vault with the SPARQL page selected](docs/screenshots/2026-09-02-obsidian-graph-view.jpg) | ![VisionClaw desktop client with the Ontology panel open on the SPARQL class](docs/screenshots/2026-09-02-desktop-ontology-panel.jpg) |
+| The `knowledge/` vault, graph view, the **SPARQL** page selected. A page enters the knowledge graph when its frontmatter says `public: true` or names an `owl-class`. Agents read and write the same files. | The identical corpus after sync: 13,165 nodes and 154k edges (inferred triples included) under GPU layout, the Ontology panel focused on `urn:ngm:class:sparql`, the class that page maps to. |
+
+<details>
+<summary>What the session proved, and how</summary>
+
+- **Conversion is format-neutral.** Syncing the converted corpus and the unconverted one with the same binary produced identical node sets apart from three labels that now honour frontmatter `title`; the final production sync had zero fetch errors.
+- **Multi-client sync.** A node grabbed in the headset (`Ethereum`, 3,268 drag updates) moved on the server and stayed pinned 360 units from where it started; every client renders that same broadcast.
+- **Agent embodiment.** Six agent nodes (a Fable 5.1 queen, Opus workers, Sonnet researchers) streamed one action every 1.2 s into `/wss/agent-events`; the desktop Agents dock showed the swarm and the KPI tile counted 450 actions. Verb sets the beam's colour and shape: query, link, update, transform, create, delete. Reproduce it with [`docs/how-to/operations/agent-beams-dev-driver.md`](docs/how-to/operations/agent-beams-dev-driver.md).
+- **Ten defects found in one day**, from a physics runaway of 316 isolated nodes to filenames containing `%` that had never fetched. Eight are closed, the physics fix awaits GPU re-verification, and one manifest-reader leak is worked around. All listed in the close-out record.
 
 </details>
 
@@ -233,36 +190,29 @@ Requires the CUDA 13.1 toolkit. See the [Deployment guide](docs/how-to/deploymen
 
 ## How it works
 
-**Agent embodiment.** When an agent acts on the graph, ontology, or a Solid pod, the action renders as a transient coloured beam `agent → target` in the GPU/XR scene. Beam colour and shape encode the verb (query, update, create, delete, link, transform); RuVector memory access renders as burst rings on the embedding cloud. Both render layers draw from one source-of-truth module (`client/src/features/visualisation/semanticEncoding.ts`) so the encodings cannot drift apart. Transport is one authenticated socket, `/wss/agent-events`, with identity resolved server-side before the identity-blind `0x23` binary frame reaches the browser.
+**Embodiment.** An agent acting on the graph, the ontology or a pod becomes a transient beam from the agent to its target, with colour and shape encoding the verb; RuVector memory access renders as burst rings on the embedding cloud. Actions arrive on one authenticated socket, `/wss/agent-events`, and leave as the identity-blind `0x23` frame every client understands.
 
-**The insight loop, running for knowledge.** The ontology's *frontier* — classes referenced by axioms but never authored — is a ranked work queue. The `ElevationActor` drafts canonical Class pages, opens a broker case, and waits. A human answers on the forum's governance page with a signed decision; an approval commits the draft to the corpus as a PR, and the next sync ingests it. See [insight-migration loop](docs/explanation/insight-migration-loop.md).
+**The insight loop.** The ontology's frontier is the set of classes named by axioms but never authored. The `ElevationActor` ranks it as a work queue, drafts a canonical page, opens a broker case, and waits for a signed human decision; approval commits the draft to the corpus as a pull request and the next sync ingests it.
 
-**The judgment broker.** This is where the espoused design and the shipped code diverge, and the honesty rule applies: the broker runs today as the `ElevationActor` case queue on `main`, serving one use case (ontology concept elevation, capped at five concurrent cases) — **not** the distributed `BrokerActor` of the original design, and narrower than a universal human-in-the-loop surface. That gap is tracked, not hidden.
-
-**The governed semantic write path.** Nothing mutates the shared ontology graph except through one authenticated door, and that door runs **three distinct gates** before a triple becomes asserted truth: an *integrity* gate (pre-merge conflict/entity-resolution detecting duplicate concepts, subclass cycles, relation contradictions, and type conflicts — its first live run caught 2 subclass cycles and 57 contradictions the structural validator had missed), then *Whelk consistency* (OWL 2 EL classification of the proposal against the full ontology — this is a reasoner that *classifies*, not merely a rule engine that validates), then *governance* (ACSP human-in-the-loop authorisation). Consistency is not integrity, and neither is permission; a clean proposal's receipt reports all three separately — `conflict: pass · whelk: consistent · acsp: pending`. Every committed triple gains a content-addressed provenance record (who asserted it, under which activity, at what time, with a validity interval) in a named graph Whelk never classifies, so the reasoned graph stays a clean present-tense projection while history stays append-only. Attribution is the authenticated `did:nostr`, never a request field, so writes are cryptographically sovereign rather than log-rewritable. Agent decisions are first-class graph nodes (`urn:agentbox:decision:*`) with causal links, bounded query-derived traversal, and idempotent replay-safe commits. Full design: [PRD-022 · ADR-047/048/049 · DDD-020](docs/reference/) (agentbox decision record). Conflict semantics are *delta-scoped*: a proposal is blocked only by conflicts it introduces or touches; pre-existing corpus defects are reported as advisory, so one legacy triple never freezes the write path.
+**The governed write path.** Nothing changes the shared ontology except through one authenticated door with three gates in sequence: integrity (duplicate concepts, subclass cycles, contradictions; its first live run caught two cycles and 57 contradictions the structural validator had missed), Whelk consistency (a reasoner that classifies, not a rule engine that validates), and governance (a signed ACSP decision). The endpoint returns a receipt with one line per gate. Every committed triple gains a content-addressed provenance record in an append-only PROV-O ledger held outside the reasoned graph, attributed to the authenticated `did:nostr`.
 
 <details>
-<summary><strong>Agent Control Surface Protocol (ACSP) — Nostr kinds 31400–31405</strong></summary>
+<summary>Protocols: ACSP kinds and the binary graph frame</summary>
 
-VisionClaw is an ACSP *producer*: agentic actors publish panel events that the forum relay routes and renders as decision surfaces, and only an admin key can publish a signed Decision (31403).
+**Agent Control Surface Protocol**, Nostr kinds 31400–31405. VisionClaw is a producer: agents publish panel events the forum relay renders as decision surfaces, and only an admin key can publish a signed Decision (31403).
 
 | Kind | Name | Flow |
 |---|---|---|
 | 31400 | PanelDefinition | Agent declares a control panel |
 | 31401 | PanelState | Agent snapshot |
 | 31402 | ActionRequest | Agent requests a human decision (broker case) |
-| 31403 | ActionResponse | Human approve/reject — admin-only, signed |
+| 31403 | ActionResponse | Human approve or reject, admin-only, signed |
 | 31404 | PanelUpdate | Agent incremental diff |
 | 31405 | PanelRetired | Agent retires a panel |
 
-Contract: [agent-control-surface.md](docs/explanation/agent-control-surface.md) · [ADR-110](docs/adr/ADR-110-agentic-actors-acsp-control-surfaces.md). The agent channel is specified in [ADR-059](docs/adr/ADR-059-bidirectional-agent-channel-server.md).
+Contract: [agent-control-surface.md](docs/explanation/agent-control-surface.md) · human approval flow: [ADR-2006](docs/adr/ADR-2006-acsp-human-approval.md).
 
-</details>
-
-<details>
-<summary><strong>Binary WebSocket protocol (full-snapshot V3 / V5)</strong></summary>
-
-High-frequency position updates use a compact binary protocol of **full absolute position+velocity snapshots** — never deltas. V3 is the 52-byte full record (with GPU analytics tail); V5 wraps a V3 body behind an 8-byte broadcast sequence (`[version=5][seq LE][V3 body]`). Delta/diff encoding is **prohibited by design** (BROADCAST-001): the GPU settles the linked-spring system and broadcasts every node's target position at ~10 fps, and each client tweens toward those targets at 60 fps at its own pace (`lerpBase` exponential decay) — so clients need the complete target state, not just the nodes that moved. A delta filter would omit stationary nodes and, after convergence, starve clients of final resting positions. Full wire format: [binary-protocol.md](docs/reference/binary-protocol.md). The `0x23 AGENT_ACTION` frame carries the transient agent→data beam.
+**Binary graph frame.** Position updates are always full absolute snapshots: V3 is a frozen 52-byte record with an analytics tail, V5 wraps it in an 8-byte broadcast sequence ([ADR-2018](docs/adr/ADR-2018-frozen-52-byte-v3-record-v5-envelope.md)). The GPU broadcasts every node's target at about 10 fps and each client tweens toward it at 60 fps, which is why a delta filter would starve clients of resting positions. Agent co-presence and the `0x23` action beam are additive sibling opcodes ([ADR-2020](docs/adr/ADR-2020-agent-copresence-additive-sibling-opcode.md)). Wire reference: [binary-protocol.md](docs/reference/binary-protocol.md).
 
 </details>
 
@@ -270,49 +220,49 @@ High-frequency position updates use a compact binary protocol of **full absolute
 
 ## Documentation
 
-VisionClaw's docs follow the [Diátaxis](https://diataxis.fr/) framework, backed by the formal decision record (ADRs, PRDs, DDD context maps). Start at the [Documentation Hub](docs/README.md).
+Diátaxis layout, backed by the decision record. Start at the [documentation hub](docs/README.md).
 
 | Category | Entry points |
 |:---------|:-------------|
-| **Explanation** | [System overview](docs/explanation/system-overview.md) · [Ontology pipeline](docs/explanation/ontology-pipeline.md) · [XR architecture](docs/explanation/xr-architecture.md) · [Security model](docs/explanation/security-model.md) · [Bounded contexts](docs/explanation/bounded-contexts.md) · [Insight-migration loop](docs/explanation/insight-migration-loop.md) |
-| **Reference** | [REST API](docs/reference/rest-api.md) · [WebSocket protocol](docs/reference/websocket-protocol.md) · [Binary protocol](docs/reference/binary-protocol.md) · [MCP tools](docs/reference/mcp-tools.md) · [Graph schema](docs/reference/graph-schema.md) · [Physics parameters](docs/reference/physics-parameters.md) · [Configuration](docs/reference/configuration.md) |
-| **How-to** | [Deployment](docs/how-to/deployment.md) · [Quest 3 XR setup](docs/how-to/xr-quest3-setup.md) |
-| **Decisions & work register** | [ADR index](docs/adr/README.md) · [TODO-unified](docs/TODO-unified.md) *(canonical six-state work register)* · [Known issues](docs/KNOWN_ISSUES.md) |
+| **Explanation** | [System overview](docs/explanation/system-overview.md) · [Ontology pipeline](docs/explanation/ontology-pipeline.md) · [XR architecture](docs/explanation/xr-architecture.md) · [Security model](docs/explanation/security-model.md) · [Bounded contexts](docs/explanation/bounded-contexts.md) · [Insight loop](docs/explanation/insight-migration-loop.md) |
+| **Reference** | [REST API](docs/reference/rest-api.md) · [WebSocket](docs/reference/websocket-protocol.md) · [Binary protocol](docs/reference/binary-protocol.md) · [MCP tools](docs/reference/mcp-tools.md) · [Graph schema](docs/reference/graph-schema.md) · [Physics parameters](docs/reference/physics-parameters.md) · [Configuration](docs/reference/configuration.md) |
+| **How-to** | [Deployment](docs/how-to/deployment.md) · [Quest 3 setup](docs/how-to/xr-quest3-setup.md) · [Agent beams dev driver](docs/how-to/operations/agent-beams-dev-driver.md) |
+| **Governing documents and ledger** | [ADR index and domain table](docs/adr/README.md) · [Vault corpus contract](docs/VAULT-corpus-format.md) · [Work register](docs/TODO-unified.md) · [Known issues](docs/KNOWN_ISSUES.md) |
 
 ---
 
-## Status & remaining work
+## Status and remaining work
 
-*Dated 2026-08-15. Maturity words pinned to the ADR-002 ladder; the canonical register is [`docs/TODO-unified.md`](docs/TODO-unified.md).*
+*Dated 2026-09-02. Maturity words: **planned** is designed and not built, **integrated** is wired and exercised on the live stack, **released** has run unattended in production. The canonical register is [`docs/TODO-unified.md`](docs/TODO-unified.md), and each row's governing document carries the `file:line` evidence.*
 
-| Capability | Maturity | Honest boundary |
+| Capability | Maturity | Boundary |
 |---|---|---|
-| OWL 2 EL + Whelk reasoning | integrated | Real and running — 5,975 classes. |
-| W3C SPARQL query | integrated | Real (Oxigraph). No Neo4j anywhere — retired ([ADR-132](docs/adr/ADR-132-neo4j-removal-oxigraph-adoption.md)). |
-| GPU graph physics | released | 82 CUDA kernels across 9 `.cu` files (5,854 LOC). ~17k nodes live (17,147 captured); higher figures are benchmarked capacity, not live count. |
-| Hexser handlers / Actix actors | released | 44 handlers (19 directive + 25 query); 35 actors; 9 ports / 12 adapters. |
-| `did:nostr` identity spine | integrated | One keypair = login + WAC principal + provenance author + DID subject + payment account. |
-| ACSP signed governance | integrated | Six-kind protocol live; only the admin key publishes a Decision (31403). One use case today (ontology elevation, ≤5 concurrent) — narrower than universal HITL. |
-| RuVector semantic memory | released | 1.17M+ embeddings, bge-small-en-v1.5 via Xinference, 384-dim, HNSW. |
-| Judgment broker | integrated | Runs as `ElevationActor` / case queue on `main` — **not** the designed distributed `BrokerActor`. |
-| SHACL shape validation | integrated | Enforcing by default (2026-08-15): the 5 `.shacl.ttl` NodeShapes are loaded and drive a shape-derived validator; a `sh:Violation` rejects the write with zero quads emitted, `sh:Warning` stays advisory. Rollback knob `ontology_agent.shacl_mode: advisory`; trust-status reports the live mode. Constraint coverage is the subset the shapes use, not the full SHACL spec. |
-| PROV-O provenance | integrated | Queryable RDF (2026-08-15): mutation, inference, and decision paths reify into the single append-only ledger `urn:ngm:graph:provenance` (full triad; URNs preserved as subjects). `GET /api/ontology/provenance?entity=<urn>` walks the `wasGeneratedBy`/`wasDerivedFrom` chain. Emission is fail-open — an audit trail, not a write gate. |
-| Gluon attractive force | planned | The beam is shipped; the intended agent→target attractive edge is deferred pending a transient-edge GPU buffer (ADR-059 addendum). |
+| OWL 2 EL reasoning (Whelk) | integrated | Running on the live corpus. The class count was audited at 5,975 in August 2026; a divergence against the 8,152 the pipeline counts is still open. |
+| SPARQL over Oxigraph | integrated | Sole store; Neo4j is gone ([ADR-2004](docs/adr/ADR-2004-oxigraph-sqlite-persistence.md)). |
+| GPU physics | released | Isolated-node runaway fixed 2 September; GPU re-verification pending after the next relaunch. |
+| Corpus | integrated | Obsidian vault, `jjohare/visionGraph`; Logseq tolerance kept until [ADR-2040](docs/adr/ADR-2040-obsidian-vault-frontmatter-gate.md)'s review trigger. |
+| `did:nostr` identity spine | integrated | One keypair for login, WAC principal, provenance author, DID subject. NIP-98 on write routes is validated twice per request today; the session realm is the workaround. |
+| ACSP signed governance | integrated | Six kinds live; one use case (ontology elevation, five concurrent cases). |
+| Judgment broker | integrated | `ElevationActor` case queue; the distributed broker in the design is unbuilt. |
+| RuVector semantic memory | integrated | agentbox's store (1.17M+ embeddings, bge-small-en-v1.5, 384-dim, HNSW). VisionClaw reads and writes it through the claude-flow MCP tools and renders access as burst rings; the direct HNSW path is off by default. |
+| SHACL shapes | integrated | Five shapes enforced by default; a `sh:Violation` rejects the write. |
+| PROV-O provenance | integrated | Append-only ledger, queryable at `GET /api/ontology/provenance?entity=<urn>`; emission is fail-open. |
+| XR client | integrated | Desktop OpenXR on a VIVE Pro validated with a live swarm (2 September). Quest 3 on-device validation still pending. |
+| Agent embodiment | integrated | Beams and capsules live in both clients; the agentbox hook path needs the next image rebuild, and there is no `agent_list` provider yet, so agent nodes are registered by request. |
+| Gluon attractive force | planned | The beam ships; the agent-to-target attractive edge waits on a transient-edge GPU buffer. |
 
-**Live-session pending** (code + tests proven; awaiting observation on real traffic — [TODO-unified §3](docs/TODO-unified.md)): envelope canary fire (L-1), ADR-117 query clamp fire (L-3), ADR-119 telemetry fire (L-4), Quest 3 physical on-device validation (L-5). Keystones K-1/K-2 (server up, canary sweep) landed 2026-07-22.
-
-**Posture held** (decisions, not gaps): XR residue keep-or-delete (T-2), four-tier RBAC merge-or-stay-coarse (T-3).
+**Live-session pending**: envelope canary (L-1), query-clamp canary (L-3), telemetry canary (L-4), Quest 3 on-device (L-5). **Decided 2026-08-31**: XR residue (T-2) and RBAC granularity (T-3).
 
 ---
 
-## Contributing & licence
+## Contributing and licence
 
-See the [Contributing guide](docs/CONTRIBUTING.md); read [Known issues](docs/KNOWN_ISSUES.md) before starting. Licensed under the [GNU AGPL v3.0-only](LICENSE) — network use is distribution: run a modified version as a network service and you must offer its complete source to its users. Maintainers and upstream IP attribution: [MAINTAINERS.md](MAINTAINERS.md).
+Read the [contributing guide](docs/CONTRIBUTING.md) and [known issues](docs/KNOWN_ISSUES.md) first. Licensed under the [GNU AGPL v3.0-only](LICENSE): running a modified version as a network service means offering its complete source to its users. A proposed MPL 2.0 relicence ships in-tree as `LICENSE.MPL` but is not operative. Maintainers and upstream-IP attribution: [MAINTAINERS.md](MAINTAINERS.md).
 
 <div align="center">
 
 **VisionClaw is the flagship engine of the [VisionFlow](https://github.com/DreamLab-AI/VisionFlow) Dynamic Agentic Mesh, built by [DreamLab AI](https://www.dreamlab-ai.com).**
 
-[Platform](https://github.com/DreamLab-AI/VisionClaw) · [Documentation](docs/README.md) · [Work register](docs/TODO-unified.md) · [Known issues](docs/KNOWN_ISSUES.md)
+[Documentation](docs/README.md) · [Work register](docs/TODO-unified.md) · [Close-out record](docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md)
 
 </div>
