@@ -17,6 +17,13 @@ impl EnhancedContentAPI {
         Self { client }
     }
 
+    /// The configured GitHub source prefixes (e.g. `mainKnowledgeGraph/pages`,
+    /// `workingGraph/pages`). The sync strips these to derive a page's
+    /// vault-relative identity (ADR-2040 §V1).
+    pub fn base_paths(&self) -> &[String] {
+        self.client.base_paths()
+    }
+
     /// List all markdown files using GitHub's Git Trees API (single API call).
     /// Returns all .md files under the configured base_path with their SHA hashes.
     /// This replaces the recursive Contents API approach that required one call per directory.

@@ -16,7 +16,7 @@
 
 use std::path::PathBuf;
 
-use visionclaw_domain::vault::{self, PageFormat};
+use visionclaw_domain::vault::{self, PageFormat, VaultIndex};
 use visionclaw_server::services::parsers::KnowledgeGraphParser;
 
 fn fixture_dir() -> PathBuf {
@@ -228,4 +228,164 @@ fn legacy_data_model_fixtures_still_gate_as_authored() {
         "the class lives in a json-ld fence, not a leading `owl:class::` line"
     );
     assert!(content.contains("```json-ld"), "routed by the canonical path");
+}
+
+// ---------------------------------------------------------------------------
+// §V1 — Obsidian wikilink resolution (the shadow-sync defect)
+// ---------------------------------------------------------------------------
+//
+// The corpus links to pages BARE (`[[Title]]`) while page identity is the
+// vault-relative path. Without Obsidian's basename rule every such link minted
+// a phantom `linked_page` stub beside the real node — 188 podcast-evidence
+// pages and 248 subfolder pages' worth of them.
+
+/// The vault the resolution tests run against: two pages in folders, one at the
+/// root, and a basename (`Security`) that is deliberately ambiguous.
+fn indexed_vault() -> VaultIndex {
+    VaultIndex::from_identities([
+        "AI Daily Brief",
+        "Security",
+        "ETSI_Domain_Infrastructure/Security",
+        "ETSI_Domain_Governance/Economy",
+        "podcast-evidence/black-friday-gpt",
+    ])
+}
+
+fn page(body: &str) -> String {
+    format!("---\npublic: true\n---\n\n{body}\n")
+}
+
+#[test]
+fn a_bare_link_to_a_subfolder_page_joins_the_real_node() {
+    let parser = KnowledgeGraphParser::new();
+    let index = indexed_vault();
+    let content = page("# AI Daily Brief\n\nCovered in [[black-friday-gpt]].");
+
+    let graph = parser
+        .parse_with_index(&content, "AI Daily Brief.md", Some(&index))
+        .expect("parses");
+
+    assert_eq!(graph.edges.len(), 1);
+    assert_eq!(
+        graph.edges[0].target,
+        parser.page_name_to_id("podcast-evidence/black-friday-gpt"),
+        "the bare link must land on the page's full vault identity"
+    );
+    assert_ne!(
+        graph.edges[0].target,
+        parser.page_name_to_id("black-friday-gpt"),
+        "hashing the bare link text is what minted the phantom stub"
+    );
+}
+
+#[test]
+fn a_legacy_underscore_link_resolves_to_the_converted_folder_page() {
+    let parser = KnowledgeGraphParser::new();
+    let index = indexed_vault();
+    let content = page("# Some Page\n\nSee [[ETSI_Domain_Governance___Economy]].");
+
+    let graph = parser
+        .parse_with_index(&content, "Some Page.md", Some(&index))
+        .expect("parses");
+
+    assert_eq!(
+        graph.edges[0].target,
+        parser.page_name_to_id("ETSI_Domain_Governance/Economy")
+    );
+}
+
+#[test]
+fn an_ambiguous_basename_prefers_the_linking_pages_own_folder() {
+    let parser = KnowledgeGraphParser::new();
+    let index = indexed_vault();
+    let content = page("# Interop\n\nSee [[Security]].");
+
+    let graph = parser
+        .parse_with_index(&content, "ETSI_Domain_Infrastructure/Interop.md", Some(&index))
+        .expect("parses");
+
+    assert_eq!(
+        graph.edges[0].target,
+        parser.page_name_to_id("ETSI_Domain_Infrastructure/Security"),
+        "a sibling in the linking page's own folder wins the tie-break"
+    );
+}
+
+#[test]
+fn an_unknown_target_still_links_to_a_stub_id() {
+    let parser = KnowledgeGraphParser::new();
+    let index = indexed_vault();
+    let content = page("# Orphan\n\nSee [[No Such Page]].");
+
+    let graph = parser
+        .parse_with_index(&content, "Orphan.md", Some(&index))
+        .expect("parses");
+
+    assert_eq!(graph.edges.len(), 1, "the dangling edge is still emitted");
+    assert_eq!(
+        graph.edges[0].target,
+        parser.page_name_to_id("No Such Page")
+    );
+}
+
+#[test]
+fn a_subfolder_pages_identity_label_and_source_file_agree() {
+    let parser = KnowledgeGraphParser::new();
+    let index = indexed_vault();
+    // `vault-migrate` writes the identity path into `title:`; that is not a
+    // display title, so it must not produce a label inconsistent with
+    // `source_file`.
+    let content = "---\npublic: true\ntitle: podcast-evidence/black-friday-gpt\n---\n\n# Black Friday GPT\n";
+
+    let graph = parser
+        .parse_with_index(content, "podcast-evidence/black-friday-gpt.md", Some(&index))
+        .expect("parses");
+    let node = &graph.nodes[0];
+
+    assert_eq!(node.metadata_id, "podcast-evidence/black-friday-gpt");
+    assert_eq!(
+        node.metadata.get("source_file").map(String::as_str),
+        Some("podcast-evidence/black-friday-gpt.md"),
+        "source_file must carry the identity, not a bare basename"
+    );
+    assert_eq!(node.label, node.metadata_id, "label agrees with identity");
+    assert_eq!(node.id, parser.page_name_to_id("podcast-evidence/black-friday-gpt"));
+}
+
+#[test]
+fn a_genuine_display_title_still_becomes_the_label() {
+    let parser = KnowledgeGraphParser::new();
+    let content = "---\npublic: true\ntitle: Black Friday GPT\n---\n\n# Body\n";
+
+    let graph = parser
+        .parse_with_index(content, "podcast-evidence/black-friday-gpt.md", None)
+        .expect("parses");
+
+    assert_eq!(graph.nodes[0].label, "Black Friday GPT");
+    assert_eq!(graph.nodes[0].metadata_id, "podcast-evidence/black-friday-gpt");
+}
+
+#[test]
+fn distinct_pages_sharing_a_basename_stay_distinct_nodes() {
+    // The silent merge: 34 basename collisions exist in the converted corpus,
+    // e.g. `ETSI_Domain_Infrastructure/Security` and the root `Security`.
+    let parser = KnowledgeGraphParser::new();
+    assert_ne!(
+        parser.page_name_to_id("ETSI_Domain_Infrastructure/Security"),
+        parser.page_name_to_id("Security")
+    );
+}
+
+#[test]
+fn the_cross_graph_twin_join_is_preserved() {
+    // 254 basename pairs span the two source graphs and MUST share one node.
+    let bases = vec![
+        "mainKnowledgeGraph/pages".to_string(),
+        "workingGraph/pages".to_string(),
+    ];
+    let parser = KnowledgeGraphParser::new();
+    let main = vault::page_name_from_repo_path("mainKnowledgeGraph/pages/Agentic AI.md", &bases);
+    let work = vault::page_name_from_repo_path("workingGraph/pages/Agentic AI.md", &bases);
+    assert_eq!(main, work);
+    assert_eq!(parser.page_name_to_id(&main), parser.page_name_to_id(&work));
 }

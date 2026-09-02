@@ -7,13 +7,13 @@
 //! - Metadata (properties, tags)
 
 use crate::utils::socket_flow_messages::BinaryNodeData;
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::collections::HashMap;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::metadata::MetadataStore;
 use visionclaw_domain::models::node::Node;
-use visionclaw_domain::vault::{self, PageMeta};
+use visionclaw_domain::vault::{self, LinkResolution, PageMeta, VaultIndex};
 
 /// Knowledge graph parser with position preservation support
 pub struct KnowledgeGraphParser {
@@ -66,6 +66,26 @@ impl KnowledgeGraphParser {
     }
 
     pub fn parse(&self, content: &str, filename: &str) -> Result<GraphData, String> {
+        self.parse_with_index(content, filename, None)
+    }
+
+    /// Parse a page, resolving its wikilinks against the vault.
+    ///
+    /// `filename` is the **vault-relative** path (`Ns/Title.md`), not a bare
+    /// basename: page identity is that path per §V1, and passing a basename
+    /// collapses every namespaced page onto its leaf name — which silently
+    /// merged distinct pages (e.g. `ETSI_Domain_Infrastructure/Security` with
+    /// the root `Security`) and orphaned every bare link to a subfolder page.
+    ///
+    /// `index` supplies Obsidian's bare-link resolution. `None` keeps the
+    /// pre-index behaviour (link text is hashed as-is) for callers with no
+    /// vault listing to hand, such as the local single-file sync.
+    pub fn parse_with_index(
+        &self,
+        content: &str,
+        filename: &str,
+        index: Option<&VaultIndex>,
+    ) -> Result<GraphData, String> {
         info!("Parsing knowledge graph file: {}", filename);
 
         // Page identity is the vault-relative path under `pages/` without the
@@ -85,7 +105,16 @@ impl KnowledgeGraphParser {
         // created here. Edges whose target doesn't exist as a page node will
         // still be stored — the Oxigraph SPARQL INSERT will create stubs or the edge will
         // dangle harmlessly until the target page is synced.
-        let wikilink_edges = self.extract_wikilink_edges(content, &nodes[0].id);
+        let (wikilink_edges, ambiguous) =
+            self.extract_wikilink_edges(content, &nodes[0].id, &page_name, index);
+        if ambiguous > 0 {
+            // Recorded for the sync log: an ambiguous basename was resolved by
+            // the same-folder / sorted-order tie-break rather than uniquely.
+            warn!(
+                "{}: {} wikilink(s) resolved by ambiguous basename",
+                filename, ambiguous
+            );
+        }
 
         let metadata = self.extract_metadata_store(content);
 
@@ -177,7 +206,18 @@ impl KnowledgeGraphParser {
 
         // §V2 `title` is the display title when it differs from the filename.
         // Identity (`metadata_id`, `id`) stays keyed on the page name.
-        let label = meta.title.clone().unwrap_or_else(|| page_name.to_string());
+        //
+        // A `title` that merely repeats the page's own identity is not a
+        // display title — `vault-migrate` currently writes the vault-relative
+        // path into this key on ~223 converted pages — so it is ignored and the
+        // identity is used directly. That keeps `label` consistent with
+        // `metadata_id` and `source_file` instead of pairing a namespaced label
+        // with a bare-basename `source_file`.
+        let label = meta
+            .title
+            .clone()
+            .filter(|title| title != page_name)
+            .unwrap_or_else(|| page_name.to_string());
 
         Node {
             id,
@@ -248,16 +288,52 @@ impl KnowledgeGraphParser {
     /// Extract wikilink edges only — no new nodes created.
     /// Returns Edge objects for each [[WikiLink]] found in content.
     /// Deduplicates by target to avoid multiple edges to the same page.
-    fn extract_wikilink_edges(&self, content: &str, source_id: &u32) -> Vec<Edge> {
+    ///
+    /// Targets are resolved through [`VaultIndex`] (Obsidian's rule): a bare
+    /// `[[Title]]` finds the page wherever it lives in the vault, so it joins
+    /// the real node instead of minting a phantom stub beside it. Returns the
+    /// edges plus the number of links that resolved only via an ambiguous
+    /// basename, for the sync log.
+    fn extract_wikilink_edges(
+        &self,
+        content: &str,
+        source_id: &u32,
+        from_identity: &str,
+        index: Option<&VaultIndex>,
+    ) -> (Vec<Edge>, usize) {
         let mut edges = Vec::new();
         let mut seen_targets = std::collections::HashSet::new();
+        let mut ambiguous = 0usize;
 
         let link_pattern =
             regex::Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").expect("Invalid regex pattern");
 
         for cap in link_pattern.captures_iter(content) {
             if let Some(link_match) = cap.get(1) {
-                let target_page = link_match.as_str().trim().to_string();
+                let raw_target = link_match.as_str();
+                let target_page = match index {
+                    Some(index) => {
+                        let resolution = index.resolve(raw_target, from_identity);
+                        if let LinkResolution::Ambiguous {
+                            ref chosen,
+                            ref alternatives,
+                        } = resolution
+                        {
+                            ambiguous += 1;
+                            debug!(
+                                "Ambiguous wikilink [[{}]] on {}: chose {} from {:?}",
+                                raw_target, from_identity, chosen, alternatives
+                            );
+                        }
+                        resolution.target().to_string()
+                    }
+                    // No vault listing: still decode the legacy encodings so a
+                    // `[[Ns___Title]]` hashes to the same id as `Ns/Title`.
+                    None => vault::normalise_link_target(raw_target),
+                };
+                if target_page.is_empty() {
+                    continue;
+                }
                 let target_id = self.page_name_to_id(&target_page);
 
                 // Skip self-loops and duplicates
@@ -277,7 +353,7 @@ impl KnowledgeGraphParser {
             }
         }
 
-        edges
+        (edges, ambiguous)
     }
 
     /// Extract links from content, preserving existing positions (legacy — creates nodes)

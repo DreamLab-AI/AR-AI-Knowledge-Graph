@@ -304,6 +304,22 @@ impl GitHubSyncService {
 
         stats.total_files = files.len();
 
+        // ADR-2040 §V1: build the vault index from the FULL listing, never the
+        // changed subset — an incremental sync must still resolve links into
+        // unchanged pages, or every one of them mints a phantom stub.
+        let base_paths = self.content_api.base_paths().to_vec();
+        let vault_index = visionclaw_domain::vault::VaultIndex::from_identities(
+            files
+                .iter()
+                .map(|f| visionclaw_domain::vault::page_name_from_repo_path(&f.path, &base_paths)),
+        );
+        info!(
+            "Vault index: {} page identities from {} files",
+            vault_index.len(),
+            files.len()
+        );
+        let vault_ctx = visionclaw_domain::vault::VaultContext::new(&vault_index, &base_paths);
+
         let force_full_sync = force_full_override
             || base_path_changed
             || std::env::var("FORCE_FULL_SYNC")
@@ -362,7 +378,7 @@ impl GitHubSyncService {
             );
 
             match self
-                .process_batch_incremental(batch, &mut stats, &mut deferred_edges)
+                .process_batch_incremental(batch, &mut stats, &mut deferred_edges, vault_ctx)
                 .await
             {
                 Ok(_) => {
@@ -1376,6 +1392,7 @@ impl GitHubSyncService {
         files: &[GitHubFileBasicMetadata],
         stats: &mut SyncStatistics,
         deferred_edges: &mut Vec<Edge>,
+        vault_ctx: visionclaw_domain::vault::VaultContext<'_>,
     ) -> Result<(), String> {
         let mut batch_nodes = std::collections::HashMap::new();
         let mut batch_edges = std::collections::HashMap::new();
@@ -1448,6 +1465,7 @@ impl GitHubSyncService {
                             &mut batch_edges,
                             &mut public_pages,
                             &mut batch_stub_ids,
+                            vault_ctx,
                         )
                         .await
                     {
@@ -1561,6 +1579,10 @@ impl GitHubSyncService {
     /// every edge target — whether it's a sibling canonical entity, a wikilink
     /// stub, or an upper-ontology class reference — resolves to the same node
     /// id as the entity itself when ingested.
+    // The four `&mut` accumulators are one logical value (the batch being
+    // built) and would read better bundled; that refactor touches every call
+    // site in this file and is deliberately left for its own change.
+    #[allow(clippy::too_many_arguments)]
     async fn process_fetched_file(
         &self,
         file: &GitHubFileBasicMetadata,
@@ -1569,8 +1591,14 @@ impl GitHubSyncService {
         edges: &mut std::collections::HashMap<String, Edge>,
         public_pages: &mut std::collections::HashSet<String>,
         stub_ids: &mut std::collections::HashSet<u32>,
+        vault_ctx: visionclaw_domain::vault::VaultContext<'_>,
     ) -> Result<(), String> {
         debug!("Processing file: {} ({} bytes)", file.name, content.len());
+
+        // The page's vault identity (§V1) — the path relative to its configured
+        // source prefix, so a knowledge page and its working twin still share
+        // one identity (and one node).
+        let identity = vault_ctx.identity_of(&file.path);
 
         // 1. Distill the file's JSON-LD blocks into a single canonical entity.
         let entity = match jsonld_ingest::parse_canonical_entity(content, &file.path) {
@@ -1584,7 +1612,14 @@ impl GitHubSyncService {
                 // populate the force-directed graph as `page` nodes joined by
                 // their wikilinks — the dual-source ingest the system was
                 // designed for.
-                self.process_plain_vault_file(file, content, nodes, edges, stub_ids);
+                self.process_plain_vault_file(
+                    file,
+                    content,
+                    nodes,
+                    edges,
+                    stub_ids,
+                    vault_ctx,
+                );
                 return Ok(());
             }
             Err(e) => {
@@ -1638,7 +1673,10 @@ impl GitHubSyncService {
         //    metadata below). Edges whose target never materialises are pruned
         //    at the deferred-edge pass against the store's node-id set.
         for link in &entity.outbound_links {
-            let target_id = self.kg_parser.page_name_to_id(&link.target_slug);
+            // Obsidian's rule (§V1): a bare `[[Title]]` finds the page wherever
+            // it lives, so it joins the real node instead of minting a stub.
+            let resolved = vault_ctx.resolve(&link.target_slug, &identity);
+            let target_id = self.kg_parser.page_name_to_id(resolved.target());
             if target_id == source_id {
                 continue;
             }
@@ -1665,7 +1703,8 @@ impl GitHubSyncService {
         //     (non-public working twins) fold to weight at the deferred pass
         //     like any dangling link.
         if let Some(name) = visionclaw_domain::vault::parse(content).elevated_from {
-            let target_id = self.kg_parser.page_name_to_id(&name);
+            let resolved = vault_ctx.resolve(&name, &identity);
+            let target_id = self.kg_parser.page_name_to_id(resolved.target());
             if target_id != source_id {
                 let edge_id = format!("{}_{}_elevated_from", source_id, target_id);
                 edges.entry(edge_id.clone()).or_insert_with(|| Edge {
@@ -1745,8 +1784,17 @@ impl GitHubSyncService {
         nodes: &mut std::collections::HashMap<u32, visionclaw_domain::models::node::Node>,
         edges: &mut std::collections::HashMap<String, Edge>,
         stub_ids: &mut std::collections::HashSet<u32>,
+        vault_ctx: visionclaw_domain::vault::VaultContext<'_>,
     ) {
-        let parsed = match self.kg_parser.parse(content, &file.name) {
+        // §V1 identity: the vault-relative path, NOT `file.name`. A basename
+        // collapses every namespaced page onto its leaf, which merged distinct
+        // pages (`ETSI_Domain_Infrastructure/Security` with the root
+        // `Security`) and orphaned every bare link into a subfolder.
+        let vault_path = format!("{}.md", vault_ctx.identity_of(&file.path));
+        let parsed = match self
+            .kg_parser
+            .parse_with_index(content, &vault_path, Some(vault_ctx.index()))
+        {
             Ok(p) => p,
             Err(e) => {
                 debug!(

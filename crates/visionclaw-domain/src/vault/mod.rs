@@ -29,6 +29,12 @@
 //! the property anywhere in the file and therefore leaked private pages that
 //! merely *quoted* the marker.
 
+pub mod link;
+
+pub use link::{
+    identity_basename, normalise_link_target, LinkResolution, VaultContext, VaultIndex,
+};
+
 use std::collections::BTreeMap;
 
 /// Which metadata carrier supplied a page's properties.
@@ -226,6 +232,33 @@ pub fn legacy_properties_anywhere(content: &str) -> Vec<(String, String)> {
 /// Identity is stable across the conversion (governing doc Invariant 4):
 /// slugification collapses any run of non-alphanumerics to a single `-`, so
 /// `A___B Testing`, `A%2FB Testing` and `A/B Testing` all slugify identically.
+/// Derive a page's vault identity from a **repository** path, given the
+/// configured GitHub base paths (§V1).
+///
+/// The base path is stripped first, so `mainKnowledgeGraph/pages/Ns/Title.md`
+/// and `workingGraph/pages/Ns/Title.md` both yield `Ns/Title`. That is load
+/// bearing: the two source graphs deliberately share basenames so a working
+/// page and its knowledge twin resolve to the SAME node (the cross-graph
+/// join), and 254 such pairs exist in the corpus. Keeping the base prefix in
+/// the identity would split every one of them.
+///
+/// With no base paths configured the whole repo is ingested, so the full path
+/// is the identity.
+pub fn page_name_from_repo_path(path: &str, base_paths: &[String]) -> String {
+    let trimmed = path.trim().trim_start_matches('/');
+
+    // Longest matching prefix wins, so nested bases cannot strip the wrong one.
+    let stripped = base_paths
+        .iter()
+        .map(|base| base.trim_matches('/'))
+        .filter(|base| !base.is_empty())
+        .filter_map(|base| trimmed.strip_prefix(&format!("{}/", base)))
+        .max_by_key(|rest| trimmed.len() - rest.len())
+        .unwrap_or(trimmed);
+
+    page_name_from_path(stripped)
+}
+
 pub fn page_name_from_path(rel: &str) -> String {
     let trimmed = rel.trim().trim_start_matches('/');
     let without_ext = trimmed.strip_suffix(".md").unwrap_or(trimmed);
@@ -788,6 +821,53 @@ mod tests {
     }
 
     // -- page_name_from_path (§V1) -------------------------------------------
+
+    #[test]
+    fn repo_path_identity_strips_the_configured_base_path() {
+        let bases = vec![
+            "mainKnowledgeGraph/pages".to_string(),
+            "workingGraph/pages".to_string(),
+        ];
+        assert_eq!(
+            page_name_from_repo_path("mainKnowledgeGraph/pages/podcast-evidence/foo.md", &bases),
+            "podcast-evidence/foo"
+        );
+        assert_eq!(
+            page_name_from_repo_path("mainKnowledgeGraph/pages/ETSI_Domain_Governance/Economy.md", &bases),
+            "ETSI_Domain_Governance/Economy"
+        );
+    }
+
+    #[test]
+    fn the_cross_graph_twin_join_survives_base_stripping() {
+        // 254 basename pairs exist across the two source graphs and MUST land
+        // on one node. Keeping the base prefix in the identity would split them.
+        let bases = vec![
+            "mainKnowledgeGraph/pages".to_string(),
+            "workingGraph/pages".to_string(),
+        ];
+        assert_eq!(
+            page_name_from_repo_path("mainKnowledgeGraph/pages/Agentic AI.md", &bases),
+            page_name_from_repo_path("workingGraph/pages/Agentic AI.md", &bases)
+        );
+    }
+
+    #[test]
+    fn a_legacy_flat_namespace_file_and_its_converted_folder_share_an_identity() {
+        // Invariant 4: conversion must not move a node. The flat `___` file and
+        // the folder it becomes yield the same identity, hence the same id.
+        let bases = vec!["mainKnowledgeGraph/pages".to_string()];
+        assert_eq!(
+            page_name_from_repo_path(
+                "mainKnowledgeGraph/pages/ETSI_Domain_Governance___Economy.md",
+                &bases
+            ),
+            page_name_from_repo_path(
+                "mainKnowledgeGraph/pages/ETSI_Domain_Governance/Economy.md",
+                &bases
+            )
+        );
+    }
 
     #[test]
     fn page_name_decodes_triple_underscore_namespaces() {

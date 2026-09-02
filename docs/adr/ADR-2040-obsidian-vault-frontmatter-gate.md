@@ -8,7 +8,7 @@ activation_status: staged
 supersedes: [ADR-2014]
 superseded_by: []
 verified_commit:
-verified_paths: [crates/visionclaw-domain/src/vault/mod.rs, src/services/file_service.rs, src/services/github_sync_service.rs, src/services/parsers/knowledge_graph_parser.rs, src/services/github/content_enhanced.rs, src/services/ontology_mutation_service.rs, src/services/decision_elevation.rs, docs/VAULT-corpus-format.md]
+verified_paths: [crates/visionclaw-domain/src/vault/mod.rs, crates/visionclaw-domain/src/vault/link.rs, src/services/file_service.rs, src/services/github_sync_service.rs, src/services/parsers/knowledge_graph_parser.rs, src/services/github/content_enhanced.rs, src/services/ontology_mutation_service.rs, src/services/decision_elevation.rs, docs/VAULT-corpus-format.md]
 owner: jjohare
 review_trigger: the first GitHub sync run after the corpus repo is converted in place, or 2026-12-01, whichever is earlier — at which point the Logseq `key:: value` tolerance is removed
 repo: visionclaw
@@ -89,5 +89,14 @@ directed_hierarchy_relation_accepts_only_class_subsumption`, byte-identical to
 findings: `DecisionElevation` drafts previously carried no `public` marker
 and would have been dropped by any gate; `OntologyMutationService`'s
 amendment path appended `- rel:: [[x]]` lines after the body (a §V5
-violation) and now edits frontmatter. `activation_status: staged` until the
-first GitHub sync runs against the converted corpus.
+violation) and now edits frontmatter. Shadow sync 2026-09-02 (EXP-V08): same binary, `main` vs converted branch →
+13,351 nodes both, edges 156,153 vs 156,101, three title-driven label diffs.
+The sync exposed that page identity had always been the bare basename (288
+colliding basenames, 254 of them the intended main↔working twin join); the
+identity is now the path relative to the matched base path, `title` echoes
+of the identity are ignored, and wikilinks resolve by Obsidian's
+shortest-path rule (`crates/visionclaw-domain/src/vault/link.rs`:
+`VaultIndex`/`VaultContext`/`LinkResolution`; index built once from the full
+listing before the SHA1 filter). Tests: 259 + 5 domain, 18 vault_gate,
+276 services. `activation_status: staged` until the first GitHub sync runs
+against the converted corpus.

@@ -1,6 +1,6 @@
 ---
 title: VAULT — authored corpus format (Obsidian vault)
-version: 1.2.0
+version: 1.4.0
 status: living
 verified_commit:
 owner: jjohare
@@ -110,10 +110,30 @@ the legacy-tolerance path.
 - The vault root is the single path authority: `VAULT_ROOT` (env) ← agentbox
   `[vault].root` (manifest). Every consumer derives sub-paths from it; no
   consumer hard-codes `/home/devuser/workspace/logseq/...`.
-- Page **identity** is the vault-relative path under `pages/` without the `.md`
-  extension, with `/` as the namespace separator. `page_name_to_id` slugifies
-  that name exactly as before, so existing node ids for non-namespace pages are
-  unchanged. Legacy encodings `___` and `%2F` decode to `/` on read.
+- Page **identity** is the path relative to the **matched `GITHUB_BASE_PATH`
+  prefix** (each vault's `pages/`), without the `.md` extension, with `/` as the
+  namespace separator — never the repo-relative path. The same relative path in
+  `knowledge/pages/` and `working/pages/` is deliberately **one node** (the
+  main↔working twin join: 254 such pairs in the 2026-09-02 corpus).
+  `page_name_to_id` slugifies that name exactly as before, so node ids for
+  root-level pages are unchanged; pages in subfolders gain distinct identities
+  (they were previously merged by basename — 34 genuinely distinct pages
+  collided). Legacy encodings `___` and `%2F` decode to `/` on read.
+- `title` is a **display** value only. A `title` that merely echoes the
+  identity path is ignored by readers, and the converter never writes one.
+- **Wikilink resolution follows Obsidian's shortest-path rule.** A link target
+  is normalised (trim; strip `|alias`, `#heading`, `^block`; decode `___` and
+  `%2F` to `/`). A target containing `/` resolves by **exact** identity match
+  with no basename fallback (rebinding `[[Wrong_Folder/Economy]]` to another
+  folder's `Economy` would invent an edge). A bare target
+  resolves by **basename**: exactly one page with that basename anywhere under
+  `pages/` → that page's full identity; several → the one in the linking
+  page's own folder, else the first in sorted path order, and the ambiguity is
+  reported; none → a `linked_page` stub. Pages that already lived in plain
+  subfolders (e.g. `working/pages/podcast-evidence/<slug>.md`) are therefore
+  reachable by the bare `[[<slug>]]` links the corpus uses, and no stub is
+  minted beside a real page. (Found by the 2026-09-02 shadow sync: +186 stub
+  pages before this rule.)
 
 ### V2 — Frontmatter (Obsidian Properties)
 
@@ -125,7 +145,7 @@ Keys are lower-kebab-case. The reserved Obsidian keys `aliases`, `tags`,
 |---|---|---|---|
 | `public` | checkbox | KG inclusion gate (see V4) | `public:: true` |
 | `aliases` | list | Obsidian aliases; also KG alias metadata | `alias::` |
-| `title` | text | Display title when it differs from the filename | `title::` |
+| `title` | text | Display title when it differs from the filename; never the identity path | `title::` |
 | `tags` | list | Obsidian tags; KG `tags` metadata | `tags::`, `#[[..]]` |
 | `owl-class` | text | Formal class IRI; **bypasses the public gate** | `owl:class::` |
 | `source-domain` | text | Domain prefix (ai/bc/mv/rb/tc/ngm) | `source-domain::` |
@@ -237,6 +257,7 @@ detected at session start like the AoE plane; absence prints the rebuild notice.
 | EXP-V04 | high, regression | `vault-migrate` on the 2026-09-02 corpus emits `public: true` on 8,615 pages (8,601 top-level + 14 under `pages/_misc/`), moves 201 namespace files into folders, renames 308 journals, rewrites 239 task markers and 168 asset links, rewrites no page embeds (none exist), and reports 14 block-embed/block-ref files, 6,541 body-property files and 4 SCHEDULED/DEADLINE journals — with `--check` on the output exiting 0. | `vault-migrate --report` on the corpus; verified 2026-09-02 (66 unit + 16 integration tests green; real run 2.6 s) |
 | EXP-V05 | high, regression | Running `vault-migrate` twice yields byte-identical output the second time. | converter test |
 | EXP-V06 | medium | `visualisation.graphs.logseq` in a persisted `settings.yaml` loads into `graphs.knowledge` without loss; the client renders with the same colours. | settings test + vitest |
+| EXP-V08 | critical | Shadow sync: syncing the converted corpus with the new binary yields the same node set as syncing the unconverted `main` with the same binary, except labels that now honour `title`; edge count within 0.1%. | 2026-09-02 dev-container runs, `GITHUB_BRANCH` override on `sync_github`: main 13,351 nodes / 156,153 edges vs converted 13,351 / 156,101; 3 label diffs (`Machine Learning Model (Artefact)`, `Multimodal Artificial Intelligence`, `podcast-evidence/pro-worker-ai`), edge Δ −50 inferred / −2 co_citation. The +186 `page` nodes versus the old-binary baseline (382 → 567) appear on both branches and are the bare-link stub defect fixed by the V1 resolution rule. |
 | EXP-V07 | medium | tmux window 9 "Notes" opens Rune at `VAULT_ROOT` when the binary exists and prints the rebuild notice when it does not; window 0 remains the tab0-bridge target. | `bash -n` + a dry run of `tmux-autostart.sh` in a scratch socket |
 
 ## Change process
