@@ -348,7 +348,9 @@ fn a_subfolder_pages_identity_label_and_source_file_agree() {
         Some("podcast-evidence/black-friday-gpt.md"),
         "source_file must carry the identity, not a bare basename"
     );
-    assert_eq!(node.label, node.metadata_id, "label agrees with identity");
+    // Obsidian displays a namespaced page by its leaf, so the label is the
+    // basename while identity keeps the full path.
+    assert_eq!(node.label, "black-friday-gpt");
     assert_eq!(node.id, parser.page_name_to_id("podcast-evidence/black-friday-gpt"));
 }
 
