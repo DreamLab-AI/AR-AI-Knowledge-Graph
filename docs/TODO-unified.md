@@ -40,7 +40,7 @@ section for detail. (Paused here 2026-08-31 by operator request.)
 
 **Doc-accuracy — §12:** `DOC-1` rest-api phantom endpoints · `DOC-2` CUDA kernel-count truth · `DOC-3` `installation.md` refresh.
 
-**Obsidian vault migration — §2 `C-14` (decisions written, code + two operator steps owed):** ADR-2040/2041/2042 + agentbox ADR-2028/2029, governed by [`VAULT-corpus-format.md`](VAULT-corpus-format.md). Operator owes the in-place conversion of the corpus repo and the agentbox image rebuild that ships Rune.
+**Obsidian vault migration — §2 `C-14` (code landed on branch `obsidian`; corpus split into `jjohare/visionGraph`; owner steps: `.env` flip, merges, dev-stack relaunch, agentbox rebuild):** ADR-2040/2041/2042 + agentbox ADR-2028/2029, governed by [`VAULT-corpus-format.md`](VAULT-corpus-format.md).
 
 **Near-closed (one operator confirm):** `C-11` branch pool (9 left) · `C-13` logseq narrativegoldmine (ADR-NG-002 P2 + minor).
 
