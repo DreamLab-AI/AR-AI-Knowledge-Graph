@@ -225,6 +225,8 @@ FORCE_FULL_SYNC=false
 SYNC_BATCH_SIZE=50
 
 # GitHub credentials (for GitHubSyncService)
+# GITHUB_REPO is the corpus repo NAME on GitHub (unchanged); its contents are an
+# Obsidian vault — see docs/VAULT-corpus-format.md. GITHUB_BASE_PATH is the vault's pages/ folder.
 GITHUB_OWNER=jjohare
 GITHUB_REPO=logseq
 GITHUB_BRANCH=main

@@ -124,14 +124,14 @@ Choose one option to populate your graph.
 
 ### Option A: Connect a GitHub repository (recommended)
 
-VisionClaw can parse a Logseq or plain-markdown repository and build a graph from `[[wikilinks]]`.
+VisionClaw can parse an Obsidian vault or plain-markdown repository and build a graph from `[[wikilinks]]`.
 
 1. Click **"Connect to GitHub"** in the left control panel.
 2. Authorise VisionClaw to read your repository.
 3. Select the repository and the folder containing your markdown files.
-4. VisionClaw parses links, creates nodes for each page tagged `public:: true`, and builds edges from wikilinks.
+4. VisionClaw parses links, creates nodes for each page whose frontmatter has `public: true`, and builds edges from wikilinks.
 
-> **Deep path** — Only files with the `public:: true` property become graph nodes. Files without that tag are still scanned for ontology blocks (`### OntologyBlock` sections), which become `owl_*` nodes. Wikilink targets that do not have a corresponding file become `linked_page` nodes. The sync flow is: `GitHubSyncService::sync_graphs()` → `KnowledgeGraphParser::parse()` → embedded Oxigraph store. Set `FORCE_FULL_SYNC=1` in `.env` to reprocess all files, bypassing SHA1 incremental filtering.
+> **Deep path** — Only pages whose frontmatter carries `public: true` (or a non-empty `owl-class`) become graph nodes; legacy `public:: true` property lines are tolerated per ADR-2040. Files without that tag are still scanned for ontology blocks (`### OntologyBlock` sections), which become `owl_*` nodes. Wikilink targets that do not have a corresponding file become `linked_page` nodes. The sync flow is: `GitHubSyncService::sync_graphs()` → `KnowledgeGraphParser::parse()` → embedded Oxigraph store. Set `FORCE_FULL_SYNC=1` in `.env` to reprocess all files, bypassing SHA1 incremental filtering.
 
 ### Option B: Import a JSON graph
 

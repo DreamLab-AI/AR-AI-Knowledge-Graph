@@ -84,9 +84,13 @@ pods, so a node round-trips between the triple store and a user's pod without re
 
 ## 3. Knowledge graph
 
-Only Logseq files tagged `public:: true` produce a page resource; the targets of their
+Only vault pages whose YAML frontmatter carries `public: true` — or a non-empty `owl-class`,
+which bypasses the publish gate — produce a page resource; the targets of their
 `[[wikilink]]` references are materialised as linked-page resources even when the target file
-lacks the tag. Agent and bot definitions enter the same graph as agent resources.
+lacks the gate. Legacy Logseq property lines (`public:: true`, `owl:class::`) are still accepted
+in a page's leading property block for the bounded window named in
+[ADR-2040](../adr/ADR-2040-obsidian-vault-frontmatter-gate.md); see
+[`VAULT-corpus-format.md`](../VAULT-corpus-format.md) §V4. Agent and bot definitions enter the same graph as agent resources.
 
 ### 3a. Node types
 
@@ -95,7 +99,7 @@ original string for round-tripping.
 
 | `rdf:type` | `vf:nodeType` | Origin |
 |------------|---------------|--------|
-| `vf:Page` | `"page"` | Logseq file with `public:: true` |
+| `vf:Page` | `"page"` | Vault page with `public: true` frontmatter (or an `owl-class`) |
 | `vf:LinkedPage` | `"linked_page"` | Target of a `[[wikilink]]` from a public page |
 | `vf:Agent` | `"agent"` | Agent definition node |
 | `vf:Bot` | `"bot"` | Bot definition node |
@@ -273,10 +277,12 @@ vfn:eAB a vf:WikilinkRef ;
 | Wikilink reference | `vf:WikilinkRef` resource | `vf:lastSeenRunId` for orphan retraction |
 | Namespace containment | `vf:inNamespace` | derived from `--` page-title prefix |
 
-**Namespace edges.** Logseq namespace pages use a `--` separator in their title
+**Namespace edges.** Namespace pages use a `--` separator in their title
 (`Project--Subtopic`). The graph-state actor generates a `vf:inNamespace` edge from each such
 node to its parent namespace node (`Project--Subtopic vf:inNamespace Project`), giving the
-client a containment hierarchy that the GPU layout treats as an attractive spring.
+client a containment hierarchy that the GPU layout treats as an attractive spring. In the vault
+the namespace is a folder (`Ns/Title`) rather than a `___`-encoded filename; page identity is the
+vault-relative path under `pages/` (ADR-2040 §5).
 
 ---
 

@@ -34,7 +34,7 @@ The CLI reads five keys from the supplied `.env` file:
 | Key                | Example                                               | Notes |
 |--------------------|-------------------------------------------------------|-------|
 | `GITHUB_OWNER`     | `jjohare`                                             | GitHub login |
-| `GITHUB_REPO`      | `logseq`                                              | Repository name |
+| `GITHUB_REPO`      | `logseq`                                              | Repository name — the corpus repo is still literally named `logseq` on GitHub; its contents are an Obsidian vault ([`VAULT-corpus-format.md`](../../VAULT-corpus-format.md)) |
 | `GITHUB_BRANCH`    | `main`                                                | Branch to track |
 | `GITHUB_BASE_PATH` | `mainKnowledgeGraph/pages,workingGraph/pages`         | Comma-separated **or** repeated over multiple lines |
 | `GITHUB_TOKEN`     | `ghp_xxx...`                                          | Personal access token |

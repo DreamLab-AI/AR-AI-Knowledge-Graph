@@ -280,7 +280,7 @@ Fetch a full ontology note with axioms, relationships, and schema context.
 { "iri": "mv:Person" }
 ```
 
-**Output** (`EnrichedNote`): Full Logseq markdown, OWL metadata (physicality, role, domain, quality score), Whelk-inferred axioms, related notes with summaries, schema context for LLM grounding.
+**Output** (`EnrichedNote`): Full vault markdown, OWL metadata (physicality, role, domain, quality score), Whelk-inferred axioms, related notes with summaries, schema context for LLM grounding.
 
 ---
 
@@ -371,7 +371,7 @@ Create new notes or amend existing ones, with full Whelk consistency checks and 
 ```
 
 **Proposal pipeline**:
-1. Generate Logseq markdown with `OntologyBlock` header
+1. Generate vault markdown with `OntologyBlock` header
 2. OntologyParser round-trip validation
 3. Whelk EL++ consistency check
 4. Quality score computation (0.0–1.0)
@@ -699,7 +699,7 @@ same typed paths (the phantom reads are gone).
 
 | Look-and-feel control | Real settings path | Notes |
 |----------|---------|-------|
-| Show agents in graph | `visualisation.graphs.logseq.nodes.nodeTypeVisibility.agent` | GraphManager's gate (Filtering & Quality group); the sole visibility authority |
+| Show agents in graph | `visualisation.graphs.knowledge.nodes.nodeTypeVisibility.agent` | GraphManager's gate (Filtering & Quality group); the sole visibility authority. Per [ADR-2041](../adr/ADR-2041-graph-settings-key-knowledge.md) the graph key is `knowledge`; the legacy `logseq` segment is accepted on the receive side for one release. |
 | Agent node colour | `visualisation.graphs.visionclaw.nodes.baseColor` | Agents group → Agent Nodes |
 | Agent node size | `visualisation.graphs.visionclaw.nodes.nodeSize` | Agents group → Agent Nodes |
 | Agent node opacity / metalness / roughness | `visualisation.graphs.visionclaw.nodes.{opacity,metalness,roughness}` | Agents group → Agent Nodes |

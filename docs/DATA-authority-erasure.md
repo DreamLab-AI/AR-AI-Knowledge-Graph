@@ -1,10 +1,11 @@
 ---
 title: Data Authority & Erasure
 doc_id: VC-DATA
-version: 0.1.1
+version: 0.2.0
 status: draft-for-ratification
 verified_commit: 73540faa0
 changelog:
+  - 0.2.0 — Authored-content owner restated as the Obsidian vault gate (frontmatter `public: true` / `owl-class`, ADR-2040); citations marked `:~` pending re-verification against the vault reader.
   - 0.1.1 — fix GRAPH_PROVENANCE citation 53→55; widen named-graph range 50-55→46-55; add RBAC_ALLOW_OWNERLESS file:line citations
 sources:
   - crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs
@@ -35,7 +36,7 @@ running code reads back as truth, regardless of what legacy ADR prose claims.
 
 | Data class | Authoritative owner (today) | Store / mechanism | Linearisation point |
 |---|---|---|---|
-| Authored content | GitHub `public:: true` markdown | `src/bin/sync_github.rs`, `src/services/file_service.rs` | Sync run commit SHA; last-writer = the GitHub push |
+| Authored content | Vault `public: true` / `owl-class` markdown (GitHub-synced) | `src/bin/sync_github.rs:~`, `src/services/file_service.rs:~` — gate per [ADR-2040](adr/ADR-2040-obsidian-vault-frontmatter-gate.md) / [`VAULT-corpus-format.md`](VAULT-corpus-format.md) §V4 | Sync run commit SHA; last-writer = the GitHub push |
 | Visibility intent | Node `visibility` column + owner pubkey | SQLite (settings/node metadata), projected by `visibility_filter.rs` | Write to the node metadata row |
 | Graph projection | Oxigraph named graphs | `oxigraph_ontology_repository.rs` (`GRAPH_KNOWLEDGE`) | Oxigraph transaction commit |
 | Ontology (asserted + inferred) | Oxigraph | `GRAPH_ONTOLOGY` / `GRAPH_ONTOLOGY_INFERRED` | Oxigraph transaction commit; inferred is derived, never primary |

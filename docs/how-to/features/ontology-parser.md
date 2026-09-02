@@ -22,7 +22,7 @@ difficulty-level: intermediate
 
 ## 1. Overview
 
-The `OntologyParser` module is a crucial component for semantic understanding within the VisionClaw system. It is designed to parse markdown files that contain ontology definitions written in a Logseq-style format. The parser extracts OWL (Web Ontology Language) structures, including classes, properties, and axioms, which are then used to build the knowledge graph's semantic layer.
+The `OntologyParser` module is a crucial component for semantic understanding within the VisionClaw system. It is designed to parse markdown files that contain ontology definitions written in the vault format ([`VAULT-corpus-format.md`](../../VAULT-corpus-format.md)); legacy Logseq-style property lines are still accepted in a page's leading property block for the window named in ADR-2040. The parser extracts OWL (Web Ontology Language) structures, including classes, properties, and axioms, which are then used to build the knowledge graph's semantic layer.
 
 This guide provides developers with the necessary information to use the parser, understand its syntax, and integrate it into their workflows.
 

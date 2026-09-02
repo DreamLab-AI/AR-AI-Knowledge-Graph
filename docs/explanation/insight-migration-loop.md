@@ -1,6 +1,6 @@
 ---
 title: The Insight Migration Loop
-description: Conceptual explanation of how VisionClaw promotes Logseq notes into governed OWL 2 ontology classes through a physics-visible, broker-reviewed migration pipeline
+description: Conceptual explanation of how VisionClaw promotes vault pages into governed OWL 2 ontology classes through a physics-visible, broker-reviewed migration pipeline
 category: explanation
 tags: [insight-migration, ontology, knowledge-graph, broker, physics, governance]
 updated-date: 2026-04-18
@@ -10,7 +10,7 @@ updated-date: 2026-04-18
 
 ## Opening
 
-Think of every note you write as a concept asking to become a class. Your team has been building, over years of note-taking, a shared vocabulary — a set of recurring terms, relationships, and distinctions that sit inside people's heads and inside thousands of Logseq pages. Those concepts are real. They do real work in conversations and documents. They just have not yet been declared. Nobody has said: this term means exactly this, it relates to these other terms in exactly these ways, and from now on Whelk can reason over it.
+Think of every note you write as a concept asking to become a class. Your team has been building, over years of note-taking, a shared vocabulary — a set of recurring terms, relationships, and distinctions that sit inside people's heads and inside thousands of vault pages. Those concepts are real. They do real work in conversations and documents. They just have not yet been declared. Nobody has said: this term means exactly this, it relates to these other terms in exactly these ways, and from now on Whelk can reason over it.
 
 The Insight Migration Loop is the mechanism by which that declaration happens, continuously, as a by-product of normal work rather than as a formal taxonomy project. When a note accumulates enough evidence — ontology wikilinks, agent proposals, maturity markers — VisionClaw surfaces it in the broker's inbox. The broker takes a look, approves, and the system opens a GitHub pull request. On merge, the note becomes a live OWL 2 Web Ontology Language (OWL 2) class that Whelk, VisionClaw's EL++ reasoner, can reason over. The 3D physics graph redraws around it. A governed ontology grows as a side effect of note-taking.
 
@@ -22,7 +22,7 @@ The people who benefit are the ones who currently answer "do we have a position 
 
 VisionClaw maintains two distinct populations of nodes, and understanding the difference is essential for understanding why the loop exists.
 
-A **KGNode** is a narrative node — a Logseq page authored with `public:: true`. It is part of your personal or team knowledge graph: exploratory, fast-changing, opinionated. It can be edited every hour without ceremony. An **OntologyClass** is a vocabulary node — a named class in the shared OWL 2 T-Box (the "terminology box", the schema). It changes slowly, only through a broker-reviewed pull request. It is what Whelk reasons over, what agents cite when they make structural claims, and what auditors trace when they need provenance.
+A **KGNode** is a narrative node — a vault page authored with `public: true` in its frontmatter. It is part of your personal or team knowledge graph: exploratory, fast-changing, opinionated. It can be edited every hour without ceremony. An **OntologyClass** is a vocabulary node — a named class in the shared OWL 2 T-Box (the "terminology box", the schema). It changes slowly, only through a broker-reviewed pull request. It is what Whelk reasons over, what agents cite when they make structural claims, and what auditors trace when they need provenance.
 
 The two tiers share one identity scheme (`vc:{domain}/{slug}`), so any external consumer sees a single namespace. But they live separately in the graph store (embedded Oxigraph, ADR-11): `KGNode` and `OntologyClass` are distinct logical types, and a `BRIDGE_TO` edge carries the relationship between a note and its potential or confirmed class. Promotion is never a rewrite — the note keeps existing, the class keeps existing, and the bridge edge between them advances from `candidate` through `promoted`. This means rollback is cheap: change the edge label, not the nodes.
 

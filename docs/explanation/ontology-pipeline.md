@@ -1,6 +1,6 @@
 ---
 title: Ontology Pipeline
-description: How VisionClaw turns Logseq Markdown into a reasoned, validated, provenance-bearing RDF knowledge graph — GitHub sync, OWL extraction, the horned-owl assembler/converter, Whelk-rs OWL 2 EL reasoning, embedded Oxigraph storage, SHACL-lite and JSON-LD validation, and PROV-O provenance.
+description: How VisionClaw turns vault Markdown into a reasoned, validated, provenance-bearing RDF knowledge graph — GitHub sync, OWL extraction, the horned-owl assembler/converter, Whelk-rs OWL 2 EL reasoning, embedded Oxigraph storage, SHACL-lite and JSON-LD validation, and PROV-O provenance.
 category: explanation
 tags: [ontology, owl, whelk, oxigraph, sparql, shacl, prov-o, reasoning, pipeline]
 ---
@@ -9,7 +9,7 @@ tags: [ontology, owl, whelk, oxigraph, sparql, shacl, prov-o, reasoning, pipelin
 
 > [VisionClaw Docs](../README.md) · [Explanation](README.md)
 
-VisionClaw maintains a formal OWL 2 ontology alongside its display knowledge graph. The pipeline ingests Logseq-formatted Markdown from a GitHub repository, extracts OWL axioms, reasons over them with a native Rust EL reasoner, stores everything as RDF in an embedded triple store, and validates and signs each contribution. This document explains the stages, the data contracts between them, and where each lives in the `visionclaw-ontology` and `visionclaw-adapters` crates.
+VisionClaw maintains a formal OWL 2 ontology alongside its display knowledge graph. The pipeline ingests vault Markdown (Obsidian frontmatter, see [`VAULT-corpus-format.md`](../VAULT-corpus-format.md)) from a GitHub repository, extracts OWL axioms, reasons over them with a native Rust EL reasoner, stores everything as RDF in an embedded triple store, and validates and signs each contribution. This document explains the stages, the data contracts between them, and where each lives in the `visionclaw-ontology` and `visionclaw-adapters` crates.
 
 The graph store is an **embedded Oxigraph** RDF quad-store (in-process, RocksDB-backed, W3C SPARQL 1.1). It is the sole store for both knowledge-graph and ontology data under the persistence migration (ADR-11), implemented by the triple-store migration framework (ADR-101). Neo4j is fully removed: there is no Bolt URI, no `NEO4J_*` configuration, and no separate database-browser UI. User settings persist in an embedded SQLite store.
 
@@ -17,14 +17,14 @@ The graph store is an **embedded Oxigraph** RDF quad-store (in-process, RocksDB-
 
 ## 1. Pipeline at a glance
 
-Two ingestion fronts feed the same store. Logseq pages carry OWL axioms either as **OWL Functional Syntax** (fenced code or an `owl:functional-syntax::` block) or as **JSON-LD** fenced blocks. Both land as RDF quads in Oxigraph; Whelk-rs then reasons over the asserted graph and materialises inferred axioms into a separate named graph.
+Two ingestion fronts feed the same store. Vault pages carry OWL axioms either as **OWL Functional Syntax** (fenced code or an `owl:functional-syntax::` block) or as **JSON-LD** fenced blocks. Both land as RDF quads in Oxigraph; Whelk-rs then reasons over the asserted graph and materialises inferred axioms into a separate named graph.
 
 ```mermaid
 flowchart LR
-    GH["GitHub Logseq repo<br/>Markdown pages"]
+    GH["GitHub vault repo<br/>Markdown pages"]
 
     subgraph Extract["Extraction (visionclaw-ontology)"]
-        LP["Logseq parser<br/>LogseqPage: title, properties, owl_blocks"]
+        LP["page parser<br/>LogseqPage: title, properties, owl_blocks"]
         CONV["converter<br/>logseq_properties_to_owl"]
         ASM["assembler<br/>OntologyAssembler"]
         HORN["horned-owl<br/>OFN parse + validate"]
@@ -56,13 +56,13 @@ The JSON-LD front (modern path) runs `extractor -> expander -> validator -> SHAC
 
 ---
 
-## 2. Stage 1 — GitHub Logseq ingestion
+## 2. Stage 1 — GitHub vault ingestion
 
 `GitHubSyncService::sync_graphs()` is the entry point. It pulls Markdown from the configured repository path (`GITHUB_BASE_PATH`, default `mainKnowledgeGraph/pages/`) in batches, and skips unchanged files by SHA-1 comparison. `FORCE_FULL_SYNC=1` bypasses the incremental filter and reprocesses every file; reset it to `0` afterwards.
 
-Each page is classified by content. A page tagged `public:: true` becomes a knowledge-graph page node and its `[[wikilink]]` targets become edges in `urn:ngm:graph:knowledge`. **Independently of the `public::` flag**, every page is scanned for ontology content — OWL Functional Syntax blocks and `### OntologyBlock` property sections — so private notes still contribute axioms.
+Each page is classified by content. A page whose frontmatter carries `public: true` becomes a knowledge-graph page node and its `[[wikilink]]` targets become edges in `urn:ngm:graph:knowledge`; the legacy `public:: true` property line is still honoured in a page's leading property block for the window named in [ADR-2040](../adr/ADR-2040-obsidian-vault-frontmatter-gate.md). **Independently of the publish gate**, every page is scanned for ontology content — OWL Functional Syntax blocks and `### OntologyBlock` property sections — so private notes still contribute axioms.
 
-`parse_logseq_file` (`crates/visionclaw-ontology/src/ontology/parser/parser.rs`) produces a `LogseqPage`:
+`parse_logseq_file` (`crates/visionclaw-ontology/src/ontology/parser/parser.rs`) produces a `LogseqPage`. The type and function names are legacy identifiers retained from the Logseq era; the format they parse is the vault format:
 
 ```rust
 pub struct LogseqPage {
@@ -216,7 +216,7 @@ The ontology subsystem is the `visionclaw-ontology` crate, extracted under the h
 |--------|----------------|
 | `inference` | OWL 2 EL++ parser, inference cache, optimisation |
 | `reasoning` | custom Whelk-backed reasoner |
-| `ontology` | Logseq parser, converter, assembler |
+| `ontology` | page parser, converter, assembler |
 | `services/jsonld_ingest` | extractor → expander → validator → SHACL gate → triple emitter |
 | `services/jsonld_validator` | EL profile, SHACL-lite, IRI/class checks |
 | `validation`, `types`, `utils` | actor-state validation, MCP tool surface, time helpers |

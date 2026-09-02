@@ -46,7 +46,7 @@ How to use specific client and graph capabilities.
 | [Natural Language Queries](features/natural-language-queries.md) | Translate plain-English questions into graph queries via LLM-powered semantic understanding. |
 | [Nostr Authentication](features/nostr-auth.md) | Enforce NIP-07/NIP-98 browser-extension authentication before application access. |
 | [Onboarding](features/onboarding.md) | Start, skip, and restart the welcome tour, and understand how tour state persists. |
-| [Ontology Parser](features/ontology-parser.md) | Configure OWL 2 parsing and the Logseq Markdown conventions it reads. |
+| [Ontology Parser](features/ontology-parser.md) | Configure OWL 2 parsing and the vault Markdown conventions it reads. |
 | [Stress Majorisation](features/stress-majorization-guide.md) | Configure and wire the stress-majorisation layout optimisation. |
 | [Voice Integration](features/voice-integration.md) | Configure the STT/TTS voice pipeline. |
 | [Voice Routing](features/voice-routing.md) | Route multi-user voice through the LiveKit SFU with push-to-talk and spatial audio for agents. |

@@ -18,7 +18,7 @@ container, writing the ACLs, and running clone/push from a client.
 
 ## When to use this
 
-- Hosting a Logseq or markdown knowledge base inside a pod so VisionClaw can ingest it
+- Hosting an Obsidian vault or other markdown knowledge base inside a pod so VisionClaw can ingest it
   over `git clone` / `git fetch` instead of the GitHub REST API.
 - Letting an agent commit broker-approved enrichments back to the source repository
   (the write-back saga, ADR-086 G4).

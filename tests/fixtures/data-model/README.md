@@ -1,9 +1,17 @@
 # VisionClaw Data Sprint — Model Test Fixtures
 
-Synthetic Logseq markdown files with embedded JSON-LD blocks that conform
+Synthetic markdown files with embedded JSON-LD blocks that conform
 to the canonical VisionClaw source-data schema (ADR-08, ADR-11). These
 fixtures are the model corpus consumed by the parser, the ontology
 adapter, the graph adapter, and the parity test harness.
+
+> **Format note.** These fixtures are still written in the legacy Logseq
+> property style (`public:: true`), which the readers accept only inside a
+> page's leading property block during the tolerance window in
+> [ADR-2040](../../../docs/adr/ADR-2040-obsidian-vault-frontmatter-gate.md).
+> Vault-format counterparts (YAML frontmatter `public: true` / `owl-class`,
+> per [`VAULT-corpus-format.md`](../../../docs/VAULT-corpus-format.md)) are owed
+> alongside the `PageMeta` parser — see `C-14` in `docs/TODO-unified.md`.
 
 ## Domain
 

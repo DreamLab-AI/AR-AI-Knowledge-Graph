@@ -187,7 +187,7 @@ xr:
 
 ### Knowledge Graph Integration
 
-Configure for Logseq and GitHub integration:
+Configure for vault and GitHub integration:
 
 ```bash
 # GitHub integration
@@ -195,14 +195,17 @@ GITHUB-TOKEN=ghp-your-github-personal-access-token
 GITHUB-SYNC-INTERVAL=300
 ENABLE-GITHUB-WEBHOOKS=true
 
-# Logseq configuration
+# Vault configuration (env names retain their legacy LOGSEQ- prefix)
 LOGSEQ-GRAPH-PATH=/data/logseq
 LOGSEQ-SYNC-MODE=auto
 ENABLE-BLOCK-REFERENCES=true
 ENABLE-PAGE-PROPERTIES=true
 ```
 
-Set up graph-specific visualisation in `data/settings.yaml`:
+Set up graph-specific visualisation in `data/settings.yaml`. The server-side key is still `logseq`
+(`src/config/visualisation.rs:512`, `data/settings.yaml:67`);
+[ADR-2041](../../adr/ADR-2041-graph-settings-key-knowledge.md) renames it to `knowledge` with
+`serde(alias = "logseq")`, so persisted files keep loading. The client already emits `knowledge`:
 ```yaml
 visualisation:
   graphs:

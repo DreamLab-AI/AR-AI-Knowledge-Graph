@@ -126,7 +126,7 @@ rather than a direct lexical match.
 
 ## ontology_read
 
-Read a single note (ontology class) with its full context: Logseq markdown,
+Read a single note (ontology class) with its full context: vault markdown,
 ontology metadata, Whelk axioms (asserted and inferred), related notes, and a
 pre-rendered schema context string for query grounding.
 
@@ -145,7 +145,7 @@ pre-rendered schema context string for query grounding.
 | `iri` | string | Class IRI |
 | `term_id` | string | Stable term identifier |
 | `preferred_term` | string | Display label |
-| `markdown_content` | string | Full Logseq markdown |
+| `markdown_content` | string | Full vault markdown |
 | `ontology_metadata` | object | `owl_class`, `physicality`, `role`, `domain`, `quality_score`, `authority_score`, `maturity`, `status`, `parent_classes[]` |
 | `whelk_axioms` | array | `{ axiom_type, subject, object, is_inferred }` — `is_inferred=true` means Whelk-derived |
 | `related_notes` | array | `{ iri, preferred_term, relationship_type, direction ("outgoing"\|"incoming"), summary }` |

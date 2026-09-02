@@ -168,9 +168,9 @@ sequenceDiagram
     participant SA as OptimizedSettingsActor<br/>src/actors/optimized_settings_actor.rs
     participant GPU as GPUComputeActor
 
-    UI->>SS: updateSettings(draft => { draft.visualisation.graphs.logseq.physics.springK = 0.5 })
+    UI->>SS: updateSettings(draft => { draft.visualisation.graphs.knowledge.physics.springK = 0.5 })
     SS->>SS: produce(partialSettings, updater) [immer]
-    SS->>SS: findChangedPaths() → ["visualisation.graphs.logseq.physics.springK"]
+    SS->>SS: findChangedPaths() → ["visualisation.graphs.knowledge.physics.springK"]
     SS->>SS: Zustand set({ partialSettings, settings, loadedPaths })
     SS->>ASM: autoSaveManager.queueChanges(batchChanges)<br/>(Map<path, value>)
     ASM->>ASM: store in pendingChanges Map

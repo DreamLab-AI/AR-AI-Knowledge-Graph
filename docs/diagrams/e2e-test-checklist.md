@@ -31,7 +31,7 @@
 ## Layer 2 — Data Ingestion
 
 - [ ] GitHub ontology sync kicks off on startup — look for `GithubSyncActor` logs
-- [ ] Logseq pages processed into `KGNode` rows ~~in Neo4j~~ in the Oxigraph triple store
+- [ ] Vault pages processed into `KGNode` rows ~~in Neo4j~~ in the Oxigraph triple store
 - [ ] OWL ontology assembler → converter → Whelk reasoner pipeline executes
 - [ ] ~~Neo4j node count > 0 after ingestion (query: `MATCH (n) RETURN count(n)`)~~ (REMOVED — Neo4j gone; verify via an Oxigraph SPARQL count instead)
 - [ ] `iri_to_id` map populated (logs: `ONT-001: Built iri_to_id map — N KGNode nodes have owl_class_iri`)

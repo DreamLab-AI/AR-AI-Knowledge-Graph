@@ -367,7 +367,7 @@ flowchart LR
 
 **`ontology_read`**
 - Input: `{ iri: string }`
-- Output: `EnrichedNote` — full Logseq markdown, OWL metadata, Whelk axioms, related notes, schema context
+- Output: `EnrichedNote` — full vault markdown, OWL metadata, Whelk axioms, related notes, schema context
 
 **`ontology_query`**
 - Input: `{ cypher: string }`
