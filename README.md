@@ -4,18 +4,30 @@
 
 ### Watch here, judge there — the flagship engine of the Dynamic Agentic Mesh
 
+**An Obsidian vault as the knowledge corpus · OWL 2 reasoning · CUDA force physics · immersive 3D and XR · embodied agent swarms**
+
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-2021-orange?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![CUDA](https://img.shields.io/badge/CUDA-13.1-76B900?style=flat-square&logo=nvidia)](https://developer.nvidia.com/cuda-toolkit)
 [![Docs](https://img.shields.io/badge/Docs-Di%C3%A1taxis-4A90D9?style=flat-square)](docs/README.md)
+[![Corpus](https://img.shields.io/badge/corpus-Obsidian%20vault-7C3AED?style=flat-square&logo=obsidian&logoColor=white)](docs/VAULT-corpus-format.md)
 
 **Maintainer**: [John O'Hare](https://github.com/jjohare) · **Upstream IP**: [Melvin Carvalho](https://github.com/melvincarvalho) · [MAINTAINERS.md](MAINTAINERS.md)
 
 <br/>
 
-*A live agent swarm embodied in the knowledge graph — status-driven capsules, per-swarm tinting, and real-time action beams from agents to the concepts they touch.*
+*A live agent swarm embodied in the knowledge graph — status-driven capsules, per-swarm tinting, and real-time action beams from agents to the concepts they touch. Inside the VIVE Pro headset, 2 September 2026, on the Obsidian-vault corpus.*
+
+![Inside the headset: agent action beams from an embodied swarm to the concepts they touch](docs/assets/media/2026-09-02-immersive-agent-actions-preview.gif)
+
+**Full clip:** [`2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 1280×720, 25 fps, 68 MB, no audio.
+
+<details>
+<summary>Earlier hero clip (desktop client)</summary>
 
 https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
+
+</details>
 
 </div>
 
@@ -106,7 +118,7 @@ Each sibling in its own words:
 <summary><b>narrativegoldmine</b> — <em>Corpus source and readable front door — open dataset, pipeline, rendered viewer</em></summary>
 <br/>
 
-> **8,100+ ordinary Logseq markdown pages that compile losslessly into a formal OWL 2 ontology — pure TBox, every page a class, zero individuals by design.** Corpus, pipeline, viewer and method ship as one open release (ODbL-1.0 data, AGPL-3.0 pipeline) published at narrativegoldmine.com; siblings reason over it (VisionClaw) and serve it as measured LLM grounding (Loom, ~0.94 grounded recall), and third-party extractors such as OntoCast stage RDF into it as governed, reviewable candidates. Rigorous curation is amortised once and reused per query — this repo is the once.
+> **8,100+ ordinary markdown pages (an Obsidian vault since September 2026) that compile losslessly into a formal OWL 2 ontology — pure TBox, every page a class, zero individuals by design.** Corpus, pipeline, viewer and method ship as one open release (ODbL-1.0 data, AGPL-3.0 pipeline) published at narrativegoldmine.com; siblings reason over it (VisionClaw) and serve it as measured LLM grounding (Loom, ~0.94 grounded recall), and third-party extractors such as OntoCast stage RDF into it as governed, reviewable candidates. Rigorous curation is amortised once and reused per query — this repo is the once.
 
 </details>
 
