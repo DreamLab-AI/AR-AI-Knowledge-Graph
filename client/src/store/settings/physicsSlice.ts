@@ -19,8 +19,12 @@ export const createPhysicsSlice: StateCreator<SettingsState, [], [], PhysicsSlic
   updatePhysics: (graphName: string, params: Partial<GPUPhysicsParams>) => {
     // Guard against non-string graph names (prevents [object Object] key corruption)
     if (typeof graphName !== 'string' || !graphName || graphName === '[object Object]') {
-      logger.warn('updatePhysics called with invalid graphName, defaulting to "logseq":', graphName);
-      graphName = 'logseq';
+      logger.warn('updatePhysics called with invalid graphName, defaulting to "knowledge":', graphName);
+      graphName = 'knowledge';
+    }
+    // ADR-2041: accept the legacy `logseq` graph name for one release.
+    if (graphName === 'logseq') {
+      graphName = 'knowledge';
     }
     const state = get();
 
@@ -140,8 +144,12 @@ export const createPhysicsSlice: StateCreator<SettingsState, [], [], PhysicsSlic
 
   updateTweening: (graphName: string, params: Partial<{ enabled: boolean; lerpBase: number; snapThreshold: number; maxDivergence: number }>) => {
     if (typeof graphName !== 'string' || !graphName || graphName === '[object Object]') {
-      logger.warn('updateTweening called with invalid graphName, defaulting to "logseq":', graphName);
-      graphName = 'logseq';
+      logger.warn('updateTweening called with invalid graphName, defaulting to "knowledge":', graphName);
+      graphName = 'knowledge';
+    }
+    // ADR-2041: accept the legacy `logseq` graph name for one release.
+    if (graphName === 'logseq') {
+      graphName = 'knowledge';
     }
     const state = get();
 

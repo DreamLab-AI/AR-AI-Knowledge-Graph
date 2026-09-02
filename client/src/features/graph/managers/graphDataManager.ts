@@ -11,6 +11,7 @@ import { useWorkerErrorStore } from '../../../store/workerErrorStore';
 import { ensureNodeHasValidPosition, validateNodeMappings, dropLinkedPageStubs } from './dataManager/nodeUtils';
 import { buildNodeIdMaps, upsertNodeIdEntry, setDataAndNotify, topologyHash } from './dataManager/topology';
 import { ListenerRegistry } from './dataManager/listeners';
+import { normaliseGraphType } from '../types/graphTypes';
 import { fetchGraphData, scheduleEmptyDataRetry, type GraphTypeFilter } from './dataManager/restClient';
 import { handleBinaryFrame, sendNodePositions as _sendNodePositions, enableBinaryUpdates as _enableBinaryUpdates } from './dataManager/wsClient';
 import { parseBinaryNodeData, getActualNodeId } from '../../../types/binaryProtocol';
@@ -42,7 +43,7 @@ class GraphDataManager {
 
   // ── Worker / graph type ─────────────────────────────────────────────────
   private workerInitialized: boolean = false;
-  private graphType: 'logseq' | 'visionclaw' = 'logseq';
+  private graphType: 'knowledge' | 'visionclaw' = 'knowledge';
   // Server-side population filter (PRD-018 WS-4). null/'all' = whole graph.
   private graphTypeFilter: GraphTypeFilter = null;
   private workerUnsubscribers: Array<() => void> = [];
@@ -164,12 +165,14 @@ class GraphDataManager {
     if (debugState.isDataDebugEnabled()) logger.debug('WebSocket service set');
   }
 
-  public setGraphType(type: 'logseq' | 'visionclaw'): void {
-    this.graphType = type;
-    if (debugState.isEnabled()) logger.info(`Graph type set to: ${type}`);
+  // ADR-2041: the legacy value `logseq` is accepted here for one release and
+  // normalised to `knowledge`; everything this manager sends uses `knowledge`.
+  public setGraphType(type: 'knowledge' | 'visionclaw' | 'logseq'): void {
+    this.graphType = normaliseGraphType(type);
+    if (debugState.isEnabled()) logger.info(`Graph type set to: ${this.graphType}`);
   }
 
-  public getGraphType(): 'logseq' | 'visionclaw' {
+  public getGraphType(): 'knowledge' | 'visionclaw' {
     return this.graphType;
   }
 

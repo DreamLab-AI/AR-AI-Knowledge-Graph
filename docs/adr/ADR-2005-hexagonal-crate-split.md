@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: 542d63d1d8e28fb2af1dce420635e7a1cee165f6
+verified_commit: 4fed5663dfbc0940c6b19a175dfcc8a9c67f2ab8
 verified_paths: [Cargo.toml, src/actors, crates/visionclaw-actors/src]
 owner: jjohare
 review_trigger: completion of the actor extraction into crates/visionclaw-actors, or a new subsystem that does not map to an existing crate layer

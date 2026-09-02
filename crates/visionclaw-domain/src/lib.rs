@@ -23,6 +23,7 @@ pub mod ports;
 pub mod telemetry;
 pub mod types;
 pub mod utils;
+pub mod vault;
 
 // Convenience re-exports — keep this list focused on the *shared kernel*
 // (types every other crate needs). Specialised types stay behind their

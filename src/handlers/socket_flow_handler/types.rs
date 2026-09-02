@@ -398,14 +398,14 @@ impl SocketFlowServer {
 
                     // Initial-load node cap, now settings-driven (ungated via the
                     // /api/settings interface). `initialNodeLimit` lives on the
-                    // logseq graph's physics settings; 0/absent = the built-in
+                    // knowledge graph's physics settings; 0/absent = the built-in
                     // default (3000), and any value is clamped to a sanity ceiling
                     // (100_000) so a client can raise it up to the full graph.
                     let initial_node_limit = resolve_initial_node_limit(
                         settings
                             .visualisation
                             .graphs
-                            .logseq
+                            .knowledge
                             .physics
                             .initial_node_limit,
                     );

@@ -265,7 +265,7 @@ impl GraphStateActor {
                 if node.owl_class_iri.is_some() {
                     self.ontology_class_ids.insert(node_id);
                 } else {
-                    // Default: most nodes from logseq are knowledge nodes
+                    // Default: most nodes from the vault are knowledge nodes
                     self.knowledge_node_ids.insert(node_id);
                 }
             }

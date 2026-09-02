@@ -31,7 +31,7 @@ vi.mock('./settingsStore', () => ({
 
 vi.mock('../features/graph/managers/graphDataManager', () => ({
   graphDataManager: {
-    getGraphType: () => 'logseq',
+    getGraphType: () => 'knowledge',
     updateNodePositions: vi.fn(),
     setGraphData: vi.fn().mockResolvedValue(undefined)
   }

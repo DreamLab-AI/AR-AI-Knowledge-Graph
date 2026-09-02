@@ -80,19 +80,19 @@ describe('REPRO T2(a): physics slider commit must produce exactly one PUT', () =
   it('slice.updatePhysics mutates local store state for the changed param', () => {
     const { state, draft } = buildSliceHarness();
 
-    state.updatePhysics('logseq', { repelK: 110 } as Partial<GPUPhysicsParams>);
+    state.updatePhysics('knowledge', { repelK: 110 } as Partial<GPUPhysicsParams>);
 
     const graphs = (draft as unknown as {
       visualisation: { graphs: Record<string, { physics?: Record<string, unknown> }> };
     }).visualisation.graphs;
-    expect(graphs.logseq.physics).toMatchObject({ repelK: 110 });
+    expect(graphs.knowledge.physics).toMatchObject({ repelK: 110 });
   });
 
   it('slice.updatePhysics (via notifyPhysicsUpdate) fires ZERO network PUTs', () => {
     const { state } = buildSliceHarness();
 
     // A single slider commit.
-    state.updatePhysics('logseq', { repelK: 110 } as Partial<GPUPhysicsParams>);
+    state.updatePhysics('knowledge', { repelK: 110 } as Partial<GPUPhysicsParams>);
 
     // The immediate persistence side-effect was removed: the slice must not
     // touch the network. Persistence is owned solely by the debounced
@@ -105,14 +105,14 @@ describe('REPRO T2(a): physics slider commit must produce exactly one PUT', () =
     const { state } = buildSliceHarness();
 
     // Path that used to fire immediately — now a no-op for the network.
-    state.updatePhysics('logseq', { repelK: 110 } as Partial<GPUPhysicsParams>);
+    state.updatePhysics('knowledge', { repelK: 110 } as Partial<GPUPhysicsParams>);
     expect(mockPut).toHaveBeenCalledTimes(0);
 
     // The canonical debounced path (autoSaveManager → updateSettingsByPaths →
     // settingsApi.updatePhysics) is the SOLE persister and fires exactly once.
     const { autoSaveManager } = await import('../autoSaveManager');
     autoSaveManager.setInitialized(true);
-    autoSaveManager.queueChange('visualisation.graphs.logseq.physics.repelK', 110);
+    autoSaveManager.queueChange('visualisation.graphs.knowledge.physics.repelK', 110);
 
     await vi.advanceTimersByTimeAsync(500);
 

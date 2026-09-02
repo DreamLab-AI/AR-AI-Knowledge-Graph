@@ -57,7 +57,7 @@ export interface ConstraintListResponse {
   dataSource: string;
   gpuAvailable: boolean;
   modes?: {
-    logseqComputeMode: number;
+    knowledgeComputeMode: number;
     visionclawComputeMode: number;
   };
 }

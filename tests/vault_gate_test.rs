@@ -1,0 +1,231 @@
+// tests/vault_gate_test.rs
+//! ADR-2040 inclusion-gate integration test — EXP-V01, EXP-V02, EXP-V03 of
+//! `docs/VAULT-corpus-format.md`.
+//!
+//! This drives the SAME code path the GitHub sync uses. The sync's gate for a
+//! plain (non-JSON-LD) page is `github_sync_service::page_is_kg_included`,
+//! which is a one-line delegation to `visionclaw_domain::vault::parse(..)
+//! .is_kg_included()`; `FileService::page_is_kg_included` delegates to exactly
+//! the same call. Both of those are private to their modules, so the gate is
+//! exercised here through that shared entry point, and the node-building half
+//! is exercised through the real `KnowledgeGraphParser` the sync calls.
+//!
+//! The fixtures in `tests/fixtures/vault/` are read from disk rather than
+//! inlined so that the same corpus can be replayed by `vault-migrate`
+//! (ADR-2042) and by the domain-crate twin of this test.
+
+use std::path::PathBuf;
+
+use visionclaw_domain::vault::{self, PageFormat};
+use visionclaw_server::services::parsers::KnowledgeGraphParser;
+
+fn fixture_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/vault")
+}
+
+fn fixture(name: &str) -> String {
+    let path = fixture_dir().join(name);
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("failed to read fixture {}: {e}", path.display()))
+}
+
+/// The gate as the sync applies it to a plain page.
+fn is_kg_included(content: &str) -> bool {
+    vault::parse(content).is_kg_included()
+}
+
+// ---------------------------------------------------------------------------
+// EXP-V01 — the publish half of the gate
+// ---------------------------------------------------------------------------
+
+#[test]
+fn exp_v01_frontmatter_public_true_ingests() {
+    let content = fixture("obsidian-public.md");
+    let meta = vault::parse(&content);
+
+    assert!(meta.public);
+    assert!(is_kg_included(&content));
+    assert_eq!(meta.format, PageFormat::Obsidian);
+    assert_eq!(meta.source_domain.as_deref(), Some("mv"));
+    assert_eq!(meta.aliases, vec!["Public Fixture"]);
+}
+
+#[test]
+fn exp_v01_frontmatter_public_false_does_not_ingest() {
+    let content = fixture("obsidian-private.md");
+
+    assert!(!is_kg_included(&content));
+    // The fixture quotes `public:: true` inside a fenced block: the gate reads
+    // only the frontmatter carrier, so the quote cannot leak the page.
+    assert!(content.contains("public:: true"));
+}
+
+#[test]
+fn exp_v01_a_page_with_no_frontmatter_does_not_ingest() {
+    // Fail-closed (Invariant 2): no carrier at all means private.
+    assert!(!is_kg_included("# Untitled\n\nJust prose.\n"));
+}
+
+// ---------------------------------------------------------------------------
+// EXP-V02 — owl-class bypasses the publish gate
+// ---------------------------------------------------------------------------
+
+#[test]
+fn exp_v02_owl_class_ingests_and_types_the_node() {
+    let content = fixture("obsidian-owl-class.md");
+    let meta = vault::parse(&content);
+
+    assert!(!meta.public, "the fixture carries no `public` key");
+    assert!(is_kg_included(&content));
+    assert_eq!(meta.owl_class.as_deref(), Some("mv:Foo"));
+
+    // The node the sync builds carries the IRI, which is what reclassifies it
+    // into the ontology population downstream.
+    let parser = KnowledgeGraphParser::new();
+    let graph = parser
+        .parse(&content, "obsidian-owl-class.md")
+        .expect("parses");
+    let node = &graph.nodes[0];
+
+    assert_eq!(node.owl_class_iri.as_deref(), Some("mv:Foo"));
+    assert_eq!(node.node_type.as_deref(), Some("ontology_node"));
+    assert_eq!(
+        node.metadata.get("source_domain").map(String::as_str),
+        Some("mv")
+    );
+}
+
+#[test]
+fn exp_v02_elevated_from_resolves_to_the_bare_page_name() {
+    // The provenance bridge the sync turns into an `elevated_from` edge.
+    let meta = vault::parse(&fixture("obsidian-owl-class.md"));
+    assert_eq!(meta.elevated_from.as_deref(), Some("Working Page"));
+}
+
+// ---------------------------------------------------------------------------
+// EXP-V03 — bounded legacy tolerance
+// ---------------------------------------------------------------------------
+
+#[test]
+fn exp_v03_legacy_leading_property_block_still_ingests() {
+    let content = fixture("legacy-public.md");
+    let meta = vault::parse(&content);
+
+    assert!(meta.public);
+    assert!(is_kg_included(&content));
+    assert_eq!(meta.format, PageFormat::LogseqLegacy);
+    assert_eq!(meta.aliases, vec!["Legacy Fixture"]);
+}
+
+#[test]
+fn exp_v03_legacy_marker_after_a_heading_or_in_a_fence_does_not_ingest() {
+    let content = fixture("legacy-midbody-public.md");
+
+    assert!(
+        content.contains("public:: true"),
+        "fixture must contain the marker it is not allowed to honour"
+    );
+    assert!(
+        !is_kg_included(&content),
+        "ADR-2040 D3 narrowing: the marker counts only in the leading block"
+    );
+    assert_eq!(vault::parse(&content).format, PageFormat::None);
+}
+
+// ---------------------------------------------------------------------------
+// §V1 — namespace identity
+// ---------------------------------------------------------------------------
+
+#[test]
+fn namespace_pages_ingest_and_keep_a_stable_identity() {
+    let content = fixture("namespace/A___B Testing.md");
+    assert!(is_kg_included(&content));
+
+    let parser = KnowledgeGraphParser::new();
+    let graph = parser
+        .parse(&content, "A___B Testing.md")
+        .expect("parses");
+    let node = &graph.nodes[0];
+
+    // The page name decodes to the `[[Ns/Title]]` form the corpus links with,
+    // and `source_file` is now the vault-relative path.
+    assert_eq!(node.metadata_id, "A/B Testing");
+    assert_eq!(
+        node.metadata.get("source_file").map(String::as_str),
+        Some("A/B Testing.md")
+    );
+
+    // Invariant 4: the decode does not move the node. Slugification collapses
+    // any run of non-alphanumerics to a single `-`, so the encoded and decoded
+    // names hash to the same id.
+    assert_eq!(
+        node.id,
+        parser.page_name_to_id("A___B Testing"),
+        "node id must be unchanged by the namespace decode"
+    );
+    assert_eq!(node.id, parser.page_name_to_id("A/B Testing"));
+}
+
+#[test]
+fn every_fixture_agrees_with_its_expected_verdict() {
+    // One table so a new fixture cannot be added without stating its verdict.
+    let expected = [
+        ("obsidian-public.md", true),
+        ("obsidian-private.md", false),
+        ("obsidian-owl-class.md", true),
+        ("legacy-public.md", true),
+        ("legacy-midbody-public.md", false),
+        ("namespace/A___B Testing.md", true),
+    ];
+
+    for (name, should_ingest) in expected {
+        assert_eq!(
+            is_kg_included(&fixture(name)),
+            should_ingest,
+            "gate verdict for fixture {name}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The pre-existing Logseq corpus fixtures now exercise the legacy path
+// ---------------------------------------------------------------------------
+
+/// `tests/fixtures/data-model/valid/pages/` was authored against the Logseq
+/// conventions and is deliberately left in that format: it is now the
+/// regression corpus for ADR-2040's bounded legacy tolerance, the counterpart
+/// to the Obsidian-form fixtures in `tests/fixtures/vault/`.
+#[test]
+fn legacy_data_model_fixtures_still_gate_as_authored() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/data-model/valid/pages");
+
+    // 001-004 declare `public:: true` in their leading property block.
+    for name in [
+        "001-minimal-page.md",
+        "002-page-with-tags-and-links.md",
+        "003-page-with-wikilinks.md",
+        "004-stub-page.md",
+    ] {
+        let content = std::fs::read_to_string(dir.join(name)).expect("fixture readable");
+        let meta = vault::parse(&content);
+        assert!(meta.is_kg_included(), "{name} must still ingest");
+        assert_eq!(meta.format, PageFormat::LogseqLegacy, "{name}");
+        assert!(meta.title.is_some(), "{name} carries a leading `title::`");
+    }
+
+    // 005 is `public:: false` and its ontology data is a json-ld FENCE, not an
+    // `owl:class::` property. The gate therefore reports private — which is
+    // correct and not a regression: a page carrying json-ld is claimed by
+    // `parse_canonical_entity` in the sync and never reaches this gate, so
+    // ADR-08 D3 ("the host page is private, the OntologyClass still surfaces")
+    // is preserved by the canonical path rather than by the publish gate.
+    let content =
+        std::fs::read_to_string(dir.join("005-page-with-embedded-ontology-block.md")).unwrap();
+    let meta = vault::parse(&content);
+    assert!(!meta.public);
+    assert_eq!(
+        meta.owl_class, None,
+        "the class lives in a json-ld fence, not a leading `owl:class::` line"
+    );
+    assert!(content.contains("```json-ld"), "routed by the canonical path");
+}

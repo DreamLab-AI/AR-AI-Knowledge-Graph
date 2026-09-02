@@ -227,7 +227,7 @@ echo -e "\n${BLUE}Step 9: Creating test physics update payload...${NC}"
 TEST_PAYLOAD='{
   "visualisation": {
     "graphs": {
-      "logseq": {
+      "knowledge": {
         "physics": {
           "springStrength": 0.1,
           "repulsionStrength": 800.0,

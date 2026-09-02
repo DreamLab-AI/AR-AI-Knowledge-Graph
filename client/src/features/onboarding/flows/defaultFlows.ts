@@ -8,7 +8,7 @@ export const welcomeFlow: OnboardingFlow = {
   steps: [
     {
       id: 'welcome',
-      title: 'Welcome to LogSeq Spring Thing!',
+      title: 'Welcome to VisionClaw!',
       description: 'This interactive tour will help you get familiar with the main features of the application. You can skip this tour at any time or restart it later from the help menu.',
       position: 'center'
     },

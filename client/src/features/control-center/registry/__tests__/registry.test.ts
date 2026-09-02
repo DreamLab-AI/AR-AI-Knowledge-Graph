@@ -35,14 +35,14 @@ const EXPECTED_GROUP_COUNTS: Record<string, number> = {
  * the physics bucket (serverBucketFor → 'physics').
  */
 const WAVE1_LAYOUT_PATHS: string[] = [
-  'visualisation.graphs.logseq.physics.enableDualDiscLayout',
-  'visualisation.graphs.logseq.physics.dagBiasK',
-  'visualisation.graphs.logseq.physics.dagLevelDistance',
+  'visualisation.graphs.knowledge.physics.enableDualDiscLayout',
+  'visualisation.graphs.knowledge.physics.dagBiasK',
+  'visualisation.graphs.knowledge.physics.dagLevelDistance',
   // ADR-141 layout programme (P2/P4): stratified planes + Sugiyama layers.
-  'visualisation.graphs.logseq.physics.planeBiasK',
-  'visualisation.graphs.logseq.physics.planeSpacing',
-  'visualisation.graphs.logseq.physics.layerBiasK',
-  'visualisation.graphs.logseq.physics.layerSpacing',
+  'visualisation.graphs.knowledge.physics.planeBiasK',
+  'visualisation.graphs.knowledge.physics.planeSpacing',
+  'visualisation.graphs.knowledge.physics.layerBiasK',
+  'visualisation.graphs.knowledge.physics.layerSpacing',
 ];
 
 const TOTAL_FIELDS =
@@ -124,7 +124,15 @@ const AGENT_GROUP_PATHS: string[] = [
 
 /** The frozen `path` strings captured from the legacy unifiedSettingsConfig. */
 function legacyPaths(): string[] {
-  return legacyFixture.paths;
+  // ADR-2041 renamed the knowledge-graph settings key `logseq` → `knowledge`.
+  // The fixture stays byte-frozen as the true WP5 historical record; the one
+  // sanctioned rename is applied here so the zero-drift comparison still holds.
+  // Remove this normalisation with the alias (ADR-2041 review_trigger).
+  return legacyFixture.paths.map((p) =>
+    p.startsWith('visualisation.graphs.logseq.')
+      ? p.replace('visualisation.graphs.logseq.', 'visualisation.graphs.knowledge.')
+      : p,
+  );
 }
 
 /** Every field (path or localKey/action) declared in the legacy config. */
@@ -254,9 +262,9 @@ describe('control-center settings registry', () => {
   // Known pre-existing off-grid sliders are whitelisted by path (out of defect-3
   // scope; documented here so future drift on the FIXED fields is still caught).
   const OFF_GRID_WHITELIST = new Set<string>([
-    'visualisation.graphs.logseq.tweening.lerpBase',            // (0.15-0.0001)/0.001 = 149.9
-    'visualisation.graphs.logseq.physics.maxForce',            // (2000-1)/5     = 399.8
-    'visualisation.graphs.logseq.physics.constraintMaxForcePerNode', // (2000-1)/5 = 399.8
+    'visualisation.graphs.knowledge.tweening.lerpBase',            // (0.15-0.0001)/0.001 = 149.9
+    'visualisation.graphs.knowledge.physics.maxForce',            // (2000-1)/5     = 399.8
+    'visualisation.graphs.knowledge.physics.constraintMaxForcePerNode', // (2000-1)/5 = 399.8
     'perplexity.maxTokens',                                    // (4096-100)/100 = 39.96
   ]);
 
@@ -281,7 +289,7 @@ describe('control-center settings registry', () => {
     const maxNodeCount = ALL_FIELDS.find((f) => f.path === 'qualityGates.maxNodeCount')!;
     expect(((maxNodeCount.max! - maxNodeCount.min!) / maxNodeCount.step!)).toBe(100);
 
-    const outline = ALL_FIELDS.find((f) => f.path === 'visualisation.graphs.logseq.labels.textOutlineWidth')!;
+    const outline = ALL_FIELDS.find((f) => f.path === 'visualisation.graphs.knowledge.labels.textOutlineWidth')!;
     expect(outline.step).toBe(0.0001);
     // the 0.0074725277 stored default now snaps to 0.0075 (loss ~2.7e-5) not 0.007 (loss ~4.7e-4)
     const snapped = Math.round(0.0074725277 / outline.step!) * outline.step!;

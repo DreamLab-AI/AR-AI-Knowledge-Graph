@@ -34,7 +34,7 @@ describe('SettingRow control dispatch', () => {
       key: 'repelK',
       label: 'Repel K',
       type: 'slider',
-      path: 'visualisation.graphs.logseq.physics.repelK',
+      path: 'visualisation.graphs.knowledge.physics.repelK',
       min: 0,
       max: 400,
       step: 1,
@@ -56,7 +56,7 @@ describe('SettingRow control dispatch', () => {
       key: 'enabled',
       label: 'Physics Enabled',
       type: 'toggle',
-      path: 'visualisation.graphs.logseq.physics.enabled',
+      path: 'visualisation.graphs.knowledge.physics.enabled',
     });
     render(<SettingRow field={field} groupId={GROUP_ID} />);
 
@@ -70,7 +70,7 @@ describe('SettingRow control dispatch', () => {
       key: 'baseColor',
       label: 'Base Color',
       type: 'color',
-      path: 'visualisation.graphs.logseq.nodes.baseColor',
+      path: 'visualisation.graphs.knowledge.nodes.baseColor',
     });
     render(<SettingRow field={field} groupId={GROUP_ID} />);
 

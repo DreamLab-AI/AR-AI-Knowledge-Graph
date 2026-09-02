@@ -17,7 +17,7 @@ class GraphWorker {
   private graphData: GraphData = { nodes: [], edges: [] };
   private nodeIdMap: Map<string, number> = new Map();
   private reverseNodeIdMap: Map<number, string> = new Map();
-  private graphType: 'logseq' | 'visionclaw' = 'logseq';
+  private graphType: 'knowledge' | 'visionclaw' = 'knowledge';
 
   private nodeIndexMap: Map<string, number> = new Map();
   // Pre-cached parallel array of node IDs — kept in sync with nodeIndexMap to
@@ -105,10 +105,11 @@ class GraphWorker {
     return Promise.resolve();
   }
 
-  async setGraphType(type: 'logseq' | 'visionclaw'): Promise<void> {
-    this.graphType = type;
+  // ADR-2041: `logseq` accepted and normalised to `knowledge` for one release.
+  async setGraphType(type: 'knowledge' | 'visionclaw' | 'logseq'): Promise<void> {
+    this.graphType = type === 'visionclaw' ? 'visionclaw' : 'knowledge';
     this.useServerPhysics = true;
-    workerLogger.info(`Graph type set to ${type} - using SERVER-AUTHORITATIVE physics (single source of truth)`);
+    workerLogger.info(`Graph type set to ${this.graphType} - using SERVER-AUTHORITATIVE physics (single source of truth)`);
   }
 
   async setGraphData(data: GraphData): Promise<void> {

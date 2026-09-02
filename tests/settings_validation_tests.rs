@@ -29,7 +29,7 @@ mod settings_validation_tests {
         let valid_updates = vec![
             ("visualisation.glow.nodeGlowStrength", json!(1.5)),
             ("visualisation.glow.edgeGlowStrength", json!(2.0)),
-            ("visualisation.graphs.logseq.physics.springK", json!(0.1)),
+            ("visualisation.graphs.knowledge.physics.springK", json!(0.1)),
             ("system.maxConnections", json!(100)),
         ];
 
@@ -49,7 +49,7 @@ mod settings_validation_tests {
             ("visualisation.glow.nodeGlowStrength", json!(100.0)), // Too high
             ("system.maxConnections", json!(-5)),                 // Negative connections
             ("system.maxConnections", json!(100000)),             // Unreasonably high
-            ("visualisation.graphs.logseq.physics.springK", json!(0.0)), // Zero physics
+            ("visualisation.graphs.knowledge.physics.springK", json!(0.0)), // Zero physics
         ];
 
         for (path, value) in invalid_updates {

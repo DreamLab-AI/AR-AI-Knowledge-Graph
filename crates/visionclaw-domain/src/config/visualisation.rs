@@ -510,8 +510,12 @@ pub struct GraphSettings {
 #[derive(Debug, Serialize, Deserialize, Clone, Default, Type, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphsSettings {
+    /// The knowledge graph. ADR-2041 renamed this key from `logseq`; the old
+    /// name is accepted on DESERIALISATION only — serialisation always emits
+    /// `knowledge`. Remove the alias per ADR-2041's review_trigger.
     #[validate(nested)]
-    pub logseq: GraphSettings,
+    #[serde(alias = "logseq")]
+    pub knowledge: GraphSettings,
     #[validate(nested)]
     pub visionclaw: GraphSettings,
 }

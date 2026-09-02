@@ -1,7 +1,7 @@
 // src/services/parsers/knowledge_graph_parser.rs
 //! Knowledge Graph Parser
 //!
-//! Parses markdown files marked with `public:: true` to extract:
+//! Parses vault pages admitted by the ADR-2040 §V4 gate to extract:
 //! - Nodes (pages, concepts)
 //! - Edges (links, relationships)
 //! - Metadata (properties, tags)
@@ -13,6 +13,7 @@ use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::metadata::MetadataStore;
 use visionclaw_domain::models::node::Node;
+use visionclaw_domain::vault::{self, PageMeta};
 
 /// Knowledge graph parser with position preservation support
 pub struct KnowledgeGraphParser {
@@ -67,9 +68,15 @@ impl KnowledgeGraphParser {
     pub fn parse(&self, content: &str, filename: &str) -> Result<GraphData, String> {
         info!("Parsing knowledge graph file: {}", filename);
 
-        let page_name = filename.strip_suffix(".md").unwrap_or(filename).to_string();
+        // Page identity is the vault-relative path under `pages/` without the
+        // `.md`, with `/` as the namespace separator (ADR-2040 §V1). The legacy
+        // `___` and `%2F` encodings decode to `/` here. Node ids are unchanged
+        // by the decode: slugify collapses any run of non-alphanumerics to a
+        // single `-`, so `A___B Testing` and `A/B Testing` hash identically
+        // (governing doc Invariant 4).
+        let page_name = vault::page_name_from_path(filename);
 
-        let mut nodes = vec![self.create_page_node(&page_name, content)];
+        let nodes = vec![self.create_page_node(&page_name, content)];
         let mut id_to_metadata = HashMap::new();
         id_to_metadata.insert(nodes[0].id.to_string(), page_name.clone());
 
@@ -97,28 +104,38 @@ impl KnowledgeGraphParser {
         })
     }
 
-    /// Create a page node, preserving existing position if available
+    /// Create a page node, preserving existing position if available.
+    ///
+    /// All authored metadata comes from `visionclaw_domain::vault` (ADR-2040
+    /// D4) — frontmatter, or the leading Logseq property block under the
+    /// bounded legacy tolerance. The metadata KEY SET is unchanged from
+    /// pre-ADR-2040 (`type`, `source_file`, `public`, `file_size`, `tags`,
+    /// `source_domain`, `quality_score`, `maturity`), so the client contract is
+    /// untouched; only `source_file` changes shape, to the vault-relative path
+    /// with `/` namespaces (`A/B Testing.md`, was `A___B Testing.md`).
     fn create_page_node(&self, page_name: &str, content: &str) -> Node {
+        let meta = vault::parse(content);
+
         let mut metadata = HashMap::new();
         metadata.insert("type".to_string(), "page".to_string());
         metadata.insert("source_file".to_string(), format!("{}.md", page_name));
+        // Every page reaching this constructor has already passed the §V4 gate
+        // in the caller, so the published flag is constant — as it was before.
         metadata.insert("public".to_string(), "true".to_string());
 
         // Real markdown byte-size, surfaced so the client can size nodes by content volume.
         let content_size = content.len();
         metadata.insert("file_size".to_string(), content_size.to_string());
 
-        let tags = self.extract_tags(content);
+        let tags = Self::extract_tags(&meta, content);
         if !tags.is_empty() {
             metadata.insert("tags".to_string(), tags.join(", "));
         }
 
-        // Extract owl:class IRI from logseq-style "owl:class:: prefix:Local" lines.
-        // Pages carrying this metadata are reclassified as ontology nodes downstream
+        // Pages carrying a class IRI are reclassified as ontology nodes downstream
         // (graph_state_actor.classify_node treats owl_class_iri.is_some() as ontology).
-        let owl_class_iri = Self::extract_owl_class(content);
-        let source_domain = Self::extract_source_domain(content);
-        if let Some(ref dom) = source_domain {
+        let owl_class_iri = meta.owl_class.clone();
+        if let Some(ref dom) = meta.source_domain {
             metadata.insert("source_domain".to_string(), dom.clone());
         }
 
@@ -158,10 +175,14 @@ impl KnowledgeGraphParser {
             (Some("page".to_string()), Some("#4A90E2".to_string()))
         };
 
+        // §V2 `title` is the display title when it differs from the filename.
+        // Identity (`metadata_id`, `id`) stays keyed on the page name.
+        let label = meta.title.clone().unwrap_or_else(|| page_name.to_string());
+
         Node {
             id,
             metadata_id: page_name.to_string(),
-            label: page_name.to_string(),
+            label,
             data,
             metadata,
             file_size: content_size as u64,
@@ -182,21 +203,6 @@ impl KnowledgeGraphParser {
             vz: Some(0.0),
             owl_class_iri,
         }
-    }
-
-    /// Extract `owl:class:: prefix:LocalName` from a logseq markdown ontology block.
-    /// Returns the full IRI value (e.g. "mv:ArbitrationDecisionEngine").
-    fn extract_owl_class(content: &str) -> Option<String> {
-        for line in content.lines() {
-            let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '-');
-            if let Some(rest) = trimmed.strip_prefix("owl:class::") {
-                let value = rest.trim();
-                if !value.is_empty() {
-                    return Some(value.to_string());
-                }
-            }
-        }
-        None
     }
 
     /// Extract `"quality": <float>` from the page's embedded JSON-LD ontology
@@ -233,20 +239,6 @@ impl KnowledgeGraphParser {
                     .to_string();
                 if !v.is_empty() {
                     return Some(v);
-                }
-            }
-        }
-        None
-    }
-
-    /// Extract `source-domain:: <value>` from logseq markdown front-matter style metadata.
-    fn extract_source_domain(content: &str) -> Option<String> {
-        for line in content.lines() {
-            let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '-');
-            if let Some(rest) = trimmed.strip_prefix("source-domain::") {
-                let value = rest.trim();
-                if !value.is_empty() {
-                    return Some(value.to_string());
                 }
             }
         }
@@ -375,19 +367,32 @@ impl KnowledgeGraphParser {
         store
     }
 
-    fn extract_tags(&self, content: &str) -> Vec<String> {
-        let mut tags = Vec::new();
+    /// A page's tags: the authored `tags` property (frontmatter or leading
+    /// Logseq block, via `PageMeta`) first, then body `#hashtags` in document
+    /// order. Deduplicated across both sources — the previous `Vec::dedup`
+    /// only collapsed ADJACENT repeats, so a tag recurring later in the body
+    /// was emitted twice.
+    fn extract_tags(meta: &PageMeta, content: &str) -> Vec<String> {
+        let mut tags: Vec<String> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut push = |tag: String, tags: &mut Vec<String>| {
+            if !tag.is_empty() && seen.insert(tag.clone()) {
+                tags.push(tag);
+            }
+        };
+
+        for tag in &meta.tags {
+            push(tag.clone(), &mut tags);
+        }
 
         let tag_pattern = regex::Regex::new(r"#([a-zA-Z0-9_-]+)|tag::\s*#?([a-zA-Z0-9_-]+)")
             .expect("Invalid regex pattern");
-
         for cap in tag_pattern.captures_iter(content) {
             if let Some(tag) = cap.get(1).or_else(|| cap.get(2)) {
-                tags.push(tag.as_str().to_string());
+                push(tag.as_str().to_string(), &mut tags);
             }
         }
 
-        tags.dedup();
         tags
     }
 

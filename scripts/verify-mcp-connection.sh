@@ -31,7 +31,7 @@ echo "   MCP_HOST=multi-agent-container"
 echo "   MCP_TCP_PORT=9500"
 
 echo ""
-echo "5. Code changes needed in WebXR (logseq container):"
+echo "5. Code changes needed in WebXR (visionclaw container):"
 echo ""
 echo "   In src/actors/claude_flow_actor.rs:"
 echo "   - Line 100: Set host to 'multi-agent-container'"

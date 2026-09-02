@@ -222,8 +222,8 @@ mod granular_api_tests {
             "visualisation.glow.nodeGlowStrength",
             "visualisation.glow.edgeGlowStrength",
             "visualisation.glow.baseColor",
-            "visualisation.graphs.logseq.physics.springK",
-            "visualisation.graphs.logseq.physics.repelK",
+            "visualisation.graphs.knowledge.physics.springK",
+            "visualisation.graphs.knowledge.physics.repelK",
             "system.debugMode",
             "system.maxConnections",
             "xr.handMeshColor",
@@ -354,17 +354,17 @@ mod granular_api_tests {
 
     #[tokio::test]
     async fn test_deep_nested_path_access() {
-        let paths = vec!["visualisation.graphs.logseq.physics.springK"];
+        let paths = vec!["visualisation.graphs.knowledge.physics.springK"];
         let result = mock_get_settings_by_paths(paths).await;
 
         assert!(result.is_ok());
         let body = result.unwrap();
 
         // Verify deeply nested access works
-        assert!(body["visualisation"]["graphs"]["logseq"]["physics"]["springK"].is_number());
+        assert!(body["visualisation"]["graphs"]["knowledge"]["physics"]["springK"].is_number());
 
         // Verify only the requested deep path is included
-        assert!(body["visualisation"]["graphs"]["logseq"]["physics"]
+        assert!(body["visualisation"]["graphs"]["knowledge"]["physics"]
             .get("repelK")
             .is_none());
         assert!(body["visualisation"].get("glow").is_none());

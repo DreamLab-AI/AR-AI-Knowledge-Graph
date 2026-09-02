@@ -43,7 +43,7 @@ use serde_json::json;
 //     let invalid_node = json!({
 //         "visualisation": {
 //             "graphs": {
-//                 "logseq": {
+//                 "knowledge": {
 //                     "nodes": {
 //                         "nodeSize": -0.5 // Invalid negative value
 //                     }
@@ -58,7 +58,7 @@ use serde_json::json;
 //     let invalid_physics = json!({
 //         "visualisation": {
 //             "graphs": {
-//                 "logseq": {
+//                 "knowledge": {
 //                     "physics": {
 //                         "damping": 2.0 // Invalid > 1.0
 //                     }
@@ -170,7 +170,7 @@ fn test_merge_auto_balance_physics() {
     let update = json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": {
                         "autoBalance": true
                     }
@@ -182,7 +182,7 @@ fn test_merge_auto_balance_physics() {
     let auto_balance = update
         .get("visualisation")
         .and_then(|v| v.get("graphs"))
-        .and_then(|g| g.get("logseq"))
+        .and_then(|g| g.get("knowledge"))
         .and_then(|l| l.get("physics"))
         .and_then(|p| p.get("autoBalance"));
 
@@ -195,7 +195,7 @@ fn test_merge_auto_balance_physics() {
 //     let update = json!({
 //         "visualisation": {
 //             "graphs": {
-//                 "logseq": {
+//                 "knowledge": {
 //                     "physics": {
 //                         "damping": 0.9,
 //                         "iterations": 100
@@ -213,9 +213,9 @@ fn test_merge_auto_balance_physics() {
 //     let physics_updates = extract_physics_updates(&update);
 //
 //     assert_eq!(physics_updates.len(), 2);
-//     assert!(physics_updates.contains_key("logseq"));
+//     assert!(physics_updates.contains_key("knowledge"));
 //     assert!(physics_updates.contains_key("visionclaw"));
-//     assert_eq!(physics_updates["logseq"]["damping"], 0.9);
+//     assert_eq!(physics_updates["knowledge"]["damping"], 0.9);
 //     assert_eq!(physics_updates["visionclaw"]["temperature"], 0.02);
 // }
 

@@ -104,11 +104,14 @@ impl EnhancedContentAPI {
                 continue;
             }
 
-            // Skip Logseq backup directories and non-content paths
+            // Skip backup, app-config and non-content paths (ADR-2040 D6:
+            // `/.obsidian/` and `/.trash/` join the legacy Logseq exclusions).
             if entry_path.contains("/bak/")
                 || entry_path.contains("/logseq/")
                 || entry_path.contains("/.recycle/")
                 || entry_path.contains("/journals/")
+                || entry_path.contains("/.obsidian/")
+                || entry_path.contains("/.trash/")
             {
                 continue;
             }
@@ -222,11 +225,14 @@ impl EnhancedContentAPI {
             } else if file_type == "dir" {
                 let dir_path = file["path"].as_str().unwrap_or("");
 
-                // Skip Logseq backup, recycle, and journal directories
+                // Skip backup, recycle, journal, and app-config directories
+                // (ADR-2040 D6 adds `.obsidian` and `.trash`).
                 if dir_path.contains("/bak")
                     || dir_path.contains("/logseq/")
                     || dir_path.contains("/.recycle")
                     || dir_path.contains("/journals")
+                    || dir_path.contains("/.obsidian")
+                    || dir_path.contains("/.trash")
                 {
                     debug!(
                         "list_markdown_files: Skipping excluded directory: {}",
@@ -382,10 +388,15 @@ impl EnhancedContentAPI {
         if let Some(files) = commit_data["files"].as_array() {
             for file in files {
                 if let Some(filename) = file["filename"].as_str() {
+                    // Namespace decode (ADR-2040 §V1): a vault page may be
+                    // addressed by its folder path while the commit still names
+                    // the legacy encoded file, or vice versa. Both `%2F` and
+                    // `___` decode to `/`.
+                    let decoded = file_path.replace("%2F", "/").replace("___", "/");
                     if filename == file_path
                         || filename.ends_with(&format!("/{}", file_path))
-                        || filename == file_path.replace("%2F", "/")
-                        || filename.ends_with(&format!("/{}", file_path.replace("%2F", "/")))
+                        || filename == decoded
+                        || filename.ends_with(&format!("/{}", decoded))
                     {
                         let additions = file["additions"].as_u64().unwrap_or(0);
                         let deletions = file["deletions"].as_u64().unwrap_or(0);

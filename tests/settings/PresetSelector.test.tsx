@@ -43,8 +43,8 @@ describe('Quality Presets System', () => {
 
     it('should have physics settings in all presets', () => {
       QUALITY_PRESETS.forEach(preset => {
-        expect(preset.settings).toHaveProperty('visualisation.graphs.logseq.physics.iterations');
-        expect(preset.settings).toHaveProperty('visualisation.graphs.logseq.physics.warmupIterations');
+        expect(preset.settings).toHaveProperty('visualisation.graphs.knowledge.physics.iterations');
+        expect(preset.settings).toHaveProperty('visualisation.graphs.knowledge.physics.warmupIterations');
       });
     });
 
@@ -73,7 +73,7 @@ describe('Quality Presets System', () => {
   describe('Preset Values', () => {
     it('should have increasing physics iterations from Low to Ultra', () => {
       const iterations = QUALITY_PRESETS.map(
-        p => p.settings['visualisation.graphs.logseq.physics.iterations']
+        p => p.settings['visualisation.graphs.knowledge.physics.iterations']
       );
       expect(iterations).toEqual([100, 300, 500, 1000]);
     });
@@ -299,7 +299,7 @@ describe('Quality Presets System', () => {
         const callArgs = mockUpdateSettings.mock.calls[0][0];
 
         // Verify it's the High preset settings
-        expect(callArgs).toHaveProperty('visualisation.graphs.logseq.physics.iterations', 500);
+        expect(callArgs).toHaveProperty('visualisation.graphs.knowledge.physics.iterations', 500);
         expect(callArgs).toHaveProperty('performance.targetFPS', 60);
         expect(callArgs).toHaveProperty('xr.renderScale', 1.2);
       });

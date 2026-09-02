@@ -109,10 +109,10 @@ impl SettingsUpdateDTO {
         // Validate visualisation settings if present
         if let Some(ref vis) = self.visualisation {
             // Validate physics iterations
-            let logseq_iterations = vis.graphs.logseq.physics.iterations;
-            if logseq_iterations == 0 || logseq_iterations > 1000 {
+            let knowledge_iterations = vis.graphs.knowledge.physics.iterations;
+            if knowledge_iterations == 0 || knowledge_iterations > 1000 {
                 return Err(SettingsValidationError {
-                    field: "visualisation.graphs.logseq.physics.iterations".to_string(),
+                    field: "visualisation.graphs.knowledge.physics.iterations".to_string(),
                     message: "iterations must be between 1 and 1000".to_string(),
                 });
             }
@@ -282,7 +282,7 @@ pub struct HologramSettingsDTO {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphsSettingsDTO {
-    pub logseq: GraphSettingsDTO,
+    pub knowledge: GraphSettingsDTO,
     pub visionclaw: GraphSettingsDTO,
 }
 

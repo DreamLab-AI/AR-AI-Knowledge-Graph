@@ -37,6 +37,84 @@ use visionclaw_adapters::{emit_activity_nonfatal, ActivityRecord};
 use visionclaw_domain::ports::ontology_repository::{
     AxiomType, OntologyRepository, OwlAxiom, OwlClass,
 };
+use visionclaw_domain::vault;
+
+
+/// Generate a vault page for a proposal: a §V2 YAML frontmatter block
+/// followed by the definition prose (ADR-2040 §V5).
+///
+/// Replaces the former `generate_vault_markdown`, which emitted an
+/// indented `- ### OntologyBlock` of `key:: value` lines. Obsidian renders
+/// those as plain text, so every page this service wrote would have been
+/// invisible to the editor the owner actually uses — and, after ADR-2040,
+/// invisible to the §V4 gate as well. `owl-class` alone would admit the
+/// page; `public: true` is emitted because these pages are published
+/// ontology terms.
+fn generate_vault_markdown(
+    proposal: &NoteProposal,
+    term_id: &str,
+    user_id: &str,
+) -> String {
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+
+    let mut extra: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut set = |key: &str, value: String| {
+        if !value.is_empty() {
+            extra.insert(key.to_string(), value);
+        }
+    };
+
+    set("ontology", "true".to_string());
+    set("term-id", term_id.to_string());
+    // `title` is the §V2 key; `preferred-term` is preserved verbatim
+    // alongside it because the ontology pipeline still reads that name.
+    set("preferred-term", proposal.preferred_term.clone());
+    set("status", "agent-proposed".to_string());
+    set("last-updated", today);
+    set("definition", proposal.definition.clone());
+    set("owl-physicality", proposal.physicality.clone());
+    set("owl-role", proposal.role.clone());
+    set("quality-score", "0.6".to_string());
+    set("authority-score", "0.5".to_string());
+    set("maturity", "draft".to_string());
+    set("contributed-by", user_id.to_string());
+    set("is-subclass-of", wikilink_list(&proposal.is_subclass_of));
+    set("alt-terms", wikilink_list(&proposal.alt_terms));
+    for (rel_type, targets) in &proposal.relationships {
+        set(rel_type, wikilink_list(targets));
+    }
+
+    let meta = vault::PageMeta {
+        public: true,
+        owl_class: (!proposal.owl_class.is_empty()).then(|| proposal.owl_class.clone()),
+        source_domain: (!proposal.domain.is_empty()).then(|| proposal.domain.clone()),
+        title: (!proposal.preferred_term.is_empty())
+            .then(|| proposal.preferred_term.clone()),
+        extra,
+        ..vault::PageMeta::default()
+    };
+
+    let body = if proposal.definition.trim().is_empty() {
+        format!("# {}\n", proposal.preferred_term)
+    } else {
+        format!("# {}\n\n{}\n", proposal.preferred_term, proposal.definition.trim())
+    };
+
+    vault::render_page(&meta, &body)
+}
+
+/// Render targets as a comma-separated list of `[[wikilinks]]` — the §V2 form
+/// for a multi-valued property whose entries are page references. `serde_yaml`
+/// quotes the whole value, so the leading `[[` is never re-read as YAML.
+fn wikilink_list(targets: &[String]) -> String {
+    targets
+        .iter()
+        .filter(|t| !t.trim().is_empty())
+        .map(|t| format!("[[{}]]", t.trim()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 
 /// Error-string sentinel prefix: a blocking conflict-integrity report. The
 /// handler maps this to HTTP 409 and returns the serialised [`ConflictReport`].
@@ -249,7 +327,7 @@ impl OntologyMutationService {
                 return Err(e);
             }
         };
-        let markdown = self.generate_logseq_markdown(&proposal, &term_id, &agent_ctx.user_id);
+        let markdown = generate_vault_markdown(&proposal, &term_id, &agent_ctx.user_id);
         let quality_score = self.compute_quality_score(&proposal);
 
         let file_path = format!(
@@ -396,24 +474,35 @@ impl OntologyMutationService {
             }
         };
 
+        // ADR-2040 §V5: amend the page's frontmatter. A legacy page's leading
+        // property block is converted to frontmatter by this same write, and
+        // the body (prose + JSON-LD fences) is carried through untouched.
+        // The former code appended `    - {rel}:: [[target]]` lines, which
+        // ADR-2040 Invariant 1 forbids — and which landed AFTER the body, well
+        // outside the leading block the gate now reads.
         let existing_markdown = existing.markdown_content.clone().unwrap_or_default();
-        let mut new_markdown = existing_markdown.clone();
+        let (mut meta, body) = vault::split(&existing_markdown);
 
         if let Some(ref new_def) = amendment.update_definition {
-            if let Some(start) = new_markdown.find("definition::") {
-                if let Some(end) = new_markdown[start..].find('\n') {
-                    new_markdown
-                        .replace_range(start..start + end, &format!("definition:: {}", new_def));
-                }
-            }
+            meta.extra
+                .insert("definition".to_string(), new_def.clone());
         }
 
         for (rel_type, targets) in &amendment.add_relationships {
+            let entry = meta.extra.entry(rel_type.clone()).or_default();
             for target in targets {
-                let line = format!("    - {}:: [[{}]]", rel_type, target);
-                new_markdown.push_str(&format!("\n{}", line));
+                let link = format!("[[{}]]", target);
+                if entry.split(',').any(|existing| existing.trim() == link) {
+                    continue;
+                }
+                if !entry.is_empty() {
+                    entry.push_str(", ");
+                }
+                entry.push_str(&link);
             }
         }
+
+        let new_markdown = vault::render_page(&meta, body);
 
         // New subclass axioms proposed by the amendment.
         let mut proposed_axioms = Vec::new();
@@ -666,75 +755,6 @@ impl OntologyMutationService {
             .unwrap_or(0);
 
         Ok(format!("{}-{:04}", prefix, max_seq + 1))
-    }
-
-    /// Generate valid Logseq markdown with OntologyBlock headers.
-    fn generate_logseq_markdown(
-        &self,
-        proposal: &NoteProposal,
-        term_id: &str,
-        user_id: &str,
-    ) -> String {
-        let today = Utc::now().format("%Y-%m-%d").to_string();
-
-        let parents: Vec<String> = proposal
-            .is_subclass_of
-            .iter()
-            .map(|p| format!("[[{}]]", p))
-            .collect();
-        let parents_str = parents.join(", ");
-
-        let alt_terms_str = if proposal.alt_terms.is_empty() {
-            String::new()
-        } else {
-            let terms: Vec<String> = proposal
-                .alt_terms
-                .iter()
-                .map(|t| format!("[[{}]]", t))
-                .collect();
-            format!("    - alt-terms:: {}\n", terms.join(", "))
-        };
-
-        let mut rels_section = String::new();
-        for (rel_type, targets) in &proposal.relationships {
-            for target in targets {
-                rels_section.push_str(&format!("    - {}:: [[{}]]\n", rel_type, target));
-            }
-        }
-
-        format!(
-            r#"- {preferred_term}
-  - ### OntologyBlock
-    - ontology:: true
-    - term-id:: {term_id}
-    - preferred-term:: {preferred_term}
-    - source-domain:: {domain}
-    - status:: agent-proposed
-    - public-access:: true
-    - last-updated:: {today}
-    - definition:: {definition}
-    - owl:class:: {owl_class}
-    - owl:physicality:: {physicality}
-    - owl:role:: {role}
-    - is-subclass-of:: {parents}
-    - quality-score:: 0.6
-    - authority-score:: 0.5
-    - maturity:: draft
-    - contributed-by:: {user_id}
-{alt_terms}{relationships}"#,
-            preferred_term = proposal.preferred_term,
-            term_id = term_id,
-            domain = proposal.domain,
-            today = today,
-            definition = proposal.definition,
-            owl_class = proposal.owl_class,
-            physicality = proposal.physicality,
-            role = proposal.role,
-            parents = parents_str,
-            user_id = user_id,
-            alt_terms = alt_terms_str,
-            relationships = rels_section,
-        )
     }
 
     /// REAL Whelk EL++ consistency check: builds the union of the corpus classes
@@ -1127,5 +1147,92 @@ mod provenance_wiring_tests {
             0,
             "no store injected → no provenance emitted"
         );
+    }
+}
+
+
+#[cfg(test)]
+mod vault_writer_tests {
+    use super::*;
+    use visionclaw_domain::vault::{self, PageFormat};
+
+    fn proposal() -> NoteProposal {
+        NoteProposal {
+            preferred_term: "Arbitration Decision Engine".to_string(),
+            definition: "Resolves competing claims: deterministically.".to_string(),
+            owl_class: "mv:ArbitrationDecisionEngine".to_string(),
+            physicality: "abstract".to_string(),
+            role: "process".to_string(),
+            domain: "mv".to_string(),
+            is_subclass_of: vec!["Engine".to_string(), "Decision Process".to_string()],
+            relationships: std::collections::HashMap::from([(
+                "enables".to_string(),
+                vec!["Consensus".to_string()],
+            )]),
+            alt_terms: vec!["Arbiter".to_string()],
+            owner_user_id: None,
+        }
+    }
+
+    #[test]
+    fn generated_page_is_frontmatter_and_passes_the_gate() {
+        let markdown = generate_vault_markdown(&proposal(), "MV-0042", "did:nostr:abc");
+
+        assert!(markdown.starts_with("---\n"), "must open with frontmatter");
+        assert!(
+            !markdown.contains(":: "),
+            "ADR-2040 Invariant 1: no writer emits `key:: value` lines"
+        );
+
+        let meta = vault::parse(&markdown);
+        assert_eq!(meta.format, PageFormat::Obsidian);
+        assert!(meta.is_kg_included());
+        assert!(meta.public);
+        assert_eq!(meta.owl_class.as_deref(), Some("mv:ArbitrationDecisionEngine"));
+        assert_eq!(meta.source_domain.as_deref(), Some("mv"));
+        assert_eq!(meta.title.as_deref(), Some("Arbitration Decision Engine"));
+    }
+
+    #[test]
+    fn generated_page_preserves_the_ontology_properties_verbatim() {
+        let markdown = generate_vault_markdown(&proposal(), "MV-0042", "did:nostr:abc");
+        let meta = vault::parse(&markdown);
+
+        assert_eq!(meta.extra.get("term-id").map(String::as_str), Some("MV-0042"));
+        assert_eq!(meta.extra.get("maturity").map(String::as_str), Some("draft"));
+        assert_eq!(
+            meta.extra.get("contributed-by").map(String::as_str),
+            Some("did:nostr:abc")
+        );
+        assert_eq!(
+            meta.extra.get("is-subclass-of").map(String::as_str),
+            Some("[[Engine]], [[Decision Process]]")
+        );
+        assert_eq!(
+            meta.extra.get("enables").map(String::as_str),
+            Some("[[Consensus]]")
+        );
+        // A definition containing a colon must survive YAML quoting intact.
+        assert_eq!(
+            meta.extra.get("definition").map(String::as_str),
+            Some("Resolves competing claims: deterministically.")
+        );
+    }
+
+    #[test]
+    fn the_body_carries_the_heading_and_definition() {
+        let markdown = generate_vault_markdown(&proposal(), "MV-0042", "did:nostr:abc");
+        let (_, body) = vault::split(&markdown);
+        assert!(body.contains("# Arbitration Decision Engine"));
+        assert!(body.contains("Resolves competing claims: deterministically."));
+    }
+
+    #[test]
+    fn wikilink_list_skips_blanks_and_wraps_each_target() {
+        assert_eq!(
+            wikilink_list(&["A".to_string(), "  ".to_string(), "B".to_string()]),
+            "[[A]], [[B]]"
+        );
+        assert_eq!(wikilink_list(&[]), "");
     }
 }

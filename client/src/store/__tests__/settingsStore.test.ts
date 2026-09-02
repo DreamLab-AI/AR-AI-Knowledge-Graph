@@ -144,13 +144,13 @@ describe('settingsStore', () => {
 
     it('should update a deeply nested path', () => {
       const store = useSettingsStore.getState();
-      store.set('visualisation.graphs.logseq.physics.springK', 42);
+      store.set('visualisation.graphs.knowledge.physics.springK', 42);
 
       const state = useSettingsStore.getState();
       const vis = (state.partialSettings as Record<string, unknown>).visualisation as Record<string, unknown>;
       const graphs = vis.graphs as Record<string, unknown>;
-      const logseq = graphs.logseq as Record<string, unknown>;
-      const physics = logseq.physics as Record<string, unknown>;
+      const knowledge = graphs.knowledge as Record<string, unknown>;
+      const physics = knowledge.physics as Record<string, unknown>;
       expect(physics.springK).toBe(42);
     });
 
@@ -468,7 +468,7 @@ describe('settingsStore', () => {
       it('should return paths for known section', () => {
         const paths = settingsStoreUtils.getSectionPaths('physics');
         expect(paths.length).toBeGreaterThan(0);
-        expect(paths).toContain('visualisation.graphs.logseq.physics');
+        expect(paths).toContain('visualisation.graphs.knowledge.physics');
       });
 
       it('should return empty array for unknown section', () => {
@@ -486,17 +486,17 @@ describe('settingsStore', () => {
       const store = useSettingsStore.getState();
 
       // springK should be clamped to [0.001, 1000]
-      store.updatePhysics('logseq', { springK: -5 });
+      store.updatePhysics('knowledge', { springK: -5 });
 
       const state = useSettingsStore.getState();
       const vis = (state.partialSettings as Record<string, unknown>).visualisation as Record<string, unknown>;
       const graphs = vis?.graphs as Record<string, unknown>;
-      const logseq = graphs?.logseq as Record<string, unknown>;
-      const physics = logseq?.physics as Record<string, unknown>;
+      const knowledge = graphs?.knowledge as Record<string, unknown>;
+      const physics = knowledge?.physics as Record<string, unknown>;
       expect(physics?.springK).toBe(0.001);
     });
 
-    it('should default to logseq when graphName is invalid', () => {
+    it('should default to knowledge when graphName is invalid', () => {
       useSettingsStore.setState({ initialized: true });
       const store = useSettingsStore.getState();
 
@@ -505,8 +505,8 @@ describe('settingsStore', () => {
       const state = useSettingsStore.getState();
       const vis = (state.partialSettings as Record<string, unknown>).visualisation as Record<string, unknown>;
       const graphs = vis?.graphs as Record<string, unknown>;
-      const logseq = graphs?.logseq as Record<string, unknown>;
-      const physics = logseq?.physics as Record<string, unknown>;
+      const knowledge = graphs?.knowledge as Record<string, unknown>;
+      const physics = knowledge?.physics as Record<string, unknown>;
       expect(physics?.springK).toBe(5);
     });
   });

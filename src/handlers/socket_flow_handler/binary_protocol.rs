@@ -129,20 +129,20 @@ impl SocketFlowServer {
 
                         if let Ok(Ok(_iterations_val)) = settings_addr
                             .send(GetSettingByPath {
-                                path: "visualisation.graphs.logseq.physics.iterations".to_string(),
+                                path: "visualisation.graphs.knowledge.physics.iterations".to_string(),
                             })
                             .await
                         {
                             if let Ok(Ok(_spring_val)) = settings_addr
                                 .send(GetSettingByPath {
-                                    path: "visualisation.graphs.logseq.physics.spring_k"
+                                    path: "visualisation.graphs.knowledge.physics.spring_k"
                                         .to_string(),
                                 })
                                 .await
                             {
                                 if let Ok(Ok(_repulsion_val)) = settings_addr
                                     .send(GetSettingByPath {
-                                        path: "visualisation.graphs.logseq.physics.repel_k"
+                                        path: "visualisation.graphs.knowledge.physics.repel_k"
                                             .to_string(),
                                     })
                                     .await

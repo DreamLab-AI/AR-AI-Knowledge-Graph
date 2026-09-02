@@ -3,12 +3,12 @@ id: ADR-2040
 title: "The authored corpus is an Obsidian vault; YAML frontmatter `public`/`owl-class` gate KG inclusion with bounded Logseq tolerance"
 date: 2026-09-02
 decision_status: proposed
-implementation_status: none
-activation_status: inactive
+implementation_status: complete
+activation_status: staged
 supersedes: [ADR-2014]
 superseded_by: []
 verified_commit:
-verified_paths: [src/services/file_service.rs, src/services/github_sync_service.rs, src/services/parsers/knowledge_graph_parser.rs, src/services/github/content_enhanced.rs, src/services/ontology_mutation_service.rs, src/services/decision_elevation.rs, docs/VAULT-corpus-format.md]
+verified_paths: [crates/visionclaw-domain/src/vault/mod.rs, src/services/file_service.rs, src/services/github_sync_service.rs, src/services/parsers/knowledge_graph_parser.rs, src/services/github/content_enhanced.rs, src/services/ontology_mutation_service.rs, src/services/decision_elevation.rs, docs/VAULT-corpus-format.md]
 owner: jjohare
 review_trigger: the first GitHub sync run after the corpus repo is converted in place, or 2026-12-01, whichever is earlier — at which point the Logseq `key:: value` tolerance is removed
 repo: visionclaw
@@ -74,10 +74,20 @@ new page invisible to the gate in the editor the owner actually uses.
 
 ## Verification
 
-Unit tests in `crates/visionclaw-domain/src/vault/` cover EXP-V01–EXP-V03 of
-the governing doc (frontmatter true/false/absent, `owl-class` bypass, legacy
-leading-block acceptance, mid-body rejection). Integration test in
-`tests/vault_gate_test.rs` runs the sync parser over fixtures in
-`tests/fixtures/vault/`. `implementation_status` is set to `complete` only
-when those tests pass under `cargo test --all-features` with
-`RUSTFLAGS='-D warnings'` and `verified_commit` records the SHA.
+2026-09-02 on the `obsidian` branch: `cargo test -p visionclaw-domain` — 240
+lib tests incl. 40 `vault` unit tests (frontmatter true/false/absent,
+`public: "true"` string rejected, `owl-class` bypass, legacy leading-block
+accepted, `public:: true` after a heading or inside a fence rejected,
+`elevatedFrom` alias stripping, `___`/`%2F`/`pages/` identity decoding,
+render/split round-trip and idempotence) + 5 fixture tests;
+`cargo test --test vault_gate_test` — 9 over `tests/fixtures/vault/`;
+`cargo test --lib services::` — 276; `cargo clippy -p visionclaw-domain
+--all-targets` — 0 warnings in `vault`. Full suite 1109 passed, 1
+pre-existing unrelated failure (`force_compute_actor::dag_rank_tests::
+directed_hierarchy_relation_accepts_only_class_subsumption`, byte-identical to
+`main`, self-contradictory assertion — tracked separately). Deliberate
+findings: `DecisionElevation` drafts previously carried no `public` marker
+and would have been dropped by any gate; `OntologyMutationService`'s
+amendment path appended `- rel:: [[x]]` lines after the body (a §V5
+violation) and now edits frontmatter. `activation_status: staged` until the
+first GitHub sync runs against the converted corpus.

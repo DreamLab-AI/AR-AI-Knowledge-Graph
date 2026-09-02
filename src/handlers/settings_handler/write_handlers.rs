@@ -63,8 +63,9 @@ pub async fn update_settings(
         .get("visualisation")
         .and_then(|v| v.get("graphs"))
         .and_then(|g| {
-            if let Some(logseq) = g.get("logseq") {
-                if let Some(physics) = logseq.get("physics") {
+            // ADR-2041: `logseq` is accepted as an alias of `knowledge`.
+            if let Some(knowledge) = crate::config::knowledge_graph_value(g) {
+                if let Some(physics) = knowledge.get("physics") {
                     if let Some(auto_balance) = physics.get("autoBalance") {
                         return Some(auto_balance.clone());
                     }
@@ -101,8 +102,8 @@ pub async fn update_settings(
             });
 
         if let Some(graphs) = vis_obj {
-            let logseq_physics = graphs
-                .entry("logseq")
+            let knowledge_physics = graphs
+                .entry("knowledge")
                 .or_insert_with(|| json!({}))
                 .as_object_mut()
                 .and_then(|l| {
@@ -110,7 +111,7 @@ pub async fn update_settings(
                         .or_insert_with(|| json!({}))
                         .as_object_mut()
                 });
-            if let Some(physics) = logseq_physics {
+            if let Some(physics) = knowledge_physics {
                 physics.insert("autoBalance".to_string(), auto_balance_value.clone());
             }
 
@@ -143,7 +144,7 @@ pub async fn update_settings(
 
     let _updated_graphs = if auto_balance_update.is_some() {
         let _physics_updates = extract_physics_updates(&update);
-        vec!["logseq", "visionclaw"]
+        vec!["knowledge", "visionclaw"]
     } else {
         modified_update
             .get("visualisation")
@@ -151,8 +152,8 @@ pub async fn update_settings(
             .and_then(|g| g.as_object())
             .map(|graphs| {
                 let mut updated = Vec::new();
-                if graphs.contains_key("logseq") {
-                    updated.push("logseq");
+                if crate::config::graphs_map_has_knowledge(graphs) {
+                    updated.push("knowledge");
                 }
                 if graphs.contains_key("visionclaw") {
                     updated.push("visionclaw");
@@ -165,7 +166,7 @@ pub async fn update_settings(
     let auto_balance_active = app_settings
         .visualisation
         .graphs
-        .logseq
+        .knowledge
         .physics
         .auto_balance
         || app_settings
@@ -188,9 +189,9 @@ pub async fn update_settings(
             let is_auto_balance_change = auto_balance_update.is_some();
 
             if is_auto_balance_change || !auto_balance_active {
-                propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
+                propagate_physics_to_gpu(&state, &app_settings, "knowledge").await;
                 if is_auto_balance_change {
-                    info!("[AUTO-BALANCE] Propagating auto_balance setting change to GPU (logseq only)");
+                    info!("[AUTO-BALANCE] Propagating auto_balance setting change to GPU (knowledge graph only)");
                 }
             } else {
                 info!("[AUTO-BALANCE] Skipping physics propagation to GPU - auto-balance is active and not changing");
@@ -488,7 +489,7 @@ pub async fn batch_update_settings(
                 for update in updates {
                     let path = update.get("path").and_then(|p| p.as_str()).unwrap_or("");
                     if path.contains(".physics.")
-                        || path.contains(".graphs.logseq.")
+                        || crate::config::path_targets_knowledge_graph(path)
                         || path.contains(".graphs.visionclaw.")
                     {
                         physics_updated = true;
@@ -499,7 +500,7 @@ pub async fn batch_update_settings(
                 if physics_updated {
                     info!("Physics settings changed in batch update, propagating to GPU actors");
 
-                    propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
+                    propagate_physics_to_gpu(&state, &app_settings, "knowledge").await;
                 }
             }
             Ok(Err(e)) => {

@@ -433,7 +433,7 @@ export interface GraphSettings {
 
 // Multi-graph namespace structure
 export interface GraphsSettings {
-  logseq: GraphSettings;
+  knowledge: GraphSettings;
   [key: string]: GraphSettings;
 }
 

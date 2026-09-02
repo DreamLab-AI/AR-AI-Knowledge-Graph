@@ -70,7 +70,7 @@ async fn test_complete_physics_parameter_flow() {
     let test_payload = serde_json::json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": {
                         "springStrength": 0.1,
                         "repulsionStrength": 500.0,
@@ -195,7 +195,7 @@ async fn test_ui_to_backend_flow() {
     let settings_update = serde_json::json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": physics_update
                 }
             }
@@ -231,7 +231,7 @@ async fn test_backend_to_gpu_flow() {
     let received_update = serde_json::json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": {
                         "springStrength": 0.02,
                         "repulsionStrength": 600.0,
@@ -246,7 +246,7 @@ async fn test_backend_to_gpu_flow() {
     println!("📥 Backend receives: {}", received_update);
 
     // 2. Test parameter validation ranges
-    let physics = received_update["visualisation"]["graphs"]["logseq"]["physics"]
+    let physics = received_update["visualisation"]["graphs"]["knowledge"]["physics"]
         .as_object()
         .unwrap();
 
@@ -381,7 +381,7 @@ async fn test_complete_flow_integration() {
     let api_payload = serde_json::json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": {
                         "springStrength": 0.1
                     }

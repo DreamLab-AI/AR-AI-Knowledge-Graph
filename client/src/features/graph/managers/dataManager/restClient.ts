@@ -27,7 +27,7 @@ export type GraphTypeFilter = 'knowledge' | 'ontology' | 'agent' | 'all' | null;
  * attempts and exponential back-off.  Returns a validated `GraphData` object
  * with string-coerced node/edge IDs and enriched positions.
  *
- * @param graphType   Multi-graph identity (`logseq`/`visionclaw`) — diagnostic only.
+ * @param graphType   Multi-graph identity (`knowledge`/`visionclaw`) — diagnostic only.
  * @param graphTypeFilter Server-side population filter → `?graph_type=`. When
  *   `null`/`'all'` the whole graph is requested (back-compat default).
  */

@@ -67,7 +67,7 @@ export function transformApiToClientSettings(
       animations: deepMergeVisual(DEFAULT_ANIMATION_SETTINGS, v.animations || {}),
       interaction: deepMergeVisual(DEFAULT_INTERACTION_SETTINGS, v.interaction || {}),
       graphs: {
-        logseq: {
+        knowledge: {
           physics: apiResponse.physics || {},
           nodes: deepMergeVisual(DEFAULT_NODES_SETTINGS, v.nodes || {}),
           edges: deepMergeVisual(DEFAULT_EDGES_SETTINGS, v.edges || {}),
@@ -146,22 +146,22 @@ export function isVisualSettingsPath(path: string): boolean {
  * Convert a client settings path to its key within the visual blob stored on the server.
  *
  * Mappings:
- *   visualisation.graphs.logseq.nodes.X  → nodes.X
- *   visualisation.graphs.logseq.edges.X  → edges.X
- *   visualisation.graphs.logseq.labels.X → labels.X
+ *   visualisation.graphs.knowledge.nodes.X  → nodes.X   (legacy `logseq` also accepted)
+ *   visualisation.graphs.knowledge.edges.X  → edges.X
+ *   visualisation.graphs.knowledge.labels.X → labels.X
  *   visualisation.<category>.X           → <category>.X
  */
 export function toVisualKey(path: string): string {
-  if (path.startsWith('visualisation.graphs.logseq.nodes')) {
-    return path.replace('visualisation.graphs.logseq.nodes', 'nodes');
+  // ADR-2041: `logseq` is accepted as a read-only alias of `knowledge` for one
+  // release so a path built from persisted state still maps to the right key.
+  const p = path.startsWith('visualisation.graphs.logseq.')
+    ? path.replace('visualisation.graphs.logseq.', 'visualisation.graphs.knowledge.')
+    : path;
+  for (const bucket of ['nodes', 'edges', 'labels'] as const) {
+    const prefix = `visualisation.graphs.knowledge.${bucket}`;
+    if (p.startsWith(prefix)) return p.replace(prefix, bucket);
   }
-  if (path.startsWith('visualisation.graphs.logseq.edges')) {
-    return path.replace('visualisation.graphs.logseq.edges', 'edges');
-  }
-  if (path.startsWith('visualisation.graphs.logseq.labels')) {
-    return path.replace('visualisation.graphs.logseq.labels', 'labels');
-  }
-  return path.replace('visualisation.', '');
+  return p.replace('visualisation.', '');
 }
 
 /** Build a nested object from a dot-notation path and a leaf value. */

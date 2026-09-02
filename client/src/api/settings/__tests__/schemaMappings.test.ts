@@ -61,7 +61,7 @@ describe('isVisualSettingsPath', () => {
   });
 
   it('returns false for physics inside graphs', () => {
-    expect(isVisualSettingsPath('visualisation.graphs.logseq.physics.damping')).toBe(false);
+    expect(isVisualSettingsPath('visualisation.graphs.knowledge.physics.damping')).toBe(false);
   });
 
   it('returns false for non-visualisation paths', () => {
@@ -71,15 +71,15 @@ describe('isVisualSettingsPath', () => {
 
 describe('toVisualKey', () => {
   it('maps nodes sub-path', () => {
-    expect(toVisualKey('visualisation.graphs.logseq.nodes.size')).toBe('nodes.size');
+    expect(toVisualKey('visualisation.graphs.knowledge.nodes.size')).toBe('nodes.size');
   });
 
   it('maps edges sub-path', () => {
-    expect(toVisualKey('visualisation.graphs.logseq.edges.width')).toBe('edges.width');
+    expect(toVisualKey('visualisation.graphs.knowledge.edges.width')).toBe('edges.width');
   });
 
   it('maps labels sub-path', () => {
-    expect(toVisualKey('visualisation.graphs.logseq.labels.fontSize')).toBe('labels.fontSize');
+    expect(toVisualKey('visualisation.graphs.knowledge.labels.fontSize')).toBe('labels.fontSize');
   });
 
   it('maps generic visualisation path', () => {

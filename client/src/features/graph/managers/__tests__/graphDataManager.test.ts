@@ -470,15 +470,22 @@ describe('GraphDataManager', () => {
   // ---- Graph type ----
 
   describe('graphType', () => {
-    it('should default to logseq', () => {
-      expect(graphDataManager.getGraphType()).toBe('logseq');
+    it('should default to knowledge', () => {
+      expect(graphDataManager.getGraphType()).toBe('knowledge');
     });
 
     it('should allow setting graph type', () => {
       graphDataManager.setGraphType('visionclaw');
       expect(graphDataManager.getGraphType()).toBe('visionclaw');
       // Reset
+      graphDataManager.setGraphType('knowledge');
+    });
+
+    // ADR-2041: the legacy value is accepted on the receive side for one release.
+    it('should normalise the legacy "logseq" value to "knowledge"', () => {
+      graphDataManager.setGraphType('visionclaw');
       graphDataManager.setGraphType('logseq');
+      expect(graphDataManager.getGraphType()).toBe('knowledge');
     });
   });
 

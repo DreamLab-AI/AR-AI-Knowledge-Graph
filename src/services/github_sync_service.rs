@@ -1584,7 +1584,7 @@ impl GitHubSyncService {
                 // populate the force-directed graph as `page` nodes joined by
                 // their wikilinks — the dual-source ingest the system was
                 // designed for.
-                self.process_plain_logseq_file(file, content, nodes, edges, stub_ids);
+                self.process_plain_vault_file(file, content, nodes, edges, stub_ids);
                 return Ok(());
             }
             Err(e) => {
@@ -1654,40 +1654,30 @@ impl GitHubSyncService {
             });
         }
 
-        // 3b. Elevation provenance: `elevatedFrom:: [[Working Page]]` logseq
-        //     property lines (written by the 2026-06-12 twin-rename batch)
-        //     become typed bridge edges from the formal class node to its
-        //     working-graph origin page. The raw property is scanned here
-        //     because the canonical entity carries only JSON-LD wikilinks.
-        //     Targets that are not authored nodes (non-public working twins)
-        //     fold to weight at the deferred pass like any dangling link.
-        for line in content.lines() {
-            let Some(rest) = line.trim_start().strip_prefix("elevatedFrom::") else {
-                continue;
-            };
-            let Some(name) = rest
-                .trim()
-                .strip_prefix("[[")
-                .and_then(|r| r.split("]]").next())
-                .map(|n| n.split('|').next().unwrap_or(n).trim())
-                .filter(|n| !n.is_empty())
-            else {
-                continue;
-            };
-            let target_id = self.kg_parser.page_name_to_id(name);
-            if target_id == source_id {
-                continue;
+        // 3b. Elevation provenance: the page's `elevatedFrom` property becomes a
+        //     typed bridge edge from the formal class node to its working-graph
+        //     origin page. Read through `visionclaw_domain::vault` (ADR-2040
+        //     D4), so it resolves from frontmatter `elevatedFrom: "[[X]]"` and,
+        //     under the bounded legacy tolerance, from a leading-block
+        //     `elevatedFrom:: [[X]]` line (the 2026-06-12 twin-rename batch).
+        //     The property is read here because the canonical entity carries
+        //     only JSON-LD wikilinks. Targets that are not authored nodes
+        //     (non-public working twins) fold to weight at the deferred pass
+        //     like any dangling link.
+        if let Some(name) = visionclaw_domain::vault::parse(content).elevated_from {
+            let target_id = self.kg_parser.page_name_to_id(&name);
+            if target_id != source_id {
+                let edge_id = format!("{}_{}_elevated_from", source_id, target_id);
+                edges.entry(edge_id.clone()).or_insert_with(|| Edge {
+                    id: edge_id,
+                    source: source_id,
+                    target: target_id,
+                    weight: 1.0,
+                    edge_type: Some("elevated_from".to_string()),
+                    metadata: None,
+                    owl_property_iri: None,
+                });
             }
-            let edge_id = format!("{}_{}_elevated_from", source_id, target_id);
-            edges.entry(edge_id.clone()).or_insert_with(|| Edge {
-                id: edge_id,
-                source: source_id,
-                target: target_id,
-                weight: 1.0,
-                edge_type: Some("elevated_from".to_string()),
-                metadata: None,
-                owl_property_iri: None,
-            });
         }
 
         // 4. Run the full JSON-LD ingest to (a) emit typed semantic edges from
@@ -1748,7 +1738,7 @@ impl GitHubSyncService {
     /// node is inserted with `or_insert`: it never clobbers an ontology node a
     /// JSON-LD sibling already emitted, while the canonical path's unconditional
     /// `insert` still upgrades a plain page to its ontology form.
-    fn process_plain_logseq_file(
+    fn process_plain_vault_file(
         &self,
         file: &GitHubFileBasicMetadata,
         content: &str,
@@ -1781,9 +1771,9 @@ impl GitHubSyncService {
             .first()
             .map(|n| n.owl_class_iri.is_some())
             .unwrap_or(false);
-        if !is_ontology && !logseq_page_is_public(content) {
+        if !is_ontology && !page_is_kg_included(content) {
             debug!(
-                "Skipped non-public working-graph page: {} (no `public:: true`)",
+                "Skipped non-public working-graph page: {} (no frontmatter `public: true`/`owl-class`)",
                 file.name
             );
             return;
@@ -2256,16 +2246,15 @@ impl GitHubSyncService {
 // Free functions
 // ------------------------------------------------------------------
 
-/// True when a plain logseq page declares `public:: true` (case-insensitive).
-/// Absence of the property means private — the working-graph gate excludes it.
-fn logseq_page_is_public(content: &str) -> bool {
-    for line in content.lines() {
-        let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '-');
-        if let Some(rest) = trimmed.strip_prefix("public::") {
-            return rest.trim().eq_ignore_ascii_case("true");
-        }
-    }
-    false
+/// The ADR-2040 §V4 inclusion gate for a plain (non-JSON-LD) vault page:
+/// frontmatter `public: true`, or a non-empty `owl-class`. Absence of both
+/// means private — the working-graph gate excludes it.
+///
+/// Delegates to `visionclaw_domain::vault`, the single parsing entry point.
+/// Logseq `public::` lines still count under the bounded legacy tolerance, but
+/// only in the leading property block.
+fn page_is_kg_included(content: &str) -> bool {
+    visionclaw_domain::vault::parse(content).is_kg_included()
 }
 
 /// Map a fully-expanded predicate IRI to a canonical edge-type label.

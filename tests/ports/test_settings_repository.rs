@@ -138,21 +138,21 @@ async fn test_physics_profiles() {
         ..Default::default()
     };
 
-    repo.save_physics_settings("logseq", &physics).await.unwrap();
+    repo.save_physics_settings("knowledge", &physics).await.unwrap();
 
     // Load it back
-    let loaded = repo.get_physics_settings("logseq").await.unwrap();
+    let loaded = repo.get_physics_settings("knowledge").await.unwrap();
     assert_eq!(loaded.time_step, 0.016);
     assert_eq!(loaded.damping, 0.8);
 
     // List profiles
     let profiles = repo.list_physics_profiles().await.unwrap();
-    assert!(profiles.contains(&"logseq".to_string()));
+    assert!(profiles.contains(&"knowledge".to_string()));
 
     // Delete profile
-    repo.delete_physics_profile("logseq").await.unwrap();
+    repo.delete_physics_profile("knowledge").await.unwrap();
     let profiles = repo.list_physics_profiles().await.unwrap();
-    assert!(!profiles.contains(&"logseq".to_string()));
+    assert!(!profiles.contains(&"knowledge".to_string()));
 }
 
 #[tokio::test]

@@ -30,7 +30,7 @@ vi.mock('../../../api/settingsApi', () => ({
 }));
 
 const MOTION = REGISTRY[0];
-const REPEL_K_TESTID = 'setting-visualisation.graphs.logseq.physics.repelK';
+const REPEL_K_TESTID = 'setting-visualisation.graphs.knowledge.physics.repelK';
 
 /**
  * Count the CANONICAL field controls only. WP1's SettingSlider/NostrAuthControl

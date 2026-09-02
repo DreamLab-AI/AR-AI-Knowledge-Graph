@@ -33,6 +33,7 @@
 use log::warn;
 use oxigraph::model::Quad;
 use serde_json::{json, Value};
+use visionclaw_domain::vault;
 
 use crate::services::decision_service::{build_decision_quads, DecisionInput, DL_NS, PROV_NS};
 
@@ -208,13 +209,23 @@ pub fn draft_decision_page(dec: &ElevatedDecision) -> (String, String) {
         dec.input.summary.trim().to_string()
     };
 
-    let content = format!(
+    let body = format!(
         "# {heading}\n\n\
          > Elevated decision record (ADR-050). Re-derived into \
          `urn:ngm:graph:ontology:assert` on the next corpus sync. Signed \
          attribution lives in the provenance graph; this page carries the summary.\n\n\
          ```json-ld\n{block}\n```\n"
     );
+
+    // ADR-2040 §V5: writers emit vault frontmatter, never `key:: value` lines.
+    // Without `public: true` the §V4 gate would treat every drafted decision
+    // page as private and the record would never reach the knowledge graph.
+    let meta = vault::PageMeta {
+        public: true,
+        title: (heading != "Decision").then(|| heading.clone()),
+        ..vault::PageMeta::default()
+    };
+    let content = vault::render_page(&meta, &body);
 
     (file_path, content)
 }
@@ -535,6 +546,60 @@ mod tests {
             .collect();
         assert!(types.iter().any(|o| o.contains(PROV_ACTIVITY)));
         assert!(types.iter().any(|o| o.contains("DecisionRecord")));
+    }
+
+    #[test]
+    fn drafted_page_is_vault_frontmatter_and_passes_the_inclusion_gate() {
+        // ADR-2040 §V5 + Invariant 2: the drafted page carried no metadata
+        // carrier at all before this change, so the §V4 gate would have read
+        // every elevated decision as private and dropped it from the graph.
+        let dec = sample(DecisionInput {
+            summary: "merge duplicate concepts".into(),
+            rationale: "resolves DUPLICATE_CONCEPT".into(),
+            proposal_urn: None,
+            caused: vec!["urn:agentbox:decision:AA:sha256-12-def".into()],
+            precedent_for: vec![],
+            influenced: vec![],
+            considered_inputs: vec![],
+            governed_by: vec![],
+        });
+        let (_, markdown) = draft_decision_page(&dec);
+
+        assert!(markdown.starts_with("---\n"));
+        assert!(
+            !markdown.contains(":: "),
+            "no writer emits `key:: value` lines (Invariant 1)"
+        );
+
+        let meta = vault::parse(&markdown);
+        assert!(meta.public);
+        assert!(meta.is_kg_included());
+        assert_eq!(meta.title.as_deref(), Some("merge duplicate concepts"));
+
+        // The json-ld body is untouched, so the read half still round-trips.
+        let parsed = parse_decision_page(&markdown).expect("decision page parses");
+        assert_eq!(parsed.decision_urn, dec.decision_urn);
+        assert_eq!(parsed.input.caused, dec.input.caused);
+    }
+
+    #[test]
+    fn a_summaryless_decision_gets_no_title_key() {
+        let dec = sample(DecisionInput {
+            summary: "   ".into(),
+            rationale: "r".into(),
+            proposal_urn: None,
+            caused: vec![],
+            precedent_for: vec![],
+            influenced: vec![],
+            considered_inputs: vec![],
+            governed_by: vec![],
+        });
+        let (_, markdown) = draft_decision_page(&dec);
+        let meta = vault::parse(&markdown);
+
+        assert!(meta.public, "still ingests");
+        assert_eq!(meta.title, None, "the `Decision` placeholder is not a title");
+        assert!(markdown.contains("# Decision"));
     }
 
     #[test]

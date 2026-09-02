@@ -169,10 +169,10 @@ impl OptimizedSettingsActor {
 
         info!("OptimizedSettingsActor initialized with performance optimizations");
         debug!(
-            "Logseq physics: damping={}, spring={}, repulsion={}",
-            settings.visualisation.graphs.logseq.physics.damping,
-            settings.visualisation.graphs.logseq.physics.spring_k,
-            settings.visualisation.graphs.logseq.physics.repel_k
+            "Knowledge graph physics: damping={}, spring={}, repulsion={}",
+            settings.visualisation.graphs.knowledge.physics.damping,
+            settings.visualisation.graphs.knowledge.physics.spring_k,
+            settings.visualisation.graphs.knowledge.physics.repel_k
         );
 
         Ok(Self {
@@ -211,55 +211,55 @@ impl OptimizedSettingsActor {
 
         let physics_patterns = vec![
             (
-                "visualisation.graphs.logseq.physics.damping",
+                "visualisation.graphs.knowledge.physics.damping",
                 FieldType::Float32,
                 bounds::DAMPING.0,
                 bounds::DAMPING.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.spring_k",
+                "visualisation.graphs.knowledge.physics.spring_k",
                 FieldType::Float32,
                 bounds::SPRING_K.0,
                 bounds::SPRING_K.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.repel_k",
+                "visualisation.graphs.knowledge.physics.repel_k",
                 FieldType::Float32,
                 bounds::REPEL_K.0,
                 bounds::REPEL_K.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.max_velocity",
+                "visualisation.graphs.knowledge.physics.max_velocity",
                 FieldType::Float32,
                 bounds::MAX_VELOCITY.0,
                 bounds::MAX_VELOCITY.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.gravity",
+                "visualisation.graphs.knowledge.physics.gravity",
                 FieldType::Float32,
                 bounds::GRAVITY.0,
                 bounds::GRAVITY.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.temperature",
+                "visualisation.graphs.knowledge.physics.temperature",
                 FieldType::Float32,
                 bounds::TEMPERATURE.0,
                 bounds::TEMPERATURE.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.bounds_size",
+                "visualisation.graphs.knowledge.physics.bounds_size",
                 FieldType::Float32,
                 bounds::BOUNDS_SIZE.0,
                 bounds::BOUNDS_SIZE.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.iterations",
+                "visualisation.graphs.knowledge.physics.iterations",
                 FieldType::Int32,
                 bounds::ITERATIONS.0,
                 bounds::ITERATIONS.1,
             ),
             (
-                "visualisation.graphs.logseq.physics.enabled",
+                "visualisation.graphs.knowledge.physics.enabled",
                 FieldType::Bool,
                 0.0,
                 1.0,
@@ -513,10 +513,10 @@ impl OptimizedSettingsActor {
         if compiled_path.len() == 4
             && compiled_path[0] == "visualisation"
             && compiled_path[1] == "graphs"
-            && compiled_path[2] == "logseq"
+            && matches!(compiled_path[2].as_str(), "knowledge" | "logseq")
             && compiled_path[3] == "physics"
         {
-            let physics = &settings.visualisation.graphs.logseq.physics;
+            let physics = &settings.visualisation.graphs.knowledge.physics;
             return Ok(serde_json::to_value(physics)
                 .map_err(|e| format!("Failed to serialize physics: {}", e))?);
         }
@@ -524,10 +524,10 @@ impl OptimizedSettingsActor {
         if compiled_path.len() == 5
             && compiled_path[0] == "visualisation"
             && compiled_path[1] == "graphs"
-            && compiled_path[2] == "logseq"
+            && matches!(compiled_path[2].as_str(), "knowledge" | "logseq")
             && compiled_path[3] == "physics"
         {
-            let physics = &settings.visualisation.graphs.logseq.physics;
+            let physics = &settings.visualisation.graphs.knowledge.physics;
             let field = &compiled_path[4];
 
             let value = match field.as_str() {
@@ -622,16 +622,16 @@ impl OptimizedSettingsActor {
 
     pub async fn warm_cache(&self) {
         let common_paths = vec![
-            "visualisation.graphs.logseq.physics",
-            "visualisation.graphs.logseq.physics.damping",
-            "visualisation.graphs.logseq.physics.spring_k",
-            "visualisation.graphs.logseq.physics.repel_k",
-            "visualisation.graphs.logseq.physics.max_velocity",
-            "visualisation.graphs.logseq.physics.gravity",
-            "visualisation.graphs.logseq.physics.temperature",
-            "visualisation.graphs.logseq.physics.bounds_size",
-            "visualisation.graphs.logseq.physics.iterations",
-            "visualisation.graphs.logseq.physics.enabled",
+            "visualisation.graphs.knowledge.physics",
+            "visualisation.graphs.knowledge.physics.damping",
+            "visualisation.graphs.knowledge.physics.spring_k",
+            "visualisation.graphs.knowledge.physics.repel_k",
+            "visualisation.graphs.knowledge.physics.max_velocity",
+            "visualisation.graphs.knowledge.physics.gravity",
+            "visualisation.graphs.knowledge.physics.temperature",
+            "visualisation.graphs.knowledge.physics.bounds_size",
+            "visualisation.graphs.knowledge.physics.iterations",
+            "visualisation.graphs.knowledge.physics.enabled",
         ];
 
         let start_time = Instant::now();
@@ -936,11 +936,19 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
             }
 
             for (path, value) in updates {
-                if path.starts_with("visualisation.graphs.logseq.physics.") {
+                // ADR-2041: accept the legacy `logseq` segment on inbound paths.
+                let physics_prefix = if path.starts_with("visualisation.graphs.logseq.physics.") {
+                    Some("visualisation.graphs.logseq.physics.")
+                } else if path.starts_with("visualisation.graphs.knowledge.physics.") {
+                    Some("visualisation.graphs.knowledge.physics.")
+                } else {
+                    None
+                };
+                if let Some(prefix) = physics_prefix {
                     validation_needed = true;
                     cache_invalidations.push(path.clone());
 
-                    let field_name = path.replace("visualisation.graphs.logseq.physics.", "");
+                    let field_name = path.replace(prefix, "");
                     let internal_field = match field_name.as_str() {
                         "springK" => "spring_k",
                         "repelK" => "repel_k",
@@ -949,7 +957,7 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                         other => other,
                     };
 
-                    let physics = &mut current.visualisation.graphs.logseq.physics;
+                    let physics = &mut current.visualisation.graphs.knowledge.physics;
 
                     match internal_field {
                         "damping" => {
@@ -1019,7 +1027,7 @@ impl Handler<SetSettingsByPaths> for OptimizedSettingsActor {
                     cache.pop(path);
                 }
 
-                cache.pop("visualisation.graphs.logseq.physics");
+                cache.pop("visualisation.graphs.knowledge.physics");
             }
 
             #[cfg(feature = "redis")]
@@ -1109,7 +1117,7 @@ impl Handler<UpdatePhysicsFromAutoBalance> for OptimizedSettingsActor {
                     .physics_update
                     .get("visualisation")
                     .and_then(|v| v.get("graphs"))
-                    .and_then(|g| g.get("logseq"))
+                    .and_then(crate::config::knowledge_graph_value)
                     .and_then(|l| l.get("physics"))
                 {
                     info!("[AUTO-BALANCE] Auto-tune complete - optimized settings updated");

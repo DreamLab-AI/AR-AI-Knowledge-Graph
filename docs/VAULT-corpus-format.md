@@ -1,6 +1,6 @@
 ---
 title: VAULT — authored corpus format (Obsidian vault)
-version: 1.1.0
+version: 1.2.0
 status: living
 verified_commit:
 owner: jjohare
@@ -59,22 +59,38 @@ The corpus is therefore prose-first markdown with a leading Logseq property
 block. The heavy lifting (JSON-LD `Page` and `Class` blocks) is format-neutral
 and carries over unchanged.
 
-### Readers and writers today (pre-ADR-2040)
+### Readers and writers (post-ADR-2040, verified 2026-09-02)
 
-| Component | Reads | Writes | Citation |
-|---|---|---|---|
-| `FileService::is_public_file` | `public:: true` / `public-access:: true` anywhere | — | `src/services/file_service.rs:736` |
-| `github_sync_service::logseq_page_is_public` | `public::` line, case-insensitive | — | `src/services/github_sync_service.rs:2261` |
-| `KnowledgeGraphParser::extract_owl_class` | `owl:class::` line | — | `src/services/parsers/knowledge_graph_parser.rs:189` |
-| `KnowledgeGraphParser::extract_source_domain` | `source-domain::` line | — | `knowledge_graph_parser.rs:244` |
-| `github_sync_service` elevation bridge | `elevatedFrom:: [[X]]` line | — | `github_sync_service.rs:1663` |
-| `EnhancedContentAPI::list_markdown_files` | skips `/bak/`, `/logseq/`, `/.recycle/`, `/journals/` | — | `src/services/github/content_enhanced.rs:107-112,225-230` |
-| `EnhancedContentAPI` namespace lookup | decodes `%2F` → `/` | — | `content_enhanced.rs:387` |
-| `OntologyMutationService` | — | emits `- owl:class:: {iri}` | `src/services/ontology_mutation_service.rs:716` |
-| agentbox `ontology-local.js` | JSON-LD `Class` fences from a hard-coded Logseq path | rewrites the fence in place | `agentbox/mcp/servers/lib/ontology-local.js:20-22,312` |
-| agentbox `ontology-index-build.js` | same hard-coded path | — | `agentbox/mcp/servers/lib/ontology-index-build.js:15` |
-| agentbox entrypoint | `ONTOLOGY_PAGES_DIR` default = Logseq path | — | `agentbox/config/entrypoint-unified.sh:504` |
-| agentbox `podcast-knowledge-ingest` | — | writes pages with `public:: true` into Logseq dirs | `agentbox/skills/podcast-knowledge-ingest/SKILL.md:62-63` |
+Single parsing entry point: `visionclaw_domain::vault::parse`
+(`crates/visionclaw-domain/src/vault/mod.rs:149`) → `PageMeta { public,
+owl_class, source_domain, aliases, title, elevated_from, tags, extra, format }`
+with `is_kg_included()`, plus `split()` / `render_page()` /
+`to_frontmatter_yaml()` (the one emitter, so YAML quoting of `mv:Foo` and
+`"[[Page]]"` is solved once), `legacy_properties_anywhere()` (enrichment
+only — never the gate) and `page_name_from_path()`.
+
+| Component | Reads / writes | Citation |
+|---|---|---|
+| `FileService::page_is_kg_included` | gate via `PageMeta` | `src/services/file_service.rs:747` |
+| `FileService::extract_owl_class_iri` / `extract_ontology_data` | enrichment, whole page (`legacy_properties_anywhere`) | `file_service.rs:728`, `:759` |
+| `github_sync_service::page_is_kg_included` | gate via `PageMeta` | `src/services/github_sync_service.rs:2256` |
+| `github_sync_service` elevation bridge | `PageMeta.elevated_from` | `github_sync_service.rs:1667` |
+| `KnowledgeGraphParser::create_page_node` | `vault::parse` for owl-class, source-domain, tags, aliases, title (label honours `title`) | `src/services/parsers/knowledge_graph_parser.rs:116`; identity via `page_name_from_path` `:77` |
+| `EnhancedContentAPI::list_markdown_files` | skips `/bak/`, `/logseq/`, `/.recycle/`, `/journals/`, `/.obsidian/`, `/.trash/` | `src/services/github/content_enhanced.rs:113-114` (files), `:234-235` (dirs) |
+| `EnhancedContentAPI` namespace lookup | decodes `%2F` **and** `___` → `/` | `content_enhanced.rs:395` |
+| `OntologyMutationService::generate_vault_markdown` | writes frontmatter pages; amendment path edits frontmatter via `split`/`render_page` | `src/services/ontology_mutation_service.rs:53`, `:484` |
+| `DecisionElevation` page draft | writes `public: true` (+ `title`) via `render_page` — previously emitted no property at all, so drafts would have been private | `src/services/decision_elevation.rs:223` |
+| agentbox `ontology-local.js` / `ontology-index-build.js` / `continual-harness.js` | corpus from `VAULT_PAGES` / `VAULT_ROOT`; writes via `vault-frontmatter.js` `ensureFrontmatter` | `agentbox/mcp/servers/lib/` (ADR-2028) |
+| agentbox entrypoint | exports `VAULT_ROOT`/`VAULT_PAGES`/`VAULT_FORMAT`/`VAULT_TUI`; `ONTOLOGY_PAGES_DIR` derives from `VAULT_PAGES` | `agentbox/config/entrypoint-unified.sh` `_ab_vault_resolve` |
+| agentbox `podcast-knowledge-ingest`, `web-summary` | write frontmatter pages under `$VAULT_ROOT` | `agentbox/skills/*/SKILL.md` (ADR-2028) |
+| `vault-migrate` | one-shot converter | `crates/vault-migrate` (ADR-2042) |
+| Rune "Notes" window | tmux window 9 at `$VAULT_ROOT` | `agentbox/config/tmux-autostart.sh` (ADR-2029) |
+
+Tests: `crates/visionclaw-domain/src/vault/mod.rs` (40 unit),
+`crates/visionclaw-domain/tests/vault_fixtures.rs` (5),
+`tests/vault_gate_test.rs` (9) over `tests/fixtures/vault/`;
+`tests/fixtures/data-model/valid/pages/*.md` remain Logseq-format and exercise
+the legacy-tolerance path.
 
 ## The vault contract
 
@@ -149,7 +165,12 @@ A page is ingested as a KG node iff **either**:
 **or**, during the legacy-tolerance window, the corresponding Logseq line
 (`public:: true`, `owl:class::`) appears in the leading property block. Absence
 of both means private. The gate anchors on parsed metadata, never on the file
-path. `/journals/`, `/.obsidian/`, `/bak/`, `/logseq/`, `/.recycle/`,
+path. A page whose formal data is a `json-ld` **`Class` fence** (not an
+`owl-class` key) is claimed by the canonical JSON-LD path
+(`parse_canonical_entity`) before the publish gate runs, so its ontology data
+surfaces even when the page is private — legacy ADR-08 D3 is honoured by the
+canonical path, not by the gate (pinned by
+`tests/vault_gate_test.rs::legacy_data_model_fixtures_still_gate_as_authored`). `/journals/`, `/.obsidian/`, `/bak/`, `/logseq/`, `/.recycle/`,
 `/.trash/` are skipped at listing time.
 
 ### V5 — Writers emit vault format only

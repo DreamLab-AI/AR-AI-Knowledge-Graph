@@ -23,6 +23,7 @@ use visionclaw_domain::models::edge::Edge as AppEdge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::metadata::{Metadata, MetadataOps, MetadataStore};
 use visionclaw_domain::models::node::Node as AppNode; // Use an alias to avoid confusion
+use visionclaw_domain::vault;
 
 // Constants
 const METADATA_PATH: &str = "/workspace/ext/data/metadata/metadata.json";
@@ -359,8 +360,9 @@ impl FileService {
                         .await
                     {
                         Ok(content) => {
-                            // Check for public-access:: true (new) or public:: true (legacy)
-                            let is_public = Self::is_public_file(&content);
+                            // ADR-2040 §V4 gate: frontmatter `public`/`owl-class`,
+                            // or a leading-block Logseq property.
+                            let is_public = Self::page_is_kg_included(&content);
 
                             if !is_public {
                                 debug!(
@@ -650,7 +652,7 @@ impl FileService {
                 };
 
                 // COMMENTED OUT: Include ALL files regardless of public status
-                // if !Self::is_public_file(&content) {
+                // if !Self::page_is_kg_included(&content) {
                 //     debug!("Skipping non-public file: {}", file_name);
                 //     continue;
                 // }
@@ -715,68 +717,89 @@ impl FileService {
         re.find_iter(content).count()
     }
 
-    /// Extract `owl:class:: prefix:LocalName` from a logseq markdown OntologyBlock.
-    /// Returns the full IRI value (e.g. "mv:ArbitrationDecisionEngine") if present.
+    /// Extract the page's formal class IRI (e.g. "mv:ArbitrationDecisionEngine").
     /// Used to surface ontology-tagged pages as ontology_node nodes so the
     /// dual-graph X-axis separation control has two populations to separate.
+    ///
+    /// Frontmatter `owl-class` (ADR-2040 §V2) is authoritative. This is node
+    /// *typing*, not the publish gate, so it also accepts the deeply-indented
+    /// `- ### OntologyBlock` form that pre-ADR-2040 writers emitted — narrowing
+    /// it to the leading block would untype thousands of existing pages.
     fn extract_owl_class_iri(content: &str) -> Option<String> {
-        for line in content.lines() {
-            let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '-');
-            if let Some(rest) = trimmed.strip_prefix("owl:class::") {
-                let value = rest.trim();
-                if !value.is_empty() {
-                    return Some(value.to_string());
-                }
-            }
+        if let Some(iri) = vault::parse(content).owl_class {
+            return Some(iri);
         }
-        None
+        vault::legacy_properties_anywhere(content)
+            .into_iter()
+            .filter(|(key, value)| key == "owl:class" && !value.is_empty())
+            .map(|(_, value)| value)
+            .next()
     }
 
-    /// Check if file has public-access:: true (new format)
-    /// or public:: true anywhere in the content (legacy format)
-    fn is_public_file(content: &str) -> bool {
-        // Check new format: public-access:: true anywhere in content
-        if content.contains("public-access:: true") {
-            return true;
-        }
-        // Legacy format: public:: true anywhere in content (can be on any line)
-        // Look for the pattern as a standalone line or Logseq property
-        for line in content.lines() {
-            let trimmed = line.trim().trim_start_matches('-').trim();
-            if trimmed == "public:: true" {
-                return true;
-            }
-        }
-        false
+    /// The ADR-2040 §V4 inclusion gate: frontmatter `public: true`, or a
+    /// non-empty `owl-class` (formal data ingests unconditionally).
+    ///
+    /// Delegates to `visionclaw_domain::vault` — the single parsing entry
+    /// point. This is a deliberate narrowing of the former `is_public_file`,
+    /// which matched `public:: true` ANYWHERE in the file and so leaked pages
+    /// that merely quoted the marker in prose or a code fence. Logseq property
+    /// lines now count only in the leading property block.
+    fn page_is_kg_included(content: &str) -> bool {
+        vault::parse(content).is_kg_included()
     }
 
-    /// Extract ontology data from markdown content with new header format
+    /// Extract ontology data from markdown content.
+    ///
+    /// Routes through `visionclaw_domain::vault` (ADR-2040 D4): frontmatter —
+    /// or, under the bounded legacy tolerance, the leading Logseq property
+    /// block — supplies the §V2 keys, and `legacy_properties_anywhere` fills
+    /// the remaining ontology fields from the indented `### OntologyBlock`
+    /// lists older writers emitted. This is metadata enrichment, NOT the
+    /// inclusion gate; the gate is `page_is_kg_included` and stays narrow.
     fn extract_ontology_data(content: &str) -> OntologyData {
         let mut data = OntologyData::default();
+        let meta = vault::parse(content);
 
-        // Parse key-value pairs from ontology block
-        for line in content.lines() {
-            let trimmed = line.trim().trim_start_matches('-').trim();
+        // Body-level properties first, then the frontmatter/leading-block keys
+        // so the authoritative carrier wins on any conflict.
+        let mut properties = vault::legacy_properties_anywhere(content);
+        properties.extend(meta.extra.iter().map(|(k, v)| (k.clone(), v.clone())));
 
-            if let Some((key, value)) = trimmed.split_once("::") {
-                let key = key.trim();
-                let value = value.trim();
-
-                match key {
-                    "term-id" => data.term_id = Some(value.to_string()),
-                    "preferred-term" => data.preferred_term = Some(value.to_string()),
-                    "source-domain" => data.source_domain = Some(value.to_string()),
-                    "status" => data.ontology_status = Some(value.to_string()),
-                    "owl:class" => data.owl_class = Some(value.to_string()),
-                    "owl:physicality" => data.owl_physicality = Some(value.to_string()),
-                    "owl:role" => data.owl_role = Some(value.to_string()),
-                    "quality-score" => data.quality_score = value.parse().ok(),
-                    "authority-score" => data.authority_score = value.parse().ok(),
-                    "maturity" => data.maturity = Some(value.to_string()),
-                    "definition" => data.definition = Some(value.to_string()),
-                    "belongsToDomain" => {
-                        // Parse [[Domain1]], [[Domain2]] format
-                        let domains: Vec<String> = value
+        for (key, value) in &properties {
+            let value = value.as_str();
+            match key.as_str() {
+                "term-id" => data.term_id = Some(value.to_string()),
+                "preferred-term" => data.preferred_term = Some(value.to_string()),
+                "source-domain" => data.source_domain = Some(value.to_string()),
+                "status" => data.ontology_status = Some(value.to_string()),
+                "owl:class" | "owl-class" => data.owl_class = Some(value.to_string()),
+                "owl:physicality" | "owl-physicality" => {
+                    data.owl_physicality = Some(value.to_string())
+                }
+                "owl:role" | "owl-role" => data.owl_role = Some(value.to_string()),
+                "quality-score" => data.quality_score = value.parse().ok(),
+                "authority-score" => data.authority_score = value.parse().ok(),
+                "maturity" => data.maturity = Some(value.to_string()),
+                "definition" => data.definition = Some(value.to_string()),
+                "belongsToDomain" => {
+                    // Parse [[Domain1]], [[Domain2]] format
+                    data.belongs_to_domain = value
+                        .split(',')
+                        .map(|s| {
+                            s.trim()
+                                .trim_start_matches("[[")
+                                .trim_end_matches("]]")
+                                .to_string()
+                        })
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                }
+                "is-subclass-of" => {
+                    // Accumulates across repeated legacy `is-subclass-of::`
+                    // lines AND across a single comma-separated frontmatter
+                    // value — the vault writers emit `"[[A]], [[B]]"`.
+                    data.is_subclass_of.extend(
+                        value
                             .split(',')
                             .map(|s| {
                                 s.trim()
@@ -784,24 +807,22 @@ impl FileService {
                                     .trim_end_matches("]]")
                                     .to_string()
                             })
-                            .filter(|s| !s.is_empty())
-                            .collect();
-                        data.belongs_to_domain = domains;
-                    }
-                    "is-subclass-of" => {
-                        // Parse [[Class]] format, accumulate multiple
-                        let class = value
-                            .trim()
-                            .trim_start_matches("[[")
-                            .trim_end_matches("]]")
-                            .to_string();
-                        if !class.is_empty() {
-                            data.is_subclass_of.push(class);
-                        }
-                    }
-                    _ => {}
+                            .filter(|s| !s.is_empty()),
+                    );
                 }
+                _ => {}
             }
+        }
+
+        // §V2 keys parsed from the authoritative carrier outrank the raw scan.
+        if meta.owl_class.is_some() {
+            data.owl_class = meta.owl_class;
+        }
+        if meta.source_domain.is_some() {
+            data.source_domain = meta.source_domain;
+        }
+        if meta.title.is_some() {
+            data.preferred_term = meta.title;
         }
 
         data
@@ -893,8 +914,9 @@ impl FileService {
         );
         match content_api.fetch_file_content(download_url).await {
             Ok(content) => {
-                // Check for public-access:: true (new) or public:: true (legacy)
-                let is_public = Self::is_public_file(&content);
+                // ADR-2040 §V4 gate: frontmatter `public`/`owl-class`,
+                // or a leading-block Logseq property.
+                let is_public = Self::page_is_kg_included(&content);
                 if !is_public {
                     info!(
                         "should_process_file: File {} does not have public marker, skipping",
@@ -1019,8 +1041,9 @@ impl FileService {
 
                     match content_api.fetch_file_content(&file_extended_meta.download_url).await {
                         Ok(content) => {
-                            // Check for public-access:: true (new) or public:: true (legacy)
-                            let is_public = Self::is_public_file(&content);
+                            // ADR-2040 §V4 gate: frontmatter `public`/`owl-class`,
+                            // or a leading-block Logseq property.
+                            let is_public = Self::page_is_kg_included(&content);
 
                             if !is_public {
                                 info!("fetch_and_process_files: File {} does not have public marker",

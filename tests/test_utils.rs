@@ -45,11 +45,11 @@ pub struct TestGlowSettings {
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct TestGraphSettings {
-    pub logseq: TestLogseqGraphSettings,
+    pub knowledge: TestKnowledgeGraphSettings,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
-pub struct TestLogseqGraphSettings {
+pub struct TestKnowledgeGraphSettings {
     pub physics: TestPhysicsSettings,
     #[serde(rename = "nodeRadius")]
     pub node_radius: f32,
