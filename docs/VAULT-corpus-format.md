@@ -208,6 +208,9 @@ must touch a legacy page converts the leading property block on write.
 - Emits a machine-readable report (`vault-migrate-report.json`) with per-rule
   counts and the list of pages carrying unconverted constructs.
 - Round-trip property: converting an already-converted vault is a no-op.
+- The converter never writes `title:` from the identity; a `title` that echoes
+  the identity or its leaf is removed on any run (`title_echo_removed`).
+- Zero-byte pages and journals rename like any other file.
 - `pages/` subdirectories: a plain subdirectory (e.g. `pages/_misc/`) converts
   as a namespace folder; dot-directories (`pages/.deleted/`, `.swarm`,
   `.claude-flow`) are copied verbatim and never converted, matching V4's

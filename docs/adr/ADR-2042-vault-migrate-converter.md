@@ -4,7 +4,7 @@ title: "`vault-migrate` is the sole Logseq→Obsidian converter — deterministi
 date: 2026-09-02
 decision_status: proposed
 implementation_status: complete
-activation_status: staged
+activation_status: live
 supersedes: []
 superseded_by: []
 verified_commit:
@@ -72,5 +72,14 @@ reported); `workingGraph` → `/home/devuser/workspace/vault-working` in
 0.65 s. `--check` on both outputs exits 0. Three survey rows in the
 governing doc were corrected from the report (no page embeds exist; body
 properties are the corpus's inline relation fields, 6,541 files not 193;
-one task page is fully fenced). `activation_status: staged` until the
-owner applies `--in-place` to the corpus repo.
+one task page is fully fenced). Two defects found by the real in-place run
+and the shadow sync, both fixed the same day (67 unit + 16 integration
+tests): zero-byte pages/journals refused to complete their rename (12
+journals), and the first release wrote the identity path into `title:` on
+223 namespace pages — `title` is display-only, echoes are now removed on
+any rerun (`rules.title_echo_removed`) and `--check` flags them as drift.
+Applied in place on the corpus (owner decision: branch-first, then a
+history-preserving split into jjohare/visionGraph with `knowledge/` and
+`working/` vault roots; the logseq `obsidian` branch is the archived
+converted source). `activation_status: live` once visionGraph is the
+configured `GITHUB_REPO`.
