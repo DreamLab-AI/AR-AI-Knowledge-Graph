@@ -11,6 +11,7 @@ pub mod config;
 pub mod content_enhanced;
 pub mod pr;
 pub mod types;
+pub mod url_path;
 
 pub use api::GitHubClient;
 pub use config::GitHubConfig;

@@ -204,20 +204,21 @@ impl KnowledgeGraphParser {
             (Some("page".to_string()), Some("#4A90E2".to_string()))
         };
 
-        // §V2 `title` is the display title when it differs from the filename.
-        // Identity (`metadata_id`, `id`) stays keyed on the page name.
+        // Display label, in order: the §V2 `title`, else the identity's leaf.
+        // Identity (`metadata_id`, `id`, `source_file`) is untouched by this —
+        // it stays the full vault-relative path.
         //
         // A `title` that merely repeats the page's own identity is not a
-        // display title — `vault-migrate` currently writes the vault-relative
-        // path into this key on ~223 converted pages — so it is ignored and the
-        // identity is used directly. That keeps `label` consistent with
-        // `metadata_id` and `source_file` instead of pairing a namespaced label
-        // with a bare-basename `source_file`.
+        // display title — `vault-migrate` writes the vault-relative path into
+        // this key on ~223 converted pages — so it is ignored. The fallback is
+        // the LEAF, never the full path: Obsidian displays `Ns/Title` as
+        // `Title`, and a label carrying its folder is noise the client then has
+        // to strip.
         let label = meta
             .title
             .clone()
             .filter(|title| title != page_name)
-            .unwrap_or_else(|| page_name.to_string());
+            .unwrap_or_else(|| vault::identity_basename(page_name).to_string());
 
         Node {
             id,
@@ -529,6 +530,74 @@ mod tests {
         let pos = parser.get_position(12345);
 
         assert_eq!(pos, (10.0, 20.0, 30.0));
+    }
+
+    fn label_of(page_path: &str, frontmatter: &str) -> String {
+        let content = format!("---\npublic: true\n{frontmatter}---\n\n# Body\n");
+        KnowledgeGraphParser::new()
+            .parse(&content, page_path)
+            .expect("parses")
+            .nodes[0]
+            .label
+            .clone()
+    }
+
+    #[test]
+    fn a_subfolder_page_without_a_title_is_labelled_by_its_leaf() {
+        // Obsidian displays `Ns/Title` as `Title`; the full path in a label is
+        // noise, and 203 converted pages hit this branch.
+        assert_eq!(
+            label_of("podcast-evidence/black-friday-gpt.md", ""),
+            "black-friday-gpt"
+        );
+    }
+
+    #[test]
+    fn a_subfolder_page_with_a_title_is_labelled_by_that_title() {
+        assert_eq!(
+            label_of(
+                "podcast-evidence/black-friday-gpt.md",
+                "title: Black Friday GPT\n"
+            ),
+            "Black Friday GPT"
+        );
+    }
+
+    #[test]
+    fn a_title_that_merely_echoes_the_identity_falls_back_to_the_leaf() {
+        // What `vault-migrate` actually writes today.
+        assert_eq!(
+            label_of(
+                "podcast-evidence/black-friday-gpt.md",
+                "title: podcast-evidence/black-friday-gpt\n"
+            ),
+            "black-friday-gpt"
+        );
+    }
+
+    #[test]
+    fn a_root_page_is_unchanged_by_the_leaf_rule() {
+        assert_eq!(label_of("Agentic AI.md", ""), "Agentic AI");
+        assert_eq!(
+            label_of("Agentic AI.md", "title: Agentic Artificial Intelligence\n"),
+            "Agentic Artificial Intelligence"
+        );
+    }
+
+    #[test]
+    fn identity_is_not_affected_by_the_label_rule() {
+        let content = "---\npublic: true\n---\n\n# Body\n";
+        let graph = KnowledgeGraphParser::new()
+            .parse(content, "podcast-evidence/black-friday-gpt.md")
+            .expect("parses");
+        let node = &graph.nodes[0];
+
+        assert_eq!(node.label, "black-friday-gpt");
+        assert_eq!(node.metadata_id, "podcast-evidence/black-friday-gpt");
+        assert_eq!(
+            node.metadata.get("source_file").map(String::as_str),
+            Some("podcast-evidence/black-friday-gpt.md")
+        );
     }
 
     #[test]
