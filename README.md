@@ -18,7 +18,7 @@
 
 *A live agent swarm embodied in the knowledge graph — status-driven capsules, per-swarm tinting, and real-time action beams from agents to the concepts they touch. Inside the VIVE Pro headset, 2 September 2026, on the Obsidian-vault corpus.*
 
-![Inside the headset: agent action beams from an embodied swarm to the concepts they touch](docs/assets/media/2026-09-02-immersive-agent-actions-preview.gif)
+https://github.com/user-attachments/assets/ffb75de6-8961-40f7-b73d-847c8ec8bb50
 
 **Full clip:** [`2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 1280×720, 25 fps, 68 MB, no audio.
 
@@ -46,9 +46,7 @@ The corpus moved from Logseq to an Obsidian vault ([`jjohare/visionGraph`](https
 | ![Obsidian graph view of the knowledge vault with the SPARQL page selected](docs/screenshots/2026-09-02-obsidian-graph-view.jpg) | ![VisionClaw desktop client with the Ontology panel open on the SPARQL class](docs/screenshots/2026-09-02-desktop-ontology-panel.jpg) |
 | The `knowledge/` vault open in Obsidian, graph view, the **SPARQL** page selected. Every note is plain markdown with YAML frontmatter; `public: true` or an `owl-class` key is what admits a page to the knowledge graph. Agents read and write the same files, and the `[vault]` section in agentbox is the single path authority. | The desktop client on the identical corpus: 13,165 nodes, 145k edges, GPU force layout. The Ontology panel is focused on `urn:ngm:class:sparql`, the formal class the vault page maps to, with TBox/ABox scope, the server-side population filter and inferred edges available. Grabbing a node in either client moves it in the other; positions are server truth. |
 
-![Immersive session: agent action beams from an embodied swarm to the concepts they touch, seen from inside the VIVE Pro headset](docs/assets/media/2026-09-02-immersive-agent-actions-preview.gif)
-
-*Inside the headset (3.5 s indicator loop at 2× speed). Full clip: [`docs/assets/media/2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 1280×720, 25 fps, 68 MB, no audio (the capture was silent).* A six-agent swarm (a Fable 5.1 queen, Opus workers, Sonnet researchers) is embodied as capsules in the graph; each tool call they make becomes a beam from the agent to the node it touched, shaped and coloured by verb (query, link, update, transform, create, delete), with the SPARQL class as the busiest target. The same `0x23 AGENT_ACTION` frames reach the desktop client, where the Agents dock shows the swarm and the KPI tile counts the actions. How to reproduce: [`docs/how-to/operations/agent-beams-dev-driver.md`](docs/how-to/operations/agent-beams-dev-driver.md).
+*Inside the headset: the clip at the top of this page. Full-quality version: [`docs/assets/media/2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 1280×720, 25 fps, 68 MB, no audio (the capture was silent).* A six-agent swarm (a Fable 5.1 queen, Opus workers, Sonnet researchers) is embodied as capsules in the graph; each tool call they make becomes a beam from the agent to the node it touched, shaped and coloured by verb (query, link, update, transform, create, delete), with the SPARQL class as the busiest target. The same `0x23 AGENT_ACTION` frames reach the desktop client, where the Agents dock shows the swarm and the KPI tile counts the actions. How to reproduce: [`docs/how-to/operations/agent-beams-dev-driver.md`](docs/how-to/operations/agent-beams-dev-driver.md).
 
 ---
 
