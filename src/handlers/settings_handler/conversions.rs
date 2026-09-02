@@ -130,7 +130,7 @@ impl From<&crate::config::HologramSettings> for HologramSettingsDTO {
 impl From<&crate::config::GraphsSettings> for GraphsSettingsDTO {
     fn from(settings: &crate::config::GraphsSettings) -> Self {
         Self {
-            logseq: (&settings.logseq).into(),
+            knowledge: (&settings.knowledge).into(),
             visionclaw: (&settings.visionclaw).into(),
         }
     }

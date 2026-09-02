@@ -57,7 +57,7 @@ mod test_data {
         json!({
             "id": "test_event_id_12345",
             "pubkey": "test_pubkey_abcdef1234567890",
-            "content": "Authenticate to LogseqSpringThing",
+            "content": "Authenticate to VisionClaw",
             "sig": "test_signature_fedcba0987654321",
             "created_at": 1640995200,
             "kind": 22242,

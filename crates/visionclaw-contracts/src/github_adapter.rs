@@ -4,6 +4,8 @@
 //! + DDD-08 §"To Section 10 (GitHub adapter)" (value-object fields).
 //!
 //! Section 10 is the transport; Section 8 owns the parse and the domain.
+//! The on-disk corpus format both sides assume is the Obsidian vault
+//! specified in `docs/VAULT-corpus-format.md` (ADR-2040).
 //! This module defines the wire shape that crosses the boundary — the
 //! `ParsedMarkdown` value object that Section 10 produces and Section 8
 //! consumes via the `IngestPage` / `IngestOntologyOnly` commands.
@@ -36,13 +38,21 @@ use ts_rs::TS;
 ///
 /// The domain receives this via `IngestPage` / `IngestOntologyOnly`
 /// commands and never sees raw HTTP responses, `octocrab` types, or
-/// Logseq-specific frontmatter / wikilink syntax. If the corpus migrates
-/// off Logseq, only the adapter changes; this value object stays stable.
+/// corpus-specific frontmatter / wikilink syntax. That insulation has since
+/// been exercised: when the authored corpus moved from a Logseq graph to an
+/// Obsidian vault (ADR-2040), only the adapter changed and this value object
+/// stayed stable.
+///
+/// The corpus format is specified by `docs/VAULT-corpus-format.md`: §V2 YAML
+/// frontmatter is the metadata carrier, and a leading Logseq `key:: value`
+/// property block is still accepted under the bounded legacy tolerance of
+/// ADR-2040 D3, which ends at the `review_trigger` on that record.
 ///
 /// `frontmatter_json` and `jsonld_blocks` are deliberately `serde_json::Value`
 /// because:
 ///
-/// - Frontmatter is open-ended (Logseq accepts arbitrary keys + tag lists).
+/// - Frontmatter is open-ended: §V2 gives meaning to a fixed set of keys and
+///   preserves every other key verbatim.
 /// - JSON-LD blocks must round-trip without loss for the ontology parser.
 ///
 /// The richer DDD-08 fields (`prose_blocks`, `ontology_blocks`,
@@ -57,12 +67,17 @@ pub struct ParsedMarkdown {
     pub canonical_path: String,
     /// Raw file body, UTF-8.
     pub raw: String,
-    /// Parsed Logseq frontmatter as a JSON object. Keys preserved verbatim
-    /// except for `public:: true` which the adapter normalises into
-    /// `{"public": true}` per DDD-08 §"To Section 10".
+    /// Parsed vault frontmatter as a JSON object
+    /// (`docs/VAULT-corpus-format.md` §V2). Keys preserved verbatim. Under the
+    /// ADR-2040 legacy tolerance the adapter also accepts a leading Logseq
+    /// property block, normalising `public:: true` into `{"public": true}`
+    /// per DDD-08 §"To Section 10" — both carriers reach the domain in the
+    /// one shape.
     #[cfg_attr(feature = "typescript-export", ts(type = "Record<string, unknown>"))]
     pub frontmatter_json: serde_json::Value,
-    /// `### OntologyBlock` JSON-LD bodies, one per block. Order preserved.
+    /// JSON-LD block bodies, one per block, order preserved. In the vault
+    /// these are plain `json-ld` code fences in the page body (§V3); in the
+    /// legacy corpus they sat under a `### OntologyBlock` heading.
     #[cfg_attr(
         feature = "typescript-export",
         ts(type = "Array<Record<string, unknown>>")

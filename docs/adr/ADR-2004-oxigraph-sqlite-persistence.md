@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: 4fed5663dfbc0940c6b19a175dfcc8a9c67f2ab8
 verified_paths: [Cargo.toml, src/app_state.rs, data/oxigraph]
 owner: jjohare
 review_trigger: a scale requirement that exceeds a single-node embedded store, or any proposal to reintroduce a networked graph database

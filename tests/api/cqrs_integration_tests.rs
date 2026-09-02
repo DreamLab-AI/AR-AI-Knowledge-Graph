@@ -291,7 +291,7 @@ mod physics_service_tests {
             event_bus,
         );
 
-        let result = service.start_simulation("logseq").await;
+        let result = service.start_simulation("knowledge").await;
         assert!(result.is_ok());
     }
 
@@ -305,7 +305,7 @@ mod physics_service_tests {
             event_bus,
         );
 
-        let result = service.stop_simulation("logseq").await;
+        let result = service.stop_simulation("knowledge").await;
         assert!(result.is_ok());
     }
 

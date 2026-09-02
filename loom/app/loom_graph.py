@@ -58,7 +58,7 @@ class LoomGraph:
         never loads, mirrors, or queries the working graph (personal/working notes,
         potentially multi-user/private). Only these two published-ontology artifacts
         are ever loaded — do NOT add workingGraph sources here. Uplift into the
-        ontology happens via VisionClaw / the forum / agentic writes into the logseq
+        ontology happens via VisionClaw / the forum / agentic writes into the vault
         corpus, never through the Loom.
         """
         if not _HAVE_OX:

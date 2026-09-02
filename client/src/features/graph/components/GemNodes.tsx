@@ -214,10 +214,10 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
   const qualityGates = useSettingsStore(s => s.get<QualityGatesSettings>('qualityGates'));
   // Base node color from the control panel ("Node Color" swatch) — anchors the
   // knowledge-graph palette when no semantic (cluster/community/anomaly/SSSP) mode is active.
-  const baseNodeColor = useSettingsStore(s => s.get<string>('visualisation.graphs.logseq.nodes.baseColor'));
+  const baseNodeColor = useSettingsStore(s => s.get<string>('visualisation.graphs.knowledge.nodes.baseColor'));
   // KG colour scheme: 'type' (per node-type palette), 'domain' (per domain palette),
   // or 'base' (legacy baseColor + label-hash hue jitter). Default 'type'.
-  const colorScheme = useSettingsStore(s => s.get<string>('visualisation.graphs.logseq.nodes.colorScheme')) ?? 'type';
+  const colorScheme = useSettingsStore(s => s.get<string>('visualisation.graphs.knowledge.nodes.colorScheme')) ?? 'type';
   // Per-node analytics data from binary protocol V3 (refreshed periodically).
   // Stride 5 (ADR-031 D2): [clusterId, anomalyScore, communityId, centrality, ssspDistance].
   const analyticsRef = useRef<Float32Array | null>(null);
@@ -723,8 +723,8 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
       }
     }
     const visSettings = settings?.visualisation as Record<string, unknown> | undefined;
-    const graphsLogseq = (visSettings?.graphs as Record<string, unknown> | undefined)?.logseq as Record<string, unknown> | undefined;
-    const nodeSettings = graphsLogseq?.nodes as Record<string, unknown> | undefined;
+    const graphsKnowledge = (visSettings?.graphs as Record<string, unknown> | undefined)?.knowledge as Record<string, unknown> | undefined;
+    const nodeSettings = graphsKnowledge?.nodes as Record<string, unknown> | undefined;
     // 1:1 — the slider value IS the global size gain; no hidden multiplier.
     // Per-node magnitude comes from computeNodeScale (degree + content size).
     const baseScale = (nodeSettings?.nodeSize as number | undefined) ?? 1.0;

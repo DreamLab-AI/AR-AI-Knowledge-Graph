@@ -4,7 +4,7 @@ import { SettingsState } from './settings/settingsTypes'
 import { createCoreSlice } from './settings/coreSlice'
 import { createPhysicsSlice } from './settings/physicsSlice'
 import { createPersistenceSlice } from './settings/persistenceSlice'
-import { collectPathsFromSettings } from './settings/settingsHelpers'
+import { collectPathsFromSettings, migrateGraphSettingsKey } from './settings/settingsHelpers'
 import { createLogger } from '../utils/loggerConfig'
 import { debugState } from '../utils/clientDebugState'
 import {
@@ -50,7 +50,11 @@ export const useSettingsStore = create<SettingsState>()(
         // Deep-merge persisted partialSettings into the current state so that
         // server-fetched values take priority during initialize(), but any settings
         // that were only stored locally are restored from localStorage.
-        const persistedSettings = (persisted.partialSettings as import('./settings/settingsTypes').DeepPartial<import('../features/settings/config/settings').Settings>) || {};
+        // ADR-2041: migrate a persisted `visualisation.graphs.logseq` object onto
+        // `visualisation.graphs.knowledge` before it reaches the store.
+        const persistedSettings = migrateGraphSettingsKey(
+          (persisted.partialSettings as import('./settings/settingsTypes').DeepPartial<import('../features/settings/config/settings').Settings>) || {},
+        );
 
         return {
           ...currentState,

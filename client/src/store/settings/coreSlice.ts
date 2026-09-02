@@ -123,23 +123,23 @@ export const createCoreSlice: StateCreator<SettingsState, [], [], CoreSlice> = (
         if (essVis && mergedVis) {
           const essGraphs = essVis.graphs as Record<string, Record<string, unknown>> | undefined;
           const mergedGraphs = mergedVis.graphs as Record<string, Record<string, unknown>> | undefined;
-          if (essGraphs?.logseq?.tweening && mergedGraphs?.logseq) {
-            mergedGraphs.logseq.tweening = essGraphs.logseq.tweening;
+          if (essGraphs?.knowledge?.tweening && mergedGraphs?.knowledge) {
+            mergedGraphs.knowledge.tweening = essGraphs.knowledge.tweening;
           }
-          if (essGraphs?.logseq?.physics && mergedGraphs?.logseq) {
-            mergedGraphs.logseq.physics = essGraphs.logseq.physics;
+          if (essGraphs?.knowledge?.physics && mergedGraphs?.knowledge) {
+            mergedGraphs.knowledge.physics = essGraphs.knowledge.physics;
           }
           // Node visibility and core visual settings are server-authoritative
           // to prevent stale localStorage from hiding graph types or making
           // nodes invisible for new sessions inheriting shared state.
-          if (essGraphs?.logseq?.nodes && mergedGraphs?.logseq) {
-            const essNodes = essGraphs.logseq.nodes as Record<string, unknown>;
-            const mergedNodes = (mergedGraphs.logseq.nodes || {}) as Record<string, unknown>;
+          if (essGraphs?.knowledge?.nodes && mergedGraphs?.knowledge) {
+            const essNodes = essGraphs.knowledge.nodes as Record<string, unknown>;
+            const mergedNodes = (mergedGraphs.knowledge.nodes || {}) as Record<string, unknown>;
             // Server wins for: visibility toggles, opacity, size
             if (essNodes.nodeTypeVisibility) mergedNodes.nodeTypeVisibility = essNodes.nodeTypeVisibility;
             if (essNodes.opacity !== undefined) mergedNodes.opacity = essNodes.opacity;
             if (essNodes.nodeSize !== undefined) mergedNodes.nodeSize = essNodes.nodeSize;
-            mergedGraphs.logseq.nodes = mergedNodes;
+            mergedGraphs.knowledge.nodes = mergedNodes;
           }
         }
         if (essRec.clientTweening !== undefined && essRec.clientTweening !== null) {
@@ -420,7 +420,7 @@ export const createCoreSlice: StateCreator<SettingsState, [], [], CoreSlice> = (
       const tweening = (newSettings as Record<string, unknown>);
       const vis = tweening.visualisation as Record<string, unknown> | undefined;
       const graphs = vis?.graphs as Record<string, Record<string, unknown>> | undefined;
-      const perGraphTweening = graphs?.logseq?.tweening as Record<string, unknown> | undefined;
+      const perGraphTweening = graphs?.knowledge?.tweening as Record<string, unknown> | undefined;
       const topLevelTweening = tweening.clientTweening as Record<string, unknown> | undefined;
       const tweeningSettings = perGraphTweening || topLevelTweening;
       if (tweeningSettings) {

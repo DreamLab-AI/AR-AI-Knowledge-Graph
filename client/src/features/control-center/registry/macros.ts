@@ -16,8 +16,8 @@ const num = (get: (p: string) => unknown, path: string, fallback: number): numbe
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 };
 
-const P = 'visualisation.graphs.logseq.physics.';
-const L = 'visualisation.graphs.logseq.labels.';
+const P = 'visualisation.graphs.knowledge.physics.';
+const L = 'visualisation.graphs.knowledge.labels.';
 const S = 'visualisation.sceneEffects.';
 
 export const MACROS: MacroDef[] = [

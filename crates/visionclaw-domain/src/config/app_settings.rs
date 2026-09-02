@@ -157,15 +157,16 @@ impl AppFullSettings {
     }
 
     pub fn get_physics(&self, graph: &str) -> &PhysicsSettings {
-        match graph {
-            "logseq" | "knowledge" => &self.visualisation.graphs.logseq.physics,
-            "visionclaw" | "agent" | "bots" => &self.visualisation.graphs.visionclaw.physics,
+        // ADR-2041: the `logseq` alias lives solely in `normalise_graph_type`.
+        match super::graph_type::normalise_graph_type(graph) {
+            "knowledge" => &self.visualisation.graphs.knowledge.physics,
+            "visionclaw" => &self.visualisation.graphs.visionclaw.physics,
             _ => {
                 log::debug!(
-                    "Unknown graph type '{}', defaulting to logseq (knowledge graph)",
+                    "Unknown graph type '{}', defaulting to the knowledge graph",
                     graph
                 );
-                &self.visualisation.graphs.logseq.physics
+                &self.visualisation.graphs.knowledge.physics
             }
         }
     }
@@ -232,8 +233,8 @@ impl AppFullSettings {
     fn validate_cross_field_constraints(&self) -> Result<(), validator::ValidationErrors> {
         let mut errors = validator::ValidationErrors::new();
 
-        if self.visualisation.graphs.logseq.physics.gravity != 0.0
-            && !self.visualisation.graphs.logseq.physics.enabled
+        if self.visualisation.graphs.knowledge.physics.gravity != 0.0
+            && !self.visualisation.graphs.knowledge.physics.enabled
         {
             errors.add("physics", ValidationError::new("physics_enabled_required"));
         }

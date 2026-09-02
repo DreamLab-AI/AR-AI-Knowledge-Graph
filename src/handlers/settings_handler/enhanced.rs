@@ -113,8 +113,9 @@ impl EnhancedSettingsHandler {
             .get("visualisation")
             .and_then(|v| v.get("graphs"))
             .and_then(|g| {
-                if let Some(logseq) = g.get("logseq") {
-                    if let Some(physics) = logseq.get("physics") {
+                // ADR-2041: `logseq` is accepted as an alias of `knowledge`.
+                if let Some(knowledge) = crate::config::knowledge_graph_value(g) {
+                    if let Some(physics) = knowledge.get("physics") {
                         if let Some(auto_balance) = physics.get("autoBalance") {
                             return Some(auto_balance.clone());
                         }
@@ -145,8 +146,8 @@ impl EnhancedSettingsHandler {
                 });
 
             if let Some(graphs) = vis_obj {
-                let logseq_physics = graphs
-                    .entry("logseq")
+                let knowledge_physics = graphs
+                    .entry("knowledge")
                     .or_insert_with(|| json!({}))
                     .as_object_mut()
                     .and_then(|l| {
@@ -154,7 +155,7 @@ impl EnhancedSettingsHandler {
                             .or_insert_with(|| json!({}))
                             .as_object_mut()
                     });
-                if let Some(physics) = logseq_physics {
+                if let Some(physics) = knowledge_physics {
                     physics.insert("autoBalance".to_string(), auto_balance_value.clone());
                 }
 
@@ -186,7 +187,7 @@ impl EnhancedSettingsHandler {
         }
 
         let _updated_graphs = if auto_balance_update.is_some() {
-            vec!["logseq", "visionclaw"]
+            vec!["knowledge", "visionclaw"]
         } else {
             let _physics_updates = extract_physics_updates(&modified_update);
             modified_update
@@ -195,8 +196,8 @@ impl EnhancedSettingsHandler {
                 .and_then(|g| g.as_object())
                 .map(|graphs| {
                     let mut updated = Vec::new();
-                    if graphs.contains_key("logseq") {
-                        updated.push("logseq");
+                    if crate::config::graphs_map_has_knowledge(graphs) {
+                        updated.push("knowledge");
                     }
                     if graphs.contains_key("visionclaw") {
                         updated.push("visionclaw");
@@ -209,7 +210,7 @@ impl EnhancedSettingsHandler {
         let auto_balance_active = app_settings
             .visualisation
             .graphs
-            .logseq
+            .knowledge
             .physics
             .auto_balance
             || app_settings
@@ -230,7 +231,7 @@ impl EnhancedSettingsHandler {
                 let is_auto_balance_change = auto_balance_update.is_some();
 
                 if is_auto_balance_change || !auto_balance_active {
-                    propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
+                    propagate_physics_to_gpu(&state, &app_settings, "knowledge").await;
                     if is_auto_balance_change {}
                 } else {
                 }
@@ -503,7 +504,7 @@ impl EnhancedSettingsHandler {
             // previous direct state.get_gpu_compute_addr() dispatch here reached the same
             // ForceComputeActor handler as the orchestrator forward, producing a double
             // warmup reset / double reheat per settings change.
-            let graph_name = "logseq";
+            let graph_name = "knowledge";
             propagate_physics_to_gpu(state, settings, graph_name).await;
         }
     }

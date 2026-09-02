@@ -219,7 +219,7 @@ pub async fn update_compute_mode(
         Ok(Ok(())) => {
             info!("Compute mode updated successfully to: {}", compute_mode);
 
-            propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
+            propagate_physics_to_gpu(&state, &app_settings, "knowledge").await;
             propagate_physics_to_gpu(&state, &app_settings, "visionclaw").await;
 
             ok_json!(json!({
@@ -258,7 +258,7 @@ pub async fn update_constraints(
     let settings_update = json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": {
                         "computeMode": 2
                     }
@@ -299,7 +299,7 @@ pub async fn update_constraints(
         Ok(Ok(())) => {
             info!("Constraints updated successfully");
 
-            propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
+            propagate_physics_to_gpu(&state, &app_settings, "knowledge").await;
             propagate_physics_to_gpu(&state, &app_settings, "visionclaw").await;
 
             ok_json!(json!({
@@ -378,7 +378,7 @@ pub async fn update_stress_optimization(
         Ok(Ok(())) => {
             info!("Stress optimization updated successfully");
 
-            propagate_physics_to_gpu(&state, &app_settings, "logseq").await;
+            propagate_physics_to_gpu(&state, &app_settings, "knowledge").await;
             propagate_physics_to_gpu(&state, &app_settings, "visionclaw").await;
 
             ok_json!(json!({

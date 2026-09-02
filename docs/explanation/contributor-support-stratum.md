@@ -15,7 +15,7 @@ Solid Pods, agent runtime, GPU physics) and a strong management mesh
 (Judgment Broker, Workflow Lifecycle, KPI Observability, Connector
 Ingestion, Policy Engine). Between those two layers, where the actual
 knowledge work of the organisation happens every day, there is no
-VisionClaw-native surface. Contributors use Logseq to draft, the CLI to
+VisionClaw-native surface. Contributors use Obsidian to draft, the CLI to
 run agents, the MCP palette to call tools, their personal pod to store
 memory, and the backend API to move things around. The surfaces exist.
 They do not compose into a harness.
@@ -171,7 +171,7 @@ produced it.
 
 Rosa is a product lead at a mid-sized fintech. She writes decision
 memos, drafts investor updates, and maintains a personal ontology of
-product bets in her Logseq graph. On a Wednesday afternoon she opens
+product bets in her Obsidian vault. On a Wednesday afternoon she opens
 the Contributor Studio focused on a feature she is scoping: a
 merchant-side fee dispute workflow.
 
@@ -576,7 +576,7 @@ If we do not build the stratum, six failure modes are predictable.
    low-friction path to raise a `ShareIntent`. The broker inbox
    stays thin; the mesh compounds slowly.
 2. **Power-user islands.** The contributors with the deepest product
-   knowledge build their own personal harnesses using Logseq + CLI +
+   knowledge build their own personal harnesses using Obsidian + CLI +
    MCP. Their breakthroughs never become the team's baseline. The
    organisation depends on individual memory.
 3. **Ontology starvation.** Without a Sensei nudging contributors to
@@ -608,9 +608,9 @@ harness can.
 
 One definitional clarification, because the space is crowded:
 
-- The stratum is **not a rewrite of Logseq**. Contributors can still
-  write in Logseq; the Studio reads and writes the same pod
-  containers. The Studio is the multi-pane workspace; Logseq remains
+- The stratum is **not a rewrite of Obsidian**. Contributors can still
+  write in their vault; the Studio reads and writes the same pod
+  containers. The Studio is the multi-pane workspace; Obsidian remains
   a valid single-user editor surface for those who prefer it.
 - The stratum is **not a chat interface**. AI partners appear in a
   lane with structured bindings, not as a conversation thread

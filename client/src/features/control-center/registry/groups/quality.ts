@@ -9,9 +9,9 @@ import type { GroupData, RegistryField } from '../types';
 
 const fields: RegistryField[] = [
   // Node Types
-  { key: 'showKnowledge', subgroup: 'Node Types', label: 'Knowledge Nodes', type: 'toggle', path: 'visualisation.graphs.logseq.nodes.nodeTypeVisibility.knowledge', description: 'Show knowledge graph nodes' },
-  { key: 'showOntology', subgroup: 'Node Types', label: 'Ontology Nodes', type: 'toggle', path: 'visualisation.graphs.logseq.nodes.nodeTypeVisibility.ontology', description: 'Show ontology nodes' },
-  { key: 'showAgents', subgroup: 'Node Types', label: 'Agent Nodes', type: 'toggle', path: 'visualisation.graphs.logseq.nodes.nodeTypeVisibility.agent', description: 'Show agent nodes' },
+  { key: 'showKnowledge', subgroup: 'Node Types', label: 'Knowledge Nodes', type: 'toggle', path: 'visualisation.graphs.knowledge.nodes.nodeTypeVisibility.knowledge', description: 'Show knowledge graph nodes' },
+  { key: 'showOntology', subgroup: 'Node Types', label: 'Ontology Nodes', type: 'toggle', path: 'visualisation.graphs.knowledge.nodes.nodeTypeVisibility.ontology', description: 'Show ontology nodes' },
+  { key: 'showAgents', subgroup: 'Node Types', label: 'Agent Nodes', type: 'toggle', path: 'visualisation.graphs.knowledge.nodes.nodeTypeVisibility.agent', description: 'Show agent nodes' },
   // Node Filtering
   { key: 'filterEnabled', subgroup: 'Node Filtering', label: 'Enable Filtering', type: 'toggle', path: 'nodeFilter.enabled', description: 'Enable node filtering' },
   { key: 'includeLinkedPages', subgroup: 'Node Filtering', label: 'Include Linked Pages', type: 'toggle', path: 'nodeFilter.includeLinkedPages', description: 'Show wikilink stub nodes (32K linked_page nodes). Disable for highest-quality view showing only fully-authored pages.', macro: 'focus' },
@@ -57,7 +57,7 @@ export const quality: GroupData = {
   description: 'Node-type visibility, quality/authority filters, GPU quality gates, grouping and hulls.',
   hotkey: '4',
   loadPaths: [
-    'visualisation.graphs.logseq.nodes.nodeTypeVisibility',
+    'visualisation.graphs.knowledge.nodes.nodeTypeVisibility',
     'nodeFilter',
     'qualityGates',
     'visualisation.clusterHulls',

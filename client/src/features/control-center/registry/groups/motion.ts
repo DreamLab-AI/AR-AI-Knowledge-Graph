@@ -6,7 +6,7 @@
  */
 import type { GroupData, RegistryField } from '../types';
 
-const P = 'visualisation.graphs.logseq.physics.';
+const P = 'visualisation.graphs.knowledge.physics.';
 
 const fields: RegistryField[] = [
   // Core Forces
@@ -68,10 +68,10 @@ const fields: RegistryField[] = [
   { key: 'typeClusterAttraction', subgroup: 'Semantic & Layout Forces', label: 'Type Cluster Attraction', type: 'slider', min: 0, max: 2.0, step: 0.05, path: 'qualityGates.typeClusterAttraction', description: 'How strongly same-type nodes group together' },
   { key: 'typeClusterRadius', subgroup: 'Semantic & Layout Forces', label: 'Type Cluster Radius', type: 'slider', min: 10, max: 500, step: 10, path: 'qualityGates.typeClusterRadius', description: 'Target radius for type-based cluster zones' },
   // Smooth Movement (client-side tweening)
-  { key: 'tweeningEnabled', subgroup: 'Smooth Movement', label: 'Smooth Node Movement', type: 'toggle', path: 'visualisation.graphs.logseq.tweening.enabled', description: 'Smoothly animate nodes toward server positions instead of snapping instantly' },
-  { key: 'tweeningLerpBase', subgroup: 'Smooth Movement', label: 'Node Animation Speed', type: 'slider', min: 0.0001, max: 0.15, step: 0.001, path: 'visualisation.graphs.logseq.tweening.lerpBase', description: 'How quickly nodes reach their target positions (lower = faster, higher = smoother)' },
-  { key: 'tweeningMaxDivergence', subgroup: 'Smooth Movement', label: 'Maximum Node Jump', type: 'slider', min: 1, max: 100, step: 1, path: 'visualisation.graphs.logseq.tweening.maxDivergence', description: 'Distance threshold above which nodes snap instantly instead of animating' },
-  { key: 'tweeningSnapThreshold', subgroup: 'Smooth Movement', label: 'Snap Distance', type: 'slider', min: 0.01, max: 1.0, step: 0.01, path: 'visualisation.graphs.logseq.tweening.snapThreshold', description: 'Distance below which nodes snap to their target (sub-pixel precision)' },
+  { key: 'tweeningEnabled', subgroup: 'Smooth Movement', label: 'Smooth Node Movement', type: 'toggle', path: 'visualisation.graphs.knowledge.tweening.enabled', description: 'Smoothly animate nodes toward server positions instead of snapping instantly' },
+  { key: 'tweeningLerpBase', subgroup: 'Smooth Movement', label: 'Node Animation Speed', type: 'slider', min: 0.0001, max: 0.15, step: 0.001, path: 'visualisation.graphs.knowledge.tweening.lerpBase', description: 'How quickly nodes reach their target positions (lower = faster, higher = smoother)' },
+  { key: 'tweeningMaxDivergence', subgroup: 'Smooth Movement', label: 'Maximum Node Jump', type: 'slider', min: 1, max: 100, step: 1, path: 'visualisation.graphs.knowledge.tweening.maxDivergence', description: 'Distance threshold above which nodes snap instantly instead of animating' },
+  { key: 'tweeningSnapThreshold', subgroup: 'Smooth Movement', label: 'Snap Distance', type: 'slider', min: 0.01, max: 1.0, step: 0.01, path: 'visualisation.graphs.knowledge.tweening.snapThreshold', description: 'Distance below which nodes snap to their target (sub-pixel precision)' },
 ];
 
 export const motion: GroupData = {
@@ -79,6 +79,6 @@ export const motion: GroupData = {
   label: 'Motion & Forces',
   description: 'Force-directed layout: springs, repulsion, gravity, bounds, and semantic layout modes.',
   hotkey: '1',
-  loadPaths: ['visualisation.graphs.logseq.physics', 'qualityGates', 'visualisation.graphs.logseq.tweening'],
+  loadPaths: ['visualisation.graphs.knowledge.physics', 'qualityGates', 'visualisation.graphs.knowledge.tweening'],
   fields,
 };

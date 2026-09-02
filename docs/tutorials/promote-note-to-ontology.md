@@ -1,15 +1,15 @@
 ---
 title: Promoting a Note to the Ontology
-description: Step-by-step tutorial — write a Logseq note, watch it surface in the Broker Inbox, review and approve it, and see it become a live OWL class in the 3D graph
+description: Step-by-step tutorial — write a vault page, watch it surface in the Broker Inbox, review and approve it, and see it become a live OWL class in the 3D graph
 category: tutorial
-tags: [tutorial, insight-migration, ontology, broker, logseq, promotion]
+tags: [tutorial, insight-migration, ontology, broker, obsidian, vault, promotion]
 updated-date: 2026-04-18
 difficulty-level: intermediate
 ---
 
 # Promoting a Note to the Ontology
 
-This tutorial walks you through the complete migration journey: from writing a Logseq note to watching a live OWL 2 Web Ontology Language (OWL 2) class appear in VisionClaw's 3D physics graph. The whole process takes under ten minutes once the system is running.
+This tutorial walks you through the complete migration journey: from writing a vault page to watching a live OWL 2 Web Ontology Language (OWL 2) class appear in VisionClaw's 3D physics graph. The whole process takes under ten minutes once the system is running.
 
 If you want to understand why the loop works the way it does before trying it, read the [Insight Migration Loop explanation](../explanation/insight-migration-loop.md) first. If you want to get started immediately, begin here.
 
@@ -28,7 +28,7 @@ Before you start, confirm all three of these hold:
 
    If it is not running, follow the [Installation Guide](installation.md) and [Build Your First Graph](first-graph.md).
 
-2. **A Logseq graph is connected.** VisionClaw must be synced to a GitHub repository containing your Logseq pages. Confirm in the left sidebar that GitHub sync shows a green connected status and a non-zero page count.
+2. **A vault is connected.** VisionClaw must be synced to a GitHub repository containing your vault's `pages/` folder. Confirm in the left sidebar that GitHub sync shows a green connected status and a non-zero page count.
 
 3. **You have the Broker role.** Only users with the `Broker` role can see the migration candidate inbox and approve promotions. Check with your VisionClaw admin, or check your own role at `http://localhost:3030/api/me`.
 
@@ -36,16 +36,19 @@ Before you start, confirm all three of these hold:
 
 ---
 
-## Step 1 — Write a Candidate Note in Logseq
+## Step 1 — Write a Candidate Note in Obsidian
 
-Open Logseq and create a new page. For this tutorial, we will use a concept from the blockchain domain. The specific domain does not matter; what matters is the structure of the note.
+Open your vault in [Obsidian](https://obsidian.md) and create a new page under `pages/`. For this tutorial, we will use a concept from the blockchain domain. The specific domain does not matter; what matters is the structure of the note.
 
 Create a file named `Digital Signature.md` with the following content:
 
 ```markdown
-public:: true
-domain:: bc
-maturity:: ready
+---
+public: true
+domain: bc
+maturity: ready
+owl-class: CryptographicMechanism
+---
 
 # Digital Signature
 
@@ -55,23 +58,23 @@ A digital signature is a cryptographic mechanism that binds a signer's identity 
 - Used by [[Smart Contract]] to authorise execution
 - Relies on [[Public Key Infrastructure]]
 - Produces a [[Hash]] of the original message
-
-owl:class:: CryptographicMechanism
 ```
 
 Key properties explained:
 
 | Property | Purpose |
 |----------|---------|
-| `public:: true` | Marks the note for inclusion in the public knowledge graph |
-| `domain:: bc` | Assigns the note to the blockchain domain |
-| `maturity:: ready` | Signals to the scoring engine that this concept is ready for review |
+| `public: true` | Marks the page for inclusion in the public knowledge graph |
+| `domain: bc` | Assigns the page to the blockchain domain |
+| `maturity: ready` | Signals to the scoring engine that this concept is ready for review |
 | Wikilinks (`[[...]]`) | Each wikilink to an existing ontology class is a scoring signal |
-| `owl:class::` | An explicit OWL declaration — one of the strongest scoring signals |
+| `owl-class` | An explicit OWL declaration — one of the strongest scoring signals, and it ingests the page even without `public: true` |
 
-Save the file. Logseq will sync it to GitHub on the next sync cycle. VisionClaw will pick it up during its next ingestion run (every few minutes by default, or you can trigger a manual sync from the Settings panel).
+These keys live in the page's YAML frontmatter (Obsidian Properties). The full contract — layout, keys, body dialect, and the inclusion gate — is [`VAULT-corpus-format.md`](../VAULT-corpus-format.md). Pages still carrying the older Logseq `public:: true` property lines keep working until the tolerance window in [ADR-2040](../adr/ADR-2040-obsidian-vault-frontmatter-gate.md) closes.
 
-<!-- screenshot: logseq page showing the Digital Signature note with public:: true and wikilinks to ontology classes -->
+Save the file and commit it to the corpus repository (Obsidian writes plain markdown; sync it with git or your usual vault-sync plugin). VisionClaw will pick it up during its next ingestion run (every few minutes by default, or you can trigger a manual sync from the Settings panel).
+
+<!-- screenshot: Obsidian page showing the Digital Signature note with public: true frontmatter and wikilinks to ontology classes -->
 
 ---
 
@@ -116,7 +119,7 @@ To confirm the candidate has reached the inbox, navigate to the Broker Workbench
 
 Click the `Digital Signature` card. The Decision Canvas opens in split-pane mode:
 
-**Left pane** — The note's full Markdown content, rendered exactly as you wrote it in Logseq. This is the raw evidence: what the author actually said.
+**Left pane** — The note's full Markdown content, rendered exactly as you wrote it in Obsidian. This is the raw evidence: what the author actually said.
 
 **Right pane** — The proposed `OntologyClass` preview: label, IRI, proposed parent class (`CryptographicMechanism`), and the properties the system has extracted (`authentication`, `non-repudiation`, `integrity-verification`).
 

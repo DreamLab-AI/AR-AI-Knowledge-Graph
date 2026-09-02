@@ -15,7 +15,7 @@ export const ESSENTIAL_PATHS = [
   'xr.enabled',
   'xr.mode',
 
-  'visualisation.graphs.logseq.physics',
+  'visualisation.graphs.knowledge.physics',
 
   // Graph-type visual settings - needed for per-type rendering
   'visualisation.graphTypeVisuals',
@@ -30,7 +30,7 @@ export const ESSENTIAL_PATHS = [
 
   // Client-side tweening settings - needed for smooth node movement
   'clientTweening',
-  'visualisation.graphs.logseq.tweening',
+  'visualisation.graphs.knowledge.tweening',
 
   // Rendering settings - needed for scene lighting and quality
   'visualisation.rendering.ambientLightIntensity',
@@ -167,7 +167,7 @@ export function setNestedValue(obj: Record<string, unknown>, path: string, value
 export function getSectionPaths(section: string): string[] {
   const sectionPathMap: Record<string, string[]> = {
     'physics': [
-      'visualisation.graphs.logseq.physics'
+      'visualisation.graphs.knowledge.physics'
     ],
     'rendering': [
       'visualisation.rendering.ambientLightIntensity',
@@ -200,13 +200,13 @@ export function getSectionPaths(section: string): string[] {
       'visualisation.graphTypeVisuals.agent'
     ],
     'nodes': [
-      'visualisation.graphs.logseq.nodes'
+      'visualisation.graphs.knowledge.nodes'
     ],
     'edges': [
-      'visualisation.graphs.logseq.edges'
+      'visualisation.graphs.knowledge.edges'
     ],
     'labels': [
-      'visualisation.graphs.logseq.labels'
+      'visualisation.graphs.knowledge.labels'
     ],
     'gemMaterial': [
       'visualisation.gemMaterial'
@@ -244,7 +244,7 @@ export function getSectionPaths(section: string): string[] {
     ],
     'tweening': [
       'clientTweening',
-      'visualisation.graphs.logseq.tweening'
+      'visualisation.graphs.knowledge.tweening'
     ]
   };
 
@@ -285,10 +285,10 @@ export function getAllAvailableSettingsPaths(): string[] {
     'visualisation.rendering.shadowMapSize',
     'visualisation.rendering.shadowBias',
 
-    'visualisation.graphs.logseq.nodes',
-    'visualisation.graphs.logseq.edges',
-    'visualisation.graphs.logseq.labels',
-    'visualisation.graphs.logseq.physics',
+    'visualisation.graphs.knowledge.nodes',
+    'visualisation.graphs.knowledge.edges',
+    'visualisation.graphs.knowledge.labels',
+    'visualisation.graphs.knowledge.physics',
 
     'visualisation.glow.enabled',
     'visualisation.glow.intensity',
@@ -336,7 +336,7 @@ export function getAllAvailableSettingsPaths(): string[] {
 
     // Client-side tweening
     'clientTweening',
-    'visualisation.graphs.logseq.tweening',
+    'visualisation.graphs.knowledge.tweening',
   ];
 }
 
@@ -357,4 +357,31 @@ export function collectPathsFromSettings(obj: unknown, prefix: string = ''): Set
   };
   collect(obj, prefix);
   return paths;
+}
+
+/**
+ * ADR-2041 migration: persisted settings written before the rename carry
+ * `visualisation.graphs.logseq`. Map that object onto `visualisation.graphs.knowledge`
+ * when `knowledge` is absent, and drop the legacy key so the next save emits only
+ * `knowledge`. Returns the same reference when there is nothing to migrate.
+ *
+ * Removal is tracked by ADR-2041's review_trigger.
+ */
+export function migrateGraphSettingsKey<T>(persisted: T): T {
+  const root = persisted as Record<string, unknown> | null | undefined;
+  const vis = root?.visualisation as Record<string, unknown> | undefined;
+  const graphs = vis?.graphs as Record<string, unknown> | undefined;
+  if (!graphs || !('logseq' in graphs)) return persisted;
+
+  const { logseq, ...rest } = graphs as { logseq?: unknown } & Record<string, unknown>;
+  const migratedGraphs: Record<string, unknown> = { ...rest };
+  // `knowledge` wins when both keys are present: it is the current vocabulary.
+  if (migratedGraphs.knowledge === undefined && logseq !== undefined) {
+    migratedGraphs.knowledge = logseq;
+  }
+
+  return {
+    ...(root as Record<string, unknown>),
+    visualisation: { ...(vis as Record<string, unknown>), graphs: migratedGraphs },
+  } as T;
 }

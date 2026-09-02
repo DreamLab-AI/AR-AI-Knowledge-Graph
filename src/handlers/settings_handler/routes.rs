@@ -140,17 +140,15 @@ async fn update_setting_by_path(
                     info!("Updated setting at path: {}", path);
 
                     if path.contains(".physics.")
-                        || path.contains(".graphs.logseq.")
+                        || crate::config::path_targets_knowledge_graph(&path)
                         || path.contains(".graphs.visionclaw.")
                     {
                         info!("Physics setting changed, propagating to GPU actors");
 
-                        let graph_name = if path.contains(".graphs.logseq.") {
-                            "logseq"
-                        } else if path.contains(".graphs.visionclaw.") {
+                        let graph_name = if path.contains(".graphs.visionclaw.") {
                             "visionclaw"
                         } else {
-                            "logseq"
+                            "knowledge"
                         };
 
                         propagate_physics_to_gpu(&state, &app_settings, graph_name).await;

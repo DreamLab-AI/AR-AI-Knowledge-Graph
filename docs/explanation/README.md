@@ -19,7 +19,7 @@ How the running system is layered, from the CUDA force engine up to the browser 
 
 | Page | What it explains |
 |------|------------------|
-| [System Overview](system-overview.md) | End-to-end tour — how a Logseq note becomes a GPU-laid-out node in the browser and on Quest 3. The 10,000-foot map. |
+| [System Overview](system-overview.md) | End-to-end tour — how a vault page becomes a GPU-laid-out node in the browser and on Quest 3. The 10,000-foot map. |
 | [Backend Architecture](backend-architecture.md) | The hexagonal Rust core — 8 workspace crates, 9 ports / 12 adapters, 44 hexser handlers (19 directive + 25 query), no CQRS bus. |
 | [Backend CQRS Pattern](backend-cqrs-pattern.md) | The directive/query handler split and why the CQRS message bus was removed (ADR-089) in favour of direct dispatch. |
 | [Actor Hierarchy](actor-hierarchy.md) | The 45 Actix actors (19 service + 16 GPU + 10 WebSocket session) and how messages flow between supervisors. |

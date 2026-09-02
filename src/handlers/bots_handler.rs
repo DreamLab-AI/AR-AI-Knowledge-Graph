@@ -495,7 +495,7 @@ TASK: Decide which setting path(s) best satisfy the request and compute new valu
 within the stated ranges. Apply EACH change with an HTTP PUT to \
 {settings_base}/api/settings/<path> with JSON body {{\"value\": <new_value>}} \
 (use the dotted path verbatim, e.g. \
-visualisation.graphs.logseq.physics.springKKnowledge). \
+visualisation.graphs.knowledge.physics.springKKnowledge). \
 Only change settings clearly implied by the request; do not touch unrelated paths. \
 If the request is not a view/graph configuration change, make no changes. \
 After applying, report a one-line summary of each path you changed and its new value.\n\n\

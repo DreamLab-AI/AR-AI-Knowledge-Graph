@@ -1085,13 +1085,13 @@ func _post_physics_reset() -> bool:
 	return true
 
 
-# PUT {base}/api/settings/physics?graph=logseq with the given params. Returns true
+# PUT {base}/api/settings/physics?graph=knowledge with the given params. Returns true
 # only if the request was dispatched. Thin wrapper over _put_physics_body.
 func _put_physics_params(repel_k: float, rest_length: float) -> bool:
 	return _put_physics_body({"repelK": repel_k, "restLength": rest_length})
 
 
-# PUT {base}/api/settings/physics?graph=logseq with an arbitrary physics body.
+# PUT {base}/api/settings/physics?graph=knowledge with an arbitrary physics body.
 # Returns true only if the request was dispatched (gate then held until
 # _on_physics_completed). Shared by Spread and the Hierarchy/View controls so they
 # all honour the single-in-flight gate identically.
@@ -1100,7 +1100,7 @@ func _put_physics_body(body: Dictionary) -> bool:
 		return false
 	if _physics_pending:
 		return false
-	var url := "%s/api/settings/physics?graph=logseq" % _http_base()
+	var url := "%s/api/settings/physics?graph=knowledge" % _http_base()
 	var headers := _auth_headers(url, "PUT")
 	var err := _physics_http.request(url, headers, HTTPClient.METHOD_PUT, JSON.stringify(body))
 	if err != OK:

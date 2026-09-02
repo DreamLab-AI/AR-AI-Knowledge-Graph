@@ -28,13 +28,14 @@ pub fn extract_physics_updates(update: &Value) -> Vec<&str> {
         .and_then(|g| g.as_object())
         .map(|graphs| {
             let mut updated = Vec::new();
-            if graphs.contains_key("logseq")
-                && graphs
-                    .get("logseq")
-                    .and_then(|g| g.get("physics"))
-                    .is_some()
+            // ADR-2041: `logseq` is accepted as an alias of `knowledge`.
+            if graphs
+                .get("knowledge")
+                .or_else(|| graphs.get("logseq"))
+                .and_then(|g| g.get("physics"))
+                .is_some()
             {
-                updated.push("logseq");
+                updated.push("knowledge");
             }
             if graphs.contains_key("visionclaw")
                 && graphs
@@ -90,7 +91,7 @@ pub fn create_physics_settings_update(physics_update: Value) -> Value {
     json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": normalized_physics
                 },
                 "visionclaw": {

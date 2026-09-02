@@ -426,7 +426,7 @@ impl Default for PhysicsSettings {
             auto_balance_config: AutoBalanceConfig::default(),
             auto_pause: AutoPauseConfig::default(),
             // Canonical compact profile (single source of truth). The YAML
-            // visualisation.graphs.logseq.physics block is NOT applied to the
+            // visualisation.graphs.knowledge.physics block is NOT applied to the
             // running simulation — boot uses these defaults whenever the sqlite
             // "physics" key is absent (app_state.rs). centerGravityK is the
             // dominant scale control: it sets the equilibrium radius against

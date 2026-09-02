@@ -5,7 +5,7 @@
  */
 import type { GroupData, RegistryField } from '../types';
 
-const L = 'visualisation.graphs.logseq.labels.';
+const L = 'visualisation.graphs.knowledge.labels.';
 
 const fields: RegistryField[] = [
   { key: 'enableLabels', subgroup: 'Labels', label: 'Show Labels', type: 'toggle', path: `${L}enableLabels`, description: 'Display node labels' },
@@ -26,6 +26,6 @@ export const labels: GroupData = {
   label: 'Labels & Text',
   description: 'Node label visibility, sizing, colour, outline, and layout cadence.',
   hotkey: '3',
-  loadPaths: ['visualisation.graphs.logseq.labels', 'visualisation.rendering'],
+  loadPaths: ['visualisation.graphs.knowledge.labels', 'visualisation.rendering'],
   fields,
 };

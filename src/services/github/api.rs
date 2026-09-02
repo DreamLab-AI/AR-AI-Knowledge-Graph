@@ -49,15 +49,15 @@ impl GitHubClient {
             debug!("HTTP client configured successfully");
         }
 
-        let decoded_path = urlencoding::decode(&config.base_path)
+        let raw_path = urlencoding::decode(&config.base_path)
             .unwrap_or(std::borrow::Cow::Owned(config.base_path.clone()))
             .into_owned();
 
         if debug_enabled {
-            debug!("Decoded base path: '{}'", decoded_path);
+            debug!("Decoded base path: '{}'", raw_path);
         }
 
-        let base_path = decoded_path
+        let base_path = raw_path
             .trim_matches('/')
             .replace("//", "/")
             .replace('\\', "/");
@@ -124,45 +124,38 @@ impl GitHubClient {
             log::debug!("Trimmed paths - Base: '{}', Path: '{}'", base, path);
         }
 
-        let decoded_path = urlencoding::decode(path)
-            .unwrap_or(std::borrow::Cow::Owned(path.to_string()))
-            .into_owned();
-        let decoded_base = urlencoding::decode(base)
-            .unwrap_or(std::borrow::Cow::Owned(base.to_string()))
-            .into_owned();
+        // NO percent-decoding here. A repository path is a literal filename,
+        // not an encoded URL fragment: the corpus contains `Presentation%3A
+        // Conclusion.md`, and decoding turned that into `Presentation:
+        // Conclusion.md` — a file that does not exist — before the URL was even
+        // built. Encoding happens once, at URL construction, in `url_path`.
+        let raw_path = path.to_string();
+        let raw_base = base.to_string();
 
-        if debug_enabled {
-            log::debug!(
-                "Decoded paths - Base: '{}', Path: '{}'",
-                decoded_base,
-                decoded_path
-            );
-        }
-
-        let full_path = if decoded_base.is_empty() {
+        let full_path = if raw_base.is_empty() {
             if debug_enabled {
                 log::debug!(
                     "Base path is empty, using decoded path only: '{}'",
-                    decoded_path
+                    raw_path
                 );
             }
-            decoded_path
+            raw_path
         } else {
-            if decoded_path.is_empty() {
+            if raw_path.is_empty() {
                 if debug_enabled {
-                    log::debug!("Path is empty, using base path only: '{}'", decoded_base);
+                    log::debug!("Path is empty, using base path only: '{}'", raw_base);
                 }
-                decoded_base
-            } else if decoded_path.starts_with(&decoded_base) {
+                raw_base
+            } else if raw_path.starts_with(&raw_base) {
                 if debug_enabled {
                     log::debug!(
                         "Path already contains base path, using as-is: '{}'",
-                        decoded_path
+                        raw_path
                     );
                 }
-                decoded_path
+                raw_path
             } else {
-                let combined = format!("{}/{}", decoded_base, decoded_path);
+                let combined = format!("{}/{}", raw_base, raw_path);
                 if debug_enabled {
                     log::debug!("Combined path: '{}'", combined);
                 }
@@ -170,11 +163,11 @@ impl GitHubClient {
             }
         };
 
-        // FIX: Do not URL-encode the entire path as it converts '/' to '%2F'
-        // GitHub API expects literal slashes in the path segment
-        // Only encode individual path components if they contain special characters
+        // Returns the RAW repository path. Encoding is not this function's job
+        // — `url_path::encode_repo_path` does it per segment at the point the
+        // path enters a URL, which is also what keeps `/` a literal separator.
         if debug_enabled {
-            log::debug!("Final full path (no encoding): '{}'", full_path);
+            log::debug!("Final full path (raw, unencoded): '{}'", full_path);
         }
 
         full_path
@@ -190,14 +183,13 @@ impl GitHubClient {
 
         let full_path = self.get_full_path(path).await;
 
-        info!(
-            "get_contents_url: Full path after encoding: '{}'",
-            full_path
-        );
+        info!("get_contents_url: Raw repository path: '{}'", full_path);
 
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
-            self.owner, self.repo, full_path, self.branch
+        let url = super::url_path::contents_url(
+            &self.owner,
+            &self.repo,
+            &full_path,
+            Some(&self.branch),
         );
 
         info!("get_contents_url: Final GitHub API URL: '{}'", url);

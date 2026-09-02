@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: f326a3b1172df4fea8183e6a4344d3f55c575013
 verified_paths: [src/middleware/rbac_gate.rs, src/main.rs, src/services/role_store.rs]
 owner: jjohare
 review_trigger: any new security-relevant env flag, or a request to soften the release boot-abort to a warning

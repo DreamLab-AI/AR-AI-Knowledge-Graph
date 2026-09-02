@@ -1,6 +1,7 @@
 // Ultra-Fast Binary Protocol for Settings Updates
 // Implements custom binary serialization, delta encoding, and streaming compression
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
 use serde::{Serialize, Deserialize};
@@ -53,15 +54,15 @@ impl PathRegistry {
 
         
         let common_paths = vec![
-            "visualisation.graphs.logseq.physics.damping",
-            "visualisation.graphs.logseq.physics.spring_k",
-            "visualisation.graphs.logseq.physics.repel_k",
-            "visualisation.graphs.logseq.physics.max_velocity",
-            "visualisation.graphs.logseq.physics.gravity",
-            "visualisation.graphs.logseq.physics.temperature",
-            "visualisation.graphs.logseq.physics.bounds_size",
-            "visualisation.graphs.logseq.physics.iterations",
-            "visualisation.graphs.logseq.physics.enabled",
+            "visualisation.graphs.knowledge.physics.damping",
+            "visualisation.graphs.knowledge.physics.spring_k",
+            "visualisation.graphs.knowledge.physics.repel_k",
+            "visualisation.graphs.knowledge.physics.max_velocity",
+            "visualisation.graphs.knowledge.physics.gravity",
+            "visualisation.graphs.knowledge.physics.temperature",
+            "visualisation.graphs.knowledge.physics.bounds_size",
+            "visualisation.graphs.knowledge.physics.iterations",
+            "visualisation.graphs.knowledge.physics.enabled",
         ];
 
         for path in common_paths {
@@ -71,7 +72,27 @@ impl PathRegistry {
         registry
     }
 
+    /// ADR-2041 alias table: an inbound path still using the legacy
+    /// `visualisation.graphs.logseq.*` segment resolves to the SAME registry
+    /// slot (and therefore the same wire `path_id`) as its `knowledge`
+    /// equivalent, instead of minting a second id for the same setting.
+    ///
+    /// Path ids are assigned by registration order, so the nine pre-registered
+    /// ids are unchanged by the rename itself; this only covers legacy inbound
+    /// strings. Remove with the alias per ADR-2041's review_trigger.
+    fn canonical_path(path: &str) -> Cow<'_, str> {
+        if path.contains(".graphs.logseq.") {
+            Cow::Owned(path.replace(".graphs.logseq.", ".graphs.knowledge."))
+        } else {
+            Cow::Borrowed(path)
+        }
+    }
+
     pub fn register_path(&mut self, path: String) -> u32 {
+        let path = match Self::canonical_path(&path) {
+            Cow::Owned(canonical) => canonical,
+            Cow::Borrowed(_) => path,
+        };
         if let Some(&id) = self.path_to_id.get(&path) {
             return id;
         }
@@ -87,7 +108,9 @@ impl PathRegistry {
     }
 
     pub fn get_path_id(&self, path: &str) -> Option<u32> {
-        self.path_to_id.get(path).copied()
+        self.path_to_id
+            .get(Self::canonical_path(path).as_ref())
+            .copied()
     }
 
     pub fn get_path_by_id(&self, id: u32) -> Option<&String> {

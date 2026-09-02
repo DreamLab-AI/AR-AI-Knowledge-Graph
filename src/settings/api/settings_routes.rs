@@ -446,7 +446,7 @@ pub async fn get_physics_settings(
     }
 
     match state.settings_addr.send(GetSettings).await {
-        Ok(Ok(settings)) => HttpResponse::Ok().json(settings.visualisation.graphs.logseq.physics),
+        Ok(Ok(settings)) => HttpResponse::Ok().json(settings.visualisation.graphs.knowledge.physics),
         Ok(Err(e)) => {
             error!("Failed to get physics settings: {}", e);
             HttpResponse::InternalServerError().json(ErrorResponse {
@@ -495,7 +495,7 @@ pub async fn update_physics_settings(
     };
 
     // Merge partial patch onto current physics from the same snapshot
-    let current_physics = &full_settings.visualisation.graphs.logseq.physics;
+    let current_physics = &full_settings.visualisation.graphs.knowledge.physics;
     let current_json = serde_json::to_value(current_physics).unwrap_or_default();
 
     let new_physics =
@@ -518,7 +518,7 @@ pub async fn update_physics_settings(
                 }
             }
         } else {
-            full_settings.visualisation.graphs.logseq.physics.clone()
+            full_settings.visualisation.graphs.knowledge.physics.clone()
         };
 
     // Validate before applying
@@ -530,7 +530,7 @@ pub async fn update_physics_settings(
     }
 
     // Apply merged physics to the same snapshot and write back atomically
-    full_settings.visualisation.graphs.logseq.physics = new_physics.clone();
+    full_settings.visualisation.graphs.knowledge.physics = new_physics.clone();
     match state
         .settings_addr
         .send(UpdateSettings {
@@ -1100,7 +1100,7 @@ pub async fn update_quality_gate_settings(
     // from the authoritative snapshot, then overlay quality-gate fields.
     match state.settings_addr.send(GetSettings).await {
         Ok(Ok(full_settings)) => {
-            let physics = &full_settings.visualisation.graphs.logseq.physics;
+            let physics = &full_settings.visualisation.graphs.knowledge.physics;
             let mut sim_params: crate::models::simulation_params::SimulationParams = physics.into();
 
             // gpu_acceleration -> compute_mode (0 = Basic/CPU, 2 = Advanced/GPU)
@@ -1377,9 +1377,9 @@ async fn get_all_from_actor(
             let physics = match settings_repo.get_setting("physics").await {
                 Ok(Some(SettingValue::Json(json))) => {
                     serde_json::from_value::<PhysicsSettings>(json)
-                        .unwrap_or(full_settings.visualisation.graphs.logseq.physics)
+                        .unwrap_or(full_settings.visualisation.graphs.knowledge.physics)
                 }
-                _ => full_settings.visualisation.graphs.logseq.physics,
+                _ => full_settings.visualisation.graphs.knowledge.physics,
             };
 
             let constraints = match settings_repo.get_setting("constraints").await {

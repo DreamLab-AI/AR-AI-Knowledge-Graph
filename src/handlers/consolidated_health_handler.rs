@@ -380,7 +380,7 @@ async fn check_physics_parameters(app_state: &web::Data<AppState>) -> String {
     .await
     {
         Ok(Ok(Ok(settings))) => {
-            let physics = &settings.visualisation.graphs.logseq.physics;
+            let physics = &settings.visualisation.graphs.knowledge.physics;
             let gravity = physics.gravity;
             let damping = physics.damping;
             let spring_k = physics.spring_k;

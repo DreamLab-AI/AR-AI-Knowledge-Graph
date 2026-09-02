@@ -142,21 +142,26 @@ impl ValidationService {
             )
         })?;
 
-        if !graphs_obj.contains_key("logseq") && !graphs_obj.contains_key("visionclaw") {
+        // ADR-2041: `logseq` is accepted as an alias of `knowledge`.
+        if !crate::config::graphs_map_has_knowledge(graphs_obj)
+            && !graphs_obj.contains_key("visionclaw")
+        {
             return Err(DetailedValidationError::new(
                 "visualisation.graphs",
-                "At least one graph (logseq or visionclaw) must be specified",
+                "At least one graph (knowledge or visionclaw) must be specified",
                 "MISSING_GRAPHS",
             ));
         }
 
-        if let (Some(logseq), Some(visionclaw)) =
-            (graphs_obj.get("logseq"), graphs_obj.get("visionclaw"))
+        if let (Some(knowledge), Some(visionclaw)) = (
+            graphs_obj.get("knowledge").or_else(|| graphs_obj.get("logseq")),
+            graphs_obj.get("visionclaw"),
+        )
         {
-            if let (Some(logseq_physics), Some(visionclaw_physics)) =
-                (logseq.get("physics"), visionclaw.get("physics"))
+            if let (Some(knowledge_physics), Some(visionclaw_physics)) =
+                (knowledge.get("physics"), visionclaw.get("physics"))
             {
-                self.validate_physics_consistency(logseq_physics, visionclaw_physics)?;
+                self.validate_physics_consistency(knowledge_physics, visionclaw_physics)?;
             }
         }
 

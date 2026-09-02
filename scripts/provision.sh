@@ -155,7 +155,7 @@ if [ -n "$GOOGLE_GEMINI_API_KEY" ]; then
     update_env "GOOGLE_GEMINI_API_KEY" "$GOOGLE_GEMINI_API_KEY"
 fi
 
-# GitHub — Logseq private repo access (scoped PAT)
+# GitHub — private corpus-repo access, scoped PAT (env var name is historical; the repo is the Obsidian vault, see docs/VAULT-corpus-format.md)
 if [ -n "${LOGSEQ_PRIVATE_REPO_GITHUB:-}" ]; then
     update_env "LOGSEQ_PRIVATE_REPO_GITHUB" "$LOGSEQ_PRIVATE_REPO_GITHUB"
 fi

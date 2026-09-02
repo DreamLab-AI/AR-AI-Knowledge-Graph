@@ -1783,10 +1783,10 @@ mod tests {
     #[test]
     fn meta_label_and_detail() {
         let mut s = RenderStore::new();
-        s.set_meta(1, "alpha-page".into(), "Alpha".into(), "page".into(), "logseq".into());
+        s.set_meta(1, "alpha-page".into(), "Alpha".into(), "page".into(), "knowledge".into());
         assert_eq!(s.meta_id_of(1), "alpha-page");
         assert_eq!(s.label_of(1), "Alpha");
-        assert_eq!(s.detail_of(1), "page · logseq");
+        assert_eq!(s.detail_of(1), "page · knowledge");
         // Unknown node → empty, not a panic.
         assert_eq!(s.meta_id_of(99), "");
         assert_eq!(s.label_of(99), "");

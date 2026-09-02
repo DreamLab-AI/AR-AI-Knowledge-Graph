@@ -156,12 +156,13 @@ impl PathAccessible for GraphsSettings {
         let segments = parse_path(path)?;
 
         match segments[0] {
-            "logseq" => {
+            // ADR-2041: `logseq` is a read-only alias of `knowledge` for one release.
+            "knowledge" | "logseq" => {
                 if segments.len() == 1 {
-                    Ok(Box::new(self.logseq.clone()))
+                    Ok(Box::new(self.knowledge.clone()))
                 } else {
                     let remaining = segments[1..].join(".");
-                    self.logseq.get_by_path(&remaining)
+                    self.knowledge.get_by_path(&remaining)
                 }
             }
             "visionclaw" => {
@@ -180,18 +181,19 @@ impl PathAccessible for GraphsSettings {
         let segments = parse_path(path)?;
 
         match segments[0] {
-            "logseq" => {
+            // ADR-2041: `logseq` is a read-only alias of `knowledge` for one release.
+            "knowledge" | "logseq" => {
                 if segments.len() == 1 {
                     match value.downcast::<GraphSettings>() {
                         Ok(v) => {
-                            self.logseq = *v;
+                            self.knowledge = *v;
                             Ok(())
                         }
-                        Err(_) => Err("Type mismatch for logseq field".to_string()),
+                        Err(_) => Err("Type mismatch for knowledge field".to_string()),
                     }
                 } else {
                     let remaining = segments[1..].join(".");
-                    self.logseq.set_by_path(&remaining, value)
+                    self.knowledge.set_by_path(&remaining, value)
                 }
             }
             "visionclaw" => {

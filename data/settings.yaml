@@ -64,7 +64,7 @@ visualisation:
     triangleSphereOpacity: 0.4
     globalRotationSpeed: 0.5
   graphs:
-    logseq:
+    knowledge:
       nodes:
         baseColor: '#202724'
         metalness: 0.1

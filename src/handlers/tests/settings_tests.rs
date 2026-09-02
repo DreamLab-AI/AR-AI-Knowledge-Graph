@@ -136,7 +136,7 @@ mod settings_api_tests {
 
         
         let update_data = json!({
-            "path": "visualisation.graphs.logseq.nodes.baseColor",
+            "path": "visualisation.graphs.knowledge.nodes.baseColor",
             "value": "#FF5733"
         });
 
@@ -188,7 +188,7 @@ mod settings_api_tests {
 
         
         let update_data = json!({
-            "path": "visualisation.graphs.logseq.nodes.emissionColor",
+            "path": "visualisation.graphs.knowledge.nodes.emissionColor",
             "value": "#00FF00"
         });
 
@@ -210,7 +210,7 @@ mod settings_api_tests {
 
         
         let update_data = json!({
-            "path": "visualisation.graphs.logseq.physics.autoBalance.stabilityVarianceThreshold",
+            "path": "visualisation.graphs.knowledge.physics.autoBalance.stabilityVarianceThreshold",
             "value": 0.05
         });
 
@@ -239,7 +239,7 @@ mod settings_api_tests {
             "paths": [
                 "visualisation.physics.damping",
                 "visualisation.physics.gravity",
-                "visualisation.graphs.logseq.nodes.baseColor",
+                "visualisation.graphs.knowledge.nodes.baseColor",
                 "visualisation.rendering.ambientLightIntensity"
             ]
         });
@@ -257,7 +257,7 @@ mod settings_api_tests {
         
         assert!(body["visualisation.physics.damping"].is_number());
         assert!(body["visualisation.physics.gravity"].is_number());
-        assert!(body["visualisation.graphs.logseq.nodes.baseColor"].is_string());
+        assert!(body["visualisation.graphs.knowledge.nodes.baseColor"].is_string());
         assert!(body["visualisation.rendering.ambientLightIntensity"].is_number());
     }
 
@@ -323,7 +323,7 @@ mod settings_api_tests {
                     "value": 0.98
                 },
                 {
-                    "path": "visualisation.graphs.logseq.nodes.baseColor",
+                    "path": "visualisation.graphs.knowledge.nodes.baseColor",
                     "value": "#FF0000"
                 },
                 {
@@ -434,18 +434,18 @@ mod settings_api_tests {
 
         
         let test_cases = vec![
-            ("visualisation.graphs.logseq.edges.arrowSize", 0.5),
-            ("visualisation.graphs.logseq.edges.baseWidth", 1.2),
-            ("visualisation.graphs.logseq.physics.enableBounds", true),
-            ("visualisation.graphs.logseq.physics.maxVelocity", 10.0),
-            ("visualisation.graphs.logseq.physics.repelK", 1000.0),
-            ("visualisation.graphs.logseq.physics.springK", 0.002),
+            ("visualisation.graphs.knowledge.edges.arrowSize", 0.5),
+            ("visualisation.graphs.knowledge.edges.baseWidth", 1.2),
+            ("visualisation.graphs.knowledge.physics.enableBounds", true),
+            ("visualisation.graphs.knowledge.physics.maxVelocity", 10.0),
+            ("visualisation.graphs.knowledge.physics.repelK", 1000.0),
+            ("visualisation.graphs.knowledge.physics.springK", 0.002),
             (
-                "visualisation.graphs.logseq.physics.autoPause.equilibriumVelocityThreshold",
+                "visualisation.graphs.knowledge.physics.autoPause.equilibriumVelocityThreshold",
                 0.01,
             ),
             (
-                "visualisation.graphs.logseq.physics.autoBalance.stabilityFrameCount",
+                "visualisation.graphs.knowledge.physics.autoBalance.stabilityFrameCount",
                 30u32,
             ),
         ];
@@ -483,7 +483,7 @@ mod settings_api_tests {
 
         
         let update_data = json!({
-            "path": "visualisation.graphs.logseq.nodes.baseColor",
+            "path": "visualisation.graphs.knowledge.nodes.baseColor",
             "value": "invalid-color"
         });
 
@@ -510,7 +510,7 @@ mod settings_api_tests {
 
         
         let update_data = json!({
-            "path": "visualisation.graphs.logseq.nodes.opacity",
+            "path": "visualisation.graphs.knowledge.nodes.opacity",
             "value": 1.5  
         });
 
@@ -533,7 +533,7 @@ mod settings_api_tests {
 
         
         let problematic_fields = vec![
-            ("visualisation.graphs.logseq.nodes.baseColor", "#FF5733"),
+            ("visualisation.graphs.knowledge.nodes.baseColor", "#FF5733"),
             ("visualisation.graphs.visionclaw.nodes.baseColor", "#33FF57"),
             ("visualisation.rendering.ambientLightIntensity", 0.8),
             ("visualisation.rendering.backgroundColor", "#000000"),
@@ -576,11 +576,11 @@ mod settings_api_tests {
         let batch_data = json!({
             "updates": [
                 {
-                    "path": "visualisation.graphs.logseq.nodes.baseColor",
+                    "path": "visualisation.graphs.knowledge.nodes.baseColor",
                     "value": "#FF0000"
                 },
                 {
-                    "path": "visualisation.graphs.logseq.nodes.opacity",
+                    "path": "visualisation.graphs.knowledge.nodes.opacity",
                     "value": 0.8
                 },
                 {
@@ -646,14 +646,14 @@ mod integration_tests {
 
         
         let req = test::TestRequest::get()
-            .uri("/api/settings/path?path=visualisation.graphs.logseq.nodes.baseColor")
+            .uri("/api/settings/path?path=visualisation.graphs.knowledge.nodes.baseColor")
             .to_request();
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success());
 
         
         let update_data = json!({
-            "path": "visualisation.graphs.logseq.nodes.baseColor",
+            "path": "visualisation.graphs.knowledge.nodes.baseColor",
             "value": "#NEW123"
         });
         let req = test::TestRequest::put()
@@ -665,7 +665,7 @@ mod integration_tests {
 
         
         let req = test::TestRequest::get()
-            .uri("/api/settings/path?path=visualisation.graphs.logseq.nodes.baseColor")
+            .uri("/api/settings/path?path=visualisation.graphs.knowledge.nodes.baseColor")
             .to_request();
         let resp = test::call_service(&app, req).await;
         let body: serde_json::Value = test::read_body_json(resp).await;
@@ -675,7 +675,7 @@ mod integration_tests {
         let batch_data = json!({
             "updates": [
                 {
-                    "path": "visualisation.graphs.logseq.nodes.baseColor",
+                    "path": "visualisation.graphs.knowledge.nodes.baseColor",
                     "value": "#BATCH1"
                 },
                 {
@@ -694,7 +694,7 @@ mod integration_tests {
         
         let batch_read = json!({
             "paths": [
-                "visualisation.graphs.logseq.nodes.baseColor",
+                "visualisation.graphs.knowledge.nodes.baseColor",
                 "visualisation.rendering.ambientLightIntensity"
             ]
         });
@@ -705,7 +705,7 @@ mod integration_tests {
         let resp = test::call_service(&app, req).await;
         let body: serde_json::Value = test::read_body_json(resp).await;
         assert_eq!(
-            body["visualisation.graphs.logseq.nodes.baseColor"],
+            body["visualisation.graphs.knowledge.nodes.baseColor"],
             "#BATCH1"
         );
         assert_eq!(body["visualisation.rendering.ambientLightIntensity"], 0.75);

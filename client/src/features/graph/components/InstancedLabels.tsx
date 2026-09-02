@@ -376,13 +376,13 @@ const InstancedLabelsWebGPU: React.FC<WebGPUProps> = ({
     );
     if (frameCountRef.current % labelLayoutEvery !== 0) return;
 
-    const labelSettings = (settings as any)?.visualisation?.graphs?.logseq?.labels ?? (settings as any)?.visualisation?.labels;
+    const labelSettings = (settings as any)?.visualisation?.graphs?.knowledge?.labels ?? (settings as any)?.visualisation?.labels;
     if (!labelSettings?.enableLabels || nodes.length === 0) {
       setWebGPULabels([]);
       return;
     }
 
-    const nodeSettings = (settings as any)?.visualisation?.graphs?.logseq?.nodes ?? (settings as any)?.visualisation?.nodes;
+    const nodeSettings = (settings as any)?.visualisation?.graphs?.knowledge?.nodes ?? (settings as any)?.visualisation?.nodes;
     const nodeSize = nodeSettings?.nodeSize ?? 0.5;
     const LABEL_DISTANCE_THRESHOLD = labelSettings?.labelDistanceThreshold ?? 1200;
     const METADATA_DISTANCE_THRESHOLD = LABEL_DISTANCE_THRESHOLD * 0.6;
@@ -689,14 +689,14 @@ const InstancedLabelsWebGL: React.FC<WebGLProps> = ({
     const rawPositionsForLayout = rawPositions;
     const currentLabelPositions = labelPositionsRef.current;
 
-    const labelSettings = (settings as any)?.visualisation?.graphs?.logseq?.labels ?? (settings as any)?.visualisation?.labels;
+    const labelSettings = (settings as any)?.visualisation?.graphs?.knowledge?.labels ?? (settings as any)?.visualisation?.labels;
     if (!labelSettings?.enableLabels || nodes.length === 0) {
       geometry.instanceCount = 0;
       nodeGlyphMapRef.current = [];
       return;
     }
 
-    const nodeSettingsObj = (settings as any)?.visualisation?.graphs?.logseq?.nodes ?? (settings as any)?.visualisation?.nodes;
+    const nodeSettingsObj = (settings as any)?.visualisation?.graphs?.knowledge?.nodes ?? (settings as any)?.visualisation?.nodes;
     const nodeSize = nodeSettingsObj?.nodeSize ?? 0.5;
     const LABEL_DISTANCE_THRESHOLD = labelSettings?.labelDistanceThreshold ?? 1200;
     const METADATA_DISTANCE_THRESHOLD = LABEL_DISTANCE_THRESHOLD * 0.6;

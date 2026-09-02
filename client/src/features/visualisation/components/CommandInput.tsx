@@ -245,7 +245,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       description: `${show ? 'Showing' : 'Hiding'} knowledge nodes`,
       localAction: () => {
         const ss = useSettingsStore.getState();
-        ss?.set?.('visualisation.graphs.logseq.nodes.nodeTypeVisibility.knowledge', show);
+        ss?.set?.('visualisation.graphs.knowledge.nodes.nodeTypeVisibility.knowledge', show);
       },
     });
   }
@@ -257,7 +257,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       description: `${show ? 'Showing' : 'Hiding'} ontology nodes`,
       localAction: () => {
         const ss = useSettingsStore.getState();
-        ss?.set?.('visualisation.graphs.logseq.nodes.nodeTypeVisibility.ontology', show);
+        ss?.set?.('visualisation.graphs.knowledge.nodes.nodeTypeVisibility.ontology', show);
       },
     });
   }
@@ -299,7 +299,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       description: `Setting node opacity to ${value}`,
       localAction: () => {
         const ss = useSettingsStore.getState();
-        ss?.set?.('visualisation.graphs.logseq.nodes.opacity', value);
+        ss?.set?.('visualisation.graphs.knowledge.nodes.opacity', value);
       },
     });
   }
@@ -311,7 +311,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       description: `${show ? 'Showing' : 'Hiding'} labels`,
       localAction: () => {
         const ss = useSettingsStore.getState();
-        ss?.set?.('visualisation.graphs.logseq.labels.enableLabels', show);
+        ss?.set?.('visualisation.graphs.knowledge.labels.enableLabels', show);
       },
     });
   }
@@ -389,7 +389,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       localAction: () => {
         const ss = useSettingsStore.getState();
         ss?.updateSettings?.((draft: any) => {
-          const labels = draft.visualisation?.graphs?.logseq?.labels;
+          const labels = draft.visualisation?.graphs?.knowledge?.labels;
           if (labels) {
             // Raw target values (no scaling) within the slider bounds.
             labels.labelDistanceThreshold = 600;
@@ -408,7 +408,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       localAction: () => {
         const ss = useSettingsStore.getState();
         ss?.updateSettings?.((draft: any) => {
-          const labels = draft.visualisation?.graphs?.logseq?.labels;
+          const labels = draft.visualisation?.graphs?.knowledge?.labels;
           if (labels) {
             // Raw target values (no scaling) within the slider bounds.
             labels.labelDistanceThreshold = 1600;
@@ -430,7 +430,7 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
       localAction: () => {
         const ss = useSettingsStore.getState();
         ss?.updateSettings?.((draft: any) => {
-          const vis = draft.visualisation?.graphs?.logseq?.nodes?.nodeTypeVisibility;
+          const vis = draft.visualisation?.graphs?.knowledge?.nodes?.nodeTypeVisibility;
           if (vis) {
             vis.knowledge = showKnowledge;
             vis.ontology = showOntology;
@@ -484,14 +484,14 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
           const viewData = {
             filters: settings?.nodeFilter,
             physics: {
-              repelK: settings?.visualisation?.graphs?.logseq?.physics?.repelK,
-              springK: settings?.visualisation?.graphs?.logseq?.physics?.springK,
-              restLength: settings?.visualisation?.graphs?.logseq?.physics?.restLength,
-              centerGravityK: settings?.visualisation?.graphs?.logseq?.physics?.centerGravityK,
-              damping: settings?.visualisation?.graphs?.logseq?.physics?.damping,
+              repelK: settings?.visualisation?.graphs?.knowledge?.physics?.repelK,
+              springK: settings?.visualisation?.graphs?.knowledge?.physics?.springK,
+              restLength: settings?.visualisation?.graphs?.knowledge?.physics?.restLength,
+              centerGravityK: settings?.visualisation?.graphs?.knowledge?.physics?.centerGravityK,
+              damping: settings?.visualisation?.graphs?.knowledge?.physics?.damping,
             },
             clusters: settings?.qualityGates,
-            nodeTypeVisibility: settings?.visualisation?.graphs?.logseq?.nodes?.nodeTypeVisibility,
+            nodeTypeVisibility: settings?.visualisation?.graphs?.knowledge?.nodes?.nodeTypeVisibility,
           };
           await solidPod.saveGraphView(viewName, viewData);
         } catch (e) {
@@ -516,8 +516,8 @@ function parseCommandToActions(cmd: string): SettingsAction[] {
             }
             if (view.nodeTypeVisibility && ss?.updateSettings) {
               ss.updateSettings((draft: any) => {
-                if (draft.visualisation?.graphs?.logseq?.nodes) {
-                  draft.visualisation.graphs.logseq.nodes.nodeTypeVisibility = view.nodeTypeVisibility;
+                if (draft.visualisation?.graphs?.knowledge?.nodes) {
+                  draft.visualisation.graphs.knowledge.nodes.nodeTypeVisibility = view.nodeTypeVisibility;
                 }
               });
             }

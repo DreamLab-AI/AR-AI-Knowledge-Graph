@@ -8,7 +8,7 @@ const logger = createLogger('BotsWebSocketIntegration');
 
 export class BotsWebSocketIntegration {
   private static instance: BotsWebSocketIntegration;
-  private logseqConnected = false;
+  private knowledgeConnected = false;
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
 
   private constructor() {
@@ -26,15 +26,15 @@ export class BotsWebSocketIntegration {
     logger.info('Initializing WebSocket connection for graph data');
 
     
-    this.initializeLogseqConnection();
+    this.initializeKnowledgeConnection();
   }
 
-  private initializeLogseqConnection() {
+  private initializeKnowledgeConnection() {
     
     webSocketService.onConnectionStatusChange((connected) => {
-      logger.info(`Logseq WebSocket connection status: ${connected}`);
-      this.logseqConnected = connected;
-      this.emit('logseq-connected', { connected });
+      logger.info(`Knowledge WebSocket connection status: ${connected}`);
+      this.knowledgeConnected = connected;
+      this.emit('knowledge-connected', { connected });
 
       
       agentTelemetry.logWebSocketMessage('connection_status_change', 'incoming', { connected });
@@ -53,8 +53,8 @@ export class BotsWebSocketIntegration {
       webSocketEventBus.emit('message:bots', { data: message });
 
       if (message.type === 'graph-update') {
-        logger.debug('Received Logseq graph update', message.data);
-        this.emit('logseq-graph-update', message.data);
+        logger.debug('Received Knowledge graph update', message.data);
+        this.emit('knowledge-graph-update', message.data);
       } else if (message.type === 'botsGraphUpdate') {
         
         const nodeCount = message.data?.nodes?.length || 0;
@@ -100,12 +100,12 @@ export class BotsWebSocketIntegration {
 
     
     webSocketService.onBinaryMessage((data) => {
-      logger.debug(`Received Logseq binary update: ${data.byteLength} bytes`);
+      logger.debug(`Received Knowledge binary update: ${data.byteLength} bytes`);
 
       
       agentTelemetry.logWebSocketMessage('binary_position_update', 'incoming', undefined, data.byteLength);
 
-      this.emit('logseq-binary-update', data);
+      this.emit('knowledge-binary-update', data);
     });
 
     
@@ -143,13 +143,13 @@ export class BotsWebSocketIntegration {
     this.emit('bots-update', data);
   }
 
-  // MCP connectivity is not tracked by this service (it only owns the Logseq
+  // MCP connectivity is not tracked by this service (it only owns the Knowledge
   // websocket). The real MCP status is polled from `/bots/status` in
   // BotsDataContext, so no `mcp` field is exposed here rather than a stub value.
   getConnectionStatus() {
     return {
-      logseq: this.logseqConnected,
-      overall: this.logseqConnected
+      knowledge: this.knowledgeConnected,
+      overall: this.knowledgeConnected
     };
   }
 
@@ -192,7 +192,7 @@ export class BotsWebSocketIntegration {
     this.clearAgents();
     
     webSocketService.close();
-    this.logseqConnected = false;
+    this.knowledgeConnected = false;
   }
 }
 

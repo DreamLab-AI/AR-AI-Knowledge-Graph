@@ -10,25 +10,25 @@ const logger = createLogger('useBotsWebSocketIntegration');
 export function useBotsWebSocketIntegration() {
   const telemetry = useTelemetry('useBotsWebSocketIntegration');
   const [connectionStatus, setConnectionStatus] = useState({
-    logseq: false,
+    knowledge: false,
     overall: false
   });
 
   useEffect(() => {
     logger.info('Initializing bots WebSocket integration (binary position updates only)');
 
-    const unsubLogseq = botsWebSocketIntegration.on('logseq-connected', ({ connected }) => {
-      setConnectionStatus(prev => ({ ...prev, logseq: connected }));
+    const unsubKnowledge = botsWebSocketIntegration.on('knowledge-connected', ({ connected }) => {
+      setConnectionStatus(prev => ({ ...prev, knowledge: connected }));
 
 
-      agentTelemetry.logAgentAction('websocket', 'logseq', connected ? 'connected' : 'disconnected');
+      agentTelemetry.logAgentAction('websocket', 'knowledge', connected ? 'connected' : 'disconnected');
     });
 
 
     const updateOverall = setInterval(() => {
       const status = botsWebSocketIntegration.getConnectionStatus();
       setConnectionStatus({
-        logseq: status.logseq,
+        knowledge: status.knowledge,
         overall: status.overall
       });
     }, 2000);
@@ -39,7 +39,7 @@ export function useBotsWebSocketIntegration() {
     agentTelemetry.logAgentAction('websocket', 'hook', 'initialized_position_updates');
 
     return () => {
-      unsubLogseq();
+      unsubKnowledge();
       clearInterval(updateOverall);
 
       

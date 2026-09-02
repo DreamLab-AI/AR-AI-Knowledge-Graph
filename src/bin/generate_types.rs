@@ -269,7 +269,7 @@ export interface GraphSettings {
 
 // Multi-graph settings
 export interface GraphsSettings {
-  logseq: GraphSettings;
+  knowledge: GraphSettings;
   visionclaw: GraphSettings;
 }
 

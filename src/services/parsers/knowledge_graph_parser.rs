@@ -1,18 +1,19 @@
 // src/services/parsers/knowledge_graph_parser.rs
 //! Knowledge Graph Parser
 //!
-//! Parses markdown files marked with `public:: true` to extract:
+//! Parses vault pages admitted by the ADR-2040 §V4 gate to extract:
 //! - Nodes (pages, concepts)
 //! - Edges (links, relationships)
 //! - Metadata (properties, tags)
 
 use crate::utils::socket_flow_messages::BinaryNodeData;
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::collections::HashMap;
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::models::graph::GraphData;
 use visionclaw_domain::models::metadata::MetadataStore;
 use visionclaw_domain::models::node::Node;
+use visionclaw_domain::vault::{self, LinkResolution, PageMeta, VaultIndex};
 
 /// Knowledge graph parser with position preservation support
 pub struct KnowledgeGraphParser {
@@ -65,11 +66,37 @@ impl KnowledgeGraphParser {
     }
 
     pub fn parse(&self, content: &str, filename: &str) -> Result<GraphData, String> {
+        self.parse_with_index(content, filename, None)
+    }
+
+    /// Parse a page, resolving its wikilinks against the vault.
+    ///
+    /// `filename` is the **vault-relative** path (`Ns/Title.md`), not a bare
+    /// basename: page identity is that path per §V1, and passing a basename
+    /// collapses every namespaced page onto its leaf name — which silently
+    /// merged distinct pages (e.g. `ETSI_Domain_Infrastructure/Security` with
+    /// the root `Security`) and orphaned every bare link to a subfolder page.
+    ///
+    /// `index` supplies Obsidian's bare-link resolution. `None` keeps the
+    /// pre-index behaviour (link text is hashed as-is) for callers with no
+    /// vault listing to hand, such as the local single-file sync.
+    pub fn parse_with_index(
+        &self,
+        content: &str,
+        filename: &str,
+        index: Option<&VaultIndex>,
+    ) -> Result<GraphData, String> {
         info!("Parsing knowledge graph file: {}", filename);
 
-        let page_name = filename.strip_suffix(".md").unwrap_or(filename).to_string();
+        // Page identity is the vault-relative path under `pages/` without the
+        // `.md`, with `/` as the namespace separator (ADR-2040 §V1). The legacy
+        // `___` and `%2F` encodings decode to `/` here. Node ids are unchanged
+        // by the decode: slugify collapses any run of non-alphanumerics to a
+        // single `-`, so `A___B Testing` and `A/B Testing` hash identically
+        // (governing doc Invariant 4).
+        let page_name = vault::page_name_from_path(filename);
 
-        let mut nodes = vec![self.create_page_node(&page_name, content)];
+        let nodes = vec![self.create_page_node(&page_name, content)];
         let mut id_to_metadata = HashMap::new();
         id_to_metadata.insert(nodes[0].id.to_string(), page_name.clone());
 
@@ -78,7 +105,16 @@ impl KnowledgeGraphParser {
         // created here. Edges whose target doesn't exist as a page node will
         // still be stored — the Oxigraph SPARQL INSERT will create stubs or the edge will
         // dangle harmlessly until the target page is synced.
-        let wikilink_edges = self.extract_wikilink_edges(content, &nodes[0].id);
+        let (wikilink_edges, ambiguous) =
+            self.extract_wikilink_edges(content, &nodes[0].id, &page_name, index);
+        if ambiguous > 0 {
+            // Recorded for the sync log: an ambiguous basename was resolved by
+            // the same-folder / sorted-order tie-break rather than uniquely.
+            warn!(
+                "{}: {} wikilink(s) resolved by ambiguous basename",
+                filename, ambiguous
+            );
+        }
 
         let metadata = self.extract_metadata_store(content);
 
@@ -97,28 +133,38 @@ impl KnowledgeGraphParser {
         })
     }
 
-    /// Create a page node, preserving existing position if available
+    /// Create a page node, preserving existing position if available.
+    ///
+    /// All authored metadata comes from `visionclaw_domain::vault` (ADR-2040
+    /// D4) — frontmatter, or the leading Logseq property block under the
+    /// bounded legacy tolerance. The metadata KEY SET is unchanged from
+    /// pre-ADR-2040 (`type`, `source_file`, `public`, `file_size`, `tags`,
+    /// `source_domain`, `quality_score`, `maturity`), so the client contract is
+    /// untouched; only `source_file` changes shape, to the vault-relative path
+    /// with `/` namespaces (`A/B Testing.md`, was `A___B Testing.md`).
     fn create_page_node(&self, page_name: &str, content: &str) -> Node {
+        let meta = vault::parse(content);
+
         let mut metadata = HashMap::new();
         metadata.insert("type".to_string(), "page".to_string());
         metadata.insert("source_file".to_string(), format!("{}.md", page_name));
+        // Every page reaching this constructor has already passed the §V4 gate
+        // in the caller, so the published flag is constant — as it was before.
         metadata.insert("public".to_string(), "true".to_string());
 
         // Real markdown byte-size, surfaced so the client can size nodes by content volume.
         let content_size = content.len();
         metadata.insert("file_size".to_string(), content_size.to_string());
 
-        let tags = self.extract_tags(content);
+        let tags = Self::extract_tags(&meta, content);
         if !tags.is_empty() {
             metadata.insert("tags".to_string(), tags.join(", "));
         }
 
-        // Extract owl:class IRI from logseq-style "owl:class:: prefix:Local" lines.
-        // Pages carrying this metadata are reclassified as ontology nodes downstream
+        // Pages carrying a class IRI are reclassified as ontology nodes downstream
         // (graph_state_actor.classify_node treats owl_class_iri.is_some() as ontology).
-        let owl_class_iri = Self::extract_owl_class(content);
-        let source_domain = Self::extract_source_domain(content);
-        if let Some(ref dom) = source_domain {
+        let owl_class_iri = meta.owl_class.clone();
+        if let Some(ref dom) = meta.source_domain {
             metadata.insert("source_domain".to_string(), dom.clone());
         }
 
@@ -158,10 +204,26 @@ impl KnowledgeGraphParser {
             (Some("page".to_string()), Some("#4A90E2".to_string()))
         };
 
+        // Display label, in order: the §V2 `title`, else the identity's leaf.
+        // Identity (`metadata_id`, `id`, `source_file`) is untouched by this —
+        // it stays the full vault-relative path.
+        //
+        // A `title` that merely repeats the page's own identity is not a
+        // display title — `vault-migrate` writes the vault-relative path into
+        // this key on ~223 converted pages — so it is ignored. The fallback is
+        // the LEAF, never the full path: Obsidian displays `Ns/Title` as
+        // `Title`, and a label carrying its folder is noise the client then has
+        // to strip.
+        let label = meta
+            .title
+            .clone()
+            .filter(|title| title != page_name)
+            .unwrap_or_else(|| vault::identity_basename(page_name).to_string());
+
         Node {
             id,
             metadata_id: page_name.to_string(),
-            label: page_name.to_string(),
+            label,
             data,
             metadata,
             file_size: content_size as u64,
@@ -182,21 +244,6 @@ impl KnowledgeGraphParser {
             vz: Some(0.0),
             owl_class_iri,
         }
-    }
-
-    /// Extract `owl:class:: prefix:LocalName` from a logseq markdown ontology block.
-    /// Returns the full IRI value (e.g. "mv:ArbitrationDecisionEngine").
-    fn extract_owl_class(content: &str) -> Option<String> {
-        for line in content.lines() {
-            let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '-');
-            if let Some(rest) = trimmed.strip_prefix("owl:class::") {
-                let value = rest.trim();
-                if !value.is_empty() {
-                    return Some(value.to_string());
-                }
-            }
-        }
-        None
     }
 
     /// Extract `"quality": <float>` from the page's embedded JSON-LD ontology
@@ -239,33 +286,55 @@ impl KnowledgeGraphParser {
         None
     }
 
-    /// Extract `source-domain:: <value>` from logseq markdown front-matter style metadata.
-    fn extract_source_domain(content: &str) -> Option<String> {
-        for line in content.lines() {
-            let trimmed = line.trim_start_matches(|c: char| c.is_whitespace() || c == '-');
-            if let Some(rest) = trimmed.strip_prefix("source-domain::") {
-                let value = rest.trim();
-                if !value.is_empty() {
-                    return Some(value.to_string());
-                }
-            }
-        }
-        None
-    }
-
     /// Extract wikilink edges only — no new nodes created.
     /// Returns Edge objects for each [[WikiLink]] found in content.
     /// Deduplicates by target to avoid multiple edges to the same page.
-    fn extract_wikilink_edges(&self, content: &str, source_id: &u32) -> Vec<Edge> {
+    ///
+    /// Targets are resolved through [`VaultIndex`] (Obsidian's rule): a bare
+    /// `[[Title]]` finds the page wherever it lives in the vault, so it joins
+    /// the real node instead of minting a phantom stub beside it. Returns the
+    /// edges plus the number of links that resolved only via an ambiguous
+    /// basename, for the sync log.
+    fn extract_wikilink_edges(
+        &self,
+        content: &str,
+        source_id: &u32,
+        from_identity: &str,
+        index: Option<&VaultIndex>,
+    ) -> (Vec<Edge>, usize) {
         let mut edges = Vec::new();
         let mut seen_targets = std::collections::HashSet::new();
+        let mut ambiguous = 0usize;
 
         let link_pattern =
             regex::Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").expect("Invalid regex pattern");
 
         for cap in link_pattern.captures_iter(content) {
             if let Some(link_match) = cap.get(1) {
-                let target_page = link_match.as_str().trim().to_string();
+                let raw_target = link_match.as_str();
+                let target_page = match index {
+                    Some(index) => {
+                        let resolution = index.resolve(raw_target, from_identity);
+                        if let LinkResolution::Ambiguous {
+                            ref chosen,
+                            ref alternatives,
+                        } = resolution
+                        {
+                            ambiguous += 1;
+                            debug!(
+                                "Ambiguous wikilink [[{}]] on {}: chose {} from {:?}",
+                                raw_target, from_identity, chosen, alternatives
+                            );
+                        }
+                        resolution.target().to_string()
+                    }
+                    // No vault listing: still decode the legacy encodings so a
+                    // `[[Ns___Title]]` hashes to the same id as `Ns/Title`.
+                    None => vault::normalise_link_target(raw_target),
+                };
+                if target_page.is_empty() {
+                    continue;
+                }
                 let target_id = self.page_name_to_id(&target_page);
 
                 // Skip self-loops and duplicates
@@ -285,7 +354,7 @@ impl KnowledgeGraphParser {
             }
         }
 
-        edges
+        (edges, ambiguous)
     }
 
     /// Extract links from content, preserving existing positions (legacy — creates nodes)
@@ -375,19 +444,32 @@ impl KnowledgeGraphParser {
         store
     }
 
-    fn extract_tags(&self, content: &str) -> Vec<String> {
-        let mut tags = Vec::new();
+    /// A page's tags: the authored `tags` property (frontmatter or leading
+    /// Logseq block, via `PageMeta`) first, then body `#hashtags` in document
+    /// order. Deduplicated across both sources — the previous `Vec::dedup`
+    /// only collapsed ADJACENT repeats, so a tag recurring later in the body
+    /// was emitted twice.
+    fn extract_tags(meta: &PageMeta, content: &str) -> Vec<String> {
+        let mut tags: Vec<String> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut push = |tag: String, tags: &mut Vec<String>| {
+            if !tag.is_empty() && seen.insert(tag.clone()) {
+                tags.push(tag);
+            }
+        };
+
+        for tag in &meta.tags {
+            push(tag.clone(), &mut tags);
+        }
 
         let tag_pattern = regex::Regex::new(r"#([a-zA-Z0-9_-]+)|tag::\s*#?([a-zA-Z0-9_-]+)")
             .expect("Invalid regex pattern");
-
         for cap in tag_pattern.captures_iter(content) {
             if let Some(tag) = cap.get(1).or_else(|| cap.get(2)) {
-                tags.push(tag.as_str().to_string());
+                push(tag.as_str().to_string(), &mut tags);
             }
         }
 
-        tags.dedup();
         tags
     }
 
@@ -448,6 +530,74 @@ mod tests {
         let pos = parser.get_position(12345);
 
         assert_eq!(pos, (10.0, 20.0, 30.0));
+    }
+
+    fn label_of(page_path: &str, frontmatter: &str) -> String {
+        let content = format!("---\npublic: true\n{frontmatter}---\n\n# Body\n");
+        KnowledgeGraphParser::new()
+            .parse(&content, page_path)
+            .expect("parses")
+            .nodes[0]
+            .label
+            .clone()
+    }
+
+    #[test]
+    fn a_subfolder_page_without_a_title_is_labelled_by_its_leaf() {
+        // Obsidian displays `Ns/Title` as `Title`; the full path in a label is
+        // noise, and 203 converted pages hit this branch.
+        assert_eq!(
+            label_of("podcast-evidence/black-friday-gpt.md", ""),
+            "black-friday-gpt"
+        );
+    }
+
+    #[test]
+    fn a_subfolder_page_with_a_title_is_labelled_by_that_title() {
+        assert_eq!(
+            label_of(
+                "podcast-evidence/black-friday-gpt.md",
+                "title: Black Friday GPT\n"
+            ),
+            "Black Friday GPT"
+        );
+    }
+
+    #[test]
+    fn a_title_that_merely_echoes_the_identity_falls_back_to_the_leaf() {
+        // What `vault-migrate` actually writes today.
+        assert_eq!(
+            label_of(
+                "podcast-evidence/black-friday-gpt.md",
+                "title: podcast-evidence/black-friday-gpt\n"
+            ),
+            "black-friday-gpt"
+        );
+    }
+
+    #[test]
+    fn a_root_page_is_unchanged_by_the_leaf_rule() {
+        assert_eq!(label_of("Agentic AI.md", ""), "Agentic AI");
+        assert_eq!(
+            label_of("Agentic AI.md", "title: Agentic Artificial Intelligence\n"),
+            "Agentic Artificial Intelligence"
+        );
+    }
+
+    #[test]
+    fn identity_is_not_affected_by_the_label_rule() {
+        let content = "---\npublic: true\n---\n\n# Body\n";
+        let graph = KnowledgeGraphParser::new()
+            .parse(content, "podcast-evidence/black-friday-gpt.md")
+            .expect("parses");
+        let node = &graph.nodes[0];
+
+        assert_eq!(node.label, "black-friday-gpt");
+        assert_eq!(node.metadata_id, "podcast-evidence/black-friday-gpt");
+        assert_eq!(
+            node.metadata.get("source_file").map(String::as_str),
+            Some("podcast-evidence/black-friday-gpt.md")
+        );
     }
 
     #[test]

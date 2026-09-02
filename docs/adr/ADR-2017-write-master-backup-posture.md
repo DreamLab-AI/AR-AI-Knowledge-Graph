@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: 7a95e17d3d0c2f5e502e8edd29cea94c314c12cb
 verified_paths: [src/services/github_sync_service.rs, scripts/backup-sqlite.sh, scripts/backup-secrets.sh]
 owner: jjohare
 review_trigger: an Oxigraph/RocksDB PITR or backup requirement, a cross-store consistency incident, or wiring RuVector delete-propagation

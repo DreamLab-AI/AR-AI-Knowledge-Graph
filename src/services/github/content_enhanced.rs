@@ -5,6 +5,7 @@ use crate::utils::time;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use serde_json::Value;
+use super::url_path::{contents_url, raw_download_url};
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -15,6 +16,13 @@ pub struct EnhancedContentAPI {
 impl EnhancedContentAPI {
     pub fn new(client: Arc<GitHubClient>) -> Self {
         Self { client }
+    }
+
+    /// The configured GitHub source prefixes (e.g. `mainKnowledgeGraph/pages`,
+    /// `workingGraph/pages`). The sync strips these to derive a page's
+    /// vault-relative identity (ADR-2040 §V1).
+    pub fn base_paths(&self) -> &[String] {
+        self.client.base_paths()
     }
 
     /// List all markdown files using GitHub's Git Trees API (single API call).
@@ -104,11 +112,14 @@ impl EnhancedContentAPI {
                 continue;
             }
 
-            // Skip Logseq backup directories and non-content paths
+            // Skip backup, app-config and non-content paths (ADR-2040 D6:
+            // `/.obsidian/` and `/.trash/` join the legacy Logseq exclusions).
             if entry_path.contains("/bak/")
                 || entry_path.contains("/logseq/")
                 || entry_path.contains("/.recycle/")
                 || entry_path.contains("/journals/")
+                || entry_path.contains("/.obsidian/")
+                || entry_path.contains("/.trash/")
             {
                 continue;
             }
@@ -123,14 +134,12 @@ impl EnhancedContentAPI {
                 .unwrap_or(entry_path)
                 .to_string();
 
-            // Construct download URL from path
-            let download_url = format!(
-                "https://raw.githubusercontent.com/{}/{}/{}/{}",
-                self.client.owner(),
-                self.client.repo(),
-                branch,
-                entry_path
-            );
+            // Construct download URL from path. The path is percent-encoded
+            // per segment: a filename may contain a literal `%`, which an
+            // unescaped interpolation turns into a bogus escape (400) or a
+            // different path (404). See `encode_repo_path`.
+            let download_url =
+                raw_download_url(self.client.owner(), self.client.repo(), branch, entry_path);
 
             markdown_files.push(GitHubFileBasicMetadata {
                 name,
@@ -222,11 +231,14 @@ impl EnhancedContentAPI {
             } else if file_type == "dir" {
                 let dir_path = file["path"].as_str().unwrap_or("");
 
-                // Skip Logseq backup, recycle, and journal directories
+                // Skip backup, recycle, journal, and app-config directories
+                // (ADR-2040 D6 adds `.obsidian` and `.trash`).
                 if dir_path.contains("/bak")
                     || dir_path.contains("/logseq/")
                     || dir_path.contains("/.recycle")
                     || dir_path.contains("/journals")
+                    || dir_path.contains("/.obsidian")
+                    || dir_path.contains("/.trash")
                 {
                     debug!(
                         "list_markdown_files: Skipping excluded directory: {}",
@@ -290,7 +302,9 @@ impl EnhancedContentAPI {
         file_path: &str,
         check_actual_changes: bool,
     ) -> VisionClawResult<DateTime<Utc>> {
-        let encoded_path = GitHubClient::get_full_path(&self.client, file_path).await;
+        // A RAW repository path. It is passed as a query parameter below, which
+        // reqwest percent-encodes itself — encoding it here would double-encode.
+        let repo_path = GitHubClient::get_full_path(&self.client, file_path).await;
 
         let commits_url = format!(
             "https://api.github.com/repos/{}/{}/commits",
@@ -298,7 +312,7 @@ impl EnhancedContentAPI {
             self.client.repo()
         );
 
-        debug!("Fetching commits for path: {}", encoded_path);
+        debug!("Fetching commits for path: {}", repo_path);
 
         let response = self
             .client
@@ -307,7 +321,7 @@ impl EnhancedContentAPI {
             .header("Authorization", format!("Bearer {}", self.client.token()))
             .header("Accept", "application/vnd.github+json")
             .query(&[
-                ("path", encoded_path.as_str()),
+                ("path", repo_path.as_str()),
                 ("ref", self.client.branch()),
                 ("per_page", if check_actual_changes { "10" } else { "1" }),
             ])
@@ -332,7 +346,7 @@ impl EnhancedContentAPI {
         for commit in &commits {
             let sha = commit["sha"].as_str().ok_or("Missing commit SHA")?;
 
-            if self.was_file_modified_in_commit(sha, &encoded_path).await? {
+            if self.was_file_modified_in_commit(sha, &repo_path).await? {
                 debug!("File was actually modified in commit: {}", sha);
                 return self.extract_commit_date(commit);
             } else {
@@ -382,10 +396,15 @@ impl EnhancedContentAPI {
         if let Some(files) = commit_data["files"].as_array() {
             for file in files {
                 if let Some(filename) = file["filename"].as_str() {
+                    // Namespace decode (ADR-2040 §V1): a vault page may be
+                    // addressed by its folder path while the commit still names
+                    // the legacy encoded file, or vice versa. Both `%2F` and
+                    // `___` decode to `/`.
+                    let decoded = file_path.replace("%2F", "/").replace("___", "/");
                     if filename == file_path
                         || filename.ends_with(&format!("/{}", file_path))
-                        || filename == file_path.replace("%2F", "/")
-                        || filename.ends_with(&format!("/{}", file_path.replace("%2F", "/")))
+                        || filename == decoded
+                        || filename.ends_with(&format!("/{}", decoded))
                     {
                         let additions = file["additions"].as_u64().unwrap_or(0);
                         let deletions = file["deletions"].as_u64().unwrap_or(0);
@@ -420,14 +439,13 @@ impl EnhancedContentAPI {
         &self,
         file_path: &str,
     ) -> VisionClawResult<ExtendedFileMetadata> {
-        let encoded_path = GitHubClient::get_full_path(&self.client, file_path).await;
+        let repo_path = GitHubClient::get_full_path(&self.client, file_path).await;
 
-        let contents_url = format!(
-            "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+        let contents_url = contents_url(
             self.client.owner(),
             self.client.repo(),
-            encoded_path,
-            self.client.branch()
+            &repo_path,
+            Some(self.client.branch()),
         );
 
         let response = self

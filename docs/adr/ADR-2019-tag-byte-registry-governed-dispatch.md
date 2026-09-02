@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: 9a2c8087385bf6db08b1aeb91004e1a60203965b
 verified_paths: [src/utils/binary_protocol.rs, xr-client/rust/src/binary_protocol.rs, src/protocols/binary_settings_protocol.rs, crates/visionclaw-xr-presence/src/wire.rs, crates/visionclaw-xr-presence/src/agent_presence.rs]
 owner: jjohare
 review_trigger: allocation of a new opcode/version tag on any binary socket, or a proposal to share one demultiplexer across sockets

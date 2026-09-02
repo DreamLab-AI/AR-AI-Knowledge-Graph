@@ -10,7 +10,7 @@ difficulty-level: beginner
 
 > [VisionClaw Docs](../README.md) · [Tutorials](README.md)
 
-VisionClaw turns a pile of notes into a knowledge graph you can walk around in. You point it at your Markdown (Logseq pages, GitHub repositories, documentation), it works out how the ideas connect, and it lays everything out as a 3D graph that you explore in a browser or on a Meta Quest 3 headset. Teams of specialist AI agents read and enrich the same graph alongside you.
+VisionClaw turns a pile of notes into a knowledge graph you can walk around in. You point it at your Markdown (an Obsidian vault, GitHub repositories, documentation), it works out how the ideas connect, and it lays everything out as a 3D graph that you explore in a browser or on a Meta Quest 3 headset. Teams of specialist AI agents read and enrich the same graph alongside you.
 
 This page is a tour. You will not type any commands here. By the end you will understand what each part does and where your data goes, so the [installation](installation.md) and [first graph](first-graph.md) tutorials make sense.
 
@@ -31,11 +31,11 @@ Everything runs on your own infrastructure. There is no external database and no
 
 ## Following a note through the system
 
-Here is the journey a single note takes, from a Logseq page on disk to a glowing node you can grab in VR.
+Here is the journey a single note takes, from a vault page on disk to a glowing node you can grab in VR.
 
 ```mermaid
 flowchart LR
-  Notes["Logseq pages<br/>(public:: true)"]
+  Notes["Vault pages<br/>(public: true)"]
   Sync["GitHub sync"]
   Store["Oxigraph<br/>RDF triple store"]
   Onto["Whelk-rs<br/>OWL 2 EL reasoner"]
@@ -118,7 +118,7 @@ You now have the mental model. Time to run it.
 1. **[Installation](installation.md)** — get the stack up with Docker, or build it natively with GPU support.
 2. **[Build your first graph](first-graph.md)** — go from a fresh install to a live 3D knowledge graph with agents running, step by step.
 
-When you are ready to grow your own ontology, [Promoting a Note to the Ontology](promote-note-to-ontology.md) walks through turning a single Logseq note into a live OWL class.
+When you are ready to grow your own ontology, [Promoting a Note to the Ontology](promote-note-to-ontology.md) walks through turning a single vault page into a live OWL class.
 
 ---
 

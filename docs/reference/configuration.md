@@ -116,7 +116,7 @@ fails fast rather than fall back to an insecure default.
 
 ## GitHub sync
 
-The sync pipeline pulls a Logseq knowledge graph from GitHub into the embedded
+The sync pipeline pulls the authored Obsidian vault from GitHub into the embedded
 triple store. Only files tagged `public:: true` become page nodes; every file
 with an `### OntologyBlock` contributes ontology data regardless of visibility.
 
@@ -127,11 +127,11 @@ with an `### OntologyBlock` contributes ontology data regardless of visibility.
 | `GITHUB_OWNER` | string | *required* | Repository owner. `GITHUB_REPO_OWNER` is accepted as an alias. |
 | `GITHUB_REPO` | string | *required* | Repository name. `GITHUB_REPO_NAME` is accepted as an alias. |
 | `GITHUB_BRANCH` | string | `main` | Branch to sync. `GITHUB_BASE_BRANCH` is accepted as an alias. |
-| `GITHUB_BASE_PATH` | string | *required* | Path prefix within the repo to ingest (e.g. `mainKnowledgeGraph/pages`). Changing it clears stale data. |
+| `GITHUB_BASE_PATH` | string | *required* | Path prefix within the repo to ingest (e.g. `knowledge/pages,working/pages`). Changing it clears stale data. |
 | `GITHUB_BASE_PATHS` | string (CSV) | `${GITHUB_BASE_PATH}` | Multiple ingest roots. |
 | `GITHUB_API_VERSION` | string | `v3` | GitHub REST API version header. |
 | `GITHUB_RATE_LIMIT` | boolean | `true` | Honour GitHub rate-limit headers and back off. |
-| `LOGSEQ_PRIVATE_REPO_GITHUB` | string | `""` | Optional private Logseq repository reference. |
+| `LOGSEQ_PRIVATE_REPO_GITHUB` | string | `""` | Optional private corpus repository reference (the vault repo, still named `logseq` on GitHub). |
 | `FORCE_FULL_SYNC` | boolean | `false` | Bypass SHA1 incremental filtering and reprocess every file. Reset to `false` after a one-off full reload. |
 
 ---

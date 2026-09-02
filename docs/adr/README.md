@@ -19,6 +19,7 @@ sections say how to amend them:
 | Security flags, named profiles, illegal combos | [`../SECURITY-profiles.md`](../SECURITY-profiles.md) |
 | SimParams ABI, force channels, kernels | [`../GPU-wire-abi.md`](../GPU-wire-abi.md) |
 | Godot XR client, HUD, deploy | [`../XR-client.md`](../XR-client.md) |
+| Authored corpus: vault layout, frontmatter, inclusion gate, converter | [`../VAULT-corpus-format.md`](../VAULT-corpus-format.md) |
 
 **Lookup order:** governing doc → its `file:line` citations into code → the ledger
 records below → `docs/archive/` **only for rationale and history — never as
@@ -34,7 +35,7 @@ governing document **in the same change**, and regenerate this index
 edges, and stale `verified_commit`+`verified_paths` claims all fail the
 build).
 
-_39 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
+_42 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 
 | ID | Title | Domain | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
 |----|-------|--------|------|----------|------|------------|------------|---------------|-------|------|
@@ -51,7 +52,7 @@ _39 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2011](ADR-2011-central-rbac-gate.md) | One central RbacGate covers the whole /api scope; writes gate at WriteGraph, not mere Authenticated | IDENTITY-authority-chain | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2012](ADR-2012-dev-bypass-triple-gated.md) | The dev-session-token bypass is triple-gated and RBAC report-mode needs a dated ack; both unreachable in release | IDENTITY-authority-chain | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2013](ADR-2013-federation-delegation-deferred.md) | Federated (OIDC) and delegated-agent (NIP-26) identity are both deferred; the secp256k1 signature chain is the sole realm | IDENTITY-authority-chain | 2026-08-31 | accepted | none | inactive | — | — | jjohare | visionclaw |
-| [ADR-2014](ADR-2014-public-kg-inclusion-gate.md) | GitHub `public:: true` gates KG inclusion; `owl:class::` bypasses it | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2014](ADR-2014-public-kg-inclusion-gate.md) | GitHub `public:: true` gates KG inclusion; `owl:class::` bypasses it | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | ADR-2040 | jjohare | visionclaw |
 | [ADR-2015](ADR-2015-derived-writeback-fence.md) | Derived-writeback fence — only `:summary`/`:observed` are writable | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2016](ADR-2016-provenance-append-only.md) | GRAPH_PROVENANCE is append-only (INSERT DATA only) | DATA-authority-erasure | 2026-08-31 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2017](ADR-2017-write-master-backup-posture.md) | One write-master per data class; disposable derived projections; SQLite-only online backup | DATA-authority-erasure | 2026-08-31 | accepted | partial | live | — | — | jjohare | visionclaw |
@@ -77,3 +78,6 @@ _39 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2037](ADR-2037-production-build-excludes-dev-auth.md) | Production release images are built without the dev-auth cargo feature, asserted in CI | SECURITY-profiles | 2026-08-31 | proposed | none | inactive | — | — | jjohare | visionclaw |
 | [ADR-2038](ADR-2038-boot-time-profile-assertion.md) | Boot-time deployment-profile assertion with illegal-combination abort | SECURITY-profiles | 2026-08-31 | proposed | none | inactive | — | — | jjohare | visionclaw |
 | [ADR-2039](ADR-2039-visionclaw-dev-mode-lan-local-bypass.md) | VISIONCLAW_DEV_MODE — a peer-agnostic LAN-local full auth bypass for a 100%-local dev headset | SECURITY-profiles | 2026-09-01 | proposed | complete | inactive | — | — | jjohare | visionclaw |
+| [ADR-2040](ADR-2040-obsidian-vault-frontmatter-gate.md) | The authored corpus is an Obsidian vault; YAML frontmatter `public`/`owl-class` gate KG inclusion with bounded Logseq tolerance | VAULT-corpus-format | 2026-09-02 | proposed | complete | staged | ADR-2014 | — | jjohare | visionclaw |
+| [ADR-2041](ADR-2041-graph-settings-key-knowledge.md) | The knowledge-graph settings key and graph-type value are `knowledge`; `logseq` is a read-only alias for one release | VAULT-corpus-format | 2026-09-02 | proposed | complete | staged | — | — | jjohare | visionclaw |
+| [ADR-2042](ADR-2042-vault-migrate-converter.md) | `vault-migrate` is the sole Logseq→Obsidian converter — deterministic, output-dir by default, preserve-and-report | VAULT-corpus-format | 2026-09-02 | proposed | complete | live | — | — | jjohare | visionclaw |

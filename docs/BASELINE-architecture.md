@@ -1,7 +1,7 @@
 ---
 title: VisionClaw Current Architecture Baseline
 doc_id: VC-BASELINE
-version: 0.1.1
+version: 0.2.0
 status: draft-for-ratification
 verified_commit: 73540faa0
 date: 2026-08-31
@@ -22,6 +22,7 @@ sources:
   - crates/visionclaw-protocol/src/protocols/binary_settings_protocol.rs
   - src/utils/binary_protocol.rs
 changelog:
+  - 0.2.0 — Data pipeline: the authored corpus is an Obsidian vault (docs/VAULT-corpus-format.md); inclusion gate is frontmatter `public: true` or `owl-class` (ADR-2040), superseding the Logseq `public:: true` property line.
   - 0.1.1 — Corrected wire-protocol citation: WireNodeDataItemV3 struct is defined in src/utils/binary_protocol.rs (webxr crate), not the visionclaw-protocol lib.rs doc-comment.
 ---
 
@@ -137,7 +138,16 @@ broadcast (`gpu/context_bus.rs`), not a central handle.
 ### Data pipeline (GitHub → Oxigraph → client)
 
 `GitHubSyncService` (`src/services/github_sync_service.rs`) synchronises markdown
-from the source repo into Oxigraph. The live ingest path extracts JSON-LD blocks
+from the source repo into Oxigraph. The source is the authored **Obsidian
+vault** — plain markdown with YAML frontmatter, specified in
+[`VAULT-corpus-format.md`](VAULT-corpus-format.md), synced from the GitHub repo
+(still literally named `jjohare/visionGraph`) with base path `pages/`. A page is
+ingested as a KG node iff its frontmatter carries `public: true` **or** a
+non-empty `owl-class` (formal data bypasses the publish gate); absence of both
+is private, fail-closed. Legacy Logseq property lines (`public:: true`,
+`owl:class::`) are tolerated only in a page's leading property block for the
+bounded window named in ADR-2040. The gate anchors on parsed metadata, never on
+the file path. The live ingest path extracts JSON-LD blocks
 and writes **quads** through `OxigraphOntologyRepository` — `sync_graphs()`
 (`:264`) / `sync_graphs_with()` (`:272`), `insert_quads_to_store()` (`:1085`);
 module header `:4-6`. It clears then repopulates the store, resolves bridge edges

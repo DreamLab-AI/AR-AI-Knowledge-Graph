@@ -19,7 +19,7 @@ import { useMacro } from './useMacro';
 import { useControlCenterUI } from '../state/useControlCenterUI';
 import { useEnsureMacroPathsLoaded } from '../state/useEnsureGroupLoaded';
 
-const PHYSICS_ENABLED_PATH = 'visualisation.graphs.logseq.physics.enabled';
+const PHYSICS_ENABLED_PATH = 'visualisation.graphs.knowledge.physics.enabled';
 
 const PHYSICS_FIELD: RegistryField = {
   key: 'physicsEnabled',

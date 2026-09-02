@@ -41,12 +41,12 @@ interface GraphManagerProps {
 const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
 
   // Narrow selectors — subscribe only to sub-trees GraphManager actually reads.
-  const logseqSettings  = useSettingsStore(s => s.settings?.visualisation?.graphs?.logseq)
+  const knowledgeSettings  = useSettingsStore(s => s.settings?.visualisation?.graphs?.knowledge)
   const graphTypeVisuals = useSettingsStore(s => s.settings?.visualisation?.graphTypeVisuals)
   const debugSettings   = useSettingsStore(s => s.settings?.system?.debug)
   const nodeFilterSettings = useSettingsStore(s => s.settings?.nodeFilter)
   const nodeTypeVisibility = useSettingsStore(
-    s => s.settings?.visualisation?.graphs?.logseq?.nodes?.nodeTypeVisibility
+    s => s.settings?.visualisation?.graphs?.knowledge?.nodes?.nodeTypeVisibility
   )
   // Stable ref for the full settings object — updated every render but doesn't trigger re-renders.
   const settingsRef = useRef(useSettingsStore.getState().settings)
@@ -234,7 +234,7 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
 
   const { camera, size } = useThree()
   const controls = useThree(s => s.controls)
-  const nodeSettings = logseqSettings?.nodes || settings?.visualisation?.nodes
+  const nodeSettings = knowledgeSettings?.nodes || settings?.visualisation?.nodes
 
   useEffect(() => {
     if (ssspResult) {
@@ -277,9 +277,9 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   }, [graphData.nodes])
 
   // Physics fingerprint (ADR-03 D7: no-op worker forward; kept as dependency marker)
-  const logseqPhysics   = logseqSettings?.physics
+  const knowledgePhysics   = knowledgeSettings?.physics
   const visionclawPhysics = useSettingsStore(s => s.settings?.visualisation?.graphs?.visionclaw?.physics)
-  const physicsFingerprint = useMemo(() => JSON.stringify({ vf: visionclawPhysics, lq: logseqPhysics }), [visionclawPhysics, logseqPhysics])
+  const physicsFingerprint = useMemo(() => JSON.stringify({ vf: visionclawPhysics, lq: knowledgePhysics }), [visionclawPhysics, knowledgePhysics])
   useEffect(() => { void physicsFingerprint }, [physicsFingerprint])
 
   // layoutMode → layoutApi.setMode
@@ -643,7 +643,7 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
       <GlassEdges
         ref={edgeFlowRef}
         points={edgePoints}
-        settings={settings?.visualisation?.graphs?.logseq?.edges || settings?.visualisation?.edges || defaultEdgeSettings}
+        settings={settings?.visualisation?.graphs?.knowledge?.edges || settings?.visualisation?.edges || defaultEdgeSettings}
         colorOverride={
           graphMode === 'knowledge_graph'
             ? settings?.visualisation?.graphTypeVisuals?.knowledgeGraph?.edgeColor
@@ -656,7 +656,7 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
       <GlassEdges
         ref={highlightEdgeFlowRef}
         points={highlightEdgePoints}
-        settings={settings?.visualisation?.graphs?.logseq?.edges || settings?.visualisation?.edges || defaultEdgeSettings}
+        settings={settings?.visualisation?.graphs?.knowledge?.edges || settings?.visualisation?.edges || defaultEdgeSettings}
         colorOverride={settings?.visualisation?.interaction?.selectionHighlightColor || '#00FFFF'}
       />
 

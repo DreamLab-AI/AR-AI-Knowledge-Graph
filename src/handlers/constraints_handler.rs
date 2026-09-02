@@ -37,7 +37,7 @@ async fn define_constraints(
     let settings_update = json!({
         "visualisation": {
             "graphs": {
-                "logseq": {
+                "knowledge": {
                     "physics": {
                         "computeMode": 2
                     }
