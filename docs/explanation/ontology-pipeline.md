@@ -58,7 +58,7 @@ The JSON-LD front (modern path) runs `extractor -> expander -> validator -> SHAC
 
 ## 2. Stage 1 — GitHub vault ingestion
 
-`GitHubSyncService::sync_graphs()` is the entry point. It pulls Markdown from the configured repository path (`GITHUB_BASE_PATH`, default `mainKnowledgeGraph/pages/`) in batches, and skips unchanged files by SHA-1 comparison. `FORCE_FULL_SYNC=1` bypasses the incremental filter and reprocesses every file; reset it to `0` afterwards.
+`GitHubSyncService::sync_graphs()` is the entry point. It pulls Markdown from the configured repository path (`GITHUB_BASE_PATH`, default `knowledge/pages/`) in batches, and skips unchanged files by SHA-1 comparison. `FORCE_FULL_SYNC=1` bypasses the incremental filter and reprocesses every file; reset it to `0` afterwards.
 
 Each page is classified by content. A page whose frontmatter carries `public: true` becomes a knowledge-graph page node and its `[[wikilink]]` targets become edges in `urn:ngm:graph:knowledge`; the legacy `public:: true` property line is still honoured in a page's leading property block for the window named in [ADR-2040](../adr/ADR-2040-obsidian-vault-frontmatter-gate.md). **Independently of the publish gate**, every page is scanned for ontology content — OWL Functional Syntax blocks and `### OntologyBlock` property sections — so private notes still contribute axioms.
 

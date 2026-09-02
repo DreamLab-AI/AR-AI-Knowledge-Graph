@@ -228,9 +228,9 @@ SYNC_BATCH_SIZE=50
 # GITHUB_REPO is the corpus repo NAME on GitHub (unchanged); its contents are an
 # Obsidian vault — see docs/VAULT-corpus-format.md. GITHUB_BASE_PATH is the vault's pages/ folder.
 GITHUB_OWNER=jjohare
-GITHUB_REPO=logseq
+GITHUB_REPO=visionGraph
 GITHUB_BRANCH=main
-GITHUB_BASE_PATH=mainKnowledgeGraph/pages
+GITHUB_BASE_PATH=knowledge/pages,working/pages
 GITHUB_TOKEN=github_pat_...
 ```
 

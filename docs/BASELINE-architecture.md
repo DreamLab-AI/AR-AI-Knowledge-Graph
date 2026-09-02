@@ -141,7 +141,7 @@ broadcast (`gpu/context_bus.rs`), not a central handle.
 from the source repo into Oxigraph. The source is the authored **Obsidian
 vault** — plain markdown with YAML frontmatter, specified in
 [`VAULT-corpus-format.md`](VAULT-corpus-format.md), synced from the GitHub repo
-(still literally named `jjohare/logseq`) with base path `pages/`. A page is
+(still literally named `jjohare/visionGraph`) with base path `pages/`. A page is
 ingested as a KG node iff its frontmatter carries `public: true` **or** a
 non-empty `owl-class` (formal data bypasses the publish gate); absence of both
 is private, fail-closed. Legacy Logseq property lines (`public:: true`,
