@@ -10,6 +10,72 @@ use cust::memory::{CopyDestination, DeviceBuffer, DevicePointer};
 use log::{debug, info, warn};
 use std::ffi::CStr;
 
+/// Fraction of `viewport_bounds` at which the degree-0 peripheral shell sits.
+///
+/// `0.8` is exactly where `integrate_pass_kernel`'s soft boundary begins its
+/// `soft_zone` push (`visionclaw_unified.cu`: `soft_zone = boundary_limit * 0.8`),
+/// so isolated nodes settle on the outermost shell the world allows while still
+/// sitting inside the boundary force that contains them.
+const PERIPHERAL_SHELL_BOUNDS_FRACTION: f32 = 0.8;
+
+/// Safety rail for the shell radius when `enable_bounds` is off and there is no
+/// configured world scale to anchor to. Purely a divergence guard — see
+/// [`peripheral_shell_radius`].
+const PERIPHERAL_SHELL_UNBOUNDED_CAP: f32 = 5_000.0;
+
+/// Target radius for the degree-0 ("isolated node") peripheral shell force.
+///
+/// # Why this is not the AABB diagonal
+///
+/// `degree_weighted_gravity_kernel` gives isolated nodes special treatment: it
+/// *cancels* their uniform centre gravity and replaces it with a single radial
+/// spring toward `peripheral_radius`. That spring is therefore the **only**
+/// radial force acting on a degree-0 node.
+///
+/// The original implementation derived that radius from the live full-graph AABB
+/// diagonal. Once isolated nodes drift outward they *dominate* the AABB, which
+/// makes the target a function of their own positions — a positive feedback loop
+/// with no fixed point:
+///
+/// ```text
+/// isolated nodes on a sphere of radius R
+///   => AABB extent ~= 2R per axis
+///   => diagonal    ~= 2R*sqrt(3) ~= 3.46R
+///   => target 3.46R > R, so they are pushed further out
+///   => R grows, so the target grows ... unbounded
+/// ```
+///
+/// Because the force is purely radial the shell stays *mathematically* spherical
+/// throughout, which is the observed fingerprint: 316 nodes at r = 33,785 with a
+/// radius standard deviation of only 7.9 (relative 2.3e-4), every velocity
+/// anti-parallel to its own position vector. The soft boundary cannot arrest it —
+/// that boundary is a velocity kick capped at `max_force`, and the total force is
+/// clamped to `max_force` as well, so it is no stronger at r = 33,785 than at
+/// r = 481.
+///
+/// The fix is to anchor the shell to a reference that does **not** depend on the
+/// positions the force is producing. `viewport_bounds` is that reference: it is
+/// the configured world scale, so a shell placed at a fixed fraction of it has no
+/// feedback term at all.
+fn peripheral_shell_radius(aabb: &AABB, viewport_bounds: f32) -> f32 {
+    if viewport_bounds > 0.0 {
+        // Bounds enabled: constant target, zero feedback.
+        return viewport_bounds * PERIPHERAL_SHELL_BOUNDS_FRACTION;
+    }
+
+    // Bounds disabled: no configured world scale exists, so fall back to the
+    // extent-derived heuristic — but cap it, so a shell that has already drifted
+    // outward cannot ratchet itself further out on the next step.
+    let extent_x = aabb.max[0] - aabb.min[0];
+    let extent_y = aabb.max[1] - aabb.min[1];
+    let extent_z = aabb.max[2] - aabb.min[2];
+    let diagonal = (extent_x * extent_x + extent_y * extent_y + extent_z * extent_z).sqrt();
+    if !diagonal.is_finite() {
+        return PERIPHERAL_SHELL_UNBOUNDED_CAP;
+    }
+    diagonal.min(PERIPHERAL_SHELL_UNBOUNDED_CAP)
+}
+
 fn safe_copy_to_device<T: cust::memory::DeviceCopy>(
     dest: &mut DeviceBuffer<T>,
     src: &[T],
@@ -762,13 +828,11 @@ impl UnifiedGPUCompute {
             if let Ok(dw_gravity_kernel) =
                 self._module.get_function("degree_weighted_gravity_kernel")
             {
-                // Compute peripheral radius as 2x the average connected-node distance from origin.
-                // We use a simple heuristic: 2x the AABB extent diagonal / 2.
-                let extent_x = aabb.max[0] - aabb.min[0];
-                let extent_y = aabb.max[1] - aabb.min[1];
-                let extent_z = aabb.max[2] - aabb.min[2];
-                let peripheral_radius =
-                    (extent_x * extent_x + extent_y * extent_y + extent_z * extent_z).sqrt();
+                // Target shell radius for degree-0 nodes. MUST NOT be derived from
+                // the live full-graph AABB: isolated nodes dominate that AABB once
+                // they drift, which makes the shell force self-referential and
+                // unbounded. See `peripheral_shell_radius`.
+                let peripheral_radius = peripheral_shell_radius(&aabb, params.viewport_bounds);
                 let isolated_spring_k = 0.01f32; // Gentle spring toward peripheral shell
 
                 let stream = &self.stream;
@@ -1013,5 +1077,212 @@ impl UnifiedGPUCompute {
         safe_copy_to_device(&mut self.vel_in_y, &zeros, "vel_in_y")?;
         safe_copy_to_device(&mut self.vel_in_z, &zeros, "vel_in_z")?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod peripheral_shell_tests {
+    use super::*;
+
+    /// Live physics parameters read from the running dev container on 2026-09-02
+    /// (`GET /api/settings/physics?graph=knowledge`), so the reproduction below
+    /// reflects the deployment that produced the escape.
+    struct P {
+        dt: f32,
+        mass: f32,
+        damping: f32,
+        max_force: f32,
+        max_velocity: f32,
+        isolated_spring_k: f32,
+    }
+
+    impl Default for P {
+        fn default() -> Self {
+            P {
+                dt: 0.016,
+                mass: 1.0,
+                damping: 0.9,
+                max_force: 150.0,
+                max_velocity: 100.0,
+                // Hard-coded in `execute_physics_step` alongside the kernel launch.
+                isolated_spring_k: 0.01,
+            }
+        }
+    }
+
+    /// The AABB the reduction reports when a spherical shell of `n` isolated nodes
+    /// at radius `r` dominates the extent — which is exactly the runaway regime,
+    /// where the connected core (r < 320) no longer contributes to min/max.
+    fn aabb_dominated_by_shell(r: f32) -> AABB {
+        AABB {
+            min: [-r, -r, -r],
+            max: [r, r, r],
+        }
+    }
+
+    /// One integration step of the radial dynamics a degree-0 node experiences.
+    ///
+    /// Mirrors `degree_weighted_gravity_kernel` (centre gravity cancelled, single
+    /// radial spring toward `target`) followed by `integrate_pass_kernel`'s force
+    /// clamp, damped velocity update and velocity clamp.
+    fn step_isolated(r: f32, v: f32, target: f32, p: &P) -> (f32, f32) {
+        let shell_force = -p.isolated_spring_k * (r - target);
+        let force = shell_force.clamp(-p.max_force, p.max_force);
+        let v = ((v + force * p.dt / p.mass) * p.damping).clamp(-p.max_velocity, p.max_velocity);
+        (r + v * p.dt, v)
+    }
+
+    /// The pre-fix rule: target radius = live full-graph AABB diagonal.
+    fn legacy_radius(aabb: &AABB) -> f32 {
+        let ex = aabb.max[0] - aabb.min[0];
+        let ey = aabb.max[1] - aabb.min[1];
+        let ez = aabb.max[2] - aabb.min[2];
+        (ex * ex + ey * ey + ez * ez).sqrt()
+    }
+
+    /// REGRESSION: the legacy AABB-diagonal target is a positive feedback loop.
+    ///
+    /// Starting from a perfectly reasonable shell just inside the world bounds,
+    /// the isolated nodes escape to tens of thousands of units with no external
+    /// input — reproducing the observed r = 33,785 runaway numerically, on the CPU.
+    #[test]
+    fn legacy_aabb_diagonal_target_diverges() {
+        let p = P::default();
+        let (mut r, mut v) = (320.0f32, 0.0f32);
+        let start = r;
+
+        for _ in 0..200_000 {
+            // The target is recomputed every step from the positions the force
+            // itself produced — this self-reference is the defect.
+            let target = legacy_radius(&aabb_dominated_by_shell(r));
+            let (nr, nv) = step_isolated(r, v, target, &p);
+            r = nr;
+            v = nv;
+        }
+
+        assert!(
+            r > 20_000.0,
+            "expected the legacy rule to run away, got r = {r}"
+        );
+        assert!(r > start * 50.0, "expected unbounded growth, got r = {r}");
+        assert!(v > 0.0, "escape velocity should stay outward, got v = {v}");
+    }
+
+    /// The legacy target always exceeds the shell's current radius, so the spring
+    /// pushes outward no matter how far out the nodes already are. This is the
+    /// "no fixed point" property stated in `peripheral_shell_radius`.
+    #[test]
+    fn legacy_target_always_exceeds_current_radius() {
+        for r in [320.0f32, 1_000.0, 10_000.0, 33_785.0, 100_000.0] {
+            let target = legacy_radius(&aabb_dominated_by_shell(r));
+            assert!(
+                target > r,
+                "legacy target {target} must exceed r={r} (that is the runaway)"
+            );
+            // 2*r*sqrt(3) ~= 3.46r — matches the measured diag/r = 3.444 on the
+            // live container across four snapshots.
+            assert!((target / r - 3.4641).abs() < 1e-3, "ratio drift at r={r}");
+        }
+    }
+
+    /// THE FIX: anchored to `viewport_bounds`, the target no longer depends on the
+    /// positions the force produces, so the shell has a stable fixed point inside
+    /// the world and the same simulation converges instead of diverging.
+    #[test]
+    fn bounds_anchored_target_converges() {
+        let p = P::default();
+        let bounds = 400.0f32; // live `boundsSize`
+        let (mut r, mut v) = (320.0f32, 0.0f32);
+
+        for _ in 0..200_000 {
+            let target = peripheral_shell_radius(&aabb_dominated_by_shell(r), bounds);
+            let (nr, nv) = step_isolated(r, v, target, &p);
+            r = nr;
+            v = nv;
+        }
+
+        let expected = bounds * PERIPHERAL_SHELL_BOUNDS_FRACTION;
+        assert!(
+            (r - expected).abs() < 1.0,
+            "shell should settle at {expected}, got {r}"
+        );
+        assert!(r <= bounds, "shell must stay inside bounds, got {r}");
+    }
+
+    /// A shell that has *already* escaped is reeled back inside the world rather
+    /// than pushed further out — i.e. the fix also recovers the live bad state.
+    #[test]
+    fn escaped_shell_is_recovered() {
+        let p = P::default();
+        let bounds = 400.0f32;
+        // The radius actually measured on the running container.
+        let (mut r, mut v) = (33_785.0f32, 0.0f32);
+
+        for _ in 0..2_000_000 {
+            let target = peripheral_shell_radius(&aabb_dominated_by_shell(r), bounds);
+            let (nr, nv) = step_isolated(r, v, target, &p);
+            r = nr;
+            v = nv;
+            if r <= bounds {
+                break;
+            }
+        }
+
+        assert!(r <= bounds, "escaped shell must return inside bounds, got {r}");
+    }
+
+    /// The sign inversion at the heart of the fix, stated directly.
+    #[test]
+    fn fix_inverts_force_direction_for_an_escaped_shell() {
+        let escaped = 33_785.0f32;
+        let aabb = aabb_dominated_by_shell(escaped);
+
+        let legacy_target = legacy_radius(&aabb);
+        let fixed_target = peripheral_shell_radius(&aabb, 400.0);
+
+        // force sign = -(r - target): positive is outward.
+        assert!(
+            -(escaped - legacy_target) > 0.0,
+            "legacy rule pushes an escaped shell further out"
+        );
+        assert!(
+            -(escaped - fixed_target) < 0.0,
+            "fixed rule pulls an escaped shell back in"
+        );
+    }
+
+    #[test]
+    fn bounds_enabled_target_is_constant_and_inside_the_soft_zone() {
+        // Independent of the AABB — that independence *is* the fix.
+        for r in [320.0f32, 33_785.0, 1e6] {
+            let got = peripheral_shell_radius(&aabb_dominated_by_shell(r), 400.0);
+            assert_eq!(got, 320.0);
+        }
+        // 0.8 * bounds is exactly where the kernel's soft boundary begins, so the
+        // boundary force contains the shell rather than fighting it.
+        assert_eq!(
+            peripheral_shell_radius(&aabb_dominated_by_shell(1.0), 400.0),
+            400.0 * 0.8
+        );
+    }
+
+    #[test]
+    fn bounds_disabled_falls_back_but_stays_capped() {
+        // `enable_bounds = false` forces `viewport_bounds` to 0.0 in SimParams.
+        let small = peripheral_shell_radius(&aabb_dominated_by_shell(100.0), 0.0);
+        assert!((small - 100.0 * 2.0 * 3.0f32.sqrt()).abs() < 1e-2);
+
+        let huge = peripheral_shell_radius(&aabb_dominated_by_shell(1e9), 0.0);
+        assert_eq!(huge, PERIPHERAL_SHELL_UNBOUNDED_CAP);
+    }
+
+    #[test]
+    fn non_finite_extent_does_not_produce_a_nan_target() {
+        let nan_aabb = AABB {
+            min: [f32::NAN; 3],
+            max: [f32::NAN; 3],
+        };
+        let r = peripheral_shell_radius(&nan_aabb, 0.0);
+        assert!(r.is_finite(), "NaN AABB must not yield a NaN shell radius");
     }
 }
