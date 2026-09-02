@@ -15,6 +15,7 @@ sections say how to amend them:
 | Security flags, named profiles, illegal combos | [`../SECURITY-profiles.md`](../SECURITY-profiles.md) |
 | SimParams ABI, force channels, kernels | [`../GPU-wire-abi.md`](../GPU-wire-abi.md) |
 | Godot XR client, HUD, deploy | [`../XR-client.md`](../XR-client.md) |
+| Authored corpus: vault layout, frontmatter, inclusion gate, converter | [`../VAULT-corpus-format.md`](../VAULT-corpus-format.md) |
 
 **Lookup order:** governing doc → its `file:line` citations into code → the ledger
 records below → `docs/archive/` **only for rationale and history — never as

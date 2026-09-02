@@ -6,7 +6,7 @@ decision_status: accepted
 implementation_status: complete
 activation_status: live
 supersedes: []
-superseded_by: []
+superseded_by: [ADR-2040]
 verified_commit: e0f8cd896
 owner: jjohare
 review_trigger: a source of authoritative data whose pages carry neither `public:: true` nor `owl:class::`, or a move to per-page ACLs at ingest

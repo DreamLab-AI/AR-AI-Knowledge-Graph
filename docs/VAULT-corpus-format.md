@@ -1,0 +1,219 @@
+---
+title: VAULT — authored corpus format (Obsidian vault)
+version: 1.0.0
+status: living
+verified_commit:
+owner: jjohare
+domain: VAULT-corpus-format
+ledger: [ADR-2040, ADR-2041, ADR-2042]
+agentbox_ledger: [ADR-2028, ADR-2029]
+---
+
+# VAULT — authored corpus format
+
+This is the governing document for the **authored knowledge corpus**: the
+markdown files that GitHub sync ingests into the knowledge graph, that the
+elevation and mutation services write back, and that agentbox skills read and
+extend. It replaces the implicit Logseq conventions that were previously spread
+across `file_service.rs`, `github_sync_service.rs`, and the agentbox skills.
+
+Related governing documents: [`DATA-authority-erasure.md`](DATA-authority-erasure.md)
+(ownership of the "Authored content" class), [`BASELINE-architecture.md`](BASELINE-architecture.md)
+(the GitHub → Oxigraph → client pipeline), and in agentbox
+[`agentbox/docs/BASELINE-container.md`](../agentbox/docs/BASELINE-container.md)
+(the `[vault]` manifest section and the Rune TUI window).
+
+## Purpose
+
+1. Define the **one** on-disk format the system reads and writes: an
+   [Obsidian](https://obsidian.md) vault of plain markdown with YAML frontmatter.
+2. Define the **legacy tolerance**: which Logseq constructs the readers still
+   accept during the transition, and the date/trigger at which tolerance ends.
+3. Define the **converter contract** (`vault-migrate`) that turns a Logseq graph
+   into a vault, and what the converter must report rather than guess.
+4. Give every consumer (VisionClaw backend, client, agentbox skills, MCP servers,
+   tmux TUI) a single path authority for the vault.
+
+## Current state
+
+### Corpus survey (2026-09-02, `/home/devuser/workspace/logseq/mainKnowledgeGraph`)
+
+| Statistic | Value |
+|---|---|
+| Pages in `pages/` | 8,638 |
+| Pages with `public:: true` | 8,601 |
+| Pages with a `json-ld` fence | 8,447 |
+| Namespace pages stored as `a___b.md` | 201 |
+| Journals (`YYYY_MM_DD.md`) | 308 |
+| Working-graph pages (`workingGraph/pages/`) | 574 |
+| Pages with `{{embed [[..]]}}` | 14 |
+| Pages with `((block-ref))` | 13 (zero `id::` targets exist — all dangling) |
+| Pages with `#[[multi word]]` tags | 6 |
+| Pages with TODO/DOING/NOW/LATER/DONE markers | 13 |
+| Pages with `key:: value` lines beyond the leading property block | 193 |
+| Pages referencing `../assets/` | 36 |
+| Pages starting with a `- ` outliner bullet | 0 |
+| Pages with YAML frontmatter | 0 |
+
+The corpus is therefore prose-first markdown with a leading Logseq property
+block. The heavy lifting (JSON-LD `Page` and `Class` blocks) is format-neutral
+and carries over unchanged.
+
+### Readers and writers today (pre-ADR-2040)
+
+| Component | Reads | Writes | Citation |
+|---|---|---|---|
+| `FileService::is_public_file` | `public:: true` / `public-access:: true` anywhere | — | `src/services/file_service.rs:736` |
+| `github_sync_service::logseq_page_is_public` | `public::` line, case-insensitive | — | `src/services/github_sync_service.rs:2261` |
+| `KnowledgeGraphParser::extract_owl_class` | `owl:class::` line | — | `src/services/parsers/knowledge_graph_parser.rs:189` |
+| `KnowledgeGraphParser::extract_source_domain` | `source-domain::` line | — | `knowledge_graph_parser.rs:244` |
+| `github_sync_service` elevation bridge | `elevatedFrom:: [[X]]` line | — | `github_sync_service.rs:1663` |
+| `EnhancedContentAPI::list_markdown_files` | skips `/bak/`, `/logseq/`, `/.recycle/`, `/journals/` | — | `src/services/github/content_enhanced.rs:107-112,225-230` |
+| `EnhancedContentAPI` namespace lookup | decodes `%2F` → `/` | — | `content_enhanced.rs:387` |
+| `OntologyMutationService` | — | emits `- owl:class:: {iri}` | `src/services/ontology_mutation_service.rs:716` |
+| agentbox `ontology-local.js` | JSON-LD `Class` fences from a hard-coded Logseq path | rewrites the fence in place | `agentbox/mcp/servers/lib/ontology-local.js:20-22,312` |
+| agentbox `ontology-index-build.js` | same hard-coded path | — | `agentbox/mcp/servers/lib/ontology-index-build.js:15` |
+| agentbox entrypoint | `ONTOLOGY_PAGES_DIR` default = Logseq path | — | `agentbox/config/entrypoint-unified.sh:504` |
+| agentbox `podcast-knowledge-ingest` | — | writes pages with `public:: true` into Logseq dirs | `agentbox/skills/podcast-knowledge-ingest/SKILL.md:62-63` |
+
+## The vault contract
+
+### V1 — Layout
+
+```
+<VAULT_ROOT>/                     # the Obsidian vault root (was mainKnowledgeGraph/)
+  .obsidian/                      # app config; only app/appearance/core-plugins/community-plugins/hotkeys are committed
+  pages/                          # authored pages — GitHub sync base path stays "pages"
+    <Title>.md
+    <Namespace>/<Title>.md        # was <Namespace>___<Title>.md
+  journals/YYYY-MM-DD.md          # was YYYY_MM_DD.md; excluded from KG ingest as before
+  assets/                         # unchanged; links rewritten to vault-root-relative "assets/..."
+  templates/                      # optional
+```
+
+- The vault root is the single path authority: `VAULT_ROOT` (env) ← agentbox
+  `[vault].root` (manifest). Every consumer derives sub-paths from it; no
+  consumer hard-codes `/home/devuser/workspace/logseq/...`.
+- Page **identity** is the vault-relative path under `pages/` without the `.md`
+  extension, with `/` as the namespace separator. `page_name_to_id` slugifies
+  that name exactly as before, so existing node ids for non-namespace pages are
+  unchanged. Legacy encodings `___` and `%2F` decode to `/` on read.
+
+### V2 — Frontmatter (Obsidian Properties)
+
+Every page begins with a YAML frontmatter block delimited by `---` lines.
+Keys are lower-kebab-case. The reserved Obsidian keys `aliases`, `tags`,
+`cssclasses` keep their Obsidian meaning.
+
+| Key | Type | Meaning | Logseq origin |
+|---|---|---|---|
+| `public` | checkbox | KG inclusion gate (see V4) | `public:: true` |
+| `aliases` | list | Obsidian aliases; also KG alias metadata | `alias::` |
+| `title` | text | Display title when it differs from the filename | `title::` |
+| `tags` | list | Obsidian tags; KG `tags` metadata | `tags::`, `#[[..]]` |
+| `owl-class` | text | Formal class IRI; **bypasses the public gate** | `owl:class::` |
+| `source-domain` | text | Domain prefix (ai/bc/mv/rb/tc/ngm) | `source-domain::` |
+| `elevatedFrom` | text (quoted link) | `"[[Working Page]]"` provenance bridge | `elevatedFrom:: [[..]]` |
+| any other `key` | text/list | Preserved verbatim from the Logseq property block | `key::` |
+
+Rules:
+- Wikilinks inside property values are quoted strings: `elevatedFrom: "[[Working Page]]"`.
+- `public` is a real YAML boolean (`true`/`false`), never the string `"true"`.
+- The JSON-LD `Page` and `Class` fences stay in the body unchanged; frontmatter
+  never duplicates their content.
+- A page with no frontmatter is **private** (fail-closed), exactly as a page
+  with no `public:: true` was.
+
+### V3 — Body dialect
+
+| Construct | Vault form | Note |
+|---|---|---|
+| Wikilinks | `[[Page]]`, `[[Page\|Alias]]`, `[[Ns/Page]]` | unchanged |
+| Embeds | `![[Page]]` | was `{{embed [[Page]]}}` |
+| Tasks | `- [ ] text`, `- [x] text` | was `- TODO/DOING/NOW/LATER text`, `- DONE text` |
+| Multi-word tags | `#multi-word` | was `#[[multi word]]` |
+| Block refs | left literal, reported | `((uuid))` with no `id::` target anywhere in the corpus |
+| Assets | `assets/<file>` (vault-root-relative) | was `../assets/<file>` |
+| Body-level `key:: value` | preserved verbatim, reported | 193 pages; not part of the gate |
+| `collapsed:: true` | dropped | outliner-only |
+| Code fences (`json-ld` etc.) | unchanged | |
+
+### V4 — Inclusion gate (amends ADR-2014)
+
+A page is ingested as a KG node iff **either**:
+
+1. its frontmatter has `public: true`, or
+2. its frontmatter has a non-empty `owl-class` (formal data ingests unconditionally),
+
+**or**, during the legacy-tolerance window, the corresponding Logseq line
+(`public:: true`, `owl:class::`) appears in the leading property block. Absence
+of both means private. The gate anchors on parsed metadata, never on the file
+path. `/journals/`, `/.obsidian/`, `/bak/`, `/logseq/`, `/.recycle/`,
+`/.trash/` are skipped at listing time.
+
+### V5 — Writers emit vault format only
+
+`OntologyMutationService`, `DecisionElevation`, agentbox `ontology-local.js`'s
+write path, `podcast-knowledge-ingest`, and `web-summary` emit **frontmatter**
+pages. No writer emits `key:: value` lines after ADR-2040 lands. A writer that
+must touch a legacy page converts the leading property block on write.
+
+### V6 — Converter (`vault-migrate`, ADR-2042)
+
+- One Rust binary, `crates/vault-migrate`, no LLM, deterministic, idempotent.
+- Default mode writes to an **output directory**; `--in-place` is explicit.
+- Never deletes; unknown constructs are preserved and **reported**, not guessed.
+- Emits a machine-readable report (`vault-migrate-report.json`) with per-rule
+  counts and the list of pages carrying unconverted constructs.
+- Round-trip property: converting an already-converted vault is a no-op.
+
+### V7 — Settings and wire vocabulary (ADR-2041)
+
+The graph-settings key `visualisation.graphs.logseq` is renamed
+`visualisation.graphs.knowledge`. Rust deserialises both (`serde(alias)`), the
+client migrates persisted settings on load, and the wire/query value `logseq`
+for `graph_type` is accepted as a synonym of `knowledge` for one release.
+
+### V8 — TUI (agentbox ADR-2029)
+
+The vault has a first-class terminal surface: Rune (`aka-rider/rune`, MIT,
+Rust/ratatui) launched from `VAULT_ROOT` in tmux window 9 "Notes". Presence is
+detected at session start like the AoE plane; absence prints the rebuild notice.
+
+## Invariants (must not silently change)
+
+1. **One format on write.** Every writer in either repo emits frontmatter pages
+   (V2). Adding a `key:: value` emitter is a violation.
+2. **Fail-closed gate.** No frontmatter, or `public` absent/false and no
+   `owl-class`, means the page is not a KG node.
+3. **Path authority is `VAULT_ROOT`.** No consumer hard-codes a corpus path;
+   the manifest `[vault].root` is the only default.
+4. **Identity stability.** Non-namespace page ids are byte-identical before and
+   after conversion; namespace page ids derive from `Ns/Title`, matching the
+   `[[Ns/Title]]` wikilink form already used in the corpus.
+5. **Converter never destroys.** Output-dir default, explicit `--in-place`,
+   preserve-and-report for anything not in V3.
+6. **Legacy tolerance is bounded.** Readers accept Logseq property lines only
+   in the leading block, only for the keys in V2, and the tolerance is removed
+   by the `review_trigger` on ADR-2040.
+
+## Expectations (EDD)
+
+| ID | Priority | Expectation | Evidence |
+|---|---|---|---|
+| EXP-V01 | critical, regression | A page whose frontmatter is `public: true` and nothing else ingests as a KG node; the same page with `public: false` or with no frontmatter does not. | `cargo test -p webxr vault_gate` |
+| EXP-V02 | critical, regression | A page with `owl-class: mv:Foo` and no `public` key ingests, and its node carries `owl_class_iri = "mv:Foo"`. | same |
+| EXP-V03 | high, regression | A legacy page starting `public:: true` still ingests; a legacy page with `public:: true` only inside a code fence or after the first heading does not. | same |
+| EXP-V04 | high, regression | `vault-migrate` on the 2026-09-02 corpus converts 8,601 pages to `public: true`, moves 201 namespace files into folders, rewrites 14 embeds and 13 task pages, and reports exactly 13 dangling block refs and 193 body-level property pages. | `vault-migrate --report` on the corpus snapshot |
+| EXP-V05 | high, regression | Running `vault-migrate` twice yields byte-identical output the second time. | converter test |
+| EXP-V06 | medium | `visualisation.graphs.logseq` in a persisted `settings.yaml` loads into `graphs.knowledge` without loss; the client renders with the same colours. | settings test + vitest |
+| EXP-V07 | medium | tmux window 9 "Notes" opens Rune at `VAULT_ROOT` when the binary exists and prints the rebuild notice when it does not; window 0 remains the tab0-bridge target. | `bash -n` + a dry run of `tmux-autostart.sh` in a scratch socket |
+
+## Change process
+
+This is a living document. Amend it in the same commit that changes any
+reader, writer, gate rule, converter rule, or the path authority. Every
+load-bearing claim carries a `file:line` citation; update the citation when
+the code moves. Bump `version` (patch for wording, minor for a new key or
+rule, major for a change to the gate or identity rule) and refresh
+`verified_commit`.
