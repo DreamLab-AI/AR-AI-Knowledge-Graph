@@ -268,3 +268,11 @@ scratchpad/
 # session recordings / stills dropped in the root for hand-off (moved off by the owner)
 /xr-capture-*.mp4
 /xr-screenshot-*.png
+/.media-originals/
+
+# curated, GitHub-sized media referenced by README.md (exceptions to the rules above)
+!docs/screenshots/2026-09-02-obsidian-graph-view.jpg
+!docs/screenshots/2026-09-02-desktop-ontology-panel.jpg
+!docs/assets/media/
+!docs/assets/media/2026-09-02-immersive-agent-actions.mp4
+!docs/assets/media/2026-09-02-immersive-agent-actions-preview.gif

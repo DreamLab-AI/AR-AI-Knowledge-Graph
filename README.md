@@ -25,6 +25,21 @@ https://github.com/user-attachments/assets/f45c92dc-4800-4b57-a6e2-178da6bb0a38
 
 ---
 
+## The system running — 2 September 2026
+
+The corpus moved from Logseq to an Obsidian vault ([`jjohare/visionGraph`](https://github.com/jjohare/visionGraph), private) on this date, and the same session exercised all three surfaces on the same graph: the vault in Obsidian, the desktop client, and the VIVE Pro headset with a live agent swarm. The contract behind it is [`docs/VAULT-corpus-format.md`](docs/VAULT-corpus-format.md); the close-out evidence is in [`docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md`](docs/gap-close-evidence/2026-09-02-obsidian-migration-closeout.md).
+
+| Obsidian — the authored corpus | Desktop client — the same graph, reasoned |
+|---|---|
+| ![Obsidian graph view of the knowledge vault with the SPARQL page selected](docs/screenshots/2026-09-02-obsidian-graph-view.jpg) | ![VisionClaw desktop client with the Ontology panel open on the SPARQL class](docs/screenshots/2026-09-02-desktop-ontology-panel.jpg) |
+| The `knowledge/` vault open in Obsidian, graph view, the **SPARQL** page selected. Every note is plain markdown with YAML frontmatter; `public: true` or an `owl-class` key is what admits a page to the knowledge graph. Agents read and write the same files, and the `[vault]` section in agentbox is the single path authority. | The desktop client on the identical corpus: 13,165 nodes, 145k edges, GPU force layout. The Ontology panel is focused on `urn:ngm:class:sparql`, the formal class the vault page maps to, with TBox/ABox scope, the server-side population filter and inferred edges available. Grabbing a node in either client moves it in the other; positions are server truth. |
+
+![Immersive session: agent action beams from an embodied swarm to the concepts they touch, seen from inside the VIVE Pro headset](docs/assets/media/2026-09-02-immersive-agent-actions-preview.gif)
+
+*Inside the headset (preview, 8 s at 8 fps). Full clip: [`docs/assets/media/2026-09-02-immersive-agent-actions.mp4`](docs/assets/media/2026-09-02-immersive-agent-actions.mp4) — 109 s, 960×540, 16 MB.* A six-agent swarm (a Fable 5.1 queen, Opus workers, Sonnet researchers) is embodied as capsules in the graph; each tool call they make becomes a beam from the agent to the node it touched, shaped and coloured by verb (query, link, update, transform, create, delete), with the SPARQL class as the busiest target. The same `0x23 AGENT_ACTION` frames reach the desktop client, where the Agents dock shows the swarm and the KPI tile counts the actions. How to reproduce: [`docs/how-to/operations/agent-beams-dev-driver.md`](docs/how-to/operations/agent-beams-dev-driver.md).
+
+---
+
 ## What it is, and why it exists
 
 Hierarchy was an information-routing protocol bounded by human bandwidth. As AI collapses the cost of that routing toward zero, the human role is not deleted — it is promoted from **router** to **judgment broker**: the person who decides at the intersections the machines cannot own.
