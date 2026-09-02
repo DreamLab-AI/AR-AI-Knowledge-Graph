@@ -1,6 +1,6 @@
 ---
 title: VAULT — authored corpus format (Obsidian vault)
-version: 1.4.0
+version: 1.4.1
 status: living
 verified_commit:
 owner: jjohare
@@ -260,7 +260,7 @@ detected at session start like the AoE plane; absence prints the rebuild notice.
 | EXP-V04 | high, regression | `vault-migrate` on the 2026-09-02 corpus emits `public: true` on 8,615 pages (8,601 top-level + 14 under `pages/_misc/`), moves 201 namespace files into folders, renames 308 journals, rewrites 239 task markers and 168 asset links, rewrites no page embeds (none exist), and reports 14 block-embed/block-ref files, 6,541 body-property files and 4 SCHEDULED/DEADLINE journals — with `--check` on the output exiting 0. | `vault-migrate --report` on the corpus; verified 2026-09-02 (66 unit + 16 integration tests green; real run 2.6 s) |
 | EXP-V05 | high, regression | Running `vault-migrate` twice yields byte-identical output the second time. | converter test |
 | EXP-V06 | medium | `visualisation.graphs.logseq` in a persisted `settings.yaml` loads into `graphs.knowledge` without loss; the client renders with the same colours. | settings test + vitest |
-| EXP-V08 | critical | Shadow sync: syncing the converted corpus with the new binary yields the same node set as syncing the unconverted `main` with the same binary, except labels that now honour `title`; after the shortest-path link rule the graph returns to the original baseline. | 2026-09-02 dev-container runs (`GITHUB_BRANCH`/`GITHUB_REPO` override on `sync_github`): same pre-fix binary → main 13,351 nodes / 156,153 edges vs converted 13,351 / 156,101 (3 title-driven label diffs); link-fix binary → `jjohare/visionGraph` 13,162 / 145,474 / 378 `page` nodes against the original old-binary baseline 13,164 / 145,692 / 382 — the 191 `podcast-evidence___…` stubs are gone and the 254 main↔working twin joins hold. |
+| EXP-V08 | critical | Shadow sync: syncing the converted corpus with the new binary yields the same node set as syncing the unconverted `main` with the same binary, except labels that now honour `title`; after the shortest-path link rule the graph returns to the original baseline. | 2026-09-02 dev-container runs (`GITHUB_BRANCH`/`GITHUB_REPO` override on `sync_github`): same pre-fix binary → main 13,351 nodes / 156,153 edges vs converted 13,351 / 156,101 (3 title-driven label diffs); link-fix binary → `jjohare/visionGraph` 13,162 / 145,474 / 378 `page` nodes against the original old-binary baseline 13,164 / 145,692 / 382 — the 191 `podcast-evidence___…` stubs are gone and the 254 main↔working twin joins hold; final run with the percent-encoding and leaf-label fixes → 13,165 / 145,561 / 381, zero fetch errors, only genuine slashed names (`TCP/IP`, `ISO/IEC …`) as labels. |
 | EXP-V07 | medium | tmux window 9 "Notes" opens Rune at `VAULT_ROOT` when the binary exists and prints the rebuild notice when it does not; window 0 remains the tab0-bridge target. | `bash -n` + a dry run of `tmux-autostart.sh` in a scratch socket |
 
 ## Change process
