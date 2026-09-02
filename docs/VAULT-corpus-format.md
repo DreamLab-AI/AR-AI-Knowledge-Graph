@@ -1,6 +1,6 @@
 ---
 title: VAULT — authored corpus format (Obsidian vault)
-version: 1.0.0
+version: 1.1.0
 status: living
 verified_commit:
 owner: jjohare
@@ -46,12 +46,12 @@ Related governing documents: [`DATA-authority-erasure.md`](DATA-authority-erasur
 | Namespace pages stored as `a___b.md` | 201 |
 | Journals (`YYYY_MM_DD.md`) | 308 |
 | Working-graph pages (`workingGraph/pages/`) | 574 |
-| Pages with `{{embed [[..]]}}` | 14 |
-| Pages with `((block-ref))` | 13 (zero `id::` targets exist — all dangling) |
+| Pages with `{{embed ((uuid))}}` block embeds (no page embeds exist) | 14 (34 occurrences) |
+| Pages with `((block-ref))` | 13 in `pages/` + 1 journal (zero `id::` targets outside `pages/.deleted/` — all dangling) |
 | Pages with `#[[multi word]]` tags | 6 |
-| Pages with TODO/DOING/NOW/LATER/DONE markers | 13 |
-| Pages with `key:: value` lines beyond the leading property block | 193 |
-| Pages referencing `../assets/` | 36 |
+| Pages with TODO/DOING/NOW/LATER/DONE markers | 13 (12 outside code fences; 239 marker occurrences incl. journals) |
+| Pages with body-level `- key:: value` lines (Dataview-style inline fields carrying the relation graph: `enables::` ×7,882, `relatedTo::` ×6,640, `requires::` ×5,982, `uses::` ×5,834, `owl-class::` ×3,854) | 6,541 files / 98,674 lines |
+| Pages referencing `../assets/` | 36 (177 targets; 9 inside code fences) |
 | Pages starting with a `- ` outliner bullet | 0 |
 | Pages with YAML frontmatter | 0 |
 
@@ -129,12 +129,13 @@ Rules:
 | Construct | Vault form | Note |
 |---|---|---|
 | Wikilinks | `[[Page]]`, `[[Page\|Alias]]`, `[[Ns/Page]]` | unchanged |
-| Embeds | `![[Page]]` | was `{{embed [[Page]]}}` |
+| Page embeds | `![[Page]]` | was `{{embed [[Page]]}}` (none exist in the corpus) |
+| Block embeds | left literal, reported | `{{embed ((uuid))}}` — no `id::` targets exist |
 | Tasks | `- [ ] text`, `- [x] text` | was `- TODO/DOING/NOW/LATER text`, `- DONE text` |
 | Multi-word tags | `#multi-word` | was `#[[multi word]]` |
 | Block refs | left literal, reported | `((uuid))` with no `id::` target anywhere in the corpus |
-| Assets | `assets/<file>` (vault-root-relative) | was `../assets/<file>` |
-| Body-level `key:: value` | preserved verbatim, reported | 193 pages; not part of the gate |
+| Assets | `assets/<file>` (vault-root-relative) | was `../assets/<file>`; rewritten in bodies **and** in leading-block property values (a note-relative path breaks once the page moves into a namespace folder) |
+| Body-level `- key:: value` | preserved verbatim, reported | 6,541 pages: Dataview inline fields carrying the relation graph; readable by Obsidian's Dataview, navigable via their `[[links]]`; never part of the gate |
 | `collapsed:: true` | dropped | outliner-only |
 | Code fences (`json-ld` etc.) | unchanged | |
 
@@ -166,6 +167,12 @@ must touch a legacy page converts the leading property block on write.
 - Emits a machine-readable report (`vault-migrate-report.json`) with per-rule
   counts and the list of pages carrying unconverted constructs.
 - Round-trip property: converting an already-converted vault is a no-op.
+- `pages/` subdirectories: a plain subdirectory (e.g. `pages/_misc/`) converts
+  as a namespace folder; dot-directories (`pages/.deleted/`, `.swarm`,
+  `.claude-flow`) are copied verbatim and never converted, matching V4's
+  listing skips. `mainKnowledgeGraph/assets` is a symlink into
+  `workingGraph/assets`; the converter follows it so each vault owns an
+  independent copy of its assets.
 
 ### V7 — Settings and wire vocabulary (ADR-2041)
 
@@ -183,7 +190,9 @@ detected at session start like the AoE plane; absence prints the rebuild notice.
 ## Invariants (must not silently change)
 
 1. **One format on write.** Every writer in either repo emits frontmatter pages
-   (V2). Adding a `key:: value` emitter is a violation.
+   (V2) for page metadata. Adding a leading-block `key:: value` emitter is a
+   violation. Body-level `- pred:: [[Target]]` inline fields (V3) are content,
+   not metadata, and remain the corpus's relation-authoring form.
 2. **Fail-closed gate.** No frontmatter, or `public` absent/false and no
    `owl-class`, means the page is not a KG node.
 3. **Path authority is `VAULT_ROOT`.** No consumer hard-codes a corpus path;
@@ -204,7 +213,7 @@ detected at session start like the AoE plane; absence prints the rebuild notice.
 | EXP-V01 | critical, regression | A page whose frontmatter is `public: true` and nothing else ingests as a KG node; the same page with `public: false` or with no frontmatter does not. | `cargo test -p webxr vault_gate` |
 | EXP-V02 | critical, regression | A page with `owl-class: mv:Foo` and no `public` key ingests, and its node carries `owl_class_iri = "mv:Foo"`. | same |
 | EXP-V03 | high, regression | A legacy page starting `public:: true` still ingests; a legacy page with `public:: true` only inside a code fence or after the first heading does not. | same |
-| EXP-V04 | high, regression | `vault-migrate` on the 2026-09-02 corpus converts 8,601 pages to `public: true`, moves 201 namespace files into folders, rewrites 14 embeds and 13 task pages, and reports exactly 13 dangling block refs and 193 body-level property pages. | `vault-migrate --report` on the corpus snapshot |
+| EXP-V04 | high, regression | `vault-migrate` on the 2026-09-02 corpus emits `public: true` on 8,615 pages (8,601 top-level + 14 under `pages/_misc/`), moves 201 namespace files into folders, renames 308 journals, rewrites 239 task markers and 168 asset links, rewrites no page embeds (none exist), and reports 14 block-embed/block-ref files, 6,541 body-property files and 4 SCHEDULED/DEADLINE journals — with `--check` on the output exiting 0. | `vault-migrate --report` on the corpus; verified 2026-09-02 (66 unit + 16 integration tests green; real run 2.6 s) |
 | EXP-V05 | high, regression | Running `vault-migrate` twice yields byte-identical output the second time. | converter test |
 | EXP-V06 | medium | `visualisation.graphs.logseq` in a persisted `settings.yaml` loads into `graphs.knowledge` without loss; the client renders with the same colours. | settings test + vitest |
 | EXP-V07 | medium | tmux window 9 "Notes" opens Rune at `VAULT_ROOT` when the binary exists and prints the rebuild notice when it does not; window 0 remains the tab0-bridge target. | `bash -n` + a dry run of `tmux-autostart.sh` in a scratch socket |

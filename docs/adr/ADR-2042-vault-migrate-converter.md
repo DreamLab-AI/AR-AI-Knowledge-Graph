@@ -3,8 +3,8 @@ id: ADR-2042
 title: "`vault-migrate` is the sole Logseq→Obsidian converter — deterministic, output-dir by default, preserve-and-report"
 date: 2026-09-02
 decision_status: proposed
-implementation_status: none
-activation_status: inactive
+implementation_status: complete
+activation_status: staged
 supersedes: []
 superseded_by: []
 verified_commit:
@@ -57,7 +57,20 @@ equivalent (13 dangling block refs, 193 pages with body-level properties).
 
 ## Verification
 
-`cargo test -p vault-migrate` (per-rule fixtures + idempotence), then a real
-run: `vault-migrate /home/devuser/workspace/logseq/mainKnowledgeGraph --out
-/home/devuser/workspace/vault` with the report's counts matching the survey in
-the governing doc (EXP-V04). `implementation_status: complete` requires both.
+2026-09-02 on the `obsidian` branch: `cargo test -p vault-migrate` — 66 unit
++ 16 integration tests green (per-rule fixtures under
+`crates/vault-migrate/tests/fixtures/logseq-mini` against a byte-exact
+`expected-vault` golden, two-run byte identity, no-op on own output,
+`--check` drift detection, source-graph never modified, `--in-place`
+namespace rename). Real runs, output-dir mode only, source graphs
+fingerprint-identical before and after:
+`mainKnowledgeGraph` → `/home/devuser/workspace/vault` in 2.6 s
+(8,655 pages, 8,634 converted; public 8,615, namespace 201, journals 308,
+tasks 239, assets 168; leftovers: 14 block-ref files, 6,541 body-property
+files, 4 SCHEDULED/DEADLINE journals; one unreadable root-owned tool file
+reported); `workingGraph` → `/home/devuser/workspace/vault-working` in
+0.65 s. `--check` on both outputs exits 0. Three survey rows in the
+governing doc were corrected from the report (no page embeds exist; body
+properties are the corpus's inline relation fields, 6,541 files not 193;
+one task page is fully fenced). `activation_status: staged` until the
+owner applies `--in-place` to the corpus repo.

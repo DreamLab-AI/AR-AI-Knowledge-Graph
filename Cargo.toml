@@ -10,6 +10,7 @@ members = [
     "crates/visionclaw-actors",
     "crates/visionclaw-xr-presence",
     "crates/visionclaw-analytics-oracle",
+    "crates/vault-migrate",
 ]
 # PRD-008: the Godot gdext client (xr-client/rust) is its own workspace context
 # (cdylib for the Quest APK, separate target). Exclude it from the server
