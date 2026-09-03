@@ -7,7 +7,7 @@ Performance engineering for the Godot 4 + godot-rust + OpenXR Quest 3 client and
    gdext crate's 0x42 graph-position decoder.
 2. **Godot on-device scene** — `benchmark_scene.tscn` + `benchmark.gd` run a 1000-node /
    10-avatar scene for 30s, capture per-frame stats, and emit a single JSON line.
-3. **Regression gate** — `regression_check.py` diffs a fresh result against
+3. **Regression gate** — `xr-perf-regression` diffs a fresh result against
    `crates/visionclaw-xr-presence/benches/baseline.json` and exits non-zero on regression.
 
 Authoritative perf budgets live in [PRD-008 §6](../../docs/PRD-008-xr-godot-replacement.md)
@@ -62,7 +62,8 @@ Criterion writes per-bench JSON to `target/criterion/<bench>/new/estimates.json`
 to the regression check:
 
 ```bash
-python3 xr-client/perf/regression_check.py \
+cargo run --quiet --release --manifest-path xr-client/rust/Cargo.toml \
+    -p xr-perf-regression -- \
     --current target/criterion/decode_pose_frame/new/estimates.json \
     --baseline crates/visionclaw-xr-presence/benches/baseline.json \
     --bench-name decode_pose_frame
@@ -76,7 +77,8 @@ to a tethered headset.
 ```bash
 godot --headless --path xr-client --script perf/run_benchmark.gd > /tmp/perf.txt 2>&1
 grep '^\[XR_PERF_RESULT\]=' /tmp/perf.txt | sed 's/^\[XR_PERF_RESULT\]=//' > /tmp/perf.json
-python3 xr-client/perf/regression_check.py \
+cargo run --quiet --release --manifest-path xr-client/rust/Cargo.toml \
+    -p xr-perf-regression -- \
     --current /tmp/perf.json \
     --baseline crates/visionclaw-xr-presence/benches/baseline.json
 ```
@@ -91,7 +93,8 @@ adb shell am start -n com.visionclaw.xr/com.godot.game.GodotApp \
                    -e benchmark_duration_s 30
 adb logcat -d -s godot | grep '^\[XR_PERF_RESULT\]=' | tail -1 \
     | sed 's/^\[XR_PERF_RESULT\]=//' > /tmp/perf.json
-python3 xr-client/perf/regression_check.py --current /tmp/perf.json \
+cargo run --quiet --release --manifest-path xr-client/rust/Cargo.toml \
+    -p xr-perf-regression -- --current /tmp/perf.json \
     --baseline crates/visionclaw-xr-presence/benches/baseline.json
 ```
 
@@ -110,13 +113,15 @@ cargo bench -p visionclaw-xr-presence -- --output-format json | \
 cargo bench -p visionclaw-xr-gdext --bench decode_throughput -- --output-format json | \
     tee target/criterion-gdext-bench.jsonl
 
-python3 xr-client/perf/regression_check.py \
+cargo run --quiet --release --manifest-path xr-client/rust/Cargo.toml \
+    -p xr-perf-regression -- \
     --current target/criterion/<bench>/new/estimates.json \
     --baseline crates/visionclaw-xr-presence/benches/baseline.json
 
 godot --headless --path xr-client --script perf/run_benchmark.gd > /tmp/perf.txt
 grep '^\[XR_PERF_RESULT\]=' /tmp/perf.txt | sed 's/^\[XR_PERF_RESULT\]=//' > /tmp/perf.json
-python3 xr-client/perf/regression_check.py --current /tmp/perf.json \
+cargo run --quiet --release --manifest-path xr-client/rust/Cargo.toml \
+    -p xr-perf-regression -- --current /tmp/perf.json \
     --baseline crates/visionclaw-xr-presence/benches/baseline.json
 ```
 
@@ -127,7 +132,8 @@ Baseline updates require a PR with explicit reviewer approval. CI may **not** pa
 
 1. Run the bench locally on the same class of hardware as CI (matters most for the Quest 3
    on-device numbers).
-2. `python3 xr-client/perf/regression_check.py --current <fresh.json> \
+2. `cargo run --quiet --release --manifest-path xr-client/rust/Cargo.toml \
+    -p xr-perf-regression -- --current <fresh.json> \
         --baseline crates/visionclaw-xr-presence/benches/baseline.json --update-baseline`
 3. Commit the updated `baseline.json` with a message that names the hardware change,
    intentional optimisation, or new fixture.
@@ -143,8 +149,10 @@ Per-metric regression budgets live inside the baseline file (`regression_budget_
 - [`run_benchmark.gd`](run_benchmark.gd) — headless `SceneTree` entry point.
 - [`fixtures/perf_graph_1k.json`](fixtures/perf_graph_1k.json) — deterministic 1000-node /
   1500-edge / 10-avatar fixture (seed `0xC0FFEE`).
-- [`regression_check.py`](regression_check.py) — Godot- and Criterion-aware diff against
-  baseline; markdown table output for PR comments.
+- [`../rust/perf-regression/`](../rust/perf-regression/) — the `xr-perf-regression` bin:
+  Godot- and Criterion-aware diff against baseline; markdown table output for PR
+  comments. Ported from `regression_check.py` (2026-09-03); same CLI flags, same
+  exit codes (0 pass / 1 regression / 2 bad input), byte-identical report output.
 - [`../../crates/visionclaw-xr-presence/benches/wire.rs`](../../crates/visionclaw-xr-presence/benches/wire.rs)
   — pose codec + validator + delta benches.
 - [`../../crates/visionclaw-xr-presence/benches/baseline.json`](../../crates/visionclaw-xr-presence/benches/baseline.json)

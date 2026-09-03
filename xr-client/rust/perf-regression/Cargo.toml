@@ -1,0 +1,17 @@
+[package]
+name = "xr-perf-regression"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "Compare a fresh XR perf result (Godot scene or Criterion) against the committed baseline."
+authors = ["jjohare <github@thedreamlab.uk>"]
+
+[[bin]]
+name = "xr-perf-regression"
+path = "src/main.rs"
+
+[dependencies]
+# `preserve_order` keeps baseline.json's key order intact on --update-baseline,
+# so a baseline refresh is a minimal diff rather than a whole-file reshuffle.
+serde_json = { version = "1.0", features = ["preserve_order"] }

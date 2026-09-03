@@ -3,6 +3,9 @@
 # visionclaw-server workspace (which `exclude`s this path). Keeps server builds
 # from compiling the GDExtension bindings and gives this crate its own target dir.
 [workspace]
+# The perf regression checker is its own tiny package so that building it does
+# not drag in the `godot` gdext toolchain this cdylib needs.
+members = ["perf-regression"]
 
 [package]
 name = "visionclaw-xr-gdext"

@@ -9,7 +9,8 @@ extends Node3D
 #   - max draw calls  <= 50
 #   - max triangles   <= 100K
 # Exit code 0 on pass, 1 on fail. Consumed by xr-godot-ci.yml on-device-perf job
-# and by perf/regression_check.py for trend comparison against baseline.json.
+# and by the xr-perf-regression bin (xr-client/rust/perf-regression) for trend
+# comparison against baseline.json.
 
 const DEFAULT_DURATION_S := 30.0
 const DEFAULT_FIXTURE := "res://perf/fixtures/perf_graph_1k.json"
