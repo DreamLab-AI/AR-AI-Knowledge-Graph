@@ -267,30 +267,70 @@ services:
   # ── Ontology Loom sidecar (Deployment B — VisionClaw ADR-135 D1 / PRD-025) ──
   # A portable ontology node with a stable, model-swappable façade. Co-located by
   # default (the usual all-on-one-machine case): reachable at http://loom:8080 on
-  # visionclaw_network by VisionClaw and agentbox. The model is a URL behind the
-  # façade (DISTILL_BACKEND_URL) — swap Gemma → Muse → next with zero consumer
-  # change. Corpus generation is mirrored on start into the loom-data volume;
-  # retrieval (/loom/scaffold, /health) works with NO backend configured.
+  # visionclaw_network by VisionClaw and agentbox — the email gateway binds
+  # REASONER_BASE_URL=http://loom:8080/v1, so this is a REQUIRED in-network door,
+  # not a CI convenience. The model is a URL behind the façade
+  # (DISTILL_BACKEND_URL) — swap Gemma → Muse → next with zero consumer change.
+  # Retrieval (/loom/scaffold, /health) works with NO backend configured.
   # Opt-in: docker compose --profile loom up -d loom   (or launch.sh with the loom profile)
+  #
+  # IMPLEMENTATION: the Rust `loom-facade` binary from the loom repo — the
+  # canonical implementation of this contract. The Python sidecar it replaces
+  # (loom/app/*.py) was a dead twin: same endpoints, same env names, a whole
+  # extra language runtime. See loom/README.md.
+  #
+  # The image is NOT built from this repo. Build it on the host from the loom
+  # checkout, whose Dockerfile needs the workspace PARENT as its context because
+  # loom path-depends on the sibling ../ruvector crate:
+  #
+  #   docker build -f loom/deploy/Dockerfile -t loom:rust /home/devuser/workspace
+  #
   loom:
     container_name: ${LOOM_CONTAINER:-loom-sidecar}
-    build:
-      context: ./loom
-      dockerfile: Dockerfile
-    image: ${LOOM_IMAGE:-loom-sidecar:dev}
+    image: ${LOOM_IMAGE:-loom:rust}
+    hostname: loom
     environment:
+      LOOM_FACADE_PORT: "8080"
+      LOOM_DEPLOY_PROFILE: "b"
       # Model-swap seam. Default co-located options (pick one at deploy):
+      #   http://loom-model:8085/v1             (model container on this network)
       #   http://host.docker.internal:11434/v1  (local Ollama/LM Studio on the host)
-      #   http://192.168.2.132:8084/v1          (LAN reasoner, e.g. HP-Desktop)
+      #   http://192.168.2.132:8084/v1          (LAN reasoner — ml DNATs to HP)
       # Blank = retrieval-only (scaffold + health work; /v1 returns 503).
       DISTILL_BACKEND_URL: ${DISTILL_BACKEND_URL:-}
+      # bge-small-en-v1.5/384 (LOCKED model) for the semantic fallback's query embed.
+      XINFERENCE_URL: ${XINFERENCE_URL:-http://xinference:9997/v1}
       ONTOLOGY_BUDGET: ${LOOM_BUDGET:-1500}
-      LOOM_MIRROR_ON_START: ${LOOM_MIRROR_ON_START:-1}
-      ONTOLOGY_SITE: ${ONTOLOGY_SITE:-https://narrativegoldmine.com}
+      # Gated OFF until the recall bench clears (loom RUST-ARCHITECTURE §8.4).
+      LOOM_SEMANTIC_FALLBACK: ${LOOM_SEMANTIC_FALLBACK:-0}
+      # Reasoning backends truncate to empty below 1536 max_tokens (§10, the 400→empty trap).
+      LOOM_MIN_MAX_TOKENS: ${LOOM_MIN_MAX_TOKENS:-1536}
+      # --- the confidence gate, EXPLICIT (loom ADR-138) --------------------------
+      # Stated rather than inherited, so `/health.injection_policy` can be checked
+      # against this file. Defaults reproduce the loom repo's Profile B posture:
+      # master switch OFF, the three thresholds pinned at the code defaults
+      # (loom-scaffold tuning.rs). Flip LOOM_CONFIDENCE_INJECTION=1 in .env to arm it.
+      LOOM_CONFIDENCE_INJECTION: ${LOOM_CONFIDENCE_INJECTION:-0}
+      LOOM_STRONG_MATCH_SCORE: ${LOOM_STRONG_MATCH_SCORE:-8.0}
+      LOOM_MIN_INJECT_SCORE: ${LOOM_MIN_INJECT_SCORE:-2.0}
+      LOOM_MIN_INJECT_FRACTION: ${LOOM_MIN_INJECT_FRACTION:-0.4}
+      RUST_LOG: ${LOOM_RUST_LOG:-info}
     volumes:
-      # Corpus generation (mirrored on start). Bind a logseq www/data here for a
-      # fully-offline co-located generation: ${HOST_PROJECT_ROOT:-.}/../logseq/www/data:/app/data
-      - loom-data:/app/data
+      # The mirrored corpus generation, READ-ONLY. Unlike the Python sidecar there
+      # is NO mirror-on-start step in this image — the generation is staged by the
+      # operator, then served immutably. Point LOOM_DATA_SOURCE at either the named
+      # volume (default) or a host dir holding a full generation, e.g.
+      #   LOOM_DATA_SOURCE=/home/devuser/workspace/loom/data
+      # A full generation is scaffold-index.json + prose-index.json + the TTLs +
+      # ontology-corpus.rvdb(+.generation.json). With an EMPTY source the façade
+      # still starts and /health still 200s, but the log says "lexical index NOT
+      # loaded ... empty floor" — a staging bug, not a dead container.
+      - ${LOOM_DATA_SOURCE:-loom-data}:/app/data:ro
+    tmpfs:
+      # Opening the .rvdb mutates the redb file even for reads, so the entrypoint
+      # copies it off the :ro mount into here first. uid/gid MUST match the image's
+      # non-root user (65532) or that copy fails EACCES.
+      - /run/loom:mode=0750,uid=65532,gid=65532
     ports:
       - "${LOOM_PORT:-8090}:8080"
     networks:
