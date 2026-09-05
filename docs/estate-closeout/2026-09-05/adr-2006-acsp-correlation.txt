@@ -1,0 +1,16 @@
+test adapters::sqlite_enrichment_repository::tests::status_mapping_matches_outcomes ... ok
+test adapters::sqlite_enrichment_repository::tests::mark_writeback_committed_flips_truth_bit ... ok
+test adapters::sqlite_enrichment_repository::tests::record_decision_transitions_status_atomically ... ok
+test adapters::sqlite_enrichment_repository::tests::a_redelivered_signed_decision_is_recorded_once ... ok
+test adapters::sqlite_enrichment_repository::tests::decisions_since_windows_on_decided_at ... ok
+test adapters::sqlite_enrichment_repository::tests::provenance_decisions_since_carries_owner_did_and_activity ... ok
+test adapters::sqlite_enrichment_repository::tests::local_decisions_without_an_event_id_are_not_deduplicated ... ok
+test adapters::sqlite_enrichment_repository::tests::signed_event_id_round_trips ... ok
+test adapters::sqlite_enrichment_repository::tests::upsert_get_and_list_roundtrip ... ok
+test adapters::sqlite_enrichment_repository::tests::set_status_marks_terminal_elevated_and_abandoned ... ok
+test adapters::sqlite_enrichment_repository::tests::loop_trace_joins_proposal_to_terminal_decision_with_monotonic_stamps ... ok
+test adapters::sqlite_enrichment_repository::tests::distinct_signed_decisions_are_both_recorded ... ok
+test adapters::sqlite_enrichment_repository::tests::loop_trace_for_pending_proposal_has_no_decision ... ok
+test adapters::sqlite_enrichment_repository::tests::duplicate_suppression_survives_a_reopen ... ok
+test adapters::sqlite_enrichment_repository::tests::a_pre_adr_2006_store_is_migrated_on_open ... ok
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 1245 filtered out; finished in 1.19s

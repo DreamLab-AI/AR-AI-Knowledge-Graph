@@ -1,0 +1,23 @@
+# ADR closeout verification run — 2026-09-05
+
+$ cargo test --lib --no-default-features
+  test result: ok. 1254 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 3.01s
+
+$ cargo test -p visionclaw-domain --lib
+  test result: ok. 282 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+$ cargo test -p visionclaw-adapters --lib
+  test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+$ cargo test -p vault-migrate
+  test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+  test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+  test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+$ cargo test -p visionclaw-integration-tests --test backup_posture
+  test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+$ cargo test -p visionclaw-integration-tests --test dev_build_inputs
+  test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+

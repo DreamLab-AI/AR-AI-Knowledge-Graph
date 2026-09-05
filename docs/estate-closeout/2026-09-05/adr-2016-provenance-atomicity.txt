@@ -1,0 +1,30 @@
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `visionclaw-adapters` (lib test) generated 2 warnings (run `cargo fix --lib -p visionclaw-adapters --tests` to apply 1 suggestion)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.52s
+     Running unittests src/lib.rs (target/debug/deps/visionclaw_adapters-265fbbe0cdc1e104)
+
+running 20 tests
+test provenance_emitter::tests::build_activity_quads_validates_without_a_store ... ok
+test provenance_emitter::tests::append_only_verified ... ok
+test provenance_emitter::tests::late_invalid_generated_iri_writes_nothing ... ok
+test provenance_emitter::tests::invalid_used_iri_writes_nothing ... ok
+test provenance_emitter::tests::injected_failure_on_first_quad_writes_nothing ... ok
+test provenance_emitter::tests::count_provenance_triples_works ... ok
+test provenance_emitter::tests::injected_storage_failure_rolls_the_record_back ... ok
+test provenance_emitter::tests::late_invalid_informed_by_iri_writes_nothing ... ok
+test provenance_emitter::tests::find_incomplete_activities_detects_a_legacy_partial_record ... ok
+test provenance_emitter::tests::provenance_for_entity_rejects_unsafe_iri ... ok
+test provenance_emitter::tests::mandatory_predicates_are_all_written ... ok
+test provenance_emitter::tests::reifies_activity_with_all_fields ... ok
+test provenance_emitter::tests::emit_activity_async_writes_and_is_nonfatal ... ok
+test provenance_emitter::tests::emits_full_prov_o_triad ... ok
+test provenance_emitter::tests::reifies_minimal_activity ... ok
+test provenance_emitter::tests::find_incomplete_activities_is_empty_after_atomic_writes ... ok
+test oxigraph_ontology_repository::tests::inferred_quads_land_in_inferred_graph_with_provenance ... ok
+test provenance_emitter::tests::query_agent_activities_returns_records ... ok
+test oxigraph_ontology_repository::tests::inference_run_reified_into_provenance_graph ... ok
+test provenance_emitter::tests::provenance_for_entity_walks_generated_and_derivation ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+

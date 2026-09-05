@@ -1,0 +1,18 @@
+  Permission denied (os error 13)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.51s
+     Running tests/backup_posture.rs (target/debug/deps/backup_posture-8576148a344c6ae0)
+
+running 10 tests
+test default_backup_root_is_outside_the_data_directory ... ok
+test destination_inside_the_source_directory_is_refused ... ok
+test membership_declaration_is_authoritative ... ok
+test page_clean_but_schemaless_database_fails_the_restore_check ... ok
+test restore_check_can_be_disabled_and_is_recorded ... ok
+test missing_required_database_fails_the_run ... ok
+test missing_optional_database_still_succeeds ... ok
+test complete_source_backs_up_every_declared_database ... ok
+test restore_check_reports_application_row_counts ... ok
+test inside_source_destination_can_be_overridden_explicitly ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+

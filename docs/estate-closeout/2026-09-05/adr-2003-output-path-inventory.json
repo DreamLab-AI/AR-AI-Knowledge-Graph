@@ -1,0 +1,14 @@
+{
+  "adr": "ADR-2003",
+  "generated_utc": "2026-09-05T19:19:51Z",
+  "paths": [
+    {"path": "src/handlers/socket_flow_handler/types.rs", "visibility_filtered": true},
+    {"path": "src/handlers/socket_flow_handler/position_updates.rs", "visibility_filtered": true},
+    {"path": "src/handlers/api_handler/graph/mod.rs", "visibility_filtered": true},
+    {"path": "src/handlers/graph_export_handler.rs", "visibility_filtered": false},
+    {"path": "src/handlers/graph_state_handler.rs", "visibility_filtered": false},
+    {"path": "src/handlers/bots_visualization_handler.rs", "visibility_filtered": false},
+    {"path": "src/handlers/api_handler/analytics/clustering_handlers.rs", "visibility_filtered": false},
+    {"path": "src/handlers/api_handler/analytics/community.rs", "visibility_filtered": false}
+  ]
+}

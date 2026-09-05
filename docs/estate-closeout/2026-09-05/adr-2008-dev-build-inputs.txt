@@ -1,0 +1,24 @@
+     Running tests/dev_build_inputs.rs (target/debug/deps/dev_build_inputs-706bac03ba56247a)
+
+running 18 tests
+test wrapper_sources_the_shared_inventory ... ok
+test unset_and_empty_variables_are_distinguishable ... ok
+test real_repository_inventory_covers_crate_manifests_and_cuda ... ok
+test missing_stamp_rebuilds ... ok
+test crate_cuda_header_edit_rebuilds ... ok
+test cuda_arch_change_rebuilds_without_any_file_edit ... ok
+test documentation_is_not_a_build_input ... ok
+test crate_cuda_edit_rebuilds ... ok
+test empty_source_tree_rebuilds ... ok
+test crate_rust_edit_rebuilds ... ok
+test untouched_tree_skips_the_build ... ok
+test ptx_edit_rebuilds ... ok
+test same_second_edit_rebuilds ... ok
+test missing_binary_rebuilds ... ok
+test build_outputs_and_vendored_trees_are_not_inputs ... ok
+test crate_build_script_edit_rebuilds ... ok
+test crate_manifest_edit_rebuilds ... ok
+test root_inputs_still_rebuild ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+

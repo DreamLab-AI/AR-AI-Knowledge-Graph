@@ -1,0 +1,9 @@
+visionclaw_unified source=src/cuda_sources/visionclaw_unified.cu provenance=compiled isa=8.8 original=d907f63a57046677 rewritten=d907f63a57046677
+gpu_clustering_kernels source=src/cuda_sources/gpu_clustering_kernels.cu provenance=compiled isa=8.8 original=8d45ec1d4b2450e8 rewritten=8d45ec1d4b2450e8
+dynamic_grid source=src/cuda_sources/dynamic_grid.cu provenance=compiled isa=8.8 original=3b5a8fca62e1e6b3 rewritten=3b5a8fca62e1e6b3
+gpu_aabb_reduction source=src/cuda_sources/gpu_aabb_reduction.cu provenance=compiled isa=8.8 original=fbeb10b8613a4ecf rewritten=fbeb10b8613a4ecf
+gpu_landmark_apsp source=src/cuda_sources/gpu_landmark_apsp.cu provenance=compiled isa=8.8 original=a8293ea28f5cf94d rewritten=a8293ea28f5cf94d
+sssp_compact source=src/cuda_sources/sssp_compact.cu provenance=compiled isa=8.8 original=968bd5dd10ca37b8 rewritten=968bd5dd10ca37b8
+semantic_forces source=src/cuda_sources/semantic_forces.cu provenance=compiled isa=8.8 original=e096eacd94289510 rewritten=e096eacd94289510
+pagerank source=src/cuda_sources/pagerank.cu provenance=compiled isa=8.8 original=f0cc4ef336684beb rewritten=f0cc4ef336684beb
+gpu_connected_components source=src/cuda_sources/gpu_connected_components.cu provenance=compiled isa=8.8 original=dfb1fad6f6696d4d rewritten=dfb1fad6f6696d4d
