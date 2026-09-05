@@ -13,14 +13,7 @@ pub async fn get_feature_flags() -> Result<HttpResponse> {
         "success": true,
         "flags": *flags,
         "description": {
-            "gpu_clustering": "Enable GPU-accelerated clustering algorithms",
-            "gpu_anomaly_detection": "Enable GPU-accelerated anomaly detection",
-            "real_time_insights": "Enable real-time AI insights generation",
-            "advanced_visualizations": "Enable advanced visualization features",
-            "performance_monitoring": "Enable detailed performance monitoring",
-            "stress_majorization": "Enable stress majorization layout algorithm",
-            "semantic_constraints": "Enable semantic constraint processing",
-            "sssp_integration": "Enable single-source shortest path integration",
+            "sssp_integration": "Single-source shortest path integration toggle (display/contract field only — gates no behaviour; see /sssp/toggle and /sssp/status)",
             "ontology_validation": "Enable ontology validation and inference operations"
         }
     }))

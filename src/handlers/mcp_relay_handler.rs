@@ -2,6 +2,7 @@ use crate::utils::network::{
     CircuitBreaker, HealthCheckConfig, HealthCheckManager, ServiceEndpoint, TimeoutConfig,
 };
 use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, Message, StreamHandler};
+use crate::app_state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use futures_util::{stream::SplitSink, SinkExt, StreamExt};
@@ -441,38 +442,85 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for MCPRelayActor {
 pub async fn mcp_relay_handler(
     req: HttpRequest,
     stream: web::Payload,
+    app_state: web::Data<AppState>,
 ) -> Result<HttpResponse, actix_web::Error> {
     info!("[MCP Relay] New WebSocket connection request");
 
-    // SECURITY: WebSocket token validation at upgrade time.
-    // Extracts token from Authorization header or query string.
-    // Currently allows but logs unauthenticated connections -- enforcement will come
-    // when all clients send tokens.
+    // SECURITY (ADR-2090): WebSocket credential validation at upgrade time.
+    //
+    // This previously accepted ANY non-empty string: it checked only that a
+    // token was present, never that it named a live session, so `?token=x` was
+    // sufficient to open the socket. It now resolves the token through
+    // `NostrService::get_session`, which as of ADR-2044 also enforces the
+    // `AUTH_TOKEN_EXPIRY` window. Unknown, expired and absent tokens all fail
+    // closed to 401.
     {
-        let token = req
+        let client_ip = req
+            .peer_addr()
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let unauthorised = |reason: &str| {
+            log::warn!(
+                "SECURITY: Rejected WebSocket upgrade on /ws/mcp-relay from {} — {}",
+                client_ip,
+                reason
+            );
+            Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Authentication required"})))
+        };
+
+        // ADR-2058/ADR-2090: the Authorization header is the ONLY accepted carrier
+        // in a release build. The `?token=` query fallback leaks the bearer token
+        // into access logs, proxy logs and Referer headers. It is compiled out of
+        // release and survives only behind the dev-auth gate. Clients that cannot
+        // set headers on an upgrade authenticate post-connect with the NIP-98
+        // `authenticate` envelope (kind 27235).
+        let header_token = req
             .headers()
             .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                let query = req.query_string();
-                url::form_urlencoded::parse(query.as_bytes())
-                    .find(|(k, _)| k == "token")
-                    .map(|(_, v)| v.to_string())
-            });
+            .map(|s| s.to_string());
 
-        if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req
-                .peer_addr()
-                .map(|a| a.to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-            log::warn!(
-                "SECURITY: Rejected unauthenticated WebSocket upgrade on /ws/mcp-relay from {}",
-                client_ip
-            );
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Authentication required"})));
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        let token = header_token.or_else(|| {
+            let found = url::form_urlencoded::parse(req.query_string().as_bytes())
+                .find(|(k, _)| k == "token")
+                .map(|(_, v)| v.to_string());
+            if found.is_some() {
+                log::warn!(
+                    "SECURITY: /ws/mcp-relay upgrade authenticated via ?token= query string — \
+                     dev-only path (ADR-2058). Use the Authorization header."
+                );
+            }
+            found
+        });
+
+        #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+        let token = {
+            if req.query_string().contains("token=") {
+                log::warn!(
+                    "SECURITY: Rejecting ?token= query-string auth on /ws/mcp-relay — \
+                     ADR-2058 requires the Authorization header in release builds"
+                );
+            }
+            header_token
+        };
+
+        let token = match token {
+            Some(t) if !t.is_empty() => t,
+            _ => return unauthorised("no bearer token or ?token= present"),
+        };
+
+        // Fail closed when the service is absent: without a session store there
+        // is nothing to validate against, so the socket must not open.
+        let Some(nostr_service) = app_state.nostr_service.clone() else {
+            return unauthorised("no NostrService configured — cannot validate the session token");
+        };
+
+        if nostr_service.get_session(&token).await.is_none() {
+            return unauthorised("token does not name a live, unexpired session");
         }
     }
 

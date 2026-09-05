@@ -110,35 +110,72 @@ pub async fn websocket_client_messages(
 ) -> Result<HttpResponse, actix_web::Error> {
     info!("New client messages WebSocket connection request");
 
-    // SECURITY: WebSocket token validation at upgrade time.
-    // Extracts token from Authorization header or query string.
-    // Currently allows but logs unauthenticated connections -- enforcement will come
-    // when all clients send tokens.
+    // SECURITY (ADR-2044, ADR-2058): WebSocket token validation at upgrade time.
+    //
+    // The token comes from the `Authorization: Bearer` header. The `?token=`
+    // query fallback is compiled in for development builds ONLY: a session token
+    // in a query string reaches proxy and access logs, which contradicts legacy
+    // ADR-011's header-only stance.
+    //
+    // It was originally kept for one release on the assumption that XR and
+    // native clients could not set headers on an upgrade. That assumption was
+    // wrong and is corrected here: the Godot client authenticates POST-connect
+    // via `nip98_authenticate_json` (`xr-client/rust/src/signer.rs:110-114`,
+    // sending `{"type":"authenticate","event":"<base64>"}`), and neither
+    // `xr-client/rust/src/` nor `client/src/services/` contains a `token=`
+    // query use at all. With no in-tree consumer the query path is closed in
+    // release rather than deprecated. vc-gpu-wire closed the equivalent sites in
+    // `socket_flow_handler/` and `fastwebsockets_handler.rs` under ADR-2058.
+    //
+    // This previously accepted ANY non-empty string: it checked only that a
+    // token was present, never that it named a live session, so `?token=x` was
+    // sufficient to open the socket. It now resolves the token through
+    // `NostrService::get_session`, which as of ADR-2044 also enforces the
+    // `AUTH_TOKEN_EXPIRY` window. Unknown, expired and absent tokens all fail
+    // closed to 401.
     {
         let token = req
             .headers()
             .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                let query = req.query_string();
-                url::form_urlencoded::parse(query.as_bytes())
-                    .find(|(k, _)| k == "token")
-                    .map(|(_, v)| v.to_string())
-            });
+            .map(|s| s.to_string());
 
-        if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req
-                .peer_addr()
-                .map(|a| a.to_string())
-                .unwrap_or_else(|| "unknown".to_string());
+        // ADR-2058: dev-only `?token=` fallback. Absent from release binaries.
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        let token = token.or_else(|| {
+            let query = req.query_string();
+            url::form_urlencoded::parse(query.as_bytes())
+                .find(|(k, _)| k == "token")
+                .map(|(_, v)| v.to_string())
+        });
+
+        let client_ip = req
+            .peer_addr()
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let unauthorised = |reason: &str| {
             log::warn!(
-                "SECURITY: Rejected unauthenticated WebSocket upgrade on /ws/client-messages from {}",
-                client_ip
+                "SECURITY: rejected WebSocket upgrade on /ws/client-messages from {client_ip} — {reason}"
             );
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Authentication required"})));
+            Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Authentication required"})))
+        };
+
+        let token = match token {
+            Some(t) if !t.is_empty() => t,
+            _ => return unauthorised("no bearer token or ?token= present"),
+        };
+
+        // Fail closed when the service is absent: without a session store there
+        // is nothing to validate against, so the socket must not open.
+        let Some(nostr_service) = app_state.nostr_service.clone() else {
+            return unauthorised("no NostrService configured — cannot validate the session token");
+        };
+
+        if nostr_service.get_session(&token).await.is_none() {
+            return unauthorised("token does not name a live, unexpired session");
         }
     }
 

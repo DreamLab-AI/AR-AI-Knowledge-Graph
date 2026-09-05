@@ -10,6 +10,9 @@ use visionclaw_domain::models::constraints::{AdvancedParams, Constraint};
 // Protocol versions for wire format (V1 REMOVED - no backward compatibility)
 // PROTOCOL_V2 (value: 2) removed — server no longer sends or decodes V2 frames
 const PROTOCOL_V3: u8 = 3; // Analytics extension protocol (P0-4) - CURRENT
+// V5 broadcast envelope: wraps a V3 body with a monotonic sequence for client-side
+// drop/reorder detection. Owned by docs/PROTOCOL-registry.md, locked by ADR-2057.
+const PROTOCOL_V5: u8 = 5;
 
 // Node type flag constants for u32 (server-side)
 const AGENT_NODE_FLAG: u32 = 0x80000000;
@@ -79,6 +82,28 @@ const WIRE_V3_ITEM_SIZE: usize = WIRE_V2_ID_SIZE
     + WIRE_U32_SIZE
     + WIRE_F32_SIZE; // id + pos + vel + sssp_dist + sssp_parent + cluster_id + anomaly_score + community_id + centrality = 52
 
+// ── ADR-2057: compile-time wire-size lock ───────────────────────────────────
+// The 52-byte V3 record is the wire contract four shipping clients speak. This
+// assertion is `const`, not a `#[test]`: the previous test-only `assert_eq!`s
+// (still present in `mod tests`) only held when the suite ran, so a change to
+// any WIRE_*_SIZE constant could reach a release build unnoticed. A const
+// assert fails the build instead. Mirrors the `size_of::<SimParams>() == 212`
+// lock in `src/models/simulation_params.rs` (ADR-2028).
+// PROTOCOL-registry.md "Invariants" — V3 record is exactly 52 bytes.
+const _: () = assert!(
+    WIRE_V3_ITEM_SIZE == 52,
+    "ADR-2057: V3 wire record must be exactly 52 bytes — changing it breaks every deployed client decoder"
+);
+
+// The V5 envelope prefixes the V3 body with an 8-byte little-endian broadcast
+// sequence: [0x05][u64 broadcast_seq LE][V3 body]. Locked here so the decode
+// branch at `decode_node_data` and the client constants stay in step.
+const WIRE_V5_SEQ_SIZE: usize = 8;
+const _: () = assert!(
+    WIRE_V5_SEQ_SIZE == 8,
+    "ADR-2057: V5 envelope sequence prefix must be exactly 8 bytes"
+);
+
 // Backwards compatibility alias - now defaults to V3
 const WIRE_ID_SIZE: usize = WIRE_V2_ID_SIZE;
 const WIRE_ITEM_SIZE: usize = WIRE_V3_ITEM_SIZE;
@@ -114,38 +139,98 @@ const WIRE_ITEM_SIZE: usize = WIRE_V3_ITEM_SIZE;
 // - V2/V3: Bits 26-28 of u32 ID for Ontology types (Bit 26 = Class, Bit 27 = Individual, Bit 28 = Property)
 // This allows the client to distinguish between different node types for visualization.
 
-pub fn set_agent_flag(node_id: u32) -> u32 {
+/// Node class a wire id is being stamped with. Named so an overflow log says
+/// which encoder branch produced it, including the previously-silent untyped one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WireIdClass {
+    Agent,
+    Knowledge,
+    OntologyClass,
+    OntologyIndividual,
+    OntologyProperty,
+    /// The untyped fall-through branch of the encoder: a node in no class list.
+    Untyped,
+}
+
+impl WireIdClass {
+    fn as_str(self) -> &'static str {
+        match self {
+            WireIdClass::Agent => "agent",
+            WireIdClass::Knowledge => "knowledge",
+            WireIdClass::OntologyClass => "ontology-class",
+            WireIdClass::OntologyIndividual => "ontology-individual",
+            WireIdClass::OntologyProperty => "ontology-property",
+            WireIdClass::Untyped => "untyped",
+        }
+    }
+}
+
+/// Enforce the 26-bit ephemeral wire-id bound for **every** node class,
+/// including untyped (ADR-2024).
+///
+/// # The policy this implements
+///
+/// A wire id is 26 bits; bits 26..=31 are class flags. An id above
+/// [`NODE_ID_MASK`] therefore cannot be carried without colliding with a flag
+/// bit, which would silently retype the node on every client.
+///
+/// The closeout finding was that the five *typed* setters logged and masked in
+/// release, while the untyped branch only `debug_assert!`ed and then forwarded
+/// the id unchanged — so a release build shipped an over-range id straight onto
+/// the wire with no diagnostic at all, where it would alias an existing id and
+/// pick up a spurious class flag.
+///
+/// The policy is now uniform across all six branches, and identical in debug and
+/// release: **remap by masking to 26 bits, and log the overflow as an error**.
+/// Masking rather than dropping the node is deliberate — a dropped node vanishes
+/// from the layout with no trace, whereas a masked one is visibly wrong *and*
+/// leaves a log line naming the class and both ids. `debug_assert!` is retained
+/// so a development build fails loudly at the offending call site, but release
+/// no longer depends on it for either the diagnostic or the bound.
+///
+/// Returns the id masked into wire range, never a value above [`NODE_ID_MASK`].
+pub fn enforce_wire_id_bounds(node_id: u32, class: WireIdClass) -> u32 {
     debug_assert!(
         node_id <= NODE_ID_MASK,
-        "Node ID {} (0x{:08X}) exceeds 26-bit limit (max {}). Use compact wire IDs.",
+        "Node ID {} (0x{:08X}) exceeds 26-bit limit (max {}) on the {} branch. Use compact wire IDs.",
         node_id,
         node_id,
-        NODE_ID_MASK
+        NODE_ID_MASK,
+        class.as_str()
     );
-    if node_id > NODE_ID_MASK {
+    let (masked, overflowed) = remap_wire_id(node_id);
+    if overflowed {
         error!(
-            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
-            node_id
+            "NODE ID OVERFLOW: {} id {} (0x{:08X}) exceeds 26-bit NODE_ID_MASK, remapped to {} \
+             — data-integrity hazard, the wire id now aliases another node (ADR-2024)",
+            class.as_str(),
+            node_id,
+            node_id,
+            masked
         );
     }
-    (node_id & NODE_ID_MASK) | AGENT_NODE_FLAG
+    masked
+}
+
+/// The bound enforcement itself, without the development-only assertion:
+/// returns the id remapped into 26-bit wire range and whether it overflowed.
+///
+/// This is the code a **release** build actually runs, split out so the overflow
+/// behaviour can be tested directly. Testing through
+/// [`enforce_wire_id_bounds`] cannot reach the overflow branch, because
+/// `debug_assert!` is active in a test profile and would panic first — which is
+/// precisely how the release-only gap in the untyped branch went unnoticed.
+#[inline]
+pub fn remap_wire_id(node_id: u32) -> (u32, bool) {
+    (node_id & NODE_ID_MASK, node_id > NODE_ID_MASK)
+}
+
+pub fn set_agent_flag(node_id: u32) -> u32 {
+    enforce_wire_id_bounds(node_id, WireIdClass::Agent) | AGENT_NODE_FLAG
 }
 
 pub fn set_knowledge_flag(node_id: u32) -> u32 {
-    debug_assert!(
-        node_id <= NODE_ID_MASK,
-        "Node ID {} (0x{:08X}) exceeds 26-bit limit (max {}). Use compact wire IDs.",
-        node_id,
-        node_id,
-        NODE_ID_MASK
-    );
-    if node_id > NODE_ID_MASK {
-        error!(
-            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
-            node_id
-        );
-    }
-    (node_id & NODE_ID_MASK) | KNOWLEDGE_NODE_FLAG
+    enforce_wire_id_bounds(node_id, WireIdClass::Knowledge) | KNOWLEDGE_NODE_FLAG
 }
 
 pub fn clear_agent_flag(node_id: u32) -> u32 {
@@ -195,54 +280,15 @@ pub fn get_node_type(node_id: u32) -> NodeType {
 }
 
 pub fn set_ontology_class_flag(node_id: u32) -> u32 {
-    debug_assert!(
-        node_id <= NODE_ID_MASK,
-        "Node ID {} (0x{:08X}) exceeds 26-bit limit (max {}). Use compact wire IDs.",
-        node_id,
-        node_id,
-        NODE_ID_MASK
-    );
-    if node_id > NODE_ID_MASK {
-        error!(
-            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
-            node_id
-        );
-    }
-    (node_id & NODE_ID_MASK) | ONTOLOGY_CLASS_FLAG
+    enforce_wire_id_bounds(node_id, WireIdClass::OntologyClass) | ONTOLOGY_CLASS_FLAG
 }
 
 pub fn set_ontology_individual_flag(node_id: u32) -> u32 {
-    debug_assert!(
-        node_id <= NODE_ID_MASK,
-        "Node ID {} (0x{:08X}) exceeds 26-bit limit (max {}). Use compact wire IDs.",
-        node_id,
-        node_id,
-        NODE_ID_MASK
-    );
-    if node_id > NODE_ID_MASK {
-        error!(
-            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
-            node_id
-        );
-    }
-    (node_id & NODE_ID_MASK) | ONTOLOGY_INDIVIDUAL_FLAG
+    enforce_wire_id_bounds(node_id, WireIdClass::OntologyIndividual) | ONTOLOGY_INDIVIDUAL_FLAG
 }
 
 pub fn set_ontology_property_flag(node_id: u32) -> u32 {
-    debug_assert!(
-        node_id <= NODE_ID_MASK,
-        "Node ID {} (0x{:08X}) exceeds 26-bit limit (max {}). Use compact wire IDs.",
-        node_id,
-        node_id,
-        NODE_ID_MASK
-    );
-    if node_id > NODE_ID_MASK {
-        error!(
-            "NODE ID OVERFLOW: id {} exceeds 26-bit NODE_ID_MASK, truncating — data-integrity hazard (ADR-2024)",
-            node_id
-        );
-    }
-    (node_id & NODE_ID_MASK) | ONTOLOGY_PROPERTY_FLAG
+    enforce_wire_id_bounds(node_id, WireIdClass::OntologyProperty) | ONTOLOGY_PROPERTY_FLAG
 }
 
 pub fn is_ontology_class(node_id: u32) -> bool {
@@ -264,6 +310,10 @@ pub fn is_ontology_node(node_id: u32) -> bool {
 // to_wire_id_v1 and from_wire_id_v1 REMOVED - V1 protocol no longer supported
 // Use to_wire_id_v2/from_wire_id_v2 for full 32-bit node ID support
 
+/// Identity by design (ADR-2024): this runs on an **already-flagged** id, whose
+/// bits 26..=31 legitimately carry the node class. Masking here would strip the
+/// class off every node. The 26-bit bound is enforced upstream, on the bare id,
+/// by [`enforce_wire_id_bounds`] — see that function for the policy.
 pub fn to_wire_id_v2(node_id: u32) -> u32 {
     node_id
 }
@@ -413,12 +463,11 @@ pub fn encode_node_data_extended_with_sssp(
         } else if ontology_property_ids.contains(node_id) {
             set_ontology_property_flag(*node_id)
         } else {
-            debug_assert!(
-                *node_id <= NODE_ID_MASK,
-                "Unflatten node ID {} (0x{:08X}) exceeds 26-bit limit (max {}). Raw persistent ID may have leaked to wire.",
-                node_id, node_id, NODE_ID_MASK
-            );
-            *node_id
+            // ADR-2024: the untyped branch previously only debug_assert!ed and
+            // then forwarded the id unchanged, so a release build shipped an
+            // over-range id onto the wire with no diagnostic. It now enforces the
+            // same bound as the five typed branches.
+            enforce_wire_id_bounds(*node_id, WireIdClass::Untyped)
         };
 
         if sample_size > 0 && *node_id < sample_size as u32 {
@@ -540,13 +589,13 @@ pub fn decode_node_data(data: &[u8]) -> Result<Vec<(u32, BinaryNodeData)>, Strin
         1 => Err("Protocol V1 is no longer supported. Please upgrade client.".to_string()),
         2 => Err("V2 protocol no longer supported. Please upgrade client to V3+.".to_string()),
         PROTOCOL_V3 => decode_node_data_v3(payload),
-        5 => {
-            // V5: [version_byte][8-byte broadcast_seq][V3 node data]
-            if payload.len() < 8 {
+        PROTOCOL_V5 => {
+            // V5: [version_byte][u64 broadcast_seq LE][V3 node data]
+            if payload.len() < WIRE_V5_SEQ_SIZE {
                 return Err("V5 frame too small for broadcast sequence".to_string());
             }
-            // Skip 8-byte broadcast sequence number
-            decode_node_data_v3(&payload[8..])
+            // Skip the broadcast sequence number (ADR-2057 locks its width).
+            decode_node_data_v3(&payload[WIRE_V5_SEQ_SIZE..])
         }
         v => Err(format!("Unknown protocol version: {}", v)),
     }
@@ -727,6 +776,292 @@ fn decode_node_data_v3(data: &[u8]) -> Result<Vec<(u32, BinaryNodeData)>, String
 pub fn calculate_message_size(updates: &[(u32, BinaryNodeData)]) -> usize {
     // V3 is now the default protocol (52 bytes per node, ADR-031 D2 centrality@48)
     1 + updates.len() * WIRE_V3_ITEM_SIZE
+}
+
+#[cfg(test)]
+mod adr_2024_wire_id_bounds {
+    //! ADR-2024: every encoder branch, including the untyped one, must enforce
+    //! the 26-bit wire-id bound in a **release** build — not only under
+    //! `debug_assert!`. These tests target [`remap_wire_id`], which is the code a
+    //! release build runs; the assertion wrapper is exercised separately for
+    //! in-range ids, because `debug_assert!` is live in a test profile.
+    use super::*;
+
+    /// One over the largest representable wire id (2^26).
+    const FIRST_OVERFLOW: u32 = NODE_ID_MASK + 1;
+
+    fn all_classes() -> [WireIdClass; 6] {
+        [
+            WireIdClass::Agent,
+            WireIdClass::Knowledge,
+            WireIdClass::OntologyClass,
+            WireIdClass::OntologyIndividual,
+            WireIdClass::OntologyProperty,
+            WireIdClass::Untyped,
+        ]
+    }
+
+    #[test]
+    fn in_range_ids_pass_through_every_class_untouched() {
+        for class in all_classes() {
+            for id in [0u32, 1, 4_095, NODE_ID_MASK] {
+                assert_eq!(
+                    enforce_wire_id_bounds(id, class),
+                    id,
+                    "{class:?} must not disturb an in-range id"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_release_path_remaps_every_over_range_id_and_reports_it() {
+        // The behaviour a release build has, for every class. Before ADR-2024's
+        // closeout the untyped branch did neither: no remap, no report.
+        for id in [FIRST_OVERFLOW, FIRST_OVERFLOW + 7, 0x8000_0000, u32::MAX] {
+            let (masked, overflowed) = remap_wire_id(id);
+            assert!(overflowed, "id {id:#010X} must be reported as overflowing");
+            assert!(
+                masked <= NODE_ID_MASK,
+                "remapped id {masked:#010X} must fit the 26-bit field"
+            );
+            assert_eq!(masked, id & NODE_ID_MASK);
+        }
+    }
+
+    #[test]
+    fn the_boundary_is_exact() {
+        // The largest valid id is not an overflow; the next one is.
+        assert_eq!(remap_wire_id(NODE_ID_MASK), (NODE_ID_MASK, false));
+        assert_eq!(remap_wire_id(FIRST_OVERFLOW), (0, true));
+    }
+
+    #[test]
+    fn a_remapped_id_never_leaks_into_the_class_flag_bits() {
+        // This is the harm the bound exists to prevent: an unmasked over-range id
+        // sets flag bits, so a plain node arrives at every client retyped.
+        let leaky = 0x8400_0000u32; // would set both the agent-ish and class bits
+        let (masked, overflowed) = remap_wire_id(leaky);
+        assert!(overflowed);
+        assert_eq!(masked & !NODE_ID_MASK, 0, "no flag bit survives the remap");
+        assert_eq!(get_node_type(masked), NodeType::Unknown);
+    }
+
+    #[test]
+    fn each_typed_setter_stamps_only_its_own_class() {
+        // Bound enforcement must not have disturbed the class stamping.
+        let id = 42u32;
+        assert!(is_agent_node(set_agent_flag(id)));
+        assert!(is_knowledge_node(set_knowledge_flag(id)));
+        assert!(is_ontology_class(set_ontology_class_flag(id)));
+        assert!(is_ontology_individual(set_ontology_individual_flag(id)));
+        assert!(is_ontology_property(set_ontology_property_flag(id)));
+        for flagged in [
+            set_agent_flag(id),
+            set_knowledge_flag(id),
+            set_ontology_class_flag(id),
+            set_ontology_individual_flag(id),
+            set_ontology_property_flag(id),
+        ] {
+            assert_eq!(get_actual_node_id(flagged), id, "id survives its flag");
+        }
+    }
+
+    #[test]
+    fn the_untyped_encoder_branch_emits_a_bounded_wire_id() {
+        // End-to-end through the encoder: a node in no class list still has its
+        // id bounded before it reaches the buffer. An in-range id is used so the
+        // development assertion does not fire; the remap itself is covered above.
+        let node = BinaryNodeData {
+            node_id: NODE_ID_MASK,
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            vx: 0.0,
+            vy: 0.0,
+            vz: 0.0,
+        };
+        let encoded = encode_node_data_with_types(&[(NODE_ID_MASK, node)], &[], &[]);
+        assert_eq!(encoded.len(), 1 + WIRE_V3_ITEM_SIZE);
+        let wire_id = u32::from_le_bytes([encoded[1], encoded[2], encoded[3], encoded[4]]);
+        assert_eq!(wire_id, NODE_ID_MASK);
+        assert_eq!(
+            wire_id & !NODE_ID_MASK,
+            0,
+            "untyped node must carry no class flag"
+        );
+        assert_eq!(get_node_type(wire_id), NodeType::Unknown);
+    }
+}
+
+#[cfg(test)]
+mod adr_2019_shared_fixture_equivalence {
+    //! ADR-2019: the shared wire fixtures must be the *real* encoder's output,
+    //! not a second implementation of the protocol. Both client decoders test
+    //! against `visionclaw_protocol::wire_fixtures`; these tests pin those
+    //! fixtures to this crate's live encoders byte for byte, so a producer change
+    //! breaks here rather than silently invalidating every consumer test.
+    use super::*;
+    use visionclaw_protocol::wire_fixtures as fx;
+
+    #[test]
+    fn the_v3_fixture_matches_the_real_position_encoder_byte_for_byte() {
+        let nodes: Vec<(u32, BinaryNodeData)> = (1u32..=3)
+            .map(|i| {
+                (
+                    i,
+                    BinaryNodeData {
+                        node_id: i,
+                        x: i as f32,
+                        y: i as f32 * 2.0,
+                        z: i as f32 * 3.0,
+                        vx: 0.0,
+                        vy: 0.0,
+                        vz: 0.0,
+                    },
+                )
+            })
+            .collect();
+        let real = encode_node_data_with_types(&nodes, &[], &[]);
+
+        let fixture = fx::v3_frame(
+            &nodes
+                .iter()
+                .map(|(id, n)| fx::NodeRecord::plain(*id, [n.x, n.y, n.z]))
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            real, fixture,
+            "shared V3 fixture has drifted from the real encoder"
+        );
+    }
+
+    #[test]
+    fn the_fixture_record_size_matches_the_frozen_wire_item() {
+        assert_eq!(fx::NODE_RECORD_BYTES, WIRE_V3_ITEM_SIZE);
+        assert_eq!(fx::PROTOCOL_V3, PROTOCOL_V3);
+        assert_eq!(fx::NODE_ID_MASK, NODE_ID_MASK);
+        assert_eq!(fx::OPCODE_AGENT_ACTION, MessageType::AgentAction as u8);
+    }
+
+    #[test]
+    fn the_action_fixture_matches_the_real_batch_encoder_byte_for_byte() {
+        let real_events = vec![
+            AgentActionEvent {
+                source_agent_id: 11,
+                target_node_id: 21,
+                action_type: 0,
+                timestamp: 1_000,
+                duration_ms: 250,
+                payload: Vec::new(),
+            },
+            AgentActionEvent {
+                source_agent_id: 12,
+                target_node_id: 22,
+                action_type: 0,
+                timestamp: 1_001,
+                duration_ms: 250,
+                payload: Vec::new(),
+            },
+        ];
+        let real = encode_agent_actions(&real_events);
+
+        let fixture = fx::agent_action_frame(&[
+            fx::ActionEvent::plain(11, 21, 1_000),
+            fx::ActionEvent::plain(12, 22, 1_001),
+        ]);
+        assert_eq!(
+            real, fixture,
+            "shared 0x23 fixture has drifted from the real encoder"
+        );
+    }
+
+    #[test]
+    fn the_v5_envelope_is_purely_additive_over_the_real_v3_body() {
+        // ADR-2018's invariant, checked against the real encoder: stripping the
+        // V5 header must leave exactly the bytes the V3 encoder produces.
+        let node = BinaryNodeData {
+            node_id: 5,
+            x: 1.0,
+            y: 2.0,
+            z: 3.0,
+            vx: 0.0,
+            vy: 0.0,
+            vz: 0.0,
+        };
+        let real_v3 = encode_node_data_with_types(&[(5, node)], &[], &[]);
+        let fixture_v5 = fx::v5_frame(77, &[fx::NodeRecord::plain(5, [1.0, 2.0, 3.0])]);
+        assert_eq!(&real_v3[1..], &fixture_v5[1 + fx::V5_SEQ_BYTES..]);
+        assert_eq!(fx::v5_sequence_of(&fixture_v5), Some(77));
+    }
+
+    #[test]
+    fn the_server_decoder_reads_the_shared_v5_fixture() {
+        // The server's own decode_node_data must accept the same fixture the
+        // clients decode, so the "policy" is one policy and not three.
+        let fixture = fx::v5_frame(9, &[fx::NodeRecord::plain(5, [1.0, 2.0, 3.0])]);
+        let decoded = decode_node_data(&fixture).expect("server decodes the shared fixture");
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].0, 5);
+    }
+
+    #[test]
+    fn the_server_decoder_rejects_a_truncated_v5_sequence() {
+        // Per-opcode policy: the sequence is envelope header. A frame cut inside
+        // it is refused, never read as sequence zero.
+        for kept in 0..fx::V5_SEQ_BYTES {
+            let frame = fx::v5_frame_truncated_sequence(kept);
+            assert!(
+                decode_node_data(&frame).is_err(),
+                "kept {kept} sequence bytes must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn the_server_decoder_rejects_unknown_position_versions() {
+        for version in [0x00u8, 0x01, 0x02, 0x04, 0x06, 0x23, 0x43, 0x44, 0xFF] {
+            let frame =
+                fx::frame_with_unknown_version(version, &[fx::NodeRecord::plain(1, [0.0; 3])]);
+            assert!(
+                decode_node_data(&frame).is_err(),
+                "version {version:#04x} must be refused by the server decoder"
+            );
+        }
+    }
+
+    #[test]
+    fn the_server_action_decoder_refuses_a_truncated_batch_whole() {
+        // The *server* batch decoder is strict where the visual client decoder is
+        // tolerant. Recording the difference is the point of ADR-2019's
+        // per-opcode policy: the same opcode has different acceptance rules on
+        // the ingest side and the render side, and neither is a bug.
+        let events = [
+            fx::ActionEvent::plain(11, 21, 1_000),
+            fx::ActionEvent::plain(12, 22, 1_001),
+        ];
+        let truncated = fx::agent_action_frame_truncated(&events, 8);
+        assert!(
+            decode_agent_actions(&truncated[1..]).is_err(),
+            "server-side batch decode is all-or-nothing"
+        );
+
+        // …while a complete batch round-trips.
+        let whole = fx::agent_action_frame(&events);
+        let decoded = decode_agent_actions(&whole[1..]).expect("complete batch decodes");
+        assert_eq!(decoded.len(), 2);
+        assert_eq!(decoded[0].source_agent_id, 11);
+    }
+
+    #[test]
+    fn the_server_action_decoder_bounds_an_overstated_count() {
+        let events = [fx::ActionEvent::plain(1, 2, 3)];
+        let frame = fx::agent_action_frame_overstated_count(&events, 9);
+        assert!(
+            decode_agent_actions(&frame[1..]).is_err(),
+            "an overstated count must be refused, never over-read"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1368,7 +1703,9 @@ impl ControlFrame {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MessageType {
-    /// Binary position updates using Protocol V3 (48 bytes/node)
+    /// Binary position updates using Protocol V3 (52 bytes/node — see
+    /// `WIRE_V3_ITEM_SIZE`, locked by ADR-2057). The 48-byte figure this comment
+    /// previously carried was an interim analytics count retired by ADR-2018.
     BinaryPositions = 0,
 
     VoiceData = 0x02,

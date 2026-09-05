@@ -225,20 +225,47 @@ impl FastWebSocketServer {
             }
         }
 
-        // SECURITY: Require authentication token before WebSocket upgrade
-        let token = req
+        // SECURITY: Require authentication token before WebSocket upgrade.
+        // ADR-2058: the Authorization header is the only accepted carrier in a
+        // release build. The `?token=` query fallback leaks the bearer token into
+        // access logs, proxy logs and Referer headers. It is compiled out of release
+        // and survives only behind the dev-auth gate. Clients that cannot set headers
+        // on an upgrade authenticate post-connect with the NIP-98 `authenticate`
+        // envelope (kind 27235) — the path the XR client already uses
+        // (`xr-client/rust/src/signer.rs:110-114`).
+        let header_token = req
             .headers()
             .get("authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                req.uri().query().and_then(|q| {
-                    url::form_urlencoded::parse(q.as_bytes())
-                        .find(|(k, _)| k == "token")
-                        .map(|(_, v)| v.to_string())
-                })
+            .map(|s| s.to_string());
+
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        let token = header_token.or_else(|| {
+            let found = req.uri().query().and_then(|q| {
+                url::form_urlencoded::parse(q.as_bytes())
+                    .find(|(k, _)| k == "token")
+                    .map(|(_, v)| v.to_string())
             });
+            if found.is_some() {
+                warn!(
+                    "SECURITY: fastwebsockets upgrade authenticated via ?token= query string — \
+                     dev-only path (ADR-2058). Use the Authorization header."
+                );
+            }
+            found
+        });
+
+        #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+        let token = {
+            if req.uri().query().is_some_and(|q| q.contains("token=")) {
+                warn!(
+                    "SECURITY: Rejecting ?token= query-string auth on the fastwebsockets \
+                     endpoint — ADR-2058 requires the Authorization header in release builds"
+                );
+            }
+            header_token
+        };
 
         if token.as_deref().unwrap_or("").is_empty() {
             warn!(

@@ -12,7 +12,6 @@ use serde_json::json;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
-use crate::ok_json;
 use crate::services::agent_visualization_protocol::McpServerType;
 use crate::AppState;
 // DEPRECATED: HybridHealthManager removed
@@ -784,83 +783,96 @@ pub async fn multi_mcp_visualization_ws(
 ) -> ActixResult<HttpResponse> {
     debug!("Starting Multi-MCP visualization WebSocket connection");
 
-    // SECURITY: Require authentication before WebSocket upgrade
+    // SECURITY (ADR-2090): WebSocket credential validation at upgrade time.
+    //
+    // This previously accepted ANY non-empty string: it checked only that a
+    // token was present, never that it named a live session, so `?token=x` was
+    // sufficient to open the socket. It now resolves the token through
+    // `NostrService::get_session`, which as of ADR-2044 also enforces the
+    // `AUTH_TOKEN_EXPIRY` window. Unknown, expired and absent tokens all fail
+    // closed to 401.
     {
-        let token = req
+        let client_ip = req
+            .peer_addr()
+            .map(|a| a.to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let unauthorised = |reason: &str| {
+            warn!(
+                "SECURITY: Rejected WebSocket upgrade on /multi-mcp/ws from {} — {}",
+                client_ip, reason
+            );
+            Ok(HttpResponse::Unauthorized()
+                .json(serde_json::json!({"error": "Authentication required"})))
+        };
+
+        // ADR-2058/ADR-2090: the Authorization header is the ONLY accepted carrier
+        // in a release build. The `?token=` query fallback leaks the bearer token
+        // into access logs, proxy logs and Referer headers. It is compiled out of
+        // release and survives only behind the dev-auth gate. Clients that cannot
+        // set headers on an upgrade authenticate post-connect with the NIP-98
+        // `authenticate` envelope (kind 27235).
+        let header_token = req
             .headers()
             .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                let query = req.query_string();
-                url::form_urlencoded::parse(query.as_bytes())
-                    .find(|(k, _)| k == "token")
-                    .map(|(_, v)| v.to_string())
-            });
+            .map(|s| s.to_string());
 
-        if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req
-                .peer_addr()
-                .map(|a| a.to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-            warn!(
-                "SECURITY: Rejected unauthenticated WebSocket upgrade on /multi-mcp/ws from {}",
-                client_ip
-            );
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Authentication required"})));
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        let token = header_token.or_else(|| {
+            let found = url::form_urlencoded::parse(req.query_string().as_bytes())
+                .find(|(k, _)| k == "token")
+                .map(|(_, v)| v.to_string());
+            if found.is_some() {
+                warn!(
+                    "SECURITY: /multi-mcp/ws upgrade authenticated via ?token= query string — \
+                     dev-only path (ADR-2058). Use the Authorization header."
+                );
+            }
+            found
+        });
+
+        #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+        let token = {
+            if req.query_string().contains("token=") {
+                warn!(
+                    "SECURITY: Rejecting ?token= query-string auth on /multi-mcp/ws — \
+                     ADR-2058 requires the Authorization header in release builds"
+                );
+            }
+            header_token
+        };
+
+        let token = match token {
+            Some(t) if !t.is_empty() => t,
+            _ => return unauthorised("no bearer token or ?token= present"),
+        };
+
+        // Fail closed when the service is absent: without a session store there
+        // is nothing to validate against, so the socket must not open.
+        let Some(nostr_service) = app_state.nostr_service.clone() else {
+            return unauthorised("no NostrService configured — cannot validate the session token");
+        };
+
+        if nostr_service.get_session(&token).await.is_none() {
+            return unauthorised("token does not name a live, unexpired session");
         }
     }
 
     ws::start(MultiMcpVisualizationWs::new(app_state, None), &req, stream)
 }
 
-pub async fn get_mcp_server_status(_app_state: web::Data<AppState>) -> ActixResult<HttpResponse> {
-    let response = json!({
-        "servers": [
-            {
-                "server_id": "claude-flow",
-                "server_type": "claude_flow",
-                "host": "localhost",
-                "port": 9500,
-                "is_connected": true,
-                "agent_count": 4
-            },
-            {
-                "server_id": "ruv-swarm",
-                "server_type": "ruv_swarm",
-                "host": "localhost",
-                "port": 9501,
-                "is_connected": false,
-                "agent_count": 0
-            }
-        ],
-        "total_agents": 4,
-        "timestamp": chrono::Utc::now().timestamp_millis()
-    });
-
-    Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .json(response))
-}
-
-pub async fn refresh_mcp_discovery(_app_state: web::Data<AppState>) -> ActixResult<HttpResponse> {
-    info!("Manual MCP discovery refresh requested");
-
-    ok_json!(json!({
-        "success": true,
-        "message": "Discovery refresh initiated",
-        "timestamp": chrono::Utc::now().timestamp_millis()
-    }))
-}
-
 pub fn configure_multi_mcp_routes(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/multi-mcp")
-            .route("/ws", web::get().to(multi_mcp_visualization_ws))
-            .route("/status", web::get().to(get_mcp_server_status))
-            .route("/refresh", web::post().to(refresh_mcp_discovery)),
+            // ADR-2091: /status and /refresh removed — both returned fiction.
+            // /status served a hardcoded server list (claude-flow reported
+            // is_connected:true with agent_count:4, never queried); /refresh
+            // reported "Discovery refresh initiated" while doing nothing.
+            // Both took _app_state unused. Real discovery state lives in
+            // services/multi_mcp_agent_discovery.rs — see ADR-2091.
+            .route("/ws", web::get().to(multi_mcp_visualization_ws)),
     );
 }
 

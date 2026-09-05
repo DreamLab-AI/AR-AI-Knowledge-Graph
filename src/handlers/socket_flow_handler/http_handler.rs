@@ -133,21 +133,49 @@ pub async fn socket_flow_handler(
     }
 
     // SECURITY: WebSocket token validation at upgrade time.
-    // Extract Bearer token from Authorization header or ?token= query param,
-    // then cryptographically validate it via NostrService.
+    // ADR-2058: the Authorization header is the ONLY accepted carrier in a release
+    // build. The former `?token=` query-string fallback is fail-open in the log
+    // sense — query strings land in access logs, proxy logs and Referer headers,
+    // so a bearer token in the URL leaks to every hop. It contradicted legacy
+    // ADR-011 and is now confined to dev builds behind the same gate as the other
+    // auth relaxations, so a production deployment cannot accept it at all.
     {
-        let token = req
+        let header_token = req
             .headers()
             .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                let query = req.query_string();
-                url::form_urlencoded::parse(query.as_bytes())
-                    .find(|(k, _)| k == "token")
-                    .map(|(_, v)| v.to_string())
-            });
+            .map(|s| s.to_string());
+
+        // Dev-only compatibility shim. Compiled out of release builds entirely.
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        let token = header_token.or_else(|| {
+            let query = req.query_string();
+            let found = url::form_urlencoded::parse(query.as_bytes())
+                .find(|(k, _)| k == "token")
+                .map(|(_, v)| v.to_string());
+            if found.is_some() {
+                warn!(
+                    "SECURITY: WebSocket client {} authenticated via ?token= query string — \
+                     dev-only path (ADR-2058), tokens in URLs leak to access logs and Referer \
+                     headers. Use the Authorization header.",
+                    client_ip
+                );
+            }
+            found
+        });
+
+        #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+        let token = {
+            if req.query_string().contains("token=") {
+                warn!(
+                    "SECURITY: Rejecting ?token= query-string auth from {} — ADR-2058 requires \
+                     the Authorization header in release builds",
+                    client_ip
+                );
+            }
+            header_token
+        };
 
         match token.as_deref() {
             Some(t) if !t.is_empty() => {
@@ -297,7 +325,9 @@ pub async fn socket_flow_handler(
         .and_then(|h| h.to_str().ok())
         .is_some();
 
-    // Extract token from query string for authentication
+    // ADR-2058: second query-string token extraction on this handler. Same rule as
+    // the upgrade-time check above — dev builds only, compiled out of release.
+    #[cfg(any(debug_assertions, feature = "dev-auth"))]
     let token_from_qs = req.query_string().split('&').find_map(|param| {
         let parts: Vec<&str> = param.split('=').collect();
         if parts.len() == 2 && parts[0] == "token" {
@@ -306,6 +336,9 @@ pub async fn socket_flow_handler(
             None
         }
     });
+
+    #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+    let token_from_qs: Option<String> = None;
 
     let mut ws_server = SocketFlowServer::new(
         app_state_arc.clone(),

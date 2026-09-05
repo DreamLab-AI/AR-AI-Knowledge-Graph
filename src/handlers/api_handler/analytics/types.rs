@@ -304,29 +304,25 @@ pub struct AnomalyState {
     pub stats: AnomalyStats,
 }
 
+// Seven of the original nine flags (`gpu_clustering`, `gpu_anomaly_detection`,
+// `real_time_insights`, `advanced_visualizations`, `performance_monitoring`,
+// `stress_majorization`, `semantic_constraints`) were removed 2026-09-05:
+// `FEATURE_FLAGS` (see `state.rs`) was verified to be read only in
+// `sssp_handlers.rs` (`sssp_integration`) and `ontology/mod.rs`
+// (`ontology_validation`) — every other field gated nothing anywhere in the
+// codebase. `ontology_validation` remains a real gate on the reasoning
+// endpoints; `sssp_integration` remains a display/contract field, echoed by
+// `/sssp/status` and toggled by `/sssp/toggle`, though it gates no behaviour
+// either.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FeatureFlags {
-    pub gpu_clustering: bool,
     pub ontology_validation: bool,
-    pub gpu_anomaly_detection: bool,
-    pub real_time_insights: bool,
-    pub advanced_visualizations: bool,
-    pub performance_monitoring: bool,
-    pub stress_majorization: bool,
-    pub semantic_constraints: bool,
     pub sssp_integration: bool,
 }
 
 impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
-            gpu_clustering: true,
-            gpu_anomaly_detection: true,
-            real_time_insights: true,
-            advanced_visualizations: true,
-            performance_monitoring: true,
-            stress_majorization: false,
-            semantic_constraints: false,
             sssp_integration: true,
             // Reasoning endpoints (/api/ontology/{validate,inferred,inference,
             // metrics,hierarchy}) are gated on this flag. The Whelk classifier

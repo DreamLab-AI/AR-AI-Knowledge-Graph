@@ -11,11 +11,12 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::actors::gpu::connected_components_actor::{
-    ComputeConnectedComponents, ConnectedComponentsResult, GetConnectedComponentsStats,
+    ComputeConnectedComponents, ConnectedComponentsResult,
 };
-use crate::actors::gpu::shortest_path_actor::{
-    APSPResult, ComputeAPSP, ComputeSSP, GetShortestPathStats, SSSPResult,
+use crate::actors::gpu::graph_analytics_supervisor::{
+    GetSupervisedComponentsStats, GetSupervisedShortestPathStats,
 };
+use crate::actors::gpu::shortest_path_actor::{APSPResult, ComputeAPSP, ComputeSSP, SSSPResult};
 use crate::ports::graph_repository::GraphRepository;
 use crate::services::pathfinding::{
     AStarPathfinder, BidirectionalDijkstra, JaccardEmbedding, PathAlgorithm,
@@ -138,14 +139,17 @@ pub async fn compute_sssp(
 ) -> Result<HttpResponse> {
     info!("API: Computing SSSP from node {}", payload.source_idx);
 
-    if let Some(ref shortest_path_actor) = data.shortest_path_actor {
+    // ADR-2053: routed through GPUManagerActor -> GraphAnalyticsSupervisor -> the
+    // SUPERVISED ShortestPathActor. The standalone actor this used to address was
+    // never sent a SharedGPUContext, so it always took the GPU-absent arm.
+    if let Some(ref gpu_manager) = data.gpu_manager_addr {
         let msg = ComputeSSP {
             source_idx: payload.source_idx,
             max_distance: payload.max_distance,
             delta: payload.delta,
         };
 
-        match shortest_path_actor.send(msg).await {
+        match gpu_manager.send(msg).await {
             Ok(Ok(result)) => {
                 info!(
                     "SSSP computed successfully: {} nodes reached",
@@ -203,7 +207,8 @@ pub async fn compute_apsp(
 ) -> Result<HttpResponse> {
     info!("API: Computing APSP");
 
-    if let Some(ref shortest_path_actor) = data.shortest_path_actor {
+    // ADR-2053: supervised path, see compute_sssp above.
+    if let Some(ref gpu_manager) = data.gpu_manager_addr {
         // Default to sqrt(n) landmarks if not specified
         let num_landmarks = payload.num_landmarks.unwrap_or(0);
 
@@ -212,7 +217,7 @@ pub async fn compute_apsp(
             seed: payload.seed,
         };
 
-        match shortest_path_actor.send(msg).await {
+        match gpu_manager.send(msg).await {
             Ok(Ok(result)) => {
                 info!(
                     "APSP computed successfully with {} landmarks",
@@ -269,13 +274,14 @@ pub async fn compute_connected_components(
 ) -> Result<HttpResponse> {
     info!("API: Computing connected components");
 
-    if let Some(ref connected_components_actor) = data.connected_components_actor {
+    // ADR-2053: supervised path, see compute_sssp above.
+    if let Some(ref gpu_manager) = data.gpu_manager_addr {
         let msg = ComputeConnectedComponents {
             max_iterations: payload.max_iterations,
             convergence_threshold: payload.convergence_threshold,
         };
 
-        match connected_components_actor.send(msg).await {
+        match gpu_manager.send(msg).await {
             Ok(Ok(result)) => {
                 info!(
                     "Connected components computed: {} components found",
@@ -318,27 +324,36 @@ pub async fn compute_connected_components(
 
 /// Get shortest path statistics
 pub async fn get_shortest_path_stats(data: web::Data<AppState>) -> Result<HttpResponse> {
-    if let Some(ref shortest_path_actor) = data.shortest_path_actor {
-        match shortest_path_actor.send(GetShortestPathStats).await {
-            Ok(stats) => ok_json!(stats),
+    // ADR-2053: the supervised wrapper returns Result, so "no actor" stays
+    // distinguishable from "genuinely all zeroes" — neither stats struct derives
+    // Default, which is exactly why a bare forward would have had to invent one.
+    if let Some(ref gpu_manager) = data.gpu_manager_addr {
+        match gpu_manager.send(GetSupervisedShortestPathStats).await {
+            Ok(Ok(stats)) => ok_json!(stats),
+            Ok(Err(e)) => {
+                error!("Shortest path stats unavailable: {}", e);
+                error_json!(e)
+            }
             Err(e) => {
                 error!("Failed to get shortest path stats: {}", e);
                 error_json!(format!("Failed to get stats: {}", e))
             }
         }
     } else {
-        error_json!("Shortest path actor not available")
+        error_json!("GPU manager not available")
     }
 }
 
 /// Get connected components statistics
 pub async fn get_connected_components_stats(data: web::Data<AppState>) -> Result<HttpResponse> {
-    if let Some(ref connected_components_actor) = data.connected_components_actor {
-        match connected_components_actor
-            .send(GetConnectedComponentsStats)
-            .await
-        {
-            Ok(stats) => ok_json!(stats),
+    // ADR-2053: supervised wrapper, see get_shortest_path_stats above.
+    if let Some(ref gpu_manager) = data.gpu_manager_addr {
+        match gpu_manager.send(GetSupervisedComponentsStats).await {
+            Ok(Ok(stats)) => ok_json!(stats),
+            Ok(Err(e)) => {
+                error!("Connected components stats unavailable: {}", e);
+                error_json!(e)
+            }
             Err(e) => {
                 error!("Failed to get connected components stats: {}", e);
                 error_json!(format!("Failed to get stats: {}", e))
@@ -522,7 +537,8 @@ pub async fn compute_point_to_point(
         PathAlgorithm::Sssp => {
             // Fall through to the GPU SSSP actor (requires index, not ID).
             // For point-to-point via SSSP, find the node index first.
-            if let Some(ref shortest_path_actor) = data.shortest_path_actor {
+            // ADR-2053: supervised path, see compute_sssp above.
+            if let Some(ref gpu_manager) = data.gpu_manager_addr {
                 // Find source index in graph
                 let source_idx = match graph_data
                     .nodes
@@ -548,7 +564,7 @@ pub async fn compute_point_to_point(
                     delta: None,
                 };
 
-                match shortest_path_actor.send(msg).await {
+                match gpu_manager.send(msg).await {
                     Ok(Ok(sssp_result)) => {
                         // Extract distance to target
                         let target_idx = graph_data

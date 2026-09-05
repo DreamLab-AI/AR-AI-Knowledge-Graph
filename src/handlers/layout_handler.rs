@@ -4,10 +4,28 @@ use crate::ok_json;
 use crate::AppState;
 use actix_web::{web, HttpResponse, Result};
 
+// The modes the live `SetLayoutMode` path on `ForceComputeActor`
+// (src/actors/gpu/force_compute_actor.rs) actually differentiates:
+// `ForceDirected` is the GPU-resident default baseline; `Radial` and
+// `Hierarchical` prime a real GPU force term (`dag_bias_k` / `layer_bias_k`
+// respectively — both read by the CUDA kernel); `Spectral` and `Temporal`
+// are CPU one-shot placements computed by `compute_layout` below.
+// `LayoutMode::Clustered` is deliberately excluded: it is classified
+// `is_gpu_resident() == true` so the early return below skips CPU placement,
+// but the actor's `SetLayoutMode` handler has no dedicated match arm for it —
+// it falls into the same catch-all as `ForceDirected` and clears both bias
+// terms. The only related term, `cluster_strength` (driving
+// `cluster_cohesion_kernel`), is an independent `/api/settings/physics` knob
+// applied unconditionally whenever it is > 0, regardless of the selected
+// layout mode. Selecting `Clustered` is therefore currently indistinguishable
+// from `ForceDirected` — it is not advertised until that gap is wired up.
+const LIVE_LAYOUT_MODES: [&str; 5] =
+    ["forceDirected", "hierarchical", "radial", "spectral", "temporal"];
+
 pub async fn get_layout_modes(_data: web::Data<AppState>) -> Result<HttpResponse> {
     ok_json!(serde_json::json!({
         "current": "forceDirected",
-        "available": ["forceDirected", "hierarchical", "radial", "spectral", "temporal", "clustered"],
+        "available": LIVE_LAYOUT_MODES,
         "transitioning": false
     }))
 }
@@ -25,10 +43,19 @@ pub async fn set_layout_mode(
         .and_then(|t| t.as_u64())
         .unwrap_or(500);
 
+    // Reject an unrecognised mode instead of silently coercing to
+    // ForceDirected — a typo'd or stale client-side mode name must not read
+    // as "applied" when it was actually ignored.
     let mode: LayoutMode =
         match serde_json::from_value(serde_json::Value::String(mode_str.to_string())) {
             Ok(m) => m,
-            Err(_) => LayoutMode::ForceDirected,
+            Err(_) => {
+                return Err(actix_web::error::ErrorBadRequest(format!(
+                    "unknown layout mode '{}' (expected one of: forceDirected, hierarchical, \
+                     radial, spectral, temporal, clustered)",
+                    mode_str
+                )));
+            }
         };
 
     // ADR-141 P1: persist the active mode into the GPU-visible SimParams.layout_mode
@@ -205,6 +232,7 @@ pub async fn set_radial_layout(
 }
 
 pub async fn get_layout_status(_data: web::Data<AppState>) -> Result<HttpResponse> {
+    // See `LIVE_LAYOUT_MODES` above for why `Clustered` is excluded.
     ok_json!(LayoutStatus {
         current_mode: LayoutMode::ForceDirected,
         transitioning: false,
@@ -218,7 +246,6 @@ pub async fn get_layout_status(_data: web::Data<AppState>) -> Result<HttpRespons
             LayoutMode::Radial,
             LayoutMode::Spectral,
             LayoutMode::Temporal,
-            LayoutMode::Clustered,
         ],
     })
 }

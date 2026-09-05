@@ -1,5 +1,5 @@
 use crate::handlers::validation_handler::ValidationService;
-use crate::models::ragflow_chat::{RagflowChatRequest, RagflowChatResponse};
+use crate::models::ragflow_chat::RagflowChatResponse;
 use crate::services::ragflow_service::{ChatResponse, RAGFlowError};
 use crate::types::speech::SpeechOptions;
 use crate::utils::validation::errors::DetailedValidationError;
@@ -11,7 +11,7 @@ use crate::{error_json, ok_json, service_unavailable, too_many_requests};
 use actix_web::web::Bytes;
 use actix_web::web::ServiceConfig;
 use actix_web::HttpRequest;
-use actix_web::{web, HttpResponse, Responder, ResponseError, Result};
+use actix_web::{web, HttpResponse, ResponseError, Result};
 use futures::StreamExt;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -189,132 +189,6 @@ pub async fn get_session_history(
     }
 }
 
-#[allow(dead_code)]
-async fn handle_ragflow_chat(
-    state: web::Data<AppState>,
-    req: HttpRequest,
-    payload: web::Json<RagflowChatRequest>,
-) -> Result<impl Responder, actix_web::Error> {
-    let pubkey = match req
-        .headers()
-        .get("X-Nostr-Pubkey")
-        .and_then(|v| v.to_str().ok())
-    {
-        Some(pk) => pk.to_string(),
-        None => {
-            return Ok(HttpResponse::Unauthorized()
-                .json(json!({"error": "Missing X-Nostr-Pubkey header"})))
-        }
-    };
-    let token = match req
-        .headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok().map(|s| s.trim_start_matches("Bearer ")))
-    {
-        Some(t) => t.to_string(),
-        None => {
-            return Ok(
-                HttpResponse::Unauthorized().json(json!({"error": "Missing Authorization token"}))
-            )
-        }
-    };
-
-    if let Some(nostr_service) = &state.nostr_service {
-        if !nostr_service.validate_session(&pubkey, &token).await {
-            return Ok(HttpResponse::Unauthorized().json(json!({"error": "Invalid session token"})));
-        }
-
-        let has_ragflow_specific_access = state.has_feature_access(&pubkey, "ragflow");
-        let is_power_user = state.is_power_user(&pubkey);
-
-        if !is_power_user && !has_ragflow_specific_access {
-            return Ok(HttpResponse::Forbidden().json(json!({"error": "This feature requires power user access or specific RAGFlow permission"})));
-        }
-    } else {
-        error!(
-            "Nostr service not available during chat handling for pubkey: {}",
-            pubkey
-        );
-        return Ok(HttpResponse::InternalServerError()
-            .json(json!({"error": "Nostr service not available"})));
-    }
-
-    info!(
-        "[handle_ragflow_chat] Checking RAGFlow service availability. Is Some: {}",
-        state.ragflow_service.is_some()
-    );
-
-    let ragflow_service = match &state.ragflow_service {
-        Some(service) => service,
-        None => {
-            error!("[handle_ragflow_chat] RAGFlow service is None, returning 503.");
-            return Ok(HttpResponse::ServiceUnavailable()
-                .json(json!({"error": "RAGFlow service not available"})));
-        }
-    };
-
-    info!("[handle_ragflow_chat] RAGFlow service is Some. Proceeding.");
-
-    let mut session_id = payload.session_id.clone();
-    if session_id.is_none() {
-        match ragflow_service.create_session(pubkey.clone()).await {
-            Ok(new_sid) => {
-                info!(
-                    "Created new RAGFlow session {} for pubkey {}",
-                    new_sid, pubkey
-                );
-                session_id = Some(new_sid);
-            }
-            Err(e) => {
-                error!(
-                    "Failed to create RAGFlow session for pubkey {}: {}",
-                    pubkey, e
-                );
-                return Ok(HttpResponse::InternalServerError()
-                    .json(json!({"error": format!("Failed to create RAGFlow session: {}", e)})));
-            }
-        }
-    }
-
-    let current_session_id = match session_id {
-        Some(sid) => sid,
-        None => {
-            error!("[handle_ragflow_chat] Session ID unexpectedly None after initialization");
-            return Ok(HttpResponse::InternalServerError()
-                .json(json!({"error": "Session initialization failed unexpectedly"})));
-        }
-    };
-
-    let stream_preference = payload.stream.unwrap_or(false);
-    match ragflow_service
-        .send_chat_message(
-            current_session_id.clone(),
-            payload.question.clone(),
-            stream_preference,
-        )
-        .await
-    {
-        Ok(ChatResponse::Buffered {
-            answer,
-            session_id: final_session_id,
-        }) => {
-            ok_json!(RagflowChatResponse {
-                answer,
-                session_id: final_session_id,
-            })
-        }
-        Ok(ChatResponse::Streaming(stream)) => Ok(HttpResponse::Ok()
-            .content_type("text/event-stream")
-            .streaming(stream)),
-        Err(e) => {
-            error!(
-                "Error communicating with RAGFlow for session {}: {}",
-                current_session_id, e
-            );
-            error_json!(json!({"error": format!("RAGFlow communication error: {}", e)}))
-        }
-    }
-}
 pub struct EnhancedRagFlowHandler {
     validation_service: ValidationService,
     rate_limiter: Arc<RateLimiter>,

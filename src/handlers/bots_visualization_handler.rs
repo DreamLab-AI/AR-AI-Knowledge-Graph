@@ -19,6 +19,10 @@ pub struct AgentVisualizationWs {
     protocol: AgentVisualizationProtocol,
     last_heartbeat: Instant,
     _last_position_update: Instant,
+    /// ADR-2066 addendum: honours the `pause_updates`/`resume_updates` client
+    /// opcodes. Previously both opcodes only logged, so a client that asked for
+    /// a pause kept receiving a 16 ms position stream.
+    paused: bool,
 }
 
 impl AgentVisualizationWs {
@@ -28,18 +32,26 @@ impl AgentVisualizationWs {
             protocol: AgentVisualizationProtocol::new(),
             last_heartbeat: Instant::now(),
             _last_position_update: Instant::now(),
+            paused: false,
         }
     }
 
-    /// Returns real agent data from AppState if available, otherwise an empty vec.
     #[allow(dead_code)]
-    fn get_real_agent_data(
-        &self,
-    ) -> Vec<crate::services::agent_visualization_protocol::AgentStateUpdate> {
-        // No agents connected yet; callers should check the X-Data-Source header
-        vec![]
-    }
-
+    /// Sends the initialisation frame.
+    ///
+    /// ADR-2066 addendum: this still reports an EMPTY roster, and that is now
+    /// explicit rather than disguised. The dead `get_real_agent_data()` helper
+    /// that pretended to be a source (it returned `vec![]` unconditionally) has
+    /// been removed. A real roster is reachable — `AppState.bots_client`
+    /// (`app_state.rs:382`) exposes `get_agents_snapshot() -> Result<Vec<Agent>>`
+    /// (`bots_client.rs:231`) — but wiring it needs two things this change does
+    /// not invent: an async fetch spawned into the actor context, and an
+    /// `Agent -> AgentStatus` mapping that does not exist. `AgentStatus`
+    /// (`crates/visionclaw-domain/src/types/claude_flow.rs:19`) requires
+    /// `profile: AgentProfile`, `active/completed/failed_tasks_count`,
+    /// `success_rate` and a `timestamp` that `Agent` (`bots_client.rs:16`) does
+    /// not carry, so a faithful conversion needs a decided contract rather than
+    /// invented defaults. Tracked as PROPOSED work, not silently faked here.
     fn send_init_state(&self, ctx: &mut ws::WebsocketContext<Self>) {
         let agents: Vec<visionclaw_domain::types::claude_flow::AgentStatus> = Vec::new();
 
@@ -56,6 +68,9 @@ impl AgentVisualizationWs {
 
     fn start_position_updates(&self, ctx: &mut ws::WebsocketContext<Self>) {
         ctx.run_interval(Duration::from_millis(16), |act, ctx| {
+            if act.paused {
+                return;
+            }
             if let Some(update_json) = act.protocol.create_position_update() {
                 ctx.text(update_json);
             }
@@ -163,10 +178,12 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for AgentVisualizatio
                             self.send_init_state(ctx);
                         }
                         "pause_updates" => {
-                            debug!("Pausing position updates");
+                            self.paused = true;
+                            debug!("Paused position updates");
                         }
                         "resume_updates" => {
-                            debug!("Resuming position updates");
+                            self.paused = false;
+                            debug!("Resumed position updates");
                         }
                         _ => {
                             warn!("Unknown client action: {}", request.action);

@@ -4,7 +4,7 @@ use crate::types::speech::SpeechOptions;
 use actix::prelude::*;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
@@ -16,6 +16,10 @@ use tokio::sync::broadcast;
 // Constants for heartbeat
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+/// ADR-2075: how long a socket may stay unauthenticated before it is closed.
+/// Generous enough for a NIP-07 extension prompt, short enough that an
+/// unauthenticated peer cannot hold a broadcast subscription open.
+const AUTH_DEADLINE: Duration = Duration::from_secs(30);
 
 // Define message types
 #[derive(Debug, Serialize, Deserialize)]
@@ -89,10 +93,27 @@ pub struct SpeechSocket {
     heartbeat: Instant,
     audio_rx: Option<broadcast::Receiver<Vec<u8>>>,
     transcription_rx: Option<broadcast::Receiver<String>>,
+    /// Verified NIP-98 pubkey for this socket. `None` until an `authenticate`
+    /// frame is accepted. ADR-2075: every command-bearing frame is refused
+    /// while this is `None`, and the socket is closed at `AUTH_DEADLINE`.
+    pubkey: Option<String>,
+    /// HTTP-equivalent URL of the upgrade request, used as the NIP-98 `u` tag
+    /// the client must have signed. Parity with the graph socket
+    /// (`socket_flow_handler/http_handler.rs:357-366`).
+    connection_url: String,
+    /// True only when `DEV_AUTH_LOOPBACK=1` and the peer is loopback. Gates the
+    /// literal `dev-session-token`, never accepted ungated.
+    dev_bypass_ok: bool,
 }
 
 impl SpeechSocket {
-    pub fn new(id: String, app_state: Arc<AppState>, _hybrid_manager: Option<()>) -> Self {
+    pub fn new(
+        id: String,
+        app_state: Arc<AppState>,
+        _hybrid_manager: Option<()>,
+        connection_url: String,
+        dev_bypass_ok: bool,
+    ) -> Self {
         let (audio_rx, transcription_rx) = if let Some(speech_service) = &app_state.speech_service {
             (
                 Some(speech_service.subscribe_to_audio()),
@@ -109,7 +130,135 @@ impl SpeechSocket {
             heartbeat: Instant::now(),
             audio_rx,
             transcription_rx,
+            pubkey: None,
+            connection_url,
+            dev_bypass_ok,
         }
+    }
+
+    /// ADR-2075: refuse any command-bearing frame until the socket has a
+    /// verified identity. Returns `true` when the caller must stop handling.
+    fn reject_unauthenticated(&self, ctx: &mut ws::WebsocketContext<Self>, msg_type: &str) -> bool {
+        if self.pubkey.is_some() {
+            return false;
+        }
+        log::warn!(
+            "[SpeechSocket] {} refused '{}' before authenticate",
+            self.id,
+            msg_type
+        );
+        ctx.text(
+            json!({
+                "type": "error",
+                "message": "authentication required: send {\"type\":\"authenticate\",\"event\":\"<base64 NIP-98>\"} first"
+            })
+            .to_string(),
+        );
+        true
+    }
+
+    /// Handle `{"type":"authenticate","event":"<base64>"}` — the estate's WS
+    /// auth frame, identical in shape to the graph socket's
+    /// (`socket_flow_handler/filter_auth.rs:10`).
+    fn handle_authenticate(
+        &mut self,
+        msg: &serde_json::Value,
+        ctx: &mut ws::WebsocketContext<Self>,
+    ) {
+        // LAN-local full dev bypass (VISIONCLAW_DEV_MODE=1), WS parity of the
+        // REST full bypass. Compiled out of release builds, which additionally
+        // refuse to boot when the var is present (ADR-06 §D11, ADR-2039).
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        {
+            if crate::utils::auth::dev_full_bypass_active() {
+                let pubkey = crate::utils::auth::DEV_MODE_PUBKEY.to_string();
+                info!(
+                    "[SpeechSocket] dev-mode: VISIONCLAW_DEV_MODE full bypass — authenticated as {}",
+                    pubkey
+                );
+                self.pubkey = Some(pubkey.clone());
+                ctx.text(
+                    json!({"type": "authenticate_success", "pubkey": pubkey}).to_string(),
+                );
+                return;
+            }
+        }
+
+        // Dev-session-token parity with the graph socket's legacy path: only
+        // when the handshake marked this connection dev-bypass-eligible.
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        {
+            if msg.get("token").and_then(|t| t.as_str()) == Some("dev-session-token") {
+                if !self.dev_bypass_ok {
+                    warn!(
+                        "[SpeechSocket] dev-auth: rejected dev-session-token — requires DEV_AUTH_LOOPBACK=1 and a loopback peer"
+                    );
+                    ctx.text(json!({
+                        "type": "authenticate_error",
+                        "error": "dev-session-token not permitted (requires loopback + DEV_AUTH_LOOPBACK)"
+                    }).to_string());
+                    return;
+                }
+                let pubkey = msg
+                    .get("pubkey")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or(crate::utils::auth::DEV_MODE_PUBKEY)
+                    .to_string();
+                self.pubkey = Some(pubkey.clone());
+                ctx.text(json!({"type": "authenticate_success", "pubkey": pubkey}).to_string());
+                return;
+            }
+        }
+
+        let Some(event_b64) = msg.get("event").and_then(|e| e.as_str()) else {
+            ctx.text(
+                json!({
+                    "type": "authenticate_error",
+                    "error": "authenticate requires an `event` field carrying a base64 NIP-98 event"
+                })
+                .to_string(),
+            );
+            return;
+        };
+
+        let nostr_service = self.app_state.nostr_service.clone();
+        let auth_header = format!("Nostr {}", event_b64);
+        let ws_url = self.connection_url.clone();
+
+        ctx.spawn(
+            actix::fut::wrap_future::<_, Self>(async move {
+                if let Some(ref ns) = nostr_service {
+                    match ns
+                        .verify_nip98_auth(&auth_header, &ws_url, "GET", None)
+                        .await
+                    {
+                        Ok(user) => return Some(user.pubkey),
+                        Err(e) => warn!("[SpeechSocket] NIP-98 WS auth failed: {}", e),
+                    }
+                } else {
+                    warn!("[SpeechSocket] no NostrService configured — cannot authenticate");
+                }
+                None
+            })
+            .map(|pubkey_opt, act, ctx| match pubkey_opt {
+                Some(pubkey) => {
+                    info!("[SpeechSocket] NIP-98 authenticated: pubkey={}", pubkey);
+                    act.pubkey = Some(pubkey.clone());
+                    ctx.text(
+                        json!({"type": "authenticate_success", "pubkey": pubkey}).to_string(),
+                    );
+                }
+                None => {
+                    ctx.text(
+                        json!({
+                            "type": "authenticate_error",
+                            "error": "NIP-98 WebSocket authentication failed"
+                        })
+                        .to_string(),
+                    );
+                }
+            }),
+        );
     }
 
     fn start_heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
@@ -329,6 +478,26 @@ impl Actor for SpeechSocket {
 
         self.start_heartbeat(ctx);
 
+        // ADR-2075: a socket that never authenticates is closed rather than left
+        // open indefinitely consuming an audio/transcription subscription.
+        ctx.run_later(AUTH_DEADLINE, |act, ctx| {
+            if act.pubkey.is_none() {
+                warn!(
+                    "[SpeechSocket] {} closed: no authenticate frame within {}s",
+                    act.id,
+                    AUTH_DEADLINE.as_secs()
+                );
+                ctx.text(
+                    json!({
+                        "type": "error",
+                        "message": "authentication deadline exceeded"
+                    })
+                    .to_string(),
+                );
+                ctx.stop();
+            }
+        });
+
         let welcome = json!({
             "type": "connected",
             "message": "Connected to speech service"
@@ -450,6 +619,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SpeechSocket {
                 match serde_json::from_str::<serde_json::Value>(&text) {
                     Ok(msg) => {
                         let msg_type = msg.get("type").and_then(|t| t.as_str());
+                        // ADR-2075: `authenticate` is the only frame accepted
+                        // before this socket has a verified identity.
+                        if msg_type == Some("authenticate") {
+                            self.handle_authenticate(&msg, ctx);
+                            return;
+                        }
+                        if self.reject_unauthenticated(ctx, msg_type.unwrap_or("<untyped>")) {
+                            return;
+                        }
                         match msg_type {
                             Some("tts") => {
                                 if let Ok(tts_req) =
@@ -801,40 +979,40 @@ pub async fn speech_socket_handler(
     app_state: web::Data<AppState>,
     _hybrid_manager: Option<()>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    // SECURITY: WebSocket token validation at upgrade time.
-    // Extracts token from Authorization header or query string.
-    // Currently allows but logs unauthenticated connections -- enforcement will come
-    // when all clients send tokens.
-    {
-        let token = req
-            .headers()
-            .get("Authorization")
-            .and_then(|h| h.to_str().ok())
-            .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                let query = req.query_string();
-                url::form_urlencoded::parse(query.as_bytes())
-                    .find(|(k, _)| k == "token")
-                    .map(|(_, v)| v.to_string())
-            });
+    // ADR-2075: authentication happens AFTER the upgrade, via the estate's
+    // `{"type":"authenticate","event":"<base64 NIP-98>"}` frame — the same shape
+    // the graph socket uses (`socket_flow_handler/filter_auth.rs:10`). The old
+    // upgrade-time check accepted any non-empty `Authorization: Bearer` value or
+    // `?token=` query parameter without verifying either, and browsers cannot set
+    // WebSocket headers, so the browser voice client (which sends neither) was
+    // rejected outright. Query-token auth is removed here per the fail-closed
+    // posture; the socket is now anonymous-but-useless until it authenticates.
+    let connection_url = {
+        let conn_info = req.connection_info();
+        format!(
+            "{}://{}{}",
+            conn_info.scheme(),
+            conn_info.host(),
+            req.uri()
+                .path_and_query()
+                .map(|pq| pq.as_str())
+                .unwrap_or("/ws/speech")
+        )
+    };
 
-        if token.as_deref().unwrap_or("").is_empty() {
-            let client_ip = req
-                .peer_addr()
-                .map(|a| a.to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-            log::warn!(
-                "SECURITY: Rejected unauthenticated WebSocket upgrade on /ws/speech from {}",
-                client_ip
-            );
-            return Ok(HttpResponse::Unauthorized()
-                .json(serde_json::json!({"error": "Authentication required"})));
-        }
-    }
+    #[cfg(any(debug_assertions, feature = "dev-auth"))]
+    let dev_bypass_ok = crate::utils::auth::dev_bypass_permitted(&req);
+    #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+    let dev_bypass_ok = false;
 
     let socket_id = format!("speech_{}", uuid::Uuid::new_v4());
-    let socket = SpeechSocket::new(socket_id, app_state.into_inner(), None);
+    let socket = SpeechSocket::new(
+        socket_id,
+        app_state.into_inner(),
+        None,
+        connection_url,
+        dev_bypass_ok,
+    );
 
     match ws::start(socket, &req, stream) {
         Ok(response) => {

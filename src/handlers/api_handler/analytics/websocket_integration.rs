@@ -509,18 +509,41 @@ pub async fn gpu_analytics_websocket(
 
     // SECURITY: Require authentication before WebSocket upgrade
     {
-        let token = req
+        // ADR-2058: Authorization header only in a release build. The `?token=`
+        // fallback leaks the bearer token into access and proxy logs, so it is
+        // compiled out of release and kept behind the dev-auth gate.
+        let header_token = req
             .headers()
             .get("Authorization")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.strip_prefix("Bearer "))
-            .map(|s| s.to_string())
-            .or_else(|| {
-                let query = req.query_string();
-                url::form_urlencoded::parse(query.as_bytes())
-                    .find(|(k, _)| k == "token")
-                    .map(|(_, v)| v.to_string())
-            });
+            .map(|s| s.to_string());
+
+        #[cfg(any(debug_assertions, feature = "dev-auth"))]
+        let token = header_token.or_else(|| {
+            let query = req.query_string();
+            let found = url::form_urlencoded::parse(query.as_bytes())
+                .find(|(k, _)| k == "token")
+                .map(|(_, v)| v.to_string());
+            if found.is_some() {
+                log::warn!(
+                    "SECURITY: /analytics/ws authenticated via ?token= query string — \
+                     dev-only path (ADR-2058). Use the Authorization header."
+                );
+            }
+            found
+        });
+
+        #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+        let token = {
+            if req.query_string().contains("token=") {
+                log::warn!(
+                    "SECURITY: Rejecting ?token= query-string auth on /analytics/ws — \
+                     ADR-2058 requires the Authorization header in release builds"
+                );
+            }
+            header_token
+        };
 
         if token.as_deref().unwrap_or("").is_empty() {
             let client_ip = req

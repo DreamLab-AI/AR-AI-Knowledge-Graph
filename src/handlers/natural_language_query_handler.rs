@@ -1,6 +1,7 @@
 //! Natural Language Query Handler
 //!
-//! REST API endpoints for translating natural language to Cypher queries
+//! REST API endpoints for translating natural language to read-only SPARQL
+//! queries against the embedded Oxigraph store (ADR-2063).
 
 use actix_web::{web, HttpResponse, Responder};
 use log::{debug, info};
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::services::natural_language_query_service::{
-    NaturalLanguageQueryService, QueryPatterns, QueryTranslation as CypherTranslation,
+    NaturalLanguageQueryService, QueryPatterns, QueryTranslation as SparqlTranslation,
 };
 
 // Response macros
@@ -30,7 +31,7 @@ pub struct NaturalLanguageQueryRequest {
 #[serde(rename_all = "camelCase")]
 pub struct QueryTranslationResponse {
     /// Translated query/queries
-    pub translations: Vec<CypherTranslation>,
+    pub translations: Vec<SparqlTranslation>,
     /// Example queries for reference
     #[serde(skip_serializing_if = "Option::is_none")]
     pub examples: Option<Vec<ExampleQuery>>,
@@ -42,36 +43,37 @@ pub struct QueryTranslationResponse {
 pub struct ExampleQuery {
     /// Natural language description
     pub description: String,
-    /// Cypher query
-    pub cypher: String,
+    /// SPARQL query
+    pub sparql: String,
 }
 
-/// Cypher explanation request
+/// SPARQL explanation request
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExplainCypherRequest {
-    /// Cypher query to explain
-    pub cypher: String,
+pub struct ExplainSparqlRequest {
+    /// SPARQL query to explain
+    pub sparql: String,
 }
 
-/// Cypher explanation response
+/// SPARQL explanation response
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExplainCypherResponse {
-    /// Original Cypher query
-    pub cypher: String,
+pub struct ExplainSparqlResponse {
+    /// Original SPARQL query
+    pub sparql: String,
     /// Natural language explanation
     pub explanation: String,
 }
 
-/// Translate natural language to Cypher
+/// Translate natural language to SPARQL
 /// POST /api/nl-query/translate
-/// Translates a natural language query into one or more Cypher queries.
+/// Translates a natural language query into one or more read-only SPARQL
+/// queries (SELECT/ASK/CONSTRUCT/DESCRIBE) against the Oxigraph store.
 /// Uses the current graph schema to generate contextually appropriate queries.
 /// # Request Body
 /// ```json
 /// {
-///   "query": "Show me all person nodes connected to Project X",
+///   "query": "Show me all knowledge-graph nodes connected to Project X",
 ///   "suggestAlternatives": false
 /// }
 /// ```
@@ -79,9 +81,9 @@ pub struct ExplainCypherResponse {
 /// ```json
 /// {
 ///   "translations": [{
-///     "originalQuery": "Show me all person nodes connected to Project X",
-///     "cypherQuery": "MATCH (p:GraphNode {node_type: 'person'})-[r:EDGE]-(x:GraphNode {label: 'Project X'}) RETURN p, r",
-///     "explanation": "Finds all person nodes connected to Project X",
+///     "originalQuery": "Show me all knowledge-graph nodes connected to Project X",
+///     "sparqlQuery": "SELECT ?n WHERE { GRAPH <urn:ngm:graph:knowledge> { ?n a vc:KnowledgeNode } } LIMIT 50",
+///     "explanation": "Finds all knowledge-graph nodes",
 ///     "confidence": 0.85,
 ///     "warnings": []
 ///   }]
@@ -99,12 +101,12 @@ pub async fn translate_query(
     } else {
         // Get single best translation
         nl_service
-            .translate_to_cypher(&request.query)
+            .translate_to_sparql(&request.query)
             .await
             .map(|t| vec![t])
     };
 
-    let result: Result<Vec<CypherTranslation>, String> = result;
+    let result: Result<Vec<SparqlTranslation>, String> = result;
     match result {
         Ok(translations) => {
             let response = QueryTranslationResponse {
@@ -121,15 +123,15 @@ pub async fn translate_query(
 
 /// Get example queries
 /// GET /api/nl-query/examples
-/// Returns a list of example natural language queries and their Cypher translations.
+/// Returns a list of example natural language queries and their SPARQL translations.
 /// Useful for helping users understand what kinds of queries they can ask.
 /// # Response
 /// ```json
 /// {
 ///   "examples": [
 ///     {
-///       "description": "Show me all person nodes",
-///       "cypher": "MATCH (n:GraphNode {node_type: 'person'}) RETURN n LIMIT 50"
+///       "description": "Show me all knowledge-graph nodes",
+///       "sparql": "SELECT ?n WHERE { GRAPH <urn:ngm:graph:knowledge> { ?n a vc:KnowledgeNode } } LIMIT 50"
 ///     }
 ///   ]
 /// }
@@ -139,47 +141,47 @@ pub async fn get_examples() -> Result<HttpResponse, actix_web::Error> {
 
     let examples: Vec<ExampleQuery> = QueryPatterns::examples()
         .into_iter()
-        .map(|(desc, cypher)| ExampleQuery {
+        .map(|(desc, sparql)| ExampleQuery {
             description: desc.to_string(),
-            cypher: cypher.to_string(),
+            sparql: sparql.to_string(),
         })
         .collect();
 
     ok_json!(serde_json::json!({ "examples": examples }))
 }
 
-/// Explain Cypher query in natural language
+/// Explain SPARQL query in natural language
 /// POST /api/nl-query/explain
-/// Takes a Cypher query and generates a natural language explanation
+/// Takes a SPARQL query and generates a natural language explanation
 /// of what it does.
 /// # Request Body
 /// ```json
 /// {
-///   "cypher": "MATCH (n:GraphNode)-[r:EDGE*1..3]-(m:GraphNode) RETURN n, m LIMIT 10"
+///   "sparql": "SELECT ?n ?m WHERE { GRAPH <urn:ngm:graph:knowledge> { ?edge vc:source ?n ; vc:target ?m } } LIMIT 10"
 /// }
 /// ```
 /// # Response
 /// ```json
 /// {
-///   "cypher": "MATCH (n:GraphNode)-[r:EDGE*1..3]-(m:GraphNode) RETURN n, m LIMIT 10",
-///   "explanation": "This query finds pairs of nodes that are connected by 1 to 3 relationships..."
+///   "sparql": "SELECT ?n ?m WHERE { GRAPH <urn:ngm:graph:knowledge> { ?edge vc:source ?n ; vc:target ?m } } LIMIT 10",
+///   "explanation": "This query finds pairs of nodes connected by an edge..."
 /// }
 /// ```
-pub async fn explain_cypher(
+pub async fn explain_sparql(
     nl_service: web::Data<Arc<NaturalLanguageQueryService>>,
-    request: web::Json<ExplainCypherRequest>,
+    request: web::Json<ExplainSparqlRequest>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    debug!("Explaining Cypher query");
+    debug!("Explaining SPARQL query");
 
     // Validate syntax first
-    if let Err(e) = nl_service.validate_cypher(&request.cypher) {
-        return error_json!("Invalid Cypher syntax", e);
+    if let Err(e) = nl_service.validate_sparql(&request.sparql) {
+        return error_json!("Invalid SPARQL syntax", e);
     }
 
-    match nl_service.explain_cypher(&request.cypher).await {
+    match nl_service.explain_sparql(&request.sparql).await {
         Ok(explanation) => {
-            let response = ExplainCypherResponse {
-                cypher: request.cypher.clone(),
+            let response = ExplainSparqlResponse {
+                sparql: request.sparql.clone(),
                 explanation,
             };
             ok_json!(response)
@@ -190,13 +192,14 @@ pub async fn explain_cypher(
     }
 }
 
-/// Validate Cypher syntax
+/// Validate SPARQL syntax
 /// POST /api/nl-query/validate
-/// Validates a Cypher query for basic syntax errors and dangerous operations.
+/// Validates that a SPARQL query is a permitted read-only form
+/// (SELECT/ASK/CONSTRUCT/DESCRIBE); rejects SPARQL Update operations.
 /// # Request Body
 /// ```json
 /// {
-///   "cypher": "MATCH (n:GraphNode) RETURN n"
+///   "sparql": "SELECT ?n WHERE { ?n a vc:KnowledgeNode } LIMIT 10"
 /// }
 /// ```
 /// # Response
@@ -206,13 +209,13 @@ pub async fn explain_cypher(
 ///   "errors": []
 /// }
 /// ```
-pub async fn validate_cypher(
+pub async fn validate_sparql(
     nl_service: web::Data<Arc<NaturalLanguageQueryService>>,
-    request: web::Json<ExplainCypherRequest>,
+    request: web::Json<ExplainSparqlRequest>,
 ) -> Result<HttpResponse, actix_web::Error> {
-    debug!("Validating Cypher query");
+    debug!("Validating SPARQL query");
 
-    let validation_result: Result<(), String> = nl_service.validate_cypher(&request.cypher);
+    let validation_result: Result<(), String> = nl_service.validate_sparql(&request.sparql);
     match validation_result {
         Ok(()) => {
             ok_json!(serde_json::json!({
@@ -235,7 +238,7 @@ pub fn configure_nl_query_routes(cfg: &mut web::ServiceConfig) {
         web::scope("/nl-query")
             .route("/translate", web::post().to(translate_query))
             .route("/examples", web::get().to(get_examples))
-            .route("/explain", web::post().to(explain_cypher))
-            .route("/validate", web::post().to(validate_cypher)),
+            .route("/explain", web::post().to(explain_sparql))
+            .route("/validate", web::post().to(validate_sparql)),
     );
 }

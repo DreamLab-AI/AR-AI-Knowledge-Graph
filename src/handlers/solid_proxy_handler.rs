@@ -22,14 +22,22 @@
 //! - DID resolution via solid_pod_rs::interop::did_nostr
 //! - Content negotiation (JSON-LD, Turtle)
 
-use actix_web::{http::Method, web, HttpRequest, HttpResponse};
+#[cfg(feature = "solid-pod-embed")]
+use actix_web::http::Method;
+use actix_web::{web, HttpRequest, HttpResponse};
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 #[cfg(feature = "solid-pod-embed")]
 use std::sync::Arc;
 
+// ADR-2067: `NostrUser`/`NostrService` are only reached by the
+// `solid-pod-embed` handlers below (`handle_solid_proxy`, `create_pod`,
+// `check_pod_exists`, `init_pod`, `get_user_from_request`) — the feature-off
+// `configure_routes` registers nothing, so these are otherwise unused there.
+#[cfg(feature = "solid-pod-embed")]
 use crate::models::protected_settings::NostrUser;
+#[cfg(feature = "solid-pod-embed")]
 use crate::services::nostr_service::NostrService;
 use crate::utils::nip98::validate_nip98_token;
 use nostr_sdk::Keys;
@@ -169,15 +177,11 @@ impl SolidPodState {
         }
     }
 
-    /// Synchronous constructor for non-feature builds (stub).
-    #[cfg(not(feature = "solid-pod-embed"))]
-    pub fn new() -> Self {
-        Self {
-            data_root: PathBuf::from("/data/solid"),
-            server_keys: None,
-            allow_anonymous: false,
-        }
-    }
+    // ADR-2067: the synchronous `SolidPodState::new()` stub constructor for
+    // feature-off builds used to live here. Its only caller was the
+    // feature-off `configure_routes`, which no longer constructs a
+    // `SolidPodState` at all (it registers no routes and no app_data).
+    // Removed as dead code.
 
     /// Extract and verify user identity from NIP-98 Authorization header.
     /// Validates the NIP-98 signature, timestamp, URL, and method.
@@ -374,20 +378,10 @@ pub async fn handle_solid_proxy(
     }
 }
 
-/// Stub handler when solid-pod-embed feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-pub async fn handle_solid_proxy(
-    _req: HttpRequest,
-    _body: web::Bytes,
-    _path: web::Path<String>,
-    _state: web::Data<SolidPodState>,
-    _nostr_service: web::Data<NostrService>,
-) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "Solid pod backend not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `handle_solid_proxy` used to live here. Now that `configure_routes` registers
+// no `/solid` routes at all when the feature is off (see the bottom of this
+// file), nothing can ever dispatch to it, so it has been removed.
 
 // ============================================================================
 // LDP Method Implementations
@@ -1217,19 +1211,9 @@ pub async fn create_pod(
     }
 }
 
-/// Stub create_pod when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-pub async fn create_pod(
-    _req: HttpRequest,
-    _body: web::Json<CreatePodRequest>,
-    _state: web::Data<SolidPodState>,
-    _nostr_service: web::Data<NostrService>,
-) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "Solid pod backend not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `create_pod` used to live here; removed now that no route reaches it in the
+// feature-off build.
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePodRequest {
@@ -1275,18 +1259,8 @@ pub async fn check_pod_exists(
     }
 }
 
-/// Stub check_pod_exists when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-pub async fn check_pod_exists(
-    _req: HttpRequest,
-    _state: web::Data<SolidPodState>,
-    _nostr_service: web::Data<NostrService>,
-) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "Solid pod backend not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `check_pod_exists` used to live here; removed for the same reason.
 
 /// Initialize pod for current user (auto-provision if needed)
 #[cfg(feature = "solid-pod-embed")]
@@ -1331,18 +1305,8 @@ pub async fn init_pod(
     }
 }
 
-/// Stub init_pod when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-pub async fn init_pod(
-    _req: HttpRequest,
-    _state: web::Data<SolidPodState>,
-    _nostr_service: web::Data<NostrService>,
-) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "Solid pod backend not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `init_pod` used to live here; removed for the same reason.
 
 /// Initialize pod from NIP-98 auth (for Solid-first requests)
 #[cfg(feature = "solid-pod-embed")]
@@ -1402,14 +1366,8 @@ pub async fn init_pod_nip98(req: HttpRequest, state: web::Data<SolidPodState>) -
     }
 }
 
-/// Stub init_pod_nip98 when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-pub async fn init_pod_nip98(_req: HttpRequest, _state: web::Data<SolidPodState>) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "Solid pod backend not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `init_pod_nip98` used to live here; removed for the same reason.
 
 /// Get user from request using NIP-98 auth (primary) or session token (fallback)
 #[cfg(feature = "solid-pod-embed")]
@@ -1475,27 +1433,22 @@ use actix::{Actor, ActorContext, StreamHandler};
 use actix_web_actors::ws;
 
 /// WebSocket actor for solid-0.1 notifications backed by storage events
+///
+/// ADR-2066: the `storage_rx` field this actor used to carry (a
+/// `Receiver<solid_pod_rs::storage::StorageEvent>`, feature-gated on
+/// `solid-pod-embed`) was dead — always initialised to `None`, never fed by any
+/// sender, never polled anywhere in `started`/`StreamHandler::handle`. The
+/// comment that used to sit above the `Subscribe` arm claiming "storage watch is
+/// handled at the handler level" was aspirational, not real wiring. Removed; the
+/// actor only tracks subscriptions for filtering, as it always actually did.
 pub struct SolidNotificationWs {
     /// User identity for the connection
     user_identity: Option<UserIdentity>,
     /// Subscribed resources
     subscriptions: Vec<String>,
-    /// Storage event receiver (connected when solid-pod-embed is active)
-    #[cfg(feature = "solid-pod-embed")]
-    storage_rx: Option<tokio::sync::mpsc::Receiver<solid_pod_rs::storage::StorageEvent>>,
 }
 
 impl SolidNotificationWs {
-    #[cfg(feature = "solid-pod-embed")]
-    pub fn new(user_identity: Option<UserIdentity>) -> Self {
-        Self {
-            user_identity,
-            subscriptions: Vec::new(),
-            storage_rx: None,
-        }
-    }
-
-    #[cfg(not(feature = "solid-pod-embed"))]
     pub fn new(user_identity: Option<UserIdentity>) -> Self {
         Self {
             user_identity,
@@ -1556,13 +1509,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for SolidNotification
                         info!("Client subscribing to: {}", resource);
                         self.subscriptions.push(resource.clone());
 
-                        // Register a storage watcher for this resource when embedded
-                        #[cfg(feature = "solid-pod-embed")]
-                        {
-                            // Storage watch is handled at the handler level;
-                            // the WS actor tracks subscriptions for filtering.
-                            debug!("Subscription registered for: {}", resource);
-                        }
+                        // ADR-2066: no storage watcher is registered anywhere for
+                        // this resource — there was never any handler-level wiring
+                        // feeding storage events back into this actor (the dead
+                        // `storage_rx` field this comment used to justify has been
+                        // removed). This actor only tracks subscriptions for
+                        // client-side filtering; it does not push change events.
+                        debug!("Subscription registered for: {}", resource);
 
                         let ack = SolidNotificationMessage::Ack { resource };
                         if let Ok(json) = serde_json::to_string(&ack) {
@@ -1653,15 +1606,8 @@ pub async fn solid_health_check(state: web::Data<SolidPodState>) -> HttpResponse
     }
 }
 
-/// Stub health check when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-pub async fn solid_health_check(_state: web::Data<SolidPodState>) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(serde_json::json!({
-        "status": "unavailable",
-        "backend": "none",
-        "error": "Compiled without solid-pod-embed feature"
-    }))
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `solid_health_check` used to live here; removed for the same reason.
 
 // ============================================================================
 // DID Resolution
@@ -1702,14 +1648,8 @@ async fn handle_did_wellknown(req: HttpRequest, state: web::Data<SolidPodState>)
     }
 }
 
-/// Stub DID well-known when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-async fn handle_did_wellknown(_req: HttpRequest, _state: web::Data<SolidPodState>) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "DID resolution not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `handle_did_wellknown` used to live here; removed for the same reason.
 
 /// GET /did/{tail:.*} — DID resolution (e.g. /did/nostr:<npub>)
 #[cfg(feature = "solid-pod-embed")]
@@ -1751,18 +1691,8 @@ async fn handle_did_proxy(
     }
 }
 
-/// Stub DID proxy when feature is disabled
-#[cfg(not(feature = "solid-pod-embed"))]
-async fn handle_did_proxy(
-    _path: web::Path<String>,
-    _req: HttpRequest,
-    _state: web::Data<SolidPodState>,
-) -> HttpResponse {
-    HttpResponse::ServiceUnavailable().json(SolidProxyError {
-        error: "DID resolution not available".to_string(),
-        details: Some("Compiled without solid-pod-embed feature".to_string()),
-    })
-}
+// ADR-2067: the `#[cfg(not(feature = "solid-pod-embed"))]` 503 stub twin of
+// `handle_did_proxy` used to live here; removed for the same reason.
 
 /// Extract the host for did:web from the request
 #[cfg(feature = "solid-pod-embed")]
@@ -1816,7 +1746,8 @@ pub async fn init_solid_state() -> web::Data<SolidPodState> {
 /// Configure Solid routes — all routes use in-process solid-pod-rs storage.
 ///
 /// On `solid-pod-embed`: registers the full route tree with FsBackend.
-/// Without the feature: registers stub routes that return 503.
+/// Without the feature (ADR-2067): registers nothing at all — see the
+/// `#[cfg(not(feature = "solid-pod-embed"))]` twin of this function below.
 #[cfg(feature = "solid-pod-embed")]
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     info!("=== REGISTERING SOLID POD ROUTES (embedded solid-pod-rs) ===");
@@ -1855,34 +1786,18 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
     .service(web::scope("/did").route("/{tail:.*}", web::get().to(handle_did_proxy)));
 }
 
-/// Stub configure_routes when solid-pod-embed feature is disabled.
-/// Registers nothing — all solid routes will 404.
+/// Configure Solid routes when the `solid-pod-embed` feature is disabled.
+///
+/// ADR-2067: this used to register the entire `/solid` + DID route tree
+/// pointed at 503 stub handlers, meaning the feature-off build advertised a
+/// full API surface that always failed. It now registers nothing at all —
+/// `/solid/*`, `/.well-known/did.json` and `/did/*` all 404 in a feature-off
+/// build, matching the actual (absent) capability. `src/main.rs` calls this
+/// function unconditionally regardless of the feature flag, so the name and
+/// `fn(&mut web::ServiceConfig)` signature are kept identical to the
+/// `solid-pod-embed` variant above.
 #[cfg(not(feature = "solid-pod-embed"))]
 pub fn configure_routes(cfg: &mut web::ServiceConfig) {
-    info!("=== SOLID POD ROUTES DISABLED (no solid-pod-embed feature) ===");
-    // Register minimal stubs that return 503
-    cfg.app_data(web::Data::new(SolidPodState::new()))
-        .service(
-            web::scope("/solid")
-                .route("/health", web::get().to(solid_health_check))
-                .route(
-                    "/.notifications",
-                    web::get().to(handle_solid_notifications_ws),
-                )
-                .route("/pods", web::post().to(create_pod))
-                .route("/pods/check", web::get().to(check_pod_exists))
-                .route("/pods/init", web::post().to(init_pod))
-                .route("/pods/init-nip98", web::post().to(init_pod_nip98))
-                .route("/{tail:.*}", web::get().to(handle_solid_proxy))
-                .route("/{tail:.*}", web::put().to(handle_solid_proxy))
-                .route("/{tail:.*}", web::post().to(handle_solid_proxy))
-                .route("/{tail:.*}", web::delete().to(handle_solid_proxy))
-                .route("/{tail:.*}", web::head().to(handle_solid_proxy))
-                .route(
-                    "/{tail:.*}",
-                    web::method(Method::PATCH).to(handle_solid_proxy),
-                ),
-        )
-        .service(web::resource("/.well-known/did.json").route(web::get().to(handle_did_wellknown)))
-        .service(web::scope("/did").route("/{tail:.*}", web::get().to(handle_did_proxy)));
+    let _ = cfg;
+    info!("=== SOLID POD ROUTES DISABLED (no solid-pod-embed feature): registering none ===");
 }

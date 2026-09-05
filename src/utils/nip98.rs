@@ -309,6 +309,12 @@ pub enum Nip98ValidationError {
     MethodMismatch { expected: String, actual: String },
     #[error("Payload hash mismatch")]
     PayloadHashMismatch,
+    #[error(
+        "Token carries no payload tag but the route requires the body to be bound to the token"
+    )]
+    PayloadHashMissing,
+    #[error("Token carries a payload tag but the route accepts no request body")]
+    UnexpectedPayloadHash,
     #[error("Invalid signature")]
     InvalidSignature,
     #[error("Failed to verify event: {0}")]
@@ -327,11 +333,66 @@ pub enum Nip98ValidationError {
 /// * `request_body` - Optional request body for payload verification
 /// # Returns
 /// Validation result with pubkey and metadata, or validation error
+/// How a route binds its request body to the NIP-98 token (ADR-2002).
+///
+/// The original validator compared the payload hash **only when both a body and
+/// a `payload` tag were present**, so a token minted without the tag
+/// authenticated any body at all — the signature covered the URL and method but
+/// not what was being sent. Whether that is acceptable is a property of the
+/// route, not of the validator, so the route now declares it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BodyBinding {
+    /// The route takes no request body. A token carrying a `payload` tag is
+    /// rejected: it was minted for a different request.
+    NoBody,
+    /// The route takes a body and the token **must** bind it. A body with no
+    /// `payload` tag is rejected. This is the default, and the right choice for
+    /// every mutating route.
+    #[default]
+    Required,
+    /// The route takes an optional body; when one is supplied the tag must
+    /// match, but a body with no tag is tolerated. Retained for the legacy
+    /// callers that pass a body through a shared helper which cannot yet say
+    /// whether the route needs it bound. New routes must not choose this.
+    RequiredWhenTagged,
+}
+
+/// Validate a NIP-98 token with the route's declared body binding (ADR-2002).
+///
+/// [`validate_nip98_token`] delegates here with [`BodyBinding::RequiredWhenTagged`],
+/// preserving the pre-ADR-2002 behaviour for existing callers; a route that
+/// mutates state should call this directly with [`BodyBinding::Required`].
+pub fn validate_nip98_token_bound(
+    token: &str,
+    expected_url: &str,
+    expected_method: &str,
+    request_body: Option<&str>,
+    binding: BodyBinding,
+) -> Result<Nip98ValidationResult, Nip98ValidationError> {
+    validate_nip98_token_inner(token, expected_url, expected_method, request_body, binding)
+}
+
 pub fn validate_nip98_token(
     token: &str,
     expected_url: &str,
     expected_method: &str,
     request_body: Option<&str>,
+) -> Result<Nip98ValidationResult, Nip98ValidationError> {
+    validate_nip98_token_inner(
+        token,
+        expected_url,
+        expected_method,
+        request_body,
+        BodyBinding::RequiredWhenTagged,
+    )
+}
+
+fn validate_nip98_token_inner(
+    token: &str,
+    expected_url: &str,
+    expected_method: &str,
+    request_body: Option<&str>,
+    binding: BodyBinding,
 ) -> Result<Nip98ValidationResult, Nip98ValidationError> {
     // Decode base64
     let decoded = BASE64
@@ -408,14 +469,38 @@ pub fn validate_nip98_token(
         });
     }
 
-    // Validate payload hash if body provided
-    if let Some(body) = request_body {
-        let computed_hash = compute_payload_hash(body);
-        if let Some(ref token_hash) = payload_hash {
-            if &computed_hash != token_hash {
+    // ADR-2002 — body binding, per the route's declared policy.
+    match (binding, request_body, payload_hash.as_deref()) {
+        // No body expected: a payload tag means the token was minted for some
+        // other request, so it is not evidence of intent for this one.
+        (BodyBinding::NoBody, _, Some(_)) => {
+            return Err(Nip98ValidationError::UnexpectedPayloadHash)
+        }
+        (BodyBinding::NoBody, _, None) => {}
+
+        // Body must be bound: an absent tag leaves the body unauthenticated.
+        (BodyBinding::Required, Some(body), Some(token_hash)) => {
+            if compute_payload_hash(body) != token_hash {
                 return Err(Nip98ValidationError::PayloadHashMismatch);
             }
         }
+        (BodyBinding::Required, Some(_), None) => {
+            return Err(Nip98ValidationError::PayloadHashMissing)
+        }
+        // No body supplied on a body-binding route: the tag, if present, has
+        // nothing to match, which means the token belongs to another request.
+        (BodyBinding::Required, None, Some(_)) => {
+            return Err(Nip98ValidationError::PayloadHashMismatch)
+        }
+        (BodyBinding::Required, None, None) => {}
+
+        // Legacy tolerance: compare only when both halves are present.
+        (BodyBinding::RequiredWhenTagged, Some(body), Some(token_hash)) => {
+            if compute_payload_hash(body) != token_hash {
+                return Err(Nip98ValidationError::PayloadHashMismatch);
+            }
+        }
+        (BodyBinding::RequiredWhenTagged, _, _) => {}
     }
 
     // Verify the Nostr event signature
@@ -1124,5 +1209,293 @@ mod tests {
         let event: Nip98Event =
             serde_json::from_str(&String::from_utf8(decoded).expect("utf8")).expect("parse");
         event.id
+    }
+
+    // ---- ADR-2002: exact freshness / TTL boundaries ------------------------
+
+    /// A fresh map for the boundary tests, so the process-global cache is never
+    /// touched and the tests can run in any order.
+    fn fresh_cache() -> HashMap<String, Instant> {
+        HashMap::new()
+    }
+
+    /// The TTL boundary is exact and half-open: an entry is a replay for
+    /// strictly less than `REPLAY_CACHE_TTL`, and free at exactly the TTL.
+    #[test]
+    fn ttl_boundary_is_exact_and_half_open() {
+        let base = Instant::now();
+        let mut cache = fresh_cache();
+        claim_in(&mut cache, "id", base, REPLAY_CACHE_MAX_ENTRIES).expect("first claim");
+
+        // One nanosecond before the TTL: still a replay.
+        let just_inside = base + REPLAY_CACHE_TTL - Duration::from_nanos(1);
+        assert!(
+            matches!(
+                claim_in(&mut cache, "id", just_inside, REPLAY_CACHE_MAX_ENTRIES),
+                Err(Nip98ValidationError::TokenReplayed)
+            ),
+            "an entry one nanosecond short of the TTL is still live"
+        );
+
+        // Exactly at the TTL: expired, so the id is claimable again.
+        let at_ttl = base + REPLAY_CACHE_TTL;
+        assert!(
+            claim_in(&mut cache, "id", at_ttl, REPLAY_CACHE_MAX_ENTRIES).is_ok(),
+            "an entry at exactly the TTL has expired"
+        );
+    }
+
+    /// Re-claiming refreshes the entry, so the TTL runs from the latest claim
+    /// rather than the first.
+    #[test]
+    fn a_reclaim_restarts_the_ttl() {
+        let base = Instant::now();
+        let mut cache = fresh_cache();
+        claim_in(&mut cache, "id", base, REPLAY_CACHE_MAX_ENTRIES).unwrap();
+        let expired = base + REPLAY_CACHE_TTL;
+        claim_in(&mut cache, "id", expired, REPLAY_CACHE_MAX_ENTRIES).unwrap();
+
+        // The TTL now runs from `expired`, not from `base`.
+        assert!(matches!(
+            claim_in(
+                &mut cache,
+                "id",
+                expired + REPLAY_CACHE_TTL - Duration::from_nanos(1),
+                REPLAY_CACHE_MAX_ENTRIES
+            ),
+            Err(Nip98ValidationError::TokenReplayed)
+        ));
+    }
+
+    /// A backward monotonic step (which should be impossible, but the code
+    /// guards for it) must never shorten an entry's life.
+    #[test]
+    fn a_backward_clock_step_does_not_expire_an_entry() {
+        let base = Instant::now() + REPLAY_CACHE_TTL * 2;
+        let mut cache = fresh_cache();
+        claim_in(&mut cache, "id", base, REPLAY_CACHE_MAX_ENTRIES).unwrap();
+
+        // `now` before `seen_at`: saturating_duration_since clamps to zero, so
+        // the entry is still live and the claim is refused.
+        let stepped_back = base - REPLAY_CACHE_TTL;
+        assert!(matches!(
+            claim_in(&mut cache, "id", stepped_back, REPLAY_CACHE_MAX_ENTRIES),
+            Err(Nip98ValidationError::TokenReplayed)
+        ));
+    }
+
+    /// The TTL is exactly twice the freshness window, so an id stays claimed for
+    /// the whole period in which its token could still pass the freshness check.
+    #[test]
+    fn ttl_covers_the_entire_freshness_window() {
+        assert_eq!(
+            REPLAY_CACHE_TTL,
+            Duration::from_secs(2 * TOKEN_MAX_AGE_SECONDS as u64),
+            "the TTL must outlive the widest window a token can be fresh in"
+        );
+    }
+
+    /// The capacity ceiling is exact: the last slot is usable, the next is not,
+    /// and a full cache fails closed rather than evicting a live entry.
+    #[test]
+    fn capacity_boundary_is_exact_and_fails_closed() {
+        let base = Instant::now();
+        let mut cache = fresh_cache();
+        for i in 0..3 {
+            claim_in(&mut cache, &format!("id-{i}"), base, 3).expect("within capacity");
+        }
+        assert_eq!(cache.len(), 3);
+
+        // The next distinct id has nowhere to go.
+        assert!(matches!(
+            claim_in(&mut cache, "id-overflow", base, 3),
+            Err(Nip98ValidationError::ReplayCacheFull)
+        ));
+
+        // A full cache still recognises a replay — capacity exhaustion must not
+        // open a hole in the single-use guarantee.
+        assert!(matches!(
+            claim_in(&mut cache, "id-0", base, 3),
+            Err(Nip98ValidationError::TokenReplayed)
+        ));
+
+        // And it must not have evicted the live entry to make room.
+        assert_eq!(cache.len(), 3);
+        assert!(cache.contains_key("id-0"));
+    }
+
+    /// Once entries expire, the space they occupied becomes usable again.
+    #[test]
+    fn expired_entries_free_capacity() {
+        let base = Instant::now();
+        let mut cache = fresh_cache();
+        for i in 0..3 {
+            claim_in(&mut cache, &format!("id-{i}"), base, 3).unwrap();
+        }
+        assert!(matches!(
+            claim_in(&mut cache, "new", base, 3),
+            Err(Nip98ValidationError::ReplayCacheFull)
+        ));
+
+        let later = base + REPLAY_CACHE_TTL;
+        assert!(
+            claim_in(&mut cache, "new", later, 3).is_ok(),
+            "expired entries must be pruned to make room"
+        );
+    }
+
+    // ---- ADR-2002: route-specific body binding -----------------------------
+
+    /// Build a signed token, optionally binding a body.
+    fn token_for(keys: &Keys, url: &str, method: &str, body: Option<&str>) -> String {
+        generate_nip98_token(
+            keys,
+            &Nip98Config {
+                url: url.to_string(),
+                method: method.to_string(),
+                body: body.map(str::to_string),
+            },
+        )
+        .expect("token")
+    }
+
+    /// The reproduced gap: a token with no `payload` tag authenticated ANY
+    /// body, because the comparison only ran when both halves were present.
+    /// `BodyBinding::Required` closes it.
+    #[test]
+    fn required_binding_rejects_an_unbound_body() {
+        let keys = Keys::generate();
+        let url = "https://example.org/api/mutate";
+        let unbound = token_for(&keys, url, "POST", None);
+
+        // The legacy policy accepts it — this is the behaviour the ADR names.
+        assert!(
+            validate_nip98_token(&unbound, url, "POST", Some("{\"drop\":\"everything\"}")).is_ok(),
+            "the legacy policy is the reproduced gap"
+        );
+
+        // The route-declared policy refuses it.
+        assert!(matches!(
+            validate_nip98_token_bound(
+                &unbound,
+                url,
+                "POST",
+                Some("{\"drop\":\"everything\"}"),
+                BodyBinding::Required,
+            ),
+            Err(Nip98ValidationError::PayloadHashMissing)
+        ));
+    }
+
+    /// A correctly bound body passes under the strict policy.
+    #[test]
+    fn required_binding_accepts_a_matching_body() {
+        let keys = Keys::generate();
+        let url = "https://example.org/api/mutate";
+        let body = "{\"value\":1}";
+        let bound = token_for(&keys, url, "POST", Some(body));
+
+        assert!(validate_nip98_token_bound(
+            &bound,
+            url,
+            "POST",
+            Some(body),
+            BodyBinding::Required
+        )
+        .is_ok());
+    }
+
+    /// A substituted body is refused even though the token itself is valid.
+    #[test]
+    fn required_binding_rejects_a_substituted_body() {
+        let keys = Keys::generate();
+        let url = "https://example.org/api/mutate";
+        let bound = token_for(&keys, url, "POST", Some("{\"value\":1}"));
+
+        assert!(matches!(
+            validate_nip98_token_bound(
+                &bound,
+                url,
+                "POST",
+                Some("{\"value\":999}"),
+                BodyBinding::Required
+            ),
+            Err(Nip98ValidationError::PayloadHashMismatch)
+        ));
+    }
+
+    /// A body-binding route handed a token whose tag has no body to match is
+    /// refused: the token belongs to a different request.
+    #[test]
+    fn required_binding_rejects_a_tag_without_a_body() {
+        let keys = Keys::generate();
+        let url = "https://example.org/api/mutate";
+        let bound = token_for(&keys, url, "POST", Some("{\"value\":1}"));
+
+        assert!(matches!(
+            validate_nip98_token_bound(&bound, url, "POST", None, BodyBinding::Required),
+            Err(Nip98ValidationError::PayloadHashMismatch)
+        ));
+    }
+
+    /// A no-body route refuses a token that carries a payload tag.
+    #[test]
+    fn no_body_binding_rejects_a_payload_tag() {
+        let keys = Keys::generate();
+        let url = "https://example.org/api/read";
+        let bound = token_for(&keys, url, "GET", Some("{\"value\":1}"));
+
+        assert!(matches!(
+            validate_nip98_token_bound(&bound, url, "GET", None, BodyBinding::NoBody),
+            Err(Nip98ValidationError::UnexpectedPayloadHash)
+        ));
+
+        // A tagless token is exactly what a no-body route expects.
+        let plain = token_for(&keys, url, "GET", None);
+        assert!(
+            validate_nip98_token_bound(&plain, url, "GET", None, BodyBinding::NoBody).is_ok()
+        );
+    }
+
+    /// The legacy policy remains what the existing callers get, so the change
+    /// is additive rather than a silent behavioural break.
+    #[test]
+    fn the_default_policy_is_strict_and_legacy_callers_are_unchanged() {
+        // The DEFAULT for a newly written route is the strict one...
+        assert_eq!(BodyBinding::default(), BodyBinding::Required);
+
+        let keys = Keys::generate();
+        let url = "https://example.org/api/mutate";
+        let bound = token_for(&keys, url, "POST", Some("{\"a\":1}"));
+        // Mismatch is still caught under the legacy policy.
+        assert!(matches!(
+            validate_nip98_token(&bound, url, "POST", Some("{\"a\":2}")),
+            Err(Nip98ValidationError::PayloadHashMismatch)
+        ));
+    }
+
+    /// Every binding policy claims the event id exactly once, so declaring a
+    /// stricter policy does not weaken the single-use guarantee.
+    #[test]
+    fn a_rejected_binding_does_not_burn_the_event_id() {
+        let keys = Keys::generate();
+        let url = "https://example.org/api/mutate";
+        let unbound = token_for(&keys, url, "POST", None);
+
+        // Rejected on the binding policy, before the claim.
+        assert!(validate_nip98_token_bound(
+            &unbound,
+            url,
+            "POST",
+            Some("body"),
+            BodyBinding::Required
+        )
+        .is_err());
+
+        // The id was never spent, so a correctly bound use still succeeds.
+        assert!(
+            validate_nip98_token_bound(&unbound, url, "POST", None, BodyBinding::Required).is_ok(),
+            "a binding rejection must not consume the token"
+        );
     }
 }

@@ -42,8 +42,51 @@ fn solid_base() -> String {
         .unwrap_or_else(|_| "http://127.0.0.1:4001/api/solid".to_string())
 }
 
-fn agent_key() -> String {
-    std::env::var("VISIONCLAW_AGENT_KEY").unwrap_or_else(|_| "changeme-agent-key".to_string())
+/// Constant-time byte comparison, so a timing side channel cannot recover the
+/// agent key one byte at a time. Dependency-free fold — `subtle` and
+/// `constant_time_eq` are only transitive deps here. Mirrors
+/// `liveness_harness_handler::constant_time_eq` (ADR-2093).
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Pure credential check, split out so the fail-closed semantics are unit
+/// testable without constructing an `HttpRequest`.
+///
+/// ADR-2093: authorised **only** when a non-empty `VISIONCLAW_AGENT_KEY` is
+/// configured and the request presents an exactly matching `X-Agent-Key`. An
+/// unset or empty key fails closed — it is never substituted with a default, so
+/// an unconfigured deployment cannot be driven with a publicly-known literal.
+fn check_agent_key(expected: Option<&str>, provided: Option<&str>) -> bool {
+    match expected.filter(|s| !s.is_empty()) {
+        Some(key) => match provided {
+            Some(got) => constant_time_eq(key.as_bytes(), got.as_bytes()),
+            None => false,
+        },
+        None => false,
+    }
+}
+
+/// Release posture: the key must be configured, and it is compared in constant
+/// time. There is no bypass codepath here (ADR-2093, estate fail-closed posture).
+#[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+fn agent_key_authorised(provided: Option<&str>) -> bool {
+    check_agent_key(std::env::var("VISIONCLAW_AGENT_KEY").ok().as_deref(), provided)
+}
+
+/// Dev / `dev-auth` builds keep the unauthenticated agent-submit flow, matching
+/// the bypass `liveness_harness_handler` already uses for the same threat model.
+/// This codepath does not exist in a release build.
+#[cfg(any(debug_assertions, feature = "dev-auth"))]
+fn agent_key_authorised(_provided: Option<&str>) -> bool {
+    true
 }
 
 // ─── Request / Response types ────────────────────────────────────────────────
@@ -500,9 +543,8 @@ pub async fn agent_submit_image_job(
     let provided = req
         .headers()
         .get("x-agent-key")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    if provided != agent_key() {
+        .and_then(|v| v.to_str().ok());
+    if !agent_key_authorised(provided) {
         return HttpResponse::Unauthorized().json(json!({
             "error": "Invalid or missing X-Agent-Key header"
         }));
@@ -779,4 +821,45 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/agent-submit", web::post().to(agent_submit_image_job))
             .route("/status/{job_id}", web::get().to(get_job_status)),
     );
+}
+
+#[cfg(test)]
+mod agent_key_tests {
+    use super::{check_agent_key, constant_time_eq};
+
+    #[test]
+    fn unset_key_fails_closed() {
+        // ADR-2093: the pre-fix code substituted "changeme-agent-key" here, so an
+        // unconfigured deployment accepted a publicly-known literal.
+        assert!(!check_agent_key(None, Some("changeme-agent-key")));
+        assert!(!check_agent_key(None, Some("anything")));
+        assert!(!check_agent_key(None, None));
+    }
+
+    #[test]
+    fn empty_key_fails_closed() {
+        assert!(!check_agent_key(Some(""), Some("")));
+        assert!(!check_agent_key(Some(""), Some("x")));
+    }
+
+    #[test]
+    fn missing_header_fails_closed() {
+        assert!(!check_agent_key(Some("real-key"), None));
+    }
+
+    #[test]
+    fn exact_match_authorises_and_mismatch_does_not() {
+        assert!(check_agent_key(Some("real-key"), Some("real-key")));
+        assert!(!check_agent_key(Some("real-key"), Some("real-ke")));
+        assert!(!check_agent_key(Some("real-key"), Some("real-keyy")));
+        assert!(!check_agent_key(Some("real-key"), Some("REAL-KEY")));
+    }
+
+    #[test]
+    fn constant_time_eq_matches_equality_semantics() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"ab"));
+        assert!(constant_time_eq(b"", b""));
+    }
 }

@@ -124,12 +124,40 @@ struct DecisionBroadcast<'a> {
     data: &'a RecordedDecision,
 }
 
-/// Shared service credential for unattended service-to-service callers. Mirrors
-/// the established sibling pattern in `image_gen_handler::agent_key` so the
-/// agentbox broker-bridge authenticates against the same `VISIONCLAW_AGENT_KEY`
-/// it already uses for the image-gen agent-submit route.
-fn agent_key() -> String {
-    std::env::var("VISIONCLAW_AGENT_KEY").unwrap_or_else(|_| "changeme-agent-key".to_string())
+// Shared service credential for unattended service-to-service callers: the
+// agentbox broker-bridge authenticates against the same `VISIONCLAW_AGENT_KEY`
+// the image-gen agent-submit route uses. Both now fail closed (ADR-2093).
+
+/// Constant-time byte comparison, so a timing side channel cannot recover the
+/// credential one byte at a time (ADR-2093). Dependency-free fold — `subtle`
+/// and `constant_time_eq` are only transitive deps here.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Pure credential check, split out so the fail-closed semantics are unit
+/// testable without constructing an `HttpRequest`.
+///
+/// ADR-2093: authorised **only** when a non-empty `VISIONCLAW_AGENT_KEY` is
+/// configured and the request presents an exactly matching `X-Agent-Key`. The
+/// previous implementation substituted a hardcoded `"changeme-agent-key"` when
+/// the variable was unset, so an unconfigured deployment accepted a
+/// publicly-known literal on the governed decision route.
+fn check_agent_key(expected: Option<&str>, provided: Option<&str>) -> bool {
+    match expected.filter(|s| !s.is_empty()) {
+        Some(key) => match provided {
+            Some(got) => constant_time_eq(key.as_bytes(), got.as_bytes()),
+            None => false,
+        },
+        None => false,
+    }
 }
 
 /// Returns `Ok(())` when the request bears the valid service credential, else
@@ -138,9 +166,11 @@ fn require_agent_key(req: &HttpRequest) -> Result<(), HttpResponse> {
     let provided = req
         .headers()
         .get("x-agent-key")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
-    if provided != agent_key() {
+        .and_then(|v| v.to_str().ok());
+    if !check_agent_key(
+        std::env::var("VISIONCLAW_AGENT_KEY").ok().as_deref(),
+        provided,
+    ) {
         warn!("[enrichment-decide] rejected: invalid or missing X-Agent-Key");
         return Err(HttpResponse::Unauthorized().json(serde_json::json!({
             "success": false,
@@ -392,6 +422,11 @@ pub(crate) async fn apply_decision(
         proposal_urn: record.proposal_urn.clone(),
         owner_did: record.owner_did.clone(),
         decided_at_ms: record.decided_at_ms as i64,
+        // ADR-2006: this decision arrives over the REST surface rather than as
+        // a signed kind-31403 event, so it carries no forum event id. The
+        // column stays NULL and the partial unique index does not constrain it.
+        decision_event_id: None,
+        decision_created_at_s: None,
     };
     if let Err(e) = repo.record_decision(&stored).await {
         warn!("[enrichment-decide] persist failed case={case_id}: {e}");
@@ -801,5 +836,28 @@ mod tests {
         let (action, plan) = derive_kernel_decision(&rec);
         assert_eq!(action, "reviewed");
         assert!(plan.is_none());
+    }
+}
+
+#[cfg(test)]
+mod agent_key_tests {
+    use super::check_agent_key;
+
+    #[test]
+    fn unset_or_empty_key_fails_closed() {
+        // ADR-2093: previously substituted "changeme-agent-key", so an
+        // unconfigured deployment accepted a publicly-known literal on the
+        // governed enrichment-decision route.
+        assert!(!check_agent_key(None, Some("changeme-agent-key")));
+        assert!(!check_agent_key(None, None));
+        assert!(!check_agent_key(Some(""), Some("")));
+    }
+
+    #[test]
+    fn only_exact_match_authorises() {
+        assert!(check_agent_key(Some("real-key"), Some("real-key")));
+        assert!(!check_agent_key(Some("real-key"), None));
+        assert!(!check_agent_key(Some("real-key"), Some("real-ke")));
+        assert!(!check_agent_key(Some("real-key"), Some("REAL-KEY")));
     }
 }

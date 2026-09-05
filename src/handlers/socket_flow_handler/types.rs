@@ -10,7 +10,6 @@ use crate::app_state::AppState;
 use crate::types::vec3::Vec3Data;
 use crate::utils::socket_flow_messages::BinaryNodeData;
 use crate::utils::validation::rate_limit::{EndpointRateLimits, RateLimiter};
-use crate::utils::websocket_heartbeat::HeartbeatDirective;
 
 // Constants for throttling debug logs
 pub(crate) const DEBUG_LOG_SAMPLE_RATE: usize = 10;
@@ -123,10 +122,6 @@ pub struct SocketFlowServer {
     /// client's subscription.
     pub(crate) last_position_subscribe: Option<Instant>,
 
-    /// ADR-031 item 4: Pending server-to-client directives embedded in pong frames.
-    /// Drained on each `send_pong` call via the `WebSocketHeartbeat` trait override.
-    pub(crate) pending_directives: Vec<HeartbeatDirective>,
-
     /// Last time this connection served a `requestInitialData` full-graph push.
     /// Guards against a client spamming `requestInitialData` to force unbounded
     /// full-graph fetch/sort/encode cycles (a cheap DoS). `None` until the first
@@ -206,7 +201,6 @@ impl SocketFlowServer {
             subscribed_node_types: HashSet::new(),
             position_sub_generation: 0,
             last_position_subscribe: None,
-            pending_directives: Vec::new(),
             last_initial_data_request: None,
             sync_generation: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
@@ -222,10 +216,8 @@ impl SocketFlowServer {
             + 1
     }
 
-    /// ADR-031 item 4: Queue a directive to be sent to this client in the next pong.
-    pub fn queue_directive(&mut self, directive: HeartbeatDirective) {
-        self.pending_directives.push(directive);
-    }
+    // REMOVED (ADR-2054): queue_directive — only caller was the removed
+    // Handler<PushDirective>, which had zero senders tree-wide.
 
     pub(crate) fn handle_ping(
         &mut self,
@@ -608,9 +600,11 @@ impl crate::utils::websocket_heartbeat::WebSocketHeartbeat for SocketFlowServer 
         self.last_activity = Instant::now();
     }
 
-    fn get_pending_directives(&mut self) -> Vec<HeartbeatDirective> {
-        std::mem::take(&mut self.pending_directives)
-    }
+    // REMOVED (ADR-2054): get_pending_directives override and the `pending_directives`
+    // field it drained. `send_pong` (which calls this) is never invoked on the live
+    // ping/pong path (mod.rs answers pings with `ctx.pong(&msg)` directly), so the
+    // trait's default (`Vec::new()`) is behaviourally identical to the always-empty
+    // queue this override used to drain.
 }
 
 impl Actor for SocketFlowServer {

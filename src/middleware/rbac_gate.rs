@@ -44,6 +44,9 @@ use log::{debug, error, warn};
 use std::future::{ready, Ready};
 use std::rc::Rc;
 
+use crate::config::security_profile::{
+    report_mode_acknowledged, report_mode_requested, BuildIdentity, EnvSnapshot,
+};
 use crate::services::nostr_service::NostrService;
 use crate::utils::auth::{verify_access, AccessLevel};
 
@@ -78,11 +81,8 @@ impl GateMode {
     /// Resolve the mode, refusing to honour `report` unless it is explicitly
     /// acknowledged (debug build, or `RBAC_REPORT_MODE_ACK` = today's UTC date).
     fn from_env() -> Self {
-        let requested_report = std::env::var("RBAC_GATE_MODE")
-            .unwrap_or_default()
-            .trim()
-            .eq_ignore_ascii_case("report");
-        if !requested_report {
+        let env = EnvSnapshot::from_process();
+        if !report_mode_requested(&env) {
             return GateMode::Enforce;
         }
         if Self::report_acknowledged() {
@@ -102,14 +102,15 @@ impl GateMode {
         }
     }
 
+    /// ADR-2012: the dated-acknowledgement rule has exactly one implementation,
+    /// in `config::security_profile`, shared with the boot-time profile
+    /// assertion so the gate and the boot check cannot drift apart. Note that
+    /// the boot assertion rejects report mode outright in a production
+    /// artefact — reaching this code in such a build means the process should
+    /// already have exited.
     fn report_acknowledged() -> bool {
-        if cfg!(debug_assertions) {
-            return true;
-        }
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        std::env::var("RBAC_REPORT_MODE_ACK")
-            .map(|v| v.trim() == today)
-            .unwrap_or(false)
+        report_mode_acknowledged(&EnvSnapshot::from_process(), BuildIdentity::current(), &today)
     }
 }
 

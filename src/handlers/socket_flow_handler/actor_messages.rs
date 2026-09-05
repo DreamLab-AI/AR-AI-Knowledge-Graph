@@ -3,7 +3,6 @@ use log::{debug, error, info, trace};
 
 use crate::utils::binary_protocol;
 use crate::utils::socket_flow_messages::BinaryNodeData;
-use crate::utils::websocket_heartbeat::HeartbeatDirective;
 
 use super::types::SocketFlowServer;
 
@@ -228,26 +227,7 @@ impl Handler<SendPositionUpdate> for SocketFlowServer {
     }
 }
 
-// ---------------------------------------------------------------------------
-// ADR-031 item 4: Push a HeartbeatDirective to a specific client session.
-// Other actors can send this message to enqueue a directive that will be
-// delivered in the next heartbeat pong frame.
-// ---------------------------------------------------------------------------
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct PushDirective {
-    pub directive: HeartbeatDirective,
-}
-
-impl Handler<PushDirective> for SocketFlowServer {
-    type Result = ();
-
-    fn handle(&mut self, msg: PushDirective, _ctx: &mut Self::Context) -> Self::Result {
-        debug!(
-            "[WebSocket] Queuing directive {:?} for client {:?}",
-            msg.directive, self.client_id
-        );
-        self.queue_directive(msg.directive);
-    }
-}
+// REMOVED (ADR-2054): PushDirective message + Handler<PushDirective>. Zero senders
+// tree-wide — `send_pong`/`get_pending_directives` were never called on the live
+// ping/pong path (mod.rs's StreamHandler answers pings with `ctx.pong(&msg)`
+// directly), so the queued directive could never reach a client.

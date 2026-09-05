@@ -19,7 +19,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::rbac::UserRole;
 use crate::services::nostr_service::NostrService;
-use crate::services::role_store::{global_role_store, RoleAssignment, RoleStore, RoleStoreError};
+use crate::services::role_store::{
+    global_role_store, CallerAuthority, RoleAssignment, RoleStore, RoleStoreError,
+};
 use crate::utils::auth::{verify_access, verify_admin, AccessLevel};
 
 #[derive(Serialize)]
@@ -143,13 +145,17 @@ pub async fn assign_role(
         Err(resp) => return resp,
     };
 
-    // Resolve the caller's own role; the full lattice check, the current-role
-    // guard AND the last-Owner invariant are enforced atomically inside
-    // `assign_checked` (single SQLite transaction — no TOCTOU).
+    // Resolve the caller's own role at admission; the full lattice check, the
+    // current-role guard AND the last-Owner invariant are enforced atomically
+    // inside `assign_checked` (single SQLite transaction — no TOCTOU).
+    // ADR-2010: the store re-reads the caller's role inside that transaction
+    // and refuses if it has weakened since admission, so a concurrent demotion
+    // cannot be raced past the lattice check.
     let caller_is_power = nostr.is_power_user(&caller).await;
     let caller_role = store.effective_role(&caller, caller_is_power).await;
+    let authority = CallerAuthority::new(&caller, caller_is_power, caller_role);
     match store
-        .assign_checked(&target_pubkey, new_role, caller_role, &caller)
+        .assign_checked(&target_pubkey, new_role, &authority)
         .await
     {
         Ok(role) => {
@@ -182,23 +188,49 @@ pub async fn revoke_role(
         Err(resp) => return resp,
     };
 
-    // Lattice guard + last-Owner invariant enforced atomically in the store.
+    // Lattice guard + last-Owner invariant enforced atomically in the store,
+    // with the caller's authority re-read inside that transaction (ADR-2010).
     let caller_is_power = nostr.is_power_user(&caller).await;
     let caller_role = store.effective_role(&caller, caller_is_power).await;
-    match store.revoke_checked(&target_pubkey, caller_role).await {
-        Ok(removed) => {
-            info!("RBAC: {caller} revoked explicit role for {target_pubkey} (existed={removed})");
-            // Report the target's actual post-revoke effective role — a
-            // power-user target reverts to Admin, not the configured default.
-            let target_is_power = nostr.is_power_user(&target_pubkey).await;
-            let reverted_to = store.effective_role(&target_pubkey, target_is_power).await;
+    let authority = CallerAuthority::new(&caller, caller_is_power, caller_role);
+    let target_is_power = nostr.is_power_user(&target_pubkey).await;
+    match store
+        .remove_checked(&target_pubkey, target_is_power, &authority)
+        .await
+    {
+        Ok(outcome) => {
+            // ADR-2010: removal is not revocation. Say plainly what happened to
+            // the target's access rather than implying it was denied.
+            info!(
+                "RBAC: {caller} removed the explicit role for {target_pubkey} \
+(existed={}, previous={:?}, now={}, authority_reduced={})",
+                outcome.had_explicit_role,
+                outcome.previous_role,
+                outcome.effective_after,
+                outcome.authority_reduced
+            );
+            if outcome.revocation_requires_explicit_viewer() {
+                warn!(
+                    "RBAC: removing {target_pubkey}'s assignment did NOT revoke access — \
+they now hold {} by default; assign 'viewer' explicitly to deny",
+                    outcome.effective_after
+                );
+            }
             HttpResponse::Ok().json(serde_json::json!({
                 "pubkey": target_pubkey,
-                "reverted_to": reverted_to,
-                "had_explicit_role": removed,
+                "reverted_to": outcome.effective_after,
+                "had_explicit_role": outcome.had_explicit_role,
+                "previous_role": outcome.previous_role,
+                "authority_reduced": outcome.authority_reduced,
+                "access_revoked": outcome.authority_reduced,
+                "note": if outcome.revocation_requires_explicit_viewer() {
+                    "removal restored default authority; assign 'viewer' explicitly to deny access"
+                } else {
+                    "explicit assignment removed"
+                },
             }))
         }
-        Err(e) => role_error_response("revoke", &target_pubkey, e),
+        Err(e) => role_error_response("remove", &target_pubkey, e),
     }
 }
 
@@ -221,6 +253,25 @@ fn role_error_response(op: &str, target: &str, e: RoleStoreError) -> HttpRespons
         E::InvalidPubkey(pk) => HttpResponse::BadRequest().json(ErrorBody {
             error: format!("invalid pubkey: {pk}"),
         }),
+        // ADR-2010: the caller was demoted between admission and commit. This
+        // is a stale-request conflict, not a permanent denial — the client
+        // re-authenticates and retries, and the retry gets a plain 403 if the
+        // demotion stands.
+        E::CallerAuthorityChanged {
+            admission,
+            current,
+        } => {
+            warn!(
+                "RBAC {op} {target} refused: caller authority changed mid-request \
+(admitted as {admission}, now {current})"
+            );
+            HttpResponse::Conflict().json(ErrorBody {
+                error: format!(
+                    "caller authority changed during the request (admitted as {admission}, \
+now {current}); re-authenticate and retry"
+                ),
+            })
+        }
         other => {
             warn!("RBAC {op} {target} failed: {other}");
             HttpResponse::InternalServerError().json(ErrorBody {
