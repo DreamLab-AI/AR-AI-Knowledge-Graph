@@ -1039,11 +1039,16 @@ impl ElevationActor {
                         );
                         // Record a gate-reject (with the reason) instead of the approve,
                         // so the store shows the case was NOT elevated and why.
+                        // A locally minted decision: it answers no signed 31403,
+                        // so it carries no event id (ADR-2006) and falls back to
+                        // the local correlation form in `decision_record`.
                         let synthetic = CaseDecision {
                             case_id: case_id.clone(),
                             action: "reject".to_string(),
                             reasoning: format!("GOV-7 consistency gate blocked elevation: {reason}"),
                             responder_pubkey: responder,
+                            event_id: String::new(),
+                            created_at: 0,
                         };
                         if let Err(e) = repo.record_decision(&decision_record(&synthetic)).await {
                             warn!("[Elevation] gate-reject persist failed for {case_id}: {e}");
@@ -1235,10 +1240,25 @@ fn decision_record(d: &CaseDecision) -> StoredDecision {
     } else {
         None
     };
-    let activity_urn = crate::uri::execution(format!(
-        "elevation-decide:{}:{}:{}",
-        d.case_id, d.action, d.responder_pubkey
-    ));
+    // ADR-2006 — correlate on the SIGNED event id, not on the tuple.
+    //
+    // `(case_id, action, responder_pubkey)` is not unique: a replayed 31403, or
+    // an admin who answers the same case the same way twice, produced an
+    // identical activity URN, so the second decision overwrote the first in the
+    // provenance graph and the two became indistinguishable. The signed event
+    // id is unique per decision by construction, so it is what the record
+    // correlates on. A decision carrying no event id (a synthetic gate-reject
+    // minted locally) falls back to the tuple plus its decision timestamp,
+    // which is still unique per occurrence.
+    let correlation = if d.event_id.is_empty() {
+        format!(
+            "elevation-decide:{}:{}:{}:local",
+            d.case_id, d.action, d.responder_pubkey
+        )
+    } else {
+        format!("elevation-decide:{}:{}", d.case_id, d.event_id)
+    };
+    let activity_urn = crate::uri::execution(&correlation);
     let writeback_triggered =
         crate::adapters::sqlite_enrichment_repository::status_for_outcome(&d.action) == "approved";
     let decided_at_ms = std::time::SystemTime::now()
@@ -1257,6 +1277,10 @@ fn decision_record(d: &CaseDecision) -> StoredDecision {
         proposal_urn,
         owner_did,
         decided_at_ms,
+        // ADR-2006 — the signed-event correlation, persisted alongside the
+        // record so a restart can tell a re-delivered decision from a new one.
+        decision_event_id: (!d.event_id.is_empty()).then(|| d.event_id.clone()),
+        decision_created_at_s: (d.created_at > 0).then_some(d.created_at as i64),
     }
 }
 

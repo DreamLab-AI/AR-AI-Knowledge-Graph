@@ -348,8 +348,10 @@ impl Actor for AgentBeamActor {
 ///      mid-flight resize/re-upload would race concurrent kernels and destabilise
 ///      the simulation.
 ///   4. The stale ADR `class_charge` modulation buffer does NOT exist — only
-///      `class_ids:i32` + `class_masses:f32` under the `physics-v2` gate, neither
-///      of which is a per-edge attractive force.
+///      `class_id` / `class_charge` / `class_mass` per-node device buffers passed to
+///      `force_pass_kernel` by `UnifiedGPUCompute`, none of which is a per-edge
+///      attractive force. (The `PhysicsGpuBuffers` struct this note used to cite was
+///      removed with the `physics-v2` feature — ADR-2055.)
 ///
 /// Correct fix (future increment): add an incremental
 /// `UpsertTransientEdge { src, tgt, weight, ttl_ms }` GPU message that appends

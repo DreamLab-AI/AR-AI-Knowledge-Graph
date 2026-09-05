@@ -2,7 +2,7 @@
 //!
 //! # Why this exists
 //!
-//! The GPU [`SimParams`] struct is a flat, `repr(C)`, 180-byte record whose
+//! The GPU [`SimParams`] struct is a flat, `repr(C)`, 212-byte record whose
 //! layout is mirrored byte-for-byte by the CUDA `SimParams` (guarded by a
 //! `static_assert`/`const assert` pair on both sides) and whose camelCase fields
 //! are the wire contract four shipping clients already speak. Turning it into a
@@ -44,7 +44,7 @@
 //! **bounded**: adding a force term to the kernels means adding a variant here,
 //! which the exhaustive `match`es make impossible to forget.
 
-use crate::models::simulation_params::{FeatureFlags, SimParams};
+use crate::models::simulation_params::{FeatureFlags, SimParams, SimulationParams, ToSimParams};
 
 /// A named, togglable force term in the layout engine. Bounded set — one variant
 /// per force term the CUDA kernels evaluate.
@@ -408,6 +408,343 @@ mod tests {
         assert_eq!(snap.len(), ForceChannel::ALL.len());
         for (i, ch) in ForceChannel::ALL.iter().enumerate() {
             assert_eq!(snap[i].0, *ch);
+        }
+    }
+}
+
+// ── ADR-2029: the final dispatch feature word ──────────────────────────────
+
+/// Everything the final feature word is derived from at dispatch (ADR-2029).
+///
+/// Gathering these into one struct is the point: the closeout finding is that
+/// the authoritative derivation lives in the physics-step wrapper, *after* the
+/// converter has already produced a feature word, and immediately overwrites it.
+/// Two of the inputs are not user settings at all — they are live device state
+/// (`num_constraints`) and a runtime toggle (`sssp_spring_adjust_enabled`) — so
+/// the word cannot be derived from `SimulationParams` alone, and any claim that
+/// the converter owns force enablement is wrong.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ForceDispatchInputs {
+    /// Repulsion strength from settings. `> 0` enables the term.
+    pub repel_k: f32,
+    /// Spring strength from settings. `> 0` enables the term.
+    pub spring_k: f32,
+    /// Centring strength from settings. `> 0` enables the term.
+    pub center_gravity_k: f32,
+    /// Settings flag requesting SSSP-adjusted springs.
+    pub use_sssp_distances: bool,
+    /// Runtime toggle on the compute context, independent of settings.
+    pub sssp_spring_adjust_enabled: bool,
+    /// **Device residency**: how many constraints are currently uploaded. This,
+    /// not any setting, decides `ENABLE_CONSTRAINTS`.
+    pub num_constraints: usize,
+}
+
+impl ForceDispatchInputs {
+    /// Gather the inputs from a settings record plus the two pieces of live
+    /// runtime state the settings do not carry.
+    pub fn new(
+        params: &SimulationParams,
+        num_constraints: usize,
+        sssp_spring_adjust_enabled: bool,
+    ) -> Self {
+        Self {
+            repel_k: params.repel_k,
+            spring_k: params.spring_k,
+            center_gravity_k: params.center_gravity_k,
+            use_sssp_distances: params.use_sssp_distances,
+            sssp_spring_adjust_enabled,
+            num_constraints,
+        }
+    }
+}
+
+/// Derive the feature word actually uploaded to the device (ADR-2029).
+///
+/// # Authority
+///
+/// This is the **single authoritative derivation**. The physics-step wrapper
+/// calls it and assigns the result over whatever `SimulationParams::to_sim_params`
+/// produced, so a converter-derived flag word never reaches the device. The actor
+/// parameter mirror also holds a converter-derived word; that copy is
+/// informational and is overwritten here before every execute.
+///
+/// # Rules
+///
+/// * `ENABLE_REPULSION` / `ENABLE_SPRINGS` / `ENABLE_CENTERING` — strictly
+///   positive scalar. Zero and negative are both off; `-0.0` is not `> 0.0`, so
+///   it is off too.
+/// * `ENABLE_SSSP_SPRING_ADJUST` — the settings flag **or** the runtime toggle.
+/// * `ENABLE_CONSTRAINTS` — derived from constraint *residency*
+///   (`num_constraints > 0`), never from a setting. This is why
+///   [`ForceChannel::Constraints`] is read-only in the registry: enablement is
+///   owned by what is resident on the device, and `ForceChannel::apply` for it is
+///   deliberately a no-op.
+///
+/// NaN is not `> 0.0`, so a poisoned scalar disables its term rather than
+/// enabling it on a value the kernel cannot use.
+pub fn derive_dispatch_feature_flags(inputs: ForceDispatchInputs) -> u32 {
+    let mut flags = 0u32;
+    if inputs.repel_k > 0.0 {
+        flags |= FeatureFlags::ENABLE_REPULSION;
+    }
+    if inputs.spring_k > 0.0 {
+        flags |= FeatureFlags::ENABLE_SPRINGS;
+    }
+    if inputs.center_gravity_k > 0.0 {
+        flags |= FeatureFlags::ENABLE_CENTERING;
+    }
+    if inputs.use_sssp_distances || inputs.sssp_spring_adjust_enabled {
+        flags |= FeatureFlags::ENABLE_SSSP_SPRING_ADJUST;
+    }
+    // KEYSTONE (ADR-098 break #1): gates the live force_pass_kernel constraint
+    // loop. Without this bit the uploaded ConstraintData buffer has zero effect.
+    if inputs.num_constraints > 0 {
+        flags |= FeatureFlags::ENABLE_CONSTRAINTS;
+    }
+    flags
+}
+
+#[cfg(test)]
+mod adr_2029_dispatch_authority {
+    //! ADR-2029: the final device word, observed across constraint residency
+    //! changes, runtime SSSP changes and scalar boundaries.
+    //!
+    //! These exercise the exact function the physics-step wrapper calls, so they
+    //! observe the word that is actually uploaded — not the converter's word,
+    //! which is overwritten before every execute.
+    use super::*;
+
+    fn base() -> ForceDispatchInputs {
+        ForceDispatchInputs {
+            repel_k: 1.0,
+            spring_k: 1.0,
+            center_gravity_k: 1.0,
+            use_sssp_distances: false,
+            sssp_spring_adjust_enabled: false,
+            num_constraints: 0,
+        }
+    }
+
+    fn has(flags: u32, bit: u32) -> bool {
+        flags & bit != 0
+    }
+
+    #[test]
+    fn constraint_enablement_follows_residency_through_zero_nonzero_zero() {
+        // The acceptance transition: 0 -> N -> 0. The bit must track residency
+        // in both directions, with no setting involved anywhere.
+        let mut i = base();
+
+        i.num_constraints = 0;
+        assert!(!has(
+            derive_dispatch_feature_flags(i),
+            FeatureFlags::ENABLE_CONSTRAINTS
+        ));
+
+        i.num_constraints = 1;
+        assert!(
+            has(derive_dispatch_feature_flags(i), FeatureFlags::ENABLE_CONSTRAINTS),
+            "a single resident constraint must enable the kernel loop"
+        );
+
+        i.num_constraints = 4_096;
+        assert!(has(
+            derive_dispatch_feature_flags(i),
+            FeatureFlags::ENABLE_CONSTRAINTS
+        ));
+
+        // Constraints removed: the bit must clear, or the kernel keeps walking a
+        // buffer that no longer describes anything.
+        i.num_constraints = 0;
+        assert!(
+            !has(derive_dispatch_feature_flags(i), FeatureFlags::ENABLE_CONSTRAINTS),
+            "removing every constraint must clear the bit"
+        );
+    }
+
+    #[test]
+    fn residency_alone_decides_constraints_regardless_of_settings() {
+        // No settings field can turn constraints on or off. Vary every scalar
+        // and the SSSP inputs; the constraint bit only ever follows residency.
+        for num_constraints in [0usize, 3] {
+            for (repel, spring, centre) in [(0.0, 0.0, 0.0), (5.0, 5.0, 5.0)] {
+                for sssp in [false, true] {
+                    let flags = derive_dispatch_feature_flags(ForceDispatchInputs {
+                        repel_k: repel,
+                        spring_k: spring,
+                        center_gravity_k: centre,
+                        use_sssp_distances: sssp,
+                        sssp_spring_adjust_enabled: sssp,
+                        num_constraints,
+                    });
+                    assert_eq!(
+                        has(flags, FeatureFlags::ENABLE_CONSTRAINTS),
+                        num_constraints > 0,
+                        "constraint enablement must depend only on residency"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn scalar_boundaries_are_strictly_positive() {
+        // Zero, negative zero, negative and NaN are all off; the smallest
+        // positive value is on. A NaN scalar must not enable a term the kernel
+        // cannot evaluate.
+        for off in [0.0f32, -0.0, -1.0, f32::NAN, f32::NEG_INFINITY] {
+            let flags = derive_dispatch_feature_flags(ForceDispatchInputs {
+                repel_k: off,
+                spring_k: off,
+                center_gravity_k: off,
+                ..base()
+            });
+            assert!(!has(flags, FeatureFlags::ENABLE_REPULSION), "repel {off}");
+            assert!(!has(flags, FeatureFlags::ENABLE_SPRINGS), "spring {off}");
+            assert!(!has(flags, FeatureFlags::ENABLE_CENTERING), "centre {off}");
+        }
+        for on in [f32::MIN_POSITIVE, 1e-6, 1.0, f32::INFINITY] {
+            let flags = derive_dispatch_feature_flags(ForceDispatchInputs {
+                repel_k: on,
+                spring_k: on,
+                center_gravity_k: on,
+                ..base()
+            });
+            assert!(has(flags, FeatureFlags::ENABLE_REPULSION), "repel {on}");
+            assert!(has(flags, FeatureFlags::ENABLE_SPRINGS), "spring {on}");
+            assert!(has(flags, FeatureFlags::ENABLE_CENTERING), "centre {on}");
+        }
+    }
+
+    #[test]
+    fn each_scalar_gates_only_its_own_term() {
+        let mut i = base();
+        i.spring_k = 0.0;
+        i.center_gravity_k = 0.0;
+        let flags = derive_dispatch_feature_flags(i);
+        assert!(has(flags, FeatureFlags::ENABLE_REPULSION));
+        assert!(!has(flags, FeatureFlags::ENABLE_SPRINGS));
+        assert!(!has(flags, FeatureFlags::ENABLE_CENTERING));
+    }
+
+    #[test]
+    fn the_runtime_sssp_toggle_changes_the_word_without_a_settings_change() {
+        // A runtime SSSP change must reach the device word on its own — the
+        // settings flag is not the only authority.
+        let mut i = base();
+        assert!(!has(
+            derive_dispatch_feature_flags(i),
+            FeatureFlags::ENABLE_SSSP_SPRING_ADJUST
+        ));
+
+        i.sssp_spring_adjust_enabled = true;
+        assert!(has(
+            derive_dispatch_feature_flags(i),
+            FeatureFlags::ENABLE_SSSP_SPRING_ADJUST
+        ));
+
+        // …and the settings flag alone also suffices (they are OR-ed).
+        let j = ForceDispatchInputs {
+            use_sssp_distances: true,
+            sssp_spring_adjust_enabled: false,
+            ..base()
+        };
+        assert!(has(
+            derive_dispatch_feature_flags(j),
+            FeatureFlags::ENABLE_SSSP_SPRING_ADJUST
+        ));
+
+        // Turning both off clears it again.
+        let k = ForceDispatchInputs {
+            use_sssp_distances: false,
+            sssp_spring_adjust_enabled: false,
+            ..base()
+        };
+        assert!(!has(
+            derive_dispatch_feature_flags(k),
+            FeatureFlags::ENABLE_SSSP_SPRING_ADJUST
+        ));
+    }
+
+    #[test]
+    fn the_dispatch_word_overrides_whatever_the_converter_produced() {
+        // The authority claim, stated as a test: take a settings record, let the
+        // converter build its word, then derive the dispatch word from the same
+        // settings plus live residency. Where they disagree, dispatch wins —
+        // which is what the physics-step wrapper does by assignment.
+        let mut params = SimulationParams::new();
+        params.repel_k = 0.0; // converter will not set ENABLE_REPULSION
+        let converted = params.to_sim_params();
+        assert!(
+            !has(converted.feature_flags, FeatureFlags::ENABLE_CONSTRAINTS),
+            "converter has no residency knowledge, so it cannot set this bit"
+        );
+
+        // Three constraints are resident on the device.
+        let dispatch =
+            derive_dispatch_feature_flags(ForceDispatchInputs::new(&params, 3, false));
+        assert!(
+            has(dispatch, FeatureFlags::ENABLE_CONSTRAINTS),
+            "the dispatch word adds the residency-derived bit the converter cannot know"
+        );
+        assert!(!has(dispatch, FeatureFlags::ENABLE_REPULSION));
+
+        // Applying the dispatch word is what the wrapper does; the resulting
+        // SimParams carries the dispatch word, not the converted one.
+        let mut final_params = converted;
+        final_params.feature_flags = dispatch;
+        assert_eq!(final_params.feature_flags, dispatch);
+        assert_ne!(
+            final_params.feature_flags, converted.feature_flags,
+            "the converter's word did not survive dispatch"
+        );
+    }
+
+    #[test]
+    fn gathering_from_settings_matches_a_hand_built_input() {
+        let mut params = SimulationParams::new();
+        params.repel_k = 2.0;
+        params.spring_k = 0.0;
+        params.center_gravity_k = 3.0;
+        params.use_sssp_distances = true;
+        let gathered = ForceDispatchInputs::new(&params, 7, true);
+        assert_eq!(
+            gathered,
+            ForceDispatchInputs {
+                repel_k: 2.0,
+                spring_k: 0.0,
+                center_gravity_k: 3.0,
+                use_sssp_distances: true,
+                sssp_spring_adjust_enabled: true,
+                num_constraints: 7,
+            }
+        );
+    }
+
+    #[test]
+    fn no_bit_outside_the_declared_feature_set_is_ever_produced() {
+        // The derivation must never invent a bit; anything else in the word
+        // would be an undeclared contract with the kernel.
+        let known = FeatureFlags::ENABLE_REPULSION
+            | FeatureFlags::ENABLE_SPRINGS
+            | FeatureFlags::ENABLE_CENTERING
+            | FeatureFlags::ENABLE_SSSP_SPRING_ADJUST
+            | FeatureFlags::ENABLE_CONSTRAINTS;
+        for num_constraints in [0usize, 1] {
+            for sssp in [false, true] {
+                for scalar in [0.0f32, 1.0] {
+                    let flags = derive_dispatch_feature_flags(ForceDispatchInputs {
+                        repel_k: scalar,
+                        spring_k: scalar,
+                        center_gravity_k: scalar,
+                        use_sssp_distances: sssp,
+                        sssp_spring_adjust_enabled: sssp,
+                        num_constraints,
+                    });
+                    assert_eq!(flags & !known, 0, "undeclared bit in the dispatch word");
+                }
+            }
         }
     }
 }

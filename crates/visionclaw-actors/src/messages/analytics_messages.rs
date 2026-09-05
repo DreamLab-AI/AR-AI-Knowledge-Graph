@@ -179,14 +179,13 @@ pub struct ClearPageRankCache;
 // Connected Components
 // ---------------------------------------------------------------------------
 
-/// Update the cached edge list used by ConnectedComponentsActor for label propagation.
-/// Send this whenever graph edges change so connected-component queries use real data.
-#[derive(Message, Debug, Clone)]
-#[rtype(result = "()")]
-pub struct UpdateComponentEdges {
-    /// Edge list as (source_node_id, target_node_id) pairs
-    pub edges: Vec<(u32, u32)>,
-}
+// REMOVED (ADR-2054, vc-gpu-wire; struct side by vc-knowledge): `UpdateComponentEdges`.
+// The message had zero senders anywhere in the tree, and it was the sole writer of
+// `ConnectedComponentsActor::cached_edges`, so the CPU fallback that read that field
+// could only ever have produced all-singleton components. vc-gpu-wire removed the
+// handler, the field and that fallback; this is the struct definition it left behind.
+// The GPU-failure branch now propagates the error instead of fabricating a
+// wrong-but-plausible result.
 
 // ---------------------------------------------------------------------------
 // Node Analytics (ADR-014 Phase 2 — DL4 fix)

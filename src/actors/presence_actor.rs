@@ -18,6 +18,10 @@ use actix::{Actor, ActorContext, AsyncContext, Context, Handler, Message, Recipi
 use serde::Serialize;
 use tracing::{debug, info, warn};
 
+use visionclaw_xr_presence::agent_presence::{
+    encode_agent_presence, AgentPresence, AgentPresenceDelta, AttentionTarget,
+    OPCODE_AGENT_PRESENCE,
+};
 use visionclaw_xr_presence::{
     hand_reach, joint_anatomy, monotonic_timestamp, ports::Broadcaster, types::HandPose,
     velocity_gate, wire, world_bounds, Aabb, AvatarId, AvatarMetadata, Did, PresenceRoom, RoomId,
@@ -48,6 +52,83 @@ fn configured_hand_reach_m() -> f32 {
 
 // 0x43 sibling-frame envelope: [opcode u8][broadcast_seq u64 LE][room_id u32 LE][user_count u16 LE]
 const PREAMBLE_OPCODE: u8 = wire::OPCODE_AVATAR_POSE;
+
+/// How long an agent's co-presence entry survives without an update before
+/// [`PresenceActor::sweep_stale_agent_presence`] retires it (ADR-2020).
+///
+/// Co-presence is a *live* claim — "this agent is working and looking at that
+/// node". A disconnected or crashed agent that never sends a closing update
+/// would otherwise keep a stale avatar attentive to a node for ever. Ten seconds
+/// is comfortably above the reliable channel's update cadence.
+pub const AGENT_PRESENCE_TTL: Duration = Duration::from_secs(10);
+
+/// Low 26 bits: the ephemeral wire node-id space (ADR-2024). An attention target
+/// naming a node outside it cannot correlate to anything on the graph socket.
+const WIRE_NODE_ID_MASK: u32 = 0x03FF_FFFF;
+
+/// One agent's last known social state plus when it was last refreshed.
+#[derive(Debug, Clone)]
+struct AgentPresenceEntry {
+    last: AgentPresence,
+    last_seen: Instant,
+}
+
+/// Publish an agent's co-presence (opcode `0x44`) into the room (ADR-2020).
+///
+/// The additive sibling of [`IngestPose`]: it carries *social* state (activity,
+/// gaze, attention target) rather than skeletal pose, on the same authenticated
+/// session. The two are deliberately independent — an agent may publish presence
+/// without ever sending a pose, and a human avatar may send poses without ever
+/// publishing presence.
+#[derive(Message, Debug)]
+#[rtype(result = "AgentPresenceOutcome")]
+pub struct IngestAgentPresence {
+    /// The publishing avatar. Must already be a joined member of this room:
+    /// membership is the authorisation boundary.
+    pub avatar_id: AvatarId,
+    pub presence: AgentPresence,
+}
+
+/// Result of an [`IngestAgentPresence`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentPresenceOutcome {
+    /// Accepted and broadcast to peers as an `0x44` delta.
+    Broadcast { changed_fields: u8 },
+    /// Accepted, but identical to the state already held at wire resolution, so
+    /// nothing was put on the wire. Gaze is compared *after* quantisation, so
+    /// sub-quantum float jitter never generates traffic.
+    Unchanged,
+    /// The publisher is not a member of this room. Membership is established by
+    /// an authenticated [`JoinRoom`], so this is the permission boundary: a
+    /// non-member cannot inject social state about anyone.
+    PermissionDenied,
+    /// The attention target names a node outside the 26-bit wire id space, so it
+    /// cannot correlate with any node on the graph socket.
+    InvalidNodeCorrelation { node_id: u32 },
+}
+
+/// Retire agent co-presence entries that have gone stale (ADR-2020).
+#[derive(Message, Debug)]
+#[rtype(result = "Vec<u32>")]
+pub struct SweepStaleAgentPresence {
+    /// Entries not refreshed within this window are retired. Defaults to
+    /// [`AGENT_PRESENCE_TTL`] when `None`.
+    pub ttl: Option<Duration>,
+}
+
+/// Read the co-presence currently held for one avatar (diagnostics/tests).
+#[derive(Message, Debug)]
+#[rtype(result = "Option<AgentPresence>")]
+pub struct GetAgentPresence {
+    pub avatar_id: AvatarId,
+}
+
+/// The graph node an avatar is currently attending to, if any (node correlation).
+#[derive(Message, Debug)]
+#[rtype(result = "Option<u32>")]
+pub struct GetAttentionNode {
+    pub avatar_id: AvatarId,
+}
 
 #[derive(Message, Debug, Clone)]
 #[rtype(result = "()")]
@@ -145,6 +226,15 @@ pub enum RoomEventEnvelope {
         avatar_id: String,
         did: String,
     },
+    /// ADR-2020: an agent's co-presence went stale and was retired. Announced on
+    /// the JSON event channel rather than as a `0x44` delta, because that codec
+    /// encodes *state* and has no representation for "this agent is gone" —
+    /// reusing an idle state delta would be ambiguous with an agent that
+    /// genuinely went idle.
+    AgentPresenceExpired {
+        /// Transport id the retired agent's `0x44` deltas were tagged with.
+        local_id: u32,
+    },
 }
 
 struct Subscriber {
@@ -168,6 +258,12 @@ pub struct PresenceActor {
     /// `PRESENCE_HAND_REACH_M`, default [`DEFAULT_PRESENCE_HAND_REACH_M`] (a
     /// generous 1.5m so tall users / extended controllers are not false-kicked).
     hand_reach_m: f32,
+    /// ADR-2020 co-presence (opcode 0x44): last published social state per agent.
+    /// Held apart from `pending_poses` so the two opcodes operate independently.
+    agent_presence: HashMap<AvatarId, AgentPresenceEntry>,
+    /// Broadcast sequence for the 0x44 channel. Separate from the 0x43 pose
+    /// sequence: the two are independent streams and must not share a counter.
+    agent_presence_sequence: u64,
     stats: RoomStatsSnapshot,
 }
 
@@ -188,6 +284,8 @@ impl PresenceActor {
             bounds: Aabb::symmetric(50.0),
             max_velocity_mps: 20.0,
             hand_reach_m: configured_hand_reach_m(),
+            agent_presence: HashMap::new(),
+            agent_presence_sequence: 0,
             stats,
         }
     }
@@ -295,6 +393,156 @@ impl PresenceActor {
             buf.extend_from_slice(&payload);
         }
         Some(buf)
+    }
+
+    // ── ADR-2020: agent co-presence (opcode 0x44) ──────────────────────────
+
+    /// The graph node an avatar is attending to, if its attention names one.
+    /// This is the *node correlation*: a `0x44` attention target and a node on
+    /// the `0x03`/`0x05` graph socket refer to the same 26-bit wire id space.
+    fn attention_node(&self, avatar_id: &AvatarId) -> Option<u32> {
+        match self.agent_presence.get(avatar_id)?.last.attention {
+            AttentionTarget::GraphNode(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Validate that an attention target can correlate to a graph node.
+    ///
+    /// A node id above the 26-bit wire mask cannot be carried by the graph
+    /// socket at all (ADR-2024), so accepting it would publish an attention
+    /// target that no client could ever resolve.
+    fn check_node_correlation(presence: &AgentPresence) -> Result<(), u32> {
+        match presence.attention {
+            AttentionTarget::GraphNode(id) if id > WIRE_NODE_ID_MASK => Err(id),
+            _ => Ok(()),
+        }
+    }
+
+    /// Apply one agent's published co-presence, broadcasting a delta when it
+    /// actually changed at wire resolution.
+    fn handle_agent_presence(
+        &mut self,
+        msg: IngestAgentPresence,
+        ctx: &mut Context<Self>,
+    ) -> AgentPresenceOutcome {
+        // Permission boundary: only a joined member may publish. Membership is
+        // established by an authenticated JoinRoom, so a caller that never
+        // joined — or one that has left — cannot inject social state.
+        if !self.subscribers.contains_key(&msg.avatar_id) {
+            warn!(
+                room = %self.room_id.as_str(),
+                "rejecting agent presence from a non-member"
+            );
+            return AgentPresenceOutcome::PermissionDenied;
+        }
+
+        if let Err(node_id) = Self::check_node_correlation(&msg.presence) {
+            warn!(node_id, "agent presence attention target is outside wire id space");
+            return AgentPresenceOutcome::InvalidNodeCorrelation { node_id };
+        }
+
+        let local_id = self.local_id_for(&msg.avatar_id);
+        let previous = self.agent_presence.get(&msg.avatar_id).map(|e| e.last);
+
+        // A first publication is a full delta; afterwards only changed fields go
+        // on the wire. `between` compares gaze at wire resolution, so float
+        // jitter below the 16-bit quantum produces no traffic.
+        let delta = match previous {
+            None => AgentPresenceDelta::full(local_id, &msg.presence),
+            Some(prev) => AgentPresenceDelta::between(local_id, &prev, &msg.presence),
+        };
+
+        self.agent_presence.insert(
+            msg.avatar_id.clone(),
+            AgentPresenceEntry {
+                last: msg.presence,
+                last_seen: Instant::now(),
+            },
+        );
+
+        if delta.is_empty() {
+            return AgentPresenceOutcome::Unchanged;
+        }
+
+        let changed_fields = delta.field_mask();
+        self.broadcast_agent_presence(&[delta], Some(&msg.avatar_id), ctx);
+        AgentPresenceOutcome::Broadcast { changed_fields }
+    }
+
+    /// Encode and dispatch one or more `0x44` deltas to the room.
+    ///
+    /// `exclude` is the publisher, which does not need its own state echoed
+    /// back. Kept entirely separate from `dispatch_broadcast`: a co-presence
+    /// update must never flush pending poses, and a pose broadcast must never
+    /// carry social state.
+    fn broadcast_agent_presence(
+        &mut self,
+        deltas: &[AgentPresenceDelta],
+        exclude: Option<&AvatarId>,
+        _ctx: &mut Context<Self>,
+    ) {
+        if deltas.is_empty() {
+            return;
+        }
+        self.agent_presence_sequence = self.agent_presence_sequence.wrapping_add(1);
+        let bytes = match encode_agent_presence(self.agent_presence_sequence, deltas) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!(err = %e, "failed to encode agent presence frame");
+                return;
+            }
+        };
+        debug_assert_eq!(bytes.first().copied(), Some(OPCODE_AGENT_PRESENCE));
+
+        let envelope = BroadcastFrame {
+            bytes: bytes.to_vec(),
+            broadcast_sequence: self.agent_presence_sequence,
+        };
+        self.stats.broadcast_frames_total += 1;
+        self.stats.broadcast_bytes_total += envelope.bytes.len() as u64;
+
+        for (id, sub) in self.subscribers.iter() {
+            if Some(id) == exclude {
+                continue;
+            }
+            if !sub.frame_recipient.connected() {
+                continue;
+            }
+            let _ = sub.frame_recipient.do_send(envelope.clone());
+        }
+    }
+
+    /// Retire co-presence entries that have not been refreshed within `ttl`,
+    /// returning the retired agents' `local_id`s (ADR-2020 stale removal).
+    ///
+    /// Retirement is announced on the JSON room-event channel rather than as a
+    /// `0x44` delta: the codec encodes *state*, and it has no representation for
+    /// "this agent is gone". Reusing a state delta to mean removal would be
+    /// ambiguous with an agent that genuinely went idle.
+    fn sweep_stale_agent_presence(&mut self, ttl: Duration) -> Vec<u32> {
+        let now = Instant::now();
+        let stale: Vec<AvatarId> = self
+            .agent_presence
+            .iter()
+            .filter(|(_, e)| now.duration_since(e.last_seen) > ttl)
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        let mut retired = Vec::with_capacity(stale.len());
+        for avatar_id in stale {
+            self.agent_presence.remove(&avatar_id);
+            let local_id = self.local_id_for(&avatar_id);
+            retired.push(local_id);
+            info!(local_id, "retiring stale agent co-presence");
+            let envelope = RoomEventEnvelope::AgentPresenceExpired { local_id };
+            for sub in self.subscribers.values() {
+                if sub.event_recipient.connected() {
+                    let _ = sub.event_recipient.do_send(envelope.clone());
+                }
+            }
+        }
+        retired
     }
 
     fn dispatch_broadcast(&mut self, sender: &AvatarId) {
@@ -557,6 +805,39 @@ impl PresenceActor {
 
         self.dispatch_broadcast(&msg.avatar_id);
         IngestOutcome::Accepted
+    }
+}
+
+impl Handler<IngestAgentPresence> for PresenceActor {
+    type Result = actix::MessageResult<IngestAgentPresence>;
+
+    fn handle(&mut self, msg: IngestAgentPresence, ctx: &mut Self::Context) -> Self::Result {
+        actix::MessageResult(self.handle_agent_presence(msg, ctx))
+    }
+}
+
+impl Handler<SweepStaleAgentPresence> for PresenceActor {
+    type Result = actix::MessageResult<SweepStaleAgentPresence>;
+
+    fn handle(&mut self, msg: SweepStaleAgentPresence, _ctx: &mut Self::Context) -> Self::Result {
+        let ttl = msg.ttl.unwrap_or(AGENT_PRESENCE_TTL);
+        actix::MessageResult(self.sweep_stale_agent_presence(ttl))
+    }
+}
+
+impl Handler<GetAgentPresence> for PresenceActor {
+    type Result = actix::MessageResult<GetAgentPresence>;
+
+    fn handle(&mut self, msg: GetAgentPresence, _ctx: &mut Self::Context) -> Self::Result {
+        actix::MessageResult(self.agent_presence.get(&msg.avatar_id).map(|e| e.last))
+    }
+}
+
+impl Handler<GetAttentionNode> for PresenceActor {
+    type Result = actix::MessageResult<GetAttentionNode>;
+
+    fn handle(&mut self, msg: GetAttentionNode, _ctx: &mut Self::Context) -> Self::Result {
+        actix::MessageResult(self.attention_node(&msg.avatar_id))
     }
 }
 
@@ -826,5 +1107,473 @@ mod tests {
             "single out-of-reach hand frame should drop, not kick: {outcome:?}"
         );
         Arbiter::current().stop();
+    }
+
+    // ── ADR-2020: agent co-presence (0x44) end to end ──────────────────────
+
+    use actix::Addr;
+    use visionclaw_xr_presence::agent_presence::{
+        decode_agent_presence, AgentActivity, AgentPresence, AttentionTarget,
+        OPCODE_AGENT_PRESENCE,
+    };
+
+    fn presence(activity: AgentActivity, gaze: [f32; 3], attn: AttentionTarget) -> AgentPresence {
+        AgentPresence::new(activity, gaze, attn)
+    }
+
+    /// Join `d` to `actor`, returning its avatar id.
+    async fn join(
+        actor: &Addr<PresenceActor>,
+        d: &Did,
+        name: &str,
+        collector: &Addr<CollectActor>,
+    ) -> AvatarId {
+        actor
+            .send(JoinRoom {
+                did: d.clone(),
+                metadata: meta(d, name),
+                frame_recipient: collector.clone().recipient(),
+                event_recipient: collector.clone().recipient(),
+            })
+            .await
+            .unwrap()
+            .unwrap()
+            .avatar_id
+    }
+
+    fn collector() -> (
+        Addr<CollectActor>,
+        Arc<Mutex<Vec<BroadcastFrame>>>,
+        Arc<Mutex<Vec<RoomEventEnvelope>>>,
+    ) {
+        let frames = Arc::new(Mutex::new(Vec::<BroadcastFrame>::new()));
+        let events = Arc::new(Mutex::new(Vec::<RoomEventEnvelope>::new()));
+        let addr = CollectActor {
+            frames: frames.clone(),
+            events: events.clone(),
+        }
+        .start();
+        (addr, frames, events)
+    }
+
+    #[actix::test]
+    async fn agent_presence_is_encoded_as_0x44_and_reaches_peers_not_the_publisher() {
+        // The closeout finding: the 0x44 codec existed but no live server/client
+        // encode/decode integration could be found. This is that integration.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, frames_a, _) = collector();
+        let (coll_b, frames_b, _) = collector();
+
+        let d_a = did(0x10);
+        let d_b = did(0x20);
+        let a = join(&actor, &d_a, "agent-a", &coll_a).await;
+        let _b = join(&actor, &d_b, "agent-b", &coll_b).await;
+
+        let outcome = actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::GraphNode(4_242),
+                ),
+            })
+            .await
+            .unwrap();
+        assert!(
+            matches!(outcome, AgentPresenceOutcome::Broadcast { .. }),
+            "first publication must broadcast, got {outcome:?}"
+        );
+
+        actix::clock::sleep(Duration::from_millis(50)).await;
+
+        // The peer received a real 0x44 frame that decodes back to what was sent.
+        let received = frames_b.lock().unwrap().clone();
+        assert_eq!(received.len(), 1, "peer must receive exactly one frame");
+        let bytes = &received[0].bytes;
+        assert_eq!(bytes[0], OPCODE_AGENT_PRESENCE, "opcode must be 0x44");
+
+        let batch = decode_agent_presence(bytes).expect("server output must decode");
+        assert_eq!(batch.deltas.len(), 1);
+        let delta = &batch.deltas[0];
+        assert_eq!(delta.state, Some(AgentActivity::Working));
+        assert_eq!(delta.attention, Some(AttentionTarget::GraphNode(4_242)));
+
+        // The publisher does not get its own state echoed back.
+        assert!(
+            frames_a.lock().unwrap().is_empty(),
+            "publisher must not receive its own presence"
+        );
+    }
+
+    #[actix::test]
+    async fn a_non_member_cannot_publish_presence() {
+        // Permission denial. Membership is established by an authenticated
+        // JoinRoom, so it is the authorisation boundary for social state.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+
+        // A well-formed avatar id that never joined this room.
+        let outsider = AvatarId::from_did(&did(0xEE));
+        let outcome = actor
+            .send(IngestAgentPresence {
+                avatar_id: outsider.clone(),
+                presence: presence(AgentActivity::Speaking, [0.0, 0.0, -1.0], AttentionTarget::User),
+            })
+            .await
+            .unwrap();
+        assert_eq!(outcome, AgentPresenceOutcome::PermissionDenied);
+
+        // Nothing was recorded for the outsider.
+        assert!(actor
+            .send(GetAgentPresence { avatar_id: outsider })
+            .await
+            .unwrap()
+            .is_none());
+
+        // A member is still accepted, so denial is not a blanket refusal.
+        let ok = actor
+            .send(IngestAgentPresence {
+                avatar_id: a,
+                presence: presence(AgentActivity::Idle, [0.0, 0.0, -1.0], AttentionTarget::None),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(ok, AgentPresenceOutcome::Broadcast { .. }));
+    }
+
+    #[actix::test]
+    async fn a_member_that_left_can_no_longer_publish() {
+        // Leaving revokes the permission: the boundary is live membership, not a
+        // one-off check at join time.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let (coll_b, _, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+        // A second member keeps the room alive: leaving the LAST member stops the
+        // actor entirely, which would test mailbox shutdown rather than authority.
+        let _b = join(&actor, &did(0x20), "agent-b", &coll_b).await;
+
+        actor
+            .send(LeaveRoom {
+                avatar_id: a.clone(),
+            })
+            .await
+            .unwrap();
+
+        let outcome = actor
+            .send(IngestAgentPresence {
+                avatar_id: a,
+                presence: presence(AgentActivity::Working, [0.0, 0.0, -1.0], AttentionTarget::None),
+            })
+            .await
+            .unwrap();
+        assert_eq!(outcome, AgentPresenceOutcome::PermissionDenied);
+    }
+
+    #[actix::test]
+    async fn attention_correlates_to_a_graph_node_id() {
+        // Node correlation: the attention target and the graph socket share the
+        // 26-bit wire id space, so an attended node is resolvable by a client.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::GraphNode(1_234),
+                ),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            actor
+                .send(GetAttentionNode {
+                    avatar_id: a.clone()
+                })
+                .await
+                .unwrap(),
+            Some(1_234)
+        );
+
+        // Attending to the user, not a node, correlates to nothing.
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(AgentActivity::Speaking, [0.0, 0.0, -1.0], AttentionTarget::User),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            actor.send(GetAttentionNode { avatar_id: a }).await.unwrap(),
+            None
+        );
+    }
+
+    #[actix::test]
+    async fn an_attention_node_outside_the_wire_id_space_is_refused() {
+        // A node id above the 26-bit mask cannot ride the graph socket at all
+        // (ADR-2024), so publishing it would name a node no client can resolve.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+
+        let over_range = WIRE_NODE_ID_MASK + 1;
+        let outcome = actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::GraphNode(over_range),
+                ),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome,
+            AgentPresenceOutcome::InvalidNodeCorrelation {
+                node_id: over_range
+            }
+        );
+        assert!(actor
+            .send(GetAgentPresence { avatar_id: a })
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[actix::test]
+    async fn an_unchanged_republication_puts_nothing_on_the_wire() {
+        // Gaze is compared at wire resolution, so float jitter below the 16-bit
+        // quantum must not generate traffic.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let (coll_b, frames_b, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+        let _b = join(&actor, &did(0x20), "agent-b", &coll_b).await;
+
+        let p = presence(
+            AgentActivity::Working,
+            [0.0, 0.0, -1.0],
+            AttentionTarget::GraphNode(7),
+        );
+        assert!(matches!(
+            actor
+                .send(IngestAgentPresence {
+                    avatar_id: a.clone(),
+                    presence: p
+                })
+                .await
+                .unwrap(),
+            AgentPresenceOutcome::Broadcast { .. }
+        ));
+        assert_eq!(
+            actor
+                .send(IngestAgentPresence {
+                    avatar_id: a.clone(),
+                    presence: p
+                })
+                .await
+                .unwrap(),
+            AgentPresenceOutcome::Unchanged
+        );
+
+        actix::clock::sleep(Duration::from_millis(50)).await;
+        assert_eq!(
+            frames_b.lock().unwrap().len(),
+            1,
+            "the identical republication must not reach the wire"
+        );
+    }
+
+    #[actix::test]
+    async fn stale_presence_is_retired_and_announced() {
+        // Stale removal: a crashed agent must not leave an avatar permanently
+        // attentive to a node.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let (coll_b, _, events_b) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+        let _b = join(&actor, &did(0x20), "agent-b", &coll_b).await;
+
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::GraphNode(99),
+                ),
+            })
+            .await
+            .unwrap();
+
+        // Well inside the TTL: nothing is retired.
+        assert!(actor
+            .send(SweepStaleAgentPresence {
+                ttl: Some(Duration::from_secs(60))
+            })
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(actor
+            .send(GetAgentPresence {
+                avatar_id: a.clone()
+            })
+            .await
+            .unwrap()
+            .is_some());
+
+        // A zero TTL makes every entry stale.
+        let retired = actor
+            .send(SweepStaleAgentPresence {
+                ttl: Some(Duration::ZERO),
+            })
+            .await
+            .unwrap();
+        assert_eq!(retired.len(), 1, "the stale entry must be retired");
+
+        assert!(
+            actor
+                .send(GetAgentPresence {
+                    avatar_id: a.clone()
+                })
+                .await
+                .unwrap()
+                .is_none(),
+            "retired presence must be dropped"
+        );
+        assert_eq!(
+            actor.send(GetAttentionNode { avatar_id: a }).await.unwrap(),
+            None,
+            "a retired agent attends to nothing"
+        );
+
+        actix::clock::sleep(Duration::from_millis(50)).await;
+        let events = events_b.lock().unwrap().clone();
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                RoomEventEnvelope::AgentPresenceExpired { local_id } if *local_id == retired[0]
+            )),
+            "retirement must be announced on the event channel, got {events:?}"
+        );
+    }
+
+    #[actix::test]
+    async fn presence_and_pose_operate_independently() {
+        // Independent pose operation: publishing co-presence must not flush or
+        // fabricate poses, and ingesting a pose must not touch social state.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let (coll_b, frames_b, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+        let _b = join(&actor, &did(0x20), "agent-b", &coll_b).await;
+
+        // Presence alone: exactly one 0x44 frame, no 0x43 frame.
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(AgentActivity::Working, [0.0, 0.0, -1.0], AttentionTarget::None),
+            })
+            .await
+            .unwrap();
+        actix::clock::sleep(Duration::from_millis(50)).await;
+        {
+            let f = frames_b.lock().unwrap();
+            assert_eq!(f.len(), 1);
+            assert_eq!(f[0].bytes[0], OPCODE_AGENT_PRESENCE);
+        }
+
+        // Now a pose from the same avatar: a 0x43 frame appears, and the social
+        // state is untouched by it.
+        let outcome = actor
+            .send(IngestPose {
+                avatar_id: a.clone(),
+                frame_bytes: encode(&sample_frame(1_000), &sample_room(), &a).unwrap().to_vec(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(outcome, IngestOutcome::Accepted);
+        actix::clock::sleep(Duration::from_millis(50)).await;
+
+        let f = frames_b.lock().unwrap().clone();
+        assert_eq!(f.len(), 2, "one presence frame and one pose frame");
+        assert_eq!(f[1].bytes[0], PREAMBLE_OPCODE, "the second is the 0x43 pose");
+
+        let still = actor
+            .send(GetAgentPresence {
+                avatar_id: a.clone(),
+            })
+            .await
+            .unwrap()
+            .expect("pose ingest must not clear social state");
+        assert_eq!(still.state, AgentActivity::Working);
+
+        // The two streams carry independent sequence spaces. Both counters start
+        // at zero, so their first frames legitimately share the value 1 — what
+        // independence means is that advancing ONE does not advance the other.
+        assert_eq!(f[0].broadcast_sequence, 1, "first 0x44 frame");
+        assert_eq!(f[1].broadcast_sequence, 1, "first 0x43 frame, own counter");
+
+        // A second presence update advances only the 0x44 counter.
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(AgentActivity::Idle, [0.0, 0.0, -1.0], AttentionTarget::None),
+            })
+            .await
+            .unwrap();
+        actix::clock::sleep(Duration::from_millis(50)).await;
+        let f = frames_b.lock().unwrap().clone();
+        assert_eq!(f.len(), 3);
+        assert_eq!(f[2].bytes[0], OPCODE_AGENT_PRESENCE);
+        assert_eq!(
+            f[2].broadcast_sequence, 2,
+            "the 0x44 counter advanced without the pose stream moving"
+        );
+    }
+
+    #[actix::test]
+    async fn a_changed_field_broadcasts_only_that_field() {
+        // Deltas elide unchanged fields, so the reliable channel stays cheap.
+        let actor = PresenceActor::new(sample_room()).start();
+        let (coll_a, _, _) = collector();
+        let (coll_b, frames_b, _) = collector();
+        let a = join(&actor, &did(0x10), "agent-a", &coll_a).await;
+        let _b = join(&actor, &did(0x20), "agent-b", &coll_b).await;
+
+        let gaze = [0.0f32, 0.0, -1.0];
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(AgentActivity::Idle, gaze, AttentionTarget::None),
+            })
+            .await
+            .unwrap();
+
+        // Only the activity changes.
+        actor
+            .send(IngestAgentPresence {
+                avatar_id: a.clone(),
+                presence: presence(AgentActivity::Working, gaze, AttentionTarget::None),
+            })
+            .await
+            .unwrap();
+
+        actix::clock::sleep(Duration::from_millis(50)).await;
+        let f = frames_b.lock().unwrap().clone();
+        assert_eq!(f.len(), 2);
+        let batch = decode_agent_presence(&f[1].bytes).expect("decodes");
+        let delta = &batch.deltas[0];
+        assert_eq!(delta.state, Some(AgentActivity::Working));
+        assert!(delta.gaze_dir.is_none(), "unchanged gaze must be elided");
+        assert!(delta.attention.is_none(), "unchanged attention must be elided");
     }
 }

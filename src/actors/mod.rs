@@ -40,7 +40,6 @@ pub mod metadata_actor;
 pub mod optimized_settings_actor;
 pub mod physics_orchestrator_actor;
 pub mod protected_settings_actor;
-pub mod supervisor;
 pub mod voice_commands;
 // pub mod supervisor_voice;
 // graph_messages module removed - AutoBalanceNotification consolidated into messages.rs
@@ -64,7 +63,7 @@ pub use gpu::GPUManagerActor;
 pub use graph_service_supervisor::{
     ActorHealth, ActorHeartbeat, ActorType, BackoffStrategy, GetSupervisorStatus,
     GraphServiceSupervisor, GraphSupervisionStrategy, RestartActor, RestartAllActors,
-    RestartPolicy, SetParentSupervisor, SupervisorMessage, SupervisorStatus,
+    RestartPolicy, SupervisorMessage, SupervisorStatus,
 };
 pub use graph_state_actor::GraphStateActor;
 pub use messages::*;
@@ -85,9 +84,6 @@ pub use protected_settings_actor::ProtectedSettingsActor;
 pub use semantic_processor_actor::{
     AISemanticFeatures, SemanticProcessorActor, SemanticProcessorConfig, SemanticStats,
 };
-pub use supervisor::{
-    ActorFactory, SupervisedActorInfo, SupervisedActorTrait, SupervisionStrategy, SupervisorActor,
-};
 pub use task_orchestrator_actor::{
     CreateTask, GetSystemStatus, GetTaskStatus, InterruptAgentTask, InterruptError,
     ListActiveTasks, StopTask, SystemStatusInfo, TaskOrchestratorActor, TaskState,
@@ -97,9 +93,24 @@ pub use workspace_actor::WorkspaceActor;
 
 // Phase 5: Actor lifecycle management and coordination
 pub mod event_coordination;
-pub mod lifecycle;
 pub use event_coordination::{initialize_event_coordinator, EventCoordinator};
-pub use lifecycle::{
-    initialize_actor_system, shutdown_actor_system, ActorLifecycleManager,
-    SupervisionStrategy as Phase5SupervisionStrategy,
-};
+// ADR-2045: `src/actors/lifecycle.rs` (`ActorLifecycleManager`,
+// `initialize_actor_system`, `shutdown_actor_system`, its own
+// `SupervisionStrategy`/`SupervisionDecision` pair) was dead code — it was
+// re-exported here but `initialize_actor_system`/`shutdown_actor_system` were
+// never called from anywhere in `src/`, and `ACTOR_SYSTEM` had no other
+// reader. It duplicated a second, unrelated `PhysicsOrchestratorActor` /
+// `SemanticProcessorActor` pair and its own health monitor alongside the
+// live `GraphServiceSupervisor` (`src/actors/graph_service_supervisor.rs`),
+// which is the actor system's real supervision path. Removed, not stubbed.
+//
+// ADR-2045: `src/actors/supervisor.rs` (the generic `SupervisorActor`,
+// `ActorFactory`, `SupervisedActorTrait`, `SupervisionStrategy`,
+// `ActorFailed`, `InitiateGracefulShutdown`) went the same way. Its
+// `SupervisorActor::new` was called only from its own `#[cfg(test)]` module
+// and `InitiateGracefulShutdown` was never sent. Its one non-test coupling was
+// `GraphServiceSupervisor`'s `parent_supervisor` field and the
+// `SetParentSupervisor` message — but that message was never SENT by anything,
+// so the field was permanently `None` and the `Escalate` branch always took
+// the stop path. Both were removed with it, and `Escalate` now says plainly
+// that it is the top of the tree.

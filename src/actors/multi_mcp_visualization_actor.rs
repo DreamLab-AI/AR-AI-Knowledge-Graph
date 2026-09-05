@@ -9,25 +9,18 @@
 //! - Dynamic layout updates based on swarm topology
 
 use actix::prelude::*;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use crate::services::agent_visualization_protocol::{
-    AgentInit, AgentMetrics, AgentStateUpdate, AgentVisualizationMessage, Bottleneck,
-    ConnectionInit, ConnectionUpdateMessage, CriticalPath, GlobalPerformanceMetrics,
-    InitializeMessage, LayerLoad, MetricsUpdateMessage, PhysicsConfig, Position, PositionUpdate,
-    PositionUpdateMessage, StateUpdateMessage, SwarmMetrics, SwarmTopologyData, VisualConfig,
+    AgentInit, Bottleneck, ConnectionInit, CriticalPath, GlobalPerformanceMetrics, LayerLoad,
+    PhysicsConfig, Position, SwarmTopologyData, VisualConfig,
 };
 use crate::services::multi_mcp_agent_discovery::McpServerConfig;
 use crate::types::AgentStatus;
 use crate::types::Vec3Data;
-use crate::utils::time;
-
-#[derive(Message, Debug, Clone)]
-#[rtype(result = "()")]
-pub struct AgentVisualizationMessageWrapper(pub AgentVisualizationMessage);
 
 #[derive(Debug)]
 pub struct MultiMcpVisualizationActor {
@@ -49,8 +42,6 @@ pub struct MultiMcpVisualizationActor {
 
     pub last_update: Instant,
     pub update_interval: Duration,
-
-    pub subscribers: Vec<Recipient<AgentVisualizationMessageWrapper>>,
 
     pub topology_data: SwarmTopologyData,
 
@@ -154,14 +145,6 @@ pub enum MultiMcpVisualizationMessage {
         metrics: McpServerMetrics,
     },
 
-    Subscribe {
-        recipient: Recipient<AgentVisualizationMessageWrapper>,
-    },
-
-    Unsubscribe {
-        recipient: Recipient<AgentVisualizationMessageWrapper>,
-    },
-
     ChangeLayout {
         algorithm: LayoutAlgorithm,
     },
@@ -229,7 +212,6 @@ impl Default for MultiMcpVisualizationActor {
             visual_config: VisualConfig::default(),
             last_update: Instant::now(),
             update_interval: Duration::from_millis(33),
-            subscribers: Vec::new(),
             topology_data: SwarmTopologyData::default(),
             global_metrics: GlobalPerformanceMetrics::default(),
         }
@@ -313,15 +295,6 @@ impl Handler<MultiMcpVisualizationMessage> for MultiMcpVisualizationActor {
                 self.update_server_metrics(server_id, metrics)
             }
 
-            MultiMcpVisualizationMessage::Subscribe { recipient } => self.subscribe(recipient),
-
-            MultiMcpVisualizationMessage::Unsubscribe {
-                recipient: _recipient,
-            } => {
-                warn!("Unsubscribe not fully implemented - requires subscriber identification");
-                Ok(())
-            }
-
             MultiMcpVisualizationMessage::ChangeLayout { algorithm } => {
                 self.change_layout(algorithm)
             }
@@ -378,8 +351,6 @@ impl MultiMcpVisualizationActor {
 
         self.initialize_server_layout()?;
 
-        self.broadcast_initialization();
-
         Ok(())
     }
 
@@ -423,14 +394,12 @@ impl MultiMcpVisualizationActor {
         &mut self,
         server_id: String,
         positions: HashMap<String, Position>,
-        timestamp: i64,
+        _timestamp: i64,
     ) -> Result<(), String> {
         for (agent_id, position) in positions {
             let full_agent_id = format!("{}:{}", server_id, agent_id);
             self.agent_positions.insert(full_agent_id, position);
         }
-
-        self.broadcast_position_update(timestamp);
 
         Ok(())
     }
@@ -450,8 +419,6 @@ impl MultiMcpVisualizationActor {
         self.agents.insert(full_agent_id.clone(), agent);
         self.agent_positions.insert(full_agent_id, pos);
 
-        self.broadcast_state_update();
-
         Ok(())
     }
 
@@ -463,8 +430,6 @@ impl MultiMcpVisualizationActor {
 
         self.connections
             .retain(|_, conn| conn.source != full_agent_id && conn.target != full_agent_id);
-
-        self.broadcast_state_update();
 
         Ok(())
     }
@@ -480,8 +445,6 @@ impl MultiMcpVisualizationActor {
 
         if let Some(agent) = self.agents.get_mut(&full_agent_id) {
             agent.status = format!("{:?}", status);
-
-            self.broadcast_state_update();
         }
 
         Ok(())
@@ -490,15 +453,11 @@ impl MultiMcpVisualizationActor {
     fn add_connection(&mut self, connection: ConnectionInit) -> Result<(), String> {
         self.connections.insert(connection.id.clone(), connection);
 
-        self.broadcast_connection_update();
-
         Ok(())
     }
 
     fn remove_connection(&mut self, connection_id: String) -> Result<(), String> {
         self.connections.remove(&connection_id);
-
-        self.broadcast_connection_update();
 
         Ok(())
     }
@@ -512,16 +471,6 @@ impl MultiMcpVisualizationActor {
 
         self.collect_global_metrics();
 
-        self.broadcast_metrics_update();
-
-        Ok(())
-    }
-
-    fn subscribe(
-        &mut self,
-        recipient: Recipient<AgentVisualizationMessageWrapper>,
-    ) -> Result<(), String> {
-        self.subscribers.push(recipient);
         Ok(())
     }
 
@@ -529,8 +478,6 @@ impl MultiMcpVisualizationActor {
         self.layout_algorithm = algorithm;
 
         self.recalculate_layout()?;
-
-        self.broadcast_position_update(time::timestamp_seconds());
 
         Ok(())
     }
@@ -542,8 +489,6 @@ impl MultiMcpVisualizationActor {
         self.server_metrics.clear();
         self.topology_data = SwarmTopologyData::default();
         self.global_metrics = GlobalPerformanceMetrics::default();
-
-        self.broadcast_state_update();
 
         Ok(())
     }
@@ -764,8 +709,6 @@ impl MultiMcpVisualizationActor {
             self.last_update = Instant::now();
 
             self.apply_physics_simulation();
-
-            self.broadcast_position_update(time::timestamp_seconds());
         }
     }
 
@@ -867,130 +810,6 @@ impl MultiMcpVisualizationActor {
                 position.y = position.y.clamp(-100.0, 100.0);
                 position.z = position.z.clamp(-100.0, 100.0);
             }
-        }
-    }
-
-    fn broadcast_initialization(&self) {
-        let message = AgentVisualizationMessage::Initialize(InitializeMessage {
-            timestamp: time::timestamp_seconds(),
-            swarm_id: "multi_mcp_swarm".to_string(),
-            session_uuid: None,
-            topology: "multi_server".to_string(),
-            agents: self.agents.values().cloned().collect(),
-            connections: self.connections.values().cloned().collect(),
-            visual_config: self.visual_config.clone(),
-            physics_config: self.physics_config.clone(),
-            positions: self.agent_positions.clone(),
-        });
-
-        self.broadcast_message(message);
-    }
-
-    fn broadcast_position_update(&self, timestamp: i64) {
-        let message = AgentVisualizationMessage::PositionUpdate(PositionUpdateMessage {
-            timestamp,
-            positions: self
-                .agent_positions
-                .iter()
-                .map(|(id, pos)| PositionUpdate {
-                    id: id.clone(),
-                    x: pos.x,
-                    y: pos.y,
-                    z: pos.z,
-                    vx: None,
-                    vy: None,
-                    vz: None,
-                })
-                .collect(),
-        });
-
-        self.broadcast_message(message);
-    }
-
-    fn broadcast_state_update(&self) {
-        let message = AgentVisualizationMessage::StateUpdate(StateUpdateMessage {
-            timestamp: time::timestamp_seconds(),
-            updates: self
-                .agents
-                .values()
-                .map(|agent| AgentStateUpdate {
-                    id: agent.id.clone(),
-                    status: Some(agent.status.clone()),
-                    health: Some(agent.health),
-                    cpu: Some(agent.cpu),
-                    memory: Some(agent.memory),
-                    activity: Some(agent.activity),
-                    tasks_active: Some(agent.tasks_active),
-                    current_task: None,
-                })
-                .collect(),
-        });
-
-        self.broadcast_message(message);
-    }
-
-    fn broadcast_connection_update(&self) {
-        let message = AgentVisualizationMessage::ConnectionUpdate(ConnectionUpdateMessage {
-            timestamp: time::timestamp_seconds(),
-            added: self.connections.values().cloned().collect(),
-            removed: Vec::new(),
-            updated: Vec::new(),
-        });
-
-        self.broadcast_message(message);
-    }
-
-    fn broadcast_metrics_update(&self) {
-        let message = AgentVisualizationMessage::MetricsUpdate(MetricsUpdateMessage {
-            timestamp: time::timestamp_seconds(),
-            overall: SwarmMetrics {
-                total_agents: self.agents.len() as u32,
-                active_agents: self
-                    .agents
-                    .values()
-                    .filter(|a| a.status == "active")
-                    .count() as u32,
-                health_avg: if !self.agents.is_empty() {
-                    self.agents.values().map(|a| a.health).sum::<f32>() / self.agents.len() as f32
-                } else {
-                    0.0
-                },
-                cpu_total: self.agents.values().map(|a| a.cpu).sum(),
-                memory_total: self.agents.values().map(|a| a.memory).sum(),
-                tokens_total: self.agents.values().map(|a| a.tokens).sum(),
-                tokens_per_second: self.agents.values().map(|a| a.token_rate).sum(),
-            },
-            agent_metrics: self
-                .agents
-                .values()
-                .map(|agent| AgentMetrics {
-                    id: agent.id.clone(),
-                    tokens: agent.tokens,
-                    token_rate: agent.token_rate,
-                    tasks_completed: agent.tasks_completed,
-                    success_rate: agent.success_rate,
-                })
-                .collect(),
-        });
-
-        self.broadcast_message(message);
-    }
-
-    fn broadcast_message(&self, message: AgentVisualizationMessage) {
-        let wrapped_message = AgentVisualizationMessageWrapper(message);
-        let mut failed_subscribers = Vec::new();
-
-        for (index, subscriber) in self.subscribers.iter().enumerate() {
-            if let Err(_) = subscriber.try_send(wrapped_message.clone()) {
-                failed_subscribers.push(index);
-            }
-        }
-
-        if !failed_subscribers.is_empty() {
-            warn!(
-                "Failed to send message to {} subscribers",
-                failed_subscribers.len()
-            );
         }
     }
 
