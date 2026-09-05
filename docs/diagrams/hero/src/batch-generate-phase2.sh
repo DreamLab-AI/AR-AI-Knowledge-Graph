@@ -4,8 +4,8 @@ set -e
 export PATH="$HOME/.bun/bin:$PATH"
 cd /home/devuser/.claude/skills/art/tools
 
-RENDERED=/home/devuser/workspace/project/docs/diagrams/rendered
-UPGRADED=/home/devuser/workspace/project/docs/diagrams/upgraded
+RENDERED=/home/devuser/workspace/project/docs/diagrams/hero/rendered
+UPGRADED=/home/devuser/workspace/project/docs/diagrams/hero/upgraded
 
 AESTHETIC='Professional dark-mode technical diagram in VisionClaw brand aesthetic. Deep midnight-navy background (#0A1020) with subtle volumetric atmospheric haze. Crystalline nodes with soft inner luminescence and thin bright borders. Violet #8B5CF6 glow for governance/human-judgment elements, cyan #00D4FF for orchestration/agents/reasoning, emerald #10B981 for discovery/knowledge/ingestion, amber #F59E0B accents for trust hubs and central foci, red #EF4444 for orphaned/risk elements. Clean sans-serif typography (Inter-style) in off-white #E8F4FC. Thin directional energy filaments for connections with gradient glow. Cinematic sci-fi UI concept art fused with engineering blueprint precision. NO hand-drawn wobble, NO cartoon, NO watercolour, NO decorative clutter. Crisp geometric clarity. Preserve the structural layout of the reference diagram exactly including all text labels verbatim. Add depth via subtle drop shadows and rim lighting. Ensure every label from the reference is legible in the final image. 16:9 composition.'
 

@@ -1,3 +1,2 @@
-# Intermediate artefacts — regenerable via src/batch-generate.sh
+# mmdc render artefacts — regenerate with: node scripts/diagram-index-gen.js docs/diagrams --render
 rendered/
-upgraded/
