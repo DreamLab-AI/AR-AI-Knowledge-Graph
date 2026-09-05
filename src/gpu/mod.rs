@@ -7,14 +7,15 @@
 pub mod types;
 
 // Phase 5 (ADR-01 D1): consolidated per-node GPU buffer ownership.
-// Feature-gated behind `physics-v2` until all callsites listed in
-// docs/migration-sprint/01-gpu-physics/WORKTREE-PLAN.md §2 are migrated.
-#[cfg(feature = "physics-v2")]
-pub mod buffers;
+// REMOVED (ADR-2055): `buffers` (`PhysicsGpuBuffers`, ADR-01 D1/D3) was gated behind the
+// `physics-v2` feature, which is retired. Its own header recorded that the legacy
+// `UnifiedGPUCompute` (`src/utils/unified_gpu_compute/construction.rs`) "still owns the
+// production path", so the module never ran in a shipped build. The ADR-01 acceptance
+// tests that exercised it (`tests/physics_actor_test.rs`) were removed with it.
+// UnifiedGPUCompute remains the sole owner of per-node GPU buffers.
 
 // Primary safe implementations (formerly safe_*)
 pub mod semantic_forces;
-pub mod streaming_pipeline;
 pub mod visual_analytics;
 
 // REMOVED: hybrid_sssp module - contained only stub implementations, archived to archive/legacy_code_2025_11_03/
@@ -30,15 +31,16 @@ pub mod memory_manager; // Legacy - use memory_manager instead
 pub use types::{BinaryNodeData, RenderData};
 
 // Primary exports (safe by default)
+// REMOVED (ADR-2054): TSNode, TSEdge, VisualAnalyticsGPU, VisualAnalyticsEngine — dead code,
+// never instantiated outside their own module. Vec4/IsolationLayer/VisualAnalyticsParams/
+// VisualAnalyticsBuilder/PerformanceMetrics kept (live external consumers).
 pub use visual_analytics::{
-    IsolationLayer, PerformanceMetrics, TSEdge, TSNode, Vec4, VisualAnalyticsBuilder,
-    VisualAnalyticsEngine, VisualAnalyticsGPU, VisualAnalyticsParams,
+    IsolationLayer, PerformanceMetrics, Vec4, VisualAnalyticsBuilder, VisualAnalyticsParams,
 };
 
-pub use streaming_pipeline::{
-    ClientConnection, ClientLOD, ClientStats, CompressedEdge, DeltaCompressor, FrameBuffer,
-    PipelineStats, SimplifiedNode, StreamMessage, StreamingPipeline,
-};
+// REMOVED: StreamingPipeline module - dead code, never instantiated outside its own module
+// (ADR-2054). Types removed: StreamingPipeline, ClientConnection, ClientLOD, ClientStats,
+// CompressedEdge, DeltaCompressor, FrameBuffer, PipelineStats, SimplifiedNode, StreamMessage.
 
 // REMOVED: Hybrid SSSP exports - module contained only stub implementations
 

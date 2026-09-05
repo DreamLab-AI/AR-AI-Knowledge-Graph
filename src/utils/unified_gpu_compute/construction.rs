@@ -33,7 +33,6 @@ pub struct UnifiedGPUCompute {
     pub(crate) _context: Context,
     pub(crate) _module: Module,
     pub(crate) clustering_module: Option<Module>,
-    pub(crate) apsp_module: Option<Module>,
     pub(crate) stream: Stream,
 
     pub(crate) build_grid_kernel_name: &'static str,
@@ -314,33 +313,13 @@ impl UnifiedGPUCompute {
             None
         };
 
-        let apsp_module = if let Some(apsp_ptx_content) = apsp_ptx {
-            if let Err(e) = crate::utils::gpu_diagnostics::validate_ptx_content(apsp_ptx_content) {
-                error!(
-                    "GPU DEGRADED: APSP PTX validation failed: {}. \
-                     GPU APSP is DISABLED for this process.",
-                    e
-                );
-                None
-            } else {
-                match Module::from_ptx(apsp_ptx_content, &[]) {
-                    Ok(module) => {
-                        info!("Successfully loaded APSP module");
-                        Some(module)
-                    }
-                    Err(e) => {
-                        error!(
-                            "GPU DEGRADED: APSP module load failed: {}. \
-                             GPU APSP is DISABLED for this process.",
-                            e
-                        );
-                        None
-                    }
-                }
-            }
-        } else {
-            None
-        };
+        // REMOVED (ADR-2054): the APSP module load. `apsp_module` had zero read
+        // sites — nothing ever resolved a kernel from it — so the load cost a
+        // startup PTX parse and, worse, logged "GPU DEGRADED: GPU APSP is
+        // DISABLED" about a capability NFR-7 forbids permanently (see
+        // ShortestPathActor::ComputeAPSP). The `apsp_ptx` parameter is retained
+        // in the signature and ignored so callers need not change shape.
+        let _ = apsp_ptx;
 
         let stream = Stream::new(StreamFlags::NON_BLOCKING, None)?;
 
@@ -449,7 +428,6 @@ impl UnifiedGPUCompute {
             _context,
             _module: kernel_module,
             clustering_module,
-            apsp_module,
             stream,
             build_grid_kernel_name: "build_grid_kernel",
             compute_cell_bounds_kernel_name: "compute_cell_bounds_kernel",

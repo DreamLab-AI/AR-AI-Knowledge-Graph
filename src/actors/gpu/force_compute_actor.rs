@@ -4560,26 +4560,49 @@ mod dag_rank_tests {
     }
 
     #[test]
-    fn directed_hierarchy_relation_accepts_only_class_subsumption() {
-        // Explicit class-subsumption provenance only → included.
+    fn directed_hierarchy_accepts_subsumption_and_the_collapsed_label() {
+        // ADR-2035, reconciled 2026-09-05.
+        //
+        // This test previously asserted that "hierarchical" must be REJECTED,
+        // contradicting the implementation and the accepted decision. The
+        // closeout confirmed the conflict is in the test, not the predicate: the
+        // ratified contract is that the collapsed `hierarchical` label IS
+        // accepted, because it is what this deployment's ingest writes for a
+        // subclass edge (matching the fold endpoint). Without it the DAG ranks
+        // stay unranked and the Radial: DAG / Hierarchy layouts are silently
+        // inert — the failure the accept was introduced to fix.
+        //
+        // The cost is recorded rather than hidden: the collapsed label is lossy,
+        // so a producer that reuses it for domain membership contributes edges
+        // that are ranked as if they were subsumption. That is a *producer*
+        // provenance question (see the domain-membership fixture below), not a
+        // reason for the consumer predicate to reject the label its own ingest
+        // emits.
         for rel in ["is_subclass_of", "subclass_of", "SUBCLASS_OF"] {
             assert!(
                 FCA::is_directed_hierarchy_relation(rel),
-                "{rel} should be directed hierarchy"
+                "{rel}: explicit subclass provenance must rank"
             );
         }
-        // Excluded: symmetric relations (equivalent_class/same_as), the separate
-        // property hierarchy (sub_property_of), and — critically — the generic
-        // "hierarchical" label, which GitHub domain-membership edges reuse and
-        // which therefore has no reliable subclass provenance.
+        for rel in ["hierarchical", "HIERARCHICAL"] {
+            assert!(
+                FCA::is_directed_hierarchy_relation(rel),
+                "{rel}: the collapsed subclass label this ingest writes must rank"
+            );
+        }
+
+        // Still excluded, and for reasons the collapsed label does not share:
+        // symmetric relations have no parent/child direction at all, and
+        // sub_property_of is a different hierarchy over properties, not classes.
         for rel in [
-            "hierarchical",
             "equivalent_class",
             "same_as",
             "sub_property_of",
             "relates_to",
             "has_part",
             "namespace",
+            "member_of",
+            "belongs_to",
             "",
         ] {
             assert!(
@@ -4587,6 +4610,105 @@ mod dag_rank_tests {
                 "{rel} must NOT be treated as directed hierarchy"
             );
         }
+    }
+
+    #[test]
+    fn a_subclass_fixture_ranks_by_depth_from_its_root() {
+        // Producer fixture: an ontology emitting explicit subclass provenance.
+        // Entity -> Animal -> Dog, plus a sibling Cat, as (parent, child) pairs.
+        const ENTITY: usize = 0;
+        const ANIMAL: usize = 1;
+        const DOG: usize = 2;
+        const CAT: usize = 3;
+        let edges = [(ENTITY, ANIMAL), (ANIMAL, DOG), (ANIMAL, CAT)];
+        assert!(edges
+            .iter()
+            .all(|_| FCA::is_directed_hierarchy_relation("subclass_of")));
+
+        let ranks = FCA::compute_dag_ranks(4, &edges);
+        assert_eq!(ranks[ENTITY], 0.0, "the root sits at rank 0");
+        assert_eq!(ranks[ANIMAL], 1.0);
+        assert_eq!(ranks[DOG], 2.0, "depth from the nearest root");
+        assert_eq!(ranks[CAT], 2.0, "siblings share a layer");
+    }
+
+    #[test]
+    fn a_domain_membership_fixture_ranks_identically_under_the_collapsed_label() {
+        // The accepted contract's known cost, made explicit rather than implied.
+        //
+        // A producer that writes "hierarchical" for domain MEMBERSHIP (repo -> file,
+        // say) is indistinguishable at the predicate from one writing it for
+        // subsumption: the label carries no provenance to tell them apart. The
+        // resulting ranks are therefore structurally identical to the subclass
+        // fixture above.
+        //
+        // This is a layout projection, not a claim about the edges' semantics.
+        // Distinguishing the two REQUIRES a producer-side label change (an
+        // explicit subclass label, or a distinct membership label); no consumer
+        // predicate can recover the distinction from this input.
+        const REPO: usize = 0;
+        const DIR: usize = 1;
+        const FILE_A: usize = 2;
+        const FILE_B: usize = 3;
+        let membership = [(REPO, DIR), (DIR, FILE_A), (DIR, FILE_B)];
+        assert!(
+            FCA::is_directed_hierarchy_relation("hierarchical"),
+            "the collapsed label is accepted whatever the producer meant by it"
+        );
+
+        let ranks = FCA::compute_dag_ranks(4, &membership);
+        assert_eq!(ranks, vec![0.0, 1.0, 2.0, 2.0]);
+
+        // The same shape as the subclass fixture: the predicate cannot separate
+        // them, so acceptance of the collapsed label is a decision about ingest
+        // provenance, not something the ranker can adjudicate.
+        let subsumption = FCA::compute_dag_ranks(4, &[(0, 1), (1, 2), (1, 3)]);
+        assert_eq!(ranks, subsumption);
+    }
+
+    #[test]
+    fn mixed_subclass_and_membership_edges_share_one_rank_space() {
+        // When both producers write the collapsed label into the same graph, the
+        // ranker sees one hierarchy. A node reachable by both paths takes the
+        // SHORTEST depth (multi-source BFS), so a membership shortcut can pull a
+        // deeply-subsumed class up a layer.
+        //  0 -> 1 -> 2 -> 3   (subclass chain)
+        //  0 -> 3             (membership shortcut, same label)
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1), (1, 2), (2, 3), (0, 3)]);
+        assert_eq!(ranks[0], 0.0);
+        assert_eq!(ranks[1], 1.0);
+        assert_eq!(ranks[2], 2.0);
+        assert_eq!(
+            ranks[3], 1.0,
+            "shortest depth wins: the membership shortcut lifts node 3"
+        );
+    }
+
+    #[test]
+    fn nodes_outside_any_hierarchy_edge_stay_unranked() {
+        // Rank -1 means "apply no radial bias", which is how a disconnected or
+        // non-hierarchical node opts out of the layout term entirely.
+        let ranks = FCA::compute_dag_ranks(4, &[(0, 1)]);
+        assert_eq!(ranks[0], 0.0);
+        assert_eq!(ranks[1], 1.0);
+        assert_eq!(ranks[2], -1.0, "not in any hierarchy edge");
+        assert_eq!(ranks[3], -1.0);
+
+        // An empty hierarchy leaves everything unranked rather than seeding a
+        // spurious root.
+        assert_eq!(FCA::compute_dag_ranks(3, &[]), vec![-1.0, -1.0, -1.0]);
+    }
+
+    #[test]
+    fn a_wholly_cyclic_hierarchy_is_seeded_deterministically() {
+        // Ingest is not guaranteed acyclic: a pure cycle has no natural root, so
+        // the lowest participating index is seeded rather than leaving the whole
+        // component unranked. Rank is a layout projection, not a proof of DAG-ness.
+        let ranks = FCA::compute_dag_ranks(3, &[(0, 1), (1, 2), (2, 0)]);
+        assert_eq!(ranks[0], 0.0, "lowest index seeded as the root");
+        assert_eq!(ranks[1], 1.0);
+        assert_eq!(ranks[2], 2.0);
+        assert!(ranks.iter().all(|r| *r >= 0.0), "no node left unranked");
     }
 }
 

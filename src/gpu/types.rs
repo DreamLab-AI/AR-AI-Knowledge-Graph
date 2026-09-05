@@ -210,9 +210,6 @@ const_assert_eq!(std::mem::align_of::<BinaryNodeData>(), 4);
 pub mod legacy {
     use super::*;
 
-    /// Re-export for backwards compatibility with streaming_pipeline
-    pub type StreamingPipelineRenderData = RenderData;
-
     /// Re-export for backwards compatibility with visual_analytics
     pub type VisualAnalyticsRenderData = RenderData;
 

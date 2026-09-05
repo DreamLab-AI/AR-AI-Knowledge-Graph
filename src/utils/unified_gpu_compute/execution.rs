@@ -943,30 +943,21 @@ impl UnifiedGPUCompute {
         params: &crate::models::simulation_params::SimulationParams,
         stability_bypass: bool,
     ) -> Result<()> {
-        // Build feature_flags from the SimulationParams and runtime toggles,
-        // mirroring the logic in SimulationParams::to_sim_params().
-        let mut feature_flags: u32 = 0;
-        if params.repel_k > 0.0 {
-            feature_flags |= crate::models::simulation_params::FeatureFlags::ENABLE_REPULSION;
-        }
-        if params.spring_k > 0.0 {
-            feature_flags |= crate::models::simulation_params::FeatureFlags::ENABLE_SPRINGS;
-        }
-        if params.center_gravity_k > 0.0 {
-            feature_flags |= crate::models::simulation_params::FeatureFlags::ENABLE_CENTERING;
-        }
-        // Honour both the SimulationParams flag and the runtime toggle
-        if params.use_sssp_distances || self.sssp_spring_adjust_enabled {
-            feature_flags |=
-                crate::models::simulation_params::FeatureFlags::ENABLE_SSSP_SPRING_ADJUST;
-        }
-        // KEYSTONE (ADR-098 break #1): gate the live force_pass_kernel constraint
-        // loop on. Without this bit the loop at visionclaw_unified.cu:475 never
-        // runs, so the uploaded ontology ConstraintData buffer has zero effect.
-        // Bit 4 (ENABLE_CONSTRAINTS) is set whenever constraints are resident.
-        if self.num_constraints > 0 {
-            feature_flags |= crate::models::simulation_params::FeatureFlags::ENABLE_CONSTRAINTS;
-        }
+        // ADR-2029: this is the authoritative derivation of the feature word that
+        // reaches the device. It is deliberately a pure function in
+        // `models::force_channels` rather than inline logic, so the final word can
+        // be observed in tests across constraint residency and runtime SSSP
+        // changes without a GPU — the closeout's acceptance condition. Two of its
+        // inputs (constraint residency, the runtime SSSP toggle) are live device
+        // state that `SimulationParams::to_sim_params()` cannot see, which is why
+        // the converter's word is overwritten below rather than trusted.
+        let feature_flags = crate::models::force_channels::derive_dispatch_feature_flags(
+            crate::models::force_channels::ForceDispatchInputs::new(
+                params,
+                self.num_constraints,
+                self.sssp_spring_adjust_enabled,
+            ),
+        );
 
         // Use SimulationParams::to_sim_params() which correctly maps ALL user-facing
         // settings to the GPU-compatible SimParams struct. Previous implementation

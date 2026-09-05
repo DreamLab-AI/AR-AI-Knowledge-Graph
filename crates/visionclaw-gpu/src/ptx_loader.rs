@@ -309,35 +309,44 @@ pub fn effective_cuda_arch() -> String {
 /// The max supported ISA is detected at runtime via `detect_max_ptx_isa()` which
 /// queries the installed CUDA driver version. Falls back to ISA 9.0 if detection
 /// fails.
+///
+/// ADR-2030 closeout: this used to reimplement the `.version` rewrite with a
+/// fixed-width `find(".version ")` + `replacen` (the exact fixed-window bug
+/// class ADR-2030 fixed at build time — a two-digit minor like `9.10` would
+/// have spliced wrong). It now delegates the actual span-parsed rewrite to
+/// [`crate::ptx_policy::rewrite_ptx_version`], the same authoritative policy
+/// `build.rs` uses, so there is exactly one `.version`-rewrite implementation
+/// in this crate. This function's remaining job is supplying the
+/// *runtime*-detected target ISA — `ptx_policy::TARGET_PTX_ISA` is a fixed
+/// build-time constant and cannot know the driver actually installed on this
+/// machine.
+///
+/// This is also the ONLY reachable rewrite for PTX that never passed through
+/// `ptx_policy` at build time: pre-shipped `.ptx` files checked into
+/// `crates/visionclaw-gpu/src/ptx/` (and the legacy `src/utils/ptx/` fallback,
+/// see `load_precompiled_ptx`), and PTX produced by the runtime `nvcc` compile
+/// fallback (`compile_ptx_fallback_sync_module`) — neither goes through
+/// `build.rs`.
 pub fn downgrade_ptx_isa_if_needed(ptx: String) -> String {
     let (max_major, max_minor) = detect_max_ptx_isa();
-    let max_isa_str = format!("{}.{}", max_major, max_minor);
-
-    // Find the .version directive and check if it needs downgrading
-    if let Some(ver_start) = ptx.find(".version ") {
-        let after = &ptx[ver_start + 9..];
-        // Extract the version string (e.g. "9.2")
-        let ver_end = after
-            .find(|c: char| !c.is_ascii_digit() && c != '.')
-            .unwrap_or(after.len());
-        let ver_str = &after[..ver_end];
-        let parts: Vec<&str> = ver_str.split('.').collect();
-        if parts.len() == 2 {
-            if let (Ok(major), Ok(minor)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
-                if major > max_major || (major == max_major && minor > max_minor) {
-                    let old_directive = format!(".version {}", ver_str);
-                    let new_directive = format!(".version {}", max_isa_str);
-                    let fixed = ptx.replacen(&old_directive, &new_directive, 1);
-                    info!(
-                        "PTX ISA downgrade: {} -> {} (driver supports up to {}.{})",
-                        old_directive, new_directive, max_major, max_minor
-                    );
-                    return fixed;
-                }
-            }
+    let target = crate::ptx_policy::PtxVersion {
+        major: max_major,
+        minor: max_minor,
+    };
+    match crate::ptx_policy::rewrite_ptx_version(&ptx, target) {
+        crate::ptx_policy::VersionRewrite::Rewritten { from, to, text } => {
+            info!(
+                "PTX ISA downgrade: .version {} -> .version {} (driver supports up to {}.{})",
+                from, to, max_major, max_minor
+            );
+            text
         }
+        // Already at or below the target, or no/unparseable .version directive
+        // (validate_ptx catches the latter downstream as a defect) — leave the
+        // content untouched either way.
+        crate::ptx_policy::VersionRewrite::Unchanged { .. }
+        | crate::ptx_policy::VersionRewrite::Defective(_) => ptx,
     }
-    ptx
 }
 
 /// Validates PTX assembly code structure

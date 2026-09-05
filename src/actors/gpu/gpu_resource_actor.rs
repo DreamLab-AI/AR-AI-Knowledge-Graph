@@ -127,19 +127,24 @@ impl GPUResourceActor {
         // ADR-098 D3: ontology_constraints.cu PTX retired — OWL axioms now drive
         // the generic live force_pass_kernel constraint loop, not separate kernels.
 
-        // Load APSP PTX for GPU-accelerated landmark distance assembly
+        // Load the landmark/APSP PTX module (select_landmarks_kernel,
+        // stress_majorization_barneshut_kernel). NOTE (ADR-2054): the module's
+        // dense-matrix `approximate_apsp_kernel` was removed from the .cu
+        // source under NFR-7 — ComputeAPSP refuses explicitly rather than
+        // falling back to a CPU path, so a load failure here has no CPU
+        // fallback to report.
         let apsp_ptx = match visionclaw_gpu::ptx_loader::load_ptx_module_sync(
             visionclaw_gpu::ptx_loader::PTXModule::GpuLandmarkApsp,
         ) {
             Ok(content) => {
                 info!(
-                    "APSP PTX loaded successfully, size: {} bytes",
+                    "APSP/landmark PTX loaded successfully, size: {} bytes",
                     content.len()
                 );
                 Some(content)
             }
             Err(e) => {
-                warn!("Failed to load APSP PTX (will use CPU fallback): {}", e);
+                warn!("Failed to load APSP/landmark PTX: {}", e);
                 None
             }
         };

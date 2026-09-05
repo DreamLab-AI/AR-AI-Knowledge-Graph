@@ -8,7 +8,7 @@
 //! - Network fragmentation detection
 
 use actix::prelude::*;
-use log::{info, warn};
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -88,9 +88,6 @@ pub struct ConnectedComponentsActor {
 
     /// Computation statistics
     stats: ConnectedComponentsStats,
-
-    /// Cached edge list (source, target) updated via UpdateComponentEdges message
-    cached_edges: Vec<(u32, u32)>,
 }
 
 impl ConnectedComponentsActor {
@@ -104,58 +101,7 @@ impl ConnectedComponentsActor {
                 avg_num_components: 0.0,
                 last_num_components: 0,
             },
-            cached_edges: Vec::new(),
         }
-    }
-
-    /// CPU-based label propagation fallback
-    /// This will be replaced with GPU kernel when available
-    fn compute_components_cpu(
-        &self,
-        num_nodes: usize,
-        edges: &[(u32, u32)],
-        max_iterations: u32,
-    ) -> Result<(Vec<u32>, u32), String> {
-        // Initialize each node with its own label
-        let mut labels: Vec<u32> = (0..num_nodes as u32).collect();
-        let mut changed = true;
-        let mut iteration = 0;
-
-        // Build adjacency list
-        let mut adjacency: HashMap<u32, Vec<u32>> = HashMap::new();
-        for &(src, dst) in edges {
-            adjacency.entry(src).or_insert_with(Vec::new).push(dst);
-            adjacency.entry(dst).or_insert_with(Vec::new).push(src);
-        }
-
-        // Propagate minimum label until convergence
-        while changed && iteration < max_iterations {
-            changed = false;
-            iteration += 1;
-
-            let old_labels = labels.clone();
-
-            for node in 0..num_nodes as u32 {
-                if let Some(neighbors) = adjacency.get(&node) {
-                    // Find minimum label among neighbors
-                    let min_neighbor_label = neighbors
-                        .iter()
-                        .map(|&n| old_labels[n as usize])
-                        .min()
-                        .unwrap_or(old_labels[node as usize]);
-
-                    // Update to minimum of current label and neighbor labels
-                    let new_label = old_labels[node as usize].min(min_neighbor_label);
-
-                    if new_label != old_labels[node as usize] {
-                        labels[node as usize] = new_label;
-                        changed = true;
-                    }
-                }
-            }
-        }
-
-        Ok((labels, iteration))
     }
 
     /// Analyze component statistics
@@ -252,8 +198,6 @@ impl Handler<ComputeConnectedComponents> for ConnectedComponentsActor {
                     .lock()
                     .map_err(|e| format!("Failed to acquire GPU compute lock: {}", e))?;
 
-                let num_nodes = unified_compute.get_num_nodes();
-
                 // Try GPU-accelerated connected components
                 match unified_compute.run_connected_components_gpu(max_iterations as i32) {
                     Ok((gpu_labels, _num_comp)) => {
@@ -266,25 +210,18 @@ impl Handler<ComputeConnectedComponents> for ConnectedComponentsActor {
                         (labels, max_iterations, path)
                     }
                     Err(e) => {
-                        // Task #74 zero-fallback gate: the GPU kernel failed and a CPU
-                        // implementation is about to run. record_execution emits the
-                        // gated `warn` and increments the fallback counter so this is
-                        // never a silent substitution.
-                        warn!(
-                            "ConnectedComponentsActor: GPU path failed ({}), falling back to CPU",
+                        // ADR-2054: the CPU fallback here previously ran
+                        // `compute_components_cpu` against `cached_edges`, a field only
+                        // ever populated by the `UpdateComponentEdges` message. That
+                        // message had zero senders tree-wide, so `cached_edges` was
+                        // always empty and the "fallback" silently returned every node
+                        // as its own singleton component — a fabricated result, not a
+                        // real fallback. Removed along with the message and the field;
+                        // propagate the GPU failure instead.
+                        return Err(format!(
+                            "ConnectedComponentsActor: GPU path failed and no CPU fallback is available: {}",
                             e
-                        );
-                        let path = record_execution(
-                            AnalyticsKernel::ConnectedComponents,
-                            ExecutionPath::CpuFallback,
-                        );
-                        drop(unified_compute);
-                        let (labels, iterations) = self.compute_components_cpu(
-                            num_nodes,
-                            &self.cached_edges,
-                            max_iterations,
-                        )?;
-                        (labels, iterations, path)
+                        ));
                     }
                 }
             }
@@ -336,14 +273,5 @@ impl Handler<GetConnectedComponentsStats> for ConnectedComponentsActor {
     }
 }
 
-impl Handler<UpdateComponentEdges> for ConnectedComponentsActor {
-    type Result = ();
-
-    fn handle(&mut self, msg: UpdateComponentEdges, _ctx: &mut Self::Context) -> Self::Result {
-        info!(
-            "ConnectedComponentsActor: Updated cached edges ({} edges)",
-            msg.edges.len()
-        );
-        self.cached_edges = msg.edges;
-    }
-}
+// REMOVED (ADR-2054): Handler<UpdateComponentEdges> — the message had zero senders
+// tree-wide and only ever fed the now-removed `cached_edges` field.

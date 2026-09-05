@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use super::connected_components_actor::{ComputeConnectedComponents, ConnectedComponentsResult};
 use super::shared::SharedGPUContext;
-use super::shortest_path_actor::ComputeSSP;
+use super::shortest_path_actor::{APSPResult, ComputeAPSP, ComputeSSP, SSSPResult};
 use super::supervisor_messages::*;
 use super::{ConnectedComponentsActor, ShortestPathActor};
 use crate::actors::messages::*;
@@ -348,6 +348,44 @@ impl Handler<SetSharedGPUContext> for GraphAnalyticsSupervisor {
     }
 }
 
+/// ADR-2053: forward the shared SSSP map to the SUPERVISED `ShortestPathActor`.
+///
+/// `SetNodeSSSP` (ADR-031 D2b) gives `ShortestPathActor` the shared `node_sssp` map so
+/// `ComputeSSP` runs publish per-node distances to wire slot 28. It was previously sent
+/// directly to a standalone actor spawned in `AppState`, which never received a
+/// `SharedGPUContext` and so could never run the GPU path. With the standalone pair
+/// removed, the message must reach the supervisor's own child — only the supervisor can
+/// address it — or SSSP distance publication silently stops.
+impl Handler<SetNodeSSSP> for GraphAnalyticsSupervisor {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetNodeSSSP, ctx: &mut Self::Context) {
+        // Ensure the child exists before forwarding: if the map arrives before
+        // `Actor::started` has spawned the children, dropping it here would be the same
+        // silent failure this ADR removes.
+        if self.shortest_path_actor.is_none() {
+            self.spawn_child_actors(ctx);
+        }
+
+        match &self.shortest_path_actor {
+            Some(addr) => match addr.try_send(msg) {
+                Ok(()) => info!(
+                    "GraphAnalyticsSupervisor: forwarded SetNodeSSSP to the supervised ShortestPathActor"
+                ),
+                Err(e) => error!(
+                    "GraphAnalyticsSupervisor: FAILED to forward SetNodeSSSP: {} — wire slot 28 \
+                     will not publish per-node SSSP distances",
+                    e
+                ),
+            },
+            None => error!(
+                "GraphAnalyticsSupervisor: SetNodeSSSP dropped — ShortestPathActor is not \
+                 spawned, so wire slot 28 will not publish per-node SSSP distances"
+            ),
+        }
+    }
+}
+
 impl Handler<ActorFailure> for GraphAnalyticsSupervisor {
     type Result = ();
 
@@ -372,6 +410,131 @@ impl Handler<RestartActor> for GraphAnalyticsSupervisor {
 // ============================================================================
 // Forwarding Handlers for Graph Analytics Operations
 // ============================================================================
+
+/// ADR-2053 (completed by vc-core, 2026-09-05): pass-through forwards for the
+/// messages the `/api/analytics/*` pathfinding routes actually send.
+///
+/// The supervisor already handled `ComputeShortestPaths` and
+/// `ComputeConnectedComponents`, but the HTTP handlers send `ComputeSSP`,
+/// `ComputeAPSP`, `GetShortestPathStats` and `GetConnectedComponentsStats`
+/// directly. Without these, retargeting those routes off the standalone
+/// (GPU-blind) actors would have left them split across two actors — worse than
+/// either end state. Each mirrors the `ComputeShortestPaths` guard above: forward
+/// only to a child that exists *and* is running, else return a plain error.
+impl Handler<ComputeSSP> for GraphAnalyticsSupervisor {
+    type Result = ResponseActFuture<Self, Result<SSSPResult, String>>;
+
+    fn handle(&mut self, msg: ComputeSSP, _ctx: &mut Self::Context) -> Self::Result {
+        let addr = match &self.shortest_path_actor {
+            Some(a) if self.shortest_path_state.is_running => a.clone(),
+            _ => {
+                return Box::pin(
+                    async { Err("ShortestPathActor not available".to_string()) }.into_actor(self),
+                );
+            }
+        };
+        Box::pin(
+            async move {
+                addr.send(msg)
+                    .await
+                    .map_err(|e| format!("Communication failed: {}", e))?
+            }
+            .into_actor(self),
+        )
+    }
+}
+
+/// ADR-2053: stats reads through the supervised path.
+///
+/// These exist as distinct messages rather than forwarding `GetShortestPathStats`
+/// / `GetConnectedComponentsStats` because those declare a bare
+/// `#[rtype(result = "...Stats")]`. A supervisor forward would then have to
+/// invent a value when the child is absent, and neither stats struct derives
+/// `Default` — so "no actor" would be indistinguishable from "genuinely all
+/// zeroes". Wrapping in `Result` keeps absence explicit, which is the whole point
+/// of moving these routes onto the supervised instances.
+#[derive(Message)]
+#[rtype(result = "Result<super::shortest_path_actor::ShortestPathStats, String>")]
+pub struct GetSupervisedShortestPathStats;
+
+#[derive(Message)]
+#[rtype(result = "Result<super::connected_components_actor::ConnectedComponentsStats, String>")]
+pub struct GetSupervisedComponentsStats;
+
+impl Handler<GetSupervisedShortestPathStats> for GraphAnalyticsSupervisor {
+    type Result = ResponseActFuture<Self, Result<super::shortest_path_actor::ShortestPathStats, String>>;
+
+    fn handle(
+        &mut self,
+        _msg: GetSupervisedShortestPathStats,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
+        let addr = match &self.shortest_path_actor {
+            Some(a) if self.shortest_path_state.is_running => a.clone(),
+            _ => {
+                return Box::pin(
+                    async { Err("ShortestPathActor not available".to_string()) }.into_actor(self),
+                );
+            }
+        };
+        Box::pin(
+            async move {
+                addr.send(super::shortest_path_actor::GetShortestPathStats)
+                    .await
+                    .map_err(|e| format!("Communication failed: {}", e))
+            }
+            .into_actor(self),
+        )
+    }
+}
+
+impl Handler<GetSupervisedComponentsStats> for GraphAnalyticsSupervisor {
+    type Result =
+        ResponseActFuture<Self, Result<super::connected_components_actor::ConnectedComponentsStats, String>>;
+
+    fn handle(&mut self, _msg: GetSupervisedComponentsStats, _ctx: &mut Self::Context) -> Self::Result {
+        let addr = match &self.connected_components_actor {
+            Some(a) if self.connected_components_state.is_running => a.clone(),
+            _ => {
+                return Box::pin(
+                    async { Err("ConnectedComponentsActor not available".to_string()) }
+                        .into_actor(self),
+                );
+            }
+        };
+        Box::pin(
+            async move {
+                addr.send(super::connected_components_actor::GetConnectedComponentsStats)
+                    .await
+                    .map_err(|e| format!("Communication failed: {}", e))
+            }
+            .into_actor(self),
+        )
+    }
+}
+
+impl Handler<ComputeAPSP> for GraphAnalyticsSupervisor {
+    type Result = ResponseActFuture<Self, Result<APSPResult, String>>;
+
+    fn handle(&mut self, msg: ComputeAPSP, _ctx: &mut Self::Context) -> Self::Result {
+        let addr = match &self.shortest_path_actor {
+            Some(a) if self.shortest_path_state.is_running => a.clone(),
+            _ => {
+                return Box::pin(
+                    async { Err("ShortestPathActor not available".to_string()) }.into_actor(self),
+                );
+            }
+        };
+        Box::pin(
+            async move {
+                addr.send(msg)
+                    .await
+                    .map_err(|e| format!("Communication failed: {}", e))?
+            }
+            .into_actor(self),
+        )
+    }
+}
 
 impl Handler<ComputeShortestPaths> for GraphAnalyticsSupervisor {
     type Result = ResponseActFuture<Self, Result<PathfindingResult, String>>;

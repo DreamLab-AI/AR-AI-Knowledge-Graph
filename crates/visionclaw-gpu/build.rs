@@ -10,6 +10,13 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+// ADR-2030: the PTX acceptance policy is compiled from ONE source of truth,
+// shared with the library so its behaviour is unit-tested. A build script cannot
+// depend on the crate it builds, so the module is included by path; it is
+// `std`-only, so this costs nothing. See `src/ptx_policy.rs` for the policy and
+// the tests that pin it.
+include!("src/ptx_policy.rs");
+
 fn main() {
     // Check if GPU feature is enabled
     let gpu_enabled = env::var("CARGO_FEATURE_GPU").is_ok();
@@ -101,6 +108,13 @@ fn main() {
         cuda_files.len()
     );
 
+    // ADR-2030 build manifest: one line per module recording where its PTX came
+    // from, its declared ISA and its content tags before/after the rewrite.
+    // Written to OUT_DIR and exported so a release can answer "which module is
+    // actually loaded, and was it compiled or a fallback?" without guessing from
+    // file modification times.
+    let mut artefacts: Vec<PtxArtefact> = Vec::new();
+
     for cuda_file in &cuda_files {
         let cuda_src = Path::new(cuda_file);
         let file_name = cuda_src.file_stem().unwrap().to_str().unwrap();
@@ -125,14 +139,30 @@ fn main() {
             nvcc_args.push(cc.clone());
         }
 
-        let nvcc_output = Command::new("nvcc")
-            .args(&nvcc_args)
-            .output()
-            .expect("Failed to execute nvcc — is the CUDA toolkit installed?");
+        // ADR-2030: classify launch failure separately from compiler failure.
+        // Previously `.expect(...)` panicked when nvcc was ABSENT — before the
+        // fallback was ever consulted — which is precisely the case the bundled
+        // pre-compiled PTX exists to cover.
+        let spawned = Command::new("nvcc").args(&nvcc_args).output();
+        let outcome = match &spawned {
+            Ok(out) => NvccOutcome::classify(None, out.status.success(), out.status.code()),
+            Err(e) => NvccOutcome::classify(Some(e.to_string()), false, None),
+        };
+        if let Ok(out) = &spawned {
+            if !out.status.success() {
+                eprintln!("NVCC STDERR: {}", String::from_utf8_lossy(&out.stderr));
+            }
+        }
 
-        if !nvcc_output.status.success() {
-            let stderr = String::from_utf8_lossy(&nvcc_output.stderr);
-            eprintln!("NVCC STDERR: {}", stderr);
+        let mut provenance = PtxProvenance::Compiled;
+        let mut source_path = cuda_src.display().to_string();
+
+        if outcome.needs_fallback() {
+            println!(
+                "cargo:warning=visionclaw-gpu: {} — {}",
+                file_name,
+                outcome.diagnosis()
+            );
 
             // Fallback: pre-compiled PTX bundled with the crate or from /app image
             let fallback_paths = [
@@ -145,50 +175,108 @@ fn main() {
 
             if let Some(fb) = fallback {
                 println!(
-                    "cargo:warning=visionclaw-gpu: NVCC failed for {} — using pre-compiled PTX from {}",
+                    "cargo:warning=visionclaw-gpu: {} — using pre-compiled PTX from {}",
                     file_name, fb
                 );
                 std::fs::copy(fb, &ptx_output).expect("Failed to copy fallback PTX");
+                provenance = PtxProvenance::for_fallback(&outcome).expect("failing outcome");
+                source_path = fb.clone();
             } else {
                 panic!(
-                    "CUDA PTX compilation failed for {} (exit {:?}) and no fallback PTX found.\n\
-                     Install gcc-13 or gcc-14: pacman -S gcc13",
+                    "PTX unavailable for {}: {}. No fallback PTX found at any of {:?}.\n\
+                     Install gcc-13 or gcc-14 (pacman -S gcc13), or ship a pre-compiled \
+                     module at src/ptx/{}.ptx",
                     file_name,
-                    nvcc_output.status.code()
+                    outcome.diagnosis(),
+                    fallback_paths,
+                    file_name
                 );
             }
         }
 
-        // Downgrade PTX ISA to 9.0 for driver compatibility.
-        // CUDA toolkit 13.x emits .version 9.x; some host drivers only support 9.0.
-        if let Ok(ptx_text) = std::fs::read_to_string(&ptx_output) {
-            if let Some(pos) = ptx_text.find(".version 9.") {
-                let slice_end = (pos + 13).min(ptx_text.len());
-                let version_str = &ptx_text[pos..slice_end];
-                if version_str != ".version 9.0" {
-                    let fixed =
-                        ptx_text[..pos].to_string() + ".version 9.0" + &ptx_text[pos + 12..];
-                    std::fs::write(&ptx_output, fixed).expect("Failed to write downgraded PTX");
-                    println!(
-                        "cargo:warning=visionclaw-gpu: Downgraded {} -> 9.0 for {}",
-                        version_str.trim(),
-                        file_name
-                    );
-                }
+        // Read once, then apply the ISA policy and the validation gate to the
+        // bytes we actually have — whether compiled or fallen back to.
+        let original = std::fs::read_to_string(&ptx_output)
+            .unwrap_or_else(|e| panic!("PTX file {} not readable: {}", file_name, e));
+        let original_tag = content_tag(original.as_bytes());
+
+        // Downgrade the declared PTX ISA for driver compatibility. The rewrite is
+        // by parsed token span, not a fixed-width splice — the old code turned a
+        // two-digit minor such as 9.10 into 9.00, a LOWER version than either the
+        // original or the target.
+        let (final_text, isa) = match rewrite_ptx_version(&original, TARGET_PTX_ISA) {
+            VersionRewrite::Unchanged { version } => {
+                // Reported as unchanged, not as a downgrade: the old code warned
+                // about a "downgrade" on content it had not touched.
+                (original.clone(), version)
             }
+            VersionRewrite::Rewritten { from, to, text } => {
+                std::fs::write(&ptx_output, &text).expect("Failed to write downgraded PTX");
+                println!(
+                    "cargo:warning=visionclaw-gpu: {} — declared ISA {} rewritten to {} \
+                     (declared-version change only; instruction support is not proven)",
+                    file_name, from, to
+                );
+                (text, to)
+            }
+            VersionRewrite::Defective(defect) => panic!(
+                "PTX for {} is unusable after the {} phase: {}",
+                file_name,
+                provenance.as_str(),
+                defect
+            ),
+        };
+
+        // Validate structure and required symbols. A non-empty file is NOT a
+        // valid one: a successful compiler writing arbitrary text used to pass
+        // the length-only gate.
+        let required: &[&str] = if file_name == "visionclaw_unified" {
+            &REQUIRED_UNIFIED_SYMBOLS
+        } else {
+            &[]
+        };
+        if let Err(defect) = validate_ptx(&final_text, required) {
+            panic!(
+                "PTX validation failed for {} (provenance {}): {}",
+                file_name,
+                provenance.as_str(),
+                defect
+            );
         }
 
-        match std::fs::metadata(&ptx_output) {
-            Ok(meta) if meta.len() > 0 => {
-                let env_var = format!("{}_PTX_PATH", file_name.to_uppercase());
-                println!("cargo:rustc-env={}={}", env_var, ptx_output.display());
-            }
-            Ok(_) => panic!("PTX file {} is empty after compilation", file_name),
-            Err(e) => panic!("PTX file {} not created: {}", file_name, e),
-        }
+        artefacts.push(PtxArtefact {
+            module: file_name.to_string(),
+            source: source_path,
+            provenance,
+            isa,
+            original_tag,
+            rewritten_tag: content_tag(final_text.as_bytes()),
+        });
+
+        let env_var = format!("{}_PTX_PATH", file_name.to_uppercase());
+        println!("cargo:rustc-env={}={}", env_var, ptx_output.display());
     }
 
-    println!("cargo:warning=visionclaw-gpu: All PTX compilation done");
+    // Emit the build manifest so the selected modules and their content identity
+    // are recorded per build rather than inferred from file modification times.
+    let manifest_path = PathBuf::from(&out_dir).join("ptx-build-manifest.txt");
+    let manifest_body: String = artefacts
+        .iter()
+        .map(|a| format!("{}\n", a.manifest_line()))
+        .collect();
+    std::fs::write(&manifest_path, &manifest_body).expect("Failed to write PTX build manifest");
+    println!(
+        "cargo:rustc-env=VISIONCLAW_PTX_MANIFEST={}",
+        manifest_path.display()
+    );
+    for a in &artefacts {
+        println!("cargo:warning=visionclaw-gpu: {}", a.manifest_line());
+    }
+
+    println!(
+        "cargo:warning=visionclaw-gpu: All PTX compilation done ({} modules)",
+        artefacts.len()
+    );
 
     // ── Phase 2: Native linking (FFI symbols) ─────────────────────────────────
     // These four .cu files export host-callable FFI symbols and must be linked

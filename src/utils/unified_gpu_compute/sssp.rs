@@ -333,9 +333,10 @@ impl UnifiedGPUCompute {
         Ok(all_distances)
     }
 
-    // `run_apsp_gpu` removed (ADR-031 D8 / NFR-7): the dense [n][n] approximate
-    // APSP matrix is O(n^2) memory and is forbidden on the analytics path. The
-    // backing `approximate_apsp_kernel` is compiled out (gpu_landmark_apsp.cu
-    // `#if 0`); the caller (ShortestPathActor::handle<ComputeAPSP>) now fails
-    // closed rather than materialising the matrix on CPU.
+    // `run_apsp_gpu` removed (ADR-031 D8 / NFR-7, superseded by ADR-2054): the
+    // dense [n][n] approximate APSP matrix is O(n^2) memory and is forbidden
+    // on the analytics path. The backing `approximate_apsp_kernel` has been
+    // deleted from gpu_landmark_apsp.cu entirely (it was already `#if 0`'d
+    // out of compilation); the caller (ShortestPathActor::handle<ComputeAPSP>)
+    // fails closed rather than materialising the matrix on CPU.
 }

@@ -11,58 +11,18 @@ extern "C" {
 // dist(i,j) ≈ min_k(dist(i,k) + dist(k,j)) over landmark nodes k
 
 // ============================================================================
-// QUARANTINED (ADR-031 D8 / NFR-7).
+// REMOVED (ADR-054, superseding the ADR-031 D8 / NFR-7 quarantine).
 //
-// `approximate_apsp_kernel` materialises a dense [num_nodes x num_nodes]
+// `approximate_apsp_kernel` materialised a dense [num_nodes x num_nodes]
 // distance matrix — O(n^2) memory (110 MB+ on the live 10,676-node graph,
-// quadratic beyond). NFR-7 forbids O(n^2) analytics memory, so this kernel
-// must NEVER be reachable on the analytics path. It is compiled out entirely;
-// removing the symbol forces any caller to fail to bind rather than silently
-// blow up GPU memory. The Rust helper `run_apsp_gpu`
-// (src/utils/unified_gpu_compute/sssp.rs:338) is now dead and must be removed
-// or guarded by the lead (see report).
+// quadratic beyond). NFR-7 forbids O(n^2) analytics memory, so it was
+// `#if 0`-guarded out of compilation and never reachable on the analytics
+// path. The Rust helper that would have called it (`run_apsp_gpu`) was
+// already removed — see src/utils/unified_gpu_compute/sssp.rs. The handler
+// that used to dispatch to it (`ShortestPathActor::handle<ComputeAPSP>`)
+// stays in place and explicitly refuses the request citing NFR-7; this is a
+// documented API refusal, not dead code, so it was not touched.
 // ============================================================================
-#if 0
-__global__ void approximate_apsp_kernel(
-    const float* __restrict__ landmark_distances,  // [num_landmarks][num_nodes] distances from landmarks
-    float* __restrict__ distance_matrix,           // [num_nodes][num_nodes] output approximate distances
-    const int num_nodes,
-    const int num_landmarks
-) {
-    // Each thread computes one distance estimate
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-    int j = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (i >= num_nodes || j >= num_nodes) return;
-
-    if (i == j) {
-        distance_matrix[i * num_nodes + j] = 0.0f;
-        return;
-    }
-
-    // Approximate using landmarks: d(i,j) ≈ min_k(d(k,i) + d(k,j))
-    float min_dist = FLT_MAX;
-
-    // Unroll for better performance with typical landmark counts
-    #pragma unroll 8
-    for (int k = 0; k < num_landmarks; k++) {
-        const float dist_ki = landmark_distances[k * num_nodes + i];
-        const float dist_kj = landmark_distances[k * num_nodes + j];
-
-        if (dist_ki < FLT_MAX && dist_kj < FLT_MAX) {
-            const float estimate = dist_ki + dist_kj;
-            min_dist = fminf(min_dist, estimate);
-        }
-    }
-
-    // Clamp infinite distances to large finite value
-    if (min_dist == FLT_MAX) {
-        min_dist = (float)num_nodes * 2.0f;
-    }
-
-    distance_matrix[i * num_nodes + j] = min_dist;
-}
-#endif // approximate_apsp_kernel quarantined (NFR-7)
 
 // Kernel to sample k landmark nodes (simple stratified sampling)
 __global__ void select_landmarks_kernel(

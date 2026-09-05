@@ -75,6 +75,11 @@ pub struct ResourceSupervisor {
 
     /// Pending graph data to send after context distribution
     pending_graph_data: Option<Arc<visionclaw_domain::models::graph::GraphData>>,
+    /// ADR-2053: subsystems whose GPU-context delivery failed on the most recent
+    /// distribution. Populated by `distribute_context_to_supervisors` and surfaced
+    /// through `get_health`, so a silently dropped context is observable instead of
+    /// presenting as an unexplained GPU-blind subsystem.
+    context_delivery_failures: Vec<&'static str>,
 }
 
 impl ResourceSupervisor {
@@ -88,6 +93,7 @@ impl ResourceSupervisor {
             graph_analytics_supervisor: None,
             graph_service_addr: None,
             init_state: InitializationState::NotStarted,
+            context_delivery_failures: Vec::new(),
             timeouts: InitializationTimeouts::default(),
             policy: SupervisionPolicy::critical(),
             failure_count: 0,
@@ -133,14 +139,30 @@ impl ResourceSupervisor {
 
         info!("ResourceSupervisor: Distributing GPU context to subsystem supervisors");
 
+        // ADR-2053: direct point-to-point delivery is the AUTHORITATIVE path. These
+        // sends were previously `let _ = addr.try_send(...)` followed unconditionally
+        // by an `info!("Context sent")` — so a full mailbox dropped the GPU context
+        // silently AND logged success, leaving a subsystem permanently GPU-blind with
+        // no diagnostic. Failures are now recorded and surfaced through health.
+        self.context_delivery_failures.clear();
+
         // Send to Physics Supervisor
         if let Some(ref addr) = self.physics_supervisor {
-            let _ = addr.try_send(SetSharedGPUContext {
+            match addr.try_send(SetSharedGPUContext {
                 context: context.clone(),
                 graph_service_addr: graph_service_addr.clone(),
                 correlation_id: None,
-            });
-            info!("ResourceSupervisor: Context sent to PhysicsSupervisor");
+            }) {
+                Ok(()) => info!("ResourceSupervisor: Context delivered to PhysicsSupervisor"),
+                Err(e) => {
+                    error!(
+                        "ResourceSupervisor: FAILED to deliver GPU context to PhysicsSupervisor: {} \
+                         — physics will run without a GPU context until redistribution",
+                        e
+                    );
+                    self.context_delivery_failures.push("PhysicsSupervisor");
+                }
+            }
 
             // Also send pending graph data to ForceComputeActor via PhysicsSupervisor
             if let Some(ref graph_data) = self.pending_graph_data {
@@ -148,11 +170,22 @@ impl ResourceSupervisor {
                     "ResourceSupervisor: Sending UpdateGPUGraphData to PhysicsSupervisor with {} nodes",
                     graph_data.nodes.len()
                 );
-                let _ = addr.try_send(UpdateGPUGraphData {
+                match addr.try_send(UpdateGPUGraphData {
                     graph: graph_data.clone(),
                     correlation_id: None,
-                });
-                info!("ResourceSupervisor: Graph data sent to PhysicsSupervisor for ForceComputeActor");
+                }) {
+                    Ok(()) => info!(
+                        "ResourceSupervisor: Graph data delivered to PhysicsSupervisor for ForceComputeActor"
+                    ),
+                    Err(e) => {
+                        error!(
+                            "ResourceSupervisor: FAILED to deliver graph data to PhysicsSupervisor: {} \
+                             — ForceComputeActor will have no nodes to integrate",
+                            e
+                        );
+                        self.context_delivery_failures.push("PhysicsSupervisor.graph_data");
+                    }
+                }
             } else {
                 warn!("ResourceSupervisor: No pending graph data to send to PhysicsSupervisor");
             }
@@ -160,30 +193,58 @@ impl ResourceSupervisor {
 
         // Send to Analytics Supervisor
         if let Some(ref addr) = self.analytics_supervisor {
-            let _ = addr.try_send(SetSharedGPUContext {
+            match addr.try_send(SetSharedGPUContext {
                 context: context.clone(),
                 graph_service_addr: graph_service_addr.clone(),
                 correlation_id: None,
-            });
-            info!("ResourceSupervisor: Context sent to AnalyticsSupervisor");
+            }) {
+                Ok(()) => info!("ResourceSupervisor: Context delivered to AnalyticsSupervisor"),
+                Err(e) => {
+                    error!(
+                        "ResourceSupervisor: FAILED to deliver GPU context to AnalyticsSupervisor: {} \
+                         — clustering, anomaly and PageRank will run GPU-blind",
+                        e
+                    );
+                    self.context_delivery_failures.push("AnalyticsSupervisor");
+                }
+            }
         }
 
         // Send to Graph Analytics Supervisor
         if let Some(ref addr) = self.graph_analytics_supervisor {
-            let _ = addr.try_send(SetSharedGPUContext {
+            match addr.try_send(SetSharedGPUContext {
                 context: context.clone(),
                 graph_service_addr: graph_service_addr.clone(),
                 correlation_id: None,
-            });
-            info!("ResourceSupervisor: Context sent to GraphAnalyticsSupervisor");
+            }) {
+                Ok(()) => info!("ResourceSupervisor: Context delivered to GraphAnalyticsSupervisor"),
+                Err(e) => {
+                    error!(
+                        "ResourceSupervisor: FAILED to deliver GPU context to GraphAnalyticsSupervisor: {} \
+                         — SSSP and connected components will run GPU-blind",
+                        e
+                    );
+                    self.context_delivery_failures
+                        .push("GraphAnalyticsSupervisor");
+                }
+            }
         }
 
-        // Also publish to event bus for any additional subscribers
+        // ADR-2053: the bus is a SUPPLEMENTARY broadcast for observers that are not one
+        // of the three subsystem supervisors. It is not the delivery mechanism, and a
+        // zero receiver count is normal rather than an error.
         let receiver_count = self.context_bus.publish(context);
-        info!(
-            "ResourceSupervisor: Context published to {} event bus subscribers",
+        debug!(
+            "ResourceSupervisor: Context also published to {} supplementary bus subscriber(s)",
             receiver_count
         );
+
+        if !self.context_delivery_failures.is_empty() {
+            error!(
+                "ResourceSupervisor: GPU context distribution INCOMPLETE — failed targets: {:?}",
+                self.context_delivery_failures
+            );
+        }
 
         // Clear pending graph data after distribution
         self.pending_graph_data = None;
@@ -232,8 +293,16 @@ impl ResourceSupervisor {
         let is_running = self.resource_actor.is_some();
         let has_context = self.shared_context.is_some();
 
+        // ADR-2053: a supervisor that holds a context but failed to hand it on is NOT
+        // healthy — downstream subsystems are GPU-blind. Report Degraded so the failure
+        // is visible to /analytics/gpu-status rather than only in the log.
+        let delivery_ok = self.context_delivery_failures.is_empty();
+
         let status = match &self.init_state {
-            InitializationState::Completed if has_context => SubsystemStatus::Healthy,
+            InitializationState::Completed if has_context && delivery_ok => {
+                SubsystemStatus::Healthy
+            }
+            InitializationState::Completed if has_context => SubsystemStatus::Degraded,
             InitializationState::InProgress => SubsystemStatus::Initializing,
             InitializationState::NotStarted => SubsystemStatus::Initializing,
             InitializationState::Failed(_) | InitializationState::TimedOut => {
@@ -242,17 +311,30 @@ impl ResourceSupervisor {
             _ => SubsystemStatus::Degraded,
         };
 
+        let last_error = if delivery_ok {
+            self.last_error.clone()
+        } else {
+            Some(format!(
+                "GPU context delivery failed to: {:?}",
+                self.context_delivery_failures
+            ))
+        };
+
         SubsystemHealth {
             subsystem_name: "resource".to_string(),
             status,
-            healthy_actors: if is_running && has_context { 1 } else { 0 },
+            healthy_actors: if is_running && has_context && delivery_ok {
+                1
+            } else {
+                0
+            },
             total_actors: 1,
             actor_states: vec![ActorHealthState {
                 actor_name: "GPUResourceActor".to_string(),
                 is_running,
                 has_context,
                 failure_count: self.failure_count,
-                last_error: self.last_error.clone(),
+                last_error,
             }],
             last_success_ms: self.last_attempt.map(|t| t.elapsed().as_millis() as u64),
             restart_count: self.failure_count,
