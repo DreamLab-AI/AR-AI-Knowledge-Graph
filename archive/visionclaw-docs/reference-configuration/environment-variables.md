@@ -209,7 +209,7 @@ GPU_MEMORY_LIMIT=16g
 | `JSS_ENABLED` | boolean | `false` | Enable Solid/JSS integration |
 | `JSS_HOST` | string | `jss` | JSS container hostname |
 | `JSS_PORT` | integer | `3000` | JSS HTTP port |
-| `JSS_BASE_URL` | string | `http://localhost:3000` | Public JSS base URL |
+| `SOLID_POD_BASE_URL` | string | `http://localhost:3000` | Public JSS base URL |
 | `JSS_ROOT_PATH` | string | `/data/pods` | Root path for pod storage |
 | `JSS_LOG_LEVEL` | string | `info` | JSS log level |
 

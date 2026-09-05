@@ -154,7 +154,7 @@ services:
       - "${JSS_PORT:-3000}:3000"
       - "${SOLID_WS_PORT:-3001}:3001"
     environment:
-      - JSS_BASE_URL=${JSS_BASE_URL:-http://localhost:3000}
+      - SOLID_POD_BASE_URL=${SOLID_POD_BASE_URL:-http://localhost:3000}
       - JSS_ROOT_PATH=/data/pods
       - JSS_LOG_LEVEL=${JSS_LOG_LEVEL:-info}
     volumes:

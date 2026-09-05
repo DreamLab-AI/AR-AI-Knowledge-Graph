@@ -319,7 +319,7 @@ So in practice today: **relay process runs, sovereign-bootstrap writes pod scaff
 [program:solid-pod]
 command=solid-pod-rs-server --config /etc/agentbox/solid-pod-rs.toml
 environment=HOME="/home/devuser",JSS_HOST="127.0.0.1",JSS_PORT="8484",
-  JSS_BASE_URL="http://127.0.0.1:8484",JSS_STORAGE_ROOT="/var/lib/solid",
+  SOLID_POD_BASE_URL="http://127.0.0.1:8484",JSS_STORAGE_ROOT="/var/lib/solid",
   JSS_LOG_LEVEL="info",RUST_LOG="info",
   JSS_ENABLE_DID_NOSTR="true",JSS_ENABLE_RATE_LIMIT="true",
   JSS_RATE_LIMIT_PER_SEC="20",JSS_ENABLE_QUOTA="true",

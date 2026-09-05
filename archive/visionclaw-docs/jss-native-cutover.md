@@ -166,7 +166,7 @@ the JSS data volume, so both backends can coexist indefinitely.
 | `SOLID_IMPL`      | `jss`                           | `jss` \| `native` \| `shadow` |
 | `POD_DATA_ROOT`   | `/app/data/solid-pod-rs`        | FS root for the native backend |
 | `POD_BASE_URL`    | `https://pods.visionclaw.org`   | Public base URL for WebIDs / Link headers |
-| `JSS_URL`         | `http://jss:3030`               | JSS upstream (used by the legacy proxy) |
+| `SOLID_POD_URL`         | `http://jss:3030`               | JSS upstream (used by the legacy proxy) |
 
 ## Compliance
 
