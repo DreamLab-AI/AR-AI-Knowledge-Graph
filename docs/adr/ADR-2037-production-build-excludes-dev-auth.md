@@ -55,3 +55,42 @@ or image-build assertion (symbol/feature check or boot self-test) and, once gree
 `verified_commit` and `verified_paths` to the build config and check that were inspected.
 Cross-ref ADR-2008 (dev image recompiles), ADR-2012 (dev bypass triple-gated), ADR-2026
 (fail-closed boot-abort). Governing doc: `docs/SECURITY-profiles.md`.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/06/08. Owner remains jjohare with release/authentication maintainers. Proposed/none/inactive remains appropriate for the shipped-image assertion. Current production build commands/default features omit dev-auth, but that is not a verified emitted-binary guarantee. The isolated matrix confirms that a non-debug build with dev-auth retains the bypass and no-op hygiene.
+
+**Acceptance condition:** Bind image digest, source, feature closure and effective profile to a receipt. Test production rejection before listener bind, including forbidden variables set to zero, and prevent promotion of a dev-auth artefact. Exercise full REST and WebSocket paths, report-mode interaction, network reachability and sentinel attribution separately from helper parsing. Preserve the distinction between the peer-agnostic full bypass and loopback dev-token mechanism. Reopen on build features, boot sequencing, bypass branches or profile policy. See the [review](../../../VisionFlow/docs/estate-review/role-authority.md#development-bypass-and-release-identity), [reproducer](../../../VisionFlow/docs/estate-review/evidence/dev-auth-probe.py) and [receipt](../../../VisionFlow/docs/estate-review/evidence/dev-auth-probe.json). No full image, listener, HTTP or headset execution ran.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** `src/config/security_profile.rs` + the call site in
+`src/main.rs`. The acceptance item "test production rejection **before listener
+bind**, including forbidden variables set to zero, and prevent promotion of a
+dev-auth artefact" is implemented as far as it can be without a build pipeline.
+
+`BuildIdentity::current()` captures `cfg!(debug_assertions)` and
+`cfg!(feature = "dev-auth")`; `is_production_artefact()` is true only for a
+release build without dev-auth. A release build carrying dev-auth raises
+`DevAuthFeatureInArtefact` — such a binary retains the loopback dev-token branch
+and must never be promoted. `assert_effective_profile_or_exit` runs immediately
+before `HttpServer::new`/`bind` and exits 2 on any finding in a production
+artefact, so a mis-promoted image never accepts a request. The peer-agnostic
+full bypass (ADR-2039) and the loopback dev-token mechanism remain distinct: the
+forbidden-variable set names `VISIONCLAW_DEV_MODE` and `DEV_AUTH_LOOPBACK`
+separately.
+
+**Tests.** `cargo test --lib --no-default-features security_profile` — 29
+passed, 0 failed, including: a release dev-auth artefact reported; a debug
+dev-auth build *not* reported (it is not a promotion candidate); a production
+artefact with findings refusing to bind; a development build with the same
+findings binding; and the forbidden-variable matrix at `0`, `""` and `1`.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2012-2038-security-profile.txt`.
+
+**Remains open.** Image digest, source and feature closure are still not bound
+to a receipt — that needs a CI step this pass cannot add. Full REST and
+WebSocket paths, network reachability and sentinel attribution are unexercised.
+No image or listener ran. `implementation_status` is left `none`/`inactive`:
+the boot check exists, but the shipped-image assertion this record is about is
+not evidenced.

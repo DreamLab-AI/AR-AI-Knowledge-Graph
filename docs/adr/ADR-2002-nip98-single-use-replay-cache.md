@@ -53,3 +53,43 @@ atomicity (16 threads, exactly one winner), cap-boundary fail-closed on an
 isolated map, expired-entry reclaim, and non-burning of ids on failed
 signature/URL/method/freshness. Two codex adversarial rounds (round 1 BLOCK →
 fixed; round 2 concerns closed by the cap-boundary test + prune-clamp fix).
+
+## Closeout extension — 2026-09-04
+
+CP-04/05/08. Owner remains jjohare with authentication/runtime maintainers. Current helper source preserves atomic claim after validation, bounded capacity and process-local state. Six isolated claim assertions pass, including no live eviction and exact-TTL reuse. Historical complete/live declarations remain scoped to the cache decision; no deployed or full-signature re-certification is implied.
+
+**Acceptance condition:** Test combined wall-clock freshness and monotonic expiry at exact boundaries and clock steps; retain explicit restart/replica policy. Define route-specific body binding because the validator compares payload only when both supplied body and tag exist. Trace token consumption through user resolution, authorisation and mutation failure; specify fresh-token retries and application idempotency after response loss. Verify capacity failure handling without opening an authentication fallback. Reopen on window/TTL, scaling, route body handling, retry or cache lifecycle changes.
+
+See the [review](../../../VisionFlow/docs/estate-review/runtime-ingress.md#visionclaw-replay-and-operation-boundaries), [reproducer](../../../VisionFlow/docs/estate-review/evidence/replay-cache-probe.py) and [receipt](../../../VisionFlow/docs/estate-review/evidence/replay-cache-probe.json). The extracted helper test does not exercise signatures, mutex concurrency, HTTP mutation or a deployed service; historical tests remain separately identified.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** `src/utils/nip98.rs`. (1) Route-specific body binding is now a
+declared policy: `BodyBinding::{NoBody, Required, RequiredWhenTagged}` plus
+`validate_nip98_token_bound(...)`. The reproduced gap — the validator compared
+the payload hash *only when both a supplied body and a `payload` tag existed*,
+so a token minted without the tag authenticated any body — is closed under
+`Required`, which rejects a body with no tag (`PayloadHashMissing`) and a tag
+with no body (`PayloadHashMismatch`); `NoBody` rejects a stray tag
+(`UnexpectedPayloadHash`). `validate_nip98_token` keeps the legacy
+`RequiredWhenTagged` semantics so the three existing callers are unchanged;
+`BodyBinding::default()` is `Required`, so a newly written route is strict.
+(2) Exact-boundary freshness/expiry: the TTL is half-open (replay at
+`TTL - 1ns`, claimable at exactly `TTL`), a re-claim restarts the TTL, a
+backward monotonic step cannot expire an entry, and `REPLAY_CACHE_TTL` is
+asserted equal to `2 x TOKEN_MAX_AGE_SECONDS`. (3) Capacity: the last slot is
+usable, the next fails closed with `ReplayCacheFull`, a full cache still detects
+a replay, no live entry is evicted, and expiry frees capacity. A binding
+rejection happens before the claim, so it does not burn the event id.
+
+**Tests.** `cargo test --lib --no-default-features nip98` — 15 new cases, all
+pass (whole-crate run: 1254 passed, 0 failed).
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2002-2009-nip98.txt`.
+
+**Remains open.** Restart/replica policy is unchanged (process-local cache;
+horizontal scaling still needs shared storage or sticky routing). Token
+consumption through user resolution, authorisation and mutation failure, and
+application idempotency after response loss, are not exercised — those need a
+running server. No route has yet been migrated to `BodyBinding::Required`; that
+is a per-route decision requiring the deployed client to mint payload tags.

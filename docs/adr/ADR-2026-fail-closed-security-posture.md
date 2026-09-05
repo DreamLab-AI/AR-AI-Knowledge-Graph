@@ -34,7 +34,7 @@ made env promotion a hard boot failure. This merges those two facets.
 The absence of any security-relevant flag grants nothing more. `RBAC_PUBLIC_READS`
 and `RBAC_ALLOW_OWNERLESS` both `unwrap_or(false)`; an owner-less store aborts
 boot with `PermissionDenied` unless `RBAC_ALLOW_OWNERLESS=1` is set explicitly;
-every role-lookup `Err` resolves down to `Viewer`, never up. In release builds,
+every role-lookup `Err` resolves down to `Viewer`, never up. In non-debug builds without dev-auth,
 `enforce_release_env_hygiene()` aborts at boot: `--allow-skip-auth` in argv exits
 `1`; any of the three suspect env vars, or `NODE_ENV=development`+`DOCKER_ENV`
 together, exits `2`. This forecloses defaulting any auth gate open and forecloses
@@ -46,7 +46,8 @@ booting a release binary that carries dev-config fingerprints.
   "we forgot the flag, so it opened up" path.
 - Operators who genuinely run single-operator/owner-less must opt in visibly
   (`RBAC_PUBLIC_READS=1`, `RBAC_ALLOW_OWNERLESS=1`) — friction is the point.
-- A release image that inherits a stray `NODE_ENV=development` will refuse to
+- A non-debug image without dev-auth that inherits both `NODE_ENV=development`
+  and `DOCKER_ENV` will refuse to
   boot even though it is not actually vulnerable; the fix is to clean the env,
   not the binary. Exit codes `1`/`2` must be understood by orchestration.
 - Role-lookup errors degrade to `Viewer`, which overlaps the RBAC record
@@ -61,3 +62,32 @@ Re-checked at `e0f8cd896`: `public_reads_enabled` `unwrap_or(false)` at
 `enforce_release_env_hygiene` argv `exit(1)` and `SUSPECT_ENVS`/`NODE_ENV+DOCKER_ENV`
 `exit(2)` at `src/main.rs:117-163`, gated `#[cfg(not(any(debug_assertions,
 feature = "dev-auth")))]` with a no-op dev stub. All four constructs are live.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/08. Owner remains jjohare with authentication/release maintainers. The scoped default parsers, ownerless boot refusal and non-debug/no-dev-auth hygiene are present. Historical complete/live declarations are retained for those mechanisms, not universal production posture. The release hygiene function is a stub when dev-auth is compiled, role errors resolve to Viewer rather than denying all reads, and the unassigned-signer default remains Editor unless narrowed.
+
+**Acceptance condition:** Define the effective profile across feature set, all bypass/report controls, role fallbacks, peer/proxy handling and public route exceptions. Test missing versus zero-valued variables, report-mode construction/date rollover/restart, ownerless/error paths and production artefact promotion. Bind configuration and binary identity to the same pre-listener acceptance receipt. Reopen on any security-relevant setting, build feature, route exception or fallback. See the [profile review](../../../VisionFlow/docs/estate-review/role-authority.md#profile-claims-and-effective-policy) and [source receipt](../../../VisionFlow/docs/estate-review/evidence/security-profile-snapshot.json). The prior nine helper cases retain matching source hashes; no new live profile or network test ran.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** The fail-closed posture gains a boot-time enforcement point.
+`enforce_release_env_hygiene()` covered three suspect variables plus the argv
+flag; `src/config/security_profile.rs` (see ADR-2038) extends that to the whole
+effective profile and runs it **before the listener binds**.
+
+Two gaps in the original hygiene check are closed: `DEV_AUTH_LOOPBACK` — the
+ADR-2012 dev-token runtime opt-in — is now in the forbidden set, and
+`RBAC_GATE_MODE=report` is now a rejection in a production artefact, which the
+env-hygiene list did not cover at all. The presence-not-truthiness rule the ADR
+already relied on is made explicit and tested: `SETTINGS_AUTH_BYPASS=0` is a
+rejection, not a disabled feature.
+
+**Tests.** `cargo test --lib --no-default-features security_profile` — 29
+passed, 0 failed.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2012-2038-security-profile.txt`.
+
+**Remains open.** The boot abort's exit code and message are asserted only in
+the pure evaluator, not by running a binary; `assert_effective_profile_or_exit`
+itself is not exercised end to end.

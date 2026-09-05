@@ -76,3 +76,9 @@ client `tsc --noEmit` clean and `vitest run` 68 files / 758 tests incl. the
 8-test `settingsMigration.test.ts` (EXP-V06). `activation_status: staged`
 until the branch merges and a persisted `settings.yaml` is loaded by the new
 binary.
+
+## Closeout extension — 2026-09-04
+
+CP-01/02/06/08. Owner remains jjohare with settings/client/runtime maintainers. Three Rust alias tests and eight client migration tests pass. The client prefers knowledge when both keys exist and drops logseq; binary paths canonicalise the legacy segment before registration/lookup. Complete/staged is preserved for the scoped rename implementation, not a live persisted-settings migration.
+
+**Acceptance condition:** Verify typed settings load/save, JSON patch, persistence merge, dotted path and transport values against one compatibility matrix. Include both keys, null/wrong types, legacy-only/canonical-only, repeated migration and rollback. Confirm binary registry IDs across independently built peers and registration order; unknown graph values must be rejected by their consuming route. Bind alias removal to a named release and migrated-consumer evidence. Reopen on settings schema, registry ordering, persistence hook or retirement changes. See the [review](../../../VisionFlow/docs/estate-review/configuration-projection.md#knowledge-settings-migration) and [receipt](../../../VisionFlow/docs/estate-review/evidence/graph-settings-migration.json). No real browser storage, server settings load/save, live patch or transport test ran.

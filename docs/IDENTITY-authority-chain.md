@@ -38,17 +38,19 @@ so mixed-case input always resolves one row.
 ### Request signing: NIP-98 (kind 27235)
 
 `src/utils/nip98.rs` is the sole verifier. `validate_nip98_token`
-(`nip98.rs:270`) enforces, in order: base64/UTF-8/JSON decode → kind == 27235
-(`:288`) → **symmetric ±60 s freshness window** (`TOKEN_MAX_AGE_SECONDS`,
-`:168`; past-side `:302`, future-side `:307`) → `u`/`method` tag extraction and
-match (`:328`–`:349`, host-checked `urls_match` at `:463`) → optional payload
-SHA-256 (`:352`) → Schnorr signature verify (`:365`) → **single-use replay
-claim** (`:374`).
+(`nip98.rs:330`) enforces, in order: base64/UTF-8/JSON decode → kind ==
+`HTTP_AUTH_KIND` 27235 (const `:20`, checked `:348`) → **symmetric ±60 s
+freshness window** (`TOKEN_MAX_AGE_SECONDS`, `:169`; past-side `:362`,
+future-side `:367`) → `u`/`method` tag extraction and match (`:376`–`:389`,
+host-checked `urls_match` at `:524`) → optional payload SHA-256
+(`compute_payload_hash`, `:132`, applied `:413`) → Schnorr signature verify
+(`:426`) → **single-use replay claim** (`:435`).
 
 The replay cache is new as of this rebuild and closes the gap the ±60 s window
-left open. `claim_event_id` (`nip98.rs:199`) records a spent event id under a
-`Mutex<HashMap>` (`REPLAY_CACHE`, `:187`); a second presentation of the same id
-within `REPLAY_CACHE_TTL_SECONDS` (= 2× the freshness window, `:177`) returns
+left open. `claim_event_id` (`nip98.rs:234`) records a spent event id under a
+`Mutex<HashMap>` (`REPLAY_CACHE`, `:215`, initialised via `replay_cache()` at
+`:217`); a second presentation of the same id within `REPLAY_CACHE_TTL`
+(= `2 * TOKEN_MAX_AGE_SECONDS`, `:178`, compared at `:255`) returns
 `Nip98ValidationError::TokenReplayed`. Check-insert-prune runs under one lock, so
 two concurrent validations of the same token cannot both win (no TOCTOU). The
 claim happens *after* every other check passes, so a forged token cannot burn a
@@ -62,10 +64,22 @@ then materialises/updates the `NostrUser` and its `is_power_user` flag.
 
 After a NIP-98 login, `NostrService` issues an opaque random session token
 (`Uuid::new_v4`, `nostr_service.rs:416`) with TTL from `AUTH_TOKEN_EXPIRY`
-(default in `:131`). `get_session` (`:560`) resolves a token back to its
-`NostrUser`; expiry is enforced against `last_seen + token_expiry` (`:212`,
-`:482`). Session tokens are the WebSocket credential (below); the REST `/api`
-scope re-verifies NIP-98 on each call rather than trusting the session token.
+(default in `:131`). `get_session` (`:574`) resolves a token back to its
+`NostrUser` and `validate_session` (`:478`) checks a token against a known
+pubkey. Both reject an empty token before any lookup and both enforce expiry
+through one shared rule, `session_is_fresh(last_seen, now, token_expiry)`
+(`:597`), so the WebSocket and REST realms cannot drift apart; a `last_seen` in
+the future (a clock stepped backwards) is treated as stale rather than as an
+unbounded lease. Session tokens are the WebSocket credential (below); the REST
+`/api` scope re-verifies NIP-98 on each call rather than trusting the session
+token.
+
+Until ADR-2044 (2026-09-05) `get_session` enforced **no** expiry at all while
+`validate_session` did, so the same credential was bounded on REST and valid
+until logout on a socket. Every WebSocket upgrade now resolves its token through
+the session realm and fails closed — an unknown token, an expired token, an
+absent token and an absent `NostrService` all produce 401, because presence of a
+token is not authentication.
 
 ### Authorization: the RBAC lattice (legacy ADR-142)
 
@@ -111,7 +125,9 @@ Consequences, by code:
   closed* structurally (absent flag ⇒ auth required) but the deployment sets it
   explicitly ⇒ every `/api` GET is public; startup logs a `warn!` (`:188`).
 - **Any authenticated pubkey is an Editor.** An unassigned pubkey that passes
-  NIP-98 becomes Editor (`role_store.rs:201`) — i.e. can write the graph.
+  NIP-98 becomes Editor — `UserRole::default_authenticated()`
+  (`src/models/rbac.rs:70`), reached from `parse_default_role` for both unset and
+  empty `RBAC_DEFAULT_ROLE` (`role_store.rs:197-198`) — i.e. can write the graph.
 - **Ownerless boot is allowed.** `RBAC_ALLOW_OWNERLESS=1` downgrades the
   no-Owner condition from a fail-closed startup error to a warning
   (`main.rs:717`–`737`).
@@ -147,7 +163,7 @@ insecure-allow branch is `#[cfg(debug_assertions/dev-auth)]` only.
 | Class | Meaning | Exists today? |
 |-------|---------|---------------|
 | **User-signed** | Request Schnorr-signed by the acting user's own key (NIP-98) | **Yes** — the primary path (`auth.rs`, `nip98.rs`). |
-| **Server-attested** | Server issues a bearer/session token after a prior signed login | **Yes** — `NostrService` session tokens for `/wss` (`nostr_service.rs:416`). |
+| **Server-attested** | Server issues a bearer/session token after a prior signed login | **Yes** — `NostrService` session tokens for `/wss` and legacy REST header validation (`auth.rs`, `nostr_service.rs`). |
 | **Service-signed** | A service/bot signs under its *own* key, not the user's | **Yes** — `nostr_bridge.rs:169` re-signs forum events under the bridge key. |
 | **Delegated-agent-signed** | Agent signs *on behalf of* a user with a verifiable delegation (NIP-26) | **No — NOT IMPLEMENTED.** |
 
@@ -160,15 +176,27 @@ insecure-allow branch is `#[cfg(debug_assertions/dev-auth)]` only.
   are frozen (2026-07-03). Pod signing can fall back unsigned (legacy agentbox
   ADR-026). Until this lands, no request can be attributed to a user *through*
   an agent.
-- **`?token=` accepted on `/wss`** (`http_handler.rs:148`) contradicts legacy
+- **`?token=` accepted on `/wss`** (`http_handler.rs:155`) contradicts legacy
   ADR-011's header-only stance. Medium severity, log-hygiene (tokens leak into
-  proxy/access logs). The header path exists and is preferred; the query path
-  should be retired.
+  proxy/access logs). The header path exists and is preferred. Deprecated for one
+  release by ADR-2044 (2026-09-05) rather than removed, because XR and native
+  clients cannot set headers on an upgrade; retirement is that record's review
+  trigger. The pattern is systemic, not one route — it also appears in
+  `client_messages_handler.rs:127`, `mcp_relay_handler.rs:461`,
+  `multi_mcp_websocket_handler.rs:798`, `fastwebsockets_handler.rs:238` and
+  `socket_flow_handler/filter_auth.rs:138` (WS message body).
+- **WebSocket upgrades that accept any non-empty token** — partially resolved.
+  `client_messages_handler` checked only that a token was present, never that it
+  named a live session: **Resolved — ADR-2044 (2026-09-05)**. The same defect
+  remains in `mcp_relay_handler.rs` and `multi_mcp_websocket_handler.rs`, which
+  reference `NostrService` nowhere at all; routed to the estate lead, so ADR-2044
+  is `implementation_status: partial` until those land. `speech_socket_handler`
+  is **not** affected — it performs full NIP-98 verification (`:230`).
 - **Open-by-default posture** (RBAC_PUBLIC_READS, RBAC_ALLOW_OWNERLESS,
   Editor-default) is intentional but unnamed. Needs a ratified security profile
   distinguishing single-operator from multi-tenant.
 - **OIDC parked.** Legacy ADR-040 (OIDC) is superseded-in-part by ADR-142; the
-  Nostr/NIP-98 chain is the only realm. No OIDC code exists.
+  public-key identity foundation supports both signed requests and legacy session credentials (ADR-2009). Enterprise federation remains deferred for VisionClaw (ADR-2013).
 - **agentbox AoE :9095 token auth** was `--auth none` on loopback with tokenless
   direct routes; token auth is staged for the next image rebuild (landing
   2026-08-31, not yet in the running image).
@@ -199,3 +227,32 @@ file:line evidence, (2) `verified_commit` bumped to the new HEAD, (3) any
 invariant change called out explicitly in review. Legacy ADRs (011, 040, 081,
 094, 142, agentbox ADR-026) are cited as evidence only — where they contradict
 the code above, the code wins and the divergence is recorded here.
+
+## RBAC closeout qualification — 2026-09-04
+
+ADR-2010 is partial against broad atomic-authority claims: target checks transact, caller role is passed from an earlier resolution. Explicit-role removal restores fallback authority and is not necessarily access revocation. ADR-2011's central gate includes public-prefix and report-mode branches; its dated acknowledgement is checked at construction, not continuously. [Source evidence and acceptance](../../VisionFlow/docs/estate-review/role-authority.md) require concurrency, composed-route, audit and lifecycle receipts before complete-system claims.
+
+## Request-credential review — 2026-09-04
+
+ADR-2009's browser migration trigger is reached in current source: the ordinary API interceptor signs NIP-98. Server legacy header acceptance remains. Eleven mocked interceptor tests cover header construction, not full-route authentication. Session age is relative to mutable last_seen. ADR-2013's enterprise/delegation deferral does not imply a single request-credential realm or govern other repositories' verifiers. See the [estate review](../../VisionFlow/docs/estate-review/role-authority.md#request-realms-and-deferred-delegation) for consumer retirement, session recovery and delegated-authority acceptance.
+
+## Remediation — 2026-09-05
+
+- **ADR-2044** — session credentials fail closed and expire identically on every
+  transport. `get_session` and `validate_session` now share one freshness rule
+  (`session_is_fresh`, `nostr_service.rs:597`) enforcing `AUTH_TOKEN_EXPIRY`;
+  `get_session` previously enforced no expiry at all, so a WS token outlived its
+  REST equivalent indefinitely. `/ws/client-messages` now resolves its token
+  through the session realm instead of checking non-emptiness. The `?token=`
+  query path is deprecated for one release rather than removed. Partial:
+  `mcp_relay_handler` and `multi_mcp_websocket_handler` are routed to the estate
+  lead. Diagrams VC-03.2, VC-03.5, VC-05.3.
+- **ADR-2070** (vc-knowledge) — the NIP-98 citations in "Request signing" had
+  drifted by roughly 60 lines. Every `file:line` in that section was re-verified
+  and corrected: `validate_nip98_token` `:270`→`:330`, kind check `:288`→`:348`,
+  freshness window `:168`→`:169` with past/future arms `:302`/`:307`→`:362`/`:367`,
+  tag match `:328`-`:349`→`:376`-`:389`, `urls_match` `:463`→`:524`, payload hash
+  →`:132`/`:413`, signature verify `:365`→`:426`, replay claim `:374`→`:435`,
+  `claim_event_id` `:199`→`:234`, `REPLAY_CACHE` `:187`→`:215`, and the constant
+  named `REPLAY_CACHE_TTL_SECONDS` `:177` corrected to the real `REPLAY_CACHE_TTL`
+  at `:178`.

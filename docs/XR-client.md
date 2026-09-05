@@ -99,7 +99,10 @@ points at the LAN backend `ws://192.168.2.132:4000` **directly** — nginx `:300
 does not proxy `/ws/presence` (README run notes). "localhost:4000" is reached
 over a reverse SSH tunnel from HP-Desktop to the backend host. The Rust
 `BinaryProtocolClient` owns the wire; GDScript only supplies URLs/credentials and
-pumps the inbox each frame (`graph_scene.gd:65-66`). It decodes **Protocol V3**
+pumps the inbox each frame (`graph_scene.gd:65-66`). The graph socket connects to
+the **plain URL** and authenticates solely with the NIP-98 `authenticate` frame
+minted over that same URL — `connect_to_url(url, nostr_secret_hex)` takes no token
+and `XR_GRAPH_TOKEN` no longer exists (ADR-2076). It decodes **Protocol V3**
 and the **V5 wrapper** (`0x05` + 8-byte broadcast seq) — see VC protocol doc and
 README gdext-class table. HTTP origin for writes is derived by swapping the ws
 scheme (`_http_base`, `graph_scene.gd:1141-1152`) or `XR_BACKEND_HTTP`.
@@ -169,9 +172,14 @@ line 586 which accepts it. The inline comment at 581-583 is the authoritative
 intent; the stale exclusion paragraph above it should be read as superseded.
 
 ## Known divergences & open items
-- **project.godot vs runtime.** File says Godot 4.3 / Forward Mobile; the working
-  build is 4.6.1-stable Compatibility. The `.godot` metadata has not been
-  re-pinned. Divergence is documented in README only; the config string is stale.
+- **project.godot vs runtime.** File says Godot 4.3 / Forward Mobile
+  (`project.godot:12`); the working build is 4.6.1-stable Compatibility. Still
+  open, and deliberately so: `config/features` is editor-managed metadata, Godot
+  is **not installed in this environment**, and hand-editing it cannot be
+  verified — the editor rewrites that array on save. Re-pinning is a task for the
+  next session on a machine with the 4.6.1 editor, not a text edit. Documented in
+  `xr-client/README.md:15-18` ("read 4.3 as the pinned editor of the day") as
+  well as here. Assessed 2026-09-05 (ADR-2079 scope review).
 - **Quest 3 is unmeasured.** Quest 3 is the sole *ship* target
   (`project.godot:2`, README) but the APK is **unbuilt** and the cross-build is
   frozen — no Android NDK is provisioned in this environment (README line 6).
@@ -183,12 +191,20 @@ intent; the stale exclusion paragraph above it should be read as superseded.
   the livekit-android AAR media transport (PRD-008 §5.5) that would consume it is
   not wired on any built target (`webrtc_audio.rs:1-5`). Voice is design-complete,
   transport-absent.
-- **Query "Execute" is a stub.** The Query tab's Execute button is gated by
-  `query_builder.gd:EXECUTE_ENABLED` and renders "Execute (soon)" / disabled
-  until a later phase (`hud.gd:403-414`, 716-719).
-- **`?token=` / dev bearer fallback.** The dev bearer path exists and 401s in
-  release, but the client still constructs it; see VC security doc for the
-  broader `?token=` on `/wss` divergence from legacy ADR-011.
+- **Query Execute is implemented; runtime acceptance remains open.**
+  `query_builder.gd:EXECUTE_ENABLED` is true; `graph_scene.gd` posts to
+  `/api/graph/query/pattern` and builds result planes. Server correctness and
+  user-visible denied/error states require verification.
+- **`?token=` — Resolved — ADR-2076 (2026-09-05).** The XR client no longer sends
+  a query token: `with_token`, the `token` parameter of `spawn_graph_stream` /
+  `graph_pump` / `connect_to_url`, and the `XR_GRAPH_TOKEN` plumbing in
+  `graph_scene.gd` are deleted. `XR_NOSTR_SECRET` and the NIP-98 `authenticate`
+  frame are the only graph-socket credential. The *server* still accepts the
+  query form for other clients — that remains an open divergence owned by the
+  wire/core domains (`docs/BASELINE-architecture.md:217`).
+- **Dev bearer fallback.** Still open. `_auth_headers` (`graph_scene.gd:1061`)
+  falls back to `PHYSICS_BEARER` + `X-Nostr-Pubkey` when no real secret is
+  present; the path 401s in release builds but the client still constructs it.
 - **Legacy ADR status.** ADR-071 (Godot-rust replacement), ADR-136 (VIVE
   validation target), ADR-140 (swarm pillars), ADR-141 (constrained layout) are
   cited as evidence; treat this document as authority where they conflict.
@@ -207,8 +223,28 @@ intent; the stale exclusion paragraph above it should be read as superseded.
 
 ## Change process
 Edit the affected `.gd`/`.rs` file, run `cargo test -p visionclaw-xr-gdext`
-(141 headless tests, <1 s, no headset/Godot/network needed — README). Any change
+(226 headless tests as of 2026-09-05, <1 s, no headset/Godot/network needed; the
+README's "141" is stale — ADR-2076). Any change
 to a render-constraint invariant (renderer, glow, driver, display) requires a
 fresh on-headset bring-up on the VIVE Pro before merge and a note here. Bump
 `version` on ratified change; record new divergences honestly rather than
 deleting them.
+
+## Estate closeout qualification — 2026-09-04
+
+The [rendered-state review](../../VisionFlow/docs/estate-review/rendered-state.md) records 218 passing Rust library tests and their limits: Godot-facing runtime classes are excluded by `cfg(test)`, and no headset/scene/shader test ran. Hover motion is implemented. Beam targets are fold-remapped and drawn-gated, while agent endpoints use local positions directly. Action timestamps are stored without freshness checks, and old actions can overwrite JSON done/idle with working. Closeout requires explicit state precedence/expiry, visible stale/error handling and authenticated action-to-render evidence on each intended target.
+
+## Renderer, HUD and hierarchy closeout — 2026-09-04
+
+ADR-2032 retains its scoped desktop configuration; current headset/export/mobile acceptance needs separate receipts — that item stands. The other two are closed:
+ADR-2033 stays **partial**, but for a different reason than the closeout gave — Corrected — ADR-2079 (2026-09-05). The source-inventory half now holds: `hud.gd` routes every ray-driven control through the single `_press_fire` helper (`hud.gd:262-264`), all eleven `Button`/`CheckButton` sites call it and no raw constructor remains, so the defect to grep for is a `Button.new()` not wrapped in `_press_fire`. What is still open is the **behavioural** half — press-to-dispatch, disabled controls, drag-off, controller jitter and duplicate actions have never been exercised on the target runtime (Godot is not installed in this environment). The receipt to fill is `docs/estate-closeout/2026-09-05/xr-export-runtime-revision-matrix.md` Column C.
+ADR-2035 retains label acceptance and its predicate test agrees — Resolved — ADR-2079 (2026-09-05). `directed_hierarchy_accepts_subsumption_and_the_collapsed_label` (`force_compute_actor.rs:4562`) asserts the accept for `is_subclass_of | subclass_of | SUBCLASS_OF | hierarchical | HIERARCHICAL`; the earlier test contradicted both the implementation and the ratified decision. The residual cost stands and is ADR-2035's `review_trigger`: the collapsed label is lossy, so a producer reusing it for domain membership contributes edges ranked as subsumption.
+Still required for the ADR-2032 and ADR-2033 items: actual scene/headset evidence. See [estate XR review](../../VisionFlow/docs/estate-review/rendered-state.md#xr-control-coverage-and-hierarchy-semantics); source and helper results do not certify Godot execution.
+
+## Remediation — 2026-09-05
+
+- **ADR-2081** — the dead browser XR-mode surface is removed; the immersive client is the Godot app alone. `@react-three/xr` (declared, never imported) and every `isXRMode` / `xrSessionState` flag and setter are deleted; the WebXR *capability probe* is retained for telemetry.
+- **ADR-2075** — `/ws/speech` authenticates with a post-upgrade NIP-98 `authenticate` frame, refuses every command-bearing frame until it arrives, closes after a 30 s deadline, and no longer reads a `?token=` query parameter or an unverified bearer. The browser voice client now sends that frame.
+- **ADR-2076** — the XR graph socket drops query-token auth entirely (`with_token`, the `token` parameters, and `XR_GRAPH_TOKEN` deleted); `XR_NOSTR_SECRET` plus the NIP-98 frame is the only credential.
+- **ADR-2077** — dead browser-client surfaces deleted: `interactionApi.ts`, the never-emitted `message:graph` bus event, the uncalled `WebSocketRegistry.closeAll()`, and the empty `contributor-studio/` and `workspace/` feature directories.
+- **ADR-2079** — closeout narrative corrected: no HUD constructor omits press-mode any more (`_press_fire` centralises it across all eleven controls) and ADR-2035's predicate test agrees with its implementation. ADR-2033 stays `partial` because its behavioural half is unverified, and the ADR-2032 headset/export/mobile receipt item stands.

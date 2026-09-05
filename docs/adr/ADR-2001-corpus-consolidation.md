@@ -48,3 +48,9 @@ the index; the legacy 241-file archive has not yet been physically relocated.
 Established at verified_commit 73540faa0 by running
 `node scripts/adr-index-gen.js docs/adr` (exit 0) and confirming a
 deliberately broken fixture exits 1.
+
+## Closeout extension — 2026-09-04
+
+CP-01/08/09. Owner remains jjohare with documentation/release maintainers. Partial/staged is retained. All 42 operative numbered records now have dated closeout dispositions, including the tombstone; this is coverage, not system acceptance. The user-requested estate roadmap intentionally extends the original one-page preference. Historical archives and lineage remain separately governed.
+
+**Acceptance condition:** Reconcile current implementation/activation claims, historical supersession, navigation and generated-index contents. Semantically re-verify governed paths before changing baselines: the actual validator currently reports four stale records and does not regenerate README. Check-mode success alone would not prove README freshness or uncommitted-source verification. Reopen on corpus expansion, legacy references or generator/schema changes. See [corpus review](../../../VisionFlow/docs/estate-review/canon-and-verification.md#visionclaw-operative-pack-coverage-and-baseline-debt) and [validator receipt](../../../VisionFlow/docs/estate-review/evidence/dev-docs-closeout.json). No archive deletion or baseline refresh was performed.

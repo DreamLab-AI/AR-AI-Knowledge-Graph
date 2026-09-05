@@ -3,7 +3,7 @@ id: ADR-2042
 title: "`vault-migrate` is the sole Logseq→Obsidian converter — deterministic, output-dir by default, preserve-and-report"
 date: 2026-09-02
 decision_status: proposed
-implementation_status: complete
+implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
@@ -83,3 +83,56 @@ history-preserving split into jjohare/visionGraph with `knowledge/` and
 `working/` vault roots; the logseq `obsidian` branch is the archived
 converted source). `activation_status: live` once visionGraph is the
 configured `GITHUB_REPO`.
+
+## Closeout extension — 2026-09-04
+
+CP-01/02/08. Owner remains jjohare with vault/data maintainers. Current suite: 70 unit and 16 integration tests pass. Additional actual-CLI output-directory fixtures accept colliding legacy/folder paths and retain only one output body, while preserving both source files. Implementation is partial against complete content preservation. Historical activation evidence is retained, not repeated on the real corpus.
+
+--dry-run combined with explicit --report writes that report, though it creates no vault output. This is narrower than the unconditional no-write decision. The planner's claimed-path set only protects starter config; it does not reject duplicate page destinations.
+
+**Acceptance condition:** Reject or explicitly resolve every destination collision before writing; account for every source page/asset and validate consumer inclusion/identity after conversion. Cover mixed namespace/folder layouts, journal collisions, case/normalisation, existing destinations, source/output aliases and interrupted writes. Define report side effects in dry-run/check modes and test recovery before in-place promotion. Reopen on path mapping, body/frontmatter conversion, write planning or consumer format changes. See the [review](../../../VisionFlow/docs/estate-review/authored-vault-transition.md#converter-collision-and-dry-run-boundaries), [reproducer](../../../VisionFlow/docs/estate-review/evidence/vault-converter-probe.py) and [receipt](../../../VisionFlow/docs/estate-review/evidence/vault-converter-probe.json). No real corpus or in-place operation ran.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** `crates/vault-migrate/`. All three acceptance items that do not
+need the real corpus are closed.
+
+1. *Destination collisions rejected or explicitly resolved before writing.* The
+   reproduced defect — colliding legacy/folder paths were accepted, both source
+   files preserved but only one output body retained — is closed.
+   `resolve_collisions` groups the whole action plan by destination **before any
+   write**. `CollisionPolicy::Fail` (the default) aborts the run naming every
+   colliding destination and its sources, because keeping one body and
+   discarding the other is data loss only the operator can adjudicate;
+   `CollisionPolicy::Suffix` (`--on-collision suffix`) keeps the first source at
+   the natural path and gives the rest a deterministic ` (2)`, ` (3)` … suffix.
+   Either way the collision is recorded in the report as
+   `report::Collision { destination, sources, resolution }`.
+2. *Report side effects defined in dry-run/check modes.* Stated in the CLI
+   long-help, the library docs and the artefact itself: `--dry-run` and
+   `--check` produce **no vault output**; the single permitted side effect is
+   the JSON report, and only when `--report <PATH>` asks for it (without it,
+   `--dry-run` prints to stdout). The report records this in
+   `report_side_effects`.
+3. *Interrupted writes.* `write_atomically` / `copy_atomically` stage into a
+   sibling temporary file and rename, so a killed run never leaves a truncated
+   page that a later `--check` would read as valid; the temporary is removed on
+   any failure.
+
+**Tests.** `cargo test -p vault-migrate` — 70 unit + 28 integration passed,
+0 failed (12 new integration cases): collision rejected before any write with
+the message naming both sources and the resolution flag; suffix policy
+preserving every body; suffix determinism across runs; a three-way collision
+getting distinct suffixes; mixed namespace/folder layouts that do *not* collide
+converting normally; journal collisions (`2026_01_02.md` vs `2026-01-02.md`);
+`--check` surfacing collisions; dry-run producing no vault output; a refused run
+leaving the source graph byte-identical; a truncated destination repaired by the
+next run with no staging file left behind; `--check` seeing a truncated
+destination as drift; and case-differing names handled on either filesystem.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2042-vault-migrate.txt`.
+
+**Remains open.** No real corpus or in-place operation ran. Accounting for every
+source page/asset and validating consumer inclusion/identity after conversion is
+not done, and recovery before in-place promotion is untested against a real
+graph.

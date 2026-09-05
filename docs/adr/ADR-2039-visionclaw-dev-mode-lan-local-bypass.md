@@ -57,8 +57,9 @@ ADR-2012/ADR-2037, minus the peer gate:
 1. **Compile-time.** The reading code exists only under
    `#[cfg(any(debug_assertions, feature = "dev-auth"))]`. Release builds get an
    `#[inline(always)] fn dev_full_bypass_active() -> bool { false }` stub — the
-   env var is unreadable and the bypass unreachable. Per ADR-2037 (CI-asserted),
-   release images are built without `dev-auth`, so the stub is guaranteed.
+   env var is unreadable and the bypass unreachable. ADR-2037 proposes a CI assertion that production images omit `dev-auth`;
+   until it is implemented and tied to the shipped artefact, that guarantee
+   remains open.
 2. **Boot refusal.** `VISIONCLAW_DEV_MODE` is already in `enforce_release_env_hygiene`'s
    `SUSPECT_ENVS` (ADR-06 §D11): a release binary that merely *sees* the var
    present hard-fails boot (exit 2). Promoting a dev config to prod cannot start.
@@ -119,3 +120,9 @@ Governing doc: `docs/SECURITY-profiles.md`. Cross-ref ADR-2012, ADR-2037, ADR-06
 Confirmed-correct by the same review: default-off env parsing, the release stub's
 inability to activate, and `verify_access` granting every level before role
 resolution.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/06/08. Owner remains jjohare with release/authentication maintainers. The scoped implemented bypass and existing decision/activation declarations are retained. Nine extracted-helper runs verify conditional compilation and dev-mode behaviour, not shipped-image stripping or headset operation. ADR-2037 is proposed; its release-image assertion cannot yet be claimed as a guaranteed dependency.
+
+**Acceptance condition:** Bind image digest, source, feature closure and effective profile to a receipt. Test production rejection before listener bind, including forbidden variables set to zero, and prevent promotion of a dev-auth artefact. Exercise full REST and WebSocket paths, report-mode interaction, network reachability and sentinel attribution separately from helper parsing. Preserve the distinction between the peer-agnostic full bypass and loopback dev-token mechanism. Reopen on build features, boot sequencing, bypass branches or profile policy. See the [review](../../../VisionFlow/docs/estate-review/role-authority.md#development-bypass-and-release-identity), [reproducer](../../../VisionFlow/docs/estate-review/evidence/dev-auth-probe.py) and [receipt](../../../VisionFlow/docs/estate-review/evidence/dev-auth-probe.json). No full image, listener, HTTP or headset execution ran.

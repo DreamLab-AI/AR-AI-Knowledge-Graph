@@ -242,11 +242,11 @@ CLASS AgentPodClient:
     user_npub: string
     delegation_token: AgentDelegationToken
     agent_secret_key: string
-    jss_base_url: string
+    SOLID_POD_BASE_URL: string
 
     CONSTRUCTOR(user_npub: string, session_id: string):
         self.user_npub = user_npub
-        self.jss_base_url = env("JSS_URL", "http://jss:3030")
+        self.SOLID_POD_BASE_URL = env("SOLID_POD_URL", "http://jss:3030")
 
         # Load delegation for this session
         self.delegation_token = load_delegation(session_id)
@@ -284,7 +284,7 @@ CLASS AgentPodClient:
 
     FUNCTION store_memory(memory_type: string, memory: Memory) -> Result:
         path = "/pods/" + self.user_npub + "/agent-memory/" + memory_type + "/" + memory.id + ".jsonld"
-        url = self.jss_base_url + path
+        url = self.SOLID_POD_BASE_URL + path
 
         body = memory.to_jsonld()
         auth_header = self.sign_request("PUT", url, sha256(body))
@@ -298,7 +298,7 @@ CLASS AgentPodClient:
 
     FUNCTION retrieve_memories(memory_type: string, query: Query?) -> Memory[]:
         path = "/pods/" + self.user_npub + "/agent-memory/" + memory_type + "/"
-        url = self.jss_base_url + path
+        url = self.SOLID_POD_BASE_URL + path
 
         auth_header = self.sign_request("GET", url, null)
 

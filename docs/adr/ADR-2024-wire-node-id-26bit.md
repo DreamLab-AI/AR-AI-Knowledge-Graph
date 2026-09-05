@@ -60,3 +60,56 @@ the release path now logs the overflow instead of truncating silently; decode
 strips via `& NODE_ID_MASK` (`clear_all_flags`, `get_actual_node_id`). The
 silent-truncation gap is closed (loud, not silent); a hard reject remains the
 open hardening tracked by `review_trigger`.
+
+## Closeout extension — 2026-09-04
+
+CP-01/02/06/08. Owner remains jjohare with protocol/graph/client maintainers. Complete/live is retained for ephemeral 26-bit IDs and typed setter behaviour. The inspected server/XR/browser masks agree. Overflow logging is specific to the five typed setters: the untyped encoder branch only debug-asserts, then forwards the unchanged ID through the identity wire helper. This source finding does not establish a live overflow or collision.
+
+**Acceptance condition:** Test allocator plus encoder/decoder boundaries for every class, including untyped nodes, in debug and release; specify reject/remap behaviour before capacity exhaustion. Bind compact maps to graph generations and test full/delta/reconnect and stale-map retirement across clients. Reopen on allocator/capacity, class-bit allocation or mapping persistence changes. See [review](../../../VisionFlow/docs/estate-review/rendered-state.md#wire-identifier-overflow-coverage) and [source receipt](../../../VisionFlow/docs/estate-review/evidence/wire-force-boundaries.json). No runtime overflow frame was exercised.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented — the release-build gap is closed.** The finding was that the five
+typed setters logged and masked overflow in release while the untyped encoder
+branch only `debug_assert!`ed and then forwarded the id *unchanged*. A release
+build therefore shipped an over-range id straight onto the wire with no
+diagnostic, where it aliases an existing id and picks up spurious class-flag bits.
+
+All six branches now share one helper, `enforce_wire_id_bounds(id, WireIdClass)`,
+with behaviour **identical in debug and release**: remap by masking to 26 bits and
+log the overflow as an error naming the class and both ids. `debug_assert!` is
+retained so development builds still fail loudly at the offending call site, but
+release no longer depends on it for either the bound or the diagnostic.
+
+Remap rather than reject is the deliberate choice, and is now documented as such:
+a dropped node vanishes from the layout with no trace, whereas a masked one is
+visibly wrong *and* leaves a log line. `WireIdClass::Untyped` exists precisely so
+the previously-silent branch names itself in that log.
+
+`to_wire_id_v2` stays an identity function, and now says why: it runs on an
+already-flagged id whose bits 26..=31 legitimately carry the class, so masking
+there would strip the class off every node. The bound is enforced upstream on the
+bare id.
+
+**Testability.** The overflow branch cannot be reached through
+`enforce_wire_id_bounds` in a test profile — `debug_assert!` panics first, which
+is exactly how the release-only gap went unnoticed. The pure remap is therefore
+split out as `remap_wire_id(id) -> (masked, overflowed)`, which *is* the code a
+release build runs, and the tests target it directly.
+
+**Tests run.** `cargo test --lib --no-default-features adr_20` — 34 pass, 6 of
+them in `adr_2024_wire_id_bounds`: in-range pass-through for all six classes;
+release-path remap and overflow reporting for `2^26`, `2^26+7`, `0x80000000` and
+`u32::MAX`; exact boundary (`NODE_ID_MASK` valid, `+1` overflows); a remapped id
+leaking no flag bit (`get_node_type` returns `Unknown`); each typed setter
+stamping only its own class with the id surviving; and an end-to-end encode
+proving the untyped branch emits a bounded, class-free wire id.
+
+**Governed paths changed.** `src/utils/binary_protocol.rs`.
+
+**Open.** No over-range id was produced by a live allocator and no rendered
+collision was observed — this is boundary coverage, not evidence of a deployed
+overflow. Per-generation durable-to-wire mapping, full/delta/reconnect map
+consistency and stale-map retirement across clients remain unaddressed; those are
+allocator and session-lifecycle concerns rather than encoder-boundary ones.
+`implementation_status` is unchanged.

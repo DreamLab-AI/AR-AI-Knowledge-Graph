@@ -3,7 +3,7 @@ id: ADR-2007
 title: GPUManagerActor is a coordinator over four subsystem supervisors on a context bus
 date: 2026-08-31
 decision_status: accepted
-implementation_status: complete
+implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
@@ -31,14 +31,14 @@ into the BASELINE actor-topology map (no separate legacy ADR number).
 `GPUManagerActor` is a lightweight coordinator that spawns four subsystem
 supervisors — **Resource, Physics, Analytics, GraphAnalytics** — each isolating
 its own failures with exponential-backoff restart and reporting health
-independently. `SharedGPUContext` is distributed by a `GPUContextBus` broadcast
-(publisher/subscriber), not a central handle passed by the coordinator, so
-subsystems receive context without coupling to each other.
+independently. `SharedGPUContext` is distributed by ResourceSupervisor through direct messages
+to registered supervisors, with additional GPUContextBus publication. Shared
+context ownership and recovery still couple subsystem behaviour.
 
 ## Consequences
 
-- A crash in one subsystem no longer downs the others; restart backoff is
-  per-supervisor.
+- Restart policies are organised per supervisor. Isolation from shared-context
+  failure requires runtime evidence; it is not guaranteed by topology alone.
 - The analytics kernels the AnalyticsSupervisor carries are code-fixed but not
   all output-validated — legacy ADR-031's "known-broken" list is stale in the
   good direction (Louvain D1 fix, PageRank D8 fix; Landmark-APSP remains
@@ -57,3 +57,9 @@ subsystems receive context without coupling to each other.
 topology and the `SharedGPUContext via GPUContextBus broadcast` distribution.
 `src/actors/gpu/context_bus.rs` defines `GPUContextBus` with `publish(...)` over
 `Arc<SharedGPUContext>`. Verified at `e0f8cd896`.
+
+## Closeout extension — 2026-09-04
+
+CP-01/06/08. Owner remains jjohare with GPU/actor/operations maintainers. Implementation is partial against broadcast-only context distribution and guaranteed isolation; historical live activation is retained. The manager creates four supervisors and registers their addresses with ResourceSupervisor. That supervisor sends context directly, then publishes to the bus. Several send results are discarded before pending graph data is cleared. Physics restarts its sibling group around shared state; address replacement alone does not prove termination or clean device recovery.
+
+**Acceptance condition:** Bind context/graph generations to acknowledged child readiness; reconcile failed sends and late/restarted subscribers. Inject child/supervisor/mailbox/device failures and verify termination, current-state recovery, bounded backoff and the declared isolation boundary. Reopen on context ownership, restart policy or new subsystems. See [supervision review](../../../VisionFlow/docs/estate-review/rendered-state.md#gpu-supervision-and-context-delivery) and [source receipt](../../../VisionFlow/docs/estate-review/evidence/crate-supervision-snapshot.json). No actor crash or GPU recovery was exercised.

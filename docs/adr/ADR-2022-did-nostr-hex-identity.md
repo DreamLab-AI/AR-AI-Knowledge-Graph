@@ -53,3 +53,29 @@ variant; `:136-140` `is_pubkey_hex`; `:185-190` `did_nostr` rejects non-hex;
 `src/services/nostr_identity_verifier.rs:65` derives the DID from the verified
 `event.pubkey`, gated at `:100-108`. `src/types/user_context.rs:16-20` documents
 `user_id` (npub) as the display identifier with hex `pubkey` for verification.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/05/08. Owner remains jjohare with identifier/identity/storage maintainers. The scoped canonical DID/no-Agent-kind implementation declaration is retained. Canonical string validation, challenge-signature verification and application authority are separate gates. Current challenge verification compares a canonical payload DID to the proven raw key, but complete route and durable-store coverage is not established by inspecting that helper.
+
+**Acceptance condition:** Inventory durable mint, compatibility-write, lookup and display sites; use typed validation or record deliberate exceptions. Verify canonical bytes across signed identity and persistence boundaries, with challenge freshness/reuse/audience policy and separate role admission. Test old/new lookup, duplicate joins and rollback before retiring legacy data. Reopen on identifier grammar, proof verification, new persistence sites or migration decisions. See the [review](../../../VisionFlow/docs/estate-review/federation-identifiers.md#mint-site-coverage-and-proof-of-identity) and [receipt](../../../VisionFlow/docs/estate-review/evidence/identifier-mint-sites.json). Prior paired-helper source hashes match; no new live proof or persistence test ran.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented (shared with ADR-2023).** The canonical-string half of this
+record is advanced through `src/uri/mod.rs`: `is_content_address` gives the
+content-address grammar an exact definition, and `uri::ngm` gives the legacy
+scheme typed constructors paired with parsers, so the persistence-boundary bytes
+are now defined in one place rather than assembled by `format!` at each site
+(detail under ADR-2021). `did_nostr` validation is now actually applied at the
+`ontology_mutation_service` mint site, which previously interpolated the agent
+id unchecked.
+
+**Tests.** `cargo test --lib --no-default-features uri::` — 31 passed, 0 failed.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2021-2023-identifiers.txt`.
+
+**Remains open.** The substance of this record's acceptance is untouched:
+challenge freshness, reuse and audience policy; role admission as a separate
+gate; complete route and durable-store coverage for
+`verify_did_matches_challenge`. No live proof ran.

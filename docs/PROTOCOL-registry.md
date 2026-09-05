@@ -1,10 +1,11 @@
 ---
 title: Protocol Registry — Wire Frames, Endpoints & Version Policy
 doc_id: VC-PROTOCOL
-version: 0.1.1
+version: 0.1.2
 status: draft-for-ratification
 verified_commit: 73540faa0
 changelog:
+  - "0.1.2: 2026-09-05 remediation — ADR-2057 compile-time 52-byte and V5-seq locks (assertion language corrected); ADR-2058 header-only WS auth (?token= divergence resolved); ADR-2060 citation corrections after line drift (V5 :513→:592, 0x23 :1354/:1125-1135/:1501→:1721/:1490/:1500, 52B asserts :712,809→compile-time :93 plus tests :1077,1174); TS client V5/V2 parity recorded as open"
   - "0.1.1: correct RBAC_PUBLIC_READS citation (rbac_gate.rs/compose, not main.rs — code fails closed); reword WIRE_V3_ITEM_SIZE asserts as unit-test (not static) assertions; cite /ws/presence route registration at main.rs:996 not construction at :816"
 sources:
   - src/utils/binary_protocol.rs
@@ -41,8 +42,8 @@ is safe. The registry below is the source of truth for tag allocation.
 | Tag | Name | Socket / path | Direction | Owning module (file:line) |
 |-----|------|---------------|-----------|---------------------------|
 | `0x03` | Graph position frame **V3** | `/wss` | server→client | `src/utils/binary_protocol.rs:12,54` |
-| `0x05` | Graph position frame **V5 envelope** (wraps V3) | `/wss` | server→client | `src/utils/binary_protocol.rs:513`; `xr-client/rust/src/binary_protocol.rs:25` |
-| `0x23` | `AGENT_ACTION` beam event | `/wss` (fanned by ClientCoordinator) | server→client | `src/utils/binary_protocol.rs:1354` |
+| `0x05` | Graph position frame **V5 envelope** (wraps V3) | `/wss` | server→client | `src/utils/binary_protocol.rs:592` (`PROTOCOL_V5` branch); `xr-client/rust/src/binary_protocol.rs:25` |
+| `0x23` | `AGENT_ACTION` beam event | `/wss` (fanned by ClientCoordinator) | server→client | `src/utils/binary_protocol.rs:1721` (`MessageType::AgentAction`) |
 | `0x43` | Avatar pose (`OPCODE_AVATAR_POSE`) | `/ws/presence` | bidirectional | `crates/visionclaw-xr-presence/src/wire.rs:9` |
 | `0x44` | Agent co-presence (`OPCODE_AGENT_PRESENCE`) | `/ws/presence` (sibling channel) | bidirectional | `crates/visionclaw-xr-presence/src/agent_presence.rs:40` |
 | `0x05` | Settings-protocol batch message | settings binary socket (distinct) | bidirectional | `src/protocols/binary_settings_protocol.rs:211,311` |
@@ -53,10 +54,15 @@ own socket.
 
 ### `0x03` — Graph position frame V3 (52 bytes/node)
 
-Canonical struct `WireNodeDataItemV3` (`src/utils/binary_protocol.rs:41-51`). One header byte
+Canonical struct `WireNodeDataItemV3` (`src/utils/binary_protocol.rs:44`). One header byte
 `0x03` then N fixed **52-byte** records, little-endian throughout. Field-by-field
-(`binary_protocol.rs:88-99`, cross-checked against the encoder at `:408-443` and the client
-decoder at `xr-client/rust/src/binary_protocol.rs:8-11`):
+(the layout comment block immediately below the `WIRE_*_SIZE` constants, cross-checked
+against `encode_node_data_with_types` and the client decoder at
+`xr-client/rust/src/binary_protocol.rs`):
+
+> Citations in this section were re-derived against the working tree by ADR-2060 and then
+> again after ADR-2057 inserted the const assertions, which shifted every later line in
+> `binary_protocol.rs`. Prefer the symbol name over the line number when they disagree.
 
 | Offset | Bytes | Type | Field | Notes |
 |--------|-------|------|-------|-------|
@@ -70,9 +76,12 @@ decoder at `xr-client/rust/src/binary_protocol.rs:8-11`):
 | `@44` | 4  | u32 | `community_id` | Louvain assignment |
 | `@48` | 4  | f32 | `centrality` | PageRank score |
 
-Total **52 bytes**. `WIRE_V3_ITEM_SIZE == 52` is checked by unit-test `assert_eq!`s inside
-`#[cfg(test)] mod tests` (`binary_protocol.rs:712,809`) — runtime test assertions, not
-compile-time `static_assert`/const-eval checks, so the invariant holds only when the tests run.
+Total **52 bytes**. `WIRE_V3_ITEM_SIZE == 52` is locked at **compile time** by
+`const _: () = assert!(...)` (`binary_protocol.rs:93`), so changing any `WIRE_*_SIZE`
+constant fails the build rather than a test run (ADR-2057). The original unit-test
+`assert_eq!`s remain as a redundant second check (`binary_protocol.rs:1077,1174`); they are
+no longer the primary guard. The V5 sequence-prefix width is locked the same way
+(`WIRE_V5_SEQ_SIZE == 8`, `binary_protocol.rs:102`).
 
 **Type flag bits** in the `@0` id (`binary_protocol.rs:15-26`, mirrored client-side at
 `xr-client/rust/src/binary_protocol.rs:37-43`): `NODE_ID_MASK = 0x03FF_FFFF` (26-bit id, max
@@ -85,7 +94,7 @@ skipped, since the maps are keyed by compact id.
 ### `0x05` — V5 broadcast envelope
 
 Layout: `[0x05][u64 broadcast_seq LE][ V3 body ]` where the V3 body is the exact 52-byte-per-node
-stream above (no inner `0x03` header byte). Server decode at `binary_protocol.rs:513-520` skips
+stream above (no inner `0x03` header byte). Server decode at `binary_protocol.rs:592` (the `PROTOCOL_V5` match arm) skips
 the 8-byte sequence then delegates to `decode_node_data_v3`. Client constants at
 `xr-client/rust/src/binary_protocol.rs:25-28` (`PROTOCOL_V5 = 0x05`, `V5_SEQ_BYTES = 8`,
 `NODE_RECORD_BYTES = 52`). The envelope is **optional** and additive: a receiver distinguishes
@@ -93,11 +102,25 @@ the 8-byte sequence then delegates to `decode_node_data_v3`. Client constants at
 monotonic ordering/drop-detection handle. **This document is the owner of the V5 envelope** — no
 legacy ADR defines it.
 
+**Client parity (ADR-2078, 2026-09-05).** All three decoders are at parity. The web client's live
+path is `client/src/types/binaryProtocol.ts:198-201,410-424` — it reads the u64 LE sequence,
+rejects a frame shorter than 9 bytes (the client-side equivalent of the server's
+`payload.len() < WIRE_V5_SEQ_SIZE` reject at `binary_protocol.rs:594`), decodes the body from
+offset 9, and surfaces the sequence as the broadcast-ack sequence at
+`client/src/store/websocket/binaryProtocol.ts:416`. The web decoder now also **declines** V2 and
+any unrecognised version instead of decoding them: it previously parsed 36-byte V2 records and,
+in its `default` arm, re-read an unknown frame from offset 0 as 36-byte records whenever the
+length divided by 36 — **fabricating nodes at arbitrary positions from arbitrary payloads. That
+hazard is closed.** The decoder is now pinned against
+`crates/visionclaw-protocol/src/wire_fixtures.rs` by
+`client/src/types/__tests__/wireFixtures.test.ts`, closing the gap that let it drift: it was the
+only one of the three decoders with no fixture-backed cross-check.
+
 ### `0x23` — AGENT_ACTION beam event
 
-`MessageType::AgentAction = 0x23` (`binary_protocol.rs:1354`, decode map `:1501`). Frame =
+`MessageType::AgentAction = 0x23` (`binary_protocol.rs:1721`). Frame =
 `[0x23]` then one or more 15-byte headers with optional variable payloads. Header
-(`AgentActionEvent`, `binary_protocol.rs:1125-1135`, `AGENT_ACTION_HEADER_SIZE = 15`):
+(`AgentActionEvent`, `binary_protocol.rs:1490`, `AGENT_ACTION_HEADER_SIZE = 15` at `:1500`):
 `source_agent_id u32 @0`, `target_node_id u32 @4`, `action_type u8 @8`
 (Query/Update/Create/Delete/Link/Transform, `:1098-1105`), `timestamp u32 @9` (ms),
 `duration_ms u16 @13`, then variable `payload`. Multiple actions coalesce into one frame
@@ -191,24 +214,38 @@ already versions itself via the leading tag byte, and the decoder branches on it
 ## Known divergences & open items
 
 - **28B and 48B figures are retired.** Legacy ADR-061 ("28B forever") and ADR-031 ("48B") are both
-  stale prose. 28 bytes survives only as the *internal* server-side `BinaryNodeData` struct
-  (`binary_protocol.rs:106-110`), never on the wire; 48 was an interim analytics count. The wire is
-  **52 bytes/node**, checked by unit-test `assert_eq!`s (`:712,809`; test-time, not compile-time).
-- **V5 envelope had no owning ADR.** This document now owns it.
-- **`?token=` query auth contradicts legacy ADR-011.** The `?token=` path is live in release
-  (`http_handler.rs:145-150`) alongside the Authorization-header path. Medium severity, log-hygiene
-  (tokens can land in access logs / referers). Prefer the header; tracked in [VC-SECURITY].
+  stale prose. 28 bytes survives only as the *internal* server-side `BinaryNodeData` struct,
+  never on the wire; 48 was an interim analytics count. The wire is **52 bytes/node**, now locked
+  at compile time — *Resolved — ADR-2057 (2026-09-05)*.
+- **V5 envelope had no owning ADR** — *Resolved — ADR-2057 (2026-09-05)*, which is now the owning
+  record for the envelope layout and the `broadcast_seq` contract. This document remains the
+  registry of record for the tag allocation itself.
+- **`?token=` query auth contradicts legacy ADR-011** — *Resolved — ADR-2058 (2026-09-05)*. The
+  `Authorization` header is now the only accepted carrier in a release build; the query-string
+  path is compiled out of release entirely and survives only behind the dev-auth gate, logging a
+  `SECURITY:` warning when used. A release build that receives `token=` logs a rejection warning.
 - **Two `0x05` allocations** (V5 graph envelope vs settings-protocol message) coexist on distinct
   sockets. Safe today; the registry records both so neither is reused on its own socket.
+  **Caution (ADR-2060):** this hazard has already caused one documentation error —
+  `BASELINE-architecture.md` cited the *settings* `0x05` as the graph V5 envelope. When citing
+  `0x05`, always name the socket.
 - **Settings binary protocol** (`src/protocols/binary_settings_protocol.rs`) is a separate framed
   protocol not yet fully enumerated here; fold it into this registry in a future revision.
+  **Open** — unchanged by the 2026-09-05 remediation.
+- **TypeScript client wire parity.** The web client (`client/src/services/binaryProtocol/`) has no
+  `0x05`/V5 handling at all and still advertises `PROTOCOL_V2` in `SUPPORTED_PROTOCOLS`, which the
+  server rejects outright. The XR Rust client parses V5 correctly. Spec routed to the vc-clients
+  lead under ADR-2057; **open** until that lands. Root cause: the TS decoder is the only one of the
+  three with no fixture-backed cross-check against
+  `crates/visionclaw-protocol/src/wire_fixtures.rs`.
 
 ## Invariants (must not silently change)
 
 - Byte 0 of every binary frame is the tag/version; unknown tags are rejected, not reinterpreted.
-- V3 record is exactly 52 bytes with the field offsets above; the `WIRE_V3_ITEM_SIZE == 52`
-  unit-test assertion (`binary_protocol.rs:712,809`) must hold — and should ideally be promoted to a
-  compile-time `const` check.
+- V3 record is exactly 52 bytes with the field offsets above; `WIRE_V3_ITEM_SIZE == 52` is
+  enforced by a compile-time `const _: () = assert!(...)` (`binary_protocol.rs:93`), so a width
+  change fails the build (ADR-2057). The V5 envelope's 8-byte `broadcast_seq` prefix is locked
+  the same way (`binary_protocol.rs:102`).
 - `NODE_ID_MASK = 0x03FF_FFFF`; flag bits 26-31 are stripped before analytics/SSSP map lookups.
 - All multi-byte fields are little-endian.
 - Tag allocation happens only in this registry, scoped per socket.
@@ -220,3 +257,27 @@ This is a living ground-truth document, not an ADR. Amend it in the same PR that
 wire-facing code, cite `file:line`, and bump `version`. Any new frame tag, field, offset, or
 endpoint auth change MUST update the tables here before merge. Removals follow the deprecation
 process above. Ratification: reviewed against the code at the recorded `verified_commit`.
+
+## Estate closeout qualification — 2026-09-04
+
+See the [rendered-state review](../../VisionFlow/docs/estate-review/rendered-state.md) and [source/test receipt](../../VisionFlow/docs/estate-review/evidence/xr-render-snapshot.json). XR discards V5 sequence values; envelope compatibility is not consumer ordering enforcement. Its 0x23 parser accepts complete events before truncation, whereas malformed position framing is rejected. Codec-specific rejection and freshness policies need explicit tests. The 0x44 codec remains staged without a located live integration. Agent-events transport authenticates a session, but frame processing does not receive that session identity; structural provenance alone does not bind the claimed agent to the sender.
+
+## Remediation — 2026-09-05
+
+- **ADR-2057** — The 52-byte V3 record and the 8-byte V5 sequence prefix are locked at compile
+  time with `const _: () = assert!(...)`; the former test-only assertions remain as a redundant
+  check. This ADR is the owning record for the V5 envelope layout and the `broadcast_seq`
+  contract. `PROTOCOL_V5` and `WIRE_V5_SEQ_SIZE` replace bare literals in the decode branch.
+- **ADR-2078** (vc-clients) — The web TypeScript decoder fails closed on V2 and on unknown
+  versions, the size-autodetect node-fabrication hazard is removed, and the decoder is
+  fixture-pinned against `wire_fixtures.rs`. Amends ADR-2057, whose Finding 1 ("the TS client has
+  no V5 support") was wrong — the live path always had it, including the short-payload guard.
+- **ADR-2058** — WebSocket bearer tokens are accepted only from the `Authorization` header in a
+  release build. The `?token=` query path is compiled out of release and survives only behind
+  the dev-auth gate with a `SECURITY:` warning; a release build receiving `token=` logs a
+  rejection.
+- **ADR-2060** — Citation corrections after line drift in `binary_protocol.rs`, and the
+  `0x05` caution above (a mis-citation of the settings tag as the graph envelope had already
+  occurred in BASELINE).
+- **Open** — TypeScript client V5 parity and V2 de-advertisement, routed to the vc-clients
+  lead under ADR-2057; and the settings binary protocol is still not enumerated here.

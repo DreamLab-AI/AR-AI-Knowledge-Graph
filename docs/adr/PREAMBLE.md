@@ -30,3 +30,5 @@ governing document **in the same change**, and regenerate this index
 `.github/workflows/docs-ci.yml`: invalid frontmatter, asymmetric supersession
 edges, and stale `verified_commit`+`verified_paths` claims all fail the
 build).
+
+The [historical closeout routing note](../adr-history-closeout.md) points each frozen archive record at the estate section-level review and the complete VisionClaw historical map; a lineage mention there does not supersede every section of a predecessor.

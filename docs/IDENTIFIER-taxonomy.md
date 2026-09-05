@@ -42,17 +42,17 @@ There is deliberately **no** `urn:visionclaw:agent` kind — an agent's identity
 
 | Kind | Grammar | Scope | Minter |
 |------|---------|-------|--------|
-| `concept` | `urn:visionclaw:concept:<domain>:<slug>` | domain-scoped shared ontology class | `concept()` `:194` |
-| `kg` | `urn:visionclaw:kg:<hex-pubkey>:<sha256-12>` | owner-scoped, content-addressed KG node | `kg()` `:207`, `kg_with_address()` `:220` |
-| `bead` | `urn:visionclaw:bead:<hex-pubkey>:<sha256-12>` | owner-scoped, content-addressed | `bead()` `:231` |
-| `execution` | `urn:visionclaw:execution:<sha256-12>` | **unscoped** — owner travels in `owner_did` | `execution()` `:243` |
-| `group` | `urn:visionclaw:group:<team>#members` | team-scoped membership ref | `group_members()` `:248` |
-| `room` | `urn:visionclaw:room:<sha256-12>` | unscoped XR presence room | `room()` `:258` |
-| `avatar` | `urn:visionclaw:avatar:<hex-pubkey>` | identity-bound 1:1 with a DID | `avatar()` `:263` |
+| `concept` | `urn:visionclaw:concept:<domain>:<slug>` | domain-scoped shared ontology class | `concept()` `:229` |
+| `kg` | `urn:visionclaw:kg:<hex-pubkey>:<sha256-12>` | owner-scoped, content-addressed KG node | `kg()` `:242`, `kg_with_address()` `:255` |
+| `bead` | `urn:visionclaw:bead:<hex-pubkey>:<sha256-12>` | owner-scoped, content-addressed | `bead()` `:265`, `bead_with_address()` `:284` |
+| `execution` | `urn:visionclaw:execution:<sha256-12>` | **unscoped** — owner travels in `owner_did` | `execution()` `:293` |
+| `group` | `urn:visionclaw:group:<team>#members` | team-scoped membership ref | `group_members()` `:298` |
+| `room` | `urn:visionclaw:room:<sha256-12>` | unscoped XR presence room | `room()` `:308` |
+| `avatar` | `urn:visionclaw:avatar:<hex-pubkey>` | identity-bound 1:1 with a DID | `avatar()` `:313` |
 
 Content addressing is `sha256-12-<12 lowercase hex>` — the first 6 bytes of a
 SHA-256 digest, byte-identical to the agentbox `sha12()` helper
-(`content_address()` `:144-153`; verified against the hand-computed vector
+(`content_address()` `:179`; verified against the hand-computed vector
 `sha256-12-b94d27b9934d` for `"hello world"`, `:582`). Owner scope is always the
 **64-char lowercase-hex BIP-340 x-only pubkey, never bech32 npub**
 (`is_pubkey_hex()` `:136-140`; `src/uri/mod.rs:31`).
@@ -82,7 +82,7 @@ named graphs remain the persistence named-graph IRIs and are not rewritten
 
 ### 3. Sovereign identity — `did:nostr:<hex-pubkey>` + display npub
 
-Identity is a DID, minted by `did_nostr()` (`src/uri/mod.rs:184-190`), prefix
+Identity is a DID, minted by `did_nostr()` (`src/uri/mod.rs:220`), prefix
 `did:nostr:` (`:47`). The DID **body is the 64-char x-only hex pubkey**; this is
 the canonical, comparison-stable identity. The verifier reconstructs the DID
 solely from the verified event pubkey and never trusts a claimed field
@@ -109,34 +109,38 @@ Layout (`src/utils/binary_protocol.rs:14-26`):
 | 26–28 | `ONTOLOGY_TYPE_MASK = 0x1C000000` | ontology subtype (only when `GraphType::Ontology`): `0x04000000` Class, `0x08000000` Individual, `0x10000000` Property (`:20-22`) |
 | 0–25 | `NODE_ID_MASK = 0x03FFFFFF` | the ID, 0 … 67,108,863 (2²⁶−1) |
 
-IDs are sequential `u32` from a `NEXT_NODE_ID` atomic counter. Encoders
-`debug_assert!(node_id <= NODE_ID_MASK)` before OR-ing the flag (`:118-136`) —
-this panics on overflow **in debug builds only**; in release the assert is
-compiled out and the code unconditionally applies `(node_id & NODE_ID_MASK) |
-FLAG` (`:125,136`), i.e. an over-range ID is silently truncated to its low 26
-bits. Decode strips via `& NODE_ID_MASK` (`:144,156`). This is an **ephemeral
-render-plane ID** — it maps
-to a durable `urn:visionclaw:kg:*` in the graph store, not the reverse.
+IDs are sequential `u32` from a `NEXT_NODE_ID` atomic counter. Every encoder
+branch routes through `enforce_wire_id_bounds` (`:167-188`), which masks the ID
+into wire range via `remap_wire_id` (`:199-201`) and, on overflow, emits an
+`error!` naming the class and both IDs. This holds in **all** builds, the
+untyped fallback branch included (`:445`); the retained
+`debug_assert!(node_id <= NODE_ID_MASK)` (`:168-175`) is a development aid that
+fails fast at the offending call site, not the bound itself — ADR-2024,
+ADR-2070. An over-range ID is still masked (and therefore aliases another node),
+but it is never silent. Decode strips via `& NODE_ID_MASK` (`:227-229`). This is
+an **ephemeral render-plane ID** — it maps to a durable `urn:visionclaw:kg:*` in
+the graph store, not the reverse.
 
 ### Cross-substrate mapping (agentbox → VisionClaw)
 
-`cross_from_agentbox()` (`src/uri/mod.rs:514-553`) is the federation boundary
+`cross_from_agentbox()` (`src/uri/mod.rs:672-719`) is the federation boundary
 translator — the counterpart of agentbox `bc20-provenance-bridge.js::toVisionclaw`.
 Closed kind map:
 
 | agentbox source | VisionClaw target | Note |
 |-----------------|-------------------|------|
-| `did:nostr:<pk>` | `did:nostr:<pk>` | already converged, passes through (`:516-525`) |
-| `urn:agentbox:agent:<pk>:*` | `did:nostr:<pk>` | identity is the DID (`:534-537`) |
-| `urn:agentbox:activity:*` | `urn:visionclaw:execution:<sha256-12>` | unscoped (`:538`) |
-| `urn:agentbox:thing:<pk>:*` | `urn:visionclaw:kg:<pk>:<sha256-12>` | owner-scoped (`:539-542`) |
-| `urn:agentbox:memory:*` | *(none — returns `None`)* | needs `{domain,slug}` elevation absent on hot path (`:543-545`) |
-| any other kind | *(none)* | closed-map discipline (`:545`) |
+| `did:nostr:<pk>` | `did:nostr:<pk>` | already converged, passes through (`:674-683`) |
+| `urn:agentbox:agent:<pk>:*` | `did:nostr:<pk>` | identity is the DID (`:692-695`) |
+| `urn:agentbox:activity:*` | `urn:visionclaw:execution:<sha256-12>` | unscoped (`:696`) |
+| `urn:agentbox:thing:<pk>:*` | `urn:visionclaw:kg:<pk>:<sha256-12>` | owner-scoped (`:697-700`) |
+| `urn:agentbox:bead:<pk>:<sha256-12>` | `urn:visionclaw:bead:<pk>:<sha256-12>` | structural crossing — both grammars are already `<pubkey>:<sha256-12>`, so the existing content address is preserved rather than re-hashed (`:701-712`, `bead_with_address()` `:284`). Added by ADR-2072; agentbox ADR-2061 holds the cross-repo parity test |
+| `urn:agentbox:memory:*` | *(none — returns `None`)* | needs `{domain,slug}` elevation absent on hot path (`:713`) |
+| any other kind | *(none)* | closed-map discipline (`:713`) |
 
 ### Dual-read legacy resolution
 
-`parse()` (`:357`) is converged-only and **rejects** `urn:ngm:*`. `parse_dual()`
-(`:467-483`) additionally resolves persisted legacy `urn:ngm:node|edge|domain|graph:*`
+`parse()` (`:509`) is converged-only and **rejects** `urn:ngm:*`. `parse_dual()`
+(`:619`) additionally resolves persisted legacy `urn:ngm:node|edge|domain|graph:*`
 IDs as `ParsedUri::LegacyNgm`, carried opaquely so old IDs keep resolving without
 re-minting. Every resolve/lookup surface must call `parse_dual`; every mint/validate
 surface must call `parse` (legacy ADR-105).
@@ -164,8 +168,10 @@ surface must call `parse` (legacy ADR-105).
   hex pubkey segment of `urn:visionclaw:kg:*`, not by an npub path. ADR-050 grammar is
   superseded by the URN grammar in code.
 - **Minted URNs may return null (legacy ADR-063).** `cross_from_agentbox` returns
-  `None` for `memory` and unknown kinds (`:543-545`); callers must record the raw
-  string + unmapped marker rather than a synthetic ID.
+  `None` for `memory` and unknown kinds (`:711-713`); callers must record the raw
+  string + unmapped marker rather than a synthetic ID. `bead` no longer falls into
+  this arm — **Resolved — ADR-2072 (2026-09-05)** — it now crosses structurally
+  (see the cross-substrate mapping table above).
 - **npub vs hex mixing risk.** `user_context` stores npub as the "primary user
   identifier" (`user_context.rs:16`) while the URN/DID layer is hex-canonical. No
   automatic conversion is enforced at that boundary — audit that npub never leaks into
@@ -201,3 +207,23 @@ re-verification: a new `Kind` variant in `src/uri/mod.rs`; any change to
 change (per ADR-074-D2' `review_trigger`); or a new subsystem emitting a persisted
 identifier. Ratification requires the change to hold all seven invariants or to
 explicitly amend one here with rationale.
+
+## Cross-repository acceptance qualification — 2026-09-04
+
+The shared local fixture confirms sha256-12 output for identical tested UTF-8 bytes, not arbitrary-object canonicalisation. Precomputed KG addresses are prefix-checked and accept malformed suffixes; complete grammar validation remains open. Rust and JS crossing maps differ on beads, so closed-map correctness does not imply equal coverage. ADR-2023/2025 retain their scoped decisions with these acceptance requirements. See the [estate identifier review](../../VisionFlow/docs/estate-review/federation-identifiers.md).
+
+## Mint and identity closeout qualification — 2026-09-04
+
+ADR-2021 is partial against universal constructor use: direct provenance formatting and legacy graph mint sites remain. ADR-2022's canonical naming must be distinguished from signed proof and role authority. [Source evidence and acceptance](../../VisionFlow/docs/estate-review/federation-identifiers.md#mint-site-coverage-and-proof-of-identity) require mint/lookup/persistence coverage and explicit migration exceptions; no named graph or stored ID is authorised for rewrite by this review.
+
+## Wire capacity closeout — 2026-09-04
+
+ADR-2024's release overflow warning belongs to the typed flag setters. **Resolved since — ADR-2070 (2026-09-05):** the untyped branch no longer debug-asserts and passes the ID through unchanged; it calls the same `enforce_wire_id_bounds` as the five typed branches (`src/utils/binary_protocol.rs:445`), so all six log `error!` and mask in release. **Still open:** shared 26-bit masks do not prove allocator safety or generation consistency, and reconnect mapping evidence per class is still required; see [estate wire review](../../VisionFlow/docs/estate-review/rendered-state.md#wire-identifier-overflow-coverage).
+
+## Remediation — 2026-09-05
+
+- **ADR-2070** — corrects the wire node-ID text: every encoder branch, the untyped fallback included,
+  routes through `enforce_wire_id_bounds` and logs on overflow in all builds; `debug_assert!` is a
+  development aid, not the bound. Also re-derives the `cross_from_agentbox` citation (`src/uri/mod.rs:650`).
+- **ADR-2072** — `cross_from_agentbox` maps `bead`, closing the cross-substrate asymmetry with the
+  agentbox BC20 bridge (agentbox ADR-2061 holds the cross-repo contract and its parity test).

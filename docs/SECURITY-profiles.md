@@ -133,24 +133,39 @@ Each profile is an **exact** flag set. Anything not listed takes its code defaul
 | `NODE_ENV=development` + `DOCKER_ENV` both set | Dev config in a container image | Hard-fail, `src/main.rs:141-147` |
 | `RBAC_GATE_MODE=report` in release without `RBAC_REPORT_MODE_ACK=<today UTC>` | Would silently disable `/api` auth | Refuses to activate, falls back to enforce, `rbac_gate.rs:88-102` |
 | `RBAC_ALLOW_OWNERLESS=0` with no `RBAC_OWNER_PUBKEY` and no prior Owner | Permanent lockout / unmanageable RBAC | Refuses to start (`PermissionDenied`), `src/main.rs:729-739` |
-| `RBAC_PUBLIC_READS=1` with `PUBKEY_VISIBILITY_FILTER=0` | Anonymous reads *and* private nodes on the wire = full data disclosure | **Not machine-enforced** — operator must never combine; flagged here |
+| `RBAC_PUBLIC_READS=1` with `PUBKEY_VISIBILITY_FILTER=0` | Anonymous reads *and* private nodes on the wire = full data disclosure | **Machine-enforced — ADR-2043** (2026-09-05): an unconditional rule in `evaluate_effective_profile` (`src/config/security_profile.rs:422`) keyed on the pair itself, so it fires whether or not a profile is declared. Before ADR-2043 this pair was caught only *indirectly* — it matches no named profile, so it raised `ProfileDrift` when a profile was declared but merely classified as `Unnamed` when none was, and `Unnamed` is not itself fatal |
 | `APP_ENV` unset in a public deployment | Skips strict env validation and CORS lockdown (`main.rs:85,887`) | Not enforced; profiles pin `APP_ENV=production` |
 
 ## Known divergences & open items
 
 - **Shipped compose posture is open-by-default, and inverts two code defaults.**
-  `docker-compose.unified.yml:78-86` sets `RBAC_PUBLIC_READS=1` and
-  `RBAC_ALLOW_OWNERLESS=1` — both are code-default **OFF/fail-closed**
-  (`rbac_gate.rs:127`, `main.rs:719`). The image therefore boots owner-less with
-  anonymous reads unless an operator overrides the `.env`. `PUBKEY_VISIBILITY_FILTER=1`
-  in compose matches the new code default. Net shipped posture ≈ `demo-open`. This
-  is a deliberate compatibility trade-off (matches legacy ADR-142 open-by-default)
-  and needs a named, ratified security profile before any multi-tenant deployment.
+  `docker-compose.unified.yml:93-94` sets `RBAC_PUBLIC_READS: "${RBAC_PUBLIC_READS:-1}"`
+  and `RBAC_ALLOW_OWNERLESS: "${RBAC_ALLOW_OWNERLESS:-1}"` — both are code-default
+  **OFF/fail-closed** (`rbac_gate.rs:122-128`, `public_reads_enabled()` ending
+  `.unwrap_or(false)`; `main.rs:732-752`, which refuses to start without an Owner
+  unless the flag is set). The image therefore boots owner-less with anonymous
+  reads unless an operator overrides the `.env`. `PUBKEY_VISIBILITY_FILTER=1`
+  (`docker-compose.unified.yml:107`) matches the code default
+  (`position_updates.rs:34-58`, `parse_visibility_flag` defaults ON). Net shipped
+  posture ≈ `demo-open`. This is a deliberate compatibility trade-off (matches
+  legacy ADR-142 open-by-default) and **stays**: the profile it realises is now
+  named and ratified by ADR-2027, so the earlier "needs a named profile"
+  condition is met. What remains open is *machine* selection — nothing at boot
+  asserts the running env matches a named profile (ADR-2038, `proposed`).
+  The code default and the compose default are two distinct facts and are cited
+  separately here per ADR-2087.
 - **Unassigned authenticated pubkey ⇒ Editor** (`rbac.rs:68`,
-  `role_store.rs:194-203`). Write-capable by default; contradicts least-privilege
-  for `multi-user-locked`. No flag exists to select the default role — code change
-  required.
-- **`?token=` accepted on `/wss`** (`http_handler.rs:342-354`) — contradicts legacy
+  `role_store.rs:194-203`). Write-capable by default, which contradicts
+  least-privilege — but this is now a *configuration* choice, not a missing
+  capability. Resolved — ADR-2087 (2026-09-05): the selector exists as
+  `RBAC_DEFAULT_ROLE` (`role_store.rs:41` `RBAC_DEFAULT_ROLE_ENV`, parsed by
+  `parse_default_role` at `:195`, failing closed to `viewer` on an unrecognised
+  value at `:204`). The `multi-user-locked` profile sets it to `viewer`; the
+  shipped compose sets `editor` (`docker-compose.unified.yml:101`) for
+  pre-RBAC compatibility. The earlier claim that no flag existed and a code
+  change was required is retired.
+- **`?token=` accepted on `/wss`** (`http_handler.rs:139-152`, the query-parameter
+  lookup at `:148`) — contradicts legacy
   ADR-011 (header-only). Session token in the query string is a log-hygiene /
   referrer-leak risk (medium). Header path exists; query path should be removed or
   gated.
@@ -184,7 +199,13 @@ Each profile is an **exact** flag set. Anything not listed takes its code defaul
    invariant. The hard capacity ceiling must fail closed (reject, `ReplayCacheFull`
    → 503), never evict a live id.
 5. `RBAC_PUBLIC_READS=1` and `PUBKEY_VISIBILITY_FILTER=0` must never coexist in a
-   deployed profile (full-disclosure combination).
+   deployed profile (full-disclosure combination). Enforced at boot by ADR-2043
+   as an unconditional rule, independent of whether a profile is declared.
+6. The security profile is asserted **before the listener binds**
+   (`assert_effective_profile_or_exit`, `src/main.rs:873`, called from the block
+   at `:868-878`, ahead of `HttpServer::new` at `:893` and `.bind()` at `:1146`).
+   A production artefact with any finding exits 2 rather than serving a request
+   (ADR-2038).
 
 ## Change process
 
@@ -194,3 +215,51 @@ fail-closed invariant; (3) adding it to the illegal-combinations table if it can
 interact badly; (4) bumping `version` and re-recording `verified_commit`. Compose
 default changes require an accompanying named-profile update. Legacy ADR prose is
 evidence, not authority — cite it, do not defer to it.
+
+## Replay closeout qualification — 2026-09-04
+
+ADR-2002's bounded process-local cache remains implemented in the inspected source. [Isolated helper evidence](../../VisionFlow/docs/estate-review/runtime-ingress.md#visionclaw-replay-and-operation-boundaries) confirms capacity and TTL semantics without certifying full authentication. Acceptance still needs combined clock boundaries, restart/replicas, route-specific payload binding and fresh-token/idempotent retries after downstream failure. Single-use authentication does not itself establish exactly-once mutation.
+
+## Visibility closeout qualification — 2026-09-04
+
+ADR-2003's default-on parser and both inspected initial/position output filters are present. Six domain filter tests pass. [Output coverage and acceptance](../../VisionFlow/docs/estate-review/rendered-state.md#visibility-defaults-and-output-coverage) still require metadata write authority, canonical owner identity, alternate output inventory and client-state behaviour after visibility/owner changes. A flag default is not proof of every private-data boundary.
+
+## Development/release acceptance qualification — 2026-09-04
+
+ADR-2037/2038 remain proposed controls, not established release-image/profile assertions. Nine [extracted-helper build cases](../../VisionFlow/docs/estate-review/role-authority.md#development-bypass-and-release-identity) confirm that non-debug plus dev-auth still allows the full bypass, whereas non-debug without it rejects any present VISIONCLAW_DEV_MODE value. ADR-2039's dependency wording is corrected. Shipped feature identity, pre-listener profile validation, report-mode interaction and actual REST/WS/headset behaviour require separate receipts.
+
+## Profile dependency reconciliation — 2026-09-04
+
+ADR-2012 is partial: report mode is reachable with acknowledgement in a non-debug build and does not expire automatically in an existing middleware instance. ADR-2026's hygiene evidence applies only without debug/dev-auth; ADR-2027 remains a partial four-setting profile model. [Effective-policy requirements](../../VisionFlow/docs/estate-review/role-authority.md#profile-claims-and-effective-policy) add build features, full bypass, report mode, public prefixes and power-user fallback to release acceptance. Prior helper source hashes still match; no live profile was certified.
+
+## Remediation — 2026-09-05
+
+- **ADR-2087** — Correct the deployment-profile documentation to match the code
+  defaults. Retires the stale "no flag exists to select the default role" bullet
+  (`RBAC_DEFAULT_ROLE_ENV` is `role_store.rs:41`, parsed at `:195`, fail-closed at
+  `:204`); re-cites the `?token=` WS path from `http_handler.rs:342-354` to the
+  actual `:139-152` (query lookup at `:148`); re-cites the open-by-default bullet
+  to `docker-compose.unified.yml:93-94` / `rbac_gate.rs:122-128` /
+  `main.rs:732-752`; and records that ADR-2027 satisfies the "needs a named,
+  ratified profile" condition while machine selection remains ADR-2038's open
+  item. Compose defaults are unchanged — demo-open is ADR-2027's decision.
+- **ADR-2086** — Assert in CI that release images exclude the `dev-auth` cargo
+  feature, implementing ADR-2037's decision as an actual gate in
+  `.github/workflows/ci.yml`. `src/main.rs:169` remains the no-op hygiene stub
+  under `#[cfg(any(debug_assertions, feature = "dev-auth"))]`, so the gate is what
+  prevents such a binary reaching production.
+- **ADR-2038 landed (vc-core, 2026-09-05)** — the profile matrix above is now
+  **machine-asserted at boot**, not advisory prose.
+  `src/config/security_profile.rs` resolves the profile from
+  `VISIONCLAW_SECURITY_PROFILE` (`:55`) or classifies the observed flags when it
+  is unset, and `assert_effective_profile_or_exit` (`:528`) exits 2 on any
+  finding in a production artefact. Note the implementation tracks **six**
+  flags (`PROFILE_FLAGS`, `:68`), not the four ADR-2027 originally named — it
+  adds `RBAC_OWNER_PUBKEY` and `RBAC_GATE_MODE`, both of which the table above
+  has always carried. ADR-2027 is corrected. Residual gap: an `Unnamed`
+  classification is not itself fatal, so an undeclared production deployment on
+  an unrecognised flag combination still binds — ADR-2038's "default to
+  multi-user-locked" is not implemented as an implicit default.
+- **ADR-2043 (vc-core, 2026-09-05)** — makes the full-disclosure pair a
+  first-class unconditional rule rather than an indirect profile mismatch. See
+  the "Illegal combinations" row and Invariant 5.

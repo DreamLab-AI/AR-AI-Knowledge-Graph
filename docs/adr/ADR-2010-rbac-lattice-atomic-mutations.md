@@ -3,7 +3,7 @@ id: ADR-2010
 title: Four-tier pubkey-bound RBAC lattice (Editor default, fail-closed to Viewer) with atomic role mutations
 date: 2026-08-31
 decision_status: accepted
-implementation_status: complete
+implementation_status: partial
 activation_status: live
 supersedes: []                   # legacy ADR-142/ADR-094 distilled — not in this tree; see lineage
 superseded_by: []
@@ -35,8 +35,8 @@ An authenticated-but-unassigned pubkey resolves to the **configured default role
 `admin`/`owner` — parse fail-closed to `Viewer`, so the env var can narrow access but never
 widen it. Any lookup error — including an unparseable stored role — **fails closed to
 `Viewer`**, never up. `assign_checked`/`revoke_checked` fold the current-role read, the
-`can_assign` privilege check, and the last-Owner guard into a single SQLite transaction, so
-escalation and sole-Owner lockout are structurally impossible (TOCTOU-free). This forecloses
+`can_assign` privilege check, and the last-Owner guard into a single SQLite transaction, protecting target-role and last-Owner checks from interleaving; caller-role
+freshness remains outside this transaction (see the dated closeout extension). This forecloses
 role logic scattered across handlers and any code path that reads then writes a role non-atomically.
 
 ## Consequences
@@ -44,7 +44,7 @@ role logic scattered across handlers and any code path that reads then writes a 
 - Under the shipped `editor` default, new authenticated pubkeys can write the graph immediately;
   the multi-user-locked profile sets `RBAC_DEFAULT_ROLE=viewer` so unknown signers are read-only
   until granted a role (closes the former open item — SECURITY ADR-2027 profile table).
-- A role-store outage denies rather than grants (Viewer), trading availability for safety.
+- A role-store outage narrows to Viewer; this does not deny every read operation.
 - Role mutations run inside a transaction, so a busy store can contend; the guarantee is atomicity,
   not throughput.
 - Also absorbs the SECURITY-profiles Editor-default facet — cross-ref SECURITY ADR-2027.
@@ -61,3 +61,52 @@ Re-checked at `e0f8cd896`, default-role facet updated 2026-08-31 (see commit for
 `revoke_checked` (`:310`) enforces `can_assign` `:330` and `LastOwner` `:342`, all inside one
 transaction folded through `TxOutcome`. `src/utils/auth.rs:60` `resolve_access_level` maps roles
 to access levels. Governing doc: `docs/IDENTITY-authority-chain.md`.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/05/08. Owner remains jjohare with identity/runtime maintainers. The transaction reads the target role and Owner count, but consumes a caller role resolved earlier by the handler. Caller demotion is not rechecked in the transaction. Implementation is partial against the broad TOCTOU-free authority claim. Removing an assignment restores default or legacy power-user authority; it does not necessarily revoke access. Lookup failure narrows to Viewer rather than denying every read.
+
+**Acceptance condition:** Verify caller/target authority under concurrent changes, removal versus effective revocation, immutable/recoverable audit outcomes and response-loss retries. Exercise the composed route policy, public-prefix methods, whoami, missing identity services and report-mode lifecycle. Bind accepted behaviour to the release profile and effective process settings. Reopen on role fallback, transaction, prefix, middleware ordering or report-mode changes. See the [authority review](../../../VisionFlow/docs/estate-review/role-authority.md) and [source receipt](../../../VisionFlow/docs/estate-review/evidence/rbac-snapshot.json). This pass is source-only: no role mutation, HTTP request or race test ran.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** `src/services/role_store.rs`, `src/handlers/admin_rbac_handler.rs`.
+
+*Caller-role freshness inside the mutation transaction.* The reproduced defect —
+the transaction read the target role and Owner count but consumed a caller role
+the handler had resolved earlier — is closed. `CallerAuthority { pubkey,
+is_power_user, admission_role }` replaces the bare `UserRole` parameter;
+`resolve_caller_role_in_tx` re-resolves the caller's effective role **inside**
+the same transaction using the same precedence as `effective_role` (explicit
+row, then Admin for a legacy power user, then the configured default, with an
+unparseable row failing closed to Viewer). `effective_mutation_authority` then
+applies the rule: a demotion aborts with `RoleStoreError::CallerAuthorityChanged`
+(HTTP 409, distinct from a plain 403 so the client knows re-authentication
+helps); a promotion does **not** escalate — the mutation stays bound by the
+admission role, so winning a race cannot grant a privilege the request was not
+admitted for.
+
+*Removal versus revocation.* `revoke_checked` is replaced by `remove_checked`,
+returning `RemovalOutcome { had_explicit_role, previous_role, effective_after,
+authority_reduced }` plus `revocation_requires_explicit_viewer()`. Removing a
+Viewer row *raises* authority to the unassigned default; removing a power user's
+row restores Admin. The handler now reports `authority_reduced` /
+`access_revoked` and warns explicitly when removal did not revoke anything,
+naming the explicit-Viewer assignment as the real revocation. `RoleStore::new_with_default`
+lets the configured default be set programmatically so both postures are testable.
+
+**Tests.** `cargo test --lib --no-default-features role_store` — 29 passed,
+0 failed (13 new): concurrent caller demotion on assign and on remove, caller
+row deleted mid-request, corrupt caller row failing closed, promotion not
+escalating, unchanged authority proceeding, demotion reported distinctly from
+denial, and six removal-semantics cases including the Viewer, Admin, power-user,
+no-op and Viewer-default variants.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2010-2011-rbac-caller-freshness.txt`.
+
+**Remains open.** No HTTP request or real race ran — the concurrency is
+simulated by mutating the store between admission and the transaction, which
+exercises the same code path but is not a live race. Immutable/recoverable audit
+outcomes, response-loss retries, whoami, missing identity services and
+report-mode lifecycle through real routes remain. Binding accepted behaviour to
+the release profile is partly addressed by the ADR-2038 boot assertion.

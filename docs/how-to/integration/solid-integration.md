@@ -270,9 +270,9 @@ Acknowledge:  ack {resourceUrl}
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `JSS_URL` | `http://jss:3030` | JSS internal URL |
+| `SOLID_POD_URL` | `http://jss:3030` | JSS internal URL |
 | `JSS_WS_URL` | `ws://jss:3030/.notifications` | JSS WebSocket URL |
-| `VITE_JSS_URL` | `/solid` | Client-side Solid proxy path |
+| `VITE_SOLID_POD_URL` | `/solid` | Client-side Solid proxy path |
 | `SOLID_PROXY_SECRET_KEY` | (none) | Server-side signing fallback |
 
 ## Troubleshooting

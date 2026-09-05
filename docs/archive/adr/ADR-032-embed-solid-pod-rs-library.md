@@ -19,7 +19,7 @@ VisionClaw is being refactored. The current Solid integration uses
 JavaScriptSolidServer (JSS, Node.js) as a sidecar container
 ([`solid-sidecar-architecture.md`](../explanation/solid-sidecar-architecture.md))
 reached over HTTP via `src/handlers/solid_proxy_handler.rs` against
-`JSS_URL=http://visionclaw-jss:3030`. Every pod read/write crosses a
+`SOLID_POD_URL=http://visionclaw-jss:3030`. Every pod read/write crosses a
 process boundary, a TCP socket, and a JSON-LD parse round-trip per call.
 
 Three forces converge on this refactor:
@@ -185,7 +185,7 @@ the same pod tree. Forum auth-worker NIP-05 federation (separate ADR in
 `nostr-rust-forum`) consumes this endpoint.
 
 **M5 — Sidecar removal.** `docker-compose.yml` drops the
-`solidproject/community-server` service. `JSS_URL` removed from `.env`.
+`solidproject/community-server` service. `SOLID_POD_URL` removed from `.env`.
 The `embedded-pod` feature flag becomes default-on; the proxy fallback
 code is deleted. `src/config.js` (entire JS stub) deleted.
 

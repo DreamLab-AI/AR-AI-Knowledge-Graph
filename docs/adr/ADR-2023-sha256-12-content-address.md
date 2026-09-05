@@ -53,3 +53,40 @@ Re-checked at `e0f8cd896`: `src/uri/mod.rs:144-153` — `content_address()` does
 `CONTENT_ADDR_PREFIX` (`:48-49`); `kg_with_address` at `:220-228` enforces the
 prefix at the BC20 boundary (`Malformed` otherwise). The doc comment at `:143`
 records the byte-for-byte agentbox `sha12()` equivalence.
+
+## Closeout extension — 2026-09-04
+
+CP-01/02/04/05. Owner remains jjohare with agentbox identifier maintainers. Five UTF-8 string fixtures match the agentbox BC20 hash helper. The Rust precomputed KG constructor/parser accepts malformed suffixes after the prefix; hash emission and input validation are separate guarantees.
+
+**Acceptance condition:** bind bytes/serialisation, complete address grammar and kind/elevation support to a shared versioned fixture run in both repositories. Test malformed precomputed addresses and persisted round-trip recovery. Preserve explicit unmapped outcomes and existing decision status. Reopen on hash, parser, scope or kind-map changes. See the [identifier review](../../../VisionFlow/docs/estate-review/federation-identifiers.md) and [paired receipt](../../../VisionFlow/docs/estate-review/evidence/federation-identity-probe.json). These are helper-level results, not deployed-ingest certification.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** `src/uri/mod.rs`. The reproduced defect — the Rust precomputed
+KG constructor and parser accepted **any** suffix after the `sha256-12-` prefix,
+so `sha256-12-`, `sha256-12-ZZZZ`, an upper-case digest and a 40-hex-character
+body all round-tripped as valid addresses — is closed.
+
+`is_content_address` defines the grammar: the prefix followed by exactly
+`CONTENT_ADDR_HEX_LEN` (12) lowercase hex characters and nothing else. It is
+enforced by `kg_with_address` (the precomputed constructor), by `parse` for
+`Kg`/`Bead`, and by `parse` for `Execution` and `Room`, which previously checked
+only the prefix plus an absent colon.
+
+**Tests.** `cargo test --lib --no-default-features uri::` — 31 passed, 0 failed
+(7 new for this record): every address the emitter produces satisfies the
+grammar the parser enforces (hash emission and input validation tied together);
+13 malformed precomputed addresses rejected by both `is_content_address` and
+`kg_with_address`, each with its reason; malformed addresses rejected inside
+full `kg`/`bead` URNs and inside `execution`/`room` URNs; a well-formed address
+still round-tripping; persisted round-trip recovery (mint → serialise → parse →
+re-mint yields the identical string); and every lowercase hex digit accepted, so
+the grammar is not accidentally narrower than the emitter.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2021-2023-identifiers.txt`.
+
+**Remains open.** The shared versioned fixture run in **both** repositories is
+not done — these results are VisionClaw-side only, and the agentbox BC20 helper
+was not re-run against them. Kind/elevation support and the complete address
+grammar beyond the content address are unaddressed. Not deployed-ingest
+certification.

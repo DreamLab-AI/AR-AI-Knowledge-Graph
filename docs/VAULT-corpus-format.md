@@ -73,7 +73,7 @@ only — never the gate) and `page_name_from_path()`.
 |---|---|---|
 | `FileService::page_is_kg_included` | gate via `PageMeta` | `src/services/file_service.rs:747` |
 | `FileService::extract_owl_class_iri` / `extract_ontology_data` | enrichment, whole page (`legacy_properties_anywhere`) | `file_service.rs:728`, `:759` |
-| `github_sync_service::page_is_kg_included` | gate via `PageMeta` | `src/services/github_sync_service.rs:2256` |
+| `github_sync_service::page_is_kg_included` | gate via `PageMeta` | `src/services/github_sync_service.rs:2304` |
 | `github_sync_service` elevation bridge | `PageMeta.elevated_from` | `github_sync_service.rs:1667` |
 | `KnowledgeGraphParser::create_page_node` | `vault::parse` for owl-class, source-domain, tags, aliases, title (label honours `title`) | `src/services/parsers/knowledge_graph_parser.rs:116`; identity via `page_name_from_path` `:77` |
 | `EnhancedContentAPI::list_markdown_files` | skips `/bak/`, `/logseq/`, `/.recycle/`, `/journals/`, `/.obsidian/`, `/.trash/` | `src/services/github/content_enhanced.rs:113-114` (files), `:234-235` (dirs) |
@@ -271,3 +271,24 @@ load-bearing claim carries a `file:line` citation; update the citation when
 the code moves. Bump `version` (patch for wording, minor for a new key or
 rule, major for a change to the gate or identity rule) and refresh
 `verified_commit`.
+
+## Converter closeout qualification — 2026-09-04
+
+ADR-2042 is partial: although 86 existing tests pass, a synthetic mixed-layout collision maps two pages to one output with exit zero and one body lost from the output. Source files remain unchanged. Explicit report output also writes during dry-run. [Evidence and acceptance](../../VisionFlow/docs/estate-review/authored-vault-transition.md#converter-collision-and-dry-run-boundaries) require destination uniqueness, input/output accounting and consumer/recovery validation before promotion. No real vault was converted in this review.
+
+## Inclusion closeout qualification — 2026-09-04
+
+ADR-2040 is partial. **Resolved since — ADR-2070 (2026-09-05):** owl-class parsing is no longer scalar-coercing. `is_class_marker` (`crates/visionclaw-domain/src/vault/mod.rs:419`) accepts only an absolute `http(s)://`/`urn:` IRI or a `prefix:local` CURIE, with no whitespace or control characters, and a rejected value is retained verbatim in `PageMeta.owl_class_rejected` (`:68-75`) while the gate stays shut — so `owl-class: true` and `owl-class: 42` no longer open it. **Still open:** local fallback metadata scanning does not enforce the shared inclusion gate (`local_file_sync_service.rs:489-491` raw-scans the first 20 lines rather than calling `visionclaw_domain::vault::parse`), and explicit public false plus a valid class marker remains included by policy — `is_kg_included` is an OR (`vault/mod.rs:129-130`). [Evidence and acceptance](../../VisionFlow/docs/estate-review/authored-vault-transition.md#inclusion-typing-and-local-fallback) distinguish 56 passing domain tests from unexecuted full ingest/publication journeys and require typed markers, reader/fallback accounting and migration activation evidence.
+
+## Settings migration acceptance — 2026-09-04
+
+ADR-2041 retains its scoped complete/staged rename status. Eleven current helper/migration tests pass, but actual persistence, patches and mixed-version transport need separate receipts. [Compatibility requirements](../../VisionFlow/docs/estate-review/configuration-projection.md#knowledge-settings-migration) cover key precedence, malformed values, binary registration order, restart/rollback and a named alias-retirement release.
+
+## Remediation — 2026-09-05
+
+- **ADR-2064** — the ontology loader walks the real authored corpus, resolving the root from a CLI
+  argument, then `VAULT_ROOT`/`pages` (Invariant 3), then the container default. The five hardcoded
+  sample classes are gone and the bin exits non-zero when nothing is extracted.
+- **ADR-2070** — records that owl-class parsing is now a typed grammar (`is_class_marker`), closing
+  that half of the Inclusion closeout qualification, and corrects the `page_is_kg_included` citation
+  to `github_sync_service.rs:2304`.

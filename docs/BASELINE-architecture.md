@@ -10,7 +10,6 @@ sources:
   - docker-compose.unified.yml
   - src/app_state.rs
   - src/main.rs
-  - src/actors/supervisor.rs
   - src/actors/graph_service_supervisor.rs
   - src/actors/gpu/mod.rs
   - src/actors/gpu/gpu_manager_actor.rs
@@ -78,20 +77,25 @@ server behind nginx:
 
 The monolith split (legacy ADR-090) is **real but incomplete**. The root binary
 is renamed `visionclaw-server` (`Cargo.toml` `[package] name = "visionclaw-server"`)
-with `src/lib.rs` + `src/main.rs`. The workspace declares the root plus **nine**
-`crates/` members (`Cargo.toml` `[workspace].members`):
+with `src/lib.rs` + `src/main.rs`. The workspace declares **twelve** members
+(`Cargo.toml` `[workspace].members`) — the root `"."` plus eleven `crates/`:
 
 `visionclaw-contracts`, `visionclaw-domain`, `visionclaw-protocol`,
 `visionclaw-adapters`, `visionclaw-gpu`, `visionclaw-ontology`,
-`visionclaw-actors`, `visionclaw-xr-presence`, `visionclaw-analytics-oracle`
-(a tenth crate dir, `graph-cognition-extract`, is present on disk).
+`visionclaw-actors`, `visionclaw-xr-presence`, `visionclaw-analytics-oracle`,
+plus `vault-migrate` and `visionclaw-integration-tests`, added since this doc's
+original root-plus-nine census (`ADR-2005` re-verification, 2026-09-05). The empty
+orphan dir `graph-cognition-extract`, never a member, has been removed.
 `xr-client/rust` (Godot gdext, Quest APK cdylib) and `agentbox/crates/headroom-napi`
 are workspace-**excluded** so a server build does not compile them.
 
-**Actor extraction is unfinished**: `src/actors/*.rs` holds **25** actor
-source files while `crates/visionclaw-actors/src` holds **11** (mostly message
-modules + `supervisor.rs`, `voice_commands.rs`, `protected_settings_actor.rs`).
-The live supervisor tree still runs from `src/actors/`, not the crate.
+**Actor extraction is unfinished**: `src/actors/*.rs` holds **23** actor
+source files while `crates/visionclaw-actors/src` holds **11** counted
+recursively (4 at the top level — `lib.rs`, `supervisor.rs`, `voice_commands.rs`,
+`protected_settings_actor.rs` — plus 7 under `messages/`). The live supervisor
+tree still runs from `src/actors/`, not the crate. The `src/` count was 25 until
+`ADR-2045` deleted the two dead supervision files; note the crate still carries
+its own copy of `supervisor.rs`, which the root crate no longer has.
 
 ### Actor system topology
 
@@ -116,9 +120,20 @@ frames), plus `OntologyActor`, `SemanticProcessorActor`, `MetadataActor`,
 `DecisionElevationActor`, `VoiceInterfaceActor`, `MultiMcpVisualizationActor`,
 `AgentMonitorActor` (each `impl Actor` in the corresponding `src/actors/*.rs`).
 
-A generic restart supervisor also exists (`SupervisorActor`,
-`src/actors/supervisor.rs:124`) with backoff, restart-window caps, and a
-drain/`InitiateGracefulShutdown` path (`:207,236` region).
+`GraphServiceSupervisor` is now the **only** supervision mechanism. Two others existed and both
+were dead; `ADR-2045` removed them. A generic restart supervisor (`SupervisorActor`, formerly
+`src/actors/supervisor.rs`) carried backoff, restart-window caps and a
+drain/`InitiateGracefulShutdown` path, but `SupervisorActor::new` was called only from its own
+`#[cfg(test)]` module, `InitiateGracefulShutdown` was never sent anywhere in `src/`, and its
+`Escalate` arm only logged because the type carried no parent field. Its one non-test coupling was
+`GraphServiceSupervisor`'s `parent_supervisor` field, settable only by `SetParentSupervisor` —
+which nothing ever sent, so the field was permanently `None` and the escalation branch always took
+the stop path; field, message, handler and branch were removed with the file, and `Escalate` now
+states that it is the top of the tree. A second, fully independent mechanism,
+`ActorLifecycleManager` (formerly `src/actors/lifecycle.rs`) with its own
+`PhysicsOrchestratorActor`/`SemanticProcessorActor` pair,
+`initialize_actor_system`/`shutdown_actor_system` and a health monitor, was never called from
+anywhere and was removed entirely.
 
 **GPU tree** — root `GPUManagerActor` (`src/actors/gpu/gpu_manager_actor.rs:57`,
 `impl Actor` at `:140`), started at `src/app_state.rs:965` when GPU is enabled.
@@ -201,10 +216,12 @@ RBAC is live (legacy ADR-142): Owner > Admin > Editor > Viewer on NIP-98 pubkeys
 enforced by `RbacGate` middleware (`src/middleware/rbac_gate.rs`), role store in
 `settings.sqlite3` (`src/services/role_store.rs`). **Shipped posture is open by
 default via compose**: the structural code default for `RBAC_PUBLIC_READS` is
-`false` (`rbac_gate.rs:122-128`, `unwrap_or(false)`), but `docker-compose.unified.yml:78`
-sets `RBAC_PUBLIC_READS=1`, `:79` sets `RBAC_ALLOW_OWNERLESS=1`, and an unassigned
-authenticated pubkey resolves to `Editor` (`role_store.rs:191`, test `:546-549`).
-`PUBKEY_VISIBILITY_FILTER` defaults `1` in compose (`:86`); the code-level demo
+`false` (`rbac_gate.rs:122-128`, `unwrap_or(false)`), but `docker-compose.unified.yml:93`
+sets `RBAC_PUBLIC_READS=1`, `:94` sets `RBAC_ALLOW_OWNERLESS=1`, and an unassigned
+authenticated pubkey resolves to `Editor` — the resolution is
+`UserRole::default_authenticated()` (`src/models/rbac.rs:70`), reached from
+`parse_default_role` for both unset and empty (`role_store.rs:197-198`).
+`PUBKEY_VISIBILITY_FILTER` defaults `1` in compose (`:107`); the code-level demo
 read-only guard defaults off (`public_demo.rs:29-33`, `unwrap_or(false)`).
 
 ## Known divergences and open items
@@ -261,3 +278,33 @@ topology, actor tree, wire protocol, port map, or trust boundary. Re-verify
 change). Historical rationale stays in the legacy corpus
 (`docs/adr`, `docs/prd`, `docs/ddd`) — cite, do not narrate. Ratification promotes
 `status` from `draft-for-ratification` to `ratified`.
+
+## Persistence closeout extension — 2026-09-04
+
+ADR-2004 retains the embedded shared-store decision and now names its CP-01/06/08
+closeout boundary: shared Oxigraph ownership does not establish a cross-store
+transaction, actor reload consistency or restore correctness. See the current
+[graph runtime evidence](../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md)
+and the data-authority governing document for sync, provenance and backup limits.
+
+## ACSP workflow closeout — 2026-09-04
+
+ADR-2006 distinguishes the forum event surface from stateful consumers and durable case reconciliation. The retained domain kernel's presence does not prove integration into the elevation actor or inbox DTO. Require signed-event/request correlation, case authority and failure/restart receipts through gate and PR outcomes. See [estate ACSP review](../../VisionFlow/docs/estate-review/forum-decisions.md#visionclaw-acsp-consumption-and-recovery). Current source review does not certify a complete human-approval journey.
+
+## Crate and supervision closeout — 2026-09-04
+
+ADR-2005 remains partial; the current workspace adds converter and integration-test members to the historical census. ADR-2007 is partial: four supervisors exist, but context delivery uses direct messages plus optional bus publication. Require responsibility/dependency acceptance, acknowledged context generations and failure/restart evidence. See [estate architecture](../../VisionFlow/docs/estate-review/vision-and-architecture.md#server-extraction-and-enforceable-boundaries) and [supervision review](../../VisionFlow/docs/estate-review/rendered-state.md#gpu-supervision-and-context-delivery).
+
+## Development and corpus acceptance — 2026-09-04
+
+ADR-2008 is partial: normal development startup uses a timestamp-gated supervisor wrapper, with demonstrated misses for crate CUDA and manifest edits. ADR-2001 retains partial/staged corpus status despite complete closeout-extension coverage of the operative series. Four stale baselines still fail the current validator. See [development inputs](../../VisionFlow/docs/estate-review/configuration-projection.md#development-restart-and-build-input-coverage) and [corpus debt](../../VisionFlow/docs/estate-review/canon-and-verification.md#visionclaw-operative-pack-coverage-and-baseline-debt).
+
+## Remediation — 2026-09-05
+
+- ADR-2045 — removed both dead supervision mechanisms. `src/actors/lifecycle.rs` (`ActorLifecycleManager`, `initialize_actor_system`, `shutdown_actor_system`) had no coupling and went first. `src/actors/supervisor.rs` (the generic `SupervisorActor`, `ActorFactory`, `SupervisedActorTrait`, `SupervisionStrategy`, `ActorFailed`, `InitiateGracefulShutdown`) followed once its one non-test coupling was resolved: `GraphServiceSupervisor` held a `parent_supervisor: Option<Addr<SupervisorActor>>` field settable only by `SetParentSupervisor`, which nothing ever sent — so the field was permanently `None` and the `Escalate` branch always took the stop path. The field, the message, its handler and the unreachable escalation branch were removed with it, and `Escalate` now states plainly that it is the top of the tree. `GraphServiceSupervisor` is the sole supervision path.
+- ADR-2046 — removed the dead `SettingsActor` (`src/settings/settings_actor.rs`, never started outside its own disabled test), the already-disabled `src/handlers/tests/settings_tests.rs`, and six orphaned `src/config/*.rs` copies (`field_mappings.rs`, `physics.rs`, `services.rs`, `system.rs`, `validation.rs`, `xr.rs`) not declared in `src/config/mod.rs`; `OptimizedSettingsActor` and `crates/visionclaw-domain/src/config/*` remain the sole live definitions.
+- ADR-2043 — the ADR-2003 full-disclosure flag pair (`RBAC_PUBLIC_READS=1` with `PUBKEY_VISIBILITY_FILTER=0`) is now rejected at boot on its own terms, unconditionally, rather than only as drift from a *declared* profile. The shipped `demo-open` compose posture is unaffected and a test asserts that for all three ratified profiles.
+- ADR-2044 — session credentials fail closed and expire identically on every transport. `NostrService::get_session` enforced no expiry at all while `validate_session` did, so a WebSocket token outlived its REST equivalent indefinitely; both now share one `session_is_fresh` rule. `/ws/client-messages` resolves its token through the session realm instead of checking non-emptiness. Partial: the same defect in `mcp_relay_handler` and `multi_mcp_websocket_handler` is routed to the estate lead.
+- ADR-2047 — settings-change broadcasts are emitted from one function and `physics` now emits, closing the per-category asymmetry. Recorded, but not yet useful: no client consumes `settingsUpdated` at all (the React validator knows `settings_update`), so the channel is dead end-to-end until vc-clients adds a handler.
+- ADR-2049 — the production image's dependency-warming stage can fail again. `cargo build --release || true && cargo build --release --lib || true` could not fail for any reason, so a broken lockfile or an uncompilable dependency produced a green layer; the stage now gates on `cargo fetch --locked` and tolerates only the crate compile, which legitimately fails against the stub `build.rs`.
+- ADR-2048 — re-verified every `file:line` in the sections above. Three compose citations pointed at unrelated lines (`RBAC_PUBLIC_READS` was cited at `:78`, a comment; the real lines are `:93`, `:94`, `:107`), the Editor default was cited at a doc-comment rather than `UserRole::default_authenticated()` (`src/models/rbac.rs:70`), the whole NIP-98 section in IDENTITY-authority-chain had drifted ~60 lines, and the crate census was stale (nine members → eleven, 25 actor files → 23). Two of these were caught by other leads reviewing my edits.

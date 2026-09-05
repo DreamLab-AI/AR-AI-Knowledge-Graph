@@ -1,6 +1,6 @@
 ---
 id: ADR-2013
-title: Federated (OIDC) and delegated-agent (NIP-26) identity are both deferred; the secp256k1 signature chain is the sole realm
+title: Enterprise federation and delegated-user authority are deferred; public-key identity supports multiple request credentials
 date: 2026-08-31
 decision_status: accepted
 implementation_status: none
@@ -15,7 +15,7 @@ domain: IDENTITY-authority-chain
 lineage: Distils legacy ADR-040 (enterprise identity — OIDC-alongside-Nostr, half superseded by ADR-142, half unbuilt) + ADR-094 (NIP-26 phone delegation, frozen 2026-07-03) + ADR-081 (federation key custody, frozen same date).
 ---
 
-# ADR-2013 — Federated (OIDC) and delegated-agent (NIP-26) identity are both deferred; the secp256k1 signature chain is the sole realm
+# ADR-2013 — Enterprise federation and delegated-user authority are deferred; public-key identity supports multiple request credentials
 
 ## Context
 
@@ -53,3 +53,28 @@ claude-flow log, no verifier code. `src/services/nostr_bridge.rs:169` signs via
 `sign_with_keys(&self.keys)` where `keys` is the bridge's own `Keys` (`:29`, constructed `:65`),
 confirming the bridge carries no original-user authority. Governing doc:
 `docs/IDENTITY-authority-chain.md` marks OIDC parked and delegated-agent-signed NOT IMPLEMENTED.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/05/08. Owner remains jjohare with identity/governance maintainers. None/inactive is retained for the deferred capabilities. The title now distinguishes the public-key identity foundation from ADR-2009's multiple request credentials. The inspected NIP-98 verifier returns the event signer as principal; the bridge verifies an incoming event then re-signs under its service key with source_event correlation. Neither operation establishes delegated-user authority. This record governs VisionClaw; other repositories' identity capabilities need their own assessment.
+
+**Acceptance condition:** Explicitly retain deferral or ratify a bounded issuer/delegation design with principal mapping, audience, operation scope, expiry, revocation, custody and durable audit correlation. Before activation, demonstrate signed grant → mutation → receipt → revocation → denied retry, including restart and negative scope cases. Reopen on enterprise onboarding or any consumer interpreting service signatures as user authority. See the [review](../../../VisionFlow/docs/estate-review/role-authority.md#request-realms-and-deferred-delegation) and [source receipt](../../../VisionFlow/docs/estate-review/evidence/auth-realms-snapshot.json). No live SSO or delegated mutation was exercised.
+
+## Acceptance progress — 2026-09-05
+
+**No code.** Deferral retained, as the closeout directs. Nothing in this pass
+activates issuer or delegation capability; the NIP-98 verifier still returns the
+event signer as principal, and the bridge still re-signs under its service key
+with `source_event` correlation. Two adjacent changes touch the neighbourhood
+without widening it:
+
+* ADR-2002 adds route-declared body binding, which strengthens what a single
+  credential proves about one request. It grants no delegated authority.
+* ADR-2010 refuses a mutation whose caller authority weakened between admission
+  and commit, which narrows rather than widens the authority surface.
+
+**Remains open.** Everything the acceptance condition names: a bounded
+issuer/delegation design with principal mapping, audience, operation scope,
+expiry, revocation, custody and durable audit correlation, and the signed
+grant → mutation → receipt → revocation → denied retry demonstration before any
+activation.

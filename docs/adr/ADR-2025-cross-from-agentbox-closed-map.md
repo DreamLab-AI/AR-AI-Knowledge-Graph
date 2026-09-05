@@ -53,3 +53,9 @@ Re-checked at `e0f8cd896`: `src/uri/mod.rs:514-553` — `cross_from_agentbox` wi
 the closed `match kind` whose `memory`/default arm returns `None` at `:543-545`;
 the `did:nostr` pass-through at `:516-525`; `UrnCrossing` at `:490-498` carries
 both ends plus `owner_did` for audit recovery.
+
+## Closeout extension — 2026-09-04
+
+CP-01/02/04/05. Owner remains jjohare with agentbox identifier maintainers. The stated Rust closed map remains intact. A paired fixture shows that the JS bridge additionally maps beads, while Rust returns None. This is a supported-kind divergence to decide jointly, not evidence that every incoming kind should receive an ID.
+
+**Acceptance condition:** bind bytes/serialisation, complete address grammar and kind/elevation support to a shared versioned fixture run in both repositories. Test malformed precomputed addresses and persisted round-trip recovery. Preserve explicit unmapped outcomes and existing decision status. Reopen on hash, parser, scope or kind-map changes. See the [identifier review](../../../VisionFlow/docs/estate-review/federation-identifiers.md) and [paired receipt](../../../VisionFlow/docs/estate-review/evidence/federation-identity-probe.json). These are helper-level results, not deployed-ingest certification.

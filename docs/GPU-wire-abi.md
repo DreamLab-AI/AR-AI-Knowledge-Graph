@@ -1,10 +1,11 @@
 ---
 title: GPU & Wire ABI
 doc_id: VC-GPU-ABI
-version: 0.1.2
+version: 0.1.3
 status: draft-for-ratification
 verified_commit: 73540faa0
 changelog:
+  - "0.1.3: 2026-09-05 remediation — ADR-2053 context delivery, ADR-2054 dead-code removal, ADR-2055 physics-v2 retirement, ADR-2056 single PTX rewrite, ADR-2059 inert flag removal, ADR-2060 citation corrections (ENABLE_CONSTRAINTS repointed to force_channels.rs derive_dispatch_feature_flags; 180-byte comment corrected in code); ADR-2061 proposed for the analytics validation gap"
   - 0.1.1: correct path-3 actor call-site citation (force_compute_actor.rs 1557 → 2057); fix stale 180-byte comment line ref (:7 → :5)
   - 0.1.2: analytics kernel trust status corrected — Louvain/PageRank carry in-source fixes (D1/D8 markers), broken-list was stale-good; outputs still await reference validation
 sources:
@@ -40,10 +41,12 @@ are size-locked to **212 bytes**:
 - CUDA: `crates/visionclaw-gpu/src/cuda_sources/visionclaw_unified.cu:21` (`struct SimParams`),
   asserted at `:117` — `static_assert(sizeof(SimParams) == 212, "SimParams size mismatch with Rust")`.
 
-The two `assert`s are the ABI guard: a field added on one side without the other
-fails to compile. The Rust module header comment still says "180-byte" — that comment
-is stale; the binding assertion (212) is authoritative. Legacy ADR-031 ("48B") and
-ADR-061 are stale on this too.
+The two `assert`s guard total size: ordinary field growth without updating the
+assertion fails to compile. Same-size field reorder/type drift requires separate
+layout comparison; see the dated closeout review below. The `force_channels.rs` module
+header comment that said "180-byte" was corrected to 212 by ADR-2060; the binding
+assertion (212) remains authoritative. Legacy ADR-031 ("48B") and ADR-061 are stale on
+this too, and are marked retired below.
 
 Layout discipline: every field added since the original prefix is appended at the
 **tail** to preserve the `repr(C)` prefix that four shipping clients already speak
@@ -74,8 +77,11 @@ Defined in `crates/visionclaw-domain/src/models/simulation_params.rs:113-119`:
 **ENABLE_CONSTRAINTS is the keystone.** Without bit 4 set, the constraint loop at
 `visionclaw_unified.cu:475` never runs and the uploaded ontology `ConstraintData`
 buffer has zero effect. It is **not** derived from user settings — it is rebuilt from
-constraint *residency* on every physics step: `execution.rs:903-904` sets the bit
-whenever `self.num_constraints > 0`. This is the ADR-098 fix that made ontology
+constraint *residency* on every physics step: `derive_dispatch_feature_flags`
+(`src/models/force_channels.rs`) sets the bit whenever `num_constraints > 0`, and
+`execution.rs` assigns that helper's result over `sim_params.feature_flags` before every
+execute (citation repointed by ADR-2060; it formerly read `execution.rs:903-904`, which
+is no longer where the rule lives). This is the ADR-098 fix that made ontology
 constraints live (audit: constraints FIXED and live). The force-channel registry
 treats `Constraints` as read-only for exactly this reason (see below).
 
@@ -113,8 +119,12 @@ use `plane_bias_k`/`plane_spacing` (all ADR-141 tail fields). The HTTP surface i
 
 ### The three host→GPU conversion paths (must stay consistent)
 
-All three build the same 212-byte struct; the flag-derivation logic is duplicated and
-**must not diverge**:
+All three build the same 212-byte struct. **The flag-derivation logic is no longer
+duplicated** (ADR-2060): `derive_dispatch_feature_flags` in `src/models/force_channels.rs`
+is the single helper, `execution.rs` calls it, and its result is written over
+`sim_params.feature_flags` before every execute — so whatever word paths 1 and 2 build is
+discarded and cannot reach the device. Paths 1 and 2 remain as struct converters; only
+their flag words are dead.
 
 1. `From<&SimulationParams> for SimParams` — `simulation_params.rs:236-317`. Derives
    repulsion/spring/centering/SSSP flags from positive scalars (`:239-250`).
@@ -122,25 +132,27 @@ All three build the same 212-byte struct; the flag-derivation logic is duplicate
    derivation (`:322-332`) but always sets `ENABLE_SSSP_SPRING_ADJUST` and defaults
    `layout_mode`/`radial_center` to inert values so this wire path never silently
    forces a mode or resets an active radial centre.
-3. `execution.rs:882-913` (`execute_physics_step`) — rebuilds `feature_flags` from
-   scratch "mirroring `to_sim_params()`", then calls `params.to_sim_params()` (path 1)
-   and **overwrites** `sim_params.feature_flags` with the freshly built word
-   (`:912-913`). This is the path that adds the residency-driven `ENABLE_CONSTRAINTS`
-   bit (`:903-904`) and honours the runtime `sssp_spring_adjust_enabled` toggle
-   (`:895`). The live actor call site (the path-3 `execute_physics_step_with_bypass`
-   invocation) is `force_compute_actor.rs:2057`.
+3. `execute_physics_step` in `src/utils/unified_gpu_compute/execution.rs` — calls
+   `params.to_sim_params()` (path 1) for the struct, then calls
+   `derive_dispatch_feature_flags` and **overwrites** `sim_params.feature_flags` with the
+   returned word. This is where the residency-driven `ENABLE_CONSTRAINTS` bit and the
+   runtime `sssp_spring_adjust_enabled` toggle enter. The live actor call site (the
+   `execute_physics_step_with_bypass` invocation) is `force_compute_actor.rs:2057`.
 
-Because path 3 recomputes the flags itself rather than trusting paths 1/2, the three
-must agree on the derivation rule (`scalar > 0.0`) or a setting change will reach the
-GPU on one path and not another (the historical "nothing moves when I change settings"
-bug, noted at `execution.rs:907-911`).
+Because path 3 assigns the shared helper's word over whatever paths 1 and 2 produced,
+the historical failure mode — a setting change reaching the GPU on one path and not
+another, the "nothing moves when I change settings" bug — is now structurally impossible
+for the flag word: there is exactly one derivation and it always wins. The ADR-2029 test
+module `adr_2029_dispatch_authority` (`force_channels.rs`) asserts against the word that
+is actually uploaded rather than against a converter's output.
 
 ### PTX ISA downgrade hack (`crates/visionclaw-gpu/build.rs`)
 
 CUDA toolkit 13.x emits `.version 9.x` PTX; some host drivers only support 9.0. The
 build post-processes every compiled `.ptx`: it finds `.version 9.` and rewrites it to
-`.version 9.0` in place (`build.rs:162-179`). If `nvcc` is unavailable it falls back to
-pre-compiled PTX bundled in the crate / `/app` image (`build.rs:137-160`). Empty or
+`.version 9.0` in place (`build.rs:162-179`). If `nvcc` runs and fails, it falls back to
+pre-compiled PTX bundled in the crate / `/app` image (`build.rs:137-160`). Failure
+to launch `nvcc` panics before that branch. Empty or
 missing PTX panics the build (`build.rs:181-187`).
 
 ### Analytics kernel trust status
@@ -168,33 +180,58 @@ output-verified. Treat results as probably-correct pending a validation pass.
 
 ## Known divergences & open items
 
-- **Stale in-code comment**: `force_channels.rs:5` and the header say `SimParams` is
-  "180-byte"; the real, asserted size is **212**. Comment lags the struct.
-- **Legacy ADR wire sizes are stale**: ADR-031 ("48B"), ADR-061 ("28B forever") predate
-  the 212-byte struct. Code wins.
-- **Duplicated flag derivation across three paths** is a latent divergence risk: no
-  single shared helper builds `feature_flags`; `execution.rs` re-implements it. A future
-  refactor should collapse the rule into one function.
+- **Stale in-code comment** — *Resolved — ADR-2060 (2026-09-05)*. The `force_channels.rs`
+  module header said "180-byte"; corrected to **212**, the asserted size.
+- **Legacy ADR wire sizes are stale** — *Resolved — ADR-2060 (2026-09-05)*. ADR-031 ("48B")
+  and ADR-061 ("28B forever") predate the 212-byte struct and the 52-byte wire record. Code
+  wins: `SimParams` is 212 bytes, the V3 wire record is 52. 28 survives only as the internal
+  server-side `BinaryNodeData`, never on the wire. The stale "48 bytes/node" comment on
+  `MessageType::BinaryPositions` was corrected in the same change (ADR-2057).
+- **Duplicated flag derivation across three paths** — *Resolved — ADR-2060 (2026-09-05)*.
+  The refactor this bullet asked for has landed: `derive_dispatch_feature_flags`
+  (`src/models/force_channels.rs`) is the single shared helper and the sole dispatch
+  authority. `execution.rs` calls it and assigns the result over `sim_params.feature_flags`
+  before every execute, so the converter paths in `simulation_params.rs` are dead for
+  dispatch and cannot diverge onto the device. The ADR-2029 test module
+  `adr_2029_dispatch_authority` observes the word actually uploaded.
 - **`ENABLE_TEMPORAL_COHERENCE` (bit 3) and `ENABLE_STRESS_MAJORIZATION` (bit 5)** are
-  declared but are not live GPU force channels (stress majorization is CPU-side,
-  `simulation_params.rs:77`). Reserved bits, not wired terms.
+  **reserved bits, not a divergence** (ADR-2060). They are declared but are not live GPU
+  force channels — `derive_dispatch_feature_flags` never sets either, and stress
+  majorization is CPU-side (`simulation_params.rs:77`, "Stress majorization params live on
+  CPU (SemanticProcessorActor); not in GPU SimParams"). The bit positions are part of the
+  frozen 212-byte ABI and are deliberately not reclaimed: doing so would be a wire-visible
+  change for no benefit.
 - **Analytics outputs are code-fixed but not output-validated**: Louvain/PageRank/
   DBSCAN carry in-source fix markers (see trust table above) but no reference-
   implementation benchmark has confirmed their outputs; a validation pass is the
-  remaining step before full trust.
+  remaining step before full trust. **Open** — carried forward as ADR-2061 (proposed),
+  which specifies the per-kernel acceptance tests against
+  `crates/visionclaw-analytics-oracle`.
 - **Registry cannot toggle Constraints**: enablement is residency-owned. Any UI that
   exposes a "constraints on/off" switch through the force-channel registry is inert by
-  design (`is_read_only`).
+  design (`is_read_only`). **Working as intended** — ADR-2029; retained here as a caution
+  to UI authors, not as a defect.
+- **Frozen `physics-v2` layout engines** — *Resolved — ADR-2055 (2026-09-05)*. The
+  five-engine `LayoutEngine` registry behind the `physics-v2` feature had stub `step()`
+  bodies, was never in `default`, and was marked "must not be enabled in a shipped build",
+  yet `layout_handler` advertised all six `LayoutMode` variants and silently coerced an
+  unknown mode to `ForceDirected`. The stubs are removed and the handler now rejects an
+  unknown mode instead of coercing it.
 
 ## Invariants (must not silently change)
 
 1. `size_of::<SimParams>() == 212` on both sides; the two static assertions stay in
    lockstep. New fields append at the tail only.
 2. `ENABLE_CONSTRAINTS` is set iff `num_constraints > 0` at physics-step time — never
-   derived from user settings (`execution.rs:903-904`).
-3. All three conversion paths derive repulsion/spring/centering flags from the same
-   `scalar > 0.0` rule; `execution.rs` remains the authority that adds constraint
-   residency and runtime SSSP toggle.
+   derived from user settings. The rule lives in `derive_dispatch_feature_flags`
+   (`src/models/force_channels.rs`); `execution.rs` calls it and assigns the result
+   (citation corrected by ADR-2060 — it previously pointed at `execution.rs:903-904`,
+   which is no longer where the rule lives).
+3. `derive_dispatch_feature_flags` is the single authority for the dispatched
+   `feature_flags` word. It derives repulsion/spring/centering from the same
+   `scalar > 0.0` rule and adds constraint residency and the runtime SSSP toggle; its
+   result is written over `sim_params.feature_flags` before every execute, so any word
+   built by a converter is discarded (ADR-2029, ADR-2060).
 4. `Constraints` is the only read-only force channel; `apply()` never mutates its scalar
    or flag.
 5. PTX is downgraded to `.version 9.0` before load; the fallback-PTX path exists for
@@ -210,3 +247,38 @@ declarations, bump both size assertions if the size moves, update this doc's Cur
 State and Invariants, and bump `version`. Fixing a broken analytics kernel moves it out
 of the Known-BROKEN list with a code citation. Cite legacy ADRs (e.g. legacy ADR-031,
 ADR-098, ADR-141) as evidence only; live code is ground truth.
+
+## Layout and force closeout — 2026-09-04
+
+ADR-2028/2029 now distinguish host layout parity, total-size guards and final dispatch authority. The extracted Rust/C++ declarations agree at all 53 offsets; a temporary dt/damping swap preserves size and passes the original assertion. No CUDA/device path ran. Require actual toolchain/module identity, drift-negative CI, coordinated consumer upgrades and actor-to-device constraint/SSSP transition receipts. See [estate simulation review](../../VisionFlow/docs/estate-review/rendered-state.md#simulation-layout-and-force-authority).
+
+## PTX closeout — 2026-09-04
+
+ADR-2030 is partial after six isolated build-phase cases distinguished missing/failed nvcc, nonempty/valid output and warning/actual version changes. Runtime loading separately selects and rewrites PTX; its structural substring check is not driver or required-symbol validation. Require selected-module hashes, host ABI agreement, native/stub identity and actual driver/kernel receipts. See [estate PTX review](../../VisionFlow/docs/estate-review/rendered-state.md#ptx-build-acceptance-and-loaded-artefact-identity). No full build or GPU execution ran in this pass.
+
+## Remediation — 2026-09-05
+
+One line per ADR from the Phase 2 remediation of the Phase 1 diagram findings (VC-10 … VC-18).
+
+- **ADR-2053** — Direct point-to-point delivery is the authoritative mechanism for
+  `SharedGPUContext`; the `GPUContextBus` is a supplementary broadcast. Delivery failures are
+  no longer fire-and-forget: they are logged, recorded, and reported as `Degraded` health.
+  Every GPU analytics actor has one residency (the supervisor's instance).
+- **ADR-2054** — Deleted dead code: `StreamingPipeline`, `UpdateComponentEdges` and its
+  handler, `VisualAnalyticsGPU`/`TSNode`/`TSEdge`, the `PushDirective`/`HeartbeatDirective`
+  queueing, and the `#if 0` APSP kernel body. `ComputeAPSP` is retained as an explicit NFR-7
+  refusal.
+- **ADR-2055** — Retired the frozen `physics-v2` feature and the five-engine `LayoutEngine`
+  registry (stub `step()` bodies, never shipped), plus `PhysicsGpuBuffers` and its acceptance
+  tests. `set_layout_mode` now rejects an unknown mode instead of silently coercing it, and
+  advertises only the five modes the live handler honours.
+- **ADR-2056** — One span-parsed `.version` rewrite. The runtime PTX downgrade delegates to
+  `ptx_policy::rewrite_ptx_version` instead of carrying its own substring implementation; it
+  retains only the runtime driver-ISA probe, which the build-time constant cannot serve.
+- **ADR-2059** — Removed the seven analytics feature flags that gated nothing; kept
+  `ontology_validation` (a real gate) and `sssp_integration` (documented as display-only).
+- **ADR-2060** — Corrected this document's citations and marked resolved divergence bullets
+  as such. Bits 3 and 5 are re-described as reserved rather than as a divergence.
+- **ADR-2061** *(proposed)* — Per-kernel conformance tests against
+  `crates/visionclaw-analytics-oracle`, with stated tolerances. The analytics trust gap stays
+  open until it lands.

@@ -163,7 +163,7 @@ identical defect and were brought into line here:
   topology mermaid showed live `BrokerActor` + `ServerNostrActor` host nodes;
   relabelled to "Broker kernel + REST (`src/domain/broker/`)" and "ACSP producer
   / ElevationActor".
-- `docs/diagrams/triptych-src/2-engine.md` — the engine label "ACSP /
+- `docs/diagrams/hero/triptych-src/2-engine.md` — the engine label "ACSP /
   BrokerActor" narrowed to "ACSP producer".
 
 **Grep receipt (this fixup pass):** `grep -rn BrokerActor docs/ --include=*.md`

@@ -3,7 +3,7 @@ id: ADR-2016
 title: GRAPH_PROVENANCE is append-only (INSERT DATA only)
 date: 2026-08-31
 decision_status: accepted
-implementation_status: complete
+implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
@@ -47,8 +47,9 @@ exist.
 - There is a real erasure gap: a right-to-be-forgotten request against a
   subject recorded here cannot be satisfied today. This interacts with the
   backup / write-master posture in ADR-2017 (no PITR, no consistent restore).
-- Tamper-evidence and agent-scoped SPARQL (`?a a prov:Agent`) are guaranteed
-  because the triad is always complete and never edited.
+- Successful complete records support agent-scoped SPARQL (`?a a prov:Agent`).
+  Insert-only emission does not guarantee record completeness after failure or
+  independently prove tamper-evidence against other privileged writers.
 
 ## Verification
 
@@ -66,3 +67,67 @@ even though `emit_provenance` is not the sole entry point.
 Re-verified at `542d63d1d` after the ADR-141 formatting sweep (test-only line
 wrapping in `ontology_mutation_service.rs` `provenance_wiring_tests`) — the
 append-only invariant is unchanged.
+
+## Closeout extension — 2026-09-04
+
+**Work package:** CP-04 / CP-05 / CP-08. **Owner:** existing owner above. Dependencies are
+CP-01 revision/ownership mapping and the relevant corpus or authority contract.
+
+**Current evidence:** reify_activity inserts individual quads without an enclosing transaction. The activity type is inserted before the agent IRI is validated; later invalid input or storage failure can leave a partial record. This is source evidence, not a production fault reproduction.
+
+See [runtime analysis](../../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md),
+[source hashes](../../../VisionFlow/docs/estate-review/evidence/visionclaw-data-snapshot.json)
+and [backup receipt](../../../VisionFlow/docs/estate-review/evidence/visionclaw-backup-probe.json).
+Source was inspected at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`. Earlier verification at `9a2c8087385bf6db08b1aeb91004e1a60203965b`
+remains historical evidence; this annex does not claim a new deployed activation
+or complete verification of every older assertion.
+
+**Acceptance still required:** Validate all terms before writing and commit a complete record atomically, or detect and repair partial records. Test a late invalid IRI and injected storage failure, correlate completed provenance with mutation receipts, and distinguish insert-only code from tamper-detection and retention guarantees.
+
+## Consumer closeout extension — 2026-09-05
+
+The [joined-trace review](../../../VisionFlow/docs/estate-review/joined-provenance-trace.md) traces the separate SQLite-backed `GET /api/trace` consumer. It does not query this ADR's Oxigraph provenance graph. Shared-identity grouping and a two-source canary are insufficient evidence of a causally complete action. CP-01/04/08 acceptance must establish original-record correlation, resource-authorised reads, capture health, bounded time/volume and any actual pod integration. This source-only extension preserves the append-only decision and its earlier storage obligations; no endpoint or deployment acceptance ran.
+
+## Acceptance progress — 2026-09-05
+
+**Implemented.** `crates/visionclaw-adapters/src/provenance_emitter.rs`. The
+reproduced defect — `reify_activity` inserted quads one at a time with no
+enclosing transaction, and inserted the activity type *before* validating the
+agent IRI, so a late invalid input or a storage failure left a partial record —
+is closed by a two-phase write.
+
+* `build_activity_quads(record)` validates **every** term first (including the
+  optional `generated` and `informed_by`, which the interleaved version reached
+  only after writing three quads) and returns the full quad set. It touches no
+  store, so callers can validate a record without writing it.
+* `commit_quads_with(store, quads, guard)` commits the whole set inside one
+  `Store::transaction`. The guard is called with each quad's index immediately
+  before insertion — the seam that makes the atomicity contract testable, since
+  a guard failing at index *n* aborts after *n* inserts have been issued, which
+  is exactly the shape of a mid-record storage failure.
+* `find_incomplete_activities(store)` is the repair half: a SPARQL query for
+  subjects typed `prov:Activity` missing any of `MANDATORY_ACTIVITY_PREDICATES`,
+  for enumerating damaged records written by the pre-ADR-2016 emitter in a
+  deployed store.
+
+`ProvenanceError` gains `From<StorageError>` so it can be the transaction
+closure's error type.
+
+**Tests.** `cargo test -p visionclaw-adapters --lib provenance` — 20 passed,
+0 failed (9 new): late invalid `generated` IRI writes nothing; late invalid
+`informed_by` writes nothing; invalid `used` writes nothing; pure validation
+without a store; **injected storage failure at index 4 rolls the record back**
+and the same quads then commit cleanly, proving the rollback did not poison the
+store; failure at index 0 is a clean no-op; atomically written records are never
+reported incomplete; a simulated legacy partial record *is* detected; and every
+mandatory predicate is actually written, so the constant and the emitter cannot
+drift.
+
+**Receipts.** `docs/estate-closeout/2026-09-05/adr-2016-provenance-atomicity.txt`,
+`adr-2015-2016-adapters.txt`.
+
+**Remains open.** Correlating completed provenance with mutation receipts is
+only partly advanced (ADR-2006 now preserves the signed event id on the decision
+side). Tamper detection and retention guarantees remain distinct from
+insert-only code and are not implemented. The separate SQLite-backed
+`GET /api/trace` consumer is untouched.

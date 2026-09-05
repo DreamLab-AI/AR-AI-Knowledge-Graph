@@ -1,0 +1,3 @@
+# Historical ADR closeout routing
+
+The frozen archive remains historical. Use the [estate section-level review](../../VisionFlow/docs/estate-review/historical-decision-reconciliation.md) and [complete VisionClaw historical map](../../VisionFlow/docs/estate-review/closeout/visionclaw-history.md) to find current assessment routes. A lineage mention does not supersede every section of a predecessor. ADR-130, for example, carries six independent decisions; telemetry and KPI obligations still require source reconciliation. Preserve each obligation until its successor, deferral or retirement is explicitly evidenced.

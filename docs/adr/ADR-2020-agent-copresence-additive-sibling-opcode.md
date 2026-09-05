@@ -62,3 +62,79 @@ decode only `0x43` (`wire::decode`, opcode-checked), and
 agent-presence wire" a pending integration point. Hence `activation_status:
 staged`, not live. Sibling pose opcode `OPCODE_AVATAR_POSE = 0x43` lives in
 `crates/visionclaw-xr-presence/src/wire.rs`.
+
+## Closeout extension — 2026-09-04
+
+Work package: **CP-06**. Owner remains `jjohare`, with protocol, identity and XR maintainers responsible for their respective boundaries.
+
+The 0x44 codec exists, but no live server/client encode/decode integration was found in this source pass. Staged activation is retained.
+
+**Acceptance condition:** Wire authenticated social state end to end and demonstrate node correlation, stale removal, permission denial and independent pose operation before declaring activation live.
+
+Dependencies: CP-01 release identity and CP-04 authority where authenticated actions cross the wire. Reopen on the existing review trigger, a changed opcode or a failing freshness/visibility probe. Existing verification and activation fields retain their historical scope; this annex records source/local tests at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`, not a new live certification.
+
+See [rendered-state review](../../../VisionFlow/docs/estate-review/rendered-state.md) and [receipt](../../../VisionFlow/docs/estate-review/evidence/xr-render-snapshot.json).
+
+## Acceptance progress — 2026-09-05
+
+**The missing integration is implemented.** The closeout found the `0x44` codec
+present on both sides with no live encode/decode integration anywhere; that is
+now wired end to end.
+
+*Server* (`src/actors/presence_actor.rs`) — co-presence is a first-class channel
+alongside `0x43` pose:
+
+- `IngestAgentPresence { avatar_id, presence }` publishes an agent's social state.
+  `AgentPresenceOutcome` reports `Broadcast { changed_fields }`, `Unchanged`,
+  `PermissionDenied` or `InvalidNodeCorrelation { node_id }`.
+- **Permission denial** — room membership is the authorisation boundary.
+  Membership is established by an authenticated `JoinRoom`, so a caller that never
+  joined, *or one that has since left*, is refused. Denial is a live-membership
+  check, not a one-off test at join time.
+- **Node correlation** — `AttentionTarget::GraphNode(id)` shares the 26-bit wire
+  id space with the graph socket (ADR-2024). `GetAttentionNode` resolves an
+  avatar to the node it attends; an id above the mask is refused as
+  `InvalidNodeCorrelation`, because it could never be resolved by any client.
+- **Stale removal** — `SweepStaleAgentPresence` retires entries not refreshed
+  within `AGENT_PRESENCE_TTL` (10 s), so a crashed agent cannot leave an avatar
+  permanently attentive to a node. Retirement is announced as
+  `RoomEventEnvelope::AgentPresenceExpired` on the JSON event channel rather than
+  as a `0x44` delta: the codec encodes *state* and has no "gone" representation,
+  and reusing an idle delta would be ambiguous with an agent that genuinely went
+  idle.
+- **Independent pose operation** — co-presence keeps its own state map and its own
+  broadcast sequence counter. Publishing presence never flushes pending poses;
+  ingesting a pose never touches social state. Deltas elide unchanged fields, and
+  gaze is compared at wire resolution so sub-quantum jitter generates no traffic.
+
+*Client* (`xr-client/rust/src/avatar_state.rs`) — `RemotePresenceStore` consumes
+the stream: it holds last-known state per transport `local_id` and folds deltas
+onto it (which is what makes elision safe), refuses out-of-order or duplicate
+batches whole, exposes `attention_node()` as the client half of node correlation,
+declines sibling opcodes so a demultiplexer can offer it every binary frame, and
+supports `remove()` for the server's retirement announcement.
+
+**Tests run.**
+
+- `cargo test --lib --no-default-features presence_actor` — 14 pass, of which 9
+  are new: `0x44` opcode on the wire and decodable by the real decoder, publisher
+  excluded from its own broadcast, non-member denied, departed member denied,
+  attention/node correlation both ways, over-range node id refused, unchanged
+  republication silent, stale retirement plus its event, presence/pose
+  independence with separate sequence counters, and per-field delta elision.
+- `xr-client/rust`: `cargo test --test agent_copresence_roundtrip` — 8 pass, all
+  driven by the **real** `encode_agent_presence`, covering full-delta
+  reconstruction, elided-field folding, out-of-order refusal, multi-agent
+  tracking, stale removal, sibling-opcode refusal, exhaustive truncation and
+  mid-stream convergence.
+
+**Governed paths changed.** `src/actors/presence_actor.rs`,
+`xr-client/rust/src/avatar_state.rs`,
+`xr-client/rust/tests/agent_copresence_roundtrip.rs`.
+
+**Open — staged activation is retained.** The integration is proven at the actor
+and codec boundary, not over a live `/ws/presence` socket: no HTTP/WS handler
+route publishes `IngestAgentPresence` from a real session yet, and no headset
+rendered a remote agent's avatar from a received frame. `implementation_status`
+should not move to live until a real authenticated session drives the path and a
+client renders the result.

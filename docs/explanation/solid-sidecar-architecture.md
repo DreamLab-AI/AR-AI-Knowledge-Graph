@@ -106,7 +106,7 @@ services:
       - ./config/solid.json:/config/config.json:ro
     environment:
       - CSS_CONFIG=/config/config.json
-      - CSS_BASE_URL=${JSS_BASE_URL:-http://localhost:3000}
+      - CSS_BASE_URL=${SOLID_POD_BASE_URL:-http://localhost:3000}
       - CSS_LOGGING_LEVEL=${JSS_LOG_LEVEL:-info}
     networks:
       - visionclaw-net

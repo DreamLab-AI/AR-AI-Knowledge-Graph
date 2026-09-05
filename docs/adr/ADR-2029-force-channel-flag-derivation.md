@@ -58,3 +58,68 @@ array-backed refactor absent — implementation is partial as recorded.
 Re-verified at `542d63d1d` after the ADR-141 formatting sweep (test-only line
 wrapping of a `constraint_max_force_per_node` assertion in `force_channels.rs`) —
 the flag-derivation semantics are unchanged.
+
+## Closeout extension — 2026-09-04
+
+CP-01/06/08. Owner remains jjohare with simulation/GPU maintainers. Partial/live is retained: the scalar mapping exists and the array-backed step remains deferred. Current source confirms the final physics-step wrapper derives residency/runtime flags and overwrites converter flags before execute; Constraints.apply is a no-op. An actor parameter mirror also derives flags, so the authority claim is scoped to final dispatch rather than every in-memory flag assignment.
+
+**Acceptance condition:** Inventory conversion/update/direct-execute callers. Observe the final device word and force output through zero/nonzero/removed constraint residency, runtime SSSP changes, scalar boundaries and settings updates. Keep constraints read-only in product controls or explicitly revise the ownership decision. Reopen on new conversion/dispatch paths, residency semantics or the deferred array refactor. See [review](../../../VisionFlow/docs/estate-review/rendered-state.md#simulation-layout-and-force-authority) and [source receipt](../../../VisionFlow/docs/estate-review/evidence/wire-force-boundaries.json). No constraint upload or GPU tick ran; the historical resident count is not current acceptance evidence.
+
+## Acceptance progress — 2026-09-05
+
+**Caller inventory.** Three paths reach the feature word; only one is
+authoritative.
+
+| Path | Role | Authority |
+|---|---|---|
+| `SimulationParams::to_sim_params()` (converter) | maps settings → `SimParams`, including a feature word | **not** authoritative — its word is overwritten |
+| actor parameter mirror | holds a converter-derived word for inspection | informational only |
+| `execute_physics_step_with_bypass` → `execute` | builds the final word immediately before dispatch | **authoritative** |
+
+`execute_physics_step` delegates to `execute_physics_step_with_bypass`, so both
+direct-execute entry points share one derivation. Two of the derivation's inputs —
+constraint residency and the runtime SSSP toggle — are live device state the
+converter cannot see, which is *why* the converter's word cannot be trusted and is
+assigned over.
+
+**Implemented — the derivation is now a pure, observable function.** The logic was
+inline in the physics-step wrapper on `UnifiedGPUCompute`, so the final device word
+could not be observed without a GPU. It is extracted to
+`models::force_channels::derive_dispatch_feature_flags(ForceDispatchInputs)`, and
+the wrapper now calls it. Behaviour is unchanged; what changed is that the exact
+word uploaded to the device is computable and assertable on the host.
+
+Rules, now documented in one place: repulsion/springs/centering gate on a
+**strictly positive** scalar (so `0.0`, `-0.0`, negative and `NaN` are all off —
+a poisoned scalar disables its term rather than enabling one the kernel cannot
+evaluate); SSSP spring adjust is the settings flag **or** the runtime toggle;
+`ENABLE_CONSTRAINTS` derives from residency (`num_constraints > 0`) and never from
+a setting — which is why `ForceChannel::Constraints` is read-only in the registry
+and its `apply` is deliberately a no-op.
+
+**Tests run.** `cargo test --lib --no-default-features adr_20` — 34 pass, 8 in
+`adr_2029_dispatch_authority`, all observing the final device word:
+
+- residency `0 → 1 → 4096 → 0`, asserting the bit tracks in **both** directions
+  (removing every constraint must clear it, or the kernel keeps walking a buffer
+  that no longer describes anything);
+- residency decides constraints regardless of every scalar and SSSP combination;
+- scalar boundaries — `0.0`, `-0.0`, `-1.0`, `NaN`, `-inf` all off;
+  `f32::MIN_POSITIVE`, `1e-6`, `1.0`, `inf` all on;
+- each scalar gates only its own term;
+- runtime SSSP toggle changes the word with no settings change, and the two
+  sources are OR-ed;
+- the dispatch word overriding the converter's — a settings record with
+  `repel_k = 0` plus 3 resident constraints yields a word carrying the
+  residency-derived bit the converter cannot know, and differing from the
+  converted word;
+- input gathering from settings plus runtime state;
+- no bit outside the five declared flags is ever produced.
+
+**Governed paths changed.** `src/models/force_channels.rs`,
+`src/utils/unified_gpu_compute/execution.rs`.
+
+**Open.** No constraint was uploaded, no GPU tick ran, and no force *output* was
+observed — these tests observe the word, not its effect on positions. Settings
+updates through the live actor path, and the deferred array-backed channel
+representation, are untouched. Partial/live is retained.

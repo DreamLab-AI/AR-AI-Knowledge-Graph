@@ -25,9 +25,9 @@ realm. Adversarial verification refuted it: `verify_access`
 (`src/utils/auth.rs`), which `RbacGate` consults for **every** `/api` route
 including `WriteGraph` mutations (`rbac_gate.rs:265`), carries an unconditional
 legacy fallback authenticating `X-Nostr-Pubkey` + `X-Nostr-Token` headers via
-`validate_session` (`src/services/nostr_service.rs:478`). The React client
-actively uses this path (`client/src/services/api/authInterceptor.ts` et al.),
-so it cannot be removed without breaking the desktop client.
+`validate_session` (`src/services/nostr_service.rs:478`). The original verification found React client dependence on this path. The current
+interceptor has migrated to per-request signing; see the dated closeout review
+below before relying on that historical retirement constraint.
 
 ## Decision
 
@@ -59,3 +59,9 @@ non-cfg-gated at `e0f8cd896`; `validate_session` expiry window confirmed at
 `client/src` files (authInterceptor, restClient, endpoints, ldpClient,
 contextLoader). Original sole-realm draft deleted by the adversarial verify
 pass of wf_0d0794b9-02c; this record replaces it stating the dual-realm truth.
+
+## Closeout extension — 2026-09-04
+
+CP-01/04/05/08. Owner remains jjohare with identity/client/release maintainers. Complete/live is retained for server coexistence. The browser migration review trigger is reached: current API interceptor, settings and LDP source sign NIP-98, and eleven mocked interceptor tests pass. The old verification remains historical; it does not describe current interceptor dependence. Legacy server acceptance remains active. Session age uses mutable last_seen, not an immutable issuance timestamp.
+
+**Acceptance condition:** Inventory every deployed credential consumer, including sockets and external clients; choose a dated compatibility/retirement contract. Verify realm precedence, body binding, effective roles, refresh/logout/revocation, persisted-session restart and rollback through real routes. Reopen on consumer migration, session lifetime/refresh changes or deployment profile changes. See [request realm review](../../../VisionFlow/docs/estate-review/role-authority.md#request-realms-and-deferred-delegation) and [receipt](../../../VisionFlow/docs/estate-review/evidence/auth-realms-snapshot.json). Client mocks establish header construction only; no session or deployment was changed.

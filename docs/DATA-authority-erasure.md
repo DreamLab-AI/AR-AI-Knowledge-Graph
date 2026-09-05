@@ -98,19 +98,32 @@ distributed transaction and no compensating-action framework in code.
   RuVector for agent memory (030) and provenance trails (033/034/124/128). Code
   resolves this as the matrix above; the legacy prose is not reconciled and must
   not be treated as authority.
-- **Backup coverage is partial.** `scripts/backup-sqlite.sh` (2026-08-31) takes
-  lock-consistent online snapshots of the four SQLite DBs via the SQLite backup
-  API and copies them off-volume. **Oxigraph has NO point-in-time backup.** There
-  is no cross-store consistent restore and no declared RPO/RTO.
+- **Backup coverage is partial — Oxigraph only.** `scripts/backup-sqlite.sh` (2026-08-31) takes
+  lock-consistent online snapshots of the SQLite DBs via the SQLite backup
+  API. Off-volume placement depends on configuration: the host default is
+  `./data/backups`. Membership is a contract, not a best-effort sweep: a missing
+  member of `REQUIRED_DBS` (`settings.sqlite3 enrichment.sqlite3 kpi.sqlite3`,
+  `backup-sqlite.sh:75`) aborts the run and publishes no manifest
+  (`:242-245`), while a missing member of `OPTIONAL_DBS` (`liveness.sqlite3`,
+  `:76`) is logged and the run continues (`:229`) — ADR-2069. **Oxigraph has NO
+  point-in-time backup.** There is no cross-store consistent restore and no
+  declared RPO/RTO.
 - **Credentials.** SOPS (legacy ADR-109, VisionClaw) was accepted 2026-05-09 but
   NEVER EXECUTED — `.env` is plaintext, no SOPS artifacts in tree. Open.
-- **Open-by-default posture.** Compose ships `RBAC_PUBLIC_READS=1`
-  (`rbac_gate.rs:119-122`, default on) and `RBAC_ALLOW_OWNERLESS=1`
-  (`docker-compose.unified.yml:78-79`, both `${VAR:-1}`; env const
-  `role_store.rs:33`, enforced `main.rs:717-737`); an unassigned authenticated
-  pubkey resolves to `Editor` (`role_store.rs:188-199`).
-  This is a deliberate compatibility trade-off that needs a named security
-  profile before ratification.
+- **Open-by-default posture is a compose choice, not a code default.** The code
+  fails closed: `public_reads_enabled()` ends `.unwrap_or(false)`
+  (`rbac_gate.rs:122-129`), whose doc comment states that "the absence of a
+  security flag must never widen access", and `main.rs:727-732` refuses to start
+  on an owner-less store unless `RBAC_ALLOW_OWNERLESS` is set explicitly
+  (env const `role_store.rs:33`). The shipped compose inverts both:
+  `RBAC_PUBLIC_READS: "${RBAC_PUBLIC_READS:-1}"`
+  (`docker-compose.unified.yml:93`) and
+  `RBAC_ALLOW_OWNERLESS: "${RBAC_ALLOW_OWNERLESS:-1}"` (`:94`). An unassigned
+  authenticated pubkey then resolves to `Editor` via `effective_role`
+  (`role_store.rs:359`). The open posture is ADR-2027's deliberate demo default
+  and stays; corrected here (ADR-2069, ADR-2070 pass; raised by estate ADR-2087)
+  because this document previously described the *code* default as open, which
+  contradicted `docs/SECURITY-profiles.md`.
 - **Landing 2026-08-31.** `PUBKEY_VISIBILITY_FILTER` now defaults ON
   (`position_updates.rs:35-42`, `unwrap_or(true)`) — the privacy encoder was
   previously inert. NIP-98 single-use replay cache added (`src/utils/nip98.rs`).
@@ -147,3 +160,30 @@ when the code moves. Bump `version` (semver: patch for wording, minor for a
 new class or rule, major for an owner reassignment) and refresh
 `verified_commit`. Ratification requires closing the open items above or
 explicitly accepting each as a signed-off trade-off with a named owner.
+
+## Complete-system closeout qualification — 2026-09-04
+
+ADR-2015/2016/2017 now carry CP-02/04/05/08 acceptance conditions backed by
+[current source and a temporary backup probe](../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md).
+The derived-writeback method is fenced; that does not exclude other governed
+asserted-graph writers. Full sync drops knowledge and agent graphs before batch
+processing and separately rebuilds asserted ontology, so no corpus-wide atomic
+activation is established. Runtime assertions not yet in the corpus can be lost
+on that rebuild even while their separate provenance survives.
+
+Provenance emission is insert-only but not record-atomic; ADR-2016 implementation
+is partial for its complete-triad guarantee. SQLite online backup recovers WAL
+data in the tested fixture, but required-member coverage, failure-domain
+separation and coordinated application restore remain open. Existing statements
+of immutable history or off-volume durability must be read with these limits.
+
+## Remediation — 2026-09-05
+
+- **ADR-2069** — ratifies the required/optional backup membership contract and corrects the
+  "missing databases are skipped" sentence: a missing `REQUIRED_DBS` member aborts the run and
+  publishes no manifest. Oxigraph point-in-time backup remains open.
+- **ADR-2070** — corrects the "Open-by-default posture" bullet: the code fails closed
+  (`rbac_gate.rs:122-129`, `main.rs:727-732`); the open posture comes from compose
+  (`docker-compose.unified.yml:93,94`) and is ADR-2027's deliberate choice. Raised by estate ADR-2087,
+  which found this document contradicting `docs/SECURITY-profiles.md`.
+- **ADR-2066** — the unwired `/api/inference/*` stack was removed; it is no longer a store consumer.
