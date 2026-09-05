@@ -28,7 +28,7 @@ on:
 
 env:
   ONTOLOGY_SOURCE_REPO: ${{ github.event.inputs.source_repo || 'jjohare/logseq' }}
-  JSS_URL: ${{ vars.JSS_URL || 'http://jss:3030' }}
+  SOLID_POD_URL: ${{ vars.SOLID_POD_URL || 'http://jss:3030' }}
   JSS_PUBLIC_PATH: /public/ontology
   CACHE_DIR: .ontology-cache
   ARTIFACT_RETENTION_DAYS: 30
@@ -541,7 +541,7 @@ jobs:
 
           # Fetch current index for rollback reference
           ROLLBACK_SHA=""
-          if curl -sf "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" -o backup/index.jsonld; then
+          if curl -sf "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" -o backup/index.jsonld; then
             ROLLBACK_SHA=$(jq -r '.["visionflow:buildSha"] // empty' backup/index.jsonld)
           fi
 
@@ -553,20 +553,20 @@ jobs:
         run: |
           set -e
 
-          JSS_URL="${{ env.JSS_URL }}"
+          SOLID_POD_URL="${{ env.SOLID_POD_URL }}"
           PUBLIC_PATH="${{ env.JSS_PUBLIC_PATH }}"
 
-          echo "Deploying to $JSS_URL$PUBLIC_PATH"
+          echo "Deploying to $SOLID_POD_URL$PUBLIC_PATH"
 
           # Create container if not exists
-          curl -X PUT "$JSS_URL$PUBLIC_PATH/" \
+          curl -X PUT "$SOLID_POD_URL$PUBLIC_PATH/" \
             -H "Content-Type: text/turtle" \
             -H "Link: <http://www.w3.org/ns/ldp#BasicContainer>; rel=\"type\"" \
             --fail-with-body || true
 
           # Deploy TTL
           echo "Uploading visionflow.ttl..."
-          curl -X PUT "$JSS_URL$PUBLIC_PATH/visionflow.ttl" \
+          curl -X PUT "$SOLID_POD_URL$PUBLIC_PATH/visionflow.ttl" \
             -H "Content-Type: text/turtle" \
             --data-binary @artifacts/ontology-ttl/visionflow.ttl \
             --fail-with-body
@@ -574,7 +574,7 @@ jobs:
           # Deploy JSON-LD files
           for file in context.jsonld ontology.jsonld index.jsonld; do
             echo "Uploading $file..."
-            curl -X PUT "$JSS_URL$PUBLIC_PATH/$file" \
+            curl -X PUT "$SOLID_POD_URL$PUBLIC_PATH/$file" \
               -H "Content-Type: application/ld+json" \
               --data-binary @artifacts/ontology-jsonld/$file \
               --fail-with-body
@@ -585,14 +585,14 @@ jobs:
 
       - name: Verify deployment
         run: |
-          JSS_URL="${{ env.JSS_URL }}"
+          SOLID_POD_URL="${{ env.SOLID_POD_URL }}"
           PUBLIC_PATH="${{ env.JSS_PUBLIC_PATH }}"
 
           echo "Verifying deployment..."
 
           # Check each resource
           for file in index.jsonld context.jsonld ontology.jsonld visionflow.ttl; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$JSS_URL$PUBLIC_PATH/$file")
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$SOLID_POD_URL$PUBLIC_PATH/$file")
             if [ "$HTTP_CODE" != "200" ]; then
               echo "ERROR: Failed to verify $file (HTTP $HTTP_CODE)"
               exit 1
@@ -601,7 +601,7 @@ jobs:
           done
 
           # Verify SHA1 matches
-          DEPLOYED_INDEX=$(curl -sf "$JSS_URL$PUBLIC_PATH/index.jsonld")
+          DEPLOYED_INDEX=$(curl -sf "$SOLID_POD_URL$PUBLIC_PATH/index.jsonld")
           DEPLOYED_SHA=$(echo "$DEPLOYED_INDEX" | jq -r '.["visionflow:buildSha"]')
 
           if [ "$DEPLOYED_SHA" == "${{ github.sha }}" ]; then
@@ -617,7 +617,7 @@ jobs:
 
           # Restore from backup
           if [ -f backup/index.jsonld ]; then
-            curl -X PUT "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" \
+            curl -X PUT "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" \
               -H "Content-Type: application/ld+json" \
               --data-binary @backup/index.jsonld || true
           fi
@@ -644,10 +644,10 @@ jobs:
               "buildNumber": "${{ github.run_number }}",
               "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
               "resources": {
-                "index": "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld",
-                "ontology": "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld",
-                "context": "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/context.jsonld",
-                "ttl": "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl"
+                "index": "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld",
+                "ontology": "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld",
+                "context": "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/context.jsonld",
+                "ttl": "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl"
               },
               "hashes": {
                 "ttl": "${{ needs.convert-ontology.outputs.ttl_sha }}",
@@ -664,12 +664,12 @@ jobs:
 
           # Send to JSS notifications endpoint (triggers WebSocket broadcast)
           # JSS will broadcast "pub /public/ontology/" to all subscribers
-          curl -X POST "${{ env.JSS_URL }}/.notifications" \
+          curl -X POST "${{ env.SOLID_POD_URL }}/.notifications" \
             -H "Content-Type: application/json" \
             -d "$NOTIFICATION" || echo "Direct notification endpoint not available"
 
           # Alternative: Touch the index to trigger LDP notification
-          curl -X PATCH "${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" \
+          curl -X PATCH "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" \
             -H "Content-Type: application/sparql-update" \
             -d "INSERT DATA { <> <http://purl.org/dc/terms/modified> \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"^^<http://www.w3.org/2001/XMLSchema#dateTime> }" || true
 
@@ -688,9 +688,9 @@ jobs:
 
           | Resource | SHA1 | URL |
           |----------|------|-----|
-          | TTL | \`${{ needs.convert-ontology.outputs.ttl_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl](${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl) |
-          | JSON-LD | \`${{ needs.convert-jsonld.outputs.jsonld_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld](${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld) |
-          | Context | \`${{ needs.convert-jsonld.outputs.context_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/context.jsonld](${{ env.JSS_URL }}${{ env.JSS_PUBLIC_PATH }}/context.jsonld) |
+          | TTL | \`${{ needs.convert-ontology.outputs.ttl_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl) |
+          | JSON-LD | \`${{ needs.convert-jsonld.outputs.jsonld_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld) |
+          | Context | \`${{ needs.convert-jsonld.outputs.context_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/context.jsonld](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/context.jsonld) |
 
           ### Pipeline
           \`\`\`

@@ -2,6 +2,14 @@
 # Wrapper script for rust-backend used by supervisord in development mode.
 # Skips cargo entirely when binary is already up-to-date — restarts with no
 # source changes take ~1s instead of ~30s.
+#
+# ADR-2008: the "up-to-date" decision lives in scripts/lib/build-inputs.sh, the
+# single authoritative inventory of what counts as a build input. It covers
+# every Rust source, CUDA kernel/header/PTX and Cargo manifest under BOTH
+# /app/src and /app/crates (the original inline heuristic missed crate
+# manifests and crate CUDA entirely), plus the toolchain files and the
+# `rerun-if-env-changed` variables the build scripts declare — including the
+# CUDA_ARCH this very script recomputes from nvidia-smi on each start.
 
 set -e
 
@@ -25,48 +33,52 @@ else
     log "WARNING: nvidia-smi failed, using sm_${CUDA_ARCH}"
 fi
 
-> /app/logs/rust-error.log
+: > "${RUST_ERROR_LOG:-/app/logs/rust-error.log}" 2>/dev/null || true
 
-RUST_BINARY="/app/target/release/visionclaw-server"
+APP_ROOT="${APP_ROOT:-/app}"
+RUST_BINARY="${RUST_BINARY:-$APP_ROOT/target/release/visionclaw-server}"
+# The feature set is part of the binary's identity: a change here must rebuild
+# even when no file changed, so it feeds the stamp signature.
+BUILD_FEATURES="${BUILD_FEATURES:-gpu,ontology,dev-auth}"
+BUILD_STAMP="${BUILD_STAMP:-$APP_ROOT/target/.visionclaw-build-stamp}"
+
+# ADR-2008: the authoritative build-input inventory.
+WRAPPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/build-inputs.sh
+. "$WRAPPER_DIR/lib/build-inputs.sh"
+
+NEEDS_BUILD=true
+NEEDS_BUILD_REASON=""
 
 if [ "${SKIP_RUST_REBUILD:-false}" != "true" ]; then
-    cd /app
+    cd "$APP_ROOT"
 
-    # Check if binary is already newer than all source inputs.
-    # If so, skip cargo entirely — saves ~30s of fingerprint scanning per restart.
-    NEEDS_BUILD=true
-    if [ -f "$RUST_BINARY" ]; then
-        BIN_MTIME=$(stat -c %Y "$RUST_BINARY" 2>/dev/null || echo 0)
-
-        # Latest mtime across Rust sources, Cargo manifests, build script, and CUDA kernels
-        LATEST_SRC=$(find /app/src /app/crates -name "*.rs" -printf '%T@\n' 2>/dev/null | sort -n | tail -1 | cut -d. -f1)
-        LATEST_SRC=${LATEST_SRC:-0}
-
-        for f in /app/Cargo.toml /app/Cargo.lock /app/build.rs; do
-            T=$(stat -c %Y "$f" 2>/dev/null || echo 0)
-            [ "$T" -gt "$LATEST_SRC" ] && LATEST_SRC=$T
-        done
-
-        LATEST_CUDA=$(find /app/src -name "*.cu" -printf '%T@\n' 2>/dev/null | sort -n | tail -1 | cut -d. -f1)
-        LATEST_CUDA=${LATEST_CUDA:-0}
-        [ "$LATEST_CUDA" -gt "$LATEST_SRC" ] && LATEST_SRC=$LATEST_CUDA
-
-        if [ "$BIN_MTIME" -gt "$LATEST_SRC" ] && [ "$LATEST_SRC" -gt 0 ]; then
-            log "Binary is up-to-date (no source changes since last build). Skipping cargo."
-            NEEDS_BUILD=false
-        fi
+    # ADR-2008: ask the shared build-input inventory whether cargo must run.
+    # Rebuild is the safe default — every branch that cannot be evaluated
+    # (missing binary, empty tree, missing stamp, changed environment) builds.
+    if NEEDS_BUILD_REASON=$(needs_rebuild "$RUST_BINARY" "$APP_ROOT" "$BUILD_STAMP" "$BUILD_FEATURES"); then
+        NEEDS_BUILD=true
+    else
+        NEEDS_BUILD=false
     fi
 
-    if [ "$NEEDS_BUILD" = "true" ]; then
-        log "Source changes detected — building with cargo..."
+    if [ "$NEEDS_BUILD" = "false" ]; then
+        log "Skipping cargo: $NEEDS_BUILD_REASON"
+    else
+        log "Rebuilding: $NEEDS_BUILD_REASON"
 
-        if cargo build --release --features gpu,ontology,dev-auth 2>&1; then
+        if cargo build --release --features "$BUILD_FEATURES" 2>&1; then
             log "✓ Build succeeded"
+            write_build_stamp "$BUILD_STAMP" "$BUILD_FEATURES"
         else
             log "ERROR: Build failed. Attempting clean rebuild..."
+            # A failed build leaves the stamp describing an environment no
+            # binary was produced for; drop it so the next start rebuilds.
+            rm -f "$BUILD_STAMP"
             cargo clean 2>/dev/null || true
-            if cargo build --release --features gpu,ontology,dev-auth 2>&1; then
+            if cargo build --release --features "$BUILD_FEATURES" 2>&1; then
                 log "✓ Clean rebuild succeeded"
+                write_build_stamp "$BUILD_STAMP" "$BUILD_FEATURES"
             else
                 log "FATAL: Clean rebuild also failed"
                 exit 1
@@ -75,7 +87,7 @@ if [ "${SKIP_RUST_REBUILD:-false}" != "true" ]; then
     fi
 else
     log "Skipping Rust rebuild (SKIP_RUST_REBUILD=true)"
-    RUST_BINARY="/app/visionclaw-server"
+    RUST_BINARY="$APP_ROOT/visionclaw-server"
 fi
 
 if [ ! -f "${RUST_BINARY}" ]; then

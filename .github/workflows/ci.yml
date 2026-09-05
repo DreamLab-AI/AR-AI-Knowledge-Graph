@@ -9,9 +9,13 @@ name: CI
 # Gating policy
 # ------------
 #   BLOCKING (real merge gates — never continue-on-error):
-#     * rust-fmt   — cargo fmt --check across every crate
-#     * rust-cpu   — build + clippy + test the CUDA-free workspace crates
-#     * client     — the client Vitest unit/component suite
+#     * rust-fmt          — cargo fmt --check across every crate
+#     * rust-cpu          — build + clippy + test the CUDA-free workspace crates
+#     * client            — the client Vitest unit/component suite
+#     * dev-auth-release-gate — ADR-2037: asserts no production/release build
+#       line (Dockerfile.production, Dockerfile.unified, prod-entrypoint.sh)
+#       carries the dev-auth cargo feature. Hermetic grep, no cargo/docker
+#       invocation — see ADR-2086 for the implementation record.
 #
 #   NON-BLOCKING (need a live stack — continue-on-error;
 #   do NOT add these to branch-protection required checks):
@@ -124,6 +128,81 @@ jobs:
       # TypeScript types, so the suite runs without a Rust toolchain.
       - name: Vitest unit/component suite
         run: npm run test
+
+  dev-auth-release-gate:
+    name: ADR-2037 dev-auth excluded from release builds (blocking)
+    runs-on: ubuntu-latest
+    # Hermetic: no cargo, no docker, no network — pure text assertion over the
+    # committed Dockerfiles/entrypoints, so this runs in seconds. ADR-2037
+    # decided that production/release images must never carry the `dev-auth`
+    # cargo feature (it compiles in the Bearer dev-session-token bypass and
+    # stubs `enforce_release_env_hygiene` in src/main.rs to a no-op); this job
+    # is the CI assertion ADR-2037 was missing. Record: ADR-2086.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert dev-auth never reaches a production/release build path
+        run: |
+          set -euo pipefail
+          FAIL=0
+
+          echo "== ADR-2037/ADR-2086: dev-auth must never enter a production/release build =="
+
+          # 1) Neither production Dockerfile's --release cargo invocation may
+          #    name the dev-auth feature (defence-in-depth, precise message).
+          for f in Dockerfile.production Dockerfile.unified; do
+            if grep -nE 'cargo (build|install)[^&]*--release' "$f" | grep -q 'dev-auth'; then
+              echo "FAIL: $f has a --release cargo build line naming the dev-auth feature"
+              FAIL=1
+            fi
+          done
+
+          # 2) Belt-and-braces: dev-auth must not appear ANYWHERE in either
+          #    Dockerfile. Both files' build-time RUN lines select features
+          #    directly (no ARG FEATURES plumbing carries dev-auth into
+          #    them) — dev-auth is only ever added by the dev-only runtime
+          #    entrypoints checked below, never by an image build step.
+          for f in Dockerfile.production Dockerfile.unified; do
+            if grep -q 'dev-auth' "$f"; then
+              echo "FAIL: $f references dev-auth — production/release images must be built without it (ADR-2037)"
+              FAIL=1
+            fi
+          done
+
+          # 3) The production runtime entrypoint (rebuilds the binary for the
+          #    container's arch on start, prod-entrypoint.sh:9) must not
+          #    carry dev-auth either.
+          if grep -q 'dev-auth' scripts/prod-entrypoint.sh; then
+            echo "FAIL: scripts/prod-entrypoint.sh references dev-auth — this is the production runtime path (ADR-2037)"
+            FAIL=1
+          fi
+
+          # 4) Positive control: dev-auth MUST still be present on the
+          #    dev-only rebuild path. If it is gone from here too, checks 1-3
+          #    above would pass vacuously (the feature vanished everywhere
+          #    rather than being correctly confined) — so failing to find it
+          #    here is itself a failure, not a pass.
+          if ! grep -q 'dev-auth' scripts/dev-entrypoint.sh; then
+            echo "FAIL: expected dev-auth on the dev-only rebuild path (scripts/dev-entrypoint.sh)."
+            echo "      Its absence means this gate can no longer tell a correctly-scoped dev-auth"
+            echo "      from one that leaked into production — update this job's ADR-2037 review."
+            FAIL=1
+          fi
+
+          if [ "$FAIL" -ne 0 ]; then
+            echo ""
+            echo "ADR-2037 violation: dev-auth must never compile into a production/release build."
+            echo "It compiles in the Bearer dev-session-token auth bypass and stubs"
+            echo "enforce_release_env_hygiene (src/main.rs) to a no-op boot check."
+            echo ""
+            echo "Fix: remove dev-auth from the offending build/entrypoint line above. dev-auth may"
+            echo "only be added by scripts/dev-entrypoint.sh, scripts/rust-backend-wrapper.sh, or the"
+            echo "dev-environment branch of scripts/launch.sh (ENVIRONMENT == dev)."
+            echo "See docs/adr/ADR-2037-production-build-excludes-dev-auth.md and"
+            echo "docs/adr/ADR-2086-ci-gate-dev-auth-excluded-from-release.md."
+            exit 1
+          fi
+
+          echo "PASS: no production/release build path includes dev-auth (ADR-2037/ADR-2086)."
 
   # ── NON-BLOCKING (advisory / hardware-gated) ──────────────────────────────
   client-quality:

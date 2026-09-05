@@ -126,10 +126,9 @@ nostr-sdk = "0.43.0"
 utoipa = { version = "5", features = ["actix_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 
-# High-Performance Networking (QUIC/WebTransport)
-quinn = "0.11"
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
-rcgen = "0.13"
+# High-Performance Networking (fastwebsockets). quinn/rustls/rcgen were pulled
+# in solely for the dead QuicTransportServer (removed under ADR-2066, see
+# src/handlers/quic_transport_handler.rs) and are no longer direct deps.
 fastwebsockets = { version = "0.8", features = ["upgrade"] }
 postcard = { version = "1.1", features = ["alloc", "use-std"] }
 http = "1.2"
@@ -253,16 +252,13 @@ gpu = []  # GPU acceleration with CUDA kernels
 ontology = []  # Ontology validation and reasoning
 redis = ["dep:redis"]  # Enable Redis distributed caching
 
-# Phase 5 GPU Physics rewrite (ADR-01). Gates the new `src/gpu/buffers.rs`
-# `PhysicsGpuBuffers` consolidation (D1), `LayoutEngine` trait + 5 engine
-# implementations (D5), and `PhysicsEvent` emission surface (D9). Disabled by
-# default — the legacy `UnifiedGPUCompute` buffer path remains the production
-# code path until every callsite enumerated in
-# `docs/migration-sprint/01-gpu-physics/WORKTREE-PLAN.md §2` is migrated.
-# FROZEN / EXPERIMENTAL (closeout 2026-07-03): this ~6k-LOC engine rewrite is not
-# on the production path — its engine `step()` bodies are stubs — and must not be
-# enabled in a shipped build until the ADR-01 T1 callsite migration completes.
-physics-v2 = []
+# Phase 5 GPU Physics rewrite (ADR-01) `physics-v2` feature retired 2026-09-05:
+# the `LayoutEngine` trait + 5 engine implementations (`src/physics/engines/`,
+# D5) were deleted — their `step()` bodies were stubs, never on the production
+# path, and closed out 2026-07-03. The `src/gpu/buffers.rs` `PhysicsGpuBuffers`
+# consolidation (D1) and `PhysicsEvent` emission surface (D9) remain
+# feature-gated behind the same now-undeclared flag pending disposition. The
+# legacy `UnifiedGPUCompute` buffer path remains the sole production code path.
 
 # Phase 11 persistence migration (ADR-11): Oxigraph (SPARQL 1.1 triple/quad
 # store) and SQLite via tokio-rusqlite are now always-on deps (ADR-11 canonical

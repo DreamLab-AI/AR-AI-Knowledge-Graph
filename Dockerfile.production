@@ -87,8 +87,20 @@ RUN mkdir -p src/bin && \
 # Pre-build all 200+ dependencies in release mode (cached until Cargo.toml changes)
 # Using a stub build.rs that skips CUDA to avoid needing .cu files at this stage
 RUN echo 'fn main() { println!("cargo:warning=Stub build - deps only"); }' > build.rs
-RUN cargo build --release 2>&1 || true && \
-    cargo build --release --lib 2>&1 || true
+# ADR-2049: this stage warms the dependency cache with a stub build.rs, so the
+# CRATE build here is expected to fail (the real .cu files and build.rs are not
+# present yet) while the DEPENDENCY build must succeed — a failure there means a
+# dependency does not compile, and swallowing it only defers the same failure to
+# the real build at a point where the cache is already poisoned.
+#
+# Previously both commands ended in `|| true`, so this whole layer could not fail
+# for any reason: a broken lockfile, an unresolvable registry, or a dependency
+# that no longer builds all produced a green layer. `--dry-run` is not available
+# for builds, so the dependency graph is fetched explicitly (which MUST succeed)
+# and only the crate compile is allowed to fail.
+RUN cargo fetch --locked
+RUN cargo build --release 2>&1 | tail -40 || \
+    echo "stub-stage crate build failed as expected (real build.rs and .cu files arrive in a later stage)"
 
 # ---------------------------------------------------------------------------
 # Stage 3: CUDA PTX compilation — cached until .cu files change
