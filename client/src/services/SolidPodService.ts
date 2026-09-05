@@ -14,7 +14,7 @@
 import { createLogger } from '../utils/loggerConfig';
 
 import {
-  JSS_BASE_URL,
+  SOLID_POD_BASE_URL,
   JsonLdDocument,
   sanitizePreferenceKey,
   resolvePath,
@@ -132,7 +132,7 @@ class SolidPodService {
 
   public async checkPodExists(): Promise<PodInfo> {
     try {
-      const response = await fetchWithAuth(`${JSS_BASE_URL}/pods/check`);
+      const response = await fetchWithAuth(`${SOLID_POD_BASE_URL}/pods/check`);
       if (!response.ok) throw new Error(`Failed to check pod: ${response.status}`);
       return await response.json();
     } catch (error) {
@@ -143,7 +143,7 @@ class SolidPodService {
 
   public async createPod(name?: string): Promise<PodCreationResult> {
     try {
-      const response = await fetchWithAuth(`${JSS_BASE_URL}/pods`, {
+      const response = await fetchWithAuth(`${SOLID_POD_BASE_URL}/pods`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -167,7 +167,7 @@ class SolidPodService {
 
   public async initPod(): Promise<PodInitResult> {
     try {
-      const response = await fetchWithAuth(`${JSS_BASE_URL}/pods/init`, {
+      const response = await fetchWithAuth(`${SOLID_POD_BASE_URL}/pods/init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
@@ -383,7 +383,7 @@ class SolidPodService {
     if (!npub.startsWith('npub1')) throw new Error('Invalid npub format. Expected npub1...');
 
     try {
-      const response = await fetchWithAuth(`${JSS_BASE_URL}/pods/connect`, {
+      const response = await fetchWithAuth(`${SOLID_POD_BASE_URL}/pods/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ npub }),

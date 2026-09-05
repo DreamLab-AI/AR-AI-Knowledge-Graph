@@ -15,7 +15,6 @@ export type WebSocketEventType =
   | 'connection:open'
   | 'connection:close'
   | 'connection:error'
-  | 'message:graph'
   | 'message:voice'
   | 'message:bots'
   | 'message:pod'
@@ -27,7 +26,6 @@ export interface WebSocketEventPayload {
   'connection:open': { name: string; url: string };
   'connection:close': { name: string; code?: number; reason?: string };
   'connection:error': { name: string; error: unknown };
-  'message:graph': { data: unknown };
   'message:voice': { data: unknown };
   'message:bots': { data: unknown };
   'message:pod': { data: unknown };

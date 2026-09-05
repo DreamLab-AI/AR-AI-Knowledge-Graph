@@ -2,7 +2,6 @@ import React, { useRef, useEffect, useState, useMemo, useCallback } from 'react'
 import { useThree, useFrame, ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { graphWorkerProxy } from '../managers/graphWorkerProxy'
-import { usePlatformStore } from '../../../services/platformManager'
 import { createLogger } from '../../../utils/loggerConfig'
 import { useSettingsStore } from '../../../store/settingsStore'
 import { BinaryNodeData, getActualNodeId } from '../../../types/binaryProtocol'
@@ -59,7 +58,6 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   const ssspResult = useCurrentSSSPResult()
   const normalizeDistances = useAnalyticsStore(state => state.normalizeDistances)
   const [normalizedSSSPResult, setNormalizedSSSPResult] = useState<any>(null)
-  const isXRMode = usePlatformStore(state => state.isXRMode)
   // One InstancedMesh per population (gem / orb / capsule). Separate refs so the
   // KnowledgeRings overlay can mirror the KNOWLEDGE mesh's colour buffer and the
   // pointer-handler guard can find any live mesh.
@@ -709,7 +707,6 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
         hierarchyMap={hierarchyMap}
         graphTypeVisuals={graphTypeVisuals}
         ssspResult={normalizedSSSPResult}
-        isXRMode={isXRMode}
       />
     </>
   )

@@ -272,6 +272,9 @@ export function validateWebSocketMessage(message: any): boolean {
       return Array.isArray(message.data) && message.data.length > 0;
     
     case 'settings_update':
+      // NOTE (ADR-2047): the server has no sender for this snake_case event; the
+      // live wire event is camelCase "settingsUpdated", handled authoritatively
+      // in store/websocket/textMessageHandler.ts. Kept here unchanged per review.
       return message.data && typeof message.data === 'object';
     
     case 'error':

@@ -9,7 +9,7 @@ export * from './binaryProtocol/backpressure';
 
 import {
   PROTOCOL_VERSION,
-  SUPPORTED_PROTOCOLS,
+  SUPPORTED_HEADER_VERSIONS,
   MessageType,
   GraphTypeFlag,
   ControlFlags,
@@ -78,7 +78,10 @@ export class BinaryWebSocketProtocol {
     const buffer = new ArrayBuffer(totalSize);
     const view = new DataView(buffer);
 
-    // V4 header: [1-byte type][1-byte version][4-byte payloadLength (uint32, LE)]
+    // Framed-message header: [1-byte type][1-byte version][4-byte payloadLength (uint32, LE)].
+    // ADR-2078: this was commented "V4 header" while the very next line writes
+    // PROTOCOL_VERSION, which is PROTOCOL_V3 = 3 — the header byte has never carried 4.
+    // The version byte carries the POSITION protocol version, not a header format version.
     view.setUint8(0, type);
     view.setUint8(1, PROTOCOL_VERSION);
     view.setUint32(2, payload.byteLength, true);
@@ -151,6 +154,7 @@ export class BinaryWebSocketProtocol {
   public decodePositionUpdates(payload: ArrayBuffer): AgentPositionUpdate[] {
     return decodePositionUpdates(payload);
   }
+
 
   public encodeAgentState(agents: AgentStateData[]): ArrayBuffer {
     const payload = encodeAgentStatePayload(agents);
@@ -305,8 +309,8 @@ export class BinaryWebSocketProtocol {
     const header = this.parseHeader(buffer);
     if (!header) return false;
 
-    if (!SUPPORTED_PROTOCOLS.includes(header.version)) {
-      logger.warn(`Unsupported protocol version: ${header.version}. Supported: ${SUPPORTED_PROTOCOLS.join(', ')}`);
+    if (!SUPPORTED_HEADER_VERSIONS.includes(header.version)) {
+      logger.warn(`Unsupported framed-header version: ${header.version}. Supported: ${SUPPORTED_HEADER_VERSIONS.join(', ')}`);
       return false;
     }
 

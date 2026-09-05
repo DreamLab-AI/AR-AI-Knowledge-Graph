@@ -43,6 +43,19 @@ export interface SolidNotification {
 
 export type SolidNotificationCallback = (notification: SolidNotification) => void;
 
+// ADR-2047 (vc-core): live settings-change broadcast. Only the "nodeFilter"
+// category carries a `settings` payload — other categories are a signal to
+// re-read that category from the settings API.
+export type SettingsUpdatedCategory = 'physics' | 'rendering' | 'nodeFilter' | (string & {});
+
+export interface SettingsUpdatedMessage {
+  type: 'settingsUpdated';
+  category: SettingsUpdatedCategory;
+  updatedBy: string;
+  timestamp: number;
+  settings?: FilterSnapshot;
+}
+
 export type LegacyMessageHandler = (message: WebSocketMessage) => void;
 export type BinaryMessageHandler = (data: ArrayBuffer) => void;
 export type ConnectionStatusHandler = (connected: boolean) => void;

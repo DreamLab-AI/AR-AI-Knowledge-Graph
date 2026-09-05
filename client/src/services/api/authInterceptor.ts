@@ -38,6 +38,46 @@ function warnIfServerInReleaseMode(status: number, sentDevToken: boolean): void 
   }
 }
 
+/**
+ * Single source of truth for the dev-mode-vs-NIP-98 auth header branch.
+ *
+ * Returns `{}` when not authenticated. When authenticated in dev mode,
+ * returns the `Bearer dev-session-token` header (see the release-mode note
+ * above `warnIfServerInReleaseMode`) plus `X-Nostr-Pubkey` when a pubkey is
+ * known. Otherwise signs the request per NIP-98 and returns an
+ * `Authorization: Nostr <token>` header. NIP-07 extensions like Podkey may
+ * also intercept, but their retry-on-401 approach is unreliable for
+ * PUT/POST mutations, so we always sign ourselves.
+ */
+export async function computeAuthHeaders(
+  fullUrl: string,
+  method: string,
+  body?: string,
+): Promise<Record<string, string>> {
+  if (!nostrAuth.isAuthenticated()) {
+    return {};
+  }
+
+  const user = nostrAuth.getCurrentUser();
+
+  if (nostrAuth.isDevMode()) {
+    const headers: Record<string, string> = {
+      Authorization: 'Bearer dev-session-token',
+    };
+    if (user?.pubkey) {
+      headers['X-Nostr-Pubkey'] = user.pubkey;
+    }
+    return headers;
+  }
+
+  if (!user?.pubkey) {
+    return {};
+  }
+
+  const token = await nostrAuth.signRequest(fullUrl, method, body);
+  return { Authorization: `Nostr ${token}` };
+}
+
 export async function authRequestInterceptor(config: RequestConfig, url: string): Promise<RequestConfig> {
   const finalConfig = { ...config };
 
@@ -51,31 +91,20 @@ export async function authRequestInterceptor(config: RequestConfig, url: string)
   headers['X-Request-ID'] = requestId;
 
   if (nostrAuth.isAuthenticated()) {
-    const user = nostrAuth.getCurrentUser();
+    const fullUrl = new URL(url, window.location.origin).href;
+    const method = (finalConfig.method || 'GET').toUpperCase();
+    const body = typeof finalConfig.body === 'string' ? finalConfig.body : undefined;
+    const devMode = nostrAuth.isDevMode();
 
-    if (nostrAuth.isDevMode()) {
-      // Dev mode: Bearer token. The server may or may not honour this —
-      // release builds (no `dev-auth` feature) will return 401. See
-      // `warnIfServerInReleaseMode` and `authResponseInterceptor` below.
-      headers['Authorization'] = 'Bearer dev-session-token';
-      if (user?.pubkey) {
-        headers['X-Nostr-Pubkey'] = user.pubkey;
-      }
-      logger.debug(`[${requestId}] Dev-mode auth headers for ${url}`);
-    } else if (user?.pubkey) {
-      // Always sign with NIP-98 ourselves. NIP-07 extensions like Podkey may
-      // also intercept, but their retry-on-401 approach is unreliable for
-      // PUT/POST mutations.
-      try {
-        const fullUrl = new URL(url, window.location.origin).href;
-        const method = (finalConfig.method || 'GET').toUpperCase();
-        const body = typeof finalConfig.body === 'string' ? finalConfig.body : undefined;
-        const token = await nostrAuth.signRequest(fullUrl, method, body);
-        headers['Authorization'] = `Nostr ${token}`;
+    try {
+      Object.assign(headers, await computeAuthHeaders(fullUrl, method, body));
+      if (devMode) {
+        logger.debug(`[${requestId}] Dev-mode auth headers for ${url}`);
+      } else {
         logger.debug(`[${requestId}] NIP-98 signed request for ${method} ${url}`);
-      } catch (e) {
-        logger.error(`[${requestId}] NIP-98 signing failed:`, e);
       }
+    } catch (e) {
+      logger.error(`[${requestId}] NIP-98 signing failed:`, e);
     }
   } else {
     logger.debug(`[${requestId}] No auth headers (not authenticated) for ${url}`);

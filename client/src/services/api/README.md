@@ -128,7 +128,6 @@ const result = await unifiedApiClient.postData('/endpoint', data);
 - `src/api/analyticsApi.ts` - GPU-accelerated analytics
 - `src/api/optimizationApi.ts` - Graph optimization
 - `src/api/exportApi.ts` - Graph export functionality
-- `src/services/interactionApi.ts` - Graph interaction processing
 - `src/services/nostrAuthService.ts` - Nostr authentication
 - `src/hooks/useHybridSystemStatus.ts` - System status monitoring
 - `src/hooks/useAutoBalanceNotifications.ts` - Auto-balance notifications

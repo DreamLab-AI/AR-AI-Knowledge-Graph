@@ -110,35 +110,6 @@ class WebSocketRegistryImpl {
   }
 
   /**
-   * Close every tracked connection and clear the registry.
-   */
-  closeAll(): void {
-    let count = 0;
-    for (const [name, entry] of this.connections) {
-      try {
-        // Remove listeners first to prevent state updates during teardown
-        if (entry._listeners) {
-          for (const { event, handler } of entry._listeners) {
-            entry.ws.removeEventListener(event, handler);
-          }
-        }
-        if (
-          entry.ws.readyState === WebSocket.OPEN ||
-          entry.ws.readyState === WebSocket.CONNECTING
-        ) {
-          entry.ws.close(1000, 'Registry closeAll');
-          count++;
-        }
-      } catch (error) {
-        logger.error(`Error closing WebSocket "${name}"`, { error });
-      }
-    }
-    this.connections.clear();
-    logger.info(`Closed ${count} WebSocket connection(s)`);
-    webSocketEventBus.emit('registry:closedAll', { count });
-  }
-
-  /**
    * Number of currently tracked connections.
    */
   get size(): number {

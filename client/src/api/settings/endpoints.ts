@@ -3,6 +3,7 @@
 
 import axios, { AxiosResponse } from 'axios';
 import { nostrAuth } from '../../services/nostrAuthService';
+import { computeAuthHeaders } from '../../services/api/authInterceptor';
 import { createLogger } from '../../utils/loggerConfig';
 import type {
   PhysicsSettings,
@@ -36,27 +37,17 @@ const API_BASE = '';
 
 axios.interceptors.request.use(async (config) => {
   if (!nostrAuth.isAuthenticated()) return config;
-
-  const user = nostrAuth.getCurrentUser();
   if (!config.headers) return config;
 
-  if (nostrAuth.isDevMode()) {
-    config.headers['Authorization'] = 'Bearer dev-session-token';
-    if (user?.pubkey) {
-      config.headers['X-Nostr-Pubkey'] = user.pubkey;
-    }
-  } else if (user?.pubkey) {
-    try {
-      const fullUrl = new URL(config.url || '', config.baseURL || window.location.origin).href;
-      const method = (config.method || 'GET').toUpperCase();
-      const body = config.data
-        ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
-        : undefined;
-      const token = await nostrAuth.signRequest(fullUrl, method, body);
-      config.headers['Authorization'] = `Nostr ${token}`;
-    } catch (e) {
-      logger.warn('[settingsApi] NIP-98 signing failed:', e);
-    }
+  try {
+    const fullUrl = new URL(config.url || '', config.baseURL || window.location.origin).href;
+    const method = (config.method || 'GET').toUpperCase();
+    const body = config.data
+      ? (typeof config.data === 'string' ? config.data : JSON.stringify(config.data))
+      : undefined;
+    Object.assign(config.headers, await computeAuthHeaders(fullUrl, method, body));
+  } catch (e) {
+    logger.warn('[settingsApi] NIP-98 signing failed:', e);
   }
   return config;
 });

@@ -17,7 +17,7 @@ interface ImportMetaEnv {
   readonly VITE_VIRCADIA_ENABLE_SPATIAL_AUDIO?: string;
   readonly VITE_QUEST3_ENABLE_HAND_TRACKING?: string;
   readonly VITE_INSTANCED_RENDERING?: string;
-  readonly VITE_JSS_URL?: string;
+  readonly VITE_SOLID_POD_URL?: string;
   readonly VITE_JSS_WS_URL?: string;
   readonly VITE_JSS_ONTOLOGY_PATH?: string;
   readonly VITE_DEBUG_REPLACE_CONSOLE?: string;

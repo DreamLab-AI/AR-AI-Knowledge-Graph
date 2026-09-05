@@ -1,9 +1,6 @@
 import { create } from 'zustand';
 import { createLogger } from '../utils/loggerConfig';
 
-// XR session state type (defined locally since xr types module doesn't exist)
-export type XRSessionState = 'inactive' | 'starting' | 'active' | 'ending' | 'error';
-
 const logger = createLogger('PlatformManager');
 
 // Detectable platform types
@@ -26,21 +23,17 @@ export interface PlatformCapabilities {
 }
 
 // Event types for platform events
-export type PlatformEventType = 
-  | 'platformchange' 
-  | 'xrmodechange' 
-  | 'xrsessionstatechange' 
+export type PlatformEventType =
+  | 'platformchange'
   | 'deviceorientationchange'
   | 'handtrackingavailabilitychange';
 
 interface PlatformState {
-  
+
   platform: PlatformType;
   xrDeviceType: XRDeviceType;
   capabilities: PlatformCapabilities;
   userAgent: string;
-  isXRMode: boolean;
-  xrSessionState: XRSessionState;
   isWebXRSupported: boolean;
   
   
@@ -57,12 +50,8 @@ interface PlatformState {
   isDesktop: () => boolean;
   isMobile: () => boolean;
   isXRSupported: () => boolean;
-  
-  
-  setXRMode: (enabled: boolean) => void;
-  setXRSessionState: (state: XRSessionState) => void;
-  
-  
+
+
   dispatchEvent: (event: PlatformEventType, data: any) => void;
   addEventListener: (event: PlatformEventType, callback: Function) => void;
   removeEventListener: (event: PlatformEventType, callback: Function) => void;
@@ -87,8 +76,6 @@ export const usePlatformStore = create<PlatformState>()((set, get) => ({
     memoryLimited: false
   },
   userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-  isXRMode: false,
-  xrSessionState: 'inactive',
   isWebXRSupported: typeof navigator !== 'undefined' && !!navigator.xr,
   initialized: false,
   
@@ -284,26 +271,7 @@ export const usePlatformStore = create<PlatformState>()((set, get) => ({
   isXRSupported: () => {
     return get().capabilities.xrSupported;
   },
-  
-  setXRMode: (enabled: boolean) => {
-    const prev = get().isXRMode;
-    if (prev !== enabled) {
-      set({ isXRMode: enabled });
-      get().dispatchEvent('xrmodechange', { enabled });
-      logger.info(`XR mode ${enabled ? 'enabled' : 'disabled'}`);
-    }
-  },
-  
-  setXRSessionState: (state: XRSessionState) => {
-    const prev = get().xrSessionState;
-    if (prev !== state) {
-      set({ xrSessionState: state });
-      get().dispatchEvent('xrsessionstatechange', { state });
-      logger.info(`XR session state changed to ${state}`);
-    }
-  },
-  
-  
+
   dispatchEvent: (event: PlatformEventType, data: any) => {
     const listeners = get().listeners;
     if (!listeners.has(event)) return;
@@ -331,10 +299,6 @@ export const usePlatformStore = create<PlatformState>()((set, get) => ({
     
     if (event === 'platformchange') {
       callback({ platform: get().platform });
-    } else if (event === 'xrmodechange') {
-      callback({ enabled: get().isXRMode });
-    } else if (event === 'xrsessionstatechange') {
-      callback({ state: get().xrSessionState });
     }
   },
   
@@ -381,18 +345,6 @@ export class PlatformManager {
     return usePlatformStore.getState().platform;
   }
   
-  public get isXRMode(): boolean {
-    return usePlatformStore.getState().isXRMode;
-  }
-  
-  public get xrSessionState(): XRSessionState {
-    return usePlatformStore.getState().xrSessionState;
-  }
-  
-  public set xrSessionState(state: XRSessionState) {
-    usePlatformStore.getState().setXRSessionState(state);
-  }
-  
   public async initialize(settings: any): Promise<void> {
     return usePlatformStore.getState().initialize();
   }
@@ -420,11 +372,7 @@ export class PlatformManager {
   public isXRSupported(): boolean {
     return usePlatformStore.getState().isXRSupported();
   }
-  
-  public setXRMode(enabled: boolean): void {
-    usePlatformStore.getState().setXRMode(enabled);
-  }
-  
+
   public getCapabilities(): PlatformCapabilities {
     return usePlatformStore.getState().capabilities;
   }

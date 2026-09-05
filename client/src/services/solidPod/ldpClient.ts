@@ -12,10 +12,11 @@
 
 import { createLogger } from '../../utils/loggerConfig';
 import { nostrAuth } from '../nostrAuthService';
+import { computeAuthHeaders } from '../api/authInterceptor';
 
 const logger = createLogger('SolidPodService:ldp');
 
-export const JSS_BASE_URL = import.meta.env.VITE_JSS_URL || '/solid';
+export const SOLID_POD_BASE_URL = import.meta.env.VITE_SOLID_POD_URL || '/solid';
 
 // ---------------------------------------------------------------------------
 // Types (re-exported so the main service can re-export them)
@@ -56,17 +57,17 @@ export function resolvePath(path: string): string {
       /^https?:\/\/[^/]*(?:visionclaw-jss|jss|localhost)[^/]*(?::\d+)?\/(.*)$/;
     const match = path.match(jssPattern);
     if (match) {
-      return `${JSS_BASE_URL}/${match[1]}`;
+      return `${SOLID_POD_BASE_URL}/${match[1]}`;
     }
     return path;
   }
 
-  if (path.startsWith(JSS_BASE_URL + '/') || path === JSS_BASE_URL) {
+  if (path.startsWith(SOLID_POD_BASE_URL + '/') || path === SOLID_POD_BASE_URL) {
     return path;
   }
 
   const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-  return `${JSS_BASE_URL}/${cleanPath}`;
+  return `${SOLID_POD_BASE_URL}/${cleanPath}`;
 }
 
 /**
@@ -95,22 +96,16 @@ export async function fetchWithAuth(
   const headers = new Headers(options.headers);
 
   if (nostrAuth.isAuthenticated()) {
-    if (nostrAuth.isDevMode()) {
-      headers.set('Authorization', 'Bearer dev-session-token');
-      const user = nostrAuth.getCurrentUser();
-      if (user?.pubkey) headers.set('X-Nostr-Pubkey', user.pubkey);
-    } else {
-      try {
-        const method = (options.method || 'GET').toUpperCase();
-        const body = typeof options.body === 'string' ? options.body : undefined;
-        const absoluteUrl = url.startsWith('http')
-          ? url
-          : `${window.location.origin}${url}`;
-        const token = await nostrAuth.signRequest(absoluteUrl, method, body);
-        headers.set('Authorization', `Nostr ${token}`);
-      } catch (e) {
-        logger.warn('NIP-98 signing failed:', e);
-      }
+    try {
+      const method = (options.method || 'GET').toUpperCase();
+      const body = typeof options.body === 'string' ? options.body : undefined;
+      const absoluteUrl = url.startsWith('http')
+        ? url
+        : `${window.location.origin}${url}`;
+      const authHeaders = await computeAuthHeaders(absoluteUrl, method, body);
+      for (const [k, v] of Object.entries(authHeaders)) headers.set(k, v);
+    } catch (e) {
+      logger.warn('NIP-98 signing failed:', e);
     }
   } else if (nostrAuth.getCurrentUser()) {
     logger.warn(

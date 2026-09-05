@@ -3,7 +3,7 @@ import { createLogger } from '../utils/loggerConfig';
 
 const logger = createLogger('ApplicationModeContext');
 
-type ApplicationMode = 'desktop' | 'mobile' | 'xr';
+type ApplicationMode = 'desktop' | 'mobile';
 
 interface LayoutSettings {
   showPanels: boolean;
@@ -14,7 +14,6 @@ interface LayoutSettings {
 interface ApplicationModeContextValue {
   mode: ApplicationMode;
   previousMode: ApplicationMode | null;
-  isXRMode: boolean;
   isMobileView: boolean;
   setMode: (mode: ApplicationMode) => void;
   layoutSettings: LayoutSettings;
@@ -23,7 +22,6 @@ interface ApplicationModeContextValue {
 const defaultContext: ApplicationModeContextValue = {
   mode: 'desktop',
   previousMode: null,
-  isXRMode: false,
   isMobileView: false,
   setMode: () => { },
   layoutSettings: {
@@ -50,7 +48,7 @@ export const ApplicationModeProvider: React.FC<ApplicationModeProviderProps> = (
       const isMobile = window.innerWidth < 768;
       setIsMobileView(isMobile);
 
-      if (isMobile && mode !== 'xr') {
+      if (isMobile) {
         setMode('mobile');
       }
       else if (!isMobile && mode === 'mobile') {
@@ -87,12 +85,6 @@ export const ApplicationModeProvider: React.FC<ApplicationModeProviderProps> = (
           showViewport: true,
           showControls: true
         };
-      case 'xr':
-        return {
-          showPanels: false,
-          showViewport: true,
-          showControls: false
-        };
       default:
         return {
           showPanels: true,
@@ -107,7 +99,6 @@ export const ApplicationModeProvider: React.FC<ApplicationModeProviderProps> = (
   const contextValue: ApplicationModeContextValue = {
     mode,
     previousMode,
-    isXRMode: mode === 'xr',
     isMobileView,
     setMode: handleModeChange,
     layoutSettings

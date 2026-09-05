@@ -2,7 +2,10 @@
 import type { Vec3 } from '../../types/binaryProtocol';
 
 // Protocol versions
-export const PROTOCOL_V2 = 2;  // Legacy: uint16 payload length, uint16 SSSP IDs
+// PROTOCOL_V2 (uint16 payload length, uint16 SSSP IDs) is rejected outright by
+// the server (src/utils/binary_protocol.rs: "V2 protocol no longer supported.
+// Please upgrade client to V3+."), so it is not advertised or named here
+// (ADR-2057). Nothing in this module referenced the constant.
 export const PROTOCOL_V3 = 3;  // LIVE: position broadcast (bare 0x03 lead byte, 52 bytes/node; ADR-031 D2 added centrality@48)
 // PROTOCOL_V4 is NOT the position/agent wire format. The live server→client
 // streams carry no version-tagged 6-byte header: positions lead with a bare
@@ -11,34 +14,71 @@ export const PROTOCOL_V3 = 3;  // LIVE: position broadcast (bare 0x03 lead byte,
 // the 6-byte framed-message header ([type][version][uint32 len]) that
 // createMessage/parseHeader/validateMessage use for GRAPH_UPDATE / VOICE /
 // control / sync framing.
-export const PROTOCOL_V4 = 4;  // Framed-message header version (6-byte header); not the position/agent wire format
+// V5 wraps a V3 body with an 8-byte little-endian broadcast sequence number:
+// `[0x05][u64 broadcast_seq LE][V3 node records]`. Mirrors the server branch
+// at src/utils/binary_protocol.rs (`match protocol_version { 5 => ... }`) and
+// the Godot XR client's `decode_position_frame_with_sequence`
+// (xr-client/rust/src/binary_protocol.rs). The V5 body carries no inner 0x03
+// byte — node records start immediately after the sequence (ADR-2057).
+export const PROTOCOL_V5 = 5;
+// Bytes the V5 envelope inserts between the version byte and the V3 body.
+export const V5_SEQ_BYTES = 8;
+// NOTE: the 52-byte record size and the node-id mask are NOT redeclared here.
+// They live once in client/src/types/binaryProtocol.ts (BINARY_NODE_SIZE_V3,
+// NODE_ID_MASK), which is the canonical live decoder — a second copy is exactly
+// how the V2/V5 drift arose (ADR-2057).
 export const PROTOCOL_VERSION = PROTOCOL_V3;  // Default to the live V3 position protocol
-export const SUPPORTED_PROTOCOLS = [PROTOCOL_V2, PROTOCOL_V3, PROTOCOL_V4];
+// Versions the framed header's version byte may legitimately carry. `createMessage`
+// writes PROTOCOL_VERSION (= PROTOCOL_V3) there, and a V5 envelope may be framed,
+// so those are the two. ADR-2078: the old list also carried a `PROTOCOL_V4 = 4`
+// declared in THIS file, which nothing ever wrote into the header byte and which
+// collided by name with the unrelated delta-node-encoding PROTOCOL_V4 in
+// client/src/types/binaryProtocol.ts:65. That constant is gone from here: the name
+// PROTOCOL_V4 now means exactly one thing in the codebase — delta node encoding.
+export const SUPPORTED_HEADER_VERSIONS = [PROTOCOL_V3, PROTOCOL_V5];
 
 // Message types (1 byte header)
+/**
+ * Message-type tag space. ADR-2078 alignment note.
+ *
+ * The SERVER's `MessageType` (`src/utils/binary_protocol.rs:1705-1722`) defines only FIVE tags,
+ * and those are the server-to-client registry:
+ *   BinaryPositions = 0, VoiceData = 0x02, ControlFrame = 0x03, AgentAction = 0x23,
+ *   BroadcastAck = 0x34.
+ * Of those, only AGENT_ACTION (0x23) and BROADCAST_ACK (0x34) are decoded from the wire by this
+ * client — live position frames are UNFRAMED and lead with a bare 0x03/0x05 version byte, so they
+ * never carry a MessageType tag at all (see the framed-header note above).
+ *
+ * Every other member below is CLIENT-OUTBOUND ONLY: it names a type this client puts in the 6-byte
+ * framed header it sends, and has no counterpart in the server enum. They are kept, not deleted,
+ * because the framed-header path is a client-to-server surface whose server-side parsing lives
+ * outside `binary_protocol.rs`; removing them from the client alone could silently break an
+ * outbound encoder. They are NOT evidence that the server emits these tags.
+ *
+ * ADR-2078 deleted five members that had zero references anywhere in client/src, by name or by
+ * literal value: VELOCITY_UPDATE (0x12), AGENT_STATE_DELTA (0x21), AGENT_HEALTH (0x22),
+ * HANDSHAKE (0x32) and HEARTBEAT (0x33). Nothing encoded or decoded them. Naming them as
+ * "deletion candidates" in a comment would have been deferred deletion, which this estate does
+ * not do — dead code is deleted. Every member that remains has a live reference.
+ */
 export enum MessageType {
 
   GRAPH_UPDATE = 0x01,
 
 
-  VOICE_DATA = 0x02,
+  VOICE_DATA = 0x02,          // SERVER TAG (binary_protocol.rs:1711)
 
 
   POSITION_UPDATE = 0x10,
   AGENT_POSITIONS = 0x11,
-  VELOCITY_UPDATE = 0x12,
 
 
   AGENT_STATE_FULL = 0x20,
-  AGENT_STATE_DELTA = 0x21,
-  AGENT_HEALTH = 0x22,
-  AGENT_ACTION = 0x23,        // Agent-to-data action for ephemeral connections
+  AGENT_ACTION = 0x23,        // SERVER TAG (binary_protocol.rs:1721) - decoded inbound
 
 
   CONTROL_BITS = 0x30,
   SSSP_DATA = 0x31,
-  HANDSHAKE = 0x32,
-  HEARTBEAT = 0x33,
 
 
   VOICE_CHUNK = 0x40,
@@ -46,7 +86,7 @@ export enum MessageType {
   VOICE_END = 0x42,
 
   // Backpressure flow control (Phase 7)
-  BROADCAST_ACK = 0x34,      // Client acknowledgement of position broadcast
+  BROADCAST_ACK = 0x34,      // SERVER TAG (binary_protocol.rs:1717) - client ack of position broadcast
 
   // Multi-user sync messages (Phase 6)
   SYNC_UPDATE = 0x50,        // Graph operation sync
@@ -180,7 +220,7 @@ export interface GraphUpdateHeader extends MessageHeader {
 // Constants for binary layout
 // Framed-message header: [1-byte type][1-byte version][4-byte payloadLength] = 6 bytes
 // (GRAPH_UPDATE / VOICE / control / sync framing; the live position + agent-action
-// streams are unframed — see the PROTOCOL_V4 note above)
+// streams are unframed — see the framed-header note above)
 export const MESSAGE_HEADER_SIZE = 6;
 export const GRAPH_UPDATE_HEADER_SIZE = 7;  // MESSAGE_HEADER_SIZE + 1-byte graphTypeFlag
 export const AGENT_POSITION_SIZE_V2 = 21;  // 4 (u32 id) + 12 (pos) + 4 (timestamp) + 1 (flags)

@@ -115,7 +115,6 @@ export interface InstancedLabelsProps {
   hierarchyMap: Map<string, HierarchyNodeLike>;
   graphTypeVisuals: GraphTypeVisualsSettings | undefined;
   ssspResult: SSSPResult | null;
-  isXRMode: boolean;
 }
 
 const MAX_GLYPHS = 32768;
@@ -155,7 +154,6 @@ function buildLabelLines(
   fontSize: number,
   metaFontSize: number,
   showMetadata: boolean,
-  vrMode: boolean,
   connectionCountMap: Map<string, number>,
   hierarchyMap: Map<string, HierarchyNodeLike>,
   ssspResult: SSSPResult | null,
@@ -194,8 +192,8 @@ function buildLabelLines(
 
     lines.push({ text: labelText, color: sourceDomain ? domainColor : textColor, fontSize });
     if (showMetadata && line2) lines.push({ text: line2, color: sourceDomain ? domainColor : '#B0BEC5', fontSize: metaFontSize });
-    if (showMetadata && !vrMode) lines.push({ text: line3, color: '#B0BEC5', fontSize: metaFontSize * 0.9 });
-    if (showMetadata && !vrMode && recencyText) lines.push({ text: recencyText, color: recencyColor, fontSize: metaFontSize * 0.85 });
+    if (showMetadata) lines.push({ text: line3, color: '#B0BEC5', fontSize: metaFontSize * 0.9 });
+    if (showMetadata && recencyText) lines.push({ text: recencyText, color: recencyColor, fontSize: metaFontSize * 0.85 });
   } else if (mode === 'ontology') {
     const depth = node.metadata?.hierarchyDepth ?? node.metadata?.depth ?? 0;
     const instanceCount = node.metadata?.instanceCount ?? 0;
@@ -211,8 +209,8 @@ function buildLabelLines(
 
     lines.push({ text: labelText, color: depthColor, fontSize });
     if (showMetadata) lines.push({ text: depthLine, color: depthColor, fontSize: metaFontSize });
-    if (showMetadata && !vrMode) lines.push({ text: categoryDisplay, color: '#B0BEC5', fontSize: metaFontSize * 0.9 });
-    if (showMetadata && !vrMode && constraintLine) lines.push({ text: constraintLine, color: constraintColor, fontSize: metaFontSize * 0.85 });
+    if (showMetadata) lines.push({ text: categoryDisplay, color: '#B0BEC5', fontSize: metaFontSize * 0.9 });
+    if (showMetadata && constraintLine) lines.push({ text: constraintLine, color: constraintColor, fontSize: metaFontSize * 0.85 });
   } else if (mode === 'agent') {
     const agentType = (node.metadata?.agentType ?? node.metadata?.type ?? 'unknown').toUpperCase();
     const status = node.metadata?.status ?? 'idle';
@@ -226,7 +224,7 @@ function buildLabelLines(
 
     lines.push({ text: agentType, color: statusColor, fontSize });
     if (showMetadata) lines.push({ text: agentLine2, color: statusColor, fontSize: metaFontSize });
-    if (showMetadata && !vrMode) lines.push({ text: agentLine3, color: '#B0BEC5', fontSize: metaFontSize * 0.9 });
+    if (showMetadata) lines.push({ text: agentLine3, color: '#B0BEC5', fontSize: metaFontSize * 0.9 });
   } else {
     lines.push({ text: labelText, color: textColor, fontSize });
   }
@@ -306,7 +304,6 @@ export const InstancedLabels: React.FC<InstancedLabelsProps> = (props) => {
     hierarchyMap: props.hierarchyMap,
     graphTypeVisuals: props.graphTypeVisuals,
     ssspResult: props.ssspResult,
-    isXRMode: props.isXRMode,
   };
 
   // WebGPU path: use HTML fallback
@@ -328,7 +325,7 @@ type WebGPUProps = InstancedLabelsProps;
 const InstancedLabelsWebGPU: React.FC<WebGPUProps> = ({
   nodes, nodeIdToIndexMap, nodePositionsRef, labelPositionsRef,
   settings, graphMode, perNodeVisualModeMap, connectionCountMap,
-  hierarchyMap, graphTypeVisuals, ssspResult, isXRMode,
+  hierarchyMap, graphTypeVisuals, ssspResult,
 }) => {
   const { camera, size } = useThree();
   const [webGPULabels, setWebGPULabels] = React.useState<WebGPULabel[]>([]);
@@ -449,7 +446,7 @@ const InstancedLabelsWebGPU: React.FC<WebGPUProps> = ({
 
       const lines = buildLabelLines(
         node, nodeLabelVisualMode, labelText, textColor, fontSize, metaFontSize,
-        showMetadata, isXRMode, connectionCountMap, hierarchyMap, ssspResult,
+        showMetadata, connectionCountMap, hierarchyMap, ssspResult,
       );
 
       // Label anchor (floats above the node) projected to screen for placement.
@@ -516,7 +513,7 @@ type WebGLProps = InstancedLabelsProps;
 const InstancedLabelsWebGL: React.FC<WebGLProps> = ({
   nodes, nodeIdToIndexMap, nodePositionsRef, labelPositionsRef,
   settings, graphMode, perNodeVisualModeMap, connectionCountMap,
-  hierarchyMap, graphTypeVisuals, ssspResult, isXRMode,
+  hierarchyMap, graphTypeVisuals, ssspResult,
 }) => {
   const { camera } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
@@ -829,7 +826,7 @@ const InstancedLabelsWebGL: React.FC<WebGLProps> = ({
 
       const lines = buildLabelLines(
         node, nodeLabelVisualMode, labelText, textColor, fontSize, metaFontSize,
-        showMetadata, isXRMode, connectionCountMap, hierarchyMap, ssspResult,
+        showMetadata, connectionCountMap, hierarchyMap, ssspResult,
       );
 
       // Zero-alloc layout: write glyphs directly into attribute buffers

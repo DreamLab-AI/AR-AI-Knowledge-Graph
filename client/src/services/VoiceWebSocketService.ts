@@ -7,13 +7,14 @@ import { gatedConsole } from '../utils/console';
 import { createLogger } from '../utils/loggerConfig';
 import { webSocketRegistry } from './WebSocketRegistry';
 import { webSocketEventBus } from './WebSocketEventBus';
+import { nostrAuth } from './nostrAuthService';
 
 const logger = createLogger('VoiceWebSocketService');
 
 const REGISTRY_NAME = 'voice';
 
 export interface VoiceMessage {
-  type: 'tts' | 'stt' | 'audio_chunk' | 'transcription' | 'error' | 'connected';
+  type: 'tts' | 'stt' | 'audio_chunk' | 'transcription' | 'error' | 'connected' | 'authenticate_success' | 'authenticate_error';
   data?: any;
 }
 
@@ -86,6 +87,7 @@ export class VoiceWebSocketService {
           this.reconnectAttempts = 0;
           webSocketRegistry.register(REGISTRY_NAME, url, this.socket!);
           webSocketEventBus.emit('connection:open', { name: REGISTRY_NAME, url });
+          void this.sendAuthenticate(url);
           this.emit('connected');
           resolve();
         };
@@ -121,6 +123,40 @@ export class VoiceWebSocketService {
   }
 
   
+  /**
+   * ADR-2075: `/ws/speech` authenticates AFTER the upgrade, because browsers
+   * cannot set WebSocket request headers. The server refuses every
+   * command-bearing frame until this arrives and closes the socket if it does
+   * not. Same frame shape as the graph socket and `analyticsApi`.
+   */
+  private async sendAuthenticate(wsUrl: string): Promise<void> {
+    if (!this.isConnected()) return;
+    if (!nostrAuth.isAuthenticated()) {
+      logger.warn('Voice socket: not authenticated — /ws/speech will refuse commands');
+      return;
+    }
+    try {
+      if (nostrAuth.isDevMode()) {
+        const user = nostrAuth.getCurrentUser();
+        this.send(
+          JSON.stringify({
+            type: 'authenticate',
+            token: 'dev-session-token',
+            pubkey: user?.pubkey,
+          })
+        );
+        return;
+      }
+      // The server validates the NIP-98 `u` tag against the HTTP-equivalent of
+      // this socket's own URL, so sign exactly that.
+      const httpUrl = wsUrl.replace(/^ws(s?):\/\//, 'http$1://');
+      const event = await nostrAuth.signRequest(httpUrl, 'GET');
+      this.send(JSON.stringify({ type: 'authenticate', event }));
+    } catch (e) {
+      logger.warn('Voice socket NIP-98 authenticate failed:', e);
+    }
+  }
+
   private handleMessage(event: MessageEvent): void {
     
     if (event.data instanceof ArrayBuffer || event.data instanceof Blob) {
@@ -154,6 +190,23 @@ export class VoiceWebSocketService {
           const errorMsg = (message as VoiceMessage).data || (message as VoiceMessage & { error?: string }).error || 'Unknown voice service error';
           gatedConsole.voice.error('Voice service error:', errorMsg);
           this.emit('voiceError', errorMsg);
+          break;
+
+        // ADR-2075 post-upgrade auth outcome.
+        case 'authenticate_success':
+          gatedConsole.voice.log(
+            'Voice socket authenticated:',
+            (message as VoiceMessage & { pubkey?: string }).pubkey
+          );
+          this.emit('voiceAuthenticated', message);
+          break;
+
+        case 'authenticate_error':
+          gatedConsole.voice.error(
+            'Voice socket authentication rejected:',
+            (message as VoiceMessage & { error?: string }).error
+          );
+          this.emit('voiceError', (message as VoiceMessage & { error?: string }).error);
           break;
 
         default:

@@ -493,9 +493,28 @@ export interface GraphUpdatedMessage extends BaseWebSocketMessage {
   reason?: string;
 }
 
+// ADR-2047 (vc-core): live settings-change broadcast. Only the "nodeFilter"
+// category carries a `settings` payload — other categories are a signal for
+// the client to re-read that category from the settings API.
+export interface SettingsUpdatedWireMessage extends BaseWebSocketMessage {
+  type: 'settingsUpdated';
+  category: 'physics' | 'rendering' | 'nodeFilter' | string;
+  updatedBy: string;
+  settings?: {
+    enabled?: boolean;
+    qualityThreshold?: number;
+    authorityThreshold?: number;
+    filterByQuality?: boolean;
+    filterByAuthority?: boolean;
+    filterMode?: string;
+    includeLinkedPages?: boolean;
+  };
+}
+
 // Union type of all possible WebSocket messages
 export type WebSocketMessage =
   | GraphUpdatedMessage
+  | SettingsUpdatedWireMessage
   | WorkspaceUpdateMessage
   | WorkspaceDeletedMessage
   | WorkspaceCollaborationMessage

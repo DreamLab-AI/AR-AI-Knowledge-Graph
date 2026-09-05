@@ -17,7 +17,6 @@ import {
   getNodeType,
   getActualNodeId,
   NodeType,
-  PROTOCOL_V2,
   PROTOCOL_V3,
   PROTOCOL_V5,
 } from '../../types/binaryProtocol';
@@ -473,7 +472,8 @@ export async function processBinaryData(
 
     if (data.byteLength >= 1) {
       const firstByte = new DataView(data).getUint8(0);
-      if (firstByte === PROTOCOL_V2 || firstByte === PROTOCOL_V3 || firstByte === PROTOCOL_V5) {
+      // ADR-2057: V2 is not accepted — the server rejects it outright.
+      if (firstByte === PROTOCOL_V3 || firstByte === PROTOCOL_V5) {
         await handleLegacyBinaryData(data, get, set);
         notifyBinaryMessageHandlers(data);
         return;

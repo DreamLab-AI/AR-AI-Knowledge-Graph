@@ -8,15 +8,21 @@
 import { createLogger, createErrorMetadata } from '../../utils/loggerConfig';
 import { debugState } from '../../utils/clientDebugState';
 import { graphDataManager } from '../../features/graph/managers/graphDataManager';
-import { useSettingsStore } from '../settingsStore';
+import { useSettingsStore, settingsStoreUtils } from '../settingsStore';
 import { useInferredEdgesStore } from '../../features/ontology/store/useInferredEdgesStore';
+import { nostrAuth } from '../../services/nostrAuthService';
+import { settingsApi } from '../../api/settingsApi';
 import type { WebSocketMessage } from '../../types/websocketTypes';
-import type { WebSocketErrorFrame } from './types';
+import type { WebSocketErrorFrame, SettingsUpdatedMessage } from './types';
 import { emit, notifyMessageHandlers } from './connectionManager';
 import { handleErrorFrame } from './binaryProtocol';
 import { isFilterResponseExpected, clearFilterResponseExpectation } from './filterSync';
 
 const logger = createLogger('WebSocketStore');
+
+// ADR-2047: last applied settingsUpdated timestamp per category, used to
+// drop a stale/out-of-order broadcast (see handleSettingsUpdated below).
+const lastAppliedSettingsTimestamp = new Map<string, number>();
 
 // Live linkage (graphUpdated): trailing debounce so a burst of server-side
 // mutation signals costs one refetch. The refetch itself is cheap when nothing
@@ -125,7 +131,96 @@ export function handleTextMessage(
     scheduleGraphRefetch(m.revision, m.reason);
   }
 
+  // ADR-2047 (vc-core): live settings-change broadcast — the actual event
+  // name the server emits is "settingsUpdated" (camelCase). The snake_case
+  // "settings_update" case in utils/validation.ts has no server sender; this
+  // is the authoritative live path.
+  if (message.type === 'settingsUpdated') {
+    handleSettingsUpdated(message as unknown as SettingsUpdatedMessage);
+  }
+
   notifyMessageHandlers(message);
+}
+
+/**
+ * ADR-2047: apply a peer's settings change.
+ *  - "nodeFilter" carries the full settings object — apply it directly.
+ *  - every other category re-reads that category from the settings API,
+ *    since the server does not send its value on the wire.
+ * The writer's own echo is ignored (it already has the up-to-date state
+ * locally and a round-trip could fight an in-flight edit), and a message
+ * older than the last one applied for that category is dropped.
+ */
+function handleSettingsUpdated(message: SettingsUpdatedMessage) {
+  const category = message?.category;
+  if (!category || typeof category !== 'string') {
+    logger.warn('[SettingsUpdated] settingsUpdated message missing category; ignoring');
+    return;
+  }
+
+  const currentUser = nostrAuth.getCurrentUser();
+  if (message.updatedBy && currentUser?.pubkey && message.updatedBy === currentUser.pubkey) {
+    if (debugState.isEnabled()) {
+      logger.info(`[SettingsUpdated] Ignoring own write echo for category=${category}`);
+    }
+    return;
+  }
+
+  const incomingTimestamp = typeof message.timestamp === 'number' ? message.timestamp : Date.now();
+  const lastApplied = lastAppliedSettingsTimestamp.get(category);
+  if (lastApplied !== undefined && incomingTimestamp <= lastApplied) {
+    logger.debug(
+      `[SettingsUpdated] Ignoring stale settingsUpdated for category=${category} ` +
+      `(ts=${incomingTimestamp} <= last=${lastApplied})`
+    );
+    return;
+  }
+  lastAppliedSettingsTimestamp.set(category, incomingTimestamp);
+
+  if (category === 'nodeFilter') {
+    if (message.settings && typeof message.settings === 'object') {
+      useSettingsStore.getState().set('nodeFilter', message.settings, true);
+      logger.info('[SettingsUpdated] Applied nodeFilter settings from peer update');
+    } else {
+      logger.warn('[SettingsUpdated] nodeFilter settingsUpdated message missing settings payload; ignoring');
+    }
+    return;
+  }
+
+  refetchSettingsCategory(category);
+}
+
+/** Re-read a settings category from the server and merge it into the store. */
+function refetchSettingsCategory(category: string): void {
+  const paths = settingsStoreUtils.getSectionPaths(category);
+  if (paths.length === 0) {
+    logger.warn(`[SettingsUpdated] No known settings paths for category=${category}; cannot re-read`);
+    return;
+  }
+
+  settingsApi.getSettingsByPaths(paths)
+    .then((fetched) => {
+      const state = useSettingsStore.getState();
+      for (const path of paths) {
+        const value = getNestedValueForPath(fetched as Record<string, unknown>, path);
+        if (value !== undefined) {
+          state.set(path, value, true);
+        }
+      }
+      logger.info(`[SettingsUpdated] Re-read category=${category} from settings API (${paths.length} path(s))`);
+    })
+    .catch((error) => {
+      logger.error(`[SettingsUpdated] Failed to re-read category=${category}:`, createErrorMetadata(error));
+    });
+}
+
+function getNestedValueForPath(obj: Record<string, unknown>, path: string): unknown {
+  let current: unknown = obj;
+  for (const key of path.split('.')) {
+    if (current === null || current === undefined || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
 }
 
 function handleInitialGraphLoad(message: WebSocketMessage) {

@@ -68,11 +68,24 @@ export const PROTOCOL_V5 = 5;
 /** Last broadcast sequence received from server (V5 frames). Undefined until first V5 frame. */
 export let lastBroadcastSequence: number | undefined;
 
-// V2 wire format: 36 bytes per node
-export const BINARY_NODE_SIZE_V2 = 36;
-// V3 wire format: 52 bytes per node (V2 + 16 bytes analytics; ADR-031 D2 added centrality@48).
-// Stride autodetect note: 52 % 36 (V2) = 16 ≠ 0 and 36 % 52 ≠ 0, so V2 and V3
-// strides remain mutually unambiguous under the `length % nodeSize` heuristic.
+/**
+ * Opcodes that ride the same binary socket as position frames but belong to a
+ * DIFFERENT codec with its own framing rules (ADR-2019 tag-byte registry):
+ *
+ * - `0x23` agent-action batch: `[0x23][u16 count]([u16 len][event])*`
+ * - `0x43` avatar pose (XR presence sibling frame)
+ * - `0x44` agent co-presence (ADR-2020)
+ *
+ * None of these is a position-frame version. The position decoder must decline
+ * them rather than attempt size-based auto-detection, which would happily
+ * reinterpret their payload as node records (ADR-2057 removed that fallback
+ * entirely — an unrecognised version is now declined outright).
+ */
+export const SIBLING_OPCODES: ReadonlySet<number> = new Set([0x23, 0x43, 0x44]);
+
+// V3 wire format: 52 bytes per node. ADR-2057 removed the 36-byte V2 stride and
+// its size-autodetect heuristic: the server rejects V2 outright
+// (`src/utils/binary_protocol.rs:565`), so nothing on the live wire is 36 bytes.
 export const BINARY_NODE_SIZE_V3 = 52;
 // Default to V3 (current server default)
 export const BINARY_NODE_SIZE = BINARY_NODE_SIZE_V3;
@@ -170,9 +183,16 @@ export function parseBinaryNodeData(buffer: ArrayBuffer): BinaryNodeData[] {
 
     switch (protocolVersion) {
       case PROTOCOL_V2:
-        nodeSize = BINARY_NODE_SIZE_V2;
-        hasAnalytics = false;
-        break;
+        // ADR-2057: the server rejects V2 outright
+        // (`src/utils/binary_protocol.rs:565` — "V2 protocol no longer supported.
+        // Please upgrade client to V3+."), so a V2 frame can only be a stale
+        // sender or a mis-routed payload. Decline rather than decode 36-byte
+        // records the live wire never carries.
+        logger.warn(
+          'Declining V2 position frame — the server no longer emits or accepts V2. ' +
+          'Expected V3 (0x03) or the V5 envelope (0x05).'
+        );
+        return [];
       case PROTOCOL_V3:
         nodeSize = BINARY_NODE_SIZE_V3;
         hasAnalytics = true;
@@ -186,24 +206,39 @@ export function parseBinaryNodeData(buffer: ArrayBuffer): BinaryNodeData[] {
         // Extract sequence, then parse remainder as V3
         return parseV5Nodes(safeBuffer);
       default:
-        // Unknown version - try to detect format by size
-        logger.warn(`Unknown protocol version: ${protocolVersion}, attempting auto-detection`);
-        offset = 0; // No version byte - legacy format?
-        nodeSize = BINARY_NODE_SIZE_V2;
-        hasAnalytics = false;
+        // ADR-2019 unknown-tag handling at the demultiplexer.
+        //
+        // A frame whose first byte is a KNOWN SIBLING OPCODE is not an unknown
+        // position version — it is another codec's frame that reached this
+        // decoder by mistake. Falling through to size auto-detection would
+        // reinterpret its bytes as V2 node records whenever its length happened
+        // to be a multiple of 36, fabricating nodes at arbitrary positions from
+        // an agent-action or presence payload. Decline it instead.
+        if (SIBLING_OPCODES.has(protocolVersion)) {
+          logger.warn(
+            `Declining frame for sibling opcode 0x${protocolVersion.toString(16)} — ` +
+            `not a position frame; route it to its own decoder.`
+          );
+          return [];
+        }
+        // ADR-2057: fail closed. The previous behaviour re-read the buffer from
+        // offset 0 as 36-byte V2 records whenever the length happened to divide
+        // by 36 — fabricating nodes at arbitrary positions from a frame whose
+        // version we do not recognise. The live wire is V3 and V5 only, so an
+        // unknown version has no plausible auto-detection.
+        logger.warn(
+          `Declining frame with unknown protocol version ${protocolVersion} — ` +
+          `expected V3 (0x03) or the V5 envelope (0x05).`
+        );
+        return [];
     }
 
     const dataLength = safeBuffer.byteLength - offset;
 
-    // Validate data length
+    // Validate data length. ADR-2057: the V2 size-swap heuristic is gone with V2
+    // itself — every frame reaching here is V3 or a V5 body, both 52-byte stride.
     if (dataLength % nodeSize !== 0) {
-      // Check if it might be the other version
-      const otherSize = hasAnalytics ? BINARY_NODE_SIZE_V2 : BINARY_NODE_SIZE_V3;
-      if (dataLength % otherSize === 0) {
-        logger.warn(`Data size suggests ${hasAnalytics ? 'V2' : 'V3'} format, switching...`);
-        nodeSize = otherSize;
-        hasAnalytics = !hasAnalytics;
-      } else {
+      {
         logger.warn(
           `Binary data length (${dataLength} bytes) is not a multiple of node size (${nodeSize}). ` +
           `Expected ${Math.floor(dataLength / nodeSize)} complete nodes.`

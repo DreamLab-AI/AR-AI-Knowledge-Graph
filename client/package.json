@@ -49,7 +49,6 @@
     "@react-three/drei": "10.7.7",
     "@react-three/fiber": "9.5.0",
     "@react-three/postprocessing": "3.0.4",
-    "@react-three/xr": "6.6.29",
     "@types/lodash": "4.17.23",
     "@types/react-window": "1.8.8",
     "@types/three": "0.183.0",
