@@ -8,6 +8,7 @@ use actix::Addr;
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -108,6 +109,10 @@ pub struct BotsClient {
     mcp_client: McpTcpClient,
     graph_service_addr: Option<Addr<GraphServiceSupervisor>>,
     agents: Arc<RwLock<Vec<Agent>>>,
+    /// Tracks the real MCP connection state (ADR-2088) — set true only after a
+    /// successful `test_connection()`, cleared on any subsequent failure so
+    /// `get_status()` never reports a constant.
+    connected: Arc<AtomicBool>,
 }
 
 impl BotsClient {
@@ -126,6 +131,7 @@ impl BotsClient {
             mcp_client,
             graph_service_addr: None,
             agents: Arc::new(RwLock::new(Vec::new())),
+            connected: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -144,6 +150,7 @@ impl BotsClient {
         match self.mcp_client.test_connection().await {
             Ok(true) => {
                 info!("MCP server is reachable");
+                self.connected.store(true, Ordering::SeqCst);
 
                 match self.mcp_client.initialize_session().await {
                     Ok(_) => {
@@ -156,10 +163,12 @@ impl BotsClient {
             }
             Ok(false) => {
                 warn!("MCP server is not reachable");
+                self.connected.store(false, Ordering::SeqCst);
                 return Err(anyhow::anyhow!("MCP server is not reachable"));
             }
             Err(e) => {
                 error!("Failed to test MCP connection: {}", e);
+                self.connected.store(false, Ordering::SeqCst);
                 return Err(anyhow::anyhow!("Failed to test MCP connection: {}", e));
             }
         }
@@ -225,13 +234,13 @@ impl BotsClient {
     }
 
     pub async fn get_status(&self) -> Result<serde_json::Value> {
-        let connected = true;
+        let connected = self.connected.load(Ordering::SeqCst);
         let agents = self.agents.read().await;
 
         Ok(serde_json::json!({
             "connected": connected,
-            "host": "agentic-workstation",
-            "port": 9090,
+            "host": self.mcp_client.host,
+            "port": self.mcp_client.port,
             "agent_count": agents.len(),
             "agents": agents.iter().map(|a| {
                 serde_json::json!({
@@ -283,5 +292,55 @@ impl BotsClient {
                 Err(anyhow::anyhow!("MCP agent spawn failed: {}", e))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ADR-2088: `get_status()` must report the client's resolved host/port,
+    /// never the old hardcoded "agentic-workstation":9090 literal.
+    #[tokio::test]
+    async fn get_status_reports_resolved_host_and_port_not_literals() {
+        let client = BotsClient::new();
+        let status = client
+            .get_status()
+            .await
+            .expect("get_status should not fail");
+
+        assert_eq!(status["host"], serde_json::json!(client.mcp_client.host));
+        assert_eq!(status["port"], serde_json::json!(client.mcp_client.port));
+        assert_ne!(
+            status["host"],
+            serde_json::json!("agentic-workstation"),
+            "get_status must not report the old hardcoded host literal"
+        );
+        assert_ne!(
+            status["port"],
+            serde_json::json!(9090u16),
+            "get_status must not report the old hardcoded port literal"
+        );
+    }
+
+    /// ADR-2088: `connected` must reflect tracked connection state, never a
+    /// constant `true`. A freshly constructed client (connect() not yet run)
+    /// must report false; flipping the tracked flag must change the report.
+    #[tokio::test]
+    async fn get_status_reflects_actual_connection_state_not_a_constant() {
+        let client = BotsClient::new();
+
+        let status = client
+            .get_status()
+            .await
+            .expect("get_status should not fail");
+        assert_eq!(status["connected"], serde_json::json!(false));
+
+        client.connected.store(true, Ordering::SeqCst);
+        let status = client
+            .get_status()
+            .await
+            .expect("get_status should not fail");
+        assert_eq!(status["connected"], serde_json::json!(true));
     }
 }

@@ -35,8 +35,8 @@
 use std::sync::Arc;
 
 use oxigraph::model::vocab::xsd;
-use oxigraph::model::{GraphNameRef, Literal, NamedNode, NamedNodeRef, QuadRef};
-use oxigraph::store::Store;
+use oxigraph::model::{GraphName, Literal, NamedNode, NamedNodeRef, Quad};
+use oxigraph::store::{StorageError, Store};
 
 use super::oxigraph_ontology_repository::GRAPH_PROVENANCE;
 
@@ -51,6 +51,15 @@ const PROV_WAS_GENERATED_BY: &str = "http://www.w3.org/ns/prov#wasGeneratedBy";
 const PROV_WAS_ATTRIBUTED_TO: &str = "http://www.w3.org/ns/prov#wasAttributedTo";
 const PROV_GENERATED_AT_TIME: &str = "http://www.w3.org/ns/prov#generatedAtTime";
 const PROV_WAS_DERIVED_FROM: &str = "http://www.w3.org/ns/prov#wasDerivedFrom";
+const PROV_ACTIVITY: &str = "http://www.w3.org/ns/prov#Activity";
+const PROV_WAS_ASSOCIATED_WITH: &str = "http://www.w3.org/ns/prov#wasAssociatedWith";
+const PROV_STARTED_AT_TIME: &str = "http://www.w3.org/ns/prov#startedAtTime";
+const PROV_USED: &str = "http://www.w3.org/ns/prov#used";
+const PROV_WAS_INFORMED_BY: &str = "http://www.w3.org/ns/prov#wasInformedBy";
+
+// `vc:` predicates carried by every activity record.
+const VC_ACTION: &str = "https://narrativegoldmine.com/ns/v1#action";
+const VC_DERIVATION: &str = "https://narrativegoldmine.com/ns/v1#derivation";
 
 /// A structured activity record ready for reification into PROV-O triples.
 #[derive(Debug, Clone)]
@@ -91,145 +100,222 @@ impl std::fmt::Display for ProvenanceError {
 
 impl std::error::Error for ProvenanceError {}
 
+/// Required so `ProvenanceError` can be the error type of a
+/// [`Store::transaction`] closure (its bound is `E: From<StorageError>`).
+impl From<StorageError> for ProvenanceError {
+    fn from(e: StorageError) -> Self {
+        ProvenanceError::Store(e.to_string())
+    }
+}
+
+/// The predicates a complete `prov:Activity` record must carry (ADR-2016).
+///
+/// [`reify_activity`] writes all five in one transaction, so a record in the
+/// store either has every one of them or does not exist. Records written by
+/// the pre-ADR-2016 non-transactional emitter can be missing some of them;
+/// [`find_incomplete_activities`] detects exactly those.
+pub const MANDATORY_ACTIVITY_PREDICATES: [&str; 5] = [
+    RDF_TYPE,
+    PROV_WAS_ASSOCIATED_WITH,
+    PROV_STARTED_AT_TIME,
+    VC_ACTION,
+    VC_DERIVATION,
+];
+
+/// Validate every term of an activity record and build the full PROV-O quad
+/// set, without touching the store (ADR-2016).
+///
+/// This is the validation half of the two-phase write: it returns `Err` for
+/// *any* malformed IRI — including ones that only appear late in the record,
+/// such as `generated` or `informed_by` — before a single quad reaches the
+/// store. Callers that want to check a record without writing it (a dry run,
+/// or an admission check upstream of the mutation) can call this directly.
+///
+/// The quad order is the documented serialisation order: activity type,
+/// association, agent type, start time, action, derivation, optional `used`,
+/// the optional generated-entity block, then the optional causal link.
+pub fn build_activity_quads(record: &ActivityRecord) -> Result<Vec<Quad>, ProvenanceError> {
+    // Phase 1 — resolve and validate every named node up front. Any failure
+    // here happens before the caller has written anything at all.
+    let graph: GraphName = make_named_node(GRAPH_PROVENANCE)?.into();
+    let subject = make_named_node(&record.activity_urn)?;
+    let agent = make_named_node(&record.agent_did)?;
+    let used_node = record
+        .used
+        .as_deref()
+        .map(make_named_node)
+        .transpose()?;
+    let generated_node = record
+        .generated
+        .as_deref()
+        .map(make_named_node)
+        .transpose()?;
+    let informed_node = record
+        .informed_by
+        .as_deref()
+        .map(make_named_node)
+        .transpose()?;
+
+    let p_type = NamedNodeRef::new_unchecked(RDF_TYPE);
+    let prov_activity = make_named_node(PROV_ACTIVITY)?;
+    let prov_agent = NamedNodeRef::new_unchecked(PROV_AGENT);
+    let p_associated = NamedNodeRef::new_unchecked(PROV_WAS_ASSOCIATED_WITH);
+    let p_started = NamedNodeRef::new_unchecked(PROV_STARTED_AT_TIME);
+    let p_action = make_named_node(VC_ACTION)?;
+    let p_derivation = make_named_node(VC_DERIVATION)?;
+
+    // Phase 2 — every term is known good, so assembling the quads cannot fail.
+    let mut quads = Vec::with_capacity(13);
+
+    // <activity> a prov:Activity
+    quads.push(Quad::new(
+        subject.clone(),
+        p_type,
+        prov_activity,
+        graph.clone(),
+    ));
+
+    // <activity> prov:wasAssociatedWith <agent>
+    quads.push(Quad::new(
+        subject.clone(),
+        p_associated,
+        agent.clone(),
+        graph.clone(),
+    ));
+
+    // <agent> a prov:Agent — completes the Entity/Activity/Agent triad so
+    // agent-scoped SPARQL (`?a a prov:Agent`) works.
+    quads.push(Quad::new(
+        agent.clone(),
+        p_type,
+        prov_agent,
+        graph.clone(),
+    ));
+
+    // <activity> prov:startedAtTime "<ts>"^^xsd:dateTime
+    quads.push(Quad::new(
+        subject.clone(),
+        p_started,
+        Literal::new_typed_literal(&record.timestamp, xsd::DATE_TIME),
+        graph.clone(),
+    ));
+
+    // <activity> vc:action "<verb>"
+    quads.push(Quad::new(
+        subject.clone(),
+        p_action,
+        Literal::new_simple_literal(&record.action),
+        graph.clone(),
+    ));
+
+    // <activity> vc:derivation "<scope>"
+    quads.push(Quad::new(
+        subject.clone(),
+        p_derivation,
+        Literal::new_simple_literal(&record.derivation),
+        graph.clone(),
+    ));
+
+    // <activity> prov:used <source> (optional)
+    if let Some(ref used) = used_node {
+        quads.push(Quad::new(
+            subject.clone(),
+            NamedNodeRef::new_unchecked(PROV_USED),
+            used.clone(),
+            graph.clone(),
+        ));
+    }
+
+    // Generated-entity block (optional): the output URN is a first-class
+    // `prov:Entity`, attributed to the agent and generated by this activity.
+    if let Some(gen_node) = generated_node {
+        quads.push(Quad::new(
+            gen_node.clone(),
+            p_type,
+            NamedNodeRef::new_unchecked(PROV_ENTITY),
+            graph.clone(),
+        ));
+        quads.push(Quad::new(
+            gen_node.clone(),
+            NamedNodeRef::new_unchecked(PROV_WAS_GENERATED_BY),
+            subject.clone(),
+            graph.clone(),
+        ));
+        quads.push(Quad::new(
+            gen_node.clone(),
+            NamedNodeRef::new_unchecked(PROV_WAS_ATTRIBUTED_TO),
+            agent.clone(),
+            graph.clone(),
+        ));
+        quads.push(Quad::new(
+            gen_node.clone(),
+            NamedNodeRef::new_unchecked(PROV_GENERATED_AT_TIME),
+            Literal::new_typed_literal(&record.timestamp, xsd::DATE_TIME),
+            graph.clone(),
+        ));
+        // <generated> prov:wasDerivedFrom <used> — only when a concrete
+        // source was consumed.
+        if let Some(ref used) = used_node {
+            quads.push(Quad::new(
+                gen_node,
+                NamedNodeRef::new_unchecked(PROV_WAS_DERIVED_FROM),
+                used.clone(),
+                graph.clone(),
+            ));
+        }
+    }
+
+    // <activity> prov:wasInformedBy <prior> (optional activity→activity chain)
+    if let Some(prior) = informed_node {
+        quads.push(Quad::new(
+            subject,
+            NamedNodeRef::new_unchecked(PROV_WAS_INFORMED_BY),
+            prior,
+            graph,
+        ));
+    }
+
+    Ok(quads)
+}
+
+/// Commit a pre-validated quad set in a single Oxigraph transaction, calling
+/// `guard` with each quad's index immediately before it is inserted.
+///
+/// The guard is the seam that makes the atomicity contract testable: a guard
+/// that returns `Err` for index *n* aborts the transaction after *n* inserts
+/// have already been issued, which is exactly the shape of a storage failure
+/// part-way through a record. Because the whole batch runs inside one
+/// transaction, an abort leaves the graph byte-identical to its prior state.
+///
+/// Oxigraph's transaction closure is `Fn` (it may be replayed), so the guard
+/// must be side-effect free and depend only on the index.
+fn commit_quads_with<F>(store: &Store, quads: &[Quad], guard: F) -> Result<usize, ProvenanceError>
+where
+    F: Fn(usize) -> Result<(), ProvenanceError>,
+{
+    store.transaction(|mut txn| {
+        for (idx, quad) in quads.iter().enumerate() {
+            guard(idx)?;
+            txn.insert(quad.as_ref())?;
+        }
+        Ok(quads.len())
+    })
+}
+
 /// Reify an activity record as PROV-O triples in the provenance graph.
 ///
-/// Returns the number of triples inserted (5–8 depending on optional fields).
+/// ADR-2016: the write is **all-or-nothing**. Every term is validated before
+/// any quad reaches the store ([`build_activity_quads`]), and the resulting
+/// quads are committed inside a single Oxigraph transaction. A malformed IRI
+/// anywhere in the record — including the optional `generated` and
+/// `informed_by` fields, which the earlier interleaved implementation only
+/// reached after writing the activity type — leaves the graph untouched, and
+/// so does a storage failure part-way through the batch.
+///
+/// Returns the number of triples inserted (6–13 depending on optional fields).
 pub fn reify_activity(store: &Store, record: &ActivityRecord) -> Result<usize, ProvenanceError> {
-    let graph = NamedNodeRef::new_unchecked(GRAPH_PROVENANCE);
-    let mut count = 0;
-
-    let subject = make_named_node(&record.activity_urn)?;
-
-    // rdf:type prov:Activity
-    let prov_activity = NamedNode::new(format!("{PROV_NS}Activity"))
-        .map_err(|e| ProvenanceError::InvalidIri(e.to_string()))?;
-    let p_type = NamedNodeRef::new_unchecked(RDF_TYPE);
-    store
-        .insert(QuadRef::new(&subject, p_type, &prov_activity, graph))
-        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-    count += 1;
-
-    // prov:wasAssociatedWith <agent_did>
-    let agent = make_named_node(&record.agent_did)?;
-    let p_associated = NamedNodeRef::new_unchecked("http://www.w3.org/ns/prov#wasAssociatedWith");
-    store
-        .insert(QuadRef::new(&subject, p_associated, &agent, graph))
-        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-    count += 1;
-
-    // <agent> a prov:Agent — type the acting principal so the Entity/Activity/
-    // Agent triad is complete and agent-scoped SPARQL (`?a a prov:Agent`) works.
-    let prov_agent = NamedNodeRef::new_unchecked(PROV_AGENT);
-    let p_type_agent = NamedNodeRef::new_unchecked(RDF_TYPE);
-    store
-        .insert(QuadRef::new(&agent, p_type_agent, prov_agent, graph))
-        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-    count += 1;
-
-    // prov:startedAtTime
-    let p_started = NamedNodeRef::new_unchecked("http://www.w3.org/ns/prov#startedAtTime");
-    let ts_lit = Literal::new_typed_literal(&record.timestamp, xsd::DATE_TIME);
-    store
-        .insert(QuadRef::new(&subject, p_started, &ts_lit, graph))
-        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-    count += 1;
-
-    // vc:action
-    let p_action = make_named_node(&format!("{VC_NS}action"))?;
-    let action_lit = Literal::new_simple_literal(&record.action);
-    store
-        .insert(QuadRef::new(
-            &subject,
-            p_action.as_ref(),
-            &action_lit,
-            graph,
-        ))
-        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-    count += 1;
-
-    // vc:derivation
-    let p_derivation = make_named_node(&format!("{VC_NS}derivation"))?;
-    let deriv_lit = Literal::new_simple_literal(&record.derivation);
-    store
-        .insert(QuadRef::new(
-            &subject,
-            p_derivation.as_ref(),
-            &deriv_lit,
-            graph,
-        ))
-        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-    count += 1;
-
-    // prov:used <source> (optional) — the activity consumed this source.
-    let used_node = match record.used {
-        Some(ref used_urn) => {
-            let node = make_named_node(used_urn)?;
-            let p_used = NamedNodeRef::new_unchecked("http://www.w3.org/ns/prov#used");
-            store
-                .insert(QuadRef::new(&subject, p_used, &node, graph))
-                .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-            count += 1;
-            Some(node)
-        }
-        None => None,
-    };
-
-    // Generated entity block (optional): the output URN is a first-class
-    // `prov:Entity`, attributed to the agent and generated by this activity.
-    // This is the queryable end of the wasGeneratedBy/wasDerivedFrom chain.
-    if let Some(ref gen_urn) = record.generated {
-        let gen_node = make_named_node(gen_urn)?;
-
-        // <generated> a prov:Entity
-        let prov_entity = NamedNodeRef::new_unchecked(PROV_ENTITY);
-        let p_type = NamedNodeRef::new_unchecked(RDF_TYPE);
-        store
-            .insert(QuadRef::new(&gen_node, p_type, prov_entity, graph))
-            .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-        count += 1;
-
-        // <generated> prov:wasGeneratedBy <activity>
-        let p_gen_by = NamedNodeRef::new_unchecked(PROV_WAS_GENERATED_BY);
-        store
-            .insert(QuadRef::new(&gen_node, p_gen_by, &subject, graph))
-            .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-        count += 1;
-
-        // <generated> prov:wasAttributedTo <agent>
-        let p_attr = NamedNodeRef::new_unchecked(PROV_WAS_ATTRIBUTED_TO);
-        store
-            .insert(QuadRef::new(&gen_node, p_attr, &agent, graph))
-            .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-        count += 1;
-
-        // <generated> prov:generatedAtTime "<ts>"^^xsd:dateTime
-        let p_gen_at = NamedNodeRef::new_unchecked(PROV_GENERATED_AT_TIME);
-        let gen_ts = Literal::new_typed_literal(&record.timestamp, xsd::DATE_TIME);
-        store
-            .insert(QuadRef::new(&gen_node, p_gen_at, &gen_ts, graph))
-            .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-        count += 1;
-
-        // <generated> prov:wasDerivedFrom <used> — the derivation edge the
-        // entity-chain query walks (only when a concrete source was consumed).
-        if let Some(ref used) = used_node {
-            let p_derived = NamedNodeRef::new_unchecked(PROV_WAS_DERIVED_FROM);
-            store
-                .insert(QuadRef::new(&gen_node, p_derived, used, graph))
-                .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-            count += 1;
-        }
-    }
-
-    // prov:wasInformedBy (optional, activity→activity causal chain)
-    if let Some(ref prior_urn) = record.informed_by {
-        let prior_node = make_named_node(prior_urn)?;
-        let p_informed = NamedNodeRef::new_unchecked("http://www.w3.org/ns/prov#wasInformedBy");
-        store
-            .insert(QuadRef::new(&subject, p_informed, &prior_node, graph))
-            .map_err(|e| ProvenanceError::Store(e.to_string()))?;
-        count += 1;
-    }
+    let quads = build_activity_quads(record)?;
+    let count = commit_quads_with(store, &quads, |_| Ok(()))?;
 
     tracing::debug!(
         activity = %record.activity_urn,
@@ -240,6 +326,54 @@ pub fn reify_activity(store: &Store, record: &ActivityRecord) -> Result<usize, P
     );
 
     Ok(count)
+}
+
+/// Detect partial activity records: subjects typed `prov:Activity` in the
+/// provenance graph that are missing at least one of
+/// [`MANDATORY_ACTIVITY_PREDICATES`].
+///
+/// [`reify_activity`] can no longer produce such a record, but records written
+/// by the pre-ADR-2016 emitter (which inserted quad by quad and could abort
+/// after the type triple) may exist in a deployed store. This is the repair
+/// half of the acceptance condition: run it over a restored store to enumerate
+/// the damaged activity URNs, which can then be re-emitted from their
+/// originating mutation receipts or quarantined.
+pub fn find_incomplete_activities(store: &Store) -> Result<Vec<String>, ProvenanceError> {
+    let sparql = format!(
+        r#"
+        PREFIX prov: <{PROV_NS}>
+        PREFIX vc: <{VC_NS}>
+        SELECT DISTINCT ?act
+        FROM <{graph}>
+        WHERE {{
+            ?act a prov:Activity .
+            FILTER (
+                   NOT EXISTS {{ ?act prov:wasAssociatedWith ?agent }}
+                || NOT EXISTS {{ ?act prov:startedAtTime ?time }}
+                || NOT EXISTS {{ ?act vc:action ?action }}
+                || NOT EXISTS {{ ?act vc:derivation ?derivation }}
+            )
+        }}
+        ORDER BY ?act
+        "#,
+        graph = GRAPH_PROVENANCE,
+    );
+
+    let results = store
+        .query(&sparql)
+        .map_err(|e| ProvenanceError::Store(e.to_string()))?;
+
+    let mut incomplete = Vec::new();
+    if let oxigraph::sparql::QueryResults::Solutions(solutions) = results {
+        for solution in solutions {
+            let s = solution.map_err(|e| ProvenanceError::Store(e.to_string()))?;
+            let urn = term_to_string(s.get("act"));
+            if !urn.is_empty() {
+                incomplete.push(urn);
+            }
+        }
+    }
+    Ok(incomplete)
 }
 
 /// Query the provenance graph for activities by a specific agent.
@@ -607,6 +741,7 @@ fn optional_term(term: Option<&oxigraph::model::Term>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxigraph::model::{GraphNameRef, QuadRef};
 
     fn mem_store() -> Store {
         Store::new().expect("in-memory store")
@@ -806,5 +941,200 @@ mod tests {
             .quads_for_pattern(None, None, None, Some(GraphNameRef::NamedNode(graph)))
             .count();
         assert!(after > before, "provenance graph must only grow");
+    }
+
+    // ---- ADR-2016 atomicity acceptance ----------------------------------
+
+    /// Count every quad currently in the provenance named graph.
+    fn provenance_quad_count(store: &Store) -> usize {
+        let graph = NamedNodeRef::new_unchecked(GRAPH_PROVENANCE);
+        store
+            .quads_for_pattern(None, None, None, Some(GraphNameRef::NamedNode(graph)))
+            .count()
+    }
+
+    /// ADR-2016: a malformed IRI that only appears *late* in the record (the
+    /// optional `generated` field, which the old interleaved emitter reached
+    /// only after writing the activity type, association and agent triples)
+    /// must leave the graph completely untouched.
+    #[test]
+    fn late_invalid_generated_iri_writes_nothing() {
+        let store = mem_store();
+        let mut record = test_record();
+        record.generated = Some("not a valid iri at all".to_string());
+
+        let err = reify_activity(&store, &record).unwrap_err();
+        assert!(
+            matches!(err, ProvenanceError::InvalidIri(_)),
+            "expected InvalidIri, got {err:?}"
+        );
+        assert_eq!(
+            provenance_quad_count(&store),
+            0,
+            "a late invalid IRI must not leave a partial record"
+        );
+    }
+
+    /// The same contract for the last optional field in the record.
+    #[test]
+    fn late_invalid_informed_by_iri_writes_nothing() {
+        let store = mem_store();
+        let mut record = test_record();
+        record.informed_by = Some("urn:visionclaw:execution:with space".to_string());
+
+        assert!(matches!(
+            reify_activity(&store, &record).unwrap_err(),
+            ProvenanceError::InvalidIri(_)
+        ));
+        assert_eq!(provenance_quad_count(&store), 0);
+    }
+
+    /// A malformed `used` IRI is rejected before the activity type triple too.
+    #[test]
+    fn invalid_used_iri_writes_nothing() {
+        let store = mem_store();
+        let mut record = test_record();
+        record.used = Some("<<broken>>".to_string());
+
+        assert!(matches!(
+            reify_activity(&store, &record).unwrap_err(),
+            ProvenanceError::InvalidIri(_)
+        ));
+        assert_eq!(provenance_quad_count(&store), 0);
+    }
+
+    /// Validation is pure: `build_activity_quads` never needs a store and
+    /// reports the same failures `reify_activity` would.
+    #[test]
+    fn build_activity_quads_validates_without_a_store() {
+        let good = build_activity_quads(&test_record()).expect("valid record builds");
+        assert_eq!(good.len(), 12, "full record reifies to 12 quads");
+
+        let mut bad = test_record();
+        bad.agent_did = "did:nostr:has space".to_string();
+        assert!(matches!(
+            build_activity_quads(&bad).unwrap_err(),
+            ProvenanceError::InvalidIri(_)
+        ));
+    }
+
+    /// ADR-2016: an injected storage failure part-way through the batch must
+    /// roll the whole record back. The guard aborts after four quads have
+    /// already been handed to the transaction, which is exactly the shape the
+    /// old quad-by-quad emitter could not survive.
+    #[test]
+    fn injected_storage_failure_rolls_the_record_back() {
+        let store = mem_store();
+        let quads = build_activity_quads(&test_record()).unwrap();
+        assert!(quads.len() > 4);
+
+        let err = commit_quads_with(&store, &quads, |idx| {
+            if idx == 4 {
+                Err(ProvenanceError::Store("injected write failure".to_string()))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert!(
+            matches!(err, ProvenanceError::Store(ref m) if m.contains("injected")),
+            "expected the injected store error, got {err:?}"
+        );
+        assert_eq!(
+            provenance_quad_count(&store),
+            0,
+            "an aborted transaction must leave no quads behind"
+        );
+
+        // The same record commits cleanly once the fault is removed, proving
+        // the rollback did not poison the store.
+        let n = commit_quads_with(&store, &quads, |_| Ok(())).unwrap();
+        assert_eq!(n, quads.len());
+        assert_eq!(provenance_quad_count(&store), quads.len());
+    }
+
+    /// A failure on the very first quad is also a clean no-op.
+    #[test]
+    fn injected_failure_on_first_quad_writes_nothing() {
+        let store = mem_store();
+        let quads = build_activity_quads(&test_record()).unwrap();
+        assert!(commit_quads_with(&store, &quads, |idx| {
+            if idx == 0 {
+                Err(ProvenanceError::Store("fail immediately".to_string()))
+            } else {
+                Ok(())
+            }
+        })
+        .is_err());
+        assert_eq!(provenance_quad_count(&store), 0);
+    }
+
+    /// A record written atomically is never reported as incomplete.
+    #[test]
+    fn find_incomplete_activities_is_empty_after_atomic_writes() {
+        let store = mem_store();
+        reify_activity(&store, &test_record()).unwrap();
+        let mut minimal = test_record();
+        minimal.activity_urn = "urn:visionclaw:execution:sha256-12-minimal00000".to_string();
+        minimal.used = None;
+        minimal.generated = None;
+        reify_activity(&store, &minimal).unwrap();
+
+        assert!(
+            find_incomplete_activities(&store).unwrap().is_empty(),
+            "atomically written records are always complete"
+        );
+    }
+
+    /// The repair detector finds a partial record of the shape the pre-ADR-2016
+    /// emitter could leave behind: the activity type triple written, then the
+    /// write aborted before the association/time/action/derivation quads.
+    #[test]
+    fn find_incomplete_activities_detects_a_legacy_partial_record() {
+        let store = mem_store();
+        reify_activity(&store, &test_record()).unwrap();
+
+        // Simulate the legacy partial write directly.
+        let graph = NamedNodeRef::new_unchecked(GRAPH_PROVENANCE);
+        let orphan = NamedNode::new("urn:visionclaw:execution:sha256-12-partial00000").unwrap();
+        store
+            .insert(QuadRef::new(
+                &orphan,
+                NamedNodeRef::new_unchecked(RDF_TYPE),
+                NamedNodeRef::new_unchecked(PROV_ACTIVITY),
+                graph,
+            ))
+            .unwrap();
+
+        let incomplete = find_incomplete_activities(&store).unwrap();
+        assert_eq!(
+            incomplete,
+            vec!["urn:visionclaw:execution:sha256-12-partial00000".to_string()],
+            "only the partial record is reported"
+        );
+    }
+
+    /// Every mandatory predicate is actually present on a committed record —
+    /// the constant and the emitter cannot drift apart.
+    #[test]
+    fn mandatory_predicates_are_all_written() {
+        let store = mem_store();
+        let record = test_record();
+        reify_activity(&store, &record).unwrap();
+
+        let subject = NamedNode::new(&record.activity_urn).unwrap();
+        let graph = NamedNodeRef::new_unchecked(GRAPH_PROVENANCE);
+        for predicate in MANDATORY_ACTIVITY_PREDICATES {
+            let p = NamedNodeRef::new_unchecked(predicate);
+            let found = store
+                .quads_for_pattern(
+                    Some((&subject).into()),
+                    Some(p),
+                    None,
+                    Some(GraphNameRef::NamedNode(graph)),
+                )
+                .count();
+            assert!(found > 0, "missing mandatory predicate {predicate}");
+        }
     }
 }

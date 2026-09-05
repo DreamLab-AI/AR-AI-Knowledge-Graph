@@ -24,6 +24,11 @@
 
 pub mod protocols;
 pub mod socket_flow_messages;
+/// Canonical wire fixtures shared by the server encoder tests and both client
+/// decoders (ADR-2018 consumer freshness, ADR-2019 per-opcode frame policy).
+/// Dependency-free by design so the isolated `xr-client/rust` workspace can
+/// include the same source file without taking on the domain crate's tree.
+pub mod wire_fixtures;
 
 // Convenience re-exports.
 pub use protocols::binary_settings_protocol::{

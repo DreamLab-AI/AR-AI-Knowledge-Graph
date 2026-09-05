@@ -207,4 +207,176 @@ mod tests {
         assert_eq!(dropped, 0);
         assert_eq!(nodes.len(), 4);
     }
+
+    // ---- ADR-2003: the three caller classes, over one corpus ---------------
+
+    const OWNER: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+    /// One corpus exercising every visibility shape at once:
+    /// 1 public, 2 private-owned-by-OWNER, 3 private-owned-by-OTHER,
+    /// 4 private with an unknown owner.
+    fn corpus() -> Vec<NodeVisibility> {
+        vec![
+            NodeVisibility::public(1),
+            NodeVisibility::private_owned_by(2, OWNER),
+            NodeVisibility::private_owned_by(3, OTHER),
+            NodeVisibility::private_unowned(4),
+        ]
+    }
+
+    fn kept_for(session: Option<&str>) -> Vec<u32> {
+        let drop = compute_private_opaque_ids(&corpus(), session);
+        let mut kept: Vec<u32> = corpus()
+            .iter()
+            .map(|n| n.wire_id)
+            .filter(|id| !drop.contains(id))
+            .collect();
+        kept.sort_unstable();
+        kept
+    }
+
+    /// An anonymous caller sees the public-only graph. Every private node
+    /// drops, whether or not its owner is known — the fail-closed rule.
+    #[test]
+    fn anonymous_caller_sees_only_public_nodes() {
+        assert_eq!(kept_for(None), vec![1]);
+    }
+
+    /// An owner sees the public graph plus their own private nodes, and nobody
+    /// else's.
+    #[test]
+    fn owner_sees_public_plus_their_own_private_nodes() {
+        assert_eq!(kept_for(Some(OWNER)), vec![1, 2]);
+    }
+
+    /// A different authenticated caller sees the public graph plus *their* own
+    /// private nodes — here, none.
+    #[test]
+    fn non_owner_sees_public_plus_only_their_own() {
+        assert_eq!(kept_for(Some(OTHER)), vec![1, 3]);
+    }
+
+    /// A private node whose owner is unknown is never visible to anyone. It is
+    /// not "owned by the caller" for any caller, so it fails closed.
+    #[test]
+    fn an_unowned_private_node_is_invisible_to_every_caller() {
+        for session in [None, Some(OWNER), Some(OTHER)] {
+            assert!(
+                !kept_for(session).contains(&4),
+                "an unowned private node must never reach the wire"
+            );
+        }
+    }
+
+    /// The union of what every caller can see never exceeds the corpus, and no
+    /// caller sees another's private node. Stated as an invariant over the
+    /// three caller classes rather than three separate assertions.
+    #[test]
+    fn no_caller_ever_sees_another_callers_private_node() {
+        let owner_view = kept_for(Some(OWNER));
+        let other_view = kept_for(Some(OTHER));
+        assert!(!owner_view.contains(&3), "OWNER must not see OTHER's node");
+        assert!(!other_view.contains(&2), "OTHER must not see OWNER's node");
+    }
+
+    /// A public-to-private transition: the same node id, re-published as
+    /// private, disappears for every caller but its owner. This is the
+    /// visibility-change case the ADR names — the filter is evaluated per
+    /// snapshot, so a re-published corpus takes effect immediately.
+    #[test]
+    fn a_public_to_private_transition_takes_effect_on_the_next_snapshot() {
+        let before = vec![NodeVisibility::public(7)];
+        for session in [None, Some(OWNER), Some(OTHER)] {
+            assert!(compute_private_opaque_ids(&before, session).is_empty());
+        }
+
+        let after = vec![NodeVisibility::private_owned_by(7, OWNER)];
+        assert!(compute_private_opaque_ids(&after, None).contains(&7));
+        assert!(compute_private_opaque_ids(&after, Some(OTHER)).contains(&7));
+        assert!(
+            !compute_private_opaque_ids(&after, Some(OWNER)).contains(&7),
+            "the owner keeps seeing their own node"
+        );
+    }
+
+    /// An owner change hands visibility to the new owner and takes it from the
+    /// old one, with no stale retention in the filter itself.
+    #[test]
+    fn an_owner_change_moves_visibility() {
+        let before = vec![NodeVisibility::private_owned_by(8, OWNER)];
+        assert!(!compute_private_opaque_ids(&before, Some(OWNER)).contains(&8));
+        assert!(compute_private_opaque_ids(&before, Some(OTHER)).contains(&8));
+
+        let after = vec![NodeVisibility::private_owned_by(8, OTHER)];
+        assert!(
+            compute_private_opaque_ids(&after, Some(OWNER)).contains(&8),
+            "the previous owner loses visibility"
+        );
+        assert!(!compute_private_opaque_ids(&after, Some(OTHER)).contains(&8));
+    }
+
+    /// Re-authenticating as a different pubkey changes what the same connection
+    /// may see: the filter holds no per-connection state, so the drop set is a
+    /// pure function of (corpus, session pubkey).
+    #[test]
+    fn reauthentication_changes_the_drop_set_with_no_retained_state() {
+        let nodes = corpus();
+        let anon = compute_private_opaque_ids(&nodes, None);
+        let as_owner = compute_private_opaque_ids(&nodes, Some(OWNER));
+        let back_to_anon = compute_private_opaque_ids(&nodes, None);
+
+        assert_ne!(anon, as_owner);
+        assert_eq!(
+            anon, back_to_anon,
+            "dropping the session must restore the anonymous view exactly"
+        );
+    }
+
+    /// Edge visibility: an edge survives only when BOTH endpoints survive. This
+    /// is the rule the socket path applies to initial edges, asserted here over
+    /// the same drop set so the two cannot diverge.
+    #[test]
+    fn an_edge_survives_only_when_both_endpoints_do() {
+        let drop = compute_private_opaque_ids(&corpus(), Some(OWNER));
+        let edges = [(1u32, 2u32), (1, 3), (2, 3), (1, 4), (2, 2)];
+        let kept: Vec<(u32, u32)> = edges
+            .into_iter()
+            .filter(|(s, t)| !drop.contains(s) && !drop.contains(t))
+            .collect();
+        assert_eq!(
+            kept,
+            vec![(1, 2), (2, 2)],
+            "only edges between nodes the owner can see survive"
+        );
+    }
+
+    /// An empty drop set leaves the payload untouched and allocates nothing —
+    /// the flag-off hot path.
+    #[test]
+    fn an_empty_drop_set_is_a_no_op() {
+        let mut pairs = vec![(1u32, Payload(10)), (2, Payload(20))];
+        let before = pairs.clone();
+        assert_eq!(apply_drop_set(&mut pairs, &HashSet::new()), 0);
+        assert_eq!(pairs, before);
+    }
+
+    /// The drop set applies identically to any payload type, which is what lets
+    /// the same set filter node positions, agent nodes and labels.
+    #[test]
+    fn the_drop_set_applies_to_any_payload_type() {
+        let drop = compute_private_opaque_ids(&corpus(), None);
+
+        let mut positions = vec![(1u32, [0.0f32; 3]), (2, [1.0; 3]), (3, [2.0; 3])];
+        assert_eq!(apply_drop_set(&mut positions, &drop), 2);
+        assert_eq!(positions.len(), 1);
+
+        let mut labels = vec![
+            (1u32, "public".to_string()),
+            (2, "owner private".to_string()),
+            (4, "unowned private".to_string()),
+        ];
+        assert_eq!(apply_drop_set(&mut labels, &drop), 2);
+        assert_eq!(labels, vec![(1, "public".to_string())]);
+    }
 }

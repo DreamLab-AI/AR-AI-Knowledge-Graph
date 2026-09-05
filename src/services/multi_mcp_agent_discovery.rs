@@ -20,6 +20,44 @@ use crate::services::agent_visualization_protocol::{
 use crate::utils::mcp_tcp_client::create_mcp_client;
 use crate::utils::time;
 
+/// ADR-2083: floor for the discovery loop's sleep interval. Each
+/// `McpServerConfig::discovery_interval_ms` is operator/deploy-time
+/// configuration; a misconfigured value of `0` (or anything absurdly small)
+/// must not spin the discovery loop into a busy-poll. Every derived interval
+/// is clamped to at least this many milliseconds regardless of what the
+/// configured servers ask for.
+const MIN_DISCOVERY_INTERVAL_MS: u64 = 250;
+
+/// ADR-2083: fallback cadence used when there is no enabled server to derive
+/// an interval from (e.g. every server has been removed or disabled).
+/// Matches `McpServerConfig::default()`'s `discovery_interval_ms` so the
+/// no-server case behaves the same as a single default-configured server.
+const DEFAULT_DISCOVERY_INTERVAL_MS: u64 = 5000;
+
+/// ADR-2083: selects the multi-MCP discovery loop's sleep interval from the
+/// configured per-server `discovery_interval_ms` values.
+///
+/// Semantics: the minimum `discovery_interval_ms` across *enabled* servers,
+/// so every server is polled at least as often as it asked to be, floored at
+/// [`MIN_DISCOVERY_INTERVAL_MS`] so a misconfigured `0` cannot spin the loop.
+/// Disabled servers never influence the result. Falls back to
+/// [`DEFAULT_DISCOVERY_INTERVAL_MS`] when no server is enabled.
+fn select_discovery_interval_ms<'a, I>(configs: I) -> u64
+where
+    I: IntoIterator<Item = &'a McpServerConfig>,
+{
+    let min_enabled = configs
+        .into_iter()
+        .filter(|config| config.enabled)
+        .map(|config| config.discovery_interval_ms)
+        .min();
+
+    match min_enabled {
+        Some(interval_ms) => interval_ms.max(MIN_DISCOVERY_INTERVAL_MS),
+        None => DEFAULT_DISCOVERY_INTERVAL_MS,
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct McpServerConfig {
     pub server_id: String,
@@ -188,6 +226,11 @@ impl MultiMcpAgentDiscovery {
             while *discovery_running.read().await {
                 let servers_config = servers.read().await.clone();
 
+                // ADR-2083: derive the inter-cycle sleep from the configured
+                // per-server discovery_interval_ms BEFORE servers_config is
+                // consumed by the discovery_futures map below.
+                let sleep_ms = select_discovery_interval_ms(servers_config.values());
+
                 // Discover all enabled servers concurrently
                 let discovery_futures: Vec<_> = servers_config
                     .into_iter()
@@ -253,8 +296,11 @@ impl MultiMcpAgentDiscovery {
 
                 futures::future::join_all(discovery_futures).await;
 
-                // Sleep between discovery cycles
-                tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                // ADR-2083: sleep for the configured discovery cadence rather
+                // than a hardcoded 1000ms — honours each server's
+                // discovery_interval_ms (minimum across enabled servers,
+                // floored at MIN_DISCOVERY_INTERVAL_MS).
+                tokio::time::sleep(tokio::time::Duration::from_millis(sleep_ms)).await;
             }
 
             info!("Multi-MCP agent discovery service stopped");
@@ -703,5 +749,74 @@ impl MultiMcpAgentDiscovery {
 impl Default for MultiMcpAgentDiscovery {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod discovery_interval_tests {
+    use super::*;
+
+    fn config(discovery_interval_ms: u64, enabled: bool) -> McpServerConfig {
+        McpServerConfig {
+            server_id: "test".to_string(),
+            server_type: McpServerType::Custom("test".to_string()),
+            host: "localhost".to_string(),
+            port: 0,
+            enabled,
+            discovery_interval_ms,
+            timeout_ms: 1000,
+            retry_attempts: 1,
+        }
+    }
+
+    /// ADR-2083: the minimum discovery_interval_ms across enabled servers wins,
+    /// so every server is polled at least as often as it configured.
+    #[test]
+    fn selects_minimum_across_enabled_servers() {
+        let configs = vec![config(3000, true), config(5000, true), config(4000, true)];
+        assert_eq!(select_discovery_interval_ms(configs.iter()), 3000);
+    }
+
+    /// ADR-2083: a configured value below the floor is clamped up, so a
+    /// misconfigured discovery_interval_ms=0 cannot spin the loop.
+    #[test]
+    fn floor_is_applied_to_a_too_small_configured_value() {
+        let configs = vec![config(0, true), config(50, true)];
+        assert_eq!(
+            select_discovery_interval_ms(configs.iter()),
+            MIN_DISCOVERY_INTERVAL_MS
+        );
+    }
+
+    /// ADR-2083: a value already above the floor passes through unchanged.
+    #[test]
+    fn value_above_floor_is_unchanged() {
+        let configs = vec![config(1200, true)];
+        assert_eq!(select_discovery_interval_ms(configs.iter()), 1200);
+    }
+
+    /// ADR-2083: disabled servers must never lower (or otherwise influence)
+    /// the selected interval, even if their configured value is tiny.
+    #[test]
+    fn disabled_servers_are_ignored() {
+        let configs = vec![config(100, false), config(6000, true)];
+        assert_eq!(select_discovery_interval_ms(configs.iter()), 6000);
+    }
+
+    /// ADR-2083: an all-disabled or empty server set falls back to the
+    /// named default rather than a bare literal or a busy-poll floor.
+    #[test]
+    fn falls_back_to_default_when_no_server_is_enabled() {
+        let configs = vec![config(100, false), config(200, false)];
+        assert_eq!(
+            select_discovery_interval_ms(configs.iter()),
+            DEFAULT_DISCOVERY_INTERVAL_MS
+        );
+
+        let empty: Vec<McpServerConfig> = Vec::new();
+        assert_eq!(
+            select_discovery_interval_ms(empty.iter()),
+            DEFAULT_DISCOVERY_INTERVAL_MS
+        );
     }
 }

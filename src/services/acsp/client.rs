@@ -18,7 +18,7 @@ use nostr_sdk::prelude::*;
 use super::events::{ActionResponse, UnsignedAcspEvent, KIND_ACTION_RESPONSE};
 
 /// A human decision delivered for a previously opened broker case.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaseDecision {
     /// The case id (the 31402 d-tag this response answers).
     pub case_id: String,
@@ -27,6 +27,40 @@ pub struct CaseDecision {
     pub reasoning: String,
     /// Pubkey of the responding admin (relay enforces admin-only 31403).
     pub responder_pubkey: String,
+    /// ADR-2006 — the id of the **signed** 31403 event this decision came from.
+    ///
+    /// Without it a decision could only be correlated by re-deriving an
+    /// identifier from `(case_id, action, responder_pubkey)`, which is not
+    /// unique: a replayed or re-sent response, or an admin who answers the same
+    /// case twice the same way, collides with the first. The signed event id is
+    /// the one identifier the relay guarantees is unique per decision, so it is
+    /// what the provenance record correlates on and what duplicate suppression
+    /// keys off.
+    pub event_id: String,
+    /// The 31403 event's `created_at`, in seconds since the Unix epoch.
+    ///
+    /// Retained separately from the local receipt time so subscription lag —
+    /// the gap between when the human decided and when this process saw it —
+    /// is measurable after the fact rather than only loggable at the moment.
+    pub created_at: u64,
+}
+
+impl CaseDecision {
+    /// A stable, per-decision correlation key: the signed event id.
+    ///
+    /// This is what makes duplicate detection exact. Two deliveries of the same
+    /// signed decision share it; two genuinely distinct decisions never do,
+    /// even when case, action and responder all match.
+    pub fn correlation_id(&self) -> &str {
+        &self.event_id
+    }
+
+    /// Seconds between the decision being signed and `observed_at` (also
+    /// epoch seconds). Saturates at zero for an event dated in the future,
+    /// which a relay with a skewed clock can produce.
+    pub fn lag_seconds(&self, observed_at: u64) -> u64 {
+        observed_at.saturating_sub(self.created_at)
+    }
 }
 
 pub struct AcspClient {
@@ -157,6 +191,10 @@ pub fn decision_from_event(event: &Event, case_prefix: &str) -> Option<CaseDecis
         action: content.action,
         reasoning: content.reasoning,
         responder_pubkey: event.pubkey.to_hex(),
+        // ADR-2006: preserve the signed event's identity and timestamp so the
+        // decision can be correlated back to the request that produced it.
+        event_id: event.id.to_hex(),
+        created_at: event.created_at.as_u64(),
     })
 }
 

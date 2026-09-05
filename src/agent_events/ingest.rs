@@ -5,17 +5,23 @@
 //! this handler VisionClaw had **no JSON consumer** for those pushes at all (see
 //! ADR-059 Design log, Finding 1 — the path was absent, not lossy). Every frame
 //! is parsed against the canonical [`AgentActionNotification`] mirror, validated,
-//! and published to the process-global [`hub`]. The beam + gluon render actor
-//! (ADR-059 §4, Phase 2b) subscribes to the hub.
+//! and published to the process-global [`hub`]. The GPU beam render actor
+//! (`AgentBeamActor`, `src/actors/agent_beam_actor.rs`) subscribes to the hub and
+//! is fully shipped; the attractive "gluon" transient edge is a separate,
+//! deferred sub-feature (see `agent_beam_actor.rs:327` for why it is not
+//! low-risk on the current packed-CSR GPU edge layout). ADR-2084 records the
+//! correction of this module's own stale framing.
 //!
 //! Out of scope here, by design:
-//!   * The deprecated `:9500` MCP-TCP path (`services/bots_client.rs`) is
-//!     untouched — it carries agent *state snapshots* (`query_agent_list`), a
-//!     different payload from `agent_action`. Cutting state over to WS expands
-//!     the wire contract and is scoped as a follow-on (see ADR-059 Design log).
-//!   * The GPU beam + gluon render (transient edge + `class_charge` modulation)
-//!     is Phase 2b — it touches the spring system and the `Edge` struct and must
-//!     not be bolted onto the latent render substrate in the same increment.
+//!   * The `:9500` MCP-TCP path (`services/bots_client.rs`) is untouched and is
+//!     **not deprecated**: it remains the sole source of agent *state
+//!     snapshots* (`query_agent_list`, polled every 2s), a different payload
+//!     from `agent_action`, and no replacement exists yet. Cutting state over
+//!     to this WS transport is a planned, unbuilt follow-on — see ADR-2084.
+//!   * The GLUON attractive transient edge (distinct from the shipped beam
+//!     render above) is deferred — it would touch the spring system and the
+//!     `Edge` struct and must not be bolted onto the shipped beam render in
+//!     the same increment; see `agent_beam_actor.rs:327` for the CSR reason.
 //!
 //! Auth model: this is a **server-to-server** ingest socket (agentbox →
 //! VisionClaw), not a browser socket. A valid session token is the gate

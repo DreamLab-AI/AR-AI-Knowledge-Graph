@@ -476,10 +476,14 @@ impl NostrService {
     }
 
     pub async fn validate_session(&self, pubkey: &str, token: &str) -> bool {
+        if token.is_empty() {
+            return false;
+        }
         if let Some(user) = self.get_user(pubkey).await {
             if let Some(session_token) = user.session_token {
                 let now = time::timestamp_seconds();
-                if now - user.last_seen <= self.token_expiry {
+                // ADR-2044: one freshness rule, shared with `get_session`.
+                if Self::session_is_fresh(user.last_seen, now, self.token_expiry) {
                     return session_token == token;
                 }
             }
@@ -556,14 +560,42 @@ impl NostrService {
         }
     }
 
-    /// Get session by token (looks up user by token)
+    /// Get session by token (looks up user by token).
+    ///
+    /// ADR-2044: this enforces the SAME `AUTH_TOKEN_EXPIRY` window as
+    /// [`Self::validate_session`]. It previously returned any user whose
+    /// `session_token` matched, with no expiry check at all, so a token
+    /// presented on a WebSocket upgrade stayed valid until logout or overwrite
+    /// while the REST path expired it — two different lifetimes for one
+    /// credential. Every caller of this function is an authentication path
+    /// (`solid_proxy_handler`, the `/wss` upgrade, `filter_auth`,
+    /// `agent_events::ingest`), so the check fails closed: an expired token
+    /// resolves to `None` exactly as an unknown token does.
     pub async fn get_session(&self, token: &str) -> Option<NostrUser> {
+        if token.is_empty() {
+            return None;
+        }
         let users = self.users.read().await;
         let token_string = token.to_string();
+        let now = time::timestamp_seconds();
         users
             .values()
-            .find(|user| user.session_token.as_ref() == Some(&token_string))
+            .find(|user| {
+                user.session_token.as_ref() == Some(&token_string)
+                    && Self::session_is_fresh(user.last_seen, now, self.token_expiry)
+            })
             .cloned()
+    }
+
+    /// Is a session still inside its `AUTH_TOKEN_EXPIRY` window?
+    ///
+    /// ADR-2044: shared by [`Self::get_session`] and [`Self::validate_session`]
+    /// so the WebSocket and REST realms cannot drift apart again. A `last_seen`
+    /// in the future (clock skew, or a clock stepped backwards) is treated as
+    /// stale rather than as an unbounded lease — the age is compared on its
+    /// absolute value so neither direction of skew can widen the window.
+    fn session_is_fresh(last_seen: i64, now: i64, token_expiry: i64) -> bool {
+        now.saturating_sub(last_seen).abs() <= token_expiry
     }
 
     /// Validate NIP-98 HTTP authentication from Authorization header
@@ -701,5 +733,46 @@ impl NostrService {
 impl Default for NostrService {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod session_expiry_tests {
+    use super::NostrService;
+
+    // ADR-2044: `get_session` and `validate_session` must share one freshness
+    // rule. These exercise the shared helper directly — it is pure over
+    // (last_seen, now, token_expiry), so the whole matrix is testable without
+    // constructing a service or touching Redis.
+    const EXPIRY: i64 = 3600;
+    const NOW: i64 = 1_757_000_000;
+
+    #[test]
+    fn fresh_session_inside_the_window_is_accepted() {
+        assert!(NostrService::session_is_fresh(NOW - 1, NOW, EXPIRY));
+        assert!(NostrService::session_is_fresh(NOW - EXPIRY + 1, NOW, EXPIRY));
+    }
+
+    #[test]
+    fn session_exactly_at_the_boundary_is_accepted() {
+        assert!(NostrService::session_is_fresh(NOW - EXPIRY, NOW, EXPIRY));
+    }
+
+    #[test]
+    fn session_past_the_window_is_rejected() {
+        assert!(!NostrService::session_is_fresh(NOW - EXPIRY - 1, NOW, EXPIRY));
+        assert!(!NostrService::session_is_fresh(NOW - 10 * EXPIRY, NOW, EXPIRY));
+    }
+
+    #[test]
+    fn future_last_seen_beyond_the_window_is_rejected_not_granted() {
+        // A clock stepped backwards must not turn into an unbounded lease:
+        // the age is compared on its absolute value.
+        assert!(!NostrService::session_is_fresh(NOW + EXPIRY + 1, NOW, EXPIRY));
+    }
+
+    #[test]
+    fn small_forward_skew_stays_inside_the_window() {
+        assert!(NostrService::session_is_fresh(NOW + 1, NOW, EXPIRY));
     }
 }

@@ -67,6 +67,84 @@ pub enum RoleStoreError {
     Forbidden(String),
     #[error("refused: this would remove the last Owner")]
     LastOwner,
+    /// ADR-2010: the caller's authority changed between admission and commit.
+    ///
+    /// The handler resolves the caller's role when the request is admitted, but
+    /// the mutation commits later. If a concurrent demotion lands in between,
+    /// the request was admitted under authority the caller no longer holds. The
+    /// transaction re-reads the caller's role and refuses rather than committing
+    /// on the stale value; the client must re-authenticate and retry.
+    #[error(
+        "refused: caller authority changed during the request \
+(admitted as {admission}, now {current}) — re-authenticate and retry"
+    )]
+    CallerAuthorityChanged {
+        admission: UserRole,
+        current: UserRole,
+    },
+}
+
+/// The caller's identity and admission-time authority for a role mutation.
+///
+/// ADR-2010: passing the resolved `UserRole` alone made the mutation
+/// transaction consume authority read *before* the transaction opened. Carrying
+/// the pubkey and the power-user flag lets the transaction re-resolve the
+/// caller's effective role against the same snapshot it reads the target from,
+/// so a concurrent demotion cannot be raced past the lattice check.
+#[derive(Debug, Clone)]
+pub struct CallerAuthority {
+    /// The caller's canonicalised pubkey.
+    pub pubkey: String,
+    /// Whether the caller is a legacy `POWER_USER_PUBKEYS` member. This is
+    /// process configuration rather than stored state, so it is resolved once
+    /// by the handler and carried in.
+    pub is_power_user: bool,
+    /// The effective role the request was admitted under. Retained so a
+    /// mid-request change is *reported* rather than silently absorbed.
+    pub admission_role: UserRole,
+}
+
+impl CallerAuthority {
+    /// Build a caller authority from the values the handler already has.
+    pub fn new(pubkey: &str, is_power_user: bool, admission_role: UserRole) -> Self {
+        Self {
+            pubkey: canonicalise_pubkey(pubkey),
+            is_power_user,
+            admission_role,
+        }
+    }
+}
+
+/// What a successful removal actually did to the target's access.
+///
+/// ADR-2010: "revoke" is a misnomer for this operation. Deleting the explicit
+/// row does not deny the target — it drops them back to whatever the ambient
+/// rules grant: `Admin` if they are a legacy power user, otherwise the
+/// configured unassigned-signer default (`Editor` unless overridden). For a
+/// target sitting at `Viewer`, removal *raises* their authority. Callers get
+/// the post-removal effective role and an explicit statement of whether access
+/// was actually reduced, so an operator is never told "revoked" when the user
+/// still holds write access.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub struct RemovalOutcome {
+    /// Was there an explicit row to remove?
+    pub had_explicit_role: bool,
+    /// The role the target held before removal, if any.
+    pub previous_role: Option<UserRole>,
+    /// The effective role the target holds now that the row is gone.
+    pub effective_after: UserRole,
+    /// True only when the target's effective authority actually decreased.
+    /// False means the removal was a no-op or an *increase* — it did not
+    /// revoke anything.
+    pub authority_reduced: bool,
+}
+
+impl RemovalOutcome {
+    /// The explicit assignment needed to genuinely deny a target that removal
+    /// would not reduce: assign `Viewer`, do not remove the row.
+    pub fn revocation_requires_explicit_viewer(&self) -> bool {
+        !self.authority_reduced && self.effective_after > UserRole::Viewer
+    }
 }
 
 /// Canonicalise a pubkey for storage AND lookup: trim + lowercase. This is the
@@ -222,6 +300,23 @@ impl RoleStore {
         Ok(Self { conn, default_role })
     }
 
+    /// Construct with an explicitly supplied unassigned-signer default,
+    /// bypassing [`RBAC_DEFAULT_ROLE_ENV`].
+    ///
+    /// The environment variable is the deployment-time control; this is the
+    /// programmatic one, for embedders that configure the posture in code and
+    /// for exercising the ADR-2010 removal semantics under both defaults
+    /// (removal restores the default, so the default decides whether removing
+    /// an assignment reduces authority or raises it).
+    pub async fn new_with_default(
+        conn: Arc<Connection>,
+        default_role: UserRole,
+    ) -> Result<Self, tokio_rusqlite::Error> {
+        let mut store = Self::new(conn).await?;
+        store.default_role = default_role;
+        Ok(store)
+    }
+
     /// The role an authenticated-but-unassigned pubkey resolves to, as
     /// configured by [`RBAC_DEFAULT_ROLE_ENV`] at construction.
     pub fn configured_default(&self) -> UserRole {
@@ -314,17 +409,30 @@ impl RoleStore {
         &self,
         target: &str,
         new_role: UserRole,
-        caller: UserRole,
-        caller_pubkey: &str,
+        caller: &CallerAuthority,
     ) -> Result<UserRole, RoleStoreError> {
         let key = validate_pubkey(target)?;
-        let assigned_by = canonicalise_pubkey(caller_pubkey);
+        let assigned_by = caller.pubkey.clone();
         let new_str = new_role.as_str().to_string();
+        let caller = caller.clone();
+        let default_role = self.default_role;
 
         let outcome: TxOutcome = self
             .conn
             .call(move |c| {
                 let tx = c.transaction()?;
+
+                // ADR-2010: re-resolve the CALLER's authority inside the same
+                // transaction that reads the target, so a concurrent demotion
+                // cannot be raced past the lattice check below.
+                let current = resolve_caller_role_in_tx(&tx, &caller, default_role)?;
+                let caller_role = match effective_mutation_authority(caller.admission_role, current)
+                {
+                    Ok(role) => role,
+                    Err(outcome) => return Ok(outcome),
+                };
+                let caller = caller_role;
+
                 let existing = read_role(&tx, &key)?;
                 if let ExistingRole::Invalid(role) = existing {
                     return Ok(TxOutcome::InvalidExisting { pubkey: key, role });
@@ -375,32 +483,62 @@ impl RoleStore {
         outcome.into_result(new_role)
     }
 
-    /// Remove an explicit assignment (revert to default), enforcing `can_assign`
-    /// on the current role and the last-Owner invariant, atomically.
-    pub async fn revoke_checked(
+    /// Remove an explicit assignment, enforcing `can_assign` on the current role
+    /// and the last-Owner invariant, atomically.
+    ///
+    /// ADR-2010 — **removal is not revocation.** Deleting the row drops the
+    /// target to their ambient authority: `Admin` if they are a legacy power
+    /// user, otherwise the configured unassigned-signer default. The returned
+    /// [`RemovalOutcome`] states the post-removal effective role and whether
+    /// authority actually fell, so an operator is never told "revoked" when the
+    /// user still holds write access. To genuinely deny a target, assign
+    /// `Viewer` explicitly — see
+    /// [`RemovalOutcome::revocation_requires_explicit_viewer`].
+    ///
+    /// `target_is_power_user` is process configuration the store cannot read,
+    /// so the caller supplies it; it decides the post-removal effective role.
+    pub async fn remove_checked(
         &self,
         target: &str,
-        caller: UserRole,
-    ) -> Result<bool, RoleStoreError> {
+        target_is_power_user: bool,
+        caller: &CallerAuthority,
+    ) -> Result<RemovalOutcome, RoleStoreError> {
         let key = canonicalise_pubkey(target);
+        let caller = caller.clone();
+        let default_role = self.default_role;
 
-        let outcome: TxOutcome = self
+        let outcome: TxRemoval = self
             .conn
             .call(move |c| {
                 let tx = c.transaction()?;
+
+                // ADR-2010: caller authority is re-read inside the transaction.
+                let current = resolve_caller_role_in_tx(&tx, &caller, default_role)?;
+                let caller_role = match effective_mutation_authority(caller.admission_role, current)
+                {
+                    Ok(role) => role,
+                    Err(outcome) => return Ok(TxRemoval::Other(outcome)),
+                };
+                let caller = caller_role;
+
                 let existing = read_role(&tx, &key)?;
                 if let ExistingRole::Invalid(role) = existing {
-                    return Ok(TxOutcome::InvalidExisting { pubkey: key, role });
+                    return Ok(TxRemoval::Other(TxOutcome::InvalidExisting {
+                        pubkey: key,
+                        role,
+                    }));
                 }
                 let existing = existing.into_option();
                 let Some(ex) = existing else {
-                    // Nothing to remove — succeed as a no-op (had_explicit=false).
-                    return Ok(TxOutcome::NoOp);
+                    // Nothing to remove — a no-op, not a revocation.
+                    return Ok(TxRemoval::Removed {
+                        previous_role: None,
+                    });
                 };
                 if !caller.can_assign(ex) {
-                    return Ok(TxOutcome::Forbidden(format!(
-                        "{caller} may not revoke a user currently holding {ex}"
-                    )));
+                    return Ok(TxRemoval::Other(TxOutcome::Forbidden(format!(
+                        "{caller} may not remove the assignment of a user currently holding {ex}"
+                    ))));
                 }
                 if ex == UserRole::Owner {
                     let owners: i64 = tx.query_row(
@@ -409,24 +547,33 @@ impl RoleStore {
                         |r| r.get(0),
                     )?;
                     if owners <= 1 {
-                        return Ok(TxOutcome::LastOwner);
+                        return Ok(TxRemoval::Other(TxOutcome::LastOwner));
                     }
                 }
                 tx.execute("DELETE FROM user_roles WHERE pubkey = ?1", [key])?;
                 tx.commit()?;
-                Ok(TxOutcome::Ok)
+                Ok(TxRemoval::Removed {
+                    previous_role: Some(ex),
+                })
             })
             .await?;
 
-        match outcome {
-            TxOutcome::Ok => Ok(true),
-            TxOutcome::NoOp => Ok(false),
-            TxOutcome::Forbidden(m) => Err(RoleStoreError::Forbidden(m)),
-            TxOutcome::LastOwner => Err(RoleStoreError::LastOwner),
-            TxOutcome::InvalidExisting { pubkey, role } => {
-                Err(RoleStoreError::InvalidRole { pubkey, role })
-            }
-        }
+        let previous_role = match outcome {
+            TxRemoval::Removed { previous_role } => previous_role,
+            TxRemoval::Other(other) => return Err(other.into_result(UserRole::Viewer).unwrap_err()),
+        };
+
+        let effective_after = if target_is_power_user {
+            UserRole::Admin
+        } else {
+            self.default_role
+        };
+        Ok(RemovalOutcome {
+            had_explicit_role: previous_role.is_some(),
+            previous_role,
+            effective_after,
+            authority_reduced: previous_role.is_some_and(|prev| effective_after < prev),
+        })
     }
 
     /// Whether any pubkey currently holds `Owner`. Used by the startup lockout
@@ -556,6 +703,67 @@ fn read_role(tx: &rusqlite::Transaction<'_>, pubkey: &str) -> rusqlite::Result<E
     })
 }
 
+/// Resolve the caller's effective role from *inside* an open transaction
+/// (ADR-2010).
+///
+/// Applies exactly the precedence [`RoleStore::effective_role`] uses — explicit
+/// assignment, then `Admin` for a legacy power user, then the configured
+/// unassigned default — but against the transaction's snapshot, so the value
+/// cannot be stale by the time the write commits. An unparseable stored role
+/// fails closed to `Viewer`, matching the async path: a corrupt row must never
+/// widen the caller's authority.
+fn resolve_caller_role_in_tx(
+    tx: &rusqlite::Transaction<'_>,
+    caller: &CallerAuthority,
+    default_role: UserRole,
+) -> rusqlite::Result<UserRole> {
+    Ok(match read_role(tx, &caller.pubkey)? {
+        ExistingRole::Some(role) => role,
+        ExistingRole::Invalid(role) => {
+            error!(
+                "RBAC: caller {} has invalid stored role '{role}'; failing closed to Viewer",
+                caller.pubkey
+            );
+            UserRole::Viewer
+        }
+        ExistingRole::None => {
+            if caller.is_power_user {
+                UserRole::Admin
+            } else {
+                default_role
+            }
+        }
+    })
+}
+
+/// The authority a mutation may act under, given admission-time and
+/// in-transaction readings (ADR-2010).
+///
+/// * A **demotion** (current < admission) aborts: the request was admitted on
+///   authority the caller no longer holds.
+/// * A **promotion** (current > admission) does not escalate: the mutation is
+///   still bound by the admission role, so winning a race cannot grant a
+///   privilege the request was not admitted for.
+/// * Unchanged authority proceeds normally.
+fn effective_mutation_authority(
+    admission: UserRole,
+    current: UserRole,
+) -> Result<UserRole, TxOutcome> {
+    if current < admission {
+        Err(TxOutcome::CallerChanged { admission, current })
+    } else {
+        Ok(admission)
+    }
+}
+
+/// Outcome of the removal transaction: either the row was removed (carrying the
+/// role it held) or the transaction refused, in which case the shared
+/// [`TxOutcome`] mapping applies.
+enum TxRemoval {
+    Removed { previous_role: Option<UserRole> },
+    Other(TxOutcome),
+}
+
 /// Outcome of a transactional check+mutate, mapped to [`RoleStoreError`] outside
 /// the `conn.call` closure (whose error type cannot carry our variants).
 enum TxOutcome {
@@ -563,7 +771,16 @@ enum TxOutcome {
     NoOp,
     Forbidden(String),
     LastOwner,
-    InvalidExisting { pubkey: String, role: String },
+    InvalidExisting {
+        pubkey: String,
+        role: String,
+    },
+    /// ADR-2010: the caller's in-transaction role is weaker than the role the
+    /// request was admitted under.
+    CallerChanged {
+        admission: UserRole,
+        current: UserRole,
+    },
 }
 
 impl TxOutcome {
@@ -574,6 +791,9 @@ impl TxOutcome {
             TxOutcome::LastOwner => Err(RoleStoreError::LastOwner),
             TxOutcome::InvalidExisting { pubkey, role } => {
                 Err(RoleStoreError::InvalidRole { pubkey, role })
+            }
+            TxOutcome::CallerChanged { admission, current } => {
+                Err(RoleStoreError::CallerAuthorityChanged { admission, current })
             }
         }
     }
@@ -610,6 +830,22 @@ mod tests {
             .await
             .expect("open in-memory db");
         RoleStore::new(Arc::new(conn)).await.expect("create table")
+    }
+
+    /// Give `pubkey` an explicit `role` row and return the matching
+    /// [`CallerAuthority`]. ADR-2010: the admission role must be derivable from
+    /// what the transaction can read, so a test caller needs a real row (or the
+    /// power-user flag) — an admission role conjured from nothing is exactly
+    /// the stale authority the store now refuses.
+    async fn caller_with_role(store: &RoleStore, pubkey: &str, role: UserRole) -> CallerAuthority {
+        store.set(pubkey, role, None).await.expect("seed caller row");
+        CallerAuthority::new(pubkey, false, role)
+    }
+
+    /// A caller whose authority comes from the legacy power-user list rather
+    /// than a stored row.
+    fn power_user_caller(pubkey: &str) -> CallerAuthority {
+        CallerAuthority::new(pubkey, true, UserRole::Admin)
     }
 
     #[tokio::test]
@@ -697,9 +933,15 @@ mod tests {
     async fn remove_reverts_to_default() {
         let store = mem_store().await;
         store.set(PK_A, UserRole::Editor, None).await.unwrap();
-        assert!(store.revoke_checked(PK_A, UserRole::Owner).await.unwrap());
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        let first = store.remove_checked(PK_A, false, &caller).await.unwrap();
+        assert!(first.had_explicit_role);
+        assert_eq!(first.previous_role, Some(UserRole::Editor));
         assert_eq!(store.get(PK_A).await.unwrap(), None);
-        assert!(!store.revoke_checked(PK_A, UserRole::Owner).await.unwrap());
+
+        let second = store.remove_checked(PK_A, false, &caller).await.unwrap();
+        assert!(!second.had_explicit_role, "second removal is a no-op");
+        assert!(!second.authority_reduced);
     }
 
     #[tokio::test]
@@ -739,18 +981,19 @@ mod tests {
         let store = mem_store().await;
         store.set(PK_A, UserRole::Owner, None).await.unwrap();
         // Owner demotes themselves → refused (they are the last Owner).
+        let self_caller = CallerAuthority::new(PK_A, false, UserRole::Owner);
         let err = store
-            .assign_checked(PK_A, UserRole::Admin, UserRole::Owner, PK_A)
+            .assign_checked(PK_A, UserRole::Admin, &self_caller)
             .await;
         assert!(matches!(err, Err(RoleStoreError::LastOwner)));
-        // Revoking the last Owner is likewise refused.
-        let rev = store.revoke_checked(PK_A, UserRole::Owner).await;
+        // Removing the last Owner's assignment is likewise refused.
+        let rev = store.remove_checked(PK_A, false, &self_caller).await;
         assert!(matches!(rev, Err(RoleStoreError::LastOwner)));
         // With a second Owner, demotion of the first is allowed.
-        store.set(PK_B, UserRole::Owner, None).await.unwrap();
+        let other_owner = caller_with_role(&store, PK_B, UserRole::Owner).await;
         assert_eq!(
             store
-                .assign_checked(PK_A, UserRole::Admin, UserRole::Owner, PK_B)
+                .assign_checked(PK_A, UserRole::Admin, &other_owner)
                 .await
                 .unwrap(),
             UserRole::Admin
@@ -760,20 +1003,29 @@ mod tests {
     #[tokio::test]
     async fn assign_checked_enforces_can_assign() {
         let store = mem_store().await;
+        let admin = caller_with_role(&store, PK_B, UserRole::Admin).await;
         // An Admin cannot mint an Admin/Owner.
         assert!(matches!(
-            store
-                .assign_checked(PK_A, UserRole::Admin, UserRole::Admin, PK_B)
-                .await,
+            store.assign_checked(PK_A, UserRole::Admin, &admin).await,
             Err(RoleStoreError::Forbidden(_))
         ));
         // ...but can grant Editor.
         assert_eq!(
             store
-                .assign_checked(PK_A, UserRole::Editor, UserRole::Admin, PK_B)
+                .assign_checked(PK_A, UserRole::Editor, &admin)
                 .await
                 .unwrap(),
             UserRole::Editor
+        );
+        // A power-user caller with no stored row reaches the same Admin
+        // authority through the legacy fallback.
+        let legacy = power_user_caller(PK_PU);
+        assert_eq!(
+            store
+                .assign_checked(PK_A, UserRole::Viewer, &legacy)
+                .await
+                .unwrap(),
+            UserRole::Viewer
         );
     }
 
@@ -866,5 +1118,311 @@ mod tests {
             })
             .await;
         assert!(bad.is_err(), "migrated table must enforce the role CHECK");
+    }
+
+    // ---- ADR-2010 caller-authority freshness ---------------------------------
+
+    /// The reproduced defect: the handler resolves the caller's role, then the
+    /// transaction consumes that stale value. Demote the caller after admission
+    /// and the mutation must refuse, not commit on the old authority.
+    #[tokio::test]
+    async fn concurrent_caller_demotion_is_refused() {
+        let store = mem_store().await;
+        // PK_B is admitted as Owner...
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        // ...and is demoted to Editor before the mutation commits.
+        store.set(PK_B, UserRole::Editor, None).await.unwrap();
+
+        let err = store
+            .assign_checked(PK_A, UserRole::Admin, &caller)
+            .await
+            .expect_err("a demoted caller must not mint an Admin");
+        match err {
+            RoleStoreError::CallerAuthorityChanged { admission, current } => {
+                assert_eq!(admission, UserRole::Owner);
+                assert_eq!(current, UserRole::Editor);
+            }
+            other => panic!("expected CallerAuthorityChanged, got {other:?}"),
+        }
+        assert_eq!(
+            store.get(PK_A).await.unwrap(),
+            None,
+            "the refused mutation must not have written anything"
+        );
+    }
+
+    /// Removal is guarded by the same freshness check.
+    #[tokio::test]
+    async fn concurrent_caller_demotion_is_refused_on_removal() {
+        let store = mem_store().await;
+        store.set(PK_A, UserRole::Editor, None).await.unwrap();
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        store.set(PK_B, UserRole::Viewer, None).await.unwrap();
+
+        let err = store
+            .remove_checked(PK_A, false, &caller)
+            .await
+            .expect_err("a demoted caller must not remove assignments");
+        assert!(matches!(
+            err,
+            RoleStoreError::CallerAuthorityChanged {
+                admission: UserRole::Owner,
+                current: UserRole::Viewer,
+            }
+        ));
+        assert_eq!(
+            store.get(PK_A).await.unwrap(),
+            Some(UserRole::Editor),
+            "the target's assignment must survive a refused removal"
+        );
+    }
+
+    /// Losing the explicit row entirely is also a demotion when the default is
+    /// weaker than the admission role.
+    #[tokio::test]
+    async fn caller_row_removed_mid_request_is_a_demotion() {
+        let store = mem_store().await;
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        store
+            .conn
+            .call(|c| {
+                c.execute("DELETE FROM user_roles WHERE pubkey = ?1", [PK_B])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+
+        let err = store
+            .assign_checked(PK_A, UserRole::Owner, &caller)
+            .await
+            .expect_err("an unassigned caller falls back to the default role");
+        assert!(matches!(
+            err,
+            RoleStoreError::CallerAuthorityChanged {
+                admission: UserRole::Owner,
+                // the store default for an unassigned signer
+                current: UserRole::Editor,
+            }
+        ));
+    }
+
+    /// A caller whose stored role is corrupted mid-request fails closed to
+    /// Viewer inside the transaction, which is a demotion.
+    #[tokio::test]
+    async fn corrupt_caller_row_mid_request_fails_closed() {
+        let store = mem_store().await;
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        // Bypass the CHECK constraint the way the migration test does, so the
+        // stored value is unparseable.
+        store
+            .conn
+            .call(|c| {
+                c.execute("PRAGMA writable_schema=ON", [])?;
+                c.execute(
+                    "UPDATE user_roles SET role = 'superuser' WHERE pubkey = ?1",
+                    [PK_B],
+                )
+                .ok();
+                c.execute("PRAGMA writable_schema=OFF", [])?;
+                Ok(())
+            })
+            .await
+            .ok();
+
+        // Either the CHECK held (role unchanged, mutation succeeds) or the row
+        // is now corrupt and the caller fails closed to Viewer. Both are safe;
+        // what must never happen is the mutation committing on Owner authority
+        // over a corrupt row.
+        let result = store.assign_checked(PK_A, UserRole::Owner, &caller).await;
+        match store.get(PK_B).await {
+            Ok(Some(UserRole::Owner)) => {
+                assert!(result.is_ok(), "an intact Owner row may still assign");
+            }
+            _ => {
+                assert!(
+                    result.is_err(),
+                    "a caller whose row no longer reads as Owner must be refused"
+                );
+            }
+        }
+    }
+
+    /// A promotion between admission and commit does not escalate: the
+    /// mutation stays bound by the authority the request was admitted under, so
+    /// winning a race cannot grant a privilege the request never had.
+    #[tokio::test]
+    async fn concurrent_caller_promotion_does_not_escalate() {
+        let store = mem_store().await;
+        let caller = caller_with_role(&store, PK_B, UserRole::Admin).await;
+        // Promoted to Owner after admission.
+        store.set(PK_B, UserRole::Owner, None).await.unwrap();
+
+        // Admin admission authority still cannot mint an Owner.
+        assert!(matches!(
+            store.assign_checked(PK_A, UserRole::Owner, &caller).await,
+            Err(RoleStoreError::Forbidden(_))
+        ));
+        // The same caller re-admitted as Owner can.
+        let reauthenticated = CallerAuthority::new(PK_B, false, UserRole::Owner);
+        assert_eq!(
+            store
+                .assign_checked(PK_A, UserRole::Owner, &reauthenticated)
+                .await
+                .unwrap(),
+            UserRole::Owner
+        );
+    }
+
+    /// Unchanged authority behaves exactly as before the freshness check.
+    #[tokio::test]
+    async fn unchanged_caller_authority_proceeds() {
+        let store = mem_store().await;
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        assert_eq!(
+            store
+                .assign_checked(PK_A, UserRole::Admin, &caller)
+                .await
+                .unwrap(),
+            UserRole::Admin
+        );
+    }
+
+    /// The freshness check runs before the lattice check, so a demoted caller
+    /// gets the stale-authority answer rather than a plain denial — the client
+    /// needs to know re-authentication will help.
+    #[tokio::test]
+    async fn demotion_is_reported_distinctly_from_denial() {
+        let store = mem_store().await;
+        let demoted = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        store.set(PK_B, UserRole::Viewer, None).await.unwrap();
+        assert!(matches!(
+            store.assign_checked(PK_A, UserRole::Editor, &demoted).await,
+            Err(RoleStoreError::CallerAuthorityChanged { .. })
+        ));
+
+        // A caller who never had the authority gets a plain Forbidden.
+        let viewer = caller_with_role(&store, PK_PU, UserRole::Viewer).await;
+        assert!(matches!(
+            store.assign_checked(PK_A, UserRole::Editor, &viewer).await,
+            Err(RoleStoreError::Forbidden(_))
+        ));
+    }
+
+    // ---- ADR-2010 removal versus revocation ----------------------------------
+
+    /// Removing a Viewer assignment RAISES the target's authority to the
+    /// unassigned default. The outcome must say so rather than reporting a
+    /// revocation.
+    #[tokio::test]
+    async fn removing_a_viewer_assignment_is_not_a_revocation() {
+        let store = mem_store().await;
+        store.set(PK_A, UserRole::Viewer, None).await.unwrap();
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+
+        let outcome = store.remove_checked(PK_A, false, &caller).await.unwrap();
+        assert!(outcome.had_explicit_role);
+        assert_eq!(outcome.previous_role, Some(UserRole::Viewer));
+        assert_eq!(
+            outcome.effective_after,
+            UserRole::Editor,
+            "removal drops to the unassigned default, which is above Viewer"
+        );
+        assert!(
+            !outcome.authority_reduced,
+            "removing a Viewer row increases authority; it revokes nothing"
+        );
+        assert!(outcome.revocation_requires_explicit_viewer());
+    }
+
+    /// Removing an Admin assignment does reduce authority, so it is a genuine
+    /// reduction — though still not a denial.
+    #[tokio::test]
+    async fn removing_an_admin_assignment_reduces_authority() {
+        let store = mem_store().await;
+        store.set(PK_A, UserRole::Admin, None).await.unwrap();
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+
+        let outcome = store.remove_checked(PK_A, false, &caller).await.unwrap();
+        assert_eq!(outcome.previous_role, Some(UserRole::Admin));
+        assert_eq!(outcome.effective_after, UserRole::Editor);
+        assert!(outcome.authority_reduced);
+        assert!(
+            !outcome.revocation_requires_explicit_viewer(),
+            "authority fell, so the operator is not misled"
+        );
+    }
+
+    /// For a legacy power user, removal restores Admin — the strongest
+    /// not-a-revocation case there is.
+    #[tokio::test]
+    async fn removing_a_power_user_assignment_restores_admin() {
+        let store = mem_store().await;
+        store.set(PK_PU, UserRole::Viewer, None).await.unwrap();
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+
+        let outcome = store.remove_checked(PK_PU, true, &caller).await.unwrap();
+        assert_eq!(
+            outcome.effective_after,
+            UserRole::Admin,
+            "a power user reverts to Admin, not the configured default"
+        );
+        assert!(!outcome.authority_reduced);
+        assert!(
+            outcome.revocation_requires_explicit_viewer(),
+            "removing a power user's Viewer row hands them Admin back"
+        );
+    }
+
+    /// The actual revocation: assign Viewer explicitly. It reduces a power
+    /// user's effective authority where removal would have raised it.
+    #[tokio::test]
+    async fn explicit_viewer_assignment_is_the_real_revocation() {
+        let store = mem_store().await;
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+        assert_eq!(
+            store
+                .assign_checked(PK_PU, UserRole::Viewer, &caller)
+                .await
+                .unwrap(),
+            UserRole::Viewer
+        );
+        assert_eq!(
+            store.effective_role(PK_PU, true).await,
+            UserRole::Viewer,
+            "the explicit row overrides the power-user fallback"
+        );
+    }
+
+    /// Removing an assignment the target never had is a no-op, not a
+    /// revocation, and reports the ambient authority truthfully.
+    #[tokio::test]
+    async fn removing_a_nonexistent_assignment_reports_ambient_authority() {
+        let store = mem_store().await;
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+
+        let outcome = store.remove_checked(PK_A, false, &caller).await.unwrap();
+        assert!(!outcome.had_explicit_role);
+        assert_eq!(outcome.previous_role, None);
+        assert_eq!(outcome.effective_after, UserRole::Editor);
+        assert!(!outcome.authority_reduced);
+    }
+
+    /// The store's configured default decides what removal restores, so a
+    /// Viewer-default deployment turns removal into a real reduction.
+    #[tokio::test]
+    async fn removal_semantics_follow_the_configured_default() {
+        let conn = Connection::open_in_memory().await.expect("open db");
+        let store = RoleStore::new_with_default(Arc::new(conn), UserRole::Viewer)
+            .await
+            .expect("create table");
+        store.set(PK_A, UserRole::Editor, None).await.unwrap();
+        let caller = caller_with_role(&store, PK_B, UserRole::Owner).await;
+
+        let outcome = store.remove_checked(PK_A, false, &caller).await.unwrap();
+        assert_eq!(outcome.effective_after, UserRole::Viewer);
+        assert!(
+            outcome.authority_reduced,
+            "with a Viewer default, removal really does reduce access"
+        );
     }
 }

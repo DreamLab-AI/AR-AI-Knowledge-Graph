@@ -7,9 +7,12 @@
 //!
 //! Phase 2 (this increment): [`ingest`] is the authenticated `/wss/agent-events`
 //! handler that parses + validates inbound `notifications/agent_action` and
-//! publishes each envelope to the process-global [`hub`]. The beam + gluon GPU
-//! render actor (ADR-059 §4, Phase 2b) subscribes to the hub — that render path
-//! and the `:9500` state-poll cutover are scoped follow-ons.
+//! publishes each envelope to the process-global [`hub`]. The GPU beam render
+//! actor (`AgentBeamActor`) subscribes to the hub and is shipped; the
+//! attractive "gluon" transient edge is a separate, deferred sub-feature (see
+//! `src/actors/agent_beam_actor.rs:327`). The `:9500` state-poll path
+//! (`bots_client.rs`) remains live and load-bearing, not deprecated — cutting
+//! it over to this transport is an unbuilt, scoped follow-on (ADR-2084).
 
 pub mod hub;
 pub mod ingest;

@@ -614,21 +614,39 @@ impl FileService {
         Ok(())
     }
 
-    /// Scan local markdown files and create metadata from them
-    /// This is used as a fallback when GitHub sync fails or when local files exist
+    /// Scan local markdown files and create metadata from them.
+    ///
+    /// This is the fallback used when GitHub sync fails or when local files
+    /// exist. ADR-2014/2040: it applies **the same inclusion gate** as the
+    /// GitHub path. It previously did not — the check was commented out with
+    /// "Include ALL files regardless of public status", so every `.md` under
+    /// the markdown directory entered the metadata store and, through it, the
+    /// knowledge graph. A private page was one failed sync away from being
+    /// ingested, which made the gate a property of which code path ran rather
+    /// than a property of the corpus.
+    ///
+    /// Excluded pages are counted and logged so a surprising fallback result is
+    /// legible rather than silent.
     pub fn scan_local_files_to_metadata() -> Result<MetadataStore, String> {
-        info!("Scanning local markdown files from {}", MARKDOWN_DIR);
+        Self::scan_local_files_to_metadata_in(Path::new(MARKDOWN_DIR))
+    }
 
-        let markdown_dir = Path::new(MARKDOWN_DIR);
+    /// [`scan_local_files_to_metadata`](Self::scan_local_files_to_metadata) over
+    /// an explicit directory. Separated so the inclusion gate can be exercised
+    /// against a fixture corpus without a configured markdown directory.
+    pub fn scan_local_files_to_metadata_in(markdown_dir: &Path) -> Result<MetadataStore, String> {
+        info!("Scanning local markdown files from {}", markdown_dir.display());
+
         if !markdown_dir.exists() {
             return Err(format!(
                 "Markdown directory does not exist: {}",
-                MARKDOWN_DIR
+                markdown_dir.display()
             ));
         }
 
         let mut metadata_store = MetadataStore::new();
         let mut node_id_counter: u32 = 1;
+        let mut excluded: usize = 0;
 
         // Read all .md files from the directory
         let entries = fs::read_dir(markdown_dir)
@@ -651,11 +669,15 @@ impl FileService {
                     }
                 };
 
-                // COMMENTED OUT: Include ALL files regardless of public status
-                // if !Self::page_is_kg_included(&content) {
-                //     debug!("Skipping non-public file: {}", file_name);
-                //     continue;
-                // }
+                // ADR-2014/2040 — the inclusion gate, applied here exactly as
+                // the GitHub sync path applies it. A page reaches the knowledge
+                // graph because the corpus says so, never because this fallback
+                // happened to be the code path that ran.
+                if !Self::page_is_kg_included(&content) {
+                    debug!("Excluding non-included file from local scan: {}", file_name);
+                    excluded += 1;
+                    continue;
+                }
 
                 debug!("Processing file: {}", file_name);
 
@@ -671,6 +693,15 @@ impl FileService {
                 metadata_store.insert(file_name, metadata);
                 node_id_counter += 1;
             }
+        }
+
+        if excluded > 0 {
+            info!(
+                "Local scan: {} file(s) included, {} excluded by the ADR-2014 inclusion gate \
+                 (public: true, or a valid owl-class)",
+                metadata_store.len(),
+                excluded
+            );
         }
 
         // Update topic counts (cross-references between files)

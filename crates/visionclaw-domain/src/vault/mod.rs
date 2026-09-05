@@ -61,9 +61,23 @@ pub struct PageMeta {
     /// `public` — the publish half of the inclusion gate. A real YAML boolean
     /// in frontmatter; the string `"true"` does **not** count (§V2).
     pub public: bool,
-    /// `owl-class` — a formal class IRI (e.g. `mv:Foo`). Non-empty means the
-    /// page bypasses the publish gate entirely.
+    /// `owl-class` — a formal class IRI (e.g. `mv:Foo`), accepted only when it
+    /// satisfies [`is_class_marker`]. A class marker admits the page to the
+    /// knowledge graph; it never makes the page publicly publishable.
     pub owl_class: Option<String>,
+    /// A present-but-rejected `owl-class` value, retained verbatim so an author
+    /// can see *why* their page was excluded (ADR-2040).
+    ///
+    /// The old parser coerced any scalar to a string, so `owl-class: true` and
+    /// `owl-class: 42` both opened the inclusion gate with a value that is not
+    /// a class IRI at all. Such a value now lands here instead, leaving
+    /// [`PageMeta::owl_class`] `None` and the gate shut.
+    pub owl_class_rejected: Option<String>,
+    /// True when the `public` key was present and explicitly false, as opposed
+    /// to simply absent. ADR-2014/2040 require the public-false-plus-class case
+    /// to be explicit rather than inferred, and it cannot be inferred from a
+    /// plain `bool`.
+    pub public_declared_false: bool,
     /// `source-domain` — the domain prefix (ai/bc/mv/rb/tc/ngm).
     pub source_domain: Option<String>,
     /// `aliases` (Obsidian) / `alias::` (Logseq). Empty when absent.
@@ -83,12 +97,61 @@ pub struct PageMeta {
     pub format: PageFormat,
 }
 
+/// Why a page is (or is not) admitted to the knowledge graph (ADR-2014/2040).
+///
+/// The two admission routes are deliberately distinct, and conflating them is
+/// what made "does a formal class override `public: false`?" unanswerable from
+/// the code. It is answerable now: it does, for **graph inclusion only**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InclusionReason {
+    /// `public: true` and no class marker. Included, and publishable.
+    Public,
+    /// `public: true` plus a class marker. Included, publishable, and formal.
+    PublicAndFormalClass,
+    /// A class marker with `public` absent. Included as formal ontology; not
+    /// publishable.
+    FormalClass,
+    /// A class marker with an **explicit** `public: false`. The page is still
+    /// included in the knowledge graph — a formal class is structural, and
+    /// dropping it would break the ontology — but the explicit `public: false`
+    /// is honoured for publication. This is the case ADR-2014 asked to be made
+    /// explicit rather than left as a silent bypass.
+    FormalClassDespitePublicFalse,
+    /// Neither route applies. Fail-closed: the page is private.
+    Excluded,
+}
+
 impl PageMeta {
-    /// The §V4 inclusion gate: `public: true` **or** a non-empty `owl-class`.
+    /// The §V4 inclusion gate: `public: true` **or** a valid `owl-class`.
     ///
-    /// Fail-closed — a page with neither is private.
+    /// Fail-closed — a page with neither is private. A malformed class marker
+    /// is not a class marker, so it does not open the gate.
     pub fn is_kg_included(&self) -> bool {
         self.public || self.owl_class.is_some()
+    }
+
+    /// Why this page is included, spelled out (ADR-2014/2040).
+    pub fn inclusion_reason(&self) -> InclusionReason {
+        match (self.public, self.owl_class.is_some()) {
+            (true, true) => InclusionReason::PublicAndFormalClass,
+            (true, false) => InclusionReason::Public,
+            (false, true) if self.public_declared_false => {
+                InclusionReason::FormalClassDespitePublicFalse
+            }
+            (false, true) => InclusionReason::FormalClass,
+            (false, false) => InclusionReason::Excluded,
+        }
+    }
+
+    /// May this page be **published** (rendered to a public surface)?
+    ///
+    /// ADR-2014/2040: knowledge-graph inclusion and public publication are
+    /// different questions with different answers. Only an affirmative
+    /// `public: true` permits publication; a formal class admits the page to
+    /// the graph without ever making it public, and an explicit `public: false`
+    /// is honoured whatever the class marker says.
+    pub fn is_publishable(&self) -> bool {
+        self.public
     }
 
     /// Serialise to the YAML body of a §V2 frontmatter block — the `---`
@@ -304,8 +367,19 @@ fn parse_frontmatter(yaml: &str) -> Option<PageMeta> {
         let Some(key) = key.as_str() else { continue };
         match key {
             // A real YAML boolean, never the string "true" (§V2).
-            "public" => meta.public = value.as_bool().unwrap_or(false),
-            "owl-class" | "owl:class" => meta.owl_class = yaml_non_empty_string(value),
+            "public" => {
+                meta.public = value.as_bool().unwrap_or(false);
+                // ADR-2014: an explicit `public: false` is a different fact
+                // from an absent key, and the class-marker interaction turns
+                // on the difference.
+                meta.public_declared_false = value.as_bool() == Some(false);
+            }
+            // ADR-2040: typed and IRI-shaped, or not a class marker at all.
+            "owl-class" | "owl:class" => {
+                let (accepted, rejected) = yaml_class_marker(value);
+                meta.owl_class = accepted;
+                meta.owl_class_rejected = rejected;
+            }
             "source-domain" => meta.source_domain = yaml_non_empty_string(value),
             "title" => meta.title = yaml_non_empty_string(value),
             "elevatedFrom" | "elevated-from" => {
@@ -322,6 +396,75 @@ fn parse_frontmatter(yaml: &str) -> Option<PageMeta> {
     }
 
     Some(meta)
+}
+
+/// Is `s` a well-formed class marker — a CURIE (`prefix:LocalName`) or an
+/// absolute IRI (`http://…`, `https://…`, `urn:…`)?
+///
+/// ADR-2040: the class marker is the half of the inclusion gate that bypasses
+/// `public`, so what counts as one has to be a policy rather than "any scalar
+/// that renders to a non-empty string". The old parser accepted `owl-class:
+/// true` and `owl-class: 42` — YAML booleans and numbers coerced through
+/// `to_string()` — and opened the gate on a value that is not an IRI at all.
+///
+/// The grammar accepted here:
+///
+/// * an absolute IRI beginning `http://`, `https://` or `urn:`; or
+/// * a CURIE `prefix:local`, where `prefix` starts with a letter and continues
+///   with letters, digits, `_`, `-` or `.`, and `local` is non-empty.
+///
+/// In both cases the value must contain no whitespace and no control
+/// characters. A bare word with no colon is not a class IRI and is rejected —
+/// which is what turns the stringified `true` away.
+pub fn is_class_marker(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() || s.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return false;
+    }
+    if s.starts_with("http://") || s.starts_with("https://") {
+        // Something has to follow the scheme.
+        return s.len() > "https://".len() || s.len() > "http://".len();
+    }
+    let Some((prefix, local)) = s.split_once(':') else {
+        return false;
+    };
+    if local.is_empty() {
+        return false;
+    }
+    if prefix == "urn" {
+        // `urn:<nid>:<nss>` — the NID and NSS are checked as one non-empty tail.
+        return local.contains(':') && !local.starts_with(':') && !local.ends_with(':');
+    }
+    let mut chars = prefix.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+}
+
+/// A YAML value as a class marker: it must be a genuine YAML **string** *and*
+/// satisfy [`is_class_marker`].
+///
+/// Returns `(accepted, rejected_verbatim)` so the caller can record why a
+/// present-but-invalid marker did not open the inclusion gate.
+fn yaml_class_marker(value: &serde_yaml::Value) -> (Option<String>, Option<String>) {
+    // Type first: a YAML boolean or number is never a class IRI, however it
+    // renders. This is the ADR-2040 typing rule.
+    let Some(s) = (match value {
+        serde_yaml::Value::String(s) => Some(s.trim().to_string()),
+        _ => None,
+    }) else {
+        return (None, yaml_scalar(value));
+    };
+    if s.is_empty() {
+        return (None, None);
+    }
+    if is_class_marker(&s) {
+        (Some(s), None)
+    } else {
+        (None, Some(s))
+    }
 }
 
 /// A YAML scalar as a trimmed string, or `None` when absent/empty/non-scalar.
@@ -395,11 +538,21 @@ fn parse_leading_property_block(content: &str) -> (PageMeta, &str) {
             "public" | "public-access" => {
                 if value.eq_ignore_ascii_case("true") {
                     meta.public = true;
+                } else if value.trim().eq_ignore_ascii_case("false") {
+                    // ADR-2014: an explicit false, not merely an absent key.
+                    meta.public_declared_false = true;
                 }
                 matched_known_key = true;
             }
             "owl:class" => {
-                meta.owl_class = non_empty(value);
+                // ADR-2040: the legacy carrier is text-only, so there is no
+                // YAML type to check — but the IRI grammar still applies, and
+                // a quoted or bare `true` is still not a class marker.
+                match non_empty(value) {
+                    Some(v) if is_class_marker(&v) => meta.owl_class = Some(v),
+                    Some(v) => meta.owl_class_rejected = Some(v),
+                    None => {}
+                }
                 matched_known_key = true;
             }
             "source-domain" => {
@@ -750,6 +903,8 @@ mod tests {
             .into_iter()
             .collect(),
             format: PageFormat::Obsidian,
+            owl_class_rejected: None,
+            public_declared_false: false,
         };
         let page = render_page(&meta, "# Foo\n\nBody prose.\n");
         assert_eq!(parse(&page), meta);
@@ -897,5 +1052,242 @@ mod tests {
     #[test]
     fn page_name_without_an_extension_is_unchanged() {
         assert_eq!(page_name_from_path("Plain Page"), "Plain Page");
+    }
+
+    // ---- ADR-2040/2014: class-marker typing and IRI policy -----------------
+
+    /// The reproduced defect: `owl-class` accepted booleans and numbers
+    /// rendered as strings, opening the inclusion gate on a value that is not
+    /// a class IRI at all.
+    #[test]
+    fn boolean_and_numeric_owl_class_are_rejected() {
+        for raw in [
+            "---\npublic: false\nowl-class: true\n---\nbody\n",
+            "---\npublic: false\nowl-class: false\n---\nbody\n",
+            "---\npublic: false\nowl-class: 42\n---\nbody\n",
+            "---\npublic: false\nowl-class: 3.14\n---\nbody\n",
+        ] {
+            let meta = parse(raw);
+            assert_eq!(
+                meta.owl_class, None,
+                "a non-string owl-class must not be a class marker: {raw:?}"
+            );
+            assert!(
+                meta.owl_class_rejected.is_some(),
+                "the rejected value must be retained: {raw:?}"
+            );
+            assert!(
+                !meta.is_kg_included(),
+                "a rejected marker must not open the inclusion gate: {raw:?}"
+            );
+            assert_eq!(meta.inclusion_reason(), InclusionReason::Excluded);
+        }
+    }
+
+    /// A *quoted* `"true"` is a genuine YAML string, so the type check passes —
+    /// and the IRI grammar rejects it instead. Both spellings land shut.
+    #[test]
+    fn quoted_non_iri_owl_class_is_rejected() {
+        for raw in [
+            "---\nowl-class: \"true\"\n---\nbody\n",
+            "---\nowl-class: 'false'\n---\nbody\n",
+            "---\nowl-class: \"42\"\n---\nbody\n",
+            "---\nowl-class: \"just a phrase\"\n---\nbody\n",
+            "---\nowl-class: \"NoColonHere\"\n---\nbody\n",
+        ] {
+            let meta = parse(raw);
+            assert_eq!(meta.owl_class, None, "{raw:?}");
+            assert!(meta.owl_class_rejected.is_some(), "{raw:?}");
+            assert!(!meta.is_kg_included(), "{raw:?}");
+        }
+    }
+
+    /// A well-formed marker still works: CURIEs and absolute IRIs both pass.
+    #[test]
+    fn well_formed_class_markers_are_accepted() {
+        for (raw, expected) in [
+            ("---\nowl-class: mv:Foo\n---\nbody\n", "mv:Foo"),
+            ("---\nowl-class: \"mv:Foo\"\n---\nbody\n", "mv:Foo"),
+            ("---\nowl-class: rb-2:Some_Class.v2\n---\nbody\n", "rb-2:Some_Class.v2"),
+            (
+                "---\nowl-class: https://narrativegoldmine.com/ns/v1#Thing\n---\nbody\n",
+                "https://narrativegoldmine.com/ns/v1#Thing",
+            ),
+            ("---\nowl-class: urn:ngm:class:thing\n---\nbody\n", "urn:ngm:class:thing"),
+        ] {
+            let meta = parse(raw);
+            assert_eq!(meta.owl_class.as_deref(), Some(expected), "{raw:?}");
+            assert_eq!(meta.owl_class_rejected, None, "{raw:?}");
+            assert!(meta.is_kg_included(), "{raw:?}");
+        }
+    }
+
+    /// The class-marker grammar, exercised directly.
+    #[test]
+    fn class_marker_grammar() {
+        for good in [
+            "mv:Foo",
+            "ai:Thing",
+            "a:b",
+            "ns_1:Local-Name.v2",
+            "http://example.org/Thing",
+            "https://example.org/ns#Thing",
+            "urn:ngm:class:thing",
+        ] {
+            assert!(is_class_marker(good), "{good} should be a class marker");
+        }
+        for bad in [
+            "",
+            "   ",
+            "true",
+            "false",
+            "42",
+            "NoColon",
+            ":LeadingColon",
+            "prefix:",
+            "1bad:Local",
+            "-bad:Local",
+            "has space:Local",
+            "mv:Foo bar",
+            "urn:onlyone",
+            "mv:Fo\to",
+            "mv:Fo\no",
+        ] {
+            assert!(!is_class_marker(bad), "{bad:?} should not be a class marker");
+        }
+        // Surrounding whitespace is trimmed, not rejected: a trailing newline
+        // from a text carrier must not turn a valid marker into a rejection.
+        assert!(is_class_marker("  mv:Foo\n"));
+    }
+
+    // ---- ADR-2014: public-false-plus-class semantics, made explicit --------
+
+    /// A class marker admits the page to the knowledge graph even when
+    /// `public: false` — but the explicit false is honoured for publication,
+    /// and the reason says so rather than leaving it as a silent bypass.
+    #[test]
+    fn public_false_plus_class_is_included_but_never_publishable() {
+        let meta = parse("---\npublic: false\nowl-class: mv:Foo\n---\nbody\n");
+        assert!(meta.is_kg_included(), "a formal class is structural");
+        assert!(
+            !meta.is_publishable(),
+            "an explicit public: false must be honoured for publication"
+        );
+        assert!(meta.public_declared_false);
+        assert_eq!(
+            meta.inclusion_reason(),
+            InclusionReason::FormalClassDespitePublicFalse
+        );
+    }
+
+    /// An absent `public` key is a different fact from an explicit false.
+    #[test]
+    fn absent_public_is_distinguished_from_explicit_false() {
+        let absent = parse("---\nowl-class: mv:Foo\n---\nbody\n");
+        assert!(!absent.public_declared_false);
+        assert_eq!(absent.inclusion_reason(), InclusionReason::FormalClass);
+
+        let explicit = parse("---\npublic: false\nowl-class: mv:Foo\n---\nbody\n");
+        assert!(explicit.public_declared_false);
+        assert_eq!(
+            explicit.inclusion_reason(),
+            InclusionReason::FormalClassDespitePublicFalse
+        );
+
+        // Both are included in the graph; neither is publishable.
+        assert!(absent.is_kg_included() && explicit.is_kg_included());
+        assert!(!absent.is_publishable() && !explicit.is_publishable());
+    }
+
+    /// The four inclusion routes, enumerated.
+    #[test]
+    fn inclusion_reasons_cover_every_route() {
+        assert_eq!(
+            parse("---\npublic: true\n---\nbody\n").inclusion_reason(),
+            InclusionReason::Public
+        );
+        assert_eq!(
+            parse("---\npublic: true\nowl-class: mv:Foo\n---\nbody\n").inclusion_reason(),
+            InclusionReason::PublicAndFormalClass
+        );
+        assert_eq!(
+            parse("---\nowl-class: mv:Foo\n---\nbody\n").inclusion_reason(),
+            InclusionReason::FormalClass
+        );
+        assert_eq!(
+            parse("---\ntitle: Nothing\n---\nbody\n").inclusion_reason(),
+            InclusionReason::Excluded
+        );
+    }
+
+    /// Publication is strictly narrower than inclusion.
+    #[test]
+    fn publishable_implies_included_but_not_the_reverse() {
+        for raw in [
+            "---\npublic: true\n---\nbody\n",
+            "---\npublic: true\nowl-class: mv:Foo\n---\nbody\n",
+            "---\nowl-class: mv:Foo\n---\nbody\n",
+            "---\npublic: false\nowl-class: mv:Foo\n---\nbody\n",
+            "---\ntitle: x\n---\nbody\n",
+        ] {
+            let meta = parse(raw);
+            if meta.is_publishable() {
+                assert!(meta.is_kg_included(), "publishable must imply included: {raw:?}");
+            }
+        }
+        let class_only = parse("---\nowl-class: mv:Foo\n---\nbody\n");
+        assert!(class_only.is_kg_included() && !class_only.is_publishable());
+    }
+
+    // ---- ADR-2040: the legacy carrier obeys the same policy -----------------
+
+    /// The legacy leading-property block is text-only, so there is no YAML type
+    /// to check — but the IRI grammar still applies there.
+    #[test]
+    fn legacy_property_block_applies_the_same_class_policy() {
+        let good = parse("public:: false\nowl:class:: mv:Foo\n\nbody\n");
+        assert_eq!(good.owl_class.as_deref(), Some("mv:Foo"));
+        assert!(good.is_kg_included());
+        assert!(good.public_declared_false);
+        assert_eq!(
+            good.inclusion_reason(),
+            InclusionReason::FormalClassDespitePublicFalse
+        );
+
+        let bad = parse("public:: false\nowl:class:: true\n\nbody\n");
+        assert_eq!(bad.owl_class, None, "a bare 'true' is not a class IRI");
+        assert_eq!(bad.owl_class_rejected.as_deref(), Some("true"));
+        assert!(!bad.is_kg_included());
+    }
+
+    /// Legacy `public-access:: true` still admits, and does not set the
+    /// explicit-false flag.
+    #[test]
+    fn legacy_public_access_still_admits() {
+        let meta = parse("public-access:: true\n\nbody\n");
+        assert!(meta.public);
+        assert!(!meta.public_declared_false);
+        assert!(meta.is_publishable());
+    }
+
+    /// A private legacy page with no markers stays out.
+    #[test]
+    fn legacy_private_page_is_excluded() {
+        let meta = parse("title:: Private Notes\n\nbody\n");
+        assert!(!meta.is_kg_included());
+        assert_eq!(meta.inclusion_reason(), InclusionReason::Excluded);
+    }
+
+    /// A rejected marker survives a render/parse round trip as *absent*, so a
+    /// rewritten page cannot smuggle the bad value back in.
+    #[test]
+    fn a_rejected_marker_is_not_re_emitted() {
+        let meta = parse("---\nowl-class: true\n---\nbody\n");
+        assert_eq!(meta.owl_class, None);
+        let yaml = meta.to_frontmatter_yaml();
+        assert!(
+            !yaml.contains("owl-class"),
+            "a rejected marker must not be re-emitted: {yaml}"
+        );
     }
 }

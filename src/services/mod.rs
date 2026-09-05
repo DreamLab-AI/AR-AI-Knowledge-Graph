@@ -15,6 +15,11 @@ pub mod mcp_relay_manager;
 pub mod multi_mcp_agent_discovery;
 pub mod natural_language_query_service;
 pub mod nostr_service;
+// ADR-2064: wired into `src/bin/load_ontology.rs` so the real corpus ingest
+// path runs horned-owl extraction over classes' `markdown_content` after
+// `OntologyParser`/`save_ontology` persist them — this module previously
+// existed but was never declared here, so it was dead code.
+pub mod owl_extractor_service;
 pub mod owl_validator;
 pub mod parsers;
 pub mod perplexity_service;
