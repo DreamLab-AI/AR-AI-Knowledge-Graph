@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_commit: 2cf2224062a0bc0d71d72f1eb4f82e02809a9042
 verified_paths: [src/actors/gpu/gpu_manager_actor.rs, src/actors/gpu/mod.rs, src/actors/gpu/context_bus.rs, docs/GPU-wire-abi.md]
 owner: jjohare
 review_trigger: a new GPU subsystem that does not fit the four-supervisor split, or a change to SharedGPUContext distribution
@@ -123,3 +123,7 @@ demonstrated by a runtime fault-injection run, and no GPU executed in this pass.
 `Phase 7|GPUContextBus|SharedGPUContext`, over `context_bus.rs` for
 `GPUContextBus|publish`, and over `docs/GPU-wire-abi.md` for the kernel-trust
 section; `git diff` on `src/app_state.rs` for the removed standalone pair.
+
+## Landing re-verification — 2026-09-06 (2cf222406)
+
+Governed paths changed in the Wave 3 landing commit: docs/GPU-wire-abi.md: the kernel trust table became a measured per-kernel table (ADR-2061: PageRank, DBSCAN, Louvain trusted; LOF broken, cause localised); gpu_manager_actor.rs untouched. Decision unaffected; `verified_commit` moved to the landing commit. Gates at that commit: cargo check --workspace --all-targets exit 0, 827 crate + 1600 root + 309 xr-client tests, vitest 809, fmt and lint clean.

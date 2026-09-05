@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_commit: 2cf2224062a0bc0d71d72f1eb4f82e02809a9042
 verified_paths: [Cargo.toml, src/actors, crates/visionclaw-actors/src]
 owner: jjohare
 review_trigger: completion of the actor extraction into crates/visionclaw-actors, or a new subsystem that does not map to an existing crate layer
@@ -169,3 +169,7 @@ crates/visionclaw-actors/src`; `git diff --stat` on the same;
 `ls src/actors/*.rs | wc -l`; `ls crates/visionclaw-actors/src/*.rs | wc -l`;
 `find src/actors -name '*.rs' | wc -l` → 59 recursive; a Python parse of
 `[workspace].members` → 12 entries.
+
+## Landing re-verification — 2026-09-06 (2cf222406)
+
+Governed paths changed in the Wave 3 landing commit: crates/visionclaw-actors messages: the never-sent `RefreshMetadata` message and its re-exports deleted (ADR-2097), plus `SupervisorActor` now the sole home of that type (ADR-2045 complete); the crate split and dependency direction are unchanged — ADR-2095 in fact relied on it, placing the typed ngm constructor in visionclaw-domain because adapters cannot depend on the server. Decision unaffected; `verified_commit` moved to the landing commit. Gates at that commit: cargo check --workspace --all-targets exit 0, 827 crate + 1600 root + 309 xr-client tests, vitest 809, fmt and lint clean.

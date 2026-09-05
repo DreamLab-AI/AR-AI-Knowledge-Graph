@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_commit: 2cf2224062a0bc0d71d72f1eb4f82e02809a9042
 verified_paths: [crates/visionclaw-adapters/src/provenance_emitter.rs, crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs, src/services/ontology_mutation_service.rs]
 owner: jjohare
 review_trigger: a GDPR/right-to-erasure obligation landing on provenance-recorded subjects, or introduction of a redaction/crypto-shred mechanism
@@ -195,3 +195,7 @@ and `ontology_mutation_service.rs:223`;
 **Still open:** correlating completed provenance with mutation receipts
 (ADR-2006) and the separate SQLite-backed `GET /api/trace` consumer were not
 re-checked — they lie outside `verified_paths`.
+
+## Landing re-verification — 2026-09-06 (2cf222406)
+
+Governed paths changed in the Wave 3 landing commit: crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs: three `urn:ngm:class` mints routed through the typed constructor with byte-identical output (ADR-2095); the append-only provenance path is untouched. Decision unaffected; `verified_commit` moved to the landing commit. Gates at that commit: cargo check --workspace --all-targets exit 0, 827 crate + 1600 root + 309 xr-client tests, vitest 809, fmt and lint clean.

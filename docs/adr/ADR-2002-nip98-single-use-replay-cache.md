@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_commit: 2cf2224062a0bc0d71d72f1eb4f82e02809a9042
 verified_paths: [src/utils/nip98.rs, docs/SECURITY-profiles.md]
 owner: jjohare
 review_trigger: horizontal scaling of the backend (replicas/load balancer), or any change to TOKEN_MAX_AGE_SECONDS
@@ -139,3 +139,7 @@ docs/SECURITY-profiles.md`.
 `test_invalid_signature_does_not_burn_id`, `test_claim_event_id_atomic_under_concurrency`,
 `ttl_boundary_is_exact_and_half_open`, `ttl_covers_the_entire_freshness_window` and
 `the_default_policy_is_strict_and_legacy_callers_are_unchanged`.
+
+## Landing re-verification — 2026-09-06 (2cf222406)
+
+Governed paths changed in the Wave 3 landing commit: docs/SECURITY-profiles.md: invariant 6 citation re-pinned to `.bind()` at main.rs:1177 by the ledger lead; src/utils/nip98.rs is token-identical across the range. Decision unaffected; `verified_commit` moved to the landing commit. Gates at that commit: cargo check --workspace --all-targets exit 0, 827 crate + 1600 root + 309 xr-client tests, vitest 809, fmt and lint clean.

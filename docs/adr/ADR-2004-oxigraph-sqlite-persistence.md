@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_commit: 2cf2224062a0bc0d71d72f1eb4f82e02809a9042
 verified_paths: [Cargo.toml, src/app_state.rs]
 owner: jjohare
 review_trigger: a scale requirement that exceeds a single-node embedded store, or any proposal to reintroduce a networked graph database
@@ -167,3 +167,7 @@ no actix, no neo4rs". No dependency, no client, no connection string.
 plus the full patches; `grep -n 'oxigraph|neo4rs|neo4j' Cargo.toml`; `grep -n`
 over `app_state.rs` for the repository constructors and the four `.sqlite3`
 paths; `grep -rn neo4rs` across the tree.
+
+## Landing re-verification — 2026-09-06 (2cf222406)
+
+Governed paths changed in the Wave 3 landing commit: src/app_state.rs: `validate_security_env_vars` made `pub(crate)` so AgentMonitorActor reuses it (ADR-2094); no persistence, Oxigraph or SQLite path changed. Decision unaffected; `verified_commit` moved to the landing commit. Gates at that commit: cargo check --workspace --all-targets exit 0, 827 crate + 1600 root + 309 xr-client tests, vitest 809, fmt and lint clean.

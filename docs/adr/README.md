@@ -37,7 +37,7 @@ build).
 
 The [historical closeout routing note](../adr-history-closeout.md) points each frozen archive record at the estate section-level review and the complete VisionClaw historical map; a lineage mention there does not supersede every section of a predecessor.
 
-_86 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
+_98 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 
 | ID | Title | Domain | Date | Decision | Impl | Activation | Supersedes | Superseded by | Owner | Repo |
 |----|-------|--------|------|----------|------|------------|------------|---------------|-------|------|
@@ -98,7 +98,7 @@ _86 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2058](ADR-2058-websocket-auth-header-only.md) | Accept WebSocket bearer tokens only from the Authorization header | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2059](ADR-2059-remove-inert-analytics-feature-flags.md) | Remove the analytics feature flags that gate nothing | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2060](ADR-2060-correct-gpu-and-wire-doc-citations.md) | Correct the GPU and wire governing-doc citations and retire resolved divergence bullets | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
-| [ADR-2061](ADR-2061-validate-analytics-kernels-against-oracle.md) | Validate the GPU analytics kernels against the CPU reference oracle | — | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2061](ADR-2061-validate-analytics-kernels-against-oracle.md) | Validate the GPU analytics kernels against the CPU reference oracle | — | 2026-09-05 | accepted | partial | live | — | — | jjohare | visionclaw |
 | [ADR-2063](ADR-2063-nlq-sparql-against-oxigraph.md) | The natural-language query service emits read-only SPARQL against Oxigraph, not Cypher | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2064](ADR-2064-ontology-loader-real-corpus.md) | The ontology loader walks the real authored corpus, not a hardcoded sample | VAULT-corpus-format | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2065](ADR-2065-remove-dead-ontology-validation-code.md) | Remove dead ontology and validation code | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
@@ -107,7 +107,7 @@ _86 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2068](ADR-2068-remove-superseded-vendored-assets.md) | Remove superseded vendored assets and dead config | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2069](ADR-2069-backup-membership-required-optional.md) | Ratify the required/optional backup membership contract and refuse incomplete backup sets | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2070](ADR-2070-correct-identifier-and-vault-doc-drift.md) | Correct identifier and vault documentation drift where the code already leads | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
-| [ADR-2071](ADR-2071-consolidate-inferred-edge-materialisation.md) | Consolidate inferred-edge materialisation onto the shared set-logic module | — | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2071](ADR-2071-consolidate-inferred-edge-materialisation.md) | Consolidate inferred-edge materialisation onto the shared set-logic module | — | 2026-09-05 | accepted | complete | staged | — | — | jjohare | visionclaw |
 | [ADR-2072](ADR-2072-cross-from-agentbox-maps-bead.md) | Map bead structurally in cross_from_agentbox; remove dead metrics scaffolding in agent_visualization_processor | IDENTIFIER-taxonomy | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2074](ADR-2074-single-nip98-signing-helper.md) | One helper computes the browser client's auth headers; no transport carries its own copy | IDENTITY-authority-chain | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2075](ADR-2075-ws-speech-post-upgrade-nip98-auth.md) | Authenticate /ws/speech with a post-upgrade NIP-98 frame and drop query-token auth | XR-client | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
@@ -119,7 +119,7 @@ _86 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2081](ADR-2081-remove-dead-browser-xr-surface.md) | Remove the dead browser XR-mode surface; the immersive client is the Godot app | XR-client | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2083](ADR-2083-multi-mcp-discovery-interval-wired.md) | Multi-MCP discovery loop honours the configured discovery_interval_ms | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2084](ADR-2084-9500-load-bearing-doc-correct-plan-ws-cutover.md) | Correct the stale ":9500 deprecated" and "beam+gluon" doc drift; plan the state-snapshot WS cutover | PROTOCOL-registry | 2026-09-05 | accepted | complete | staged | — | — | jjohare | visionclaw |
-| [ADR-2085](ADR-2085-briefing-workflow-server-route-gap.md) | The briefing workflow client calls agentbox routes that do not exist | BASELINE-architecture | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2085](ADR-2085-briefing-workflow-server-route-gap.md) | The briefing workflow client calls agentbox routes that do not exist | BASELINE-architecture | 2026-09-05 | accepted | complete | staged | — | — | jjohare | visionclaw |
 | [ADR-2086](ADR-2086-ci-gate-dev-auth-excluded-from-release.md) | CI asserts release/production builds exclude the dev-auth cargo feature | SECURITY-profiles | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2087](ADR-2087-deployment-profile-doc-correctness.md) | Correct the deployment-profile documentation to match the code defaults | SECURITY-profiles | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2088](ADR-2088-bots-client-status-resolved-values.md) | BotsClient::get_status reports resolved runtime values, never literals | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
@@ -127,3 +127,15 @@ _86 record(s). Regenerate with_ `node scripts/adr-index-gen.js docs/adr`.
 | [ADR-2090](ADR-2090-ws-upgrade-resolves-token-through-session-realm.md) | WebSocket upgrades resolve the token through the session realm and fail closed | IDENTITY-authority-chain | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2091](ADR-2091-remove-fictional-mcp-status-routes.md) | Remove the two multi-MCP REST routes that returned fabricated state | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
 | [ADR-2093](ADR-2093-agent-key-fail-closed-constant-time.md) | The service agent key fails closed and is compared in constant time | SECURITY-profiles | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2094](ADR-2094-fail-closed-management-api-credential-and-cached-mcp-health.md) | Fail closed on the Management API credential and cache the MCP health verdict | IDENTITY-authority-chain | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2095](ADR-2095-typed-legacy-ngm-class-mint.md) | Mint urn:ngm:class through a typed constructor in the domain crate | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2096](ADR-2096-local-file-sync-uses-the-vault-parsing-entry-point.md) | Route local file sync's inclusion gate through the vault parsing entry point | VAULT-corpus-format | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2097](ADR-2097-delete-the-metadata-refresh-stub.md) | Delete the MetadataActor refresh stub rather than implement it | DATA-authority-erasure | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2098](ADR-2098-solid-pod-url-names-the-in-process-endpoint.md) | Point SOLID_POD_URL at the in-process pod endpoint, not the removed JSS sidecar | BASELINE-architecture | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2099](ADR-2099-delete-unreachable-framed-agent-action-branch.md) | Delete the unreachable framed-header agent-action decode branch | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2100](ADR-2100-one-solid-jss-notification-client.md) | Consolidate the Solid/JSS notification clients onto one socket | — | 2026-09-05 | accepted | complete | live | — | — | jjohare | visionclaw |
+| [ADR-2101](ADR-2101-durable-decision-elevation-case-state.md) | Decision-elevation cases have a durable case-state authority | BASELINE-architecture | 2026-09-05 | accepted | complete | staged | — | — | jjohare | visionclaw |
+| [ADR-2102](ADR-2102-estate-wide-cross-store-erasure-orchestration.md) | Orchestrate subject erasure across all five stores, and give the append-only provenance graph a redaction mechanism | DATA-authority-erasure | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2103](ADR-2103-oxigraph-point-in-time-backup.md) | Give Oxigraph a point-in-time backup with a declared RPO and RTO | DATA-authority-erasure | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2104](ADR-2104-sops-execute-or-withdraw.md) | Execute the SOPS rollout or formally withdraw ADR-109's acceptance — and document plaintext .env as the interim state either way | DATA-authority-erasure | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
+| [ADR-2105](ADR-2105-correlated-promotion-chain-end-to-end.md) | Carry one authoring correlation id through validation, PR, approval, merge and served corpus — VisionClaw echoes it | IDENTIFIER-taxonomy | 2026-09-05 | proposed | none | inactive | — | — | jjohare | visionclaw |
