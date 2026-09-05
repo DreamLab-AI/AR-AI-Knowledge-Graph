@@ -3463,4 +3463,238 @@ mod tests {
             "results.bindings present: {json}"
         );
     }
+
+    // ---- ADR-2015: derived write-back fence --------------------------------
+
+    /// Count the quads in one named graph.
+    fn graph_len(repo: &OxigraphOntologyRepository, graph: &str) -> usize {
+        let g = oxigraph::model::NamedNodeRef::new_unchecked(graph);
+        repo.store
+            .quads_for_pattern(
+                None,
+                None,
+                None,
+                Some(oxigraph::model::GraphNameRef::NamedNode(g)),
+            )
+            .count()
+    }
+
+    fn derived_quads_total(repo: &OxigraphOntologyRepository) -> usize {
+        graph_len(repo, GRAPH_ONTOLOGY_SUMMARY) + graph_len(repo, GRAPH_ONTOLOGY_OBSERVED)
+    }
+
+    fn quad(g: &str, s: &str, p: &str, o: &str) -> (String, String, String, String) {
+        (g.to_string(), s.to_string(), p.to_string(), o.to_string())
+    }
+
+    const S: &str = "urn:ngm:class:subject";
+    const P: &str = "urn:ngm:property:predicate";
+
+    /// The permitted graphs accept writes, and both commit.
+    #[tokio::test]
+    async fn permitted_graphs_accept_derived_writes() {
+        let repo = in_memory_repo();
+        let n = repo
+            .append_derived_quads(vec![
+                quad(GRAPH_ONTOLOGY_SUMMARY, S, P, "a summary value"),
+                quad(GRAPH_ONTOLOGY_OBSERVED, S, P, "an observed value"),
+            ])
+            .await
+            .expect("permitted graphs accept writes");
+        assert_eq!(n, 2);
+        assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY_SUMMARY), 1);
+        assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY_OBSERVED), 1);
+    }
+
+    /// ADR-2015: a mixed batch is rejected **whole**. One forbidden graph in a
+    /// batch must not let the permitted quads through — the fence is on the
+    /// batch, not on the individual quad, so a caller cannot smuggle a write
+    /// past it by burying it among legitimate ones.
+    #[tokio::test]
+    async fn a_mixed_batch_is_rejected_whole() {
+        for fenced in DERIVED_FENCE {
+            let repo = in_memory_repo();
+            let err = repo
+                .append_derived_quads(vec![
+                    quad(GRAPH_ONTOLOGY_SUMMARY, S, P, "legitimate"),
+                    quad(fenced, S, P, "smuggled"),
+                    quad(GRAPH_ONTOLOGY_OBSERVED, S, P, "also legitimate"),
+                ])
+                .await
+                .expect_err("a fenced graph anywhere in the batch must reject it");
+            assert!(
+                format!("{err}").contains("fenced graph"),
+                "unexpected error: {err}"
+            );
+            assert_eq!(
+                derived_quads_total(&repo),
+                0,
+                "the permitted quads in a rejected batch must not be written"
+            );
+        }
+    }
+
+    /// Every fenced graph is refused on its own too.
+    #[tokio::test]
+    async fn each_fenced_graph_is_refused() {
+        for fenced in DERIVED_FENCE {
+            let repo = in_memory_repo();
+            assert!(repo
+                .append_derived_quads(vec![quad(fenced, S, P, "x")])
+                .await
+                .is_err());
+            assert_eq!(graph_len(&repo, fenced), 0);
+        }
+    }
+
+    /// A graph outside the allow-list is refused even when it is not on the
+    /// fence list: the policy is an allow-list, not a deny-list, so a graph
+    /// added later is refused by default rather than accepted by omission.
+    #[tokio::test]
+    async fn an_unlisted_graph_is_refused_by_default() {
+        let repo = in_memory_repo();
+        for graph in [
+            GRAPH_KNOWLEDGE,
+            GRAPH_AGENT,
+            GRAPH_SHAPES,
+            GRAPH_PROVENANCE,
+            "urn:ngm:graph:invented:later",
+        ] {
+            let err = repo
+                .append_derived_quads(vec![quad(graph, S, P, "x")])
+                .await
+                .expect_err("only :summary/:observed are writable here");
+            let msg = format!("{err}");
+            assert!(
+                msg.contains("derived writes only target") || msg.contains("fenced graph"),
+                "unexpected error for {graph}: {msg}"
+            );
+        }
+        assert_eq!(derived_quads_total(&repo), 0);
+    }
+
+    /// Unsafe subject and predicate IRIs are rejected wherever they appear.
+    #[tokio::test]
+    async fn unsafe_iris_are_rejected_in_every_position() {
+        let hostile = "urn:ngm:class:x> <urn:p> <urn:o> . } INSERT DATA { GRAPH <urn:ngm:graph:ontology:assert> { <urn:evil";
+        let cases = [
+            (
+                "subject",
+                quad(GRAPH_ONTOLOGY_SUMMARY, hostile, P, "v"),
+                "unsafe subject IRI",
+            ),
+            (
+                "predicate",
+                quad(GRAPH_ONTOLOGY_SUMMARY, S, hostile, "v"),
+                "unsafe predicate IRI",
+            ),
+            (
+                "object",
+                quad(GRAPH_ONTOLOGY_SUMMARY, S, P, hostile),
+                "unsafe object IRI",
+            ),
+        ];
+        for (position, bad, expected) in cases {
+            let repo = in_memory_repo();
+            let err = repo
+                .append_derived_quads(vec![
+                    quad(GRAPH_ONTOLOGY_SUMMARY, S, P, "legitimate"),
+                    bad,
+                ])
+                .await
+                .unwrap_err();
+            assert!(
+                format!("{err}").contains(expected),
+                "an unsafe {position} IRI must be rejected with {expected}, got: {err}"
+            );
+            assert_eq!(
+                derived_quads_total(&repo),
+                0,
+                "the legitimate quad beside an unsafe {position} must not be written"
+            );
+        }
+    }
+
+    /// The escape hatch that matters: an unsafe IRI in a mixed batch rejects
+    /// the batch and leaves the fenced graphs untouched.
+    #[tokio::test]
+    async fn an_unsafe_iri_rejects_the_batch_and_writes_nothing() {
+        let repo = in_memory_repo();
+        let hostile = "urn:x> <urn:p> <urn:o> . } INSERT DATA { GRAPH <urn:ngm:graph:ontology:assert> { <urn:evil";
+        let err = repo
+            .append_derived_quads(vec![
+                quad(GRAPH_ONTOLOGY_SUMMARY, S, P, "legitimate"),
+                quad(GRAPH_ONTOLOGY_SUMMARY, hostile, P, "hostile"),
+            ])
+            .await
+            .expect_err("an unsafe subject IRI must reject the batch");
+        assert!(format!("{err}").contains("unsafe subject IRI"), "{err}");
+        assert_eq!(derived_quads_total(&repo), 0);
+        assert_eq!(
+            graph_len(&repo, GRAPH_ONTOLOGY),
+            0,
+            "the injection target must be empty"
+        );
+        assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY_INFERRED), 0);
+    }
+
+    /// A literal object containing SPARQL metacharacters is escaped, not
+    /// rejected, and cannot break out of the INSERT DATA block.
+    #[tokio::test]
+    async fn hostile_literal_objects_are_escaped_not_executed() {
+        let repo = in_memory_repo();
+        let hostile_literal =
+            "value\" . } INSERT DATA { GRAPH <urn:ngm:graph:ontology:assert> { <urn:e> <urn:p> \"x";
+        repo.append_derived_quads(vec![quad(
+            GRAPH_ONTOLOGY_SUMMARY,
+            S,
+            P,
+            hostile_literal,
+        )])
+        .await
+        .expect("a literal is escaped, not refused");
+
+        assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY_SUMMARY), 1);
+        assert_eq!(
+            graph_len(&repo, GRAPH_ONTOLOGY),
+            0,
+            "the escaped literal must not have reached the asserted graph"
+        );
+    }
+
+    /// ADR-2015: the fence lives in the repository, not in the HTTP handler.
+    /// A direct call — the path an in-process actor or a future route would
+    /// take — is fenced identically.
+    #[tokio::test]
+    async fn the_fence_holds_on_a_direct_repository_call() {
+        let repo = in_memory_repo();
+        // No handler, no request, no middleware: the repository method itself.
+        assert!(repo
+            .append_derived_quads(vec![quad(GRAPH_ONTOLOGY, S, P, "x")])
+            .await
+            .is_err());
+        assert!(repo
+            .append_derived_quads(vec![quad(GRAPH_ONTOLOGY_INFERRED, S, P, "x")])
+            .await
+            .is_err());
+        assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY), 0);
+        assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY_INFERRED), 0);
+    }
+
+    /// An empty batch is a no-op, not an error.
+    #[tokio::test]
+    async fn an_empty_batch_is_a_no_op() {
+        let repo = in_memory_repo();
+        assert_eq!(repo.append_derived_quads(vec![]).await.unwrap(), 0);
+        assert_eq!(derived_quads_total(&repo), 0);
+    }
+
+    /// The fence constant covers exactly the two graphs the ADR names, so a new
+    /// graph cannot be added to the fence without this test noticing.
+    #[test]
+    fn the_fence_covers_assert_and_inferred() {
+        assert_eq!(DERIVED_FENCE.len(), 2);
+        assert!(DERIVED_FENCE.contains(&GRAPH_ONTOLOGY));
+        assert!(DERIVED_FENCE.contains(&GRAPH_ONTOLOGY_INFERRED));
+    }
 }

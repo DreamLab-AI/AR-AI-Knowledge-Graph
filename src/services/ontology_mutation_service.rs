@@ -192,9 +192,30 @@ impl OntologyMutationService {
         let Some(store) = self.provenance_store.clone() else {
             return;
         };
+        // ADR-2021 — mint through the typed constructors, not `format!`.
+        //
+        // The old inline mint produced `urn:visionclaw:execution:<kind>-<id>`,
+        // which is not a `sha256-12-` content address and so does not satisfy
+        // the execution grammar `uri::parse` enforces: the record it wrote could
+        // never be parsed back. `uri::execution` content-addresses the same
+        // components, matching every other execution URN in the estate.
+        let activity_urn = crate::uri::execution(format!("{activity_kind}:{proposal_id}"));
+        // `did_nostr` validates the pubkey. Provenance is fail-open by contract,
+        // so an unusable agent id is logged and the emission skipped rather than
+        // writing an unattributable record.
+        let agent_did = match crate::uri::did_nostr(agent_id) {
+            Ok(did) => did,
+            Err(e) => {
+                warn!(
+                    "provenance skipped for {activity_kind}/{proposal_id}: \
+                     agent id is not a valid DID subject: {e}"
+                );
+                return;
+            }
+        };
         let record = ActivityRecord {
-            activity_urn: format!("urn:visionclaw:execution:{activity_kind}-{proposal_id}"),
-            agent_did: format!("did:nostr:{agent_id}"),
+            activity_urn,
+            agent_did,
             timestamp: Utc::now().to_rfc3339(),
             action: action.to_string(),
             derivation: "proposed".to_string(),

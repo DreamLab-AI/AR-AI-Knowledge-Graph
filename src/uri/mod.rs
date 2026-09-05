@@ -139,6 +139,41 @@ pub fn is_pubkey_hex(s: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// The number of lowercase-hex characters in a `sha256-12-` address body:
+/// the first 6 bytes of the SHA-256 digest, two nibbles each.
+pub const CONTENT_ADDR_HEX_LEN: usize = 12;
+
+/// Is `s` a well-formed content address — the `sha256-12-` prefix followed by
+/// **exactly** [`CONTENT_ADDR_HEX_LEN`] lowercase hex characters and nothing
+/// else?
+///
+/// ADR-2023: emitting a correct hash and validating an incoming address are
+/// separate guarantees. [`content_address`] always produced a conforming
+/// string, but the constructor and parser only checked the prefix, so
+/// `sha256-12-`, `sha256-12-ZZZZ`, `sha256-12-` + 40 hex chars and an
+/// upper-case digest all round-tripped as valid KG addresses. This is the
+/// grammar both ends now enforce.
+pub fn is_content_address(s: &str) -> bool {
+    match s.strip_prefix(CONTENT_ADDR_PREFIX) {
+        Some(body) => {
+            body.len() == CONTENT_ADDR_HEX_LEN
+                && body
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }
+        None => false,
+    }
+}
+
+/// Validate a content address, returning it unchanged or a precise error.
+fn require_content_address(s: &str) -> Result<(), UriError> {
+    if is_content_address(s) {
+        Ok(())
+    } else {
+        Err(UriError::Malformed(s.to_string()))
+    }
+}
+
 /// `sha256-12-<12 lowercase hex>` content address over `input` bytes.
 /// Matches the agentbox `sha12()` helper byte-for-byte.
 pub fn content_address(input: impl AsRef<[u8]>) -> String {
@@ -221,9 +256,8 @@ pub fn kg_with_address(owner_pubkey: &str, content_addr: &str) -> Result<String,
     if !is_pubkey_hex(owner_pubkey) {
         return Err(UriError::InvalidPubkey(owner_pubkey.to_string()));
     }
-    if !content_addr.starts_with(CONTENT_ADDR_PREFIX) {
-        return Err(UriError::Malformed(content_addr.to_string()));
-    }
+    // ADR-2023: the full grammar, not just the prefix.
+    require_content_address(content_addr)?;
     Ok(format!("{NS}:{}:{owner_pubkey}:{content_addr}", Kind::Kg))
 }
 
@@ -237,6 +271,22 @@ pub fn bead(owner_pubkey: &str, content: impl AsRef<[u8]>) -> Result<String, Uri
         Kind::Bead,
         content_address(content)
     ))
+}
+
+/// Mint `urn:visionclaw:bead:<hex-pubkey>:<sha256-12>` from an already-computed
+/// content address (e.g. a value crossing the BC20 boundary). Mirrors
+/// [`kg_with_address`]: agentbox `bead` locals are content-addressed
+/// (`management-api/lib/uris.js` `KINDS.bead.contentAddressed = true`) in the
+/// same `sha256-12-<12hex>` shape VisionClaw uses, so the crossing preserves
+/// the existing address rather than re-hashing (see
+/// `bc20-provenance-bridge.js::toVisionclaw`'s `bead` arm, "structural
+/// pass-through").
+pub fn bead_with_address(owner_pubkey: &str, content_addr: &str) -> Result<String, UriError> {
+    if !is_pubkey_hex(owner_pubkey) {
+        return Err(UriError::InvalidPubkey(owner_pubkey.to_string()));
+    }
+    require_content_address(content_addr)?;
+    Ok(format!("{NS}:{}:{owner_pubkey}:{content_addr}", Kind::Bead))
 }
 
 /// Mint `urn:visionclaw:execution:<sha256-12>` (unscoped; owner in `owner_did`).
@@ -265,6 +315,108 @@ pub fn avatar(pubkey: &str) -> Result<String, UriError> {
         return Err(UriError::InvalidPubkey(pubkey.to_string()));
     }
     Ok(format!("{NS}:{}:{pubkey}", Kind::Avatar))
+}
+
+// ── Legacy `urn:ngm:*` identifiers (ADR-2021 recorded exception) ─────────────
+
+/// Typed constructors and parsers for the pre-convergence `urn:ngm:*` graph
+/// identifiers.
+///
+/// ADR-2021 requires every durable mint site to use a typed constructor **or**
+/// record a deliberate exception. The graph repository's node and edge IRIs are
+/// that exception: they are the on-disk identity of an existing Oxigraph
+/// dataset, and ADR-105's no-rewrite named-graph policy forbids re-minting them
+/// under `urn:visionclaw:*`. Rather than leave the mint as an inline `format!`
+/// in the adapter — untyped, unpaired with a parser, and free to drift — the
+/// scheme lives here, beside its parser, so mint and lookup cannot disagree.
+///
+/// **This module mints legacy identifiers on purpose. Nothing new should use
+/// it.** New durable identifiers go through [`kg`], [`bead`], [`execution`] and
+/// friends.
+pub mod ngm {
+    /// `urn:ngm:node:<u32>` — the canonical legacy node IRI prefix.
+    pub const NODE_PREFIX: &str = "urn:ngm:node:";
+    /// `urn:ngm:edge:<source>:<target>:<edge-id>` — the legacy edge IRI prefix.
+    pub const EDGE_PREFIX: &str = "urn:ngm:edge:";
+
+    /// Mint the canonical legacy node IRI. The full 32-bit id (class bits
+    /// included) is used so the IRI round-trips losslessly.
+    pub fn node_iri(id: u32) -> String {
+        format!("{NODE_PREFIX}{id}")
+    }
+
+    /// Parse a legacy node IRI back into its full `u32` id.
+    ///
+    /// Paired with [`node_iri`]: `parse_node_iri(&node_iri(x)) == Some(x)` for
+    /// every `u32`.
+    pub fn parse_node_iri(iri: &str) -> Option<u32> {
+        iri.strip_prefix(NODE_PREFIX)
+            .and_then(|tail| tail.parse::<u32>().ok())
+    }
+
+    /// Mint the canonical legacy edge IRI. The three components are the edge's
+    /// endpoints and its stored `id` field, in that order.
+    pub fn edge_iri(source: u32, target: u32, edge_id: &str) -> String {
+        format!("{EDGE_PREFIX}{source}:{target}:{edge_id}")
+    }
+
+    /// The parts of a legacy edge IRI.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct EdgeRef {
+        pub source: u32,
+        pub target: u32,
+        pub edge_id: String,
+    }
+
+    /// Parse a legacy edge IRI into its parts.
+    ///
+    /// The `edge_id` component may itself contain `:` (upstream callers choose
+    /// it), so only the first two components are split off.
+    pub fn parse_edge_iri(iri: &str) -> Option<EdgeRef> {
+        let tail = iri.strip_prefix(EDGE_PREFIX)?;
+        let (source, rest) = tail.split_once(':')?;
+        let (target, edge_id) = rest.split_once(':')?;
+        if edge_id.is_empty() {
+            return None;
+        }
+        Some(EdgeRef {
+            source: source.parse().ok()?,
+            target: target.parse().ok()?,
+            edge_id: edge_id.to_string(),
+        })
+    }
+
+    /// Is `s` already a legacy edge IRI?
+    pub fn is_edge_iri(s: &str) -> bool {
+        parse_edge_iri(s).is_some()
+    }
+
+    /// How to locate an edge for deletion, given whatever the caller holds.
+    ///
+    /// The repository hands back `Edge::id` set to the **full IRI** when an edge
+    /// is read from the store, but `Edge::new` leaves it as a bare
+    /// `<source>-<target>` string. A delete path that assumed one form silently
+    /// matched nothing when handed the other — which is exactly what
+    /// `remove_edge` did, minting a one-segment `urn:ngm:edge:<id>` that no
+    /// three-segment subject could ever equal. Resolving the two forms here,
+    /// once, is what keeps the mint and the lookup in agreement.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum EdgeLookup {
+        /// The caller already holds the exact subject IRI.
+        Exact(String),
+        /// The caller holds a bare stored edge id; match any legacy edge IRI
+        /// whose final component equals it.
+        TrailingId(String),
+    }
+
+    /// Classify an edge identifier into the lookup it supports.
+    pub fn edge_lookup(edge_id: &str) -> EdgeLookup {
+        if is_edge_iri(edge_id) {
+            EdgeLookup::Exact(edge_id.to_string())
+        } else {
+            EdgeLookup::TrailingId(edge_id.to_string())
+        }
+    }
 }
 
 // ── Parsing (round-trip + BC20 ingest) ───────────────────────────────────────
@@ -398,9 +550,9 @@ pub fn parse(input: &str) -> Result<ParsedUri, UriError> {
             if !is_pubkey_hex(pubkey) {
                 return Err(UriError::InvalidPubkey(pubkey.to_string()));
             }
-            if !address.starts_with(CONTENT_ADDR_PREFIX) {
-                return Err(UriError::Malformed(address.to_string()));
-            }
+            // ADR-2023: reject a malformed suffix after the prefix, not just
+            // a missing prefix.
+            require_content_address(address)?;
             if kind == Kind::Kg {
                 Ok(ParsedUri::Kg {
                     pubkey: pubkey.to_string(),
@@ -414,7 +566,7 @@ pub fn parse(input: &str) -> Result<ParsedUri, UriError> {
             }
         }
         Kind::Execution => {
-            if !tail.starts_with(CONTENT_ADDR_PREFIX) || tail.contains(':') {
+            if !is_content_address(tail) {
                 return Err(UriError::Malformed(input.to_string()));
             }
             Ok(ParsedUri::Execution {
@@ -433,7 +585,7 @@ pub fn parse(input: &str) -> Result<ParsedUri, UriError> {
             })
         }
         Kind::Room => {
-            if !tail.starts_with(CONTENT_ADDR_PREFIX) || tail.contains(':') {
+            if !is_content_address(tail) {
                 return Err(UriError::Malformed(input.to_string()));
             }
             Ok(ParsedUri::Room {
@@ -504,6 +656,12 @@ pub struct UrnCrossing {
 ///   * `agent`    → `did:nostr:<pubkey>` (identity, structural round-trip)
 ///   * `activity` → `urn:visionclaw:execution:<sha256-12>` (unscoped)
 ///   * `thing`    → `urn:visionclaw:kg:<pubkey>:<sha256-12>`
+///   * `bead`     → `urn:visionclaw:bead:<pubkey>:<sha256-12>` (structural
+///                  pass-through — see ADR-2072 / agentbox ADR-2061: agentbox
+///                  `bead` locals are already `sha256-12-<12hex>` content
+///                  addresses, so the crossing preserves the existing address
+///                  instead of re-hashing, matching
+///                  `bc20-provenance-bridge.js::toVisionclaw`'s `bead` arm)
 ///   * `memory`   → `urn:visionclaw:concept:...` requires elevation {domain,slug},
 ///                  which the ingest hot path does not have, so it is recorded as
 ///                  a crossing-without-translation (returns `None`).
@@ -539,6 +697,16 @@ pub fn cross_from_agentbox(agentbox_urn: &str) -> Option<UrnCrossing> {
         "thing" => {
             let pk = scope?;
             kg(pk, agentbox_urn).ok()?
+        }
+        "bead" => {
+            // Structural pass-through (ADR-2072): the agentbox `bead` local is
+            // already a `sha256-12-<12hex>` content address (uris.js
+            // KINDS.bead.contentAddressed = true), the same shape VisionClaw
+            // uses, so the crossing preserves it rather than re-hashing the
+            // whole agentbox URN the way `thing`/`activity` do.
+            let pk = scope?;
+            let local = tail.strip_prefix(pk)?.strip_prefix(':')?;
+            bead_with_address(pk, local).ok()?
         }
         // memory→concept needs the elevation {domain,slug} target, absent on the
         // hot path; the crossing is recorded raw rather than mis-mapped.
@@ -812,6 +980,43 @@ mod tests {
     }
 
     #[test]
+    fn bc20_crosses_bead_structurally_preserving_content_address() {
+        // bead → bead (owner-scoped, structural pass-through of the existing
+        // content address — ADR-2072 / agentbox ADR-2061). Unlike thing/activity,
+        // the local is NOT re-hashed: the agentbox local IS the VisionClaw
+        // address, unchanged.
+        let addr = content_address(b"some bead payload");
+        let agentbox_urn = format!("urn:agentbox:bead:{PK_A}:{addr}");
+        let c = cross_from_agentbox(&agentbox_urn).unwrap();
+        assert_eq!(
+            c.visionclaw_id,
+            format!("urn:visionclaw:bead:{PK_A}:{addr}")
+        );
+        assert_eq!(c.owner_did.as_deref(), Some(&*format!("did:nostr:{PK_A}")));
+        assert_eq!(c.agentbox_urn, agentbox_urn);
+        // Well-formed per the converged grammar and round-trips through parse().
+        let parsed = parse(&c.visionclaw_id).unwrap();
+        assert_eq!(parsed.kind(), Some(Kind::Bead));
+        assert_eq!(
+            parsed,
+            ParsedUri::Bead {
+                pubkey: PK_A.to_string(),
+                address: addr,
+            }
+        );
+    }
+
+    #[test]
+    fn bc20_bead_crossing_rejects_invalid_scope() {
+        // An invalid (non-64-hex) scope must not cross — the closed map treats
+        // it the same as a missing scope: None, never a mis-scoped mint.
+        let addr = content_address(b"payload");
+        assert!(cross_from_agentbox(&format!("urn:agentbox:bead:not-a-pubkey:{addr}")).is_none());
+        // Too-short hex also rejected.
+        assert!(cross_from_agentbox(&format!("urn:agentbox:bead:deadbeef:{addr}")).is_none());
+    }
+
+    #[test]
     fn matches_agentbox_kg_target_urn_fixture() {
         // The schema.rs cross-repo fixture carries this exact target_urn shape;
         // it must parse cleanly as a kg node on the VisionClaw side.
@@ -821,5 +1026,255 @@ mod tests {
         assert_eq!(p.kind(), Some(Kind::Kg));
         assert_eq!(p.owner_pubkey(), Some(PK_B));
         assert_eq!(p.to_uri(), fixture);
+    }
+
+    // ---- ADR-2023: content-address grammar --------------------------------
+
+    /// Every address the emitter produces satisfies the grammar the parser
+    /// enforces. Hash emission and input validation are separate guarantees,
+    /// and this is the assertion that ties them together.
+    #[test]
+    fn emitted_addresses_satisfy_the_grammar() {
+        for input in ["", "a", "hello world", "\u{1F600}", &"x".repeat(10_000)] {
+            let addr = content_address(input);
+            assert!(
+                is_content_address(&addr),
+                "emitter produced an address the parser rejects: {addr}"
+            );
+            assert_eq!(addr.len(), CONTENT_ADDR_PREFIX.len() + CONTENT_ADDR_HEX_LEN);
+        }
+    }
+
+    /// The reproduced defect: a malformed suffix after a correct prefix.
+    #[test]
+    fn malformed_precomputed_addresses_are_rejected() {
+        // (address, why it is malformed)
+        let bad = [
+            ("sha256-12-", "empty body"),
+            ("sha256-12-abc", "too short"),
+            ("sha256-12-abcdef0123456", "too long"),
+            ("sha256-12-ABCDEF012345", "upper-case hex"),
+            ("sha256-12-abcdefghijkl", "non-hex letters"),
+            ("sha256-12-abcdef01234!", "punctuation"),
+            ("sha256-12-abcdef 12345", "embedded space"),
+            ("sha256-12-abcdef:12345", "embedded colon"),
+            ("sha256-12-abcdef01234\n", "trailing newline"),
+            ("sha256-12--bcdef012345", "leading dash in body"),
+            ("not-an-addr", "no prefix at all"),
+            ("sha256-12", "truncated prefix"),
+            ("SHA256-12-abcdef012345", "upper-case prefix"),
+        ];
+        for (addr, why) in bad {
+            assert!(
+                !is_content_address(addr),
+                "{addr:?} must be rejected ({why})"
+            );
+            assert!(
+                matches!(
+                    kg_with_address(PK_A, addr),
+                    Err(UriError::Malformed(_))
+                ),
+                "kg_with_address must reject {addr:?} ({why})"
+            );
+        }
+    }
+
+    /// A malformed address embedded in a full URN is rejected by the parser
+    /// too, not merely by the constructor.
+    #[test]
+    fn parser_rejects_malformed_addresses_in_kg_and_bead_urns() {
+        for kind in ["kg", "bead"] {
+            for body in ["", "abc", "ABCDEF012345", "abcdefghijkl", "abcdef0123456"] {
+                let urn = format!("{NS}:{kind}:{PK_A}:{CONTENT_ADDR_PREFIX}{body}");
+                assert!(
+                    matches!(parse(&urn), Err(UriError::Malformed(_))),
+                    "parser must reject {urn}"
+                );
+            }
+        }
+    }
+
+    /// Execution and room addresses obey the same grammar.
+    #[test]
+    fn parser_rejects_malformed_execution_and_room_addresses() {
+        for kind in ["execution", "room"] {
+            for body in ["", "abc", "ABCDEF012345", "abcdef0123456"] {
+                let urn = format!("{NS}:{kind}:{CONTENT_ADDR_PREFIX}{body}");
+                assert!(
+                    matches!(parse(&urn), Err(UriError::Malformed(_))),
+                    "parser must reject {urn}"
+                );
+            }
+        }
+    }
+
+    /// A well-formed precomputed address still round-trips — the tightened
+    /// grammar rejects malformed input without narrowing the valid set.
+    #[test]
+    fn well_formed_precomputed_address_round_trips() {
+        let addr = content_address("crossing the BC20 boundary");
+        let urn = kg_with_address(PK_A, &addr).expect("valid address is accepted");
+        match parse(&urn).expect("parses") {
+            ParsedUri::Kg { pubkey, address } => {
+                assert_eq!(pubkey, PK_A);
+                assert_eq!(address, addr);
+            }
+            other => panic!("expected Kg, got {other:?}"),
+        }
+    }
+
+    /// Persisted round-trip recovery: an address minted, serialised into a URN,
+    /// parsed back and re-minted yields the identical string.
+    #[test]
+    fn precomputed_address_survives_a_persistence_round_trip() {
+        let original = kg(PK_B, "durable content").expect("mint");
+        let parsed = parse(&original).expect("parse");
+        let ParsedUri::Kg { pubkey, address } = &parsed else {
+            panic!("expected Kg, got {parsed:?}");
+        };
+        let reminted = kg_with_address(pubkey, address).expect("re-mint from the parsed parts");
+        assert_eq!(reminted, original);
+        assert_eq!(parsed.to_uri(), original);
+    }
+
+    /// Every hex digit is accepted; the grammar is not accidentally narrower
+    /// than the emitter.
+    #[test]
+    fn all_lowercase_hex_digits_are_accepted() {
+        assert!(is_content_address("sha256-12-0123456789ab"));
+        assert!(is_content_address("sha256-12-cdef01234567"));
+        assert!(is_content_address("sha256-12-000000000000"));
+        assert!(is_content_address("sha256-12-ffffffffffff"));
+    }
+
+    // ---- ADR-2021: legacy mint sites routed through typed constructors -----
+
+    /// The legacy node scheme mints and parses as a pair, for the whole `u32`
+    /// range including the class-bit boundaries.
+    #[test]
+    fn legacy_node_iri_round_trips() {
+        for id in [0u32, 1, 42, 0x0400_0000, 0x4000_0000, 0x1C00_0000, u32::MAX] {
+            let iri = ngm::node_iri(id);
+            assert!(iri.starts_with(ngm::NODE_PREFIX));
+            assert_eq!(
+                ngm::parse_node_iri(&iri),
+                Some(id),
+                "{iri} must parse back to {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_node_iri_rejects_foreign_input() {
+        assert_eq!(ngm::parse_node_iri("urn:ngm:edge:1:2:x"), None);
+        assert_eq!(ngm::parse_node_iri("urn:ngm:node:"), None);
+        assert_eq!(ngm::parse_node_iri("urn:ngm:node:not-a-number"), None);
+        assert_eq!(ngm::parse_node_iri("urn:ngm:node:-1"), None);
+        // u32::MAX + 1 does not fit.
+        assert_eq!(ngm::parse_node_iri("urn:ngm:node:4294967296"), None);
+        assert_eq!(ngm::parse_node_iri("urn:visionclaw:kg:x:y"), None);
+    }
+
+    /// The legacy edge scheme likewise round-trips, including an `edge_id` that
+    /// itself contains a colon.
+    #[test]
+    fn legacy_edge_iri_round_trips() {
+        for (source, target, id) in [
+            (1u32, 2u32, "1-2"),
+            (0, 0, "self"),
+            (u32::MAX, 0, "max-to-zero"),
+            (7, 9, "has:colons:inside"),
+        ] {
+            let iri = ngm::edge_iri(source, target, id);
+            let parsed = ngm::parse_edge_iri(&iri).expect("parses");
+            assert_eq!(parsed.source, source);
+            assert_eq!(parsed.target, target);
+            assert_eq!(parsed.edge_id, id);
+        }
+    }
+
+    #[test]
+    fn legacy_edge_iri_rejects_foreign_input() {
+        assert_eq!(ngm::parse_edge_iri("urn:ngm:node:5"), None);
+        // One segment — the shape the old remove_edge minted.
+        assert_eq!(ngm::parse_edge_iri("urn:ngm:edge:1-2"), None);
+        // Two segments.
+        assert_eq!(ngm::parse_edge_iri("urn:ngm:edge:1:2"), None);
+        // Non-numeric endpoints.
+        assert_eq!(ngm::parse_edge_iri("urn:ngm:edge:a:b:c"), None);
+        // Empty trailing id.
+        assert_eq!(ngm::parse_edge_iri("urn:ngm:edge:1:2:"), None);
+    }
+
+    /// The reproduced mint/lookup mismatch. `remove_edge` was handed either a
+    /// full IRI (what a read returns in `Edge::id`) or a bare stored id (what
+    /// `Edge::new` leaves there), and minted a one-segment IRI for both — a
+    /// subject that no three-segment edge could ever equal. `edge_lookup`
+    /// distinguishes the two forms, which is what makes the delete match.
+    #[test]
+    fn edge_lookup_distinguishes_a_full_iri_from_a_bare_id() {
+        let full = ngm::edge_iri(3, 4, "3-4");
+        assert_eq!(
+            ngm::edge_lookup(&full),
+            ngm::EdgeLookup::Exact(full.clone()),
+            "a full IRI is matched exactly"
+        );
+        assert_eq!(
+            ngm::edge_lookup("3-4"),
+            ngm::EdgeLookup::TrailingId("3-4".to_string()),
+            "a bare stored id is matched by its trailing component"
+        );
+        // The old one-segment form is not a valid edge IRI, so it falls through
+        // to a trailing-id match rather than being treated as an exact subject.
+        assert_eq!(
+            ngm::edge_lookup("urn:ngm:edge:3-4"),
+            ngm::EdgeLookup::TrailingId("urn:ngm:edge:3-4".to_string())
+        );
+    }
+
+    /// A full IRI ends with `:<edge_id>`, so the trailing-id match the
+    /// repository issues finds exactly the edge the mint wrote.
+    #[test]
+    fn a_minted_edge_iri_ends_with_its_bare_id() {
+        let iri = ngm::edge_iri(11, 12, "11-12");
+        assert!(
+            iri.ends_with(":11-12"),
+            "the trailing-id delete filter depends on this: {iri}"
+        );
+        assert!(iri.starts_with(ngm::EDGE_PREFIX));
+    }
+
+    /// Legacy identifiers stay legacy: `parse` never claims them as converged
+    /// VisionClaw URNs, and `parse_dual` resolves them as legacy.
+    #[test]
+    fn legacy_identifiers_are_not_converged_urns() {
+        for iri in [ngm::node_iri(5), ngm::edge_iri(5, 6, "5-6")] {
+            assert!(
+                parse(&iri).is_err(),
+                "{iri} must not parse as a converged URN"
+            );
+            assert!(
+                matches!(parse_dual(&iri), Ok(ParsedUri::LegacyNgm { .. })),
+                "{iri} must resolve as a legacy identifier"
+            );
+        }
+    }
+
+    /// The converged execution URN the mutation service now mints parses
+    /// cleanly — the old `execution:<kind>-<id>` form did not.
+    #[test]
+    fn mutation_service_execution_urn_shape_parses() {
+        let urn = execution("class-create:proposal-123");
+        match parse(&urn).expect("the minted execution URN must parse") {
+            ParsedUri::Execution { address } => assert!(is_content_address(&address)),
+            other => panic!("expected Execution, got {other:?}"),
+        }
+
+        // The shape the service used to mint is now correctly rejected.
+        let legacy_shape = format!("{NS}:execution:class-create-proposal-123");
+        assert!(
+            matches!(parse(&legacy_shape), Err(UriError::Malformed(_))),
+            "the pre-ADR-2021 execution shape must not parse"
+        );
     }
 }

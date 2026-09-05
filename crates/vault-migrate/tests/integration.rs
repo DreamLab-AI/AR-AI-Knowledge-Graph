@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use vault_migrate::{run, Options};
+use vault_migrate::{run, CollisionPolicy, Options};
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
@@ -25,6 +25,7 @@ fn base(graph: PathBuf, out: Option<PathBuf>) -> Options {
         quiet: true,
         force: false,
         allow_dirty: false,
+        on_collision: CollisionPolicy::Fail,
     }
 }
 
@@ -291,4 +292,331 @@ fn copy_dir(from: &Path, to: &Path) {
             std::fs::copy(e.path(), &dest).unwrap();
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// ADR-2042 acceptance — destination collisions, dry-run side effects,
+// interrupted writes
+// ---------------------------------------------------------------------------
+
+/// A disposable graph directory, removed when the guard drops.
+struct Graph(PathBuf);
+
+impl Graph {
+    fn new(tag: &str) -> Self {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock after epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("adr2042-{tag}-{nanos}"));
+        std::fs::create_dir_all(dir.join("pages")).expect("mkdir pages");
+        std::fs::create_dir_all(dir.join("journals")).expect("mkdir journals");
+        Graph(dir)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    /// Write a page at a graph-relative path.
+    fn page(&self, rel: &str, body: &str) -> &Self {
+        let p = self.0.join("pages").join(rel);
+        if let Some(parent) = p.parent() {
+            std::fs::create_dir_all(parent).expect("mkdir");
+        }
+        std::fs::write(p, body).expect("write page");
+        self
+    }
+
+    fn journal(&self, rel: &str, body: &str) -> &Self {
+        std::fs::write(self.0.join("journals").join(rel), body).expect("write journal");
+        self
+    }
+}
+
+impl Drop for Graph {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn out_dir(graph: &Graph) -> PathBuf {
+    graph.path().with_extension("out")
+}
+
+/// A graph carrying the same page in both layouts: the legacy namespace
+/// encoding and the folder layout. Both map to `pages/Ns/Title.md`.
+fn colliding_graph(tag: &str) -> Graph {
+    let g = Graph::new(tag);
+    g.page("Ns___Title.md", "- legacy namespace body\n");
+    g.page("Ns/Title.md", "- folder layout body\n");
+    g
+}
+
+/// The reproduced defect: the CLI accepted colliding paths and kept only one
+/// output body while preserving both sources. It must now refuse.
+#[test]
+fn colliding_destinations_are_rejected_before_any_write() {
+    let g = colliding_graph("collide-fail");
+    let out = out_dir(&g);
+    let err = run(&base(g.path().to_path_buf(), Some(out.clone())))
+        .expect_err("a destination collision must refuse the run");
+    let msg = format!("{err:#}");
+    assert!(
+        msg.contains("destination collision"),
+        "expected a collision failure, got: {msg}"
+    );
+    assert!(msg.contains("pages/Ns/Title.md"), "message: {msg}");
+    assert!(msg.contains("Ns___Title.md"), "message: {msg}");
+    assert!(msg.contains("Ns/Title.md"), "message: {msg}");
+    assert!(
+        msg.contains("--on-collision suffix"),
+        "the failure must state the resolution: {msg}"
+    );
+
+    // Nothing was written: the refusal happens on the plan.
+    assert!(
+        !out.exists() || tree(&out).is_empty(),
+        "a refused run must not write a vault"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// The explicit resolution keeps every page body, deterministically named.
+#[test]
+fn suffix_policy_preserves_every_colliding_body() {
+    let g = colliding_graph("collide-suffix");
+    let out = out_dir(&g);
+    let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
+    opts.on_collision = CollisionPolicy::Suffix;
+
+    let outcome = run(&opts).expect("suffix policy resolves the collision");
+    let written = tree(&out);
+
+    assert!(
+        written.contains_key("pages/Ns/Title.md"),
+        "the first source keeps the natural path: {:?}",
+        written.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        written.contains_key("pages/Ns/Title (2).md"),
+        "the second source is suffixed: {:?}",
+        written.keys().collect::<Vec<_>>()
+    );
+
+    // Both bodies survive — nothing was silently discarded.
+    let all: String = written
+        .iter()
+        .filter(|(k, _)| k.starts_with("pages/Ns/"))
+        .map(|(_, v)| String::from_utf8_lossy(v).into_owned())
+        .collect();
+    assert!(all.contains("legacy namespace body"), "bodies: {all}");
+    assert!(all.contains("folder layout body"), "bodies: {all}");
+
+    // The report names the collision and the resolution it applied.
+    assert_eq!(outcome.report.collisions.len(), 1);
+    let c = &outcome.report.collisions[0];
+    assert_eq!(c.destination, "pages/Ns/Title.md");
+    assert_eq!(c.sources.len(), 2);
+    assert!(c.resolution.contains("suffixed"), "{}", c.resolution);
+    assert!(c.resolution.contains("Title (2).md"), "{}", c.resolution);
+
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Suffixing is deterministic: a second run produces the identical vault.
+#[test]
+fn suffix_resolution_is_deterministic_across_runs() {
+    let g = colliding_graph("collide-determinism");
+    let first = g.path().with_extension("out1");
+    let second = g.path().with_extension("out2");
+
+    for out in [&first, &second] {
+        let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
+        opts.on_collision = CollisionPolicy::Suffix;
+        run(&opts).expect("run");
+    }
+    assert_eq!(tree(&first), tree(&second), "suffixing must be deterministic");
+    let _ = std::fs::remove_dir_all(&first);
+    let _ = std::fs::remove_dir_all(&second);
+}
+
+/// Three-way collisions get ` (2)` and ` (3)`, not two files fighting over one
+/// suffix.
+#[test]
+fn three_way_collision_gets_distinct_suffixes() {
+    let g = Graph::new("collide-three");
+    g.page("Ns___Title.md", "- one\n");
+    g.page("Ns%2FTitle.md", "- two\n");
+    g.page("Ns/Title.md", "- three\n");
+    let out = out_dir(&g);
+    let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
+    opts.on_collision = CollisionPolicy::Suffix;
+
+    run(&opts).expect("run");
+    let written = tree(&out);
+    for name in [
+        "pages/Ns/Title.md",
+        "pages/Ns/Title (2).md",
+        "pages/Ns/Title (3).md",
+    ] {
+        assert!(written.contains_key(name), "missing {name}: {:?}", written.keys().collect::<Vec<_>>());
+    }
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Mixed namespace/folder layouts that do NOT collide convert normally — the
+/// check must not fire on ordinary graphs.
+#[test]
+fn mixed_layouts_without_collisions_convert_normally() {
+    let g = Graph::new("mixed-ok");
+    g.page("Ns___Alpha.md", "- alpha\n");
+    g.page("Ns/Beta.md", "- beta\n");
+    g.page("Gamma.md", "- gamma\n");
+    let out = out_dir(&g);
+
+    let outcome = run(&base(g.path().to_path_buf(), Some(out.clone()))).expect("run");
+    assert!(outcome.report.collisions.is_empty());
+    let written = tree(&out);
+    for name in ["pages/Ns/Alpha.md", "pages/Ns/Beta.md", "pages/Gamma.md"] {
+        assert!(written.contains_key(name), "missing {name}");
+    }
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Journals collide too: `2026_01_02.md` and `2026-01-02.md` both become
+/// `journals/2026-01-02.md`.
+#[test]
+fn colliding_journals_are_rejected() {
+    let g = Graph::new("collide-journal");
+    g.journal("2026_01_02.md", "- logseq journal\n");
+    g.journal("2026-01-02.md", "- converted journal\n");
+    let out = out_dir(&g);
+
+    let err = run(&base(g.path().to_path_buf(), Some(out.clone())))
+        .expect_err("colliding journals must refuse the run");
+    let msg = format!("{err:#}");
+    assert!(msg.contains("journals/2026-01-02.md"), "message: {msg}");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Collisions are detected in `--check` too, so CI catches them without a run.
+#[test]
+fn check_mode_detects_collisions() {
+    let g = colliding_graph("collide-check");
+    let mut opts = base(g.path().to_path_buf(), None);
+    opts.check = true;
+    let err = run(&opts).expect_err("--check must surface the collision");
+    assert!(format!("{err:#}").contains("destination collision"));
+}
+
+/// ADR-2042 dry-run side effects: no vault output, and the report is the one
+/// permitted artefact.
+#[test]
+fn dry_run_produces_no_vault_output_and_reports_its_side_effects() {
+    let g = Graph::new("dry-run-side-effects");
+    g.page("Alpha.md", "- alpha\n");
+    let out = out_dir(&g);
+    let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
+    opts.dry_run = true;
+
+    let outcome = run(&opts).expect("dry run");
+    assert!(
+        !out.exists() || tree(&out).is_empty(),
+        "--dry-run must write no vault output"
+    );
+    assert_eq!(outcome.report.mode, "dry-run");
+    // The library run itself has no side effects; the CLI records the report
+    // write, which is the only one the mode permits.
+    assert!(outcome.report.report_side_effects.is_empty());
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// The source graph is never touched by a refused or dry run.
+#[test]
+fn a_refused_run_leaves_the_source_graph_intact() {
+    let g = colliding_graph("collide-source-intact");
+    let before = tree(g.path());
+    let out = out_dir(&g);
+    let _ = run(&base(g.path().to_path_buf(), Some(out.clone())));
+    assert_eq!(before, tree(g.path()), "the source graph must be untouched");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// ADR-2042 interrupted writes: a truncated destination left by a killed run
+/// is replaced with the complete body on the next run, and no staging file is
+/// left behind.
+#[test]
+fn a_truncated_destination_is_repaired_by_the_next_run() {
+    let g = Graph::new("interrupted");
+    g.page("Alpha.md", "- alpha body that is long enough to truncate\n");
+    let out = out_dir(&g);
+
+    // First run produces the real output.
+    run(&base(g.path().to_path_buf(), Some(out.clone()))).expect("first run");
+    let complete = std::fs::read(out.join("pages/Alpha.md")).expect("read output");
+    assert!(!complete.is_empty());
+
+    // Simulate an interrupted write: half the bytes on disk.
+    std::fs::write(out.join("pages/Alpha.md"), &complete[..complete.len() / 2])
+        .expect("truncate");
+
+    let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
+    opts.force = true;
+    run(&opts).expect("second run");
+
+    assert_eq!(
+        std::fs::read(out.join("pages/Alpha.md")).expect("read"),
+        complete,
+        "the truncated page must be restored in full"
+    );
+    assert!(
+        !tree(&out).keys().any(|k| k.contains("vault-migrate-") && k.ends_with(".tmp")),
+        "no staging file may survive a completed run"
+    );
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// `--check` sees a truncated destination as drift rather than silently
+/// accepting it.
+#[test]
+fn check_reports_a_truncated_destination_as_drift() {
+    let g = Graph::new("interrupted-check");
+    g.page("Alpha.md", "- alpha body long enough to truncate\n");
+    let out = out_dir(&g);
+    run(&base(g.path().to_path_buf(), Some(out.clone()))).expect("first run");
+
+    let complete = std::fs::read(out.join("pages/Alpha.md")).expect("read");
+    std::fs::write(out.join("pages/Alpha.md"), &complete[..complete.len() / 2])
+        .expect("truncate");
+
+    let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
+    opts.check = true;
+    let outcome = run(&opts).expect("check run");
+    assert!(outcome.drift > 0, "a truncated page must register as drift");
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+/// Case-only differences are distinct destinations on a case-sensitive
+/// filesystem and must not be reported as a collision there.
+#[test]
+fn case_differing_page_names_are_distinct_destinations() {
+    let g = Graph::new("case");
+    g.page("Alpha.md", "- lower\n");
+    g.page("ALPHA.md", "- upper\n");
+    let out = out_dir(&g);
+
+    match run(&base(g.path().to_path_buf(), Some(out.clone()))) {
+        Ok(outcome) => {
+            // Case-sensitive filesystem: two destinations, no collision.
+            assert!(outcome.report.collisions.is_empty());
+            assert_eq!(tree(&out).keys().filter(|k| k.starts_with("pages/")).count(), 2);
+        }
+        Err(e) => {
+            // Case-insensitive filesystem: the fixture could not even be
+            // created distinctly, so a collision report is the correct answer.
+            assert!(format!("{e:#}").contains("collision"));
+        }
+    }
+    let _ = std::fs::remove_dir_all(&out);
 }

@@ -32,6 +32,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use tokio_rusqlite::Connection;
 
@@ -80,6 +81,14 @@ CREATE TABLE IF NOT EXISTS enrichment_decisions (
     -- (insight-to-integration time) is computable per closed loop. Additive; an
     -- on-disk store predating REC-10 gains it via `apply_additive_migrations`.
     writeback_committed_at_ms INTEGER,
+    -- ADR-2006: the id of the signed kind-31403 event this decision came from.
+    -- NULL for a locally minted decision (a gate-reject answers no signed
+    -- event). Additive; an on-disk store predating ADR-2006 gains it via
+    -- `apply_additive_migrations`.
+    decision_event_id    TEXT,
+    -- ADR-2006: the signed event's own `created_at` (epoch seconds), kept
+    -- beside the local receipt time so subscription lag stays measurable.
+    decision_created_at_s INTEGER,
     activity_urn         TEXT    NOT NULL,
     proposal_urn         TEXT,
     owner_did            TEXT,
@@ -89,6 +98,11 @@ CREATE TABLE IF NOT EXISTS enrichment_decisions (
 
 CREATE INDEX IF NOT EXISTS enrichment_decision_case_idx
     ON enrichment_decisions(case_id, decided_at_ms);
+
+-- ADR-2006: the partial unique index on `decision_event_id` is created by
+-- `apply_additive_migrations`, NOT here. This batch runs first, before the
+-- column migration, so on a store predating ADR-2006 the index would reference
+-- a column the table does not yet have and abort the whole open.
 
 INSERT OR IGNORE INTO schema_migrations (id) VALUES ('0003_enrichment_proposals');
 "#;
@@ -128,6 +142,20 @@ fn apply_additive_migrations(c: &rusqlite::Connection) -> rusqlite::Result<()> {
         "enrichment_decisions",
         "writeback_committed_at_ms",
         "INTEGER",
+    )?;
+    // ADR-2006 — signed-event correlation. The unique index is created HERE,
+    // after `add_column_if_missing`, so it works for both a fresh store (the
+    // column arrives from CREATE TABLE) and one predating ADR-2006 (the column
+    // arrives from the ALTER above). A signed decision event is recorded at
+    // most once however many times the relay delivers it; the index is partial
+    // so locally minted decisions, which carry no event id, are never
+    // constrained against each other.
+    add_column_if_missing(c, "enrichment_decisions", "decision_event_id", "TEXT")?;
+    add_column_if_missing(c, "enrichment_decisions", "decision_created_at_s", "INTEGER")?;
+    c.execute_batch(
+        "CREATE UNIQUE INDEX IF NOT EXISTS enrichment_decision_event_idx
+             ON enrichment_decisions(decision_event_id)
+             WHERE decision_event_id IS NOT NULL;",
     )
 }
 
@@ -206,6 +234,17 @@ pub struct StoredDecision {
     pub proposal_urn: Option<String>,
     pub owner_did: Option<String>,
     pub decided_at_ms: i64,
+    /// ADR-2006 — the signed kind-31403 event id this decision came from, or
+    /// `None` for a locally minted decision. This is the correlation key back to
+    /// the original request; it is unique per signed decision, so a replayed or
+    /// re-delivered event is recognisable rather than being recorded twice.
+    #[serde(default)]
+    pub decision_event_id: Option<String>,
+    /// The signed event's `created_at`, in epoch **seconds**. `None` for a
+    /// locally minted decision. Kept beside `decided_at_ms` (the local receipt
+    /// time) so subscription lag stays measurable after a restart.
+    #[serde(default)]
+    pub decision_created_at_s: Option<i64>,
 }
 
 /// One case's joined loop-trace row (REC-10, Insight Ingestion Loop v1). Joins a
@@ -493,6 +532,8 @@ impl SqliteEnrichmentRepository {
         let proposal_urn = d.proposal_urn.clone();
         let owner_did = d.owner_did.clone();
         let decided_at_ms = d.decided_at_ms;
+        let decision_event_id = d.decision_event_id.clone();
+        let decision_created_at_s = d.decision_created_at_s;
         let status = status_for_outcome(&outcome).to_string();
 
         self.conn
@@ -500,12 +541,34 @@ impl SqliteEnrichmentRepository {
                 let tx = c.transaction()?;
                 let decision_id: i64;
                 {
+                    // ADR-2006 — a re-delivered signed decision must not be
+                    // recorded twice. The relay can replay a 31403 after a
+                    // reconnect or restart, and the subscription starts at
+                    // "now" without knowing what it already saw. Returning the
+                    // existing row makes redelivery an exact no-op rather than
+                    // a duplicate audit entry.
+                    if let Some(ref event_id) = decision_event_id {
+                        let existing: Option<i64> = tx
+                            .query_row(
+                                "SELECT id FROM enrichment_decisions
+                                 WHERE decision_event_id = ?1",
+                                [event_id],
+                                |r| r.get(0),
+                            )
+                            .optional()?;
+                        if let Some(id) = existing {
+                            tx.commit()?;
+                            return Ok(id);
+                        }
+                    }
+
                     let mut ins = tx.prepare_cached(
                         "INSERT INTO enrichment_decisions
                              (case_id, outcome, attributed, broker_pubkey, reasoning,
                               writeback_triggered, writeback_committed, activity_urn,
-                              proposal_urn, owner_did, decided_at_ms)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                              proposal_urn, owner_did, decided_at_ms,
+                              decision_event_id, decision_created_at_s)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                     )?;
                     ins.execute(rusqlite::params![
                         &case_id,
@@ -519,6 +582,8 @@ impl SqliteEnrichmentRepository {
                         &proposal_urn,
                         &owner_did,
                         decided_at_ms,
+                        &decision_event_id,
+                        decision_created_at_s,
                     ])?;
                     decision_id = tx.last_insert_rowid();
 
@@ -604,7 +669,8 @@ impl SqliteEnrichmentRepository {
                 let mut stmt = c.prepare_cached(
                     "SELECT case_id, outcome, attributed, broker_pubkey, reasoning,
                             writeback_triggered, writeback_committed, activity_urn,
-                            proposal_urn, owner_did, decided_at_ms
+                            proposal_urn, owner_did, decided_at_ms,
+                            decision_event_id, decision_created_at_s
                      FROM enrichment_decisions
                      WHERE case_id = ?1
                      ORDER BY decided_at_ms DESC, id DESC",
@@ -627,6 +693,8 @@ impl SqliteEnrichmentRepository {
                         proposal_urn: r.get(8)?,
                         owner_did: r.get(9)?,
                         decided_at_ms: r.get(10)?,
+                        decision_event_id: r.get(11)?,
+                        decision_created_at_s: r.get(12)?,
                     });
                 }
                 Ok(out)
@@ -845,6 +913,17 @@ mod tests {
             proposal_urn: Some("urn:visionclaw:kg:pk:sha256-12-deadbeef0000".into()),
             owner_did: Some("did:nostr:pk".into()),
             decided_at_ms: 1_700_000_000_000,
+            decision_event_id: None,
+            decision_created_at_s: None,
+        }
+    }
+
+    /// A decision carrying a signed 31403 event id (ADR-2006).
+    fn signed_decision(case_id: &str, event_id: &str) -> StoredDecision {
+        StoredDecision {
+            decision_event_id: Some(event_id.to_string()),
+            decision_created_at_s: Some(1_700_000_000),
+            ..decision(case_id, false)
         }
     }
 
@@ -1050,5 +1129,152 @@ mod tests {
         assert_eq!(status_for_outcome("reject"), "rejected");
         assert_eq!(status_for_outcome("rejected"), "rejected");
         assert_eq!(status_for_outcome("amend"), "reviewed");
+    }
+
+    // ---- ADR-2006: signed-event correlation, duplicates, lag, restart ------
+
+    /// The signed event id survives the round trip, so a stored decision can be
+    /// traced back to the request that produced it.
+    #[tokio::test]
+    async fn signed_event_id_round_trips() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("case-sig")).await.unwrap();
+        repo.record_decision(&signed_decision("case-sig", "e".repeat(64).as_str()))
+            .await
+            .unwrap();
+
+        let rows = repo.decisions_for("case-sig").await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].decision_event_id.as_deref(), Some("e".repeat(64).as_str()));
+        assert_eq!(rows[0].decision_created_at_s, Some(1_700_000_000));
+    }
+
+    /// The reproduced hazard: the relay re-delivers a decision after a
+    /// reconnect. It must be recorded once, and the second call must return the
+    /// same row id rather than a new one.
+    #[tokio::test]
+    async fn a_redelivered_signed_decision_is_recorded_once() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("case-dup")).await.unwrap();
+        let d = signed_decision("case-dup", "f".repeat(64).as_str());
+
+        let first = repo.record_decision(&d).await.unwrap();
+        let second = repo.record_decision(&d).await.unwrap();
+        assert_eq!(first, second, "redelivery must return the existing row");
+        assert_eq!(
+            repo.decisions_for("case-dup").await.unwrap().len(),
+            1,
+            "a re-delivered decision must not create a second audit row"
+        );
+    }
+
+    /// Two genuinely distinct decisions on the same case, with the same action
+    /// and responder, are both recorded — they differ only by event id, which
+    /// is exactly what the old tuple-based correlation could not see.
+    #[tokio::test]
+    async fn distinct_signed_decisions_are_both_recorded() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("case-two")).await.unwrap();
+        repo.record_decision(&signed_decision("case-two", "a".repeat(64).as_str()))
+            .await
+            .unwrap();
+        repo.record_decision(&signed_decision("case-two", "b".repeat(64).as_str()))
+            .await
+            .unwrap();
+
+        let rows = repo.decisions_for("case-two").await.unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+
+    /// Locally minted decisions carry no event id, so the partial unique index
+    /// must not constrain them against each other.
+    #[tokio::test]
+    async fn local_decisions_without_an_event_id_are_not_deduplicated() {
+        let repo = temp_repo().await;
+        repo.create_or_update(&proposal("case-local")).await.unwrap();
+        repo.record_decision(&decision("case-local", false)).await.unwrap();
+        repo.record_decision(&decision("case-local", false)).await.unwrap();
+
+        assert_eq!(
+            repo.decisions_for("case-local").await.unwrap().len(),
+            2,
+            "NULL event ids are not duplicates of one another"
+        );
+    }
+
+    /// Restart: a store reopened from the same file still recognises a
+    /// previously recorded signed decision, so a subscription that replays from
+    /// "now" cannot double-record across a process boundary.
+    #[tokio::test]
+    async fn duplicate_suppression_survives_a_reopen() {
+        let dir = std::env::temp_dir().join(format!(
+            "adr2006-reopen-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("enrichment.sqlite3");
+
+        let d = signed_decision("case-restart", "c".repeat(64).as_str());
+        let first_id = {
+            let repo = SqliteEnrichmentRepository::open(&path).await.unwrap();
+            repo.create_or_update(&proposal("case-restart")).await.unwrap();
+            repo.record_decision(&d).await.unwrap()
+        };
+
+        // Reopen — a fresh process seeing the same replayed event.
+        let repo = SqliteEnrichmentRepository::open(&path).await.unwrap();
+        let second_id = repo.record_decision(&d).await.unwrap();
+        assert_eq!(first_id, second_id, "the reopened store must recognise it");
+        assert_eq!(repo.decisions_for("case-restart").await.unwrap().len(), 1);
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A store created before ADR-2006 gains the column and the index on open,
+    /// and then deduplicates correctly.
+    #[tokio::test]
+    async fn a_pre_adr_2006_store_is_migrated_on_open() {
+        let dir = std::env::temp_dir().join(format!(
+            "adr2006-migrate-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("enrichment.sqlite3");
+
+        // Build a store, then drop the ADR-2006 column to simulate the old
+        // schema. SQLite supports DROP COLUMN from 3.35.
+        {
+            let repo = SqliteEnrichmentRepository::open(&path).await.unwrap();
+            repo.conn
+                .call(|c| {
+                    c.execute_batch(
+                        "DROP INDEX IF EXISTS enrichment_decision_event_idx;
+                         ALTER TABLE enrichment_decisions DROP COLUMN decision_created_at_s;
+                         ALTER TABLE enrichment_decisions DROP COLUMN decision_event_id;",
+                    )?;
+                    Ok(())
+                })
+                .await
+                .unwrap();
+        }
+
+        // Reopening applies the additive migration.
+        let repo = SqliteEnrichmentRepository::open(&path).await.unwrap();
+        repo.create_or_update(&proposal("case-mig")).await.unwrap();
+        let d = signed_decision("case-mig", "d".repeat(64).as_str());
+        let a = repo.record_decision(&d).await.unwrap();
+        let b = repo.record_decision(&d).await.unwrap();
+        assert_eq!(a, b, "the migrated store must deduplicate");
+        assert_eq!(repo.decisions_for("case-mig").await.unwrap().len(), 1);
+
+        drop(repo);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

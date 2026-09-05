@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use vault_migrate::{run, Options};
+use vault_migrate::{run, CollisionPolicy, Options};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -20,7 +20,11 @@ frontmatter, `Ns___Title.md` becomes `Ns/Title.md`, journals are renamed to \
 `YYYY-MM-DD.md`, and the body dialect is rewritten to Obsidian's. Anything with \
 no faithful equivalent (block refs, body-level properties) is preserved \
 byte-for-byte and listed in the JSON report.\n\n\
-The default mode writes to a new directory and never touches the source graph."
+The default mode writes to a new directory and never touches the source graph.\n\n\
+--dry-run and --check produce NO vault output. The single permitted side effect \
+in those modes is the JSON report, and only when --report <PATH> asks for it; \
+without --report, --dry-run prints the report to stdout instead. The report \
+records this in its report_side_effects field."
 )]
 struct Args {
     /// The Logseq graph directory (contains pages/, journals/, assets/).
@@ -66,6 +70,15 @@ struct Args {
     /// Suppress the human summary on stderr.
     #[arg(long, short)]
     quiet: bool,
+
+    /// What to do when two source pages map onto the same vault path
+    /// (`Ns___Title.md` and `Ns/Title.md` both become `Ns/Title.md`).
+    /// `fail` (default) refuses the run and names every collision; `suffix`
+    /// keeps the first source at the natural path and gives the rest a
+    /// ` (2)`, ` (3)` … suffix.
+    #[arg(long, value_name = "MODE", default_value = "fail",
+          value_parser = ["fail", "suffix"])]
+    on_collision: String,
 }
 
 fn main() -> ExitCode {
@@ -92,25 +105,48 @@ fn real_main() -> Result<ExitCode> {
         quiet: a.quiet,
         force: a.force,
         allow_dirty: a.allow_dirty,
+        on_collision: match a.on_collision.as_str() {
+            "suffix" => CollisionPolicy::Suffix,
+            _ => CollisionPolicy::Fail,
+        },
     };
 
-    let outcome = run(&opts)?;
-    let json = outcome.report.to_json();
+    let mut outcome = run(&opts)?;
 
-    if a.dry_run && a.report.is_none() {
-        print!("{json}");
+    // ADR-2042 — report side effects, stated explicitly.
+    //
+    // `--dry-run` and `--check` write NO vault output; `run()` above returns
+    // before touching the target tree. The one side effect either mode may have
+    // is the JSON report, and only because `--report <PATH>` asked for it. That
+    // is narrower than "writes nothing", so the artefact records what it did.
+    let report_target = if a.dry_run && a.report.is_none() {
+        None
     } else if !a.check || a.report.is_some() {
         let target = a.out.clone().unwrap_or_else(|| a.graph.clone());
-        let path = a
-            .report
-            .clone()
-            .unwrap_or_else(|| target.join("vault-migrate-report.json"));
-        if let Some(p) = path.parent() {
-            std::fs::create_dir_all(p)?;
-        }
-        std::fs::write(&path, &json)?;
-        if !a.quiet {
-            eprintln!("report written to {}", path.display());
+        Some(
+            a.report
+                .clone()
+                .unwrap_or_else(|| target.join("vault-migrate-report.json")),
+        )
+    } else {
+        None
+    };
+    outcome.report.report_side_effects = match &report_target {
+        Some(path) => vec![format!("wrote report to {}", path.display())],
+        None => vec!["report printed to stdout; no file written".to_string()],
+    };
+
+    let json = outcome.report.to_json();
+    match &report_target {
+        None => print!("{json}"),
+        Some(path) => {
+            if let Some(p) = path.parent() {
+                std::fs::create_dir_all(p)?;
+            }
+            std::fs::write(path, &json)?;
+            if !a.quiet {
+                eprintln!("report written to {}", path.display());
+            }
         }
     }
 

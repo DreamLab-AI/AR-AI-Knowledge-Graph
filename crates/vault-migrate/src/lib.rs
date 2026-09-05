@@ -30,6 +30,26 @@ pub struct Options {
     pub quiet: bool,
     pub force: bool,
     pub allow_dirty: bool,
+    /// ADR-2042: what to do when two source pages map onto the same vault path.
+    pub on_collision: CollisionPolicy,
+}
+
+/// How a destination collision is handled (ADR-2042).
+///
+/// A collision is never resolved implicitly. The planner detects every one
+/// **before any file is written**, and the policy decides between refusing the
+/// run and applying a declared, deterministic renaming.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CollisionPolicy {
+    /// Refuse the run, naming every colliding destination and its sources.
+    /// The default: silently keeping one body and discarding the other is data
+    /// loss, and the operator is the only one who can say which page wins.
+    #[default]
+    Fail,
+    /// Keep the first source (in sorted order) at the natural destination and
+    /// give each subsequent one a ` (2)`, ` (3)` … suffix before the extension.
+    /// Deterministic, so a re-run produces the same vault.
+    Suffix,
 }
 
 #[derive(Debug)]
@@ -42,8 +62,14 @@ pub struct RunOutcome {
 
 #[derive(Debug)]
 enum Action {
-    /// A converted markdown file, or a generated config file.
-    Write { rel: PathBuf, content: String },
+    /// A converted markdown file, or a generated config file. `source` is the
+    /// page it came from, or `None` for generated starter config — it is what
+    /// a collision report names.
+    Write {
+        rel: PathBuf,
+        content: String,
+        source: Option<PathBuf>,
+    },
     /// Anything the converter does not interpret: copied byte-for-byte.
     Copy { src: PathBuf, rel: PathBuf },
 }
@@ -53,6 +79,21 @@ impl Action {
         match self {
             Action::Write { rel, .. } => rel,
             Action::Copy { rel, .. } => rel,
+        }
+    }
+
+    fn rel_mut(&mut self) -> &mut PathBuf {
+        match self {
+            Action::Write { rel, .. } => rel,
+            Action::Copy { rel, .. } => rel,
+        }
+    }
+
+    /// The source this action carries, for collision reporting.
+    fn source(&self) -> Option<&Path> {
+        match self {
+            Action::Write { source, .. } => source.as_deref(),
+            Action::Copy { src, .. } => Some(src.as_path()),
         }
     }
 }
@@ -216,11 +257,15 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
                 }
                 tally(&mut rep, &r.stats);
                 collect_leftovers(&rel, &r.stats, &mut block_refs, &mut body_props, &mut sched);
-                actions.push(Action::Write { rel, content: r.content });
+                actions.push(Action::Write {
+                    rel,
+                    content: r.content,
+                    source: Some(abs.clone()),
+                });
             }
         }
     }
-    for ((_, _, renamed), res) in journal_files.iter().zip(journal_out) {
+    for ((abs, _, renamed), res) in journal_files.iter().zip(journal_out) {
         match res {
             Err(e) => rep.errors.push(e),
             Ok((rel, r, _)) => {
@@ -229,7 +274,11 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
                 }
                 tally(&mut rep, &r.stats);
                 collect_leftovers(&rel, &r.stats, &mut block_refs, &mut body_props, &mut sched);
-                actions.push(Action::Write { rel, content: r.content });
+                actions.push(Action::Write {
+                    rel,
+                    content: r.content,
+                    source: Some(abs.clone()),
+                });
             }
         }
     }
@@ -241,9 +290,22 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
         if claimed.contains(&rel) || target.join(&rel).exists() {
             continue;
         }
-        actions.push(Action::Write { rel, content });
+        actions.push(Action::Write { rel, content, source: None });
     }
 
+    actions.sort_by(|a, b| a.rel().cmp(b.rel()));
+
+    // --- ADR-2042: destination collisions, resolved before any write ------
+    //
+    // A graph can hold both `Ns___Title.md` and `Ns/Title.md`; both decode to
+    // `pages/Ns/Title.md`. Left alone, the last action to be applied wins and
+    // one page body is silently lost while both sources survive — precisely
+    // the reproduced defect. Detect every collision here, on the plan, and
+    // either refuse or apply the declared resolution.
+    rep.collisions = resolve_collisions(&mut actions, opts.on_collision, source);
+    if opts.on_collision == CollisionPolicy::Fail && !rep.collisions.is_empty() {
+        bail!("{}", collision_failure_message(&rep.collisions));
+    }
     actions.sort_by(|a, b| a.rel().cmp(b.rel()));
 
     block_refs.sort();
@@ -281,6 +343,137 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
     }
 
     Ok(RunOutcome { report: rep, drift, drift_examples })
+}
+
+// ---------------------------------------------------------------------------
+// ADR-2042 — destination collisions
+// ---------------------------------------------------------------------------
+
+/// Find every destination two or more actions map onto and apply `policy`.
+///
+/// Returns one [`report::Collision`] per colliding destination, sorted, and —
+/// under [`CollisionPolicy::Suffix`] — rewrites the losing actions' destinations
+/// in place. Under [`CollisionPolicy::Fail`] the actions are left untouched and
+/// the caller aborts, so nothing is written.
+///
+/// `source_root` is stripped from reported source paths so the report is
+/// relocatable.
+fn resolve_collisions(
+    actions: &mut [Action],
+    policy: CollisionPolicy,
+    source_root: &Path,
+) -> Vec<report::Collision> {
+    use std::collections::BTreeMap;
+
+    // Group action indices by destination. Actions are already sorted by
+    // destination, and within a destination we take them in the order they were
+    // planned, so the resolution is deterministic across runs.
+    let mut by_dest: BTreeMap<PathBuf, Vec<usize>> = BTreeMap::new();
+    for (idx, a) in actions.iter().enumerate() {
+        by_dest.entry(a.rel().to_path_buf()).or_default().push(idx);
+    }
+
+    let describe = |p: Option<&Path>| -> String {
+        match p {
+            Some(p) => p
+                .strip_prefix(source_root)
+                .unwrap_or(p)
+                .display()
+                .to_string(),
+            None => "<generated starter config>".to_string(),
+        }
+    };
+
+    // Destinations already claimed, so a suffixed name cannot collide in turn.
+    let claimed: BTreeSet<PathBuf> = by_dest.keys().cloned().collect();
+    let mut extra_claimed: BTreeSet<PathBuf> = BTreeSet::new();
+
+    let mut collisions = Vec::new();
+    for (dest, idxs) in by_dest {
+        if idxs.len() < 2 {
+            continue;
+        }
+        let mut sources: Vec<String> = idxs
+            .iter()
+            .map(|i| describe(actions[*i].source()))
+            .collect();
+        sources.sort();
+
+        let resolution = match policy {
+            CollisionPolicy::Fail => "rejected".to_string(),
+            CollisionPolicy::Suffix => {
+                let mut resolved = vec![dest.display().to_string()];
+                // The first action keeps the natural destination.
+                for i in idxs.iter().skip(1) {
+                    let new_rel =
+                        next_free_suffixed(&dest, &claimed, &extra_claimed);
+                    extra_claimed.insert(new_rel.clone());
+                    resolved.push(new_rel.display().to_string());
+                    *actions[*i].rel_mut() = new_rel;
+                }
+                format!("suffixed -> {}", resolved.join(", "))
+            }
+        };
+
+        collisions.push(report::Collision {
+            destination: dest.display().to_string(),
+            sources,
+            resolution,
+        });
+    }
+    collisions.sort();
+    collisions
+}
+
+/// `pages/Ns/Title.md` -> `pages/Ns/Title (2).md`, then ` (3)`, … skipping any
+/// name another action already claims.
+fn next_free_suffixed(
+    dest: &Path,
+    claimed: &BTreeSet<PathBuf>,
+    extra: &BTreeSet<PathBuf>,
+) -> PathBuf {
+    let parent = dest.parent().map(Path::to_path_buf).unwrap_or_default();
+    let stem = dest
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let ext = dest.extension().map(|e| e.to_string_lossy().into_owned());
+
+    for n in 2..=10_000u32 {
+        let name = match &ext {
+            Some(e) => format!("{stem} ({n}).{e}"),
+            None => format!("{stem} ({n})"),
+        };
+        let candidate = parent.join(name);
+        if !claimed.contains(&candidate) && !extra.contains(&candidate) {
+            return candidate;
+        }
+    }
+    // Unreachable in practice: 10k same-named pages. Fall back to a name that
+    // is certainly free rather than looping forever or overwriting.
+    let name = match &ext {
+        Some(e) => format!("{stem} (collision-{}).{e}", extra.len()),
+        None => format!("{stem} (collision-{})", extra.len()),
+    };
+    parent.join(name)
+}
+
+/// The operator-facing message for a refused run.
+fn collision_failure_message(collisions: &[report::Collision]) -> String {
+    let mut out = format!(
+        "{} destination collision(s): more than one source page maps onto the same \
+vault path. Refusing to write, because keeping one body and discarding the other \
+would lose a page.\n",
+        collisions.len()
+    );
+    for c in collisions {
+        out.push_str(&format!("  {} <- {}\n", c.destination, c.sources.join(", ")));
+    }
+    out.push_str(
+        "Resolve them in the source graph (rename or merge the pages), or re-run with \
+--on-collision suffix to have the converter disambiguate deterministically.",
+    );
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -452,6 +645,45 @@ fn differs(a: &Action, dest: &Path) -> Result<Option<String>> {
     }
 }
 
+/// Write `bytes` to `dest` via a sibling temporary file and an atomic rename.
+///
+/// The temporary lives beside the destination so the rename never crosses a
+/// filesystem boundary. It is removed on any failure, so a failed run leaves
+/// neither a partial destination nor a stray temporary.
+fn write_atomically(dest: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = temp_sibling(dest);
+    match fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, dest)) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
+}
+
+/// Copy `src` to `dest` via a sibling temporary file and an atomic rename.
+fn copy_atomically(src: &Path, dest: &Path) -> std::io::Result<()> {
+    let tmp = temp_sibling(dest);
+    match fs::copy(src, &tmp).and_then(|_| fs::rename(&tmp, dest)) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            Err(e)
+        }
+    }
+}
+
+/// A per-process, per-destination temporary name beside `dest`. Including the
+/// pid keeps two concurrent converters from fighting over the same staging file.
+fn temp_sibling(dest: &Path) -> PathBuf {
+    let name = dest
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "out".to_string());
+    let parent = dest.parent().map(Path::to_path_buf).unwrap_or_default();
+    parent.join(format!(".{name}.vault-migrate-{}.tmp", std::process::id()))
+}
+
 fn same_file(a: &Path, b: &Path) -> bool {
     match (fs::canonicalize(a), fs::canonicalize(b)) {
         (Ok(x), Ok(y)) => x == y,
@@ -471,7 +703,12 @@ fn apply(a: &Action, dest: &Path, errors: &mut Vec<String>) -> Result<()> {
             if fs::read(dest).map(|b| b == content.as_bytes()).unwrap_or(false) {
                 return Ok(());
             }
-            fs::write(dest, content)
+            // ADR-2042: write atomically. An interrupted run (SIGKILL, full
+            // disk, container stop) must never leave a truncated page behind
+            // that a later --check would read as valid content; the temporary
+            // file absorbs the partial write and the rename is atomic within
+            // the destination filesystem.
+            write_atomically(dest, content.as_bytes())
                 .with_context(|| format!("writing {}", dest.display()))?;
         }
         Action::Copy { src, .. } => {
@@ -484,7 +721,9 @@ fn apply(a: &Action, dest: &Path, errors: &mut Vec<String>) -> Result<()> {
                     return Ok(());
                 }
             }
-            if let Err(e) = fs::copy(src, dest) {
+            // Copies are staged the same way, so a half-copied asset never
+            // appears at its final path.
+            if let Err(e) = copy_atomically(src, dest) {
                 errors.push(format!("copy {} -> {}: {e}", src.display(), dest.display()));
             }
         }

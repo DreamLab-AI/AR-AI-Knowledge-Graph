@@ -36,6 +36,23 @@ pub struct Leftovers {
     pub whiteboards: Vec<String>,
 }
 
+/// One destination path that more than one source page maps onto (ADR-2042).
+///
+/// A Logseq graph can hold `Ns___Title.md` (legacy namespace encoding) *and*
+/// `Ns/Title.md` (folder layout) at once; both decode to the same vault path.
+/// The converter never silently keeps one body and drops the other — it either
+/// refuses the run or applies the declared resolution, and records the fact
+/// here either way.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Collision {
+    /// The vault-relative destination two or more sources wanted.
+    pub destination: String,
+    /// Every source that mapped onto it, sorted.
+    pub sources: Vec<String>,
+    /// What the run did about it: `"rejected"` or the resolved destinations.
+    pub resolution: String,
+}
+
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct Report {
     pub source: String,
@@ -46,6 +63,13 @@ pub struct Report {
     pub pages_already_obsidian: usize,
     pub rules: Rules,
     pub leftovers: Leftovers,
+    /// Destination collisions found while planning (ADR-2042).
+    pub collisions: Vec<Collision>,
+    /// What this run wrote outside the vault tree. ADR-2042 defines `--dry-run`
+    /// and `--check` as producing **no vault output**; an explicitly requested
+    /// `--report <PATH>` is the one permitted side effect, and it is recorded
+    /// here so the artefact states its own provenance.
+    pub report_side_effects: Vec<String>,
     pub errors: Vec<String>,
 }
 

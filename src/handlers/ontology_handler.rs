@@ -749,7 +749,7 @@ pub async fn validate_ontology(
 /// (SELECT / ASK / CONSTRUCT / DESCRIBE) pass through. Mutations must go through
 /// the dedicated, power-user-gated write endpoints (e.g. `/ontology/graph` POST,
 /// axiom/class mutators) rather than raw SPARQL passthrough.
-fn validate_read_only_sparql(query: &str) -> Result<(), String> {
+pub(crate) fn validate_read_only_sparql(query: &str) -> Result<(), String> {
     // Strip line comments (`# ...`) and normalise to uppercase tokens.
     let mut cleaned = String::with_capacity(query.len());
     for line in query.lines() {

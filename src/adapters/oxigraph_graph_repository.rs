@@ -1087,12 +1087,32 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
     }
 
     async fn remove_edge(&self, edge_id: &str) -> KgResult<()> {
-        let iri = format!("urn:ngm:edge:{}", edge_id);
+        // ADR-2021 — the mint site and the lookup site must agree. This method
+        // used to build `urn:ngm:edge:<edge_id>`, a ONE-segment IRI, while
+        // `edge_iri` writes the THREE-segment
+        // `urn:ngm:edge:<source>:<target>:<id>`. No subject could ever match,
+        // so every delete silently removed nothing. The two forms a caller can
+        // hold — the full IRI handed back by a read, or the bare stored id from
+        // `Edge::new` — are resolved by `uri::ngm::edge_lookup`.
         let prologue = Self::PROLOGUE;
+        let (subject_pattern, filter) = match crate::uri::ngm::edge_lookup(edge_id) {
+            crate::uri::ngm::EdgeLookup::Exact(iri) => (format!("<{iri}>"), String::new()),
+            crate::uri::ngm::EdgeLookup::TrailingId(id) => (
+                "?e".to_string(),
+                format!(
+                    "\n  FILTER(STRSTARTS(STR(?e), \"{prefix}\") && STRENDS(STR(?e), \":{id}\"))",
+                    prefix = crate::uri::ngm::EDGE_PREFIX,
+                    id = escape_literal(&id),
+                ),
+            ),
+        };
 
         // Delete from default graph (bridge edges)
         let store = self.store.clone();
-        let del_default = format!("{prologue}DELETE WHERE {{ <{iri}> ?p ?o }}",);
+        let del_default = format!(
+            "{prologue}DELETE {{ {subject_pattern} ?p ?o }} \
+             WHERE {{ {subject_pattern} ?p ?o .{filter} }}"
+        );
         tokio::task::spawn_blocking(move || store.update(del_default.as_str()).map_err(access))
             .await
             .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?
@@ -1101,8 +1121,10 @@ impl KnowledgeGraphRepository for OxigraphGraphRepository {
         // Delete from named graphs
         for graph_iri in [GRAPH_KNOWLEDGE, GRAPH_AGENT] {
             let s = self.store.clone();
-            let del =
-                format!("{prologue}DELETE WHERE {{ GRAPH <{graph_iri}> {{ <{iri}> ?p ?o }} }}",);
+            let del = format!(
+                "{prologue}DELETE {{ GRAPH <{graph_iri}> {{ {subject_pattern} ?p ?o }} }} \
+                 WHERE {{ GRAPH <{graph_iri}> {{ {subject_pattern} ?p ?o }}{filter} }}"
+            );
             tokio::task::spawn_blocking(move || s.update(del.as_str()).map_err(access))
                 .await
                 .map_err(|e| KnowledgeGraphRepositoryError::DatabaseError(format!("join: {e}")))?

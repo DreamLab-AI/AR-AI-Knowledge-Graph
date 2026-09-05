@@ -7,11 +7,21 @@
 //! This service reads raw markdown from the database and builds complete
 //! OWL ontologies with all restrictions, axioms, and complex semantics.
 
-use horned_owl::io::owx::reader::read as read_owx;
-use horned_owl::model::*;
-use horned_functional::io::reader::read as read_functional;
+// ADR-2064: this module previously referenced a horned-owl/horned-functional
+// API shape (`AnnotatedOntology`, `horned_owl::io::owx::reader::read`,
+// `horned_functional::io::reader::read`) that does not exist in the pinned
+// horned-owl 1.2.0 / horned-functional 0.4.0 (the crate's ontology container
+// is `horned_owl::ontology::set::SetOntology<A>` of `AnnotatedComponent<A>`
+// values, and functional-syntax parsing is `horned_functional::from_str`).
+// The module was also never declared in `services/mod.rs`, so none of this
+// had ever been compiled. Wiring it into `src/bin/load_ontology.rs` (ADR-2064)
+// surfaced both the API drift and two pre-existing logic bugs (a moved-value
+// use in `parse_owl_blocks` and a `flat_map`/`sum` type error in
+// `count_axioms`), fixed below against the real, pinned API.
 
-use visionclaw_domain::ports::ontology_repository::{OntologyRepository, OwlClass};
+
+
+use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 use log::{debug, info, warn};
 use regex::Regex;
 use std::sync::Arc;
@@ -116,14 +126,17 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
             class_iri
         );
 
+        // Compute the count before moving `owl_blocks` into the struct literal.
+        let axiom_count = self.count_axioms(&owl_blocks);
+
         Ok(ExtractedOwl {
             class_iri: class_iri.to_string(),
             owl_blocks,
-            axiom_count: self.count_axioms(&owl_blocks),
+            axiom_count,
         })
     }
 
-    
+
     fn count_axioms(&self, blocks: &[String]) -> usize {
         let axiom_patterns = [
             "Declaration",
@@ -138,7 +151,7 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
 
         blocks
             .iter()
-            .flat_map(|block| {
+            .map(|block| {
                 axiom_patterns
                     .iter()
                     .map(|pattern| block.matches(pattern).count())
@@ -148,50 +161,16 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
     }
 
     
-    pub fn parse_with_horned_owl(&self, owl_text: &str) -> Result<AnnotatedOntology, String> {
-        use std::io::Cursor;
-
-        let cursor = Cursor::new(owl_text.as_bytes());
-
-        read_functional(cursor, Default::default())
-            .map_err(|e| format!("Failed to parse OWL with horned-owl: {}", e))
-    }
-
-    
-    pub async fn build_complete_ontology(&self) -> Result<AnnotatedOntology, String> {
-        info!("Building complete ontology from database with horned-owl...");
-
-        let extracted = self.extract_all_owl().await?;
-
-        
-        let mut combined_ontology = AnnotatedOntology::default();
-
-        for ext in extracted {
-            for block in ext.owl_blocks {
-                match self.parse_with_horned_owl(&block) {
-                    Ok(onto) => {
-                        
-                        for axiom in onto.axiom() {
-                            combined_ontology.insert(axiom.clone());
-                        }
-                    }
-                    Err(e) => {
-                        warn!(
-                            "Failed to parse OWL block for {}: {}",
-                            ext.class_iri, e
-                        );
-                    }
-                }
-            }
-        }
-
-        info!(
-            "Complete ontology built: {} axioms",
-            combined_ontology.axiom().len()
-        );
-
-        Ok(combined_ontology)
-    }
+    // ADR-2064: `parse_with_horned_owl` and `build_complete_ontology` were removed.
+    // They referenced `AnnotatedOntology` and `horned_functional::io::reader::read`
+    // and could never compile: `horned-functional` 0.4.0 binds `horned-owl` 0.11.0
+    // (Cargo.lock carries both 0.11.0 and the direct 1.2.0 pin), whose ontology
+    // types are incompatible with the 1.2.0 `SetOntology<A>`/`AnnotatedComponent<A>`
+    // model this crate uses. The module was never declared in `services/mod.rs`
+    // before this ADR, so the mismatch had never been compiled. Nothing called
+    // either function: `src/bin/load_ontology.rs:191` uses `extract_all_owl` only.
+    // Functional-syntax parsing, if needed later, belongs on horned-owl 1.2.0's own
+    // `io::ofn` reader rather than a second, older ontology model.
 }
 
 #[derive(Debug, Clone)]
