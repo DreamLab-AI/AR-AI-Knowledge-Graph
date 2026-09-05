@@ -20,7 +20,7 @@ sources:
   - src/gpu/dynamic_buffer_manager.rs
   - src/gpu/memory_manager.rs
   - src/utils/gpu_diagnostics.rs
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 ## VC-12.1 SimParams full 212-byte repr(C) layout
 ```mermaid
@@ -232,7 +232,7 @@ classDiagram
 
     note for PerNodeBuffers "stride 4B all fields except rand_states 48B<br/>count=allocated_nodes (L46-238)"
     note for PerEdgeBuffers "row_offsets=num_nodes+1<br/>col/weights=num_edges (L373-375)"
-    note for PerGridCellBuffers "max_grid_cells = 32768 fixed<br/>(construction.rs:390-392)"
+    note for PerGridCellBuffers "max_grid_cells = 32768 fixed<br/>(construction.rs:369-371)"
     note for UnifiedGPUCompute "production per-node buffer owner<br/>(construction.rs:31-241)"
     note for PhysicsV2Gated "buffers.rs:1-25, gated feature=physics-v2<br/>not live yet"
     note for DeprecatedManager "dynamic_buffer_manager.rs:1-16<br/>use memory_manager.rs"

@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/utils/binary_protocol.rs, xr-client/rust/src/binary_protocol.rs]
 owner: jjohare
 review_trigger: a new GPU analytics field that cannot fit an existing slot, or any need to change the 52-byte node-record layout
@@ -124,3 +124,65 @@ live concurrent full/delta producer pair or a real reconnect to a restarted
 server. `implementation_status` is unchanged: the ordering contract is
 implemented and tested at the consumer, but end-to-end certification against live
 production remains outstanding.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `eac011303`:** `src/utils/binary_protocol.rs` (+487/-…)
+and `xr-client/rust/src/binary_protocol.rs` (+338/-…) — the freshness-gate and
+shared-fixture work recorded above, landed by `1d68d8eb1` and `f21d30922`.
+
+**The frozen record survived the change, which is the whole point of the record.**
+`WIRE_V3_ITEM_SIZE` is still composed field-by-field at
+`src/utils/binary_protocol.rs:75-83` and pinned by a **compile-time** assertion at
+`:93-96` — `const _: () = assert!(WIRE_V3_ITEM_SIZE == 52, "ADR-2057: V3 wire
+record must be exactly 52 bytes …")`. This is stronger than the
+`test_wire_format_size` runtime check the Verification block above cites: it now
+fails the *build*, not a test run. The nine fields and the layout comment are at
+`:114-125`.
+
+**V5 is still purely additive.** The decoder dispatch at `:588-601` routes
+`PROTOCOL_V3 => decode_node_data_v3(payload)` (`:591`) and, for V5, skips
+`WIRE_V5_SEQ_SIZE` before delegating to the *same unchanged* V3 codec at `:598`.
+
+**The client mirror still fixes the same three constants:**
+`xr-client/rust/src/binary_protocol.rs` — `PROTOCOL_V5 = 0x05` (`:25`),
+`V5_SEQ_BYTES = 8` (`:26`), `NODE_RECORD_BYTES = 52` (`:28`), with the alignment
+error naming the record size at `:51`.
+
+**New surface, all additive.** `decode_position_frame_with_sequence` (`:400`)
+returns the broadcast sequence; `decode_position_frame` (`:389`) is the
+sequence-discarding wrapper, so no existing caller changes. `FreshnessGate`
+(`:537`) is a consumer-side ordering contract that reads the envelope field —
+it does not alter the frame. The shared fixture
+`crates/visionclaw-protocol/src/wire_fixtures.rs` is exported at
+`crates/visionclaw-protocol/src/lib.rs:31` and included into the isolated
+xr-client workspace by `#[path]` at
+`xr-client/rust/tests/wire_freshness_and_frame_policy.rs:11-12`, so both sides
+test against one byte-level source.
+
+**Commands run:** `git diff --stat eac011303..HEAD -- src/utils/binary_protocol.rs
+xr-client/rust/src/binary_protocol.rs`; `grep -n` over both files for
+`WIRE_V3_ITEM_SIZE|NODE_RECORD_BYTES|PROTOCOL_V5|V5_SEQ_BYTES|match protocol_version|
+decode_node_data_v3|FreshnessGate`; `ls`/`grep` for `wire_fixtures`; `cargo test
+--lib --no-default-features binary_protocol` → **38 passed, 0 failed**;
+`cargo test --lib --no-default-features adr_20` → **35 passed, 0 failed**
+(fixture/encoder equivalence and V5-additivity).
+
+**Client-side receipt at this commit:** `cargo test` in `xr-client/rust` →
+**226 lib + 83 integration passed, 0 failed** across 11 integration binaries,
+including **23 in `tests/wire_freshness_and_frame_policy.rs`** (decreasing,
+duplicate, full/delta interleaving, reconnect resync, delta-before-resync,
+unsequenced V3, frozen record size). The acceptance section's "227 lib + 75
+integration" was that session's count; the suite has since been re-partitioned —
+the 23-case freshness figure it names is exact.

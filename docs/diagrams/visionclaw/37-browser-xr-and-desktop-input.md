@@ -20,7 +20,9 @@ sources:
   - client/vite.config.ts
   - client/package.json
   - xr-client/project.godot
-verified_commit: b00c28a0d
+  - client/src/app/App.tsx
+  - client/src/services/remoteLogger.ts
+verified_commit: bed6b617d
 ---
 
 ## VC-37.1 Browser XR capability probe — what platformManager actually does

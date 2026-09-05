@@ -16,7 +16,10 @@ sources:
   - src/actors/gpu/force_compute_actor.rs
   - src/actors/gpu/constraint_actor.rs
   - Cargo.toml
-verified_commit: b00c28a0d
+  - src/models/force_channels.rs
+  - src/utils/binary_protocol.rs
+  - src/utils/unified_gpu_compute/execution.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-16.1 Node drag start — pin acquisition

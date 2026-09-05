@@ -169,7 +169,10 @@ fn decide_bots_graph_emit(
 pub struct AgentMonitorActor {
     _client: ClaudeFlowClient,
     graph_service_addr: Addr<crate::actors::GraphServiceSupervisor>,
-    management_api_client: ManagementApiClient,
+    /// `None` when the Management API credential failed validation and a dev
+    /// relaxation kept the process alive (ADR-2094). Under the fail-closed
+    /// profile this is always `Some` — boot aborts otherwise.
+    management_api_client: Option<ManagementApiClient>,
 
     is_connected: bool,
 
@@ -199,6 +202,47 @@ pub struct AgentMonitorActor {
     consecutive_empty_polls: u32,
 }
 
+/// Whether insecure defaults may relax a security failure in this build.
+///
+/// Mirrors the compile-time gate used by the socket-flow HTTP handler
+/// (ADR-06 §D1): in `debug_assertions` or `--features dev-auth` builds the
+/// `ALLOW_INSECURE_DEFAULTS` env var is honoured; in release builds the
+/// env-var read is not present in the binary at all.
+#[cfg(any(debug_assertions, feature = "dev-auth"))]
+fn insecure_defaults_allowed() -> bool {
+    std::env::var("ALLOW_INSECURE_DEFAULTS").is_ok()
+}
+
+/// Release-build stub: insecure defaults are never honoured.
+#[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+#[inline(always)]
+fn insecure_defaults_allowed() -> bool {
+    false
+}
+
+/// Decide what the actor does with the result of the shared security-env
+/// validation (ADR-2094).
+///
+/// Split out of [`AgentMonitorActor::new`] as a pure function so the
+/// fail-closed policy is unit-testable without mutating process-global
+/// environment variables from a test thread.
+///
+/// | validation | dev relaxation armed | outcome                                |
+/// |------------|----------------------|----------------------------------------|
+/// | `Ok(key)`  | either               | `Ok(Some(key))` — client enabled       |
+/// | `Err(_)`   | `true`               | `Ok(None)` — client disabled, loudly   |
+/// | `Err(e)`   | `false`              | `Err(e)` — caller must abort boot      |
+fn decide_management_api_credential(
+    validation: Result<String, String>,
+    insecure_defaults_allowed: bool,
+) -> Result<Option<String>, String> {
+    match validation {
+        Ok(key) => Ok(Some(key)),
+        Err(_) if insecure_defaults_allowed => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 impl AgentMonitorActor {
     pub fn new(
         client: ClaudeFlowClient,
@@ -212,13 +256,40 @@ impl AgentMonitorActor {
             .ok()
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(9090);
-        // SECURITY: Management API key is required - no insecure fallback
-        let api_key = std::env::var("MANAGEMENT_API_KEY").unwrap_or_else(|_| {
-            warn!("[AgentMonitorActor] MANAGEMENT_API_KEY not set - Management API client will be disabled");
-            String::new()
-        });
-
-        let management_api_client = ManagementApiClient::new(host, port, api_key);
+        // SECURITY (ADR-2094): the credential goes through the SAME validator
+        // `AppState` boot uses. Before this, `AppState` failed closed on a
+        // missing/weak `MANAGEMENT_API_KEY` while this constructor accepted an
+        // empty-string fallback behind a single `warn!` — two policies for one
+        // secret, and the actor's copy was the lax one.
+        let validation =
+            crate::app_state::validate_security_env_vars().map_err(|error| error.to_string());
+        let management_api_client =
+            match decide_management_api_credential(validation, insecure_defaults_allowed()) {
+                Ok(Some(api_key)) => Some(ManagementApiClient::new(host, port, api_key)),
+                Ok(None) => {
+                    // Dev-profile relaxation only (compile-gated to debug/`dev-auth`
+                    // builds). Loud, and the client is genuinely disabled — never a
+                    // client authenticating with an empty bearer token.
+                    error!(
+                        "[AgentMonitorActor] SECURITY: MANAGEMENT_API_KEY failed validation. \
+                     ALLOW_INSECURE_DEFAULTS is honoured in this dev build, so the Management \
+                     API client is DISABLED — agent telemetry will be empty. Release builds \
+                     refuse to start instead."
+                    );
+                    None
+                }
+                Err(error) => {
+                    // Fail-closed profile (docs/SECURITY-profiles.md Invariant 6:
+                    // security posture is asserted before the listener binds). The
+                    // actor is constructed inside `AppState::new` during boot, so an
+                    // unwind here is a boot error, exactly as `AppState`'s own call
+                    // to the validator is.
+                    panic!(
+                        "[AgentMonitorActor] SECURITY: refusing to construct the Management API \
+                     client without a valid MANAGEMENT_API_KEY (fail-closed): {error}"
+                    );
+                }
+            };
 
         Self {
             _client: client,
@@ -245,7 +316,15 @@ impl AgentMonitorActor {
     fn poll_agent_statuses(&mut self, ctx: &mut Context<Self>) {
         debug!("[AgentMonitorActor] Polling active tasks from Management API");
 
-        let api_client = self.management_api_client.clone();
+        // ADR-2094: `None` means the credential failed validation under a dev
+        // relaxation. There is no unauthenticated poll to fall back to.
+        let Some(api_client) = self.management_api_client.clone() else {
+            debug!(
+                "[AgentMonitorActor] Management API client disabled (no valid \
+                 MANAGEMENT_API_KEY); skipping poll"
+            );
+            return;
+        };
         let ctx_addr = ctx.address();
 
         ctx.spawn(
@@ -726,5 +805,73 @@ mod tests {
         let d3 = decide_bots_graph_emit(19, d2.next_last_emit_nonempty, d2.next_consecutive_empty);
         assert!(d3.send, "roster restored with no intervening empty clear");
         assert_eq!(d3.next_consecutive_empty, 0);
+    }
+
+    // ── ADR-2094: Management API credential is fail-closed ───────────────────
+
+    /// A validated key is used verbatim, whichever build this is.
+    #[test]
+    fn valid_key_enables_the_client() {
+        for relaxed in [false, true] {
+            let decision =
+                decide_management_api_credential(Ok("a-strong-16-plus-char-key".into()), relaxed);
+            assert_eq!(decision, Ok(Some("a-strong-16-plus-char-key".into())));
+        }
+    }
+
+    /// The regression this closes: a missing/weak key must NOT degrade into an
+    /// empty-string credential behind a warning. With no dev relaxation armed
+    /// the caller is handed an error and aborts boot — matching `AppState`.
+    #[test]
+    fn invalid_key_is_a_boot_error_when_fail_closed() {
+        let decision = decide_management_api_credential(
+            Err("MANAGEMENT_API_KEY environment variable is not set.".into()),
+            false,
+        );
+        assert_eq!(
+            decision,
+            Err("MANAGEMENT_API_KEY environment variable is not set.".into()),
+            "fail-closed profile must surface the error, never substitute an empty key"
+        );
+    }
+
+    /// The only relaxation: a dev build with `ALLOW_INSECURE_DEFAULTS` set gets
+    /// a *disabled* client (`None`), never an unauthenticated one.
+    #[test]
+    fn invalid_key_disables_the_client_under_dev_relaxation() {
+        let decision =
+            decide_management_api_credential(Err("MANAGEMENT_API_KEY is too short.".into()), true);
+        assert_eq!(
+            decision,
+            Ok(None),
+            "dev relaxation disables the client; it does not weaken the credential"
+        );
+    }
+
+    /// No decision path can ever produce an empty-string credential — the exact
+    /// shape the pre-ADR-2094 fallback produced.
+    #[test]
+    fn no_decision_path_yields_an_empty_credential() {
+        for relaxed in [false, true] {
+            for validation in [
+                Ok("sixteen-char-key".to_string()),
+                Err("missing".to_string()),
+            ] {
+                if let Ok(Some(key)) = decide_management_api_credential(validation, relaxed) {
+                    assert!(
+                        !key.is_empty(),
+                        "an enabled client never holds an empty key"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Release builds cannot reach the relaxation at all: the gate is
+    /// compile-time, so the env var is inert in a non-dev binary.
+    #[test]
+    #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
+    fn release_builds_never_allow_insecure_defaults() {
+        assert!(!insecure_defaults_allowed());
     }
 }

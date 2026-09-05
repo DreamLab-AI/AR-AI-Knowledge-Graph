@@ -21,7 +21,18 @@ sources:
   - agentbox/browsercontainer/server.js
   - agentbox/agentbox.sh
   - agentbox/flake.nix
-verified_commit: b00c28a0d
+  - agentbox/.github/workflows/invariants.yml
+  - agentbox/scripts/ci/check-seccomp.sh
+  - agentbox/voice/unmute-override.yml
+  - agentbox/agentbox.toml
+  - agentbox/mcp/servers/ruvector-mcp.cjs
+  - agentbox/scripts/ci/check-db-password.sh
+  - agentbox/scripts/ci/check-manifest-catalogue.js
+  - agentbox/scripts/ci/check-nnp.sh
+  - agentbox/scripts/ci/check-no-npx-latest.sh
+  - agentbox/scripts/ci/check-secret-not-in-env.sh
+  - agentbox/scripts/ci/check-single-metrics.js
+verified_commit: bed6b617d
 ---
 
 ## AB-06.1 Compose overlay topology on visionclaw_network

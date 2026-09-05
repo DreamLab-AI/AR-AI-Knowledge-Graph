@@ -71,7 +71,8 @@ sources:
   - client/src/features/control-center/hooks/useRevealSetting.ts
   - client/src/features/control-center/primitives/NostrAuthControl.tsx
   - client/src/features/control-center/status/StatusFlyout.tsx
-verified_commit: b00c28a0d
+  - client/src/services/nostrAuthService.ts
+verified_commit: bed6b617d
 ---
 ## VC-30.1 Provider nesting and top-level render states
 ```mermaid
@@ -402,7 +403,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Caller as PlatformManager.initialize<br/>client/src/services/platformManager.ts:396
+    participant Caller as PlatformManager.initialize<br/>client/src/services/platformManager.ts:348
     participant Store as usePlatformStore<br/>client/src/services/platformManager.ts:72
     participant Nav as navigator.xr<br/>client/src/services/platformManager.ts:105
     participant Win as window resize listener<br/>client/src/services/platformManager.ts:146-150
@@ -450,7 +451,7 @@ sequenceDiagram
     Note over Store: setXRMode(enabled) dispatches "xrmodechange" only on actual change<br/>platformManager.ts:288-295
     Note over Store: setXRSessionState(state) dispatches "xrsessionstatechange"<br/>states: inactive|starting|active|ending|error<br/>platformManager.ts:5,297-304
     Store->>Store: dispatchEvent(event,data) iterates listeners.get(event) Set,<br/>try/catch per callback<br/>platformManager.ts:307-318
-    Note over Caller: PlatformManager class (platformManager.ts:368) is a backwards-compat<br/>singleton adapter (getInstance) wrapping usePlatformStore.getState() calls -<br/>exported as platformManager, platformManager.ts:446
+    Note over Caller: PlatformManager class (platformManager.ts:332) is a backwards-compat<br/>singleton adapter (getInstance) wrapping usePlatformStore.getState() calls -<br/>exported as platformManager, platformManager.ts:394
 ```
 ## VC-30.7 remoteLogger — console interception, buffering, batch POST, failure path
 ```mermaid

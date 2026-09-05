@@ -419,24 +419,20 @@ async function handleLegacyBinaryData(
   }
 }
 
-async function handleAgentAction(data: ArrayBuffer, header: ReturnType<typeof binaryProtocol.parseHeader>) {
-  if (!header) return;
-
-  const payload = binaryProtocol.extractPayload(data, header);
-
-  const actions = payload.byteLength >= 15
-    ? binaryProtocol.decodeAgentActions(payload)
-    : [];
-
-  dispatchAgentActions(actions);
-}
-
 /**
- * The SHIPPING 0x23 wire frame is a bare type tag, not a 6-byte V4 header:
- * `[0x23][count:u16][(len:u16)(event 15B+payload)]…` (encode_agent_actions,
- * src/utils/binary_protocol.rs:1233). Stripping the V4 MESSAGE_HEADER_SIZE
- * here misaligns the batch count, so the tagged frame is decoded with a
- * 1-byte offset instead of routing through parseHeader/extractPayload.
+ * The ONLY agent-action wire frame is a bare type tag, not a 6-byte framed
+ * header: `[0x23][count:u16][(len:u16)(event 15B+payload)]…`
+ * (encode_agent_actions, src/utils/binary_protocol.rs:1233). Stripping
+ * MESSAGE_HEADER_SIZE would misalign the batch count, so the tag is peeled with
+ * a 1-byte offset instead of routing through parseHeader/extractPayload.
+ *
+ * ADR-2099: there is no second, framed-header decode path for 0x23, and there
+ * cannot be one. The framed header writes its type byte at offset 0
+ * (createMessage, BinaryWebSocketProtocol.ts:84) and parseHeader reads it back
+ * from offset 0, so `header.type === AGENT_ACTION` implies `firstByte === 0x23`
+ * — which processBinaryData has already routed here and returned on. A
+ * `case MessageType.AGENT_ACTION` in that switch is unreachable by
+ * construction; it was deleted, not kept as a fallback.
  */
 function handleAgentActionTagged(data: ArrayBuffer) {
   const actions = data.byteLength >= 18
@@ -478,6 +474,8 @@ export async function processBinaryData(
         notifyBinaryMessageHandlers(data);
         return;
       }
+      // Total for 0x23: parseHeader reads its type from offset 0 too, so no
+      // agent-action frame can reach the switch below (ADR-2099).
       if (firstByte === MessageType.AGENT_ACTION) {
         handleAgentActionTagged(data);
         return;
@@ -502,10 +500,6 @@ export async function processBinaryData(
       case MessageType.POSITION_UPDATE:
       case MessageType.AGENT_POSITIONS:
         await handlePositionUpdate(data, header, get, set);
-        break;
-
-      case MessageType.AGENT_ACTION:
-        await handleAgentAction(data, header);
         break;
 
       default:

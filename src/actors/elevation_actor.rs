@@ -326,7 +326,7 @@ impl ElevationActor {
             priority,
             category: CaseCategory::KnowledgeEnrichment,
             subject_kind: SubjectKind::AutomationProposal,
-            subject_id: format!("urn:ngm:class:{}", slugify(&name)),
+            subject_id: crate::uri::ngm::class_iri(&slugify(&name)),
             request: ActionRequest {
                 fields,
                 reasoning: Some(reasoning),
@@ -499,7 +499,7 @@ pub fn draft_class_page(c: &FrontierCandidate) -> (String, String) {
          ```json-ld\n\
          {{\n\
          \x20 \"@context\": \"https://narrativegoldmine.com/ns/v2.jsonld\",\n\
-         \x20 \"@id\": \"urn:ngm:class:{slug}\",\n\
+         \x20 \"@id\": \"{class_iri}\",\n\
          \x20 \"@type\": \"Class\",\n\
          \x20 \"label\": \"{name}\",\n\
          \x20 \"definition\": \"{definition}\",\n\
@@ -511,7 +511,7 @@ pub fn draft_class_page(c: &FrontierCandidate) -> (String, String) {
          }}\n\
          ```\n",
         name = name,
-        slug = slug,
+        class_iri = crate::uri::ngm::class_iri(&slug),
         definition = definition.replace('"', "'"),
         domain = c.domain,
         refs = refs,

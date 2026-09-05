@@ -6733,6 +6733,7 @@ dependencies = [
  "log",
  "once_cell",
  "tokio",
+ "visionclaw-analytics-oracle",
  "visionclaw-domain",
 ]
 

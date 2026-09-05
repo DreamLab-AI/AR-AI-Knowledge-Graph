@@ -279,5 +279,10 @@ See the [rendered-state review](../../VisionFlow/docs/estate-review/rendered-sta
 - **ADR-2060** — Citation corrections after line drift in `binary_protocol.rs`, and the
   `0x05` caution above (a mis-citation of the settings tag as the graph envelope had already
   occurred in BASELINE).
+- **ADR-2099** (vc-clients) — The bare-tag `[0x23][count:u16]…` decoder is the sole
+  agent-action path in the web client. The framed-header branch was unreachable — `parseHeader`
+  reads its type byte from offset 0, the same byte the tag check has already consumed — so it is
+  deleted rather than kept as a fallback, and the suite now asserts `extractPayload` is never
+  reached for a 0x23 frame. Unknown-version fail-closed behaviour (ADR-2078) is unchanged.
 - **Open** — TypeScript client V5 parity and V2 de-advertisement, routed to the vc-clients
   lead under ADR-2057; and the settings binary protocol is still not enumerated here.

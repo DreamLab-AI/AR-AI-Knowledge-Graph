@@ -30,7 +30,10 @@ sources:
   - client/src/store/transientBeamStore.ts
   - xr-client/rust/src/binary_protocol.rs
   - docs/IDENTIFIER-taxonomy.md
-verified_commit: b00c28a0d
+  - client/src/utils/validation.ts
+  - src/handlers/socket_flow_handler/http_handler.rs
+  - src/settings/api/settings_routes.rs
+verified_commit: bed6b617d
 ---
 ## VC-32.1 Connect + NIP-98 WS authenticate handshake
 ```mermaid
@@ -190,7 +193,7 @@ classDiagram
     }
     FramedMessageHeader --> MessageType : selects codec
     FramedMessageHeader --> GraphTypeFlag : graphTypeFlag field
-    note for FramedMessageHeader "createMessage/parseHeader BinaryWebSocketProtocol.ts:73-114. Header size<br/>MESSAGE_HEADER_SIZE=6, GRAPH_UPDATE_HEADER_SIZE=7 (frameTypes.ts:184-185). Used<br/>only for client-to-server encode calls: encodePositionUpdates, encodeAgentState,<br/>encodeSSSPData, encodeControlBits, encodeVoiceChunk, createBroadcastAck,<br/>encodeAgentAction (BinaryWebSocketProtocol.ts:126-286)."
+    note for FramedMessageHeader "createMessage/parseHeader BinaryWebSocketProtocol.ts:73-114. Header size<br/>MESSAGE_HEADER_SIZE=6, GRAPH_UPDATE_HEADER_SIZE=7 (frameTypes.ts:184-185). Used<br/>only for client-to-server encode calls: encodePositionUpdates, encodeAgentState,<br/>encodeSSSPData, encodeControlBits, encodeVoiceChunk, createBroadcastAck,<br/>encodeAgentAction (BinaryWebSocketProtocol.ts:129-290)."
     note for MessageType "DIVERGENCE. BinaryWebSocketProtocol.ts:81 comment labels this six-byte layout the<br/>V4 header, but line 83 writes PROTOCOL_VERSION which equals PROTOCOL_V3=3<br/>(frameTypes.ts:15) into the version byte - PROTOCOL_V4=4 (frameTypes.ts:14) is<br/>never actually placed on the wire by this path. frameTypes.ts:7-13 itself<br/>documents that PROTOCOL_V4 here means only this framed-header version, NOT the<br/>position/agent wire format the server ships."
     note for FramedMessageHeader "DOC-DRIFT. docs/PROTOCOL-registry.md frame tag registry lists only<br/>0x03,0x05,0x23,0x43,0x44 as live server-to-client tags; this client-only outbound<br/>envelope and its MessageType space (0x01,0x02,0x10-0x54) do not appear in that<br/>registry at all."
 ```

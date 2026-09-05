@@ -28,7 +28,10 @@ sources:
   - src/web_contract/state.rs
   - src/web_contract/trail.rs
   - src/app_state.rs
-verified_commit: b00c28a0d
+  - src/bin/sync_local.rs
+  - src/services/ontology_mutation_service.rs
+  - src/services/voice_intent_client.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-24.1 Enrichment-proposal lifecycle (real status values)
@@ -211,7 +214,7 @@ sequenceDiagram
             POLL->>POLL: resolved.push(case_id) - remove from elevating map
         end
     end
-    Note over POLL,REPO: DIVERGENCE: ADR-2006 is PARTIAL (BASELINE-architecture.md<br/>ACSP workflow closeout 2026-09-04). This poll has no failure/restart<br/>receipt: a crash between the 31404 publish and set_status leaves the<br/>case tracked only in the in-process elevating HashMap - a process<br/>restart loses it silently, with no signed-event/request correlation<br/>or case-authority record surviving the restart
+    Note over POLL,REPO: RESOLVED ADR-2101 (2026-09-05) in part: the durable case-state<br/>authority ADR-2006 left unnamed is THIS store - enrichment.sqlite3 - reached for<br/>decision-elevation cases through DecisionElevationStore, and decision rows now<br/>carry the ADR-2006 signed-event correlation on both elevation paths.<br/>STILL OPEN on this path: the ElevationActor poll shown here persists set_status<br/>but has no boot reconciliation, so a case lost between publish and persist is not<br/>reloaded on restart. ADR-2101 adds that to DecisionElevationActor only - see VC-24.6
 ```
 
 ## VC-24.6 DecisionElevationActor — parallel path vs ElevationActor
@@ -241,7 +244,7 @@ sequenceDiagram
             DEA->>GH: create_ontology_pr decision page (NO consistency gate)<br/>decision_elevation_actor.rs:397-420
             Note right of DEA: Deliberately leaner than ElevationActor (module doc :12-14):<br/>decisions are ABox prov:Activity individuals adding no TBox<br/>axioms, so there is NO EL++ Whelk gate here (contrast VC-24.4<br/>approve_with_gate GOV-7)
             GH-->>DEA: pr_url
-            DEA->>DEA: elevating.insert case_id TrackedPr (in-memory only)
+            DEA->>DEA: mark_elevating persists the PR url then elevating.insert case_id TrackedPr<br/>decision_elevation_store.rs mark_elevating
         else reject/amend/delegate
             DEA->>DEA: rejected_count+=1, publish_state
         end
@@ -254,7 +257,7 @@ sequenceDiagram
             DEA->>ACSP: publish decision_abandoned kind 31404
         end
     end
-    Note over DEA: DIVERGENCE: unlike ElevationActor, DecisionElevationActor has<br/>NO enrichment_repo / SqliteEnrichmentRepository field at all (grep<br/>confirms) - the GOV-2 terminal event above is published to the forum<br/>but never persisted to any durable store. Pending cases live ONLY in<br/>self.pending (HashMap), so a process restart loses every open decision-<br/>elevation case with no reconciliation path. This is the concrete code<br/>evidence for the ADR-2006 closeout line current elevation processing<br/>owns pending state and for failure/restart receipts unproven
+    Note over DEA: RESOLVED ADR-2101 (2026-09-05): the actor now holds a<br/>DecisionElevationStore over the same data/enrichment.sqlite3 the ElevationActor<br/>uses - case rows tagged category decision-elevation, decision rows carrying the<br/>ADR-2006 signed-event correlation. Every transition is durable and ordered - the<br/>case row is written BEFORE the 31402 publish, the PR url BEFORE the in-memory<br/>tracking insert, and the GOV-2 terminal status BEFORE the case leaves the map.<br/>At boot plan_reconciliation reloads every non-terminal case and re-arms the merge<br/>poll, re-opens a PR whose approval crashed before it landed, re-arms a case still<br/>awaiting a human, or expires it past a 14-day TTL with a 31404 receipt.<br/>A case tracking an open PR is never expired. Remaining gap - a resumed approval<br/>can open a duplicate PR, recorded as follow-on 1 in ADR-2101
 ```
 
 ## VC-24.7 broker_inbox_handler and decision_handler routes

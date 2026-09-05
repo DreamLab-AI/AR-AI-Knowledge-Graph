@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []                   # legacy ADR-142/ADR-094 distilled — not in this tree; see lineage
 superseded_by: []
-verified_commit: f326a3b1172df4fea8183e6a4344d3f55c575013
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/models/rbac.rs, src/services/role_store.rs, src/utils/auth.rs]
 owner: jjohare
 review_trigger: adoption of a multi-user-locked deployment, or any change to default_authenticated() or the last-Owner guard
@@ -110,3 +110,53 @@ exercises the same code path but is not a live race. Immutable/recoverable audit
 outcomes, response-loss retries, whoami, missing identity services and
 report-mode lifecycle through real routes remain. Binding accepted behaviour to
 the release profile is partly addressed by the ADR-2038 boot assertion.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `f326a3b11`:** `src/services/role_store.rs` only
+(+596/-38 — the caller-freshness and removal-semantics work recorded above).
+`src/models/rbac.rs` and `src/utils/auth.rs` are unchanged.
+
+**Lattice and defaults intact.** `Owner(4) > Admin(3) > Editor(2) > Viewer(1)` at
+`src/models/rbac.rs:52-55`; `default_authenticated()` still returns `Editor` with
+its rationale comment at `:62-69`. `parse_default_role` (`role_store.rs:195-211`)
+still maps only `editor`/`viewer` and logs-then-fails-closed to `Viewer` on any
+other value at `:202-208`; unset and empty both take the `Editor` default
+(`:197-198`). `effective_role` (`:359-374`) keeps the precedence explicit
+row → Admin-for-power-user → configured default, with `Err(e) => UserRole::Viewer`
+at `:369-372` — the fail-closed-never-up rule.
+`src/utils/auth.rs:60` `resolve_access_level` is unmoved.
+
+**Atomicity holds; the API changed shape.** `assign_checked` is now at `:408`
+(was `:243`), enforcing `can_assign` at `:444` and `:450` and the last-Owner guard
+at `:465`, all inside one transaction folded through `TxOutcome` (`:775-798`).
+`revoke_checked` **no longer exists** — the citation `(:310)`/`:330`/`:342` in the
+Verification block above is historical and describes a removed function. Its
+replacement is `remove_checked` at `:500-577`, enforcing `can_assign` at `:538`
+and last-Owner at `:550`, returning `RemovalOutcome` (`:129-160`) so a caller can
+tell removal from revocation. Caller freshness is now *inside* the transaction:
+`CallerAuthority` (`:95`), `resolve_caller_role_in_tx` (`:717`) and
+`effective_mutation_authority` (`:750`), with a mid-request demotion surfacing as
+`RoleStoreError::CallerAuthorityChanged` (`:81`, `:798`).
+
+**Status unchanged at `partial`, and correctly so.** The 2026-09-04 acceptance
+condition is only part-discharged: no HTTP request or real race has run, and
+audit/idempotency/whoami/report-mode lifecycle remain unexercised.
+
+**Commands run:** `git diff --stat f326a3b11..HEAD -- src/models/rbac.rs
+src/services/role_store.rs src/utils/auth.rs`; `grep -n` over `role_store.rs` for
+`assign_checked|remove_checked|revoke_checked|CallerAuthority|LastOwner|can_assign|
+parse_default_role|effective_role`; `awk` dumps of `role_store.rs:195-215` and
+`:355-395`; `cargo test --lib --no-default-features role_store` → **29 passed,
+0 failed** (1238 filtered out).

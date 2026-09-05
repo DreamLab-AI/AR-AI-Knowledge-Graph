@@ -54,6 +54,16 @@ storage-agnostic domain kernel (`BrokerCase`, `DecisionOrchestrator`,
 exists. `src/actors/broker_actor.rs` is absent and there are no `neo4j`
 adapters under `src/adapters/`. Verified at `e0f8cd896`.
 
+2026-09-05 — the durable case-state authority is now named for the decision-elevation
+consumer: [ADR-2101](ADR-2101-durable-decision-elevation-case-state.md) persists `DecisionElevationActor`
+cases and decisions into the same `data/enrichment.sqlite3` store via
+`src/adapters/decision_elevation_store.rs`, and adds boot reconciliation that resumes or
+times out every non-terminal case. This closes the "current elevation processing owns
+pending state" and "restart" parts of the closeout for that consumer only; amend/delegate
+semantics, supersession, reviewer authority and live relay/PR receipts remain open, so this
+record stays `partial`. Verified at `b0bc275f6` (working tree); `cargo test -p visionclaw-server
+--lib decision` 79 passed / 0 failed.
+
 ## Closeout extension — 2026-09-04
 
 CP-01/03/04/05/08. Owner remains jjohare with governance/actor/storage maintainers. Implementation is partial against the stateless and kernel-driven workflow claims; historical live activation of the ACSP surface is retained. Current elevation processing owns pending state, while the inbox projects enrichment storage through a local DTO. CaseDecision does not retain signed event ID/request reference. Subscription starts at now and logs lag; the handler consumes pending state before asynchronous persistence.

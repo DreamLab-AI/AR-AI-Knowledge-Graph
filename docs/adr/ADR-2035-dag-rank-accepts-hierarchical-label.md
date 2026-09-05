@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/actors/gpu/force_compute_actor.rs]
 owner: jjohare
 review_trigger: an ingest change that stops collapsing subclass provenance to the generic 'hierarchical' label, or reintroduces domain-membership edges under that same label
@@ -113,3 +113,49 @@ label is a decision about what this ingest emits, not evidence about it — actu
 ingest fixtures from the live producer, rank-buffer upload and displayed layout
 were not exercised, and no GPU layout ran. Complete/live is retained for the
 scoped label-accept implementation.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed change since `eac011303`:** `src/actors/gpu/force_compute_actor.rs`,
+carried in the `346fff7af` actor trim and the `da2f5cac7` GPU consolidation. The
+predicate itself was not part of either refactor.
+
+**The accept still stands.** `is_directed_hierarchy_relation` is at
+`src/actors/gpu/force_compute_actor.rs:581`, and its `matches!` arm at `:587`
+still reads
+`"is_subclass_of" | "subclass_of" | "SUBCLASS_OF" | "hierarchical" | "HIERARCHICAL"`
+(cited `:586` — the line moved by one). The doc-comment at `:576-580` still
+states the generic label **IS** accepted, so code and comment continue to agree,
+and the rationale comment naming this deployment's ingest is at `:582`. The
+predicate's only consumer is unchanged at `:1247`.
+
+**The test/producer-contract conflict recorded in Consequences is resolved.** The
+Consequences bullet says "the existing predicate test still rejects the collapsed
+label; see the closeout extension for this unresolved test/producer-contract
+conflict." At HEAD that test no longer exists under its old name: it is
+`directed_hierarchy_accepts_subsumption_and_the_collapsed_label` at `:4563`, and
+it asserts the ratified contract rather than contradicting it. The bullet is now
+historical; the conflict is closed, not merely re-described.
+
+**Still open:** ratifying producer semantics with subclass *and*
+domain-membership fixtures, and verifying rank upload and displayed layout, still
+need ingest fixtures and a GPU layout run. Neither ran here. The risk the
+Decision knowingly accepts — domain-membership edges reusing `"hierarchical"`
+would fabricate ranks — is unchanged and remains the `review_trigger`.
+
+**Commands run:** `git diff --stat eac011303..HEAD --
+src/actors/gpu/force_compute_actor.rs`; `grep -n
+'hierarchical|HIERARCHICAL|is_directed_hierarchy_relation'
+src/actors/gpu/force_compute_actor.rs`; `cargo test --lib --no-default-features
+hierarchy` → **8 passed, 0 failed** (1259 filtered out).

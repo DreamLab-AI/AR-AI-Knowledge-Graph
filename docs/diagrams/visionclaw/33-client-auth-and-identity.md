@@ -26,7 +26,16 @@ sources:
   - docker-compose.unified.yml
   - docs/BASELINE-architecture.md
   - docs/IDENTIFIER-taxonomy.md
-verified_commit: b00c28a0d
+  - client/src/api/analyticsApi.ts
+  - client/src/app/main.tsx
+  - client/src/features/graph/managers/dataManager/restClient.ts
+  - client/src/features/ontology/services/jss/contextLoader.ts
+  - client/src/services/VoiceWebSocketService.ts
+  - client/src/services/api/UnifiedApiClient.ts
+  - src/services/nostr_service.rs
+  - src/utils/auth.rs
+  - src/utils/nip98.rs
+verified_commit: bed6b617d
 ---
 ## VC-33.1 NIP-07 extension login (client-asserted, no server verify round-trip)
 ```mermaid

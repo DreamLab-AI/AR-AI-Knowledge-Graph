@@ -25,7 +25,8 @@ sources:
   - src/agent_events/hub.rs
   - src/agent_events/schema.rs
   - src/agent_events/provenance.rs
-verified_commit: b00c28a0d
+  - src/services/acsp/client.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-27.1 BotsClient — legacy `:9500` MCP-TCP poller (superseded path)
@@ -237,7 +238,7 @@ sequenceDiagram
     end
     Client->>Ws: ws::Message::Close
     Ws->>Ws: log final circuit-breaker stats, ctx.close(reason) - :602-620
-    Note over Ws: DIVERGENCE: has_healthy_services() (:190-210) always returns true - the async<br/>health lookup it spawns is fire-and-forget and never gates the return value
+    Note over Ws: RESOLVED ADR-2094 (2026-09-05): has_healthy_services (:253) is a pure atomic read of a cached verdict<br/>one monitor task started at connection init publishes it and stops when the client drops (:209) - no per-call spawn
     Note over H,Ws: DOC-DRIFT: GET /multi-mcp/status (get_mcp_server_status, :819-846) returns a<br/>hardcoded two-server JSON literal, not live MultiMcpAgentDiscovery state (:822-838)
     Note over H,Ws: DOC-DRIFT: POST /multi-mcp/refresh (refresh_mcp_discovery, :848-856) ignores<br/>app_state and never calls MultiMcpAgentDiscovery::start_discovery - it only echoes success
 ```
@@ -432,7 +433,7 @@ sequenceDiagram
     MAC->>API: POST /v1/briefs/{id}/debrief (create_debrief) - :539-580
     MAC->>API: GET /health (health_check, no auth header) - :586-597
     Note over MAC,API: every call above shares the same alt: 200/2xx Ok(json) else Err(ApiError(body,status)),<br/>and Err(NetworkError) on transport failure (repeated at each call site, e.g. :328-342,388-399)
-    Note over Boot,MAC: DIVERGENCE: AppState's boot path fail-closes on a missing/weak MANAGEMENT_API_KEY (app_state.rs:104-113),<br/>but AgentMonitorActor::new falls back to an empty-string key with only a warn (agent_monitor_actor.rs:216-219)
+    Note over Boot,MAC: RESOLVED ADR-2094 (2026-09-05): AgentMonitorActor::new calls the same validate_security_env_vars AppState uses (app_state.rs:82)<br/>a missing or weak MANAGEMENT_API_KEY is a boot error and the client is an Option, never an empty-string key (agent_monitor_actor.rs:235-267)
 ```
 
 ## VC-27.10 agent_visualization_protocol — outbound wire message envelope

@@ -22,7 +22,9 @@ sources:
   - agentbox/management-api/middleware/privacy-filter.js
   - agentbox/management-api/middleware/linked-data/encoder.js
   - agentbox/management-api/routes/uri-resolver.js
-verified_commit: b00c28a0d
+  - agentbox/management-api/utils/agent-event-publisher.js
+  - agentbox/schema/federation-kinds.json
+verified_commit: bed6b617d
 ---
 ## ES-03.1 Shared wire envelope: AgentActionNotification (agentbox emit -> VisionClaw ingest)
 ```mermaid
@@ -103,12 +105,12 @@ flowchart TD
     KGADDR -- "require_content_address fails<br/>:169-174" --> ERR
     subgraph LEGACY["Legacy coexistence"]
         NGM["urn:ngm:* LEGACY_NGM_NS<br/>src/uri/mod.rs:46"]
-        DUAL["parse_dual()<br/>src/uri/mod.rs:594-611<br/>resolve paths only"]
+        DUAL["parse_dual()<br/>src/uri/mod.rs:619<br/>resolve paths only"]
         NGM --> DUAL
     end
     NOTE1["INVARIANT: no urn:visionclaw:agent kind - identity IS the DID<br/>src/uri/mod.rs:26-27,51-52"]
     NOTE2["INVARIANT: every durable id minted only via these typed constructors<br/>ad-hoc format! is prohibited - src/uri/mod.rs:33-35"]
-    NOTE3["DIVERGENCE: parse rejects urn:ngm:*, parse_dual accepts it (mint vs resolve split)<br/>docs/IDENTIFIER-taxonomy.md invariant 7"]
+    NOTE3["DELIBERATE (2026-09-05, ADR-2061 review): parse rejects urn:ngm:* and parse_dual accepts it<br/>Not drift - a mint vs resolve split. parse refuses the retired namespace so no NEW durable id is minted under it<br/>parse_dual accepts it so ids persisted before the ADR-105 cutover keep resolving<br/>Collapsing them either strands legacy ids or re-opens minting - docs/IDENTIFIER-taxonomy.md invariant 7"]
     NOTE1 -.-> DID
     NOTE2 -.-> NS
     DUAL -.-> NOTE3
@@ -154,60 +156,64 @@ flowchart TD
 ## ES-03.4 cross_from_agentbox: closed kind-map, VisionClaw inbound (agentbox source wins)
 ```mermaid
 flowchart TD
-    IN["cross_from_agentbox agentbox_urn<br/>src/uri/mod.rs:650"]
-    DIDCHECK{"strip_prefix did:nostr: and is_pubkey_hex<br/>:652-660"}
+    IN["cross_from_agentbox agentbox_urn<br/>src/uri/mod.rs:797"]
+    DIDCHECK{"strip_prefix did:nostr: and is_pubkey_hex<br/>:799-800"}
     IN --> DIDCHECK
-    DIDCHECK -- "yes" --> PASSTHRU["UrnCrossing visionclaw_id equals agentbox_urn unchanged<br/>already converged, passes through :656"]
-    DIDCHECK -- "no, bad pubkey" --> NONE0["return None<br/>:661"]
-    DIDCHECK -- "no did prefix" --> STRIP["strip_prefix urn:agentbox: then split_once<br/>:665-666"]
+    DIDCHECK -- "yes" --> PASSTHRU["UrnCrossing visionclaw_id equals agentbox_urn unchanged<br/>already converged, passes through :801-805"]
+    DIDCHECK -- "no, bad pubkey" --> NONE0["return None<br/>:807"]
+    DIDCHECK -- "no did prefix" --> STRIP["strip_prefix urn:agentbox: then split_once<br/>:810-811"]
     STRIP -- "fails" --> NONE1["return None, question-mark operator"]
-    STRIP --> SCOPE["scope is first tail token if is_pubkey_hex<br/>:668-669"]
-    SCOPE --> MATCH{"match kind"}
-    MATCH -- "agent" --> AGENTARM["pk equals scope; did_nostr pk<br/>:672-675<br/>result did:nostr plus pk"]
-    MATCH -- "activity" --> ACTARM["execution agentbox_urn<br/>:676<br/>result urn:visionclaw:execution plus sha256-12, UNSCOPED"]
-    MATCH -- "thing" --> THINGARM["pk equals scope; kg pk, agentbox_urn<br/>:677-680<br/>result urn:visionclaw:kg plus pk plus sha256-12, OWNER-SCOPED"]
-    MATCH -- "memory (default arm)" --> NONE2["return None<br/>:682 DIVERGENCE: needs domain and slug elevation absent on hot path"]
-    MATCH -- "bead (also default arm)" --> NONE3["return None<br/>:682 same wildcard as memory - no bead crossing on this side"]
-    MATCH -- "any other kind" --> NONE4["return None<br/>:682 closed-map discipline B04"]
-    AGENTARM --> RESULT["Some UrnCrossing agentbox_urn, visionclaw_id, owner_did<br/>:685-688"]
+    STRIP --> SCOPE["scope is first tail token if is_pubkey_hex<br/>:813-814"]
+    SCOPE --> LOOKUP["federation_kind kind - row from the SHARED artefact<br/>:820 agentbox/schema/federation-kinds.json via include_str! :651<br/>the kind list is DERIVED here, never transcribed"]
+    LOOKUP -- "no row, or row says crosses false" --> NONE2["return None<br/>:820-823 refusal is read from the artefact, not hard-coded"]
+    LOOKUP -- "row says crosses true" --> MATCH{"match spec.target_kind<br/>:830 target kind to typed constructor"}
+    MATCH -- "did:nostr" --> AGENTARM["did_nostr scope<br/>:831<br/>result did:nostr plus pk"]
+    MATCH -- "execution" --> ACTARM["execution agentbox_urn<br/>:832<br/>result urn:visionclaw:execution plus sha256-12, UNSCOPED"]
+    MATCH -- "kg" --> THINGARM["kg scope, agentbox_urn<br/>:833<br/>result urn:visionclaw:kg plus pk plus sha256-12, OWNER-SCOPED"]
+    MATCH -- "bead" --> BEADARM["bead_with_address pk, local<br/>:834-843 structural pass-through, existing sha256-12 preserved not re-hashed<br/>result urn:visionclaw:bead plus pk plus sha256-12, OWNER-SCOPED"]
+    MATCH -- "target with no arm on this side" --> NONE4["return None<br/>:844 and federation_targets_all_have_an_arm FAILS<br/>a one-sided artefact addition cannot ship as a silent drop"]
+    AGENTARM --> RESULT["Some UrnCrossing agentbox_urn, visionclaw_id, owner_did<br/>:846-850"]
     ACTARM --> RESULT
     THINGARM --> RESULT
+    BEADARM --> RESULT
     NOTE_ADR["ADR-2025: closed kind-map returns None, never a synthetic id, for unmapped urns"]
-    NOTE_DIV["PROPOSED ADR-2061: JS bridge supports agent, activity, thing, bead plus option-dependent memory while Rust cross_from_agentbox has no bead arm. Resolution is to make the kind list a single shared artefact both translators derive from, resolved in favour of crossing, with a paired symmetry fixture. Rust arm routed to vc-knowledge, JS map to ab-identity-governance"]
-    NONE3 -.-> NOTE_DIV
+    NOTE_DIV["RESOLVED ADR-2061 (2026-09-05): the kind list is ONE versioned artefact both translators derive from<br/>agentbox/schema/federation-kinds.json v1.0.0 - 19 kinds, 4 crossing. JS reads it at load, Rust embeds it with include_str!<br/>bead resolved in favour of crossing. A paired fixture asserts crossed-vs-refused and target grammar per kind<br/>50 jest cases here plus 7 cargo test cases - a one-sided change fails both suites"]
+    NOTE_MEM["DELIBERATE, not unimplemented (ADR-2061): memory refusal is RECORDED in the artefact<br/>refusal_class deliberate, target_kind concept, elevation.required_args domain and slug<br/>The hot path carries no elevation target, so mapping it would fabricate a shared ontology class from a private lesson<br/>Supplying domain and slug DOES cross it - the tests assert that, which is what separates policy from a missing arm"]
+    BEADARM -.-> NOTE_DIV
+    NONE2 -.-> NOTE_MEM
     NONE2 -.-> NOTE_ADR
 ```
 ## ES-03.5 bc20-provenance-bridge.js: AGENTBOX_TO_VISIONCLAW / VISIONCLAW_TO_AGENTBOX (JS side, wider than Rust)
 ```mermaid
 flowchart TD
-    FWD["toVisionclaw agentboxUrn, opts<br/>bc20-provenance-bridge.js:134"]
-    PARSED["const parsed = uris.parse agentboxUrn, B02<br/>:136"]
+    FWD["toVisionclaw agentboxUrn, opts<br/>bc20-provenance-bridge.js:158"]
+    PARSED["const parsed = uris.parse agentboxUrn, B02<br/>:160"]
     FWD --> PARSED
-    PARSED -- "not urn scheme" --> DROP0["_countDrop unknown non-canonical, onDrop<br/>return null :137-139"]
-    PARSED -- "kind agent" --> AGENTCHK{"pubkey present and PUBKEY_HEX_RE<br/>:145-146"}
-    AGENTCHK -- "no" --> DROP1["_countDrop agent missing-scope<br/>return null :147-149"]
-    AGENTCHK -- "yes" --> VCDID["vc = did:nostr plus pubkey<br/>:151"]
-    PARSED -- "kind not agent" --> MAPLOOK["vcKind = AGENTBOX_TO_VISIONCLAW kind<br/>:156, map at :90-95 activity to execution, thing to kg, memory to concept, bead to bead"]
-    MAPLOOK -- "no mapping" --> DROP2["_countDrop kind unmapped-kind<br/>return null :157-160"]
-    MAPLOOK -- "execution" --> VCEXEC["vc = urn:visionclaw:execution plus sha12 agentboxUrn<br/>:164-166"]
+    PARSED -- "not urn scheme" --> DROP0["_countDrop unknown non-canonical, onDrop<br/>return null :161-164"]
+    PARSED -- "kind agent" --> AGENTCHK{"pubkey present and PUBKEY_HEX_RE<br/>:169-170"}
+    AGENTCHK -- "no" --> DROP1["_countDrop agent missing-scope<br/>return null :171-173"]
+    AGENTCHK -- "yes" --> VCDID["vc = did:nostr plus pubkey<br/>:175"]
+    PARSED -- "kind not agent" --> MAPLOOK["vcKind = AGENTBOX_TO_VISIONCLAW kind<br/>:180 - the map is DERIVED at :112-127 from the shared artefact, not written out<br/>schema/federation-kinds.json rows give activity to execution, thing to kg, memory to concept, bead to bead"]
+    MAPLOOK -- "no mapping" --> DROP2["_countDrop kind unmapped-kind<br/>return null :181-184"]
+    MAPLOOK -- "execution" --> VCEXEC["vc = urn:visionclaw:execution plus sha12 agentboxUrn<br/>:188-190"]
     MAPLOOK -- "bead" --> BEADCHK{"pubkey hex and local matches sha256-12 pattern"}
-    BEADCHK -- "no" --> DROP3["_countDrop bead missing-scope or malformed-local<br/>return null :167-182"]
-    BEADCHK -- "yes" --> VCBEAD["vc = urn:visionclaw:bead plus pubkey plus local, STRUCTURAL PASS-THROUGH<br/>:183"]
+    BEADCHK -- "no" --> DROP3["_countDrop bead missing-scope or malformed-local<br/>return null :191-206"]
+    BEADCHK -- "yes" --> VCBEAD["vc = urn:visionclaw:bead plus pubkey plus local, STRUCTURAL PASS-THROUGH<br/>:206"]
     MAPLOOK -- "kg" --> KGCHK{"pubkey present and hex"}
-    KGCHK -- "no" --> DROP4["_countDrop kg missing-scope<br/>return null :183-193"]
-    KGCHK -- "yes" --> VCKG["vc = urn:visionclaw:kg plus pubkey plus sha12 agentboxUrn<br/>:194"]
+    KGCHK -- "no" --> DROP4["_countDrop kg missing-scope<br/>return null :207-213"]
+    KGCHK -- "yes" --> VCKG["vc = urn:visionclaw:kg plus pubkey plus sha12 agentboxUrn<br/>:213"]
     MAPLOOK -- "concept" --> CONCEPTCHK{"opts.domain and opts.slug supplied"}
-    CONCEPTCHK -- "no" --> DROP5["_countDrop concept missing-args<br/>return null :195-198"]
-    CONCEPTCHK -- "yes" --> VCCONCEPT["vc = urn:visionclaw:concept plus slugify domain plus slugify slug<br/>:199"]
-    VCDID --> RESULT["{visionclaw_id, mapping} plus _countCrossing<br/>:151-152,199-201"]
+    CONCEPTCHK -- "no" --> DROP5["_countDrop concept missing-args<br/>return null :214-219"]
+    CONCEPTCHK -- "yes" --> VCCONCEPT["vc = urn:visionclaw:concept plus slugify domain plus slugify slug<br/>:220"]
+    VCDID --> RESULT["{visionclaw_id, mapping} plus _countCrossing<br/>:175-177,223-224"]
     VCEXEC --> RESULT
     VCBEAD --> RESULT
     VCKG --> RESULT
     VCCONCEPT --> RESULT
-    NOTE_DIFF["PROPOSED ADR-2061: paired fixture shows JS bridge maps beads while Rust cross_from_agentbox returns None. ADR-2061 requires both sides to agree per kind on crossed versus refused, and to distinguish a deliberate refusal from an unimplemented arm"]
+    NOTE_DIFF["RESOLVED ADR-2061 (2026-09-05): both translators now derive this map from one versioned artefact<br/>schema/federation-kinds.json v1.0.0 is read here at load and embedded in Rust with include_str!<br/>A paired fixture asserts per-kind agreement on crossed versus refused and on the target grammar<br/>Flipping one artefact row failed 3 of 50 jest cases and 4 of 7 cargo test cases - asymmetry is a test failure"]
     VCBEAD -.-> NOTE_DIFF
-    subgraph REV["toAgentbox visionclawId, opts - mirror direction, :215-265"]
-        REVDID{"did:nostr scheme?<br/>:219-220"}
+    subgraph REV["toAgentbox visionclawId, opts - mirror direction, :239-290"]
+        REVDID{"did:nostr scheme?<br/>:243-244"}
         REVDID -- "yes" --> REVSTORE{"store.getByVisionclaw hit?"}
         REVSTORE -- "yes" --> REVHIT["return hit.agentbox_urn"]
         REVSTORE -- "no" --> REVFALLBACK["return urn:agentbox:agent plus pubkey plus underscore<br/>:229"]

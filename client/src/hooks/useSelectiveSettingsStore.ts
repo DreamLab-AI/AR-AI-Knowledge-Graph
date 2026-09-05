@@ -39,7 +39,7 @@ export function useSelectiveSettings<T extends Record<string, any>>(
 ): T {
   const pathEntries = useMemo(
     () => Object.entries(paths) as [keyof T, SettingsPath][],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
     [JSON.stringify(paths)]
   );
 
@@ -130,7 +130,7 @@ export function useSettingsSubscription(
 
     const unsubscribe = useSettingsStore.getState().subscribe(path, handleChange, false);
     return () => { mounted = false; unsubscribe(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [path, immediate, depsKey]);
 }
 

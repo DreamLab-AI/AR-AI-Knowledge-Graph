@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b00c28a0d766c8cf46cd00b100dab60ef2dd74a4
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [Cargo.toml, src/app_state.rs]
 owner: jjohare
 review_trigger: a scale requirement that exceeds a single-node embedded store, or any proposal to reintroduce a networked graph database
@@ -119,3 +119,51 @@ read, `oxigraph` path join, `OxigraphOntologyRepository::open`,
 `OxigraphGraphRepository::from_store`). `grep -n "neo4rs" Cargo.toml` remains
 empty. The removed dependencies sat below the storage block, so no line shifted.
 `node scripts/adr-index-gen.js docs/adr --check` → `ok: 72 ADR(s) valid`.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `b00c28a0d`:** `Cargo.toml` (-24/+14) and
+`src/app_state.rs` (-50/+38). **Neither touches the persistence substrate.** The
+`Cargo.toml` delta drops `quinn`/`rustls`/`rcgen` (direct deps only of the dead
+`QuicTransportServer` removed under ADR-2066) and retires the `physics-v2`
+feature (ADR-2055); the `app_state.rs` delta removes the standalone
+`ShortestPathActor`/`ConnectedComponentsActor` pair under ADR-2053. The
+persistence substrate is untouched by both.
+
+**Substrate confirmed at HEAD, with the `~` citations made exact:**
+
+| Claim | Cited | Actual at HEAD |
+|---|---|---|
+| `oxigraph = { version = "0.4" }` | `Cargo.toml:80` | **`Cargo.toml:82`** |
+| Store opened once | `~:451` | `OxigraphOntologyRepository::open(&oxigraph_path)` at `src/app_state.rs:449`, path built at `:447` |
+| Graph repo derived off the same handle | `~:456` | `OxigraphGraphRepository::from_store(oxigraph_store)` at `:454` |
+| settings.sqlite3 | `~:459` | `:457` |
+| enrichment.sqlite3 | `~:472` | `:470` (isolation rationale at `:469`) |
+| liveness.sqlite3 | `~:487` | `:485` |
+| kpi.sqlite3 | "plus the KPI store" | `:515` |
+
+The one-handle-shared-by-both-repositories property — and therefore the accepted
+consequence that a corrupt store takes both down together — is intact: `:454`
+still derives the graph repository `from_store` the ontology repository opened at
+`:449`.
+
+**Neo4j still absent.** `grep -rn neo4rs --include=*.toml --include=*.rs`
+(excluding `target/`) returns exactly one hit, and it is the negative assertion
+in a comment: `crates/visionclaw-contracts/Cargo.toml:19` — "this crate … pulls
+no actix, no neo4rs". No dependency, no client, no connection string.
+
+**Commands run:** `git diff --stat b00c28a0d..HEAD -- Cargo.toml src/app_state.rs`
+plus the full patches; `grep -n 'oxigraph|neo4rs|neo4j' Cargo.toml`; `grep -n`
+over `app_state.rs` for the repository constructors and the four `.sqlite3`
+paths; `grep -rn neo4rs` across the tree.

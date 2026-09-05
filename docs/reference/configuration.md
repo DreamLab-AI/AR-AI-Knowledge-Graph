@@ -217,7 +217,8 @@ See [URN ↔ Solid mapping](urn-solid-mapping.md) and the
 |----------|------|---------|-------------|
 | `PRIMARY_PROVIDER` | string | `anthropic` | Default LLM provider selector. |
 | `OPENAI_API_KEY` | string | `""` | OpenAI API key. |
-| `PERPLEXITY_API_KEY` | string | `""` | Perplexity API key. |
+| `PERPLEXITY_API_KEY` | string | `""` | **Not the Perplexity endpoint config.** Read only by the boot readiness report (`app_state.rs:1516`) to decide whether `PerplexityService` was *expected* to be present. See the correction note below. |
+| `PERPLEXITY_ENABLED_PUBKEYS` | string (csv) | `""` | Per-pubkey feature gate for Perplexity access (`feature_access.rs:20`). Gates *who* may call it, not *where* it calls. |
 | `COMFYUI_URL` | string | `http://comfyui:8188` | ComfyUI image-generation endpoint. |
 | `COMFYUI_SALAD_URL` | string | `http://comfyui:3000` | Alternate ComfyUI/Salad endpoint. |
 | `RAGFLOW_API_KEY` | string | `""` | RAGFlow API key. |
@@ -233,6 +234,22 @@ See [URN ↔ Solid mapping](urn-solid-mapping.md) and the
 | `CLAUDE_FLOW_HOST` | string | `agentic-workstation` | Claude Flow coordination host. |
 | `RUV_SWARM_HOST` / `RUV_SWARM_PORT` | string / integer | `agentic-workstation` / — | Swarm coordination endpoint. |
 | `DAA_HOST` / `DAA_PORT` | string / integer | — | Decentralised autonomous agent endpoint. |
+
+**Correction (2026-09-05) — Perplexity is settings-sourced, not env-sourced.** This
+table previously listed `PERPLEXITY_API_KEY` as if it configured the Perplexity
+endpoint. It does not. `PerplexityService` reads `AppFullSettings.perplexity` and
+fails with "Perplexity settings not configured" when that section is absent; the
+`api_url`, `api_key` and `model` it uses all come from settings
+(`src/services/perplexity_service.rs:99-120`), which is why the section is one of
+the three `SECRET_BEARING_SECTIONS` redacted from full-settings GETs
+(`settings_handler/routes.rs:229`). The only two Perplexity environment variables
+the code reads are `PERPLEXITY_ENABLED_PUBKEYS`, which gates *who* may use the
+feature (`src/config/feature_access.rs:20`), and `PERPLEXITY_API_KEY`, read solely
+by `AppState`'s readiness report to decide whether the service was expected to be
+constructed (`src/app_state.rs:1516`) — setting it configures nothing. The MCP
+skill layer is separate and genuinely does take `PERPLEXITY_API_KEY` from the
+environment; see [agents catalog](agents-catalog.md) §Skill Configuration. Raised by
+diagram note VC-28.3 (`docs/diagrams/visionclaw/28-external-services.md`).
 
 ---
 

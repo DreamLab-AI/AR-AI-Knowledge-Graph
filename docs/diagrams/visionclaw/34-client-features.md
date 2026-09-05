@@ -93,7 +93,14 @@ sources:
   - client/src/features/voice/usePushToTalkAgentBinding.ts
   - client/src/services/PushToTalkService.ts
   - client/src/services/VoiceWebSocketService.ts
-verified_commit: b00c28a0d
+  - client/src/features/control-center/agents/AgentOpsSurface.tsx
+  - client/src/features/control-center/primitives/SettingSlider.tsx
+  - client/src/features/control-center/state/useControlCenterUI.ts
+  - client/src/features/control-center/status/StatusSurface.tsx
+  - client/src/features/design-system/components/SearchInput.tsx
+  - client/src/features/ontology/components/OntologyContribution.tsx
+  - src/services/broker_events.rs
+verified_commit: bed6b617d
 ---
 ## VC-34.1 settings — field edit to server PUT
 ```mermaid

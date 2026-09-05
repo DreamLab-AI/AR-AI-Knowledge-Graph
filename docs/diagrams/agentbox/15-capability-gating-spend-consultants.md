@@ -33,7 +33,15 @@ sources:
   - agentbox/docs/adr/ADR-2020-capability-gating.md
   - agentbox/docs/adr/ADR-2031-consultant-model-manifest-projection.md
   - agentbox/docs/adr/ADR-2033-deepsec-security-gate.md
-verified_commit: b00c28a0d
+  - agentbox/.deepsec-gate/deepsec.config.mjs
+  - agentbox/lib/npm-cli.nix
+  - agentbox/mcp/servers/lib/ontology-retrieval.js
+  - agentbox/scripts/ci/check-manifest-catalogue.js
+  - agentbox/services/agentbox-ops/src/cost_cap/ledger.rs
+  - agentbox/skills/mcp.json
+  - agentbox/agentbox.sh
+  - agentbox/flake.nix
+verified_commit: bed6b617d
 ---
 
 ## AB-15.1 Gate lattice — manifest to package set to supervisor to runtime trace
@@ -81,7 +89,7 @@ flowchart TD
     C5 --> R
     N2 -.->|"rebuild — aci_shell/tree_search_coder npm closures"| C1
 
-    note1["DIVERGENCE: ADR-2020 acceptance progress —<br/>byte-identical-when-off / zero-footprint build evidence<br/>for a disabled gate still needs an image rebuild to prove,<br/>only the spend-cap half is verified #40;mod_tests.rs#41;"]
+    note1["PROPOSED ADR-2077: a procedure ADR carrying the exact five-build<br/>nix rebuild sequence - closure identity and runtime trace are proved<br/>separately, a gate that cannot pass is a named exception, and the<br/>receipt lands in docs/reference/gap-close-evidence"]
     C1 -.-> note1
 ```
 
@@ -165,7 +173,7 @@ sequenceDiagram
     end
     SM-->>API: apply_classes, core, surfaces, modules, counts
     API-->>API: reply.send #40;generated_at, ...view, execution#41;
-    Note over SM: DIVERGENCE: the CATALOGUE is hand-authored documentation-as-data<br/>#40;system-manifest.js:9-14#41; — it can drift from agentbox.toml when a new<br/>gate is added, only the introspected STATE cannot drift
+    Note over SM: RESOLVED ADR-2069 #40;2026-09-05#41;: catalogue drift now FAILS the build.<br/>scripts/ci/check-manifest-catalogue.js rejects any agentbox.toml boolean key that is neither<br/>catalogued nor in an explicit BASELINE, and the BASELINE is a ratchet — an entry that has since<br/>been catalogued, or has left the toml, fails too, so the list can only shrink. 17 baselined keys<br/>are real capabilities still owed a CATALOGUE entry and warn on every run
 ```
 
 ## AB-15.4 Apply-class lifecycle of a gate

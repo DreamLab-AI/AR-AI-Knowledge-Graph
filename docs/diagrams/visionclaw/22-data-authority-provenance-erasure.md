@@ -29,7 +29,11 @@ sources:
   - client/src/services/solidPod/ldpClient.ts
   - client/src/services/SolidPodService.ts
   - scripts/backup-sqlite.sh
-verified_commit: b00c28a0d
+  - agentbox/management-api/routes/git-bridge.js
+  - docker-compose.unified.yml
+  - src/app_state.rs
+  - src/services/ontology_mutation_service.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-22.1 Write-master per data class
@@ -62,7 +66,7 @@ flowchart LR
     AssertGraph -.-> DivLegacy
     RuVector -.-> DivLegacy
 
-    DivCreds["DIVERGENCE: SOPS accepted 2026-05-09 but NEVER EXECUTED - .env is plaintext, no SOPS artifacts in tree<br/>docs/DATA-authority-erasure.md:106-107"]
+    DivCreds["PROPOSED ADR-2104: execute the SOPS rollout or formally withdraw ADR-109 - plaintext .env is documented as the interim state either way<br/>a 43MB scripts/sops binary dated 2026-05-09 is present and gitignored, but no .sops.yaml, secrets.enc.yaml or sops-env.sh exists<br/>docs/DATA-authority-erasure.md:106-107"]
     DotEnv -.-> DivCreds
 ```
 
@@ -227,7 +231,7 @@ sequenceDiagram
     end
     Note over STORE: INVARIANT: append-only - no DELETE, DROP or CLEAR issued against this graph (ADR-2016,<br/>provenance_emitter.rs:32-33), verified by append_only_verified test (provenance_emitter.rs:917)
     Note over WRITER: Retraction only ADDS dl:validTo and deletes nothing - history never removed (provenance_writer.rs:218,478-502)
-    Note over EMITTER,WRITER: DIVERGENCE: GRAPH_PROVENANCE is append-only by design so a compliant erasure story needs crypto-shredding or<br/>redaction, neither exists today (docs/DATA-authority-erasure.md:91-95)
+    Note over EMITTER,WRITER: PROPOSED ADR-2102: keep the append-only invariant and satisfy erasure by crypto-shredding the per-subject key so<br/>quad structure and hash chain survive while plaintext does not - the alternative is to declare provenance out of erasure<br/>scope explicitly - ADR-2102 exists to force that choice rather than leave it to omission
 ```
 
 ## VC-22.5 Unified provenance trace read path (`GET /api/trace`)
@@ -326,7 +330,7 @@ sequenceDiagram
         SH->>SH: write MANIFEST.txt with sha256 per db
         SH-->>OP: DONE - N databases in DEST
     end
-    Note over SH: DIVERGENCE: Oxigraph has NO point-in-time backup - no cross-store consistent restore, no declared RPO/RTO (ADR-2017, docs/DATA-authority-erasure.md:101-105)
+    Note over SH: PROPOSED ADR-2103: Oxigraph gains a point-in-time snapshot as a REQUIRED backup member with a declared RPO from the<br/>schedule and an RTO from a measured restore drill - GRAPH_PROVENANCE is restore-only because it cannot be re-derived<br/>extends ADR-2017, which stays the per-class write-master authority
 ```
 
 ## VC-22.8 Dual-writes: fact fan-out to two stores
@@ -419,7 +423,7 @@ sequenceDiagram
         SYNC->>SYNC: existing data left intact, no clear (github_sync_service.rs:355-358)
     end
     Note over DIRECT,AG: a class added via add_owl_class between full-syncs is NOT itself in GRAPH_PROVENANCE-protected history for the<br/>assert graph - only re-derivation from the corpus (logseq source) restores it after the next rebuild
-    Note over SYNC,AG: DIVERGENCE: no estate-wide erasure or corpus-consistency orchestration spans GitHub content, Oxigraph graphs,<br/>SQLite state, RuVector vectors and the append-only provenance graph (docs/DATA-authority-erasure.md:91-95)
+    Note over SYNC,AG: PROPOSED ADR-2102: one durable erasure record, five store acknowledgements, and a partial erasure that is recorded<br/>and retryable rather than a silent success - agentbox ADR-2060 is the RuVector-side half and is referenced, not superseded
 ```
 
 ## VC-22.11 SQLite membership contract vs KPI/enrichment sole-source risk

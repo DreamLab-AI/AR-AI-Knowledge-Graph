@@ -7,8 +7,8 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b00c28a0d766c8cf46cd00b100dab60ef2dd74a4
-verified_paths: []
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_paths: [src/gpu/mod.rs, src/actors/gpu/connected_components_actor.rs, src/handlers/socket_flow_handler/mod.rs, src/handlers/socket_flow_handler/actor_messages.rs, src/handlers/socket_flow_handler/types.rs, tests/gpu_safety_tests.rs]
 owner: jjohare
 review_trigger: Any reintroduction of a message type, module or kernel with no caller at merge time
 repo: visionclaw
@@ -105,3 +105,60 @@ other leads; those were fixed by their owners and the check was re-run clean.)
 
 Verification ran on the uncommitted working tree above the recorded SHA; `verified_paths` is
 empty for that reason.
+
+## Verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**The `complete` status above was premature, and the reason is instructive.**
+The Verification block's greps were scoped to `src/` and `crates/`, and its build
+evidence was `cargo check -p visionclaw-server` — which compiles the library and
+binary but **not** the test targets. The deletions therefore left three root-crate
+test targets uncompilable, and nothing in this record's own verification could
+have detected it.
+
+Concretely, at the recorded `b00c28a0d` and still at `bed6b617d`,
+`tests/gpu_safety_tests.rs` opened with
+`use visionclaw_server::gpu::streaming_pipeline::{…}` (`:9`) and imported
+`TSEdge, TSNode, … VisualAnalyticsGPU` (`:13`) — every one of them deleted by this
+ADR — and exercised `TSNode::new()` at `:525`, `:538`, `:543`, `:548`. A dead type
+has no callers *in `src/`* precisely because its remaining callers are tests; the
+grep that proves the deletion is safe is the same grep that hides the breakage.
+
+**Now closed at `b0bc275f6`** (*fix(tests): make the sprint build with
+--all-targets; cargo fmt the workspace*), which trimmed
+`tests/gpu_safety_tests.rs` by 199 lines: the import block and the
+`TSNode`/`TSEdge` cases were removed with `REMOVED (ADR-2054)` markers matching
+the convention used in `src/` (`:9-10`, `:337-339`, `:410-411`), and
+`test_render_data_validation` was reparented into a module renamed to match what
+it actually exercises (`RenderData`, `:347`). The marker set is now consistent
+across both trees:
+`grep -rn "REMOVED (ADR-2054)" src/ crates/ tests/` → the six original `src/`
+sites plus a seventh in `src/utils/unified_gpu_compute/construction.rs` (the APSP
+module load) and three in `tests/gpu_safety_tests.rs`.
+
+**The build evidence for this record is now `cargo check --workspace
+--all-targets` → exit 0** (5m32s at this commit, warnings only). That command,
+not `cargo check -p <crate>`, is the standing requirement for any ADR whose
+implementation is a deletion: the `review_trigger` above ("any reintroduction of
+a message type, module or kernel with no caller at merge time") is only
+answerable if test targets are compiled too.
+
+`verified_paths` is populated for the first time — the record was
+`verified_paths: []` because the original verification ran on an uncommitted
+tree. It now names the deletion sites and, deliberately,
+`tests/gpu_safety_tests.rs`, so that a future change re-coupling a test to a
+deleted type re-stales this record instead of passing silently.
+
+`implementation_status` stays `complete`: the deletions themselves were correct
+and are unchanged — what was incomplete was the *verification*, which is what
+this section repairs.

@@ -13,7 +13,31 @@ sources:
   - agentbox/management-api/lib/failure-taxonomy.js
   - agentbox/management-api/lib/execution-journal.js
   - agentbox/management-api/observability/metrics.js
-verified_commit: b00c28a0d
+  - agentbox/scripts/agentbox-config-validate.js
+  - agentbox/tests/contract/execution-journal.contract.spec.js
+  - agentbox/agentbox.toml
+  - agentbox/docker-compose.yml
+  - agentbox/flake.nix
+  - agentbox/management-api/adapters/events/local-jsonl.js
+  - agentbox/management-api/middleware/consumer-payer.js
+  - agentbox/management-api/middleware/spend-policy.js
+  - agentbox/management-api/routes/admin-users.js
+  - agentbox/management-api/routes/agent-events.js
+  - agentbox/management-api/routes/approvals.js
+  - agentbox/management-api/routes/beads.js
+  - agentbox/management-api/routes/broker-bridge.js
+  - agentbox/management-api/routes/dream.js
+  - agentbox/management-api/routes/git-bridge.js
+  - agentbox/management-api/routes/kg-elevation.js
+  - agentbox/management-api/routes/linked-objects.js
+  - agentbox/management-api/routes/memory.js
+  - agentbox/management-api/routes/payments.js
+  - agentbox/management-api/routes/pod-git.js
+  - agentbox/management-api/routes/projects.js
+  - agentbox/management-api/routes/sessions-boundary.js
+  - agentbox/management-api/routes/tasks.js
+  - agentbox/scripts/ci/check-ports-loopback.mjs
+verified_commit: bed6b617d
 ---
 
 ## AB-03.1 server.js boot part 1 — Fastify construction, hooks, static route registers

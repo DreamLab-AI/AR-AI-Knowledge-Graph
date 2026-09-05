@@ -26,7 +26,8 @@ sources:
   - src/actors/gpu/shortest_path_actor.rs
   - src/actors/gpu/connected_components_actor.rs
   - src/actors/physics_orchestrator_actor.rs
-verified_commit: b00c28a0d
+  - src/app_state.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-10.1 GPU supervision tree
@@ -519,7 +520,7 @@ sequenceDiagram
     participant PO as PhysicsOrchestratorActor<br/>src/actors/physics_orchestrator_actor.rs:379
     participant FCA as ForceComputeActor<br/>force_compute_actor.rs:3122
     participant SMA as StressMajorizationActor<br/>stress_majorization_actor.rs:95
-    participant CCA as ConnectedComponentsActor<br/>connected_components_actor.rs:279
+    participant CCA as ConnectedComponentsActor<br/>connected_components_actor.rs:82
     participant OCA as OntologyConstraintActor<br/>ontology_constraint_actor.rs:291
     participant GRA as GPUResourceActor<br/>gpu_resource_actor.rs:142
 

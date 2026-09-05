@@ -23,7 +23,17 @@ sources:
   - agentbox/management-api/routes/dream.js
   - agentbox/management-api/lib/dream-ledger.js
   - agentbox/skills/dream-machine/commands/dream.md
-verified_commit: b00c28a0d
+  - agentbox/config/entrypoint-unified.sh
+  - agentbox/services/dream-engine/src/ledger.rs
+  - agentbox/services/dream-engine/src/llm.rs
+  - agentbox/management-api/lib/action-plane.js
+  - agentbox/scripts/dream-forum-suggestions.mjs
+  - agentbox/scripts/dream-harvest.mjs
+  - agentbox/scripts/dream-hooks-syntax.sh
+  - agentbox/scripts/dream-inbox.mjs
+  - agentbox/scripts/dream-machine-nightly.mjs
+  - agentbox/scripts/dream-night-digest.mjs
+verified_commit: bed6b617d
 ---
 
 ## AB-23.1 One repo-night — run phases
@@ -123,7 +133,7 @@ sequenceDiagram
             end
         end
     end
-    Note over ENG: DIVERGENCE: the nightly cycle is an acknowledged BACKGROUND-JOB bypass — legacy ADR-057<br/>replayable execution journal and ADR-059 monotonic action-policy pipeline are both<br/>status proposed with NO code, so no uniform interceptor sees this path<br/>(GOVERNANCE-capabilities divergences 1 and 6)
+    Note over ENG: PROPOSED ADR-2071 #40;2026-09-05#41;: still a bypass. ADR-2041 wired the execution journal<br/>onto POST /v1/tasks only, and a faithful routing would DENY the night — its SSH, external LLM,<br/>git push and forum side effects classify as egress or mutate, and action-plane.js wires no approver.<br/>ADR-2071 stages journalling ahead of policing, HTTP-only because local-jsonl caches the hash-chain<br/>head in memory and appends unlocked. GOVERNANCE-capabilities divergences 1 and 6 stay OPEN
 ```
 
 ## AB-23.3 Evaluator-readiness admission — refusal before scheduling

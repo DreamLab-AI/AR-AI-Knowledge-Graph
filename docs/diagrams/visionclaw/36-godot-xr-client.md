@@ -29,7 +29,18 @@ sources:
   - src/utils/auth.rs
   - src/main.rs
   - docker-compose.unified.yml
-verified_commit: b00c28a0d
+  - crates/visionclaw-xr-presence/benches/baseline.json
+  - src/actors/presence_actor.rs
+  - xr-client/rust/src/avatar_state.rs
+  - xr-client/rust/src/gaze.rs
+  - xr-client/rust/src/interaction.rs
+  - xr-client/rust/src/lod.rs
+  - xr-client/rust/src/proxemics.rs
+  - xr-client/rust/src/selection.rs
+  - xr-client/scripts/plane_manager.gd
+  - xr-client/scripts/query_builder.gd
+  - xr-client/tests/run_gut.gd
+verified_commit: bed6b617d
 ---
 
 ## VC-36.1 Boot — OpenXR init, capability probe, deferred scene swap (ADR-2036)
@@ -189,11 +200,11 @@ stateDiagram-v2
     Authenticated --> Backoff: socket closed
     Backoff --> Connecting: timer expires
     note right of Backoff
-        _backoff_delay(attempts) graph_scene.gd:2300
+        _backoff_delay(attempts) graph_scene.gd:2296-2300
         min(RECONNECT_BASE_DELAY_SEC * 2^(attempts-1), RECONNECT_MAX_DELAY_SEC)
         base 2.0s graph_scene.gd:20, cap 60.0s graph_scene.gd:21
-        graph socket timer graph_scene.gd:2309
-        presence socket timer graph_scene.gd:2316
+        graph socket timer graph_scene.gd:2303
+        presence socket timer graph_scene.gd:2310
         INVARIANT the two sockets back off INDEPENDENTLY
         graph_scene.gd:153-154, 2337, 2350
     end note

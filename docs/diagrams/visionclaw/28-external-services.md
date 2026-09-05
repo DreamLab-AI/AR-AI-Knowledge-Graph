@@ -14,7 +14,11 @@ sources:
   - src/services/github/config.rs
   - src/services/speech_service.rs
   - src/handlers/quic_transport_handler.rs
-verified_commit: b00c28a0d
+  - src/app_state.rs
+  - src/config/feature_access.rs
+  - src/handlers/fastwebsockets_handler.rs
+  - src/handlers/mod.rs
+verified_commit: bed6b617d
 ---
 ## VC-28.1 ragflow_service — outbound RAGFlow agent API
 ```mermaid
@@ -58,8 +62,12 @@ sequenceDiagram
         RS-->>H: Err StatusError - :402
     else stream_preference=false - :405
         RF-->>RS: 200 {data:{answer,session_id}}
-        RS-->>H: Ok(ChatResponse::Buffered{answer,session_id}) - :433
-        Note right of RS: DIVERGENCE: missing data.answer -> ParseError - :420-424
+        alt data.answer present - :415-419
+            RS-->>H: Ok(ChatResponse::Buffered{answer,session_id}) - :433
+        else data.answer missing - :420-423
+            RS-->>H: Err ParseError Answer not found in non-streamed RAGFlow response - :421-423
+        end
+        Note right of RS: DOC-CORRECTED 2026-09-05: the missing-answer ParseError branch is now drawn<br/>code at ragflow_service.rs:414-423 was already correct - the diagram omitted it
     else stream_preference=true - :438
         RF-->>RS: SSE bytes_stream "data: {...}"
         loop each SSE line - :446
@@ -74,36 +82,36 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant CFG as config()<br/>src/handlers/ragflow_handler.rs:745
-    participant H as EnhancedRagFlowHandler<br/>:318
+    participant CFG as config()<br/>src/handlers/ragflow_handler.rs:620
+    participant H as EnhancedRagFlowHandler<br/>:192
     participant N as NostrService
     participant RS as RAGFlowService
 
-    Note over CFG: scope /ragflow registers 6 routes - :751-763
-    C->>CFG: POST /ragflow/session -> create_session - :139,752
-    C->>CFG: POST /ragflow/message -> send_message - :51,753
-    C->>CFG: POST /ragflow/chat -> handler.chat_enhanced - :334,754
-    C->>CFG: POST /ragflow/session/enhanced -> create_session_enhanced - :541,758
-    C->>CFG: GET /ragflow/history/{session_id} -> get_session_history - :170,761
-    C->>CFG: GET /ragflow/history/enhanced/{session_id} -> get_session_history_enhanced - :601,762
+    Note over CFG: scope /ragflow registers 6 routes - :625-638
+    C->>CFG: POST /ragflow/session -> create_session - :139,626
+    C->>CFG: POST /ragflow/message -> send_message - :51,627
+    C->>CFG: POST /ragflow/chat -> handler.chat_enhanced - :208,628
+    C->>CFG: POST /ragflow/session/enhanced -> create_session_enhanced - :415,632
+    C->>CFG: GET /ragflow/history/{session_id} -> get_session_history - :170,635
+    C->>CFG: GET /ragflow/history/enhanced/{session_id} -> get_session_history_enhanced - :475,636
 
     rect rgb(225,230,250)
-    C->>H: chat_enhanced(req,state,payload) - :334
-    alt rate limit exceeded - :341
-        H-->>C: 429 TooManyRequests - :347
-    else payload > MAX_REQUEST_SIZE - :354
-        H-->>C: 413 PayloadTooLarge - :357
-    else missing X-Nostr-Pubkey - :368
-        H-->>C: 401 Unauthorized - :377
+    C->>H: chat_enhanced(req,state,payload) - :208
+    alt rate limit exceeded - :216
+        H-->>C: 429 TooManyRequests - :221
+    else payload > MAX_REQUEST_SIZE - :229
+        H-->>C: 413 PayloadTooLarge - :231
+    else missing X-Nostr-Pubkey - :245
+        H-->>C: 401 Unauthorized - :251
     else missing Authorization Bearer - :383
         H-->>C: 401 Unauthorized - :393
-    else nostr_service.validate_session fails - :401
-        H->>N: validate_session(pubkey,token) - :401
+    else nostr_service.validate_session fails - :275
+        H->>N: validate_session(pubkey,token) - :275
         N-->>H: false
-        H-->>C: 401 invalid_session - :406
-    else no ragflow access and not power user - :415
-        H-->>C: 403 insufficient_permissions - :420
-    else state.ragflow_service is None - :464
+        H-->>C: 401 invalid_session - :280
+    else no ragflow access and not power user - :289
+        H-->>C: 403 insufficient_permissions - :294
+    else state.ragflow_service is None - :342
         H-->>C: 503 RAGFlow service unavailable
     else ok
         H->>RS: create_session or send_chat_message (see VC-28.1)
@@ -149,7 +157,7 @@ sequenceDiagram
         end
     end
     end
-    Note over PS: DOC-DRIFT: config is read from AppFullSettings.perplexity,<br/>not from PERPLEXITY_* env vars - :99-120 - only PERPLEXITY_ENABLED_PUBKEYS<br/>env gates feature access - feature_access.rs:20 - unrelated to endpoint config
+    Note over PS: DOC-CORRECTED 2026-09-05: endpoint config is read from AppFullSettings.perplexity - api_url, api_key, model at :99-120<br/>not from PERPLEXITY_* env vars - only PERPLEXITY_ENABLED_PUBKEYS gates feature access at feature_access.rs:20 and<br/>PERPLEXITY_API_KEY is read solely as a readiness expectation signal at app_state.rs:1516 - configuration.md:220 and<br/>how-to/agent-orchestration.md:449 corrected
 ```
 ## VC-28.4 image_gen_handler — ComfyUI submit path (user session)
 ```mermaid
@@ -371,40 +379,25 @@ sequenceDiagram
 
     Note over SS: see VC-35 for the full speech pipeline - WS ingress, tag manager,<br/>voice command parsing, TTS response routing are out of scope here
 ```
-## VC-28.8 quic_transport_handler — QUIC transport path (unwired)
+## VC-28.8 quic_transport_handler — the postcard wire types that survived ADR-2066
 ```mermaid
 sequenceDiagram
     autonumber
-    participant XR as XR/Browser client
-    participant QS as QuicTransportServer<br/>src/handlers/quic_transport_handler.rs:240
-    participant EP as quinn::Endpoint<br/>:326
-    participant WS as WebSocket path<br/>fastwebsockets_handler.rs
+    participant GPU as position source<br/>src/handlers/fastwebsockets_handler.rs:391
+    participant PT as postcard wire types<br/>src/handlers/quic_transport_handler.rs:22
+    participant WS as fastwebsockets transport<br/>src/handlers/fastwebsockets_handler.rs:34
+    participant C as XR/Browser client
 
-    Note over QS: QuicServerConfig::default - :202<br/>bind_addr 0.0.0.0:4433, max_connections 1000,<br/>idle_timeout_ms 30000, max_udp_payload_size 1472,<br/>congestion_controller Bbr - :203-210
+    GPU->>PT: PostcardNodeUpdate::from(BinaryNodeData) per node (:38-53, called at fastwebsockets_handler.rs:393)
+    PT->>WS: PostcardBatchUpdate { frame_id, timestamp_ms, nodes } (:71-75, built at fastwebsockets_handler.rs:397)
+    WS->>WS: postcard::to_stdvec(batch) (fastwebsockets_handler.rs:373)
+    WS-)C: binary WebSocket frame over the broadcast channel (fastwebsockets_handler.rs:80, :303)
+    C->>WS: inbound frame, postcard::from_bytes::<PostcardBatchUpdate> (fastwebsockets_handler.rs:344, :458)
+    WS->>PT: BinaryNodeData::from(PostcardNodeUpdate) back at the boundary (:55-67)
 
-    QS->>QS: QuicTransportServer::new(app_state,config) - :252
-    QS->>QS: build_server_config() - generate_self_signed_cert() - :263,308
-    QS->>EP: Endpoint::server(server_config,bind_addr) - :321
-    alt endpoint bind fails (Err propagated by ?) - :321
-        QS-->>QS: start() returns Err, server never listens
-    else bound
-        loop endpoint.accept() - :338
-            XR->>QS: QUIC connection (0-RTT) - :344
-            QS->>QS: handle_connection - session_id, open_bi control stream - :363,401
-            QS-->>XR: ControlMessage::Welcome{capabilities:[postcard,delta-encoding,datagrams]} - :407-414
-            par control channel
-                QS->>XR: handle_control_send - :438
-                XR->>QS: handle_control_recv - Ping/Subscribe/Unsubscribe/Disconnect - :431,494-534
-            and position channel
-                QS-)XR: handle_position_datagrams - unreliable datagram per frame - :445
-            end
-            alt connection.closed() - :459
-                QS->>QS: remove session from sessions map - :465
-            end
-        end
-    end
-
-    Note over QS,WS: RESOLVED ADR-2066: QuicTransportServer was never constructed or routed and has been<br/>deleted, along with the quinn/rustls/rcgen dependencies it alone pulled in. PostcardNodeUpdate and<br/>PostcardBatchUpdate are RETAINED - fastwebsockets_handler.rs imports both, so the module was not<br/>wholly dead. All clients use the WebSocket path - see VC-13.
+    Note over PT,WS: RESOLVED ADR-2066 (2026-09-05) — QuicTransportServer, QuicClientSession,<br/>QuicServerConfig, CongestionController, ControlMessage, the topology and delta types<br/>and the quinn, rustls and rcgen dependencies were constructed nowhere and routed<br/>nowhere. All are deleted. The file is now 101 lines of wire types only.
+    Note over PT: the module is retained solely because fastwebsockets_handler.rs:34 imports<br/>PostcardBatchUpdate and PostcardNodeUpdate directly. src/handlers/mod.rs:117 keeps<br/>pub mod quic_transport_handler and dropped the pub use re-export block.
+    Note over C: every client uses the WebSocket path — there is no QUIC listener and no<br/>0-RTT datagram path in the tree. See VC-13 for the live broadcast pipeline.
 ```
 ## VC-28.9 consolidated external-dependency map
 ```mermaid
@@ -416,7 +409,6 @@ flowchart LR
         AG["image_gen_handler<br/>agent_submit_image_job:495"]
         GH["GitHubPRService<br/>github_pr_service.rs:21"]
         SS["SpeechService<br/>speech_service.rs:32"]
-        QT["QuicTransportServer<br/>quic_transport_handler.rs:240 - UNWIRED"]
     end
 
     RF["RAGFlow API<br/>env RAGFLOW_API_BASE_URL - no default, boot fails if unset"]
@@ -429,7 +421,6 @@ flowchart LR
     KOK["Kokoro TTS<br/>settings.kokoro.api_url default http://kokoro-tts-container:8880"]
     WHI["Whisper STT<br/>settings.whisper.api_url default http://whisper-webui-backend:8000"]
     MCPS["MCP swarm TCP<br/>env MCP_HOST default multi-agent-container, MCP_TCP_PORT default 9500"]
-    XRC["XR/Browser client - QUIC 0-RTT<br/>bind 0.0.0.0:4433 - never started"]
 
     RS -->|"POST /api/v1/agents/.. - fatal: no fallback"| RF
     PS -->|"POST api_url - degraded: error surfaced to caller"| PX
@@ -441,12 +432,12 @@ flowchart LR
     SS -->|"TTS - degraded: audio chunk skipped"| KOK
     SS -->|"STT - degraded: transcription dropped"| WHI
     SS -->|"voice-command relay - degraded: spoken error reply"| MCPS
-    XRC -.->|"never connects - server not started"| QT
+
+    N1["RESOLVED ADR-2066 (2026-09-05) — the QuicTransportServer node and its<br/>unreachable XR QUIC 0-RTT client edge were removed from this map with the<br/>code itself. See VC-28.8 for the postcard wire types that survived."]
+    SS --- N1
 
     classDef fatal fill:#5a1e1e,stroke:#c0392b,color:#fff
     classDef degraded fill:#4a3a10,stroke:#d4a017,color:#fff
-    classDef dead fill:#333,stroke:#888,color:#ccc,stroke-dasharray: 5 5
     class RF,GHA,CFU,CFS fatal
     class PX,SOL,OAI,KOK,WHI,MCPS degraded
-    class QT,XRC dead
 ```

@@ -23,7 +23,8 @@ import React, { useMemo, useRef, useEffect, useLayoutEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 
-/* eslint-disable react/no-unknown-property */
+/* R3F maps three.js props onto JSX host elements (args, position, rotation, intensity...);
+   these are not DOM properties. react/no-unknown-property is not enforced in this config. */
 
 // ---------------------------------------------------------------------------
 // Pure ring-buffer + sampling helpers (unit-tested in AgentTrail.test.ts)

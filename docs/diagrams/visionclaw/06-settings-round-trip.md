@@ -23,7 +23,10 @@ sources:
   - src/main.rs
   - src/handlers/tests/mod.rs
   - docs/adr/ADR-2041-graph-settings-key-knowledge.md
-verified_commit: b00c28a0d
+  - client/src/types/generated/settings.ts
+  - src/handlers/nostr_handler.rs
+  - src/middleware/rbac_gate.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-06.1 Settings route surface and the actor behind it
@@ -320,21 +323,24 @@ sequenceDiagram
     Note over B: server-side YAML is snake_case, the JSON and TS surface is camelCase —<br/>the serde alias behaviour is asserted at boot, src/main.rs:296-315
 ```
 
-## VC-06.10 Dead settings surface — SettingsActor and its disabled test module
+## VC-06.10 RESOLVED ADR-2046 — the dead SettingsActor surface and what replaced it
 ```mermaid
 flowchart TB
-    SA["SettingsActor — src/settings/settings_actor.rs:15<br/>441 lines, 14 message types, 14 Handler impls"]
-    MSG["UpdatePhysicsSettings :94 · GetPhysicsSettings :98<br/>UpdateConstraintSettings :102 · GetConstraintSettings :106<br/>UpdateRenderingSettings :110 · GetRenderingSettings :114<br/>LoadProfile :118 · SaveProfile :122 · ListProfiles :128 · DeleteProfile :132<br/>GetAllSettings :136 · UpdateNodeFilterSettings :141 · GetNodeFilterSettings :146<br/>UpdateQualityGateSettings :151 · GetQualityGateSettings :156"]
-    SA --> MSG
-    EXP["re-exported by src/settings/mod.rs:18-21<br/>GetPhysicsSettings, LoadProfile, SaveProfile, SettingsActor, UpdatePhysicsSettings"]
-    SA --> EXP
-    LIVE["LIVE actor is OptimizedSettingsActor<br/>src/app_state.rs:350 and :1170"]
-    T["src/handlers/tests/settings_tests.rs<br/>the only .start() call, at :23"]
-    SA --> T
-    D1["DIVERGENCE — SettingsActor is never started at runtime. src/settings/mod.rs:17 says<br/>'retained for backward compatibility but routes now use OptimizedSettingsActor'."]
-    D2["DIVERGENCE — settings_tests.rs is COMMENTED OUT of the module tree at<br/>src/handlers/tests/mod.rs:4, and references two modules that do not exist:<br/>crate::actors::settings_actor (:7) and crate::handlers::settings_paths (:10).<br/>It could not compile if re-enabled."]
-    D3["DIVERGENCE — api_handler::config disables the old settings_handler entirely,<br/>comment src/handlers/api_handler/mod.rs:132-133"]
-    SA --- D1
-    T --- D2
-    LIVE --- D3
+    ADR["ADR-2046 — remove the dead SettingsActor<br/>and the orphaned src/config copies"]
+    SA["DELETED src/settings/settings_actor.rs<br/>SettingsActor, 14 message types, 14 Handler impls<br/>never started at runtime"]
+    EXP["DELETED re-export block in src/settings/mod.rs<br/>the ADR-2046 comment at :13-16 records the removal<br/>in place of the GetPhysicsSettings / LoadProfile /<br/>SaveProfile / SettingsActor re-exports"]
+    TST["DELETED src/handlers/tests/settings_tests.rs<br/>the only start() caller — it was already commented out<br/>of the module tree and referenced two absent modules"]
+    MOD["src/settings/mod.rs:17-18<br/>the surviving re-exports are auth_extractor and models only"]
+    LIVE["LIVE actor is OptimizedSettingsActor<br/>src/app_state.rs:353 field, started at :1161<br/>see VC-06.1 for the live round trip"]
+
+    ADR --> SA
+    ADR --> EXP
+    ADR --> TST
+    SA --> MOD
+    EXP --> MOD
+    TST --> MOD
+    MOD --> LIVE
+
+    N1["RESOLVED ADR-2046 (2026-09-05) — this section used to draw SettingsActor, its<br/>message catalogue and three DIVERGENCE notes about a surface that never ran.<br/>All of it is deleted, so the divergences are closed rather than restated."]
+    LIVE --- N1
 ```

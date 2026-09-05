@@ -5,6 +5,11 @@ import { useSettingsStore } from '@/store/settingsStore';
 import { useHeadTracking } from '@/hooks/useHeadTracking';
 import { toast } from '@/features/design-system/components/Toast';
 
+// ADR-04 D10: pre-allocated scratch for the per-frame projection nudge below.
+// makeTranslation overwrites every element before each use, so there is no
+// carry-over between frames and no per-frame allocation.
+const NUDGE_MATRIX = new THREE.Matrix4();
+
 export function HeadTrackedParallaxController() {
   const { camera, size } = useThree();
   const { isEnabled, setIsEnabled, isTracking, headPosition, error } = useHeadTracking();
@@ -52,9 +57,9 @@ export function HeadTrackedParallaxController() {
         const offsetX = headPosition.x * sensitivity * -0.5;
         const offsetY = headPosition.y * sensitivity * 0.5;
 
-        const offsetVector = new THREE.Vector3(offsetX, offsetY, 0);
-        const nudgeMatrix = new THREE.Matrix4().makeTranslation(offsetVector.x, offsetVector.y, 0);
-        camera.projectionMatrix.multiply(nudgeMatrix);
+        // The intermediate Vector3 here was dead weight — only .x/.y were read
+        // straight back out — and both allocations ran on EVERY tracked frame.
+        camera.projectionMatrix.multiply(NUDGE_MATRIX.makeTranslation(offsetX, offsetY, 0));
       }
     } else {
       

@@ -14,7 +14,14 @@ sources:
   - agentbox/config/artifact-probes.json
   - agentbox/schema/agentbox.toml.schema.json
   - agentbox/agentbox.toml
-verified_commit: b00c28a0d
+  - agentbox/config/entrypoint-unified.sh
+  - agentbox/scripts/agentbox-config-validate.js
+  - agentbox/scripts/recall-fixtures/recall-fixture.v1.json
+  - agentbox/scripts/ruvector-recall-harness.mjs
+  - agentbox/skills/mcp.json
+  - agentbox/docker-compose.yml
+  - agentbox/scripts/post-deploy-cleanup.sh
+verified_commit: bed6b617d
 ---
 
 ## AB-05.1 GET /v1/system — catalogue plus live introspection

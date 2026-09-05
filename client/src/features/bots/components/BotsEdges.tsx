@@ -37,7 +37,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BotsEdge, BotsAgent } from '../types/BotsTypes';
 
-/* eslint-disable react/no-unknown-property */
+/* R3F maps three.js props onto JSX host elements (args, position, rotation, intensity...);
+   these are not DOM properties. react/no-unknown-property is not enforced in this config. */
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested in __tests__/BotsEdges.test.ts) — byte-identical to

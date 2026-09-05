@@ -341,7 +341,7 @@ async fn test_propose_create_generates_valid_result() {
 }
 
 #[tokio::test]
-async fn test_propose_create_markdown_contains_ontology_block() {
+async fn test_propose_create_markdown_has_v2_frontmatter() {
     let mutation_service = build_mutation_service();
     let proposal = NoteProposal {
         preferred_term: "Neural Network".to_string(),
@@ -365,25 +365,31 @@ async fn test_propose_create_markdown_contains_ontology_block() {
         .await
         .unwrap();
 
+    // ADR-2040 §V5: `generate_vault_markdown` no longer emits an indented
+    // `- ### OntologyBlock` of Logseq `key:: value` lines — Obsidian rendered
+    // those as plain text, so the pages were invisible to the owner's editor
+    // and to the §V4 gate. It now emits a §V2 YAML frontmatter block. These
+    // assertions track that contract; see
+    // src/services/ontology_mutation_service.rs:42-51.
     let preview = &result.markdown_preview;
     assert!(
-        preview.contains("OntologyBlock"),
-        "Should contain OntologyBlock header"
+        preview.starts_with("---\n"),
+        "Should open with a §V2 YAML frontmatter fence, got: {preview}"
     );
     assert!(
-        preview.contains("ontology:: true"),
-        "Should have ontology marker"
+        preview.contains("ontology: 'true'"),
+        "Should carry the ontology marker (serde_yaml quotes the string \"true\"), got: {preview}"
     );
     assert!(
         preview.contains("Neural Network"),
         "Should contain preferred term"
     );
     assert!(
-        preview.contains("ai:NeuralNetwork"),
-        "Should contain OWL class"
+        preview.contains("owl-class: ai:NeuralNetwork"),
+        "Should contain OWL class under the §V2 `owl-class` key, got: {preview}"
     );
     assert!(
-        preview.contains("status:: agent-proposed"),
+        preview.contains("status: agent-proposed"),
         "Should be agent-proposed"
     );
 }

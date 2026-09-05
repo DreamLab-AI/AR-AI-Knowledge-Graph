@@ -26,11 +26,10 @@ pub use graph_messages::{
     GetGraphData, GetGraphStateActor, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions,
     GetNodeTypeArrays, GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount, GetWorkspaces,
     InitializeActor, LoadWorkspaces, NodeIdMapping, NodeTypeArrays, PositionFrameSnapshot,
-    PositionRow, RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge, RemoveNode,
-    RemoveNodeByMetadata, RequestGraphUpdate, SaveWorkspaces, ToggleFavoriteWorkspace,
-    UpdateGraphData, UpdateMetadata, UpdateNodeFromMetadata, UpdateNodePosition,
-    UpdateNodePositions, UpdateNodeTypeArrays, UpdateWorkspace, WorkspaceChangeType,
-    WorkspaceStateChanged,
+    PositionRow, ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata,
+    RequestGraphUpdate, SaveWorkspaces, ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata,
+    UpdateNodeFromMetadata, UpdateNodePosition, UpdateNodePositions, UpdateNodeTypeArrays,
+    UpdateWorkspace, WorkspaceChangeType, WorkspaceStateChanged,
 };
 
 // --- physics_messages ---

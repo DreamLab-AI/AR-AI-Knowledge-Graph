@@ -33,7 +33,8 @@ sources:
   - client/src/features/graph/managers/graphWorkerProxy.ts
   - client/src/features/graph/workers/graph.worker.ts
   - client/src/services/BinaryWebSocketProtocol.ts
-verified_commit: b00c28a0d
+  - src/handlers/socket_flow_handler/actor_messages.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-13.3 GPU broadcast frame end to end
@@ -55,7 +56,7 @@ sequenceDiagram
     Note right of BO: BROADCAST-001: FULL SNAPSHOT ONLY<br/>no delta filter exists — visible_indices are<br/>visibility-culled only (culling disabled by default)<br/>src/gpu/broadcast_optimizer.rs:7-11
     alt rate-limit interval elapsed (target_fps=25, default)<br/>src/gpu/broadcast_optimizer.rs:33
         BO-->>FC: (should_broadcast=true, all_indices)
-        FC->>BP: backpressure.try_acquire()<br/>src/gpu/backpressure.rs:2455
+        FC->>BP: backpressure.try_acquire()<br/>src/gpu/backpressure.rs:262
         alt token available (max_tokens=100, cost=1)<br/>src/gpu/backpressure.rs:67-70
             BP-->>FC: Some(sequence_id)
             Note over FC: clamp NaN/Inf per-node<br/>src/actors/gpu/force_compute_actor.rs:2460
@@ -348,7 +349,7 @@ sequenceDiagram
     participant WSS as SocketFlowServer<br/>src/handlers/socket_flow_handler/types.rs:616
     participant SH as StreamHandler dispatch<br/>src/handlers/socket_flow_handler/mod.rs:23
     participant MR as message_routing<br/>src/handlers/socket_flow_handler/message_routing.rs:16
-    participant OA as other actors<br/>src/handlers/socket_flow_handler/actor_messages.rs:243
+    participant OA as other actors<br/>src/handlers/socket_flow_handler/actor_messages.rs:230-233
 
     rect rgb(225,228,245)
     Note over WSS: Actor::started sets up a server-driven ping timer<br/>src/handlers/socket_flow_handler/types.rs:662-669
@@ -372,7 +373,7 @@ sequenceDiagram
         MR->>WSS: handle_ping(PingMessage)<br/>src/handlers/socket_flow_handler/message_routing.rs:109-115
         WSS-->>C: PongMessage JSON<br/>src/handlers/socket_flow_handler/types.rs:232-236
     end
-    Note over WSS,OA: RESOLVED ADR-2054 PushDirective queues a HeartbeatDirective<br/>into pending_directives (ADR-031 item 4), but this actor's<br/>ping/pong path never calls WebSocketHeartbeat::send_pong<br/>or get_pending_directives — queued directives<br/>(ReloadConfig, ForceFullSync, UpdateAvailable) are never<br/>flushed to the client on this code path<br/>src/handlers/socket_flow_handler/actor_messages.rs:243-253,<br/>src/utils/websocket_heartbeat.rs:88-114 — removed, zero senders
+    Note over WSS,OA: RESOLVED ADR-2054 PushDirective queues a HeartbeatDirective<br/>into pending_directives (ADR-031 item 4), but this actor's<br/>ping/pong path never calls WebSocketHeartbeat::send_pong<br/>or get_pending_directives — queued directives<br/>(ReloadConfig, ForceFullSync, UpdateAvailable) are never<br/>flushed to the client on this code path<br/>src/handlers/socket_flow_handler/actor_messages.rs:230-233,<br/>src/utils/websocket_heartbeat.rs:88-114 — removed, zero senders
     end
 ```
 

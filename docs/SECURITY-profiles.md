@@ -203,7 +203,7 @@ Each profile is an **exact** flag set. Anything not listed takes its code defaul
    as an unconditional rule, independent of whether a profile is declared.
 6. The security profile is asserted **before the listener binds**
    (`assert_effective_profile_or_exit`, `src/main.rs:873`, called from the block
-   at `:868-878`, ahead of `HttpServer::new` at `:893` and `.bind()` at `:1146`).
+   at `:868-878`, ahead of `HttpServer::new` at `:893` and `.bind()` at `:1177`).
    A production artefact with any finding exits 2 rather than serving a request
    (ADR-2038).
 

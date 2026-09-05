@@ -352,7 +352,7 @@ export const ClusterHulls: React.FC<ClusterHullsProps> = ({
     }
     // Spatial clusters carry no semantic key; hullEntries colours them by rank.
     return { map: buildSpatialClusters(pts, SPATIAL_TARGET_CELLS), colorByKey };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [nodes, nodeIdToIndexMap, nodePositionsRef, tick, settings?.visualisation?.clusterHulls?.spatialFallback, settings?.visualisation?.clusterHulls?.communityFallback]);
 
   // ---- Build hull geometries from current positions ----
@@ -414,7 +414,7 @@ export const ClusterHulls: React.FC<ClusterHullsProps> = ({
 
     return entries;
     // tick drives periodic recomputation
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [enabled, clusterMap, nodeIdToIndexMap, nodePositionsRef, padding, maxHulls, slabThickness, tick]);
 
   // ---- Cleanup previous geometries when entries change ----

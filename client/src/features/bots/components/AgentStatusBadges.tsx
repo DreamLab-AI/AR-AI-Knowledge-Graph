@@ -25,7 +25,7 @@ export const AgentStatusBadges: React.FC<AgentStatusBadgesProps> = ({
     }));
     setDisplayLogs(newLogs);
     setLogKey(prev => prev + logs.length);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [logs]);
 
   return (

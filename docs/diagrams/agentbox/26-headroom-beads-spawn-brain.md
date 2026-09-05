@@ -25,7 +25,8 @@ sources:
   - agentbox/config/hooks/ruvnet-brain-ground.cjs
   - agentbox/tests/contract/beads.contract.spec.js
   - agentbox/agentbox.toml
-verified_commit: b00c28a0d
+  - agentbox/mcp/servers/lib/ontology-local.js
+verified_commit: bed6b617d
 ---
 
 ## AB-26.1 headroom — lazy native load and slot gating
@@ -307,7 +308,7 @@ sequenceDiagram
         end
     end
     Note over ST: the substrate-tools server also exposes refine :34, refine_validate :51, refine_rollback<br/>:56, refine_history :61, refine_list :70 and the working-set family ws_note :77, ws_get<br/>:86, ws_list :91, ws_drop :96, ws_revalidate :101 — see AB-22 and AB-25
-    Note over ST: DIVERGENCE: GOVERNANCE-capabilities records these as beads substrate primitives that<br/>activate AFTER IMAGE REBUILD, and notes that ADR-051's deferred-distillation MCP tools<br/>are NOT yet a discrete server — only these primitives exist. See AB-24
+    Note over ST: PROPOSED ADR-2074: build the ADR-051 distillation tools as a discrete manifest-gated MCP server that holds the<br/>harness signing key, rather than as tools on the fail-open ontology-bridge - none of D2 or D3 exists today, so there is<br/>no distill tool, no job URN kind and no job_urn field. See AB-24
 ```
 
 ## AB-26.8 RuvNet Brain grounding

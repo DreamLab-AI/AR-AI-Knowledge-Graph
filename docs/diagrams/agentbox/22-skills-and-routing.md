@@ -33,7 +33,10 @@ sources:
   - agentbox/docs/adr/ADR-2028-vault-manifest-path-authority.md
   - agentbox/services/agentbox-ops/src/cost_cap/mod.rs
   - agentbox/services/agentbox-ops/src/bin/tree-search-cap.rs
-verified_commit: b00c28a0d
+  - agentbox/management-api/lib/system-manifest.js
+  - agentbox/flake.nix
+  - agentbox/mcp/servers/mcp-ws-relay.js
+verified_commit: bed6b617d
 ---
 
 ## AB-22.1 Skill discovery and JIT load at a turn

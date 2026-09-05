@@ -403,7 +403,7 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
 
     meshRef.current = inst;
     return { mesh: inst, uniforms: matResult.uniforms };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [dominant, capacityKey]);
 
   // Dispose previous GPU resources on unmount only.
@@ -822,10 +822,18 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
 
     // --- Scale + posIdx caches: recompute only when affecting inputs change --
     const cacheLen = capacityRef.current || nextPowerOf2(Math.max(nodeCount, 4096));
+    // ADR-04 D10 compliance: these are GROW-ONLY caches, not per-frame
+    // allocations. The length guard means a frame allocates only when the node
+    // count outgrows the current buffer, and cacheLen is a power-of-2 capacity,
+    // so growth is amortised O(1) and stops entirely once the graph settles.
+    // They cannot be hoisted to module scope: the size is data-dependent and
+    // the buffers are per-instance. Steady-state frames allocate nothing.
     if (!scaleCacheRef.current || scaleCacheRef.current.length < nodeCount) {
+      // eslint-disable-next-line no-restricted-syntax -- grow-only cache, guarded by the length check above
       scaleCacheRef.current = new Float32Array(cacheLen);
     }
     if (!posIdxCacheRef.current || posIdxCacheRef.current.length < nodeCount) {
+      // eslint-disable-next-line no-restricted-syntax -- grow-only cache, guarded by the length check above
       posIdxCacheRef.current = new Int32Array(cacheLen);
     }
     const scaleCache = scaleCacheRef.current;
@@ -860,6 +868,7 @@ const GemNodesInner: React.ForwardRefRenderFunction<GemNodesHandle, GemNodesProp
       // recomputing computeColor. Sized to the colour capacity (stride 3).
       let baseCache = baseColorCacheRef.current;
       if (!baseCache || baseCache.length < nodeCount * 3) {
+        // eslint-disable-next-line no-restricted-syntax -- grow-only cache, guarded by the length check above
         baseCache = new Float32Array(cacheLen * 3);
         baseColorCacheRef.current = baseCache;
       }

@@ -37,7 +37,16 @@ sources:
   - src/validation/mod.rs
   - src/config/mod.rs
   - Cargo.toml
-verified_commit: b00c28a0d
+  - src/app_state.rs
+  - src/application/graph/queries.rs
+  - src/application/knowledge_graph/directives.rs
+  - src/application/knowledge_graph/queries.rs
+  - src/application/ontology/directives.rs
+  - src/application/ontology/queries.rs
+  - src/application/settings/directives.rs
+  - src/application/settings/queries.rs
+  - src/handlers/utils.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-07.1 The hexagon — ports, adapters and where each canonical type lives

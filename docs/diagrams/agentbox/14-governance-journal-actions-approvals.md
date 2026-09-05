@@ -28,7 +28,16 @@ sources:
   - agentbox/docs/adr/ADR-2027-secret-custody-rotation-break-glass.md
   - agentbox/docs/archive/adr/ADR-057-replayable-agent-execution-journal.md
   - agentbox/docs/archive/adr/ADR-059-monotonic-agent-action-policy-pipeline.md
-verified_commit: b00c28a0d
+  - agentbox/mcp/mcp.json
+  - agentbox/mcp/nostr-bridge/relay-consumer.js
+  - agentbox/mcp/servers/nostr-bridge.js
+  - agentbox/tests/contract/agent-action-pipeline.contract.spec.js
+  - agentbox/agentbox.toml
+  - agentbox/config/hooks/project-tracking-publish.cjs
+  - agentbox/management-api/lib/authority.js
+  - agentbox/management-api/lib/uris.js
+  - agentbox/skills/lint-skills.sh
+verified_commit: bed6b617d
 ---
 
 ## AB-14.1 Governance plane — surfaces that reach the decision point vs surfaces that miss it

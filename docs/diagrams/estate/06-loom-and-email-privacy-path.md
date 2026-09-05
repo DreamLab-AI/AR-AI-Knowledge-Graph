@@ -13,7 +13,7 @@ sources:
   - docker-compose.unified.yml
   - agentbox/flake.nix
   - agentbox/agentbox.toml
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 ## ES-06.1 Topology — the gateway holds a façade, never a model port
 ```mermaid

@@ -32,7 +32,12 @@ sources:
   - src/reasoning/mod.rs
   - src/services/github_sync_service.rs
   - src/main.rs
-verified_commit: b00c28a0d
+  - crates/visionclaw-adapters/src/sparql_migrations.rs
+  - src/actors/gpu/gpu_manager_actor.rs
+  - src/actors/gpu/ontology_constraint_actor.rs
+  - src/actors/gpu/physics_supervisor.rs
+  - src/settings/models.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-20.1 load_ontology bin - actual sample-data loader
@@ -104,22 +109,22 @@ erDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Sync as GitHubSyncService::run_post_sync_reasoning<br/>src/services/github_sync_service.rs:1113
+    participant Sync as GitHubSyncService::run_post_sync_reasoning<br/>src/services/github_sync_service.rs:1220
     participant Repo as OxigraphOntologyRepository<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:2321
     participant Engine as WhelkInferenceEngine<br/>crates/visionclaw-adapters/src/whelk_inference_engine.rs:346
     participant Whelk as whelk-rs reasoner::assert<br/>crates/visionclaw-adapters/src/whelk_inference_engine.rs:425
 
-    Sync->>Repo: get_classes() (line 1117, defn 2321)
-    Sync->>Repo: get_axioms() (line 1122)
-    Sync->>Sync: axioms.extend(ngm_property_hierarchy_axioms()) (line 1132)
-    Sync->>Engine: load_ontology(classes, axioms) (line 1148, defn line 348)
+    Sync->>Repo: get_classes() (line 1225, defn 2321)
+    Sync->>Repo: get_axioms() (line 1230)
+    Sync->>Sync: axioms.extend(ngm_property_hierarchy_axioms()) (line 1239)
+    Sync->>Engine: load_ontology(classes, axioms) (line 1255, defn line 348)
     Engine->>Engine: compute_ontology_checksum(ontology) (line 368)
     alt checksum unchanged since last load
         Engine-->>Sync: reuse cached_subsumptions (line 379-381)
     else checksum changed
         Engine-->>Sync: cached_subsumptions cleared, fresh reasoning required (line 375-378)
     end
-    Sync->>Engine: infer() (line 1153, defn line 397)
+    Sync->>Engine: infer() (line 1260, defn line 397)
     alt cached_subsumptions present (line 406)
         Engine-->>Sync: cached InferenceResults, whelk-rs not invoked (line 407-418)
     else no cache
@@ -129,7 +134,7 @@ sequenceDiagram
         Engine-->>Sync: InferenceResults inferred_axioms inference_time_ms (line 445-450)
     end
     Note over Engine: DOC-DRIFT - module doc calls this bounded EL reasoning but infer() lines 397-452 has no tokio timeout or axiom-count cap
-    Sync->>Repo: store_inference_results(results) (line 1163, defn line 2466)
+    Sync->>Repo: store_inference_results(results) (line 1270, defn line 2466)
     Repo->>Repo: CLEAR GRAPH GRAPH_ONTOLOGY_INFERRED then atomic INSERT (ADR-11 D9, ADR-099 D3, lines 2466-2560)
     Note over Sync: DIVERGENCE - OntologyReasoningService::infer_axioms (ontology_reasoning_service.rs:107) runs CustomReasoner<br/>not this Whelk engine, its WhelkInferenceEngine field is legacy (line 77) and OntologyReasoningService::new is<br/>never called outside tests
 ```
@@ -138,25 +143,31 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Sync as GitHubSyncService::run_post_sync_reasoning<br/>src/services/github_sync_service.rs:1113
-    participant Resolver as IriNodeResolver<br/>src/services/github_sync_service.rs:1178
-    participant KG as KnowledgeGraphRepository::batch_add_edges<br/>src/services/github_sync_service.rs:1232
+    participant Sync as GitHubSyncService::run_post_sync_reasoning<br/>src/services/github_sync_service.rs:1220
+    participant Resolver as IriNodeResolver<br/>src/services/github_sync_service.rs:1285
+    participant KG as KnowledgeGraphRepository::batch_add_edges<br/>src/services/github_sync_service.rs:1324
     participant Pipeline as OntologyPipelineService::materialise_inferred_edges_from_axioms<br/>src/services/ontology_pipeline_service.rs:473
-    participant Mat as inferred_edge_materialiser<br/>src/services/inferred_edge_materialiser.rs:158
+    participant Mat as inferred_edge_materialiser<br/>src/services/inferred_edge_materialiser.rs:126
     participant Idx as ontology_class_index::maybe_refresh_after_sync<br/>src/services/ontology_class_index.rs:468
 
     rect rgb(235,235,255)
     Note over Sync,KG: PATH A - inline materialisation, runs unconditionally after Whelk infer
-    loop each inferred SubClassOf axiom (github_sync_service.rs:1191)
-        Sync->>Resolver: resolve(subject_iri) resolve(object_iri) (lines 1198-1199)
+    Sync->>Sync: select_inferred_edges_for_sync(axioms, resolver, asserted) (line 1309, defn line 1141)
+    Sync->>Mat: is_materialisable_subclass_pair drops self, owl#Nothing child, owl#Thing parent (line 1151, defn line 168)
+    Sync->>Mat: immediate_parents_from_subclass_pairs reduces transitive ancestors to immediate parents (line 1160, defn line 180)
+    loop each immediate (child_iri, parent_iri) pair
+        Sync->>Resolver: resolve(child_iri) resolve(parent_iri) (lines 1170-1171)
         alt endpoint unresolved
-            Sync->>Sync: unresolved_endpoints += 1 (lines 1201 1204)
+            Sync->>Sync: unresolved_endpoints += 1 (lines 1173 1176)
         else both resolved
-            Sync->>Sync: build Edge id inferred_src_tgt weight 0.4 (lines 1207-1220)
+            Sync->>Sync: push (child_id, parent_id) candidate (line 1180)
         end
     end
-    Sync->>KG: batch_add_edges(inferred_edges) (line 1232)
-    Note over Sync: PROPOSED ADR-2071 - this live path hand-rolls selection and never calls inferred_edge_materialiser,<br/>so it has no per-child cap, no asserted-pair dedup and no transitive-to-immediate reduction - it can emit<br/>long-range grandparent edges the module suppresses. Consolidation is gated on a shadow-sync acceptance test.
+    Sync->>Mat: asserted_pairs(graph.edges) both directions (line 1302, defn line 78)
+    Sync->>Mat: select_inferred_edges drops self-loops, asserted pairs, caps per child at 8 (line 1189, defn line 126)
+    Sync->>Mat: build_inferred_edge tags edge_type hierarchical and metadata inferred=true (line 1197, defn line 68)
+    Sync->>KG: batch_add_edges(inferred_edges) (line 1324)
+    Note over Sync: RESOLVED ADR-2071 (2026-09-05) - this live path now calls inferred_edge_materialiser for every selection rule,<br/>so the per-child cap of 8, asserted-pair suppression and the transitive-to-immediate reduction apply here<br/>exactly as on PATH B. Long-range grandparent edges are no longer emitted, and every edge carries<br/>metadata inferred=true, so edge_is_inferred classifies sync-produced edges onto the inferred channel.
     end
     rect rgb(255,245,225)
     Note over Pipeline,Mat: PATH B - OntologyPipelineService, gated OFF by default
@@ -169,7 +180,7 @@ sequenceDiagram
         Pipeline->>Pipeline: graph_repo.batch_add_edges(edges) (line 541)
     end
     end
-    Sync->>Idx: maybe_refresh_after_sync(classes) (github_sync_service.rs:616, defn line 468)
+    Sync->>Idx: maybe_refresh_after_sync(classes) (github_sync_service.rs:635, defn line 468)
     alt ONTOLOGY_CLASS_INDEX_ENABLED unset (default, ontology_class_index.rs:75)
         Idx-->>Sync: skip refresh (line 474)
     else enabled

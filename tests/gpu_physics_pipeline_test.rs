@@ -111,10 +111,15 @@ fn ptx_module_source_and_env_var_consistency() {
     // Catches copy-paste errors when adding new CUDA kernel modules.
     use visionclaw_server::utils::ptx::PTXModule;
 
+    // ADR-2054 removed the quarantined `approximate_apsp_kernel` and its module,
+    // taking the set from 10 to 8. The exact count is pinned by the owning crate
+    // (`visionclaw-gpu`: `ptx_loader::tests::all_modules_returns_eight_variants`);
+    // this stays a lower bound so it keeps catching a module added without its
+    // `.cu` source or `_PTX_PATH` env var, without duplicating that pin.
     let modules = PTXModule::all_modules();
     assert!(
-        modules.len() >= 10,
-        "Expected >= 10 PTX modules, got {}",
+        modules.len() >= 8,
+        "Expected >= 8 PTX modules, got {}",
         modules.len()
     );
 

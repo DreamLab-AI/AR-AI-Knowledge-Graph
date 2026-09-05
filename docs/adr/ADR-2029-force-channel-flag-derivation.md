@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: 9423abdb37e5a7a59840a06dc587fd423b8c9e53
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/models/force_channels.rs, src/utils/unified_gpu_compute/execution.rs, src/models/simulation_params.rs]
 owner: jjohare
 review_trigger: array-backed force-term refactor (deferred step 2), or any new host→GPU conversion path
@@ -123,3 +123,63 @@ and its `apply` is deliberately a no-op.
 observed — these tests observe the word, not its effect on positions. Settings
 updates through the live actor path, and the deferred array-backed channel
 representation, are untouched. Partial/live is retained.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `9423abdb3`:** all three paths —
+`src/models/force_channels.rs`, `src/utils/unified_gpu_compute/execution.rs` and
+`src/models/simulation_params.rs`.
+
+**The single-authority decision holds, but the authority has moved and the
+Verification citations above are now wrong.** That block cites
+`execute_physics_step` rebuilding `feature_flags` from `0` at
+`execution.rs:884`, setting `ENABLE_CONSTRAINTS` at `:903-904` and overwriting
+the converter's word at `:912-913`. At HEAD none of those lines hold that code.
+The current shape:
+
+- `execute_physics_step` (`execution.rs:934-939`) is now a thin wrapper
+  delegating to `execute_physics_step_with_bypass` (`:941`).
+- The flag word is derived by a **pure function** —
+  `crate::models::force_channels::derive_dispatch_feature_flags(
+  ForceDispatchInputs::new(params, self.num_constraints,
+  self.sssp_spring_adjust_enabled))` at `execution.rs:954-960`, with the
+  ADR-2029 rationale comment at `:946-953` naming this record.
+- The converter's word is still **overwritten, not trusted**:
+  `let mut sim_params = params.to_sim_params();` at `:967` immediately followed
+  by `sim_params.feature_flags = feature_flags;` at `:968`.
+
+This is the same decision realised better, not a different one: extracting the
+derivation to a pure function is precisely what makes the 2026-09-04 acceptance
+condition ("observe the final device word … without a GPU") testable, and the
+comment at `:947-950` says so. `derive_dispatch_feature_flags` is at
+`force_channels.rs:486`, `ForceDispatchInputs` at `:427`, with the residency rule
+documented at `:439` and `:478` and the runtime-SSSP-or-settings rule at `:477`.
+
+**Constraints is still a read-only channel.** `apply` at `force_channels.rs:183`
+returns early on `is_read_only` (`:210`), which matches only
+`ForceChannel::Constraints`; the rationale comment at `:185` and `:207` still
+states the flag is rebuilt every physics step from residency. The tests
+`only_constraints_is_read_only` (`:373`) and `constraints_apply_is_a_noop`
+(`:380`) both survive.
+
+**Status stays `partial`:** the array-backed step 2 is still not built — the
+channel enum still maps onto scattered scalars (`:118`, `:132`, `:165`, `:222`) —
+and no constraint upload or GPU tick ran in this pass.
+
+**Commands run:** `git diff --stat 9423abdb3..HEAD -- src/models/force_channels.rs
+src/utils/unified_gpu_compute/execution.rs src/models/simulation_params.rs`;
+`grep -n` over both files for `derive_dispatch_feature_flags|ForceDispatchInputs|
+is_read_only|ENABLE_CONSTRAINTS|ENABLE_SSSP|to_sim_params|execute_physics_step`;
+`awk` dumps of `execution.rs:930-1000`; `cargo test --lib --no-default-features
+force_channels` → **19 passed, 0 failed** (1248 filtered out).

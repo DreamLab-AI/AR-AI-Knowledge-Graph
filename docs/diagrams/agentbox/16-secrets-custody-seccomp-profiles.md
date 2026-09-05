@@ -19,7 +19,7 @@ sources:
   - agentbox/skills/email-search/SKILL.md
   - agentbox/docs/adr/ADR-2027-secret-custody-rotation-break-glass.md
   - scripts/backup-secrets.sh
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 
 ## AB-16.1 Container hardening posture — what actually confines the box

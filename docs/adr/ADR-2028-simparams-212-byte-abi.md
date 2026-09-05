@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/models/simulation_params.rs, crates/visionclaw-gpu/src/cuda_sources/visionclaw_unified.cu]
 owner: jjohare
 review_trigger: any new SimParams field, or a driver/toolkit change altering the 212-byte size
@@ -115,3 +115,56 @@ comparison out of tree). Matching the loaded device module's identity to the hos
 binary, and coordinated rollout/rollback across every raw-copy consumer before
 tail growth, remain open. `implementation_status` is unchanged: complete/live
 still refers to the scoped flat, size-locked representation.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. For this record's largest such file,
+`src/models/simulation_params.rs` (+303/-70 raw), the `SIMPARAMS_MANIFEST` field
+names and byte offsets hash identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed change since `eac011303`:** `src/models/simulation_params.rs` only.
+`crates/visionclaw-gpu/src/cuda_sources/visionclaw_unified.cu` is **unchanged**,
+so the CUDA half of the twin assertion was not touched.
+
+**The 212-byte lock is intact on both sides.** Rust:
+`const _: () = assert!(std::mem::size_of::<SimParams>() == 212);` at
+`src/models/simulation_params.rs:228` — citation still exact. CUDA:
+`static_assert(sizeof(SimParams) == 212, "SimParams size mismatch with Rust");`
+at `crates/visionclaw-gpu/src/cuda_sources/visionclaw_unified.cu:117` — also
+still exact. The raw-copy path is unchanged: `#[derive(… Pod, Zeroable)]` at
+`:27`, `unsafe impl DeviceRepr` / `DeviceCopy` at `:118-119`. Tail-append
+discipline is still visible in the source, with the "Added at the end to preserve
+the existing repr(C) prefix layout" comments at `:88`, `:94`, `:99`, `:105` and
+`:111`.
+
+**The blind spot named in the Consequences is now closed.** That paragraph says
+the size assertions "do not detect all field-order or same-width type
+mismatches" — every field is a 4-byte scalar, so same-size drift was the ordinary
+failure mode and the guard caught none of it. At HEAD there is a versioned
+field/type/offset manifest beside the size guard:
+`SIMPARAMS_MANIFEST: [SimParamsField; 53]` at `:327`, `SIMPARAMS_SIZE = 212` at
+`:296`, `AbiDrift` at `:268`, and a live manifest built with
+`std::mem::offset_of!` at `:618-626` and compared against the declared one at
+`:967-975`. The test at `:1046` asserts *"same-size drift must be detected"* — the
+exact `dt`/`damping` swap the 2026-09-04 closeout used to defeat the size guard.
+Cross-checks also assert `SIMPARAMS_MANIFEST.len() * 4 == SIMPARAMS_SIZE`
+(`:987`) and that every field lies inside the struct (`:994`), so the manifest
+cannot silently disagree with the size.
+
+**Still open, unchanged:** the manifest pins the *Rust* layout. Nothing here
+compares the actual CUDA toolchain's layout or the loaded device module's
+identity, so the cross-language half of the 2026-09-04 acceptance condition
+remains outstanding. No CUDA or GPU execution ran in this pass either.
+
+**Commands run:** `git diff --stat eac011303..HEAD -- src/models/simulation_params.rs
+crates/visionclaw-gpu/src/cuda_sources/visionclaw_unified.cu`; `grep -n` over
+`simulation_params.rs` for `== 212|Pod, Zeroable|DeviceRepr|DeviceCopy|Added at
+the end|SIMPARAMS_MANIFEST|AbiDrift|offset_of`; `grep -n
+'static_assert(sizeof(SimParams)' …visionclaw_unified.cu`; `cargo test --lib
+--no-default-features simulation_params` → **11 passed, 0 failed**.

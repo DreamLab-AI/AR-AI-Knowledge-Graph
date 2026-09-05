@@ -109,7 +109,7 @@ const TimelineScrubber: React.FC = () => {
     };
     // Mount-once: domain is stable enough at first paint; later widening only
     // shifts labels, it must not re-fire the initial load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, []);
 
   const currentMs = useMemo(() => posToMs(pos, domainMinMs, domainMaxMs), [pos, domainMinMs, domainMaxMs]);

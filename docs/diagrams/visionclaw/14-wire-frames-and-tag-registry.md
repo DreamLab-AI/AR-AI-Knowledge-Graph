@@ -17,7 +17,10 @@ sources:
   - client/src/services/binaryProtocol/frameTypes.ts
   - client/src/services/BinaryWebSocketProtocol.ts
   - src/actors/agent_beam_actor.rs
-verified_commit: b00c28a0d
+  - client/src/types/__tests__/wireFixtures.test.ts
+  - client/src/types/binaryProtocol.ts
+  - src/actors/presence_actor.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-14.1 V3 position record — 52 bytes, little-endian

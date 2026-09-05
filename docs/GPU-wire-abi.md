@@ -1,10 +1,11 @@
 ---
 title: GPU & Wire ABI
 doc_id: VC-GPU-ABI
-version: 0.1.3
+version: 0.1.4
 status: draft-for-ratification
 verified_commit: 73540faa0
 changelog:
+  - "0.1.4: 2026-09-05 ADR-2061 landed — the analytics kernel trust status is now a measured test result (crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs) rather than an assertion: PageRank, DBSCAN and Louvain TRUSTED; LOF recorded BROKEN at max |delta| 0.702 against a 1e-3 bar"
   - "0.1.3: 2026-09-05 remediation — ADR-2053 context delivery, ADR-2054 dead-code removal, ADR-2055 physics-v2 retirement, ADR-2056 single PTX rewrite, ADR-2059 inert flag removal, ADR-2060 citation corrections (ENABLE_CONSTRAINTS repointed to force_channels.rs derive_dispatch_feature_flags; 180-byte comment corrected in code); ADR-2061 proposed for the analytics validation gap"
   - 0.1.1: correct path-3 actor call-site citation (force_compute_actor.rs 1557 → 2057); fix stale 180-byte comment line ref (:7 → :5)
   - 0.1.2: analytics kernel trust status corrected — Louvain/PageRank carry in-source fixes (D1/D8 markers), broken-list was stale-good; outputs still await reference validation
@@ -14,6 +15,9 @@ sources:
   - crates/visionclaw-domain/src/models/simulation_params.rs
   - crates/visionclaw-gpu/src/cuda_sources/visionclaw_unified.cu
   - crates/visionclaw-gpu/build.rs
+  - crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs
+  - crates/visionclaw-gpu/src/cuda_sources/gpu_clustering_kernels.cu
+  - crates/visionclaw-analytics-oracle/src/lib.rs
   - src/utils/unified_gpu_compute/execution.rs
   - src/handlers/layout_handler.rs
   - src/actors/gpu/force_compute_actor.rs
@@ -157,26 +161,40 @@ missing PTX panics the build (`build.rs:181-187`).
 
 ### Analytics kernel trust status
 
-Legacy ADR-031's "known-broken" list is **stale in the good direction** — the named
-kernels have since been fixed in source (re-verified 2026-08-31 during the
-operative-pack mint):
+**A kernel is trusted here only when a conformance test says so.** ADR-2061 landed
+that suite: `crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs` drives each
+compiled kernel over the fixtures in `crates/visionclaw-analytics-oracle` and asserts
+against that crate's CPU reference at fixed tolerances. Results below were measured
+2026-09-05 on an NVIDIA RTX A6000 (sm_86, driver 610.57.04, nvcc 12.9, PTX ISA 8.8).
 
-- **Louvain community detection** — FIXED: fully consistent synchronous pass, "D1
-  fix" marker (`crates/visionclaw-gpu/src/cuda_sources/gpu_clustering_kernels.cu:581`).
-- **PageRank** — FIXED: the buggy per-block dangling-mass kernel was deleted in
-  favour of the correct global two-kernel path, "D8 fix" marker
-  (`crates/visionclaw-gpu/src/cuda_sources/pagerank.cu:263`).
-- **DBSCAN** — no broken marker remains; border handling flows through the
-  propagate/finalise phases (`gpu_clustering_kernels.cu:1079-1080`).
-- **Landmark APSP** — compile-quarantined (`#if 0`-class guard), not shipped enabled.
-- **Node embeddings** (legacy ADR-072) — no embedding kernels exist in the tree; the
-  "random noise" hash bag-of-characters path is gone as a GPU concern.
-- **LOF** (local outlier factor) — fixed and trustworthy.
-- **Ontology constraints** (legacy ADR-098) — fixed and live (keystone wiring above).
+| Kernel | Status | Test | Measured |
+|---|---|---|---|
+| **PageRank** | **TRUSTED** | `adr_2061_pagerank_matches_oracle` | max per-node \|Δ\| **3.4e-11** vs `pagerank(g, 0.85, 100)` (bar: 1e-4); top-decile ranking order matches on all five fixtures incl. `canonical_live_scale` (n=10,676) |
+| **DBSCAN** | **TRUSTED** | `adr_2061_dbscan_matches_oracle` | labelling matches `dbscan` **exactly** up to cluster-id permutation, noise set included; the border point joins its core's cluster (the ADR-031 D7 contract) |
+| **Louvain / community detection** | **TRUSTED** | `adr_2061_louvain_matches_oracle` | `two_clique` → 2 communities, exactly `two_clique_optimal_partition` up to permutation, Q **0.4524** = optimal; `triangle`/`star` → 1; `canonical_live_scale` → **16** communities (the planted count), Q **0.8960** vs reference 0.9146, deficit **0.0186** (bar: 0.05) |
+| **LOF / anomaly** | **BROKEN** | `adr_2061_lof_matches_oracle` *(fails)* | max per-point \|Δ\| **0.702** vs `lof(points, 3)` — **702× the 1e-3 bar**. The >95th-percentile set still matches, so a gross outlier is still flagged, but inlier ordering is wrong. Root cause below. |
+| **Landmark APSP** | not covered — no live output | — | compile-quarantined (`gpu_landmark_apsp.cu:25` `#if 0`, `#endif` at `:65`), refused at `shortest_path_actor.rs:353-360` under NFR-7 |
+| **Node embeddings** (legacy ADR-072) | not applicable | — | no embedding kernels exist in the tree; the "random noise" hash bag-of-characters path is gone as a GPU concern |
+| **Ontology constraints** (legacy ADR-098) | not covered by this suite | — | fixed and live (keystone wiring above); the oracle crate carries no constraint reference to compare against |
 
-No formal correctness benchmark has re-validated Louvain/PageRank/DBSCAN outputs
-against reference implementations — the fixes are code-verified, not
-output-verified. Treat results as probably-correct pending a validation pass.
+The three in-source fix markers are now output-confirmed, not merely code-reviewed:
+the Louvain "D1 fix" (`gpu_clustering_kernels.cu:581`), the PageRank "D8 fix"
+(`pagerank.cu:263`), and DBSCAN's border handling (`gpu_clustering_kernels.cu:1079-1080`)
+each hold up against an independent CPU implementation.
+
+**LOF is the exception, and its previous "fixed and trustworthy" entry was wrong.**
+`lof_lrd_from_neighbors` (`gpu_clustering_kernels.cu:404-417`) floors every reachability
+distance at the *query's* k-distance rather than each *neighbour's*. Because the
+neighbour-distance buffer is sorted ascending, `fmaxf(nbr_dist[i], k_distance)` is
+`k_distance` for every term, so `lrd(p)` collapses to `1 / k_distance(p)` and the kernel
+computes `k_distance(p) * mean_o(1 / k_distance(o))` — a k-distance ratio, not Breunig
+LOF, which needs `reach-dist_k(p, o) = max(k_distance(o), d(p, o))`. The test verifies
+this closed form reproduces the kernel's output to **5.6e-7 on every point**, so the
+diagnosis is measured rather than inferred. `anomaly_score@40` therefore carries a
+statistic that ranks a gross outlier correctly but is not the documented metric.
+Correcting it needs a three-pass restructure (k-distance array → lrd array → ratio) plus
+a matching change to the server-side driver, which is why ADR-2061 records it as a
+failing entry rather than fixing it in place.
 
 ## Known divergences & open items
 
@@ -201,12 +219,14 @@ output-verified. Treat results as probably-correct pending a validation pass.
   CPU (SemanticProcessorActor); not in GPU SimParams"). The bit positions are part of the
   frozen 212-byte ABI and are deliberately not reclaimed: doing so would be a wire-visible
   change for no benefit.
-- **Analytics outputs are code-fixed but not output-validated**: Louvain/PageRank/
-  DBSCAN carry in-source fix markers (see trust table above) but no reference-
-  implementation benchmark has confirmed their outputs; a validation pass is the
-  remaining step before full trust. **Open** — carried forward as ADR-2061 (proposed),
-  which specifies the per-kernel acceptance tests against
-  `crates/visionclaw-analytics-oracle`.
+- **Analytics outputs are code-fixed but not output-validated** — *Partially resolved —
+  ADR-2061 (2026-09-05)*. The conformance suite exists and ran:
+  `crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs` asserts each kernel against
+  `crates/visionclaw-analytics-oracle`. PageRank, DBSCAN and Louvain **pass** and are now
+  output-verified (numbers in the trust table above). **LOF fails** its 1e-3 bar by 702×
+  and is recorded BROKEN, with the defect localised to
+  `gpu_clustering_kernels.cu:404-417`. The threshold was not loosened. **Open** only for
+  LOF: `anomaly_score@40` publishes a k-distance ratio, not Breunig LOF.
 - **Registry cannot toggle Constraints**: enablement is residency-owned. Any UI that
   exposes a "constraints on/off" switch through the force-channel registry is inert by
   design (`is_read_only`). **Working as intended** — ADR-2029; retained here as a caution
@@ -279,6 +299,12 @@ One line per ADR from the Phase 2 remediation of the Phase 1 diagram findings (V
   `ontology_validation` (a real gate) and `sssp_integration` (documented as display-only).
 - **ADR-2060** — Corrected this document's citations and marked resolved divergence bullets
   as such. Bits 3 and 5 are re-described as reserved rather than as a divergence.
-- **ADR-2061** *(proposed)* — Per-kernel conformance tests against
-  `crates/visionclaw-analytics-oracle`, with stated tolerances. The analytics trust gap stays
-  open until it lands.
+- **ADR-2061** *(accepted, partial)* — Per-kernel conformance tests against
+  `crates/visionclaw-analytics-oracle` landed as
+  `crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs`, so the trust table above is a
+  test result rather than an assertion: PageRank (max \|Δ\| 3.4e-11), DBSCAN (exact up to
+  permutation) and Louvain (16/16 communities, Q deficit 0.0186) are TRUSTED, while LOF is
+  recorded BROKEN at max \|Δ\| 0.702 against its 1e-3 bar — root-caused to the
+  query-vs-neighbour k-distance error at `gpu_clustering_kernels.cu:404-417` and left failing
+  rather than loosened. The analytics trust gap is closed for three of four kernels and stays
+  open for LOF.

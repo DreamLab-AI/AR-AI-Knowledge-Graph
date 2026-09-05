@@ -26,7 +26,11 @@ sources:
   - agentbox/docs/adr/ADR-2012-relay-allowlist-only-ingress.md
   - agentbox/docs/adr/ADR-2025-cross-repo-federation-contract.md
   - agentbox/docs/adr/ADR-2026-session-mirror-egress-boundary.md
-verified_commit: b00c28a0d
+  - agentbox/management-api/lib/governance-decision-waiter.js
+  - agentbox/management-api/lib/llm-marketplace.js
+  - agentbox/agentbox.sh
+  - agentbox/management-api/lib/agent-control-surface.js
+verified_commit: bed6b617d
 ---
 
 ## AB-13.1 Nostr topology — relay, gateway, pod bridge, mirror, mesh
@@ -67,7 +71,7 @@ flowchart TB
     PB -.->|"federated_kinds (agentbox.toml:233), standalone by default"| MESH
     FORUM -.->|"Cloudflare API (not Nostr)"| CLOUD
 
-N1["DIVERGENCE: two independent consumers subscribe to the SAME embedded relay and both write<br/>pods/&lt;npub&gt;/events/inbox/&lt;id&gt;.json — the Rust spawn_consumer (lib.rs:696) and the<br/>JS RelayConsumer (management-api/server.js:1264-1310, mcp/nostr-bridge/relay-consumer.js:249<br/>_onInbound). lib.rs:1-18 documents the Rust bridge as REPLACING the JS relay-consumer, but<br/>server.js still requires and starts it when AGENTBOX_RELAY_POD_BRIDGE=true"]
+N1["RESOLVED ADR-2065 (2026-09-05): the Rust spawn_consumer is the sole inbox writer when the<br/>pod-bridge daemon runs — RelayConsumer takes writeInbox=false via AGENTBOX_POD_INBOX_WRITER,<br/>projected from the same podBridgeEnabled expression that gates the daemon supervisor block.<br/>The JS consumer is narrowed, not deleted: it still solely implements ACSP governance 31400-31405,<br/>agent-intent 38000+, payments 38200/38201, the outbox publisher and external fanout"]
     N2["INVARIANT ADR-2012: relay ingress is allowlist-only, no fallback, no auto-add — allowed_pubkeys baked at nix build (relayAllowedPubkeysCsv, flake.nix:1382)"]
 ```
 

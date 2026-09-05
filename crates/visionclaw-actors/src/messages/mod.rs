@@ -22,10 +22,10 @@ pub use graph_messages::{
     GetGraphData, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions, GetNodeTypeArrays,
     GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount, GetWorkspaces, InitializeActor,
     LoadWorkspaces, NodeIdMapping, NodeTypeArrays, PositionFrameSnapshot, PositionRow,
-    RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata,
-    SaveWorkspaces, ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata,
-    UpdateNodeFromMetadata, UpdateNodePosition, UpdateNodePositions, UpdateNodeTypeArrays,
-    UpdateWorkspace, WorkspaceChangeType, WorkspaceStateChanged,
+    ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata, SaveWorkspaces,
+    ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata, UpdateNodeFromMetadata,
+    UpdateNodePosition, UpdateNodePositions, UpdateNodeTypeArrays, UpdateWorkspace,
+    WorkspaceChangeType, WorkspaceStateChanged,
 };
 
 // ---------------------------------------------------------------------------

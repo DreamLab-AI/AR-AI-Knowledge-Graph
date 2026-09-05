@@ -3,12 +3,12 @@ id: ADR-2045
 title: Remove the dead ActorLifecycleManager supervision machinery
 date: 2026-09-05
 decision_status: accepted
-implementation_status: partial
+implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b00c28a0d766c8cf46cd00b100dab60ef2dd74a4
-verified_paths: []
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_paths: [src/actors/mod.rs, src/actors/graph_service_supervisor.rs, crates/visionclaw-actors/src/supervisor.rs, tests/orchestration_improvements_test.rs]
 owner: jjohare
 review_trigger: a new supervision requirement that GraphServiceSupervisor cannot express
 repo: visionclaw
@@ -58,19 +58,25 @@ the `Escalate` branch that uses them from `graph_service_supervisor.rs`, at whic
 - `ActorLifecycleManager`, `initialize_actor_system`, `shutdown_actor_system`, the `ACTOR_SYSTEM`
   static, and `lifecycle.rs`'s own `SupervisionStrategy`/`SupervisionDecision` pair no longer exist;
   any future actor-boot code must use `GraphServiceSupervisor`, the one real supervision path.
-- `src/actors/supervisor.rs` (`SupervisorActor`, `InitiateGracefulShutdown`, its
-  `SupervisionStrategy`, `ActorFailed`, `ActorFactory`, `SupervisedActorInfo`,
-  `SupervisedActorTrait`) remains in the tree, still unreachable at runtime outside its own tests,
-  because `graph_service_supervisor.rs` references two of its types. This is recorded as
-  outstanding work, not silently dropped from scope.
-- Follow-on work (tracked here, actioned by vc-core or a later estate pass): remove
-  `parent_supervisor`/`SetParentSupervisor`/the dead `Escalate` branch from
-  `graph_service_supervisor.rs`, then delete `src/actors/supervisor.rs` entirely and its
-  `src/actors/mod.rs:88-90` re-export, closing this ADR's implementation to `complete`.
-- `crates/visionclaw-actors/src/supervisor.rs` is a byte-identical duplicate of
-  `src/actors/supervisor.rs` in a separate, apparently-unused workspace crate. It was not touched —
-  out of this task's named scope (only `src/actors/supervisor.rs` and `src/actors/lifecycle.rs`
-  were named) — but is flagged here for whichever lead owns `crates/visionclaw-actors`.
+- ~~`src/actors/supervisor.rs` … remains in the tree … recorded as outstanding work.~~
+  ~~Follow-on work: remove `parent_supervisor`/`SetParentSupervisor`/the dead `Escalate`
+  branch from `graph_service_supervisor.rs`, then delete `src/actors/supervisor.rs` entirely
+  and its `src/actors/mod.rs:88-90` re-export, closing this ADR's implementation to
+  `complete`.~~ **Superseded 2026-09-05 — the follow-on work landed.** `346fff7af` deleted
+  `src/actors/supervisor.rs` (`git diff --name-status` reports `D`), the `src/actors/mod.rs`
+  re-export is gone (the block at `:107-116` now records the removal instead), and
+  `graph_service_supervisor.rs` carries neither `parent_supervisor` nor `SetParentSupervisor`
+  — its `Escalate` arm (`:795-806`, variant at `:294`) now states plainly that it is the top
+  of the tree and logs-and-stops. `implementation_status` moves to `complete` on that basis.
+- `crates/visionclaw-actors/src/supervisor.rs` is now the **only** home of `SupervisorActor`
+  (`grep -rn "pub struct SupervisorActor" src/ crates/` → one hit, `:124`), and the crate is
+  **not** unused: `src/actors/messages/{graph,ontology,agent,analytics,client}_messages.rs`
+  each re-export from `visionclaw_actors::messages::*`, and
+  `tests/orchestration_improvements_test.rs:278-280` was repointed to
+  `visionclaw_actors::supervisor::{InitiateGracefulShutdown, RegisterActor,
+  SupervisionStrategy, SupervisorActor}` when the root copy went. The earlier description of
+  it as an "apparently-unused workspace crate" holding a "byte-identical duplicate" was wrong
+  at the time and is doubly wrong now — it is the surviving canonical copy.
 
 ## Verification
 
@@ -133,3 +139,50 @@ must be re-run at the landing commit.
 $ node scripts/adr-index-gen.js docs/adr --check
 ```
 Exits 0 (see repo CI log for this change).
+
+## Verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+The greps the Verification block above deferred to "the landing commit" have now
+been run at that commit, and the outstanding work the Consequences recorded is
+discharged — so this record moves from `partial` to `complete` and gains
+`verified_paths`.
+
+- **`src/actors/supervisor.rs` is gone.** `ls` → *No such file or directory*;
+  `git diff --name-status b00c28a0d..HEAD -- src/actors` reports `D` for it and
+  for `src/actors/lifecycle.rs`, deleted by `346fff7af`.
+- **The re-export is gone.** `grep -n "pub mod supervisor\|pub use supervisor"
+  src/actors/mod.rs` → no hit (the only `supervisor` match is the commented-out
+  `// pub mod supervisor_voice;` at `:44`). The former `:88-90` re-export is
+  replaced by the explanatory block at `:100-116`.
+- **The last non-test coupling is gone.** `grep -n
+  "parent_supervisor\|SetParentSupervisor\|Escalate"
+  src/actors/graph_service_supervisor.rs` returns only the `Escalate` variant
+  (`:294`), its handler (`:795-806`) and the comment at `:797-802` recording that
+  `SetParentSupervisor` was never sent, so `parent_supervisor` was permanently
+  `None`. No field, no message, no live escalation path.
+- **`SupervisorActor` has exactly one definition.**
+  `grep -rn "pub struct SupervisorActor" src/ crates/` →
+  `crates/visionclaw-actors/src/supervisor.rs:124`. The type survived the
+  deletion in the crate that owns the actor layer, which is the intended
+  direction of travel under ADR-2005, not an orphan.
+- **The test that used it was repointed, not deleted.**
+  `tests/orchestration_improvements_test.rs:278-280` imports
+  `visionclaw_actors::supervisor::{InitiateGracefulShutdown, RegisterActor,
+  SupervisionStrategy, SupervisorActor}`, with the reason at `:276`. Landed in
+  `b0bc275f6`.
+- **The whole workspace builds, tests included.**
+  `cargo check --workspace --all-targets` → **exit 0** (5m32s, warnings only).
+  This is the check that matters for a deletion ADR: `cargo check -p
+  visionclaw-server` alone does not compile test targets, so it cannot see a
+  test that still references a deleted type.

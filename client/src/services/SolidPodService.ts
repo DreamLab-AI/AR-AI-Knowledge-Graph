@@ -29,7 +29,7 @@ import {
 } from './solidPod/ldpClient';
 
 import {
-  PodNotificationManager,
+  podNotificationManager,
   JSS_WS_URL,
   SolidNotification,
 } from './solidPod/podNotifications';
@@ -114,7 +114,10 @@ export interface PodInitResult {
 
 class SolidPodService {
   private static instance: SolidPodService;
-  private readonly notifications = new PodNotificationManager();
+  // ADR-2100: the ONE JSS notification socket, shared with the Zustand
+  // WebSocket store. Not a private instance — a second one would recreate the
+  // duplicate-client divergence this consolidated.
+  private readonly notifications = podNotificationManager;
   private lastKnownPreferencesPath: string | null = null;
 
   private constructor() {}

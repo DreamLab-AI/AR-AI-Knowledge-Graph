@@ -256,3 +256,4 @@ ADR-2009's browser migration trigger is reached in current source: the ordinary 
   `claim_event_id` `:199`→`:234`, `REPLAY_CACHE` `:187`→`:215`, and the constant
   named `REPLAY_CACHE_TTL_SECONDS` `:177` corrected to the real `REPLAY_CACHE_TTL`
   at `:178`.
+- **ADR-2094** — `MANAGEMENT_API_KEY` has one validator again. `AgentMonitorActor::new` (`src/actors/agent_monitor_actor.rs`) read the variable itself and fell back to an empty key behind a `warn!` while `AppState` boot failed closed on the same variable through `validate_security_env_vars` (`src/app_state.rs:78`); the actor now calls that validator, and a missing, insecure-default or under-16-character key is a boot error. The only relaxation is the existing compile-gated `ALLOW_INSECURE_DEFAULTS` (debug/`dev-auth` builds), which *disables* the Management API client loudly rather than weakening the credential — no path yields an empty-string bearer token.

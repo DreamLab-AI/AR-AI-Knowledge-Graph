@@ -19,7 +19,14 @@ sources:
   - agentbox/management-api/routes/mandate.js
   - agentbox/management-api/routes/uri-resolver.js
   - agentbox/management-api/routes/well-known.js
-verified_commit: b00c28a0d
+  - agentbox/config/entrypoint-unified.sh
+  - agentbox/management-api/lib/agent-control-surface.js
+  - agentbox/management-api/routes/agent-events.js
+  - agentbox/management-api/server.js
+  - agentbox/mcp/servers/nostr-bridge.js
+  - agentbox/agentbox.toml
+  - agentbox/management-api/lib/bc20-provenance-bridge.js
+verified_commit: bed6b617d
 ---
 
 ## AB-11.1 Identity, URN and mandate type model

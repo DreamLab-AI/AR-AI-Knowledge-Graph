@@ -34,7 +34,11 @@ sources:
   - agentbox/voice/README.md
   - agentbox/agentbox.sh
   - agentbox/scripts/agentbox-config-validate.js
-verified_commit: b00c28a0d
+  - agentbox/gui-tools-sidecar/qgis-mcp-headless.py
+  - agentbox/voice/unmute-override.yml
+  - agentbox/docker-compose.voice.yml
+  - agentbox/scripts/qgis_mcp_standalone.py
+verified_commit: bed6b617d
 ---
 
 ## AB-27.1 ComfyUI — builtin loopback gate vs external sidecar integration

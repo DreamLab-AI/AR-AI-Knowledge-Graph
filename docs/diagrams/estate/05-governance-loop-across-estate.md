@@ -24,7 +24,7 @@ sources:
   - agentbox/management-api/routes/broker-bridge.js
   - agentbox/management-api/routes/kg-elevation.js
   - agentbox/mcp/nostr-bridge/relay-consumer.js
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 ## ES-05.1 The loop — one case crossing four systems
 ```mermaid

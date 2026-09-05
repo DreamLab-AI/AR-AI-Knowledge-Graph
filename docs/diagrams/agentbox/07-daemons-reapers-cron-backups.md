@@ -13,7 +13,11 @@ sources:
   - agentbox/services/agentbox-ops/src/hermes/jobs.rs
   - agentbox/flake.nix
   - agentbox/agentbox.sh
-verified_commit: b00c28a0d
+  - agentbox/scripts/ontology-condense-scheduler.mjs
+  - agentbox/scripts/ruvector-aggregate-sweep.mjs
+  - agentbox/scripts/ruvector-pattern-distill.mjs
+  - agentbox/aisp/cli.js
+verified_commit: bed6b617d
 ---
 
 ## AB-07.1 Supervised process classes by lifecycle shape

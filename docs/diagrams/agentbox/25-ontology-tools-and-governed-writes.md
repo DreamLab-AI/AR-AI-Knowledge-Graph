@@ -22,7 +22,10 @@ sources:
   - agentbox/config/hooks/ontology-monitor.cjs
   - agentbox/services/ontology-tools/src/lib.rs
   - agentbox/agentbox.toml
-verified_commit: b00c28a0d
+  - agentbox/config/entrypoint-unified.sh
+  - agentbox/flake.nix
+  - agentbox/scripts/ci/check-no-logseq-paths.sh
+verified_commit: bed6b617d
 ---
 
 ## AB-25.1 ontology-bridge tool surface and dispatch
@@ -94,7 +97,7 @@ sequenceDiagram
     RET-->>BR: terse Turtle + breadcrumb + seed_iris + provenance
     BR-->>AG: budget-bounded provenance-scoped subgraph
     Note over AG,BR: read-pervasive and FAIL-OPEN — the tool never blocks a turn and never bloats the context<br/>window
-    Note over RET: DIVERGENCE: the Loom expand helper queries ONE merged graph and does not isolate<br/>asserted from inferred, so provenance remains a REQUESTED scope, not a backend-enforced<br/>one (ADR-2023 remaining)
+    Note over RET: PROPOSED ADR-2073: split the Loom store into assert and inferred named graphs so seed and expand both carry<br/>a GRAPH clause and provenance is backend-enforced - until the store is split the scope is refused with an explicit<br/>limitation, never silently merged - ADR-2023 remaining is the ORIGIN of this gap, not its resolution
 ```
 
 ## AB-25.3 The authoring-authority gate — four modes, deny by default
@@ -256,7 +259,7 @@ sequenceDiagram
     end
     Note over AG,CORP: INVARIANT ADR-2022: personal-KG concepts reach the shared ontology ONLY through<br/>ontology_propose then Whelk then PR then human review/merge (agentbox.toml:632-635)
     Note over GUARD: DIVERGENCE: ADR-2022 implementation_status is PARTIAL. FORCE_LOCAL dispatch precedes the<br/>remote axiom descriptor and reaches a Markdown-writing helper, so the remote default<br/>prevents an ungoverned REMOTE load but does not by itself enforce every LOCAL authoring<br/>path — that is what the AB-25.3 gate now covers
-    Note over CORP: DIVERGENCE: carrying one correlation id through a real Whelk validation then PR then<br/>approval then merge then served corpus still requires the VisionClaw-side stages to<br/>accept and echo it — the end-to-end correlated promotion chain is not demonstrated
+    Note over CORP: PROPOSED VisionClaw ADR-2105: the proposal, approval, merge and served-corpus stages accept, persist and echo<br/>the authoring correlation id, and a request without one is recorded as unlinked rather than given a synthetic mint<br/>ADR-2022 remaining is the ORIGIN of this gap, not its resolution
     Note over BR: RESOLVED ADR-2054: the standalone CLI now routes through createAuthoredCorpusWriter<br/>with mode forced-local, so EVERY authoring caller crosses assertAuthoringAuthority.<br/>A denial returns a typed OntologyAuthorityError result and exits non-zero — being a<br/>CLI is not an authority. The static-guard test pins the receiver as the gated writer.
 ```
 

@@ -56,7 +56,7 @@ sidecar. Hero images regenerate with `hero/src/batch-generate.sh` (Nano Banana P
 ## Diagram index
 
 <!-- BEGIN GENERATED DIAGRAM INDEX -->
-_71 topic files, 839 diagrams. Regenerate with_ `node scripts/diagram-index-gen.js docs/diagrams`.
+_71 topic files, 841 diagrams. Regenerate with_ `node scripts/diagram-index-gen.js docs/diagrams`.
 
 ### visionclaw
 
@@ -103,7 +103,7 @@ _71 topic files, 839 diagrams. Regenerate with_ `node scripts/diagram-index-gen.
 | ID | Topic | Diagrams | Kinds | Governing | ADRs |
 |----|-------|----------|-------|-----------|------|
 | AB-01 | [Nix flake composition and apply-class gates](agentbox/01-nix-flake-composition.md) | 10 | flowchart, stateDiagram-v2, sequenceDiagram, classDiagram | [BASELINE-container.md](../../agentbox/docs/BASELINE-container.md) | ADR-2003, ADR-2006, ADR-2029, ADR-2039 |
-| AB-02 | [Boot sequence, supervision tree and readiness](agentbox/02-boot-sequence-and-readiness.md) | 16 | sequenceDiagram, flowchart, stateDiagram-v2 | [BASELINE-container.md](../../agentbox/docs/BASELINE-container.md) | ADR-2003, ADR-2007, ADR-2028, ADR-2029 |
+| AB-02 | [Boot sequence, supervision tree and readiness](agentbox/02-boot-sequence-and-readiness.md) | 18 | sequenceDiagram, flowchart, stateDiagram-v2 | [BASELINE-container.md](../../agentbox/docs/BASELINE-container.md) | ADR-2003, ADR-2007, ADR-2028, ADR-2029, ADR-2034, ADR-2063 |
 | AB-03 | [Management API request lifecycle and route table](agentbox/03-management-api-request-lifecycle.md) | 17 | sequenceDiagram, flowchart | [BASELINE-container.md](../../agentbox/docs/BASELINE-container.md), [INGRESS-identity.md](../../agentbox/docs/INGRESS-identity.md) | ADR-2005, ADR-2013, ADR-2003 |
 | AB-04 | [Five-slot adapter spine, dispatch middleware and connect lifecycle](agentbox/04-adapter-spine.md) | 16 | flowchart, classDiagram, sequenceDiagram, stateDiagram-v2 | [BASELINE-container.md](../../agentbox/docs/BASELINE-container.md) | ADR-2004, ADR-2005, ADR-2035, ADR-2036, ADR-2037 |
 | AB-05 | [Manifest gate catalogue, vault path authority and the agentbox.sh CLI](agentbox/05-manifest-gates-and-cli.md) | 10 | sequenceDiagram, flowchart, stateDiagram-v2 | [BASELINE-container.md](../../agentbox/docs/BASELINE-container.md) | ADR-2003, ADR-2028, ADR-2029, ADR-2036, ADR-2037, ADR-2038, ADR-2039 |

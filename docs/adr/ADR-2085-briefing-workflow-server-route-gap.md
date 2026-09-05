@@ -2,12 +2,12 @@
 id: ADR-2085
 title: The briefing workflow client calls agentbox routes that do not exist
 date: 2026-09-05
-decision_status: proposed
-implementation_status: none
-activation_status: inactive
+decision_status: accepted
+implementation_status: complete
+activation_status: staged
 supersedes: []
 superseded_by: []
-verified_commit: b00c28a0d766c8cf46cd00b100dab60ef2dd74a4
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: []
 owner: jjohare
 review_trigger: any attempt to invoke BriefingService::submit_brief or request_debrief in a live deployment, or a decision to build the agentbox brief routes
@@ -102,3 +102,51 @@ Proposed ADR — no implementation to verify. Evidence gathered at `verified_com
   mention at `agentbox/management-api/middleware/linked-data/surfaces/s01-pods.js:10`.
 - Working-tree caveat: verification ran on the uncommitted working tree above `verified_commit`;
   re-verify the grep results at the landing commit.
+
+## Verification — 2026-09-05
+
+Implemented. The three routes exist in agentbox as `management-api/routes/briefing.js`, registered in
+`management-api/server.js:1181`; the agentbox half is recorded as **ADR-2072** (BASELINE-container).
+`activation_status: staged` — management-api is baked into the agentbox image, so the routes serve
+traffic only after the next `./agentbox.sh rebuild`; they are complete and tested in the tree now.
+
+**Working-tree base:** `verified_commit` b0bc275f6501aae7751b85a72ce15fe1e730e7e8 (VisionClaw).
+The agentbox half sits above e070514d808b218574403377fb75e0e1a0a256b3. Both implementations are
+uncommitted at the time of writing, so re-verify at the landing commits. `verified_paths` is `[]`.
+
+Commands and results:
+
+- `cargo test --lib briefing` (VisionClaw root) → **4 passed**, 0 failed, 1333 filtered out. The new
+  `#[cfg(test)] mod tests` in `src/services/briefing_service.rs` drives a real `ManagementApiClient`
+  — the "not a curl approximation" rule above — against a bare-tokio mock origin replying with
+  exactly the JSON `routes/briefing.js` emits, so no Cargo dependency was added. Cases:
+  `submit_brief_creates_then_executes_against_the_agentbox_contract` (one brief id end to end
+  through create + execute, asserting the snake_case request bodies, the Bearer header, and that
+  `epic_bead_id` is carried forward), `request_debrief_posts_role_responses_and_returns_the_debrief_path`
+  (the `role_responses` snake_case key with camelCase `responsePath`/`taskId` inner fields, and the
+  `bead_id`-derived `completed`/`pending` status), plus two failure paths —
+  `submit_brief_surfaces_a_server_error_instead_of_a_silent_success` (the 404 this ADR was written
+  about) and `submit_brief_fails_when_execute_rejects_after_a_successful_create` (a 503 from the
+  agentbox action plane must fail the whole submit, not return an empty `role_tasks`).
+- `cargo fmt --all --check` → clean (exit 0).
+- `node scripts/diagram-index-gen.js docs/diagrams --check` → `parsed 71 topic files, 841 mermaid
+  diagrams`, no error. ES-02.11's `PROPOSED ADR-2085: CONFIRMED absent` note is now
+  `RESOLVED ADR-2085/2072 (2026-09-05): …`, and its `BRF` participant, which read
+  "route not found under agentbox/management-api/routes in this pass", now cites
+  `agentbox/management-api/routes/briefing.js:1`.
+- agentbox side, from `agentbox/management-api`:
+  `node node_modules/.bin/jest ../tests/sovereign/briefing-route.test.js` → **10 passed**;
+  `node node_modules/.bin/jest` → **80 suites / 1289 passed**, 3 skipped, 34 todo, 0 failed, against
+  a 79-suite / 1279-passing baseline measured with the new file excluded — the 10 added tests are
+  the entire delta and nothing regressed.
+
+Contract detail worth recording, because it is the part that fails silently: `RoleTask` carries no
+`#[serde(rename_all)]` while its enclosing `ExecuteBriefResponse` does, so `roleTasks` is camelCase
+but its **elements are snake_case** (`task_id`, `bead_id`, `response_path`). Fastify strips response
+properties absent from a route's schema, so a server that camelCased those members would hand the
+client an empty field rather than an error. Both test suites assert the exact key sets.
+
+The Consequences constraint above is discharged rather than merely satisfied: `BriefingService` may
+now be wired into user-facing handlers, because the routes it calls exist. Two follow-ons stand —
+no route reads or lists a brief (the client needs neither, so none was invented), and no retention
+policy governs the brief artefacts accumulating under the pods slot at `/briefs/`.

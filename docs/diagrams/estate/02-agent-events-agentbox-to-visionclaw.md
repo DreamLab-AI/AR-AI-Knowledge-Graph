@@ -24,7 +24,24 @@ sources:
   - src/utils/unified_gpu_compute/memory.rs
   - src/utils/unified_gpu_compute/execution.rs
   - client/src/features/visualisation/components/TransientBeamsLayer.tsx
-verified_commit: b00c28a0d
+  - agentbox/management-api/middleware/auth.js
+  - agentbox/management-api/routes/briefing.js
+  - agentbox/management-api/routes/status.js
+  - agentbox/management-api/routes/tasks.js
+  - agentbox/management-api/server.js
+  - client/src/store/transientBeamStore.ts
+  - client/src/store/websocket/binaryProtocol.ts
+  - src/actors/graph_service_supervisor.rs
+  - src/app_state.rs
+  - src/handlers/mcp_relay_handler.rs
+  - src/handlers/multi_mcp_websocket_handler.rs
+  - src/main.rs
+  - src/services/bots_client.rs
+  - src/services/management_api_client.rs
+  - src/services/mcp_relay_manager.rs
+  - src/services/multi_mcp_agent_discovery.rs
+  - src/utils/mcp_tcp_client.rs
+verified_commit: bed6b617d
 ---
 ## ES-02.1 Producer — POST /v1/agent-events/emit, NIP-98 gate, local publish
 ```mermaid
@@ -260,20 +277,20 @@ classDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant WS as processBinaryData<br/>client/src/store/websocket/binaryProtocol.ts:464
+    participant WS as processBinaryData<br/>client/src/store/websocket/binaryProtocol.ts:459
     participant DEC as decodeAgentActions<br/>client/src/services/binaryProtocol
-    participant DISP as dispatchAgentActions<br/>client/src/store/websocket/binaryProtocol.ts:449
+    participant DISP as dispatchAgentActions<br/>client/src/store/websocket/binaryProtocol.ts:444
     participant STORE as transientBeamStore<br/>client/src/store/transientBeamStore.ts:64
     participant LAYER as TransientBeamsLayer<br/>client/src/features/visualisation/components/TransientBeamsLayer.tsx:1
 
     WS->>WS: firstByte = DataView(data).getUint8(0)
     alt firstByte == MessageType.AGENT_ACTION (0x23)
-        WS->>WS: handleAgentActionTagged(data): decodeAgentActions(data.slice(1)) if byteLength>=18<br/>client/src/store/websocket/binaryProtocol.ts:442-447
-        Note over WS: DOC-DRIFT: the tagged 0x23 frame is a bare [tag][count]... layout, NOT the 6-byte V4<br/>MESSAGE_HEADER - handleAgentAction (parseHeader path, line 423) is dead code for this tag<br/>because line 481 returns early - client/src/store/websocket/binaryProtocol.ts:435-441
-    else firstByte in {PROTOCOL_V2, PROTOCOL_V3, PROTOCOL_V5}
+        WS->>WS: handleAgentActionTagged(data): decodeAgentActions(data.slice(1)) if byteLength>=18<br/>client/src/store/websocket/binaryProtocol.ts:437-442
+        Note over WS: RESOLVED ADR-2099 (2026-09-05): the 0x23 frame is a bare [tag][count]... layout, never the<br/>6-byte framed header. The unreachable handleAgentAction parseHeader branch is DELETED, not kept<br/>as a fallback - parseHeader reads type from offset 0, the same byte line 479 consumes before<br/>returning. Tests assert extractPayload is never reached for 0x23 - binaryProtocolAgentAction.test.ts
+    else firstByte in {PROTOCOL_V3, PROTOCOL_V5}
         WS->>WS: handleLegacyBinaryData(data)
-    else header.type == MessageType.AGENT_ACTION (V4-headered path, unreachable for shipping 0x23)
-        WS->>DEC: handleAgentAction(data, header)
+    else any other lead byte
+        WS->>WS: parseHeader then switch on header.type - GRAPH_UPDATE / VOICE / POSITION<br/>default falls through to handleLegacyBinaryData. No AGENT_ACTION case exists here (ADR-2099)
     end
     WS->>DEC: decodeAgentActions(payload)
     DEC-->>WS: AgentActionEvent[]
@@ -447,7 +464,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant VC as ManagementApiClient<br/>src/services/management_api_client.rs:27
-    participant BRF as briefs handlers<br/>agentbox management-api (route not found under agentbox/management-api/routes in this pass)
+    participant BRF as briefs handlers<br/>agentbox/management-api/routes/briefing.js:1
     participant STA as status route<br/>agentbox/management-api/routes/status.js:12
     participant HLT as GET /health<br/>agentbox/management-api/server.js:543
 
@@ -466,5 +483,5 @@ sequenceDiagram
         HLT-->>VC: Ok(false)
     end
     Note over VC,BRF: family: create_brief/execute_brief/create_debrief share identical Bearer + StatusCode-match<br/>+ ApiError(text,status) shape - src/services/management_api_client.rs:432-584
-    Note over BRF: PROPOSED ADR-2085: CONFIRMED absent - agentbox/management-api has no /v1/briefs route at all,<br/>so this live caller (briefing_service.rs:37,55,93) 404s at runtime. ADR-2085 picks implementing the<br/>routes over removing the feature and pins the exact request and response contract. Routed to<br/>ab-identity-governance (routes) and vc-knowledge (briefing_service.rs)
+    Note over BRF: RESOLVED ADR-2085/2072 (2026-09-05): all three routes now exist in<br/>agentbox/management-api/routes/briefing.js, registered at management-api/server.js:1181.<br/>Brief documents and the durable brief record go through the pods adapter slot, the epic and<br/>role child beads through the beads slot, and every identifier is minted via lib/uris.js.<br/>The execute step is gated by the same ADR-2041 action pipeline as POST /v1/tasks and fails<br/>closed with 503 when the execution journal has no live events adapter.<br/>Activation is staged - the routes go live at the next image rebuild.
 ```

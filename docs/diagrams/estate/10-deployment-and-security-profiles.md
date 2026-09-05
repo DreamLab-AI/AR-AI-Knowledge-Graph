@@ -26,7 +26,8 @@ sources:
   - agentbox/scripts/ci/check-ports-loopback.mjs
   - src/config/security_profile.rs
   - agentbox/.github/workflows/invariants.yml
-verified_commit: b00c28a0d
+  - scripts/backup-secrets.sh
+verified_commit: bed6b617d
 ---
 ## ES-10.1 Three named profiles — exact flag set per profile vs the fail-closed code default
 ```mermaid

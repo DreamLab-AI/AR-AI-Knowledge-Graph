@@ -19,7 +19,9 @@ sources:
   - src/handlers/api_handler/analytics/sssp_handlers.rs
   - src/handlers/api_handler/ontology/mod.rs
   - src/actors/gpu/analytics_telemetry.rs
-verified_commit: b00c28a0d
+  - src/actors/gpu/force_compute_actor.rs
+  - src/actors/gpu/stress_majorization_actor.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-18.1 /analytics scope — auth wrapper and route table

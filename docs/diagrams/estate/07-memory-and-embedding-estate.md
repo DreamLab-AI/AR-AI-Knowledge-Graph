@@ -18,7 +18,7 @@ sources:
   - src/handlers/memory_flash_handler.rs
   - src/main.rs
   - src/actors/agent_monitor_actor.rs
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 ## ES-07.1 Every RuVector client and the one shared embedder
 ```mermaid

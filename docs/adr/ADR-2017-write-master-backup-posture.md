@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: 7a95e17d3d0c2f5e502e8edd29cea94c314c12cb
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/services/github_sync_service.rs, scripts/backup-sqlite.sh, scripts/backup-secrets.sh]
 owner: jjohare
 review_trigger: an Oxigraph/RocksDB PITR or backup requirement, a cross-store consistency incident, or wiring RuVector delete-propagation
@@ -121,3 +121,79 @@ separation is enforced for the host mode only (docker mode writes to a
 host-visible path by construction, but that is not asserted). Full-sync
 generation staging, and ownership of runtime assertions and agent-graph resets,
 are untouched.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed change since `7a95e17d3`:** `scripts/backup-sqlite.sh` (+150/-10),
+landed by `f681b32da` — this record's own acceptance work (membership classes,
+off-source destination guard, application-level restore check).
+`scripts/backup-secrets.sh` is unchanged.
+
+**Backup posture re-confirmed against the current script:**
+
+- **Membership is now declared and enforced**, closing the "a missing DB is a
+  silent skip" gap: `REQUIRED_DBS="settings.sqlite3 enrichment.sqlite3
+  kpi.sqlite3"` and `OPTIONAL_DBS="liveness.sqlite3"` at `:75-76`, classified by
+  `is_required()` at `:88-92`, with a missing required member failing the run
+  (no manifest, destination removed) at `:220-227` and `:242-246`.
+- **Online backup API, not a file copy**, in both modes:
+  `sqlite3 "$src" ".backup '$tmp'"` at `:182` (docker) and `:201` (host), each
+  followed by `PRAGMA integrity_check` at `:186` / `:203`, with `die` on
+  anything but `ok` — so a corrupt snapshot is never rotated in.
+- **Application-level restore verification**, on by default:
+  `VERIFY_RESTORE="${VERIFY_RESTORE:-1}"` at `:81`, per-DB expected tables at
+  `:97-105`, `verify_restore()` at `:110-132`, invoked at `:235-238`. A
+  page-clean but schemaless file now fails.
+- **Destination is outside the source by default** (`BACKUP_ROOT` at `:72`),
+  with the inside-source refusal and its `ALLOW_BACKUP_INSIDE_DATA=1` override at
+  `:154-169`; rotation keeps `KEEP=14` (`:73`, `:266-277`).
+- **The no-cross-store-2PC / no-tombstones posture is unchanged**: the ontology
+  write path still does an atomic `CLEAR`+`INSERT` via `save_ontology_graph`
+  gated on `force_full_sync` (`src/services/github_sync_service.rs:360`,
+  `:944-995`, `:1022`), and there is still **no** Oxigraph/RocksDB backup script —
+  `ls scripts/ | grep -i backup` returns only `backup-sqlite.sh` and
+  `backup-secrets.sh`, so the no-PITR consequence stands.
+
+**One citation is now literally false but substantively sound.** The Verification
+block says a grep for `tombstone`/`2pc`/`two-phase` across `src/` and `crates/`
+"returns nothing". At HEAD it returns one hit —
+`crates/visionclaw-adapters/src/provenance_emitter.rs:128`, the doc comment for
+ADR-2016's **intra-store** two-phase write (validate, then commit in one
+`Store::transaction`). That is not a cross-store 2PC or a tombstone mechanism, so
+the invariant this ADR asserts is intact; only the grep's exactness has lapsed.
+Recorded here rather than edited into the historical block, which is honest about
+the commit it ran at.
+
+**New evidence this record did not previously have.** `ca80eafa5` added
+`crates/visionclaw-integration-tests/tests/backup_posture.rs`, which drives the
+**real script** in `MODE=host` against throwaway SQLite fixtures — not a
+re-implementation. `cargo test -p visionclaw-integration-tests --test
+backup_posture` → **10 passed, 0 failed**, covering: complete source backs up
+every declared DB; missing *required* fails the run; missing *optional* still
+succeeds; the membership declaration is authoritative; an inside-source
+destination is refused and can be explicitly overridden; the default root is
+outside the data directory; a page-clean but schemaless DB fails the restore
+check; restore reports row counts; and disabling the check is recorded in the
+manifest.
+
+**Still open, unchanged:** no production restore has been executed; the
+failure-domain separation is asserted for host mode only (docker mode is not);
+and there is still no PITR for Oxigraph/RocksDB.
+
+**Commands run:** `git diff 7a95e17d3..HEAD -- scripts/backup-sqlite.sh`
+(full patch); `sed -n` dumps of `scripts/backup-sqlite.sh` `:72-105`, `:154-206`,
+`:220-246`, `:266-277`; `grep -n` over `src/services/github_sync_service.rs`;
+`ls scripts/ | grep -i backup`; `grep -rn 'tombstone|2pc|two-phase' src/ crates/`;
+`cargo test -p visionclaw-integration-tests --test backup_posture` → **10 passed,
+0 failed**.

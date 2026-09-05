@@ -50,7 +50,7 @@ export function useConstraintStats(intervalMs = 5000, enabled = true): UseConstr
       };
     }
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [intervalMs, enabled]);
 
   return { stats, loading, refresh: () => { tick.current++; void load(); } };

@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: f326a3b1172df4fea8183e6a4344d3f55c575013
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/utils/nip98.rs, docs/SECURITY-profiles.md]
 owner: jjohare
 review_trigger: horizontal scaling of the backend (replicas/load balancer), or any change to TOKEN_MAX_AGE_SECONDS
@@ -93,3 +93,49 @@ consumption through user resolution, authorisation and mutation failure, and
 application idempotency after response loss, are not exercised — those need a
 running server. No route has yet been migrated to `BodyBinding::Required`; that
 is a per-route decision requiring the deployed client to mint payload tags.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `f326a3b11`:** `src/utils/nip98.rs` (+383/-3, the
+`BodyBinding` work recorded above) and `docs/SECURITY-profiles.md` (+95, the
+2026-09-05 remediation section). Both are additive; neither weakens a layer.
+
+**Both layers still hold at HEAD.** The freshness window is
+`TOKEN_MAX_AGE_SECONDS = 60` (`nip98.rs:169`) checked symmetrically at
+`:423`/`:428`. The single-use claim is still the *last* step of validation:
+signature `verify()` at `:511-512`, then `claim_event_id(&nip98_event.id,
+Instant::now())` at `:520` — so a failed signature, URL, method, freshness or
+body-binding check cannot burn a legitimate event id. `claim_in`
+(`:245-277`) still runs check→prune→cap→insert under one lock; the cap is
+`REPLAY_CACHE_MAX_ENTRIES = 100_000` (`:198`) and returns
+`Nip98ValidationError::ReplayCacheFull` at `:272` rather than evicting a live
+entry. `REPLAY_CACHE_TTL` is still `2 × TOKEN_MAX_AGE_SECONDS` (`:178`). The
+cache remains a process-global `HashMap` behind one mutex — process-local by
+design, so the horizontal-scaling review trigger is unchanged.
+
+`docs/SECURITY-profiles.md` invariant 4 (`:193-200`) still records both layers,
+the process-local scope and the fail-closed ceiling. No citation in this record
+was found wrong.
+
+**Commands run:** `git diff --stat f326a3b11..HEAD -- src/utils/nip98.rs
+docs/SECURITY-profiles.md`; `grep -n` over `nip98.rs` for `BodyBinding`,
+`claim_event_id`, `REPLAY_CACHE_*`, `TOKEN_MAX_AGE_SECONDS`, `verify()`;
+`sed -n '230,285p' src/utils/nip98.rs`; `sed -n '187,215p'
+docs/SECURITY-profiles.md`.
+
+**Test receipt at this commit:** `cargo test --lib --no-default-features nip98` →
+**39 passed, 0 failed** (1228 filtered out), including
+`test_invalid_signature_does_not_burn_id`, `test_claim_event_id_atomic_under_concurrency`,
+`ttl_boundary_is_exact_and_half_open`, `ttl_covers_the_entire_freshness_window` and
+`the_default_policy_is_strict_and_legacy_callers_are_unchanged`.

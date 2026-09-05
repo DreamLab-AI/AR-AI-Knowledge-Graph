@@ -75,7 +75,12 @@ const INSECURE_DEFAULT_KEYS: &[&str] = &[
 /// This is intentional to prevent the application from starting in an insecure state.
 /// # Returns
 /// The validated MANAGEMENT_API_KEY value on success.
-fn validate_security_env_vars() -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+///
+/// ADR-2094: `pub(crate)` so `AgentMonitorActor` shares this one policy rather
+/// than carrying a laxer copy of it. Any crate-internal consumer of
+/// `MANAGEMENT_API_KEY` must validate through here.
+pub(crate) fn validate_security_env_vars(
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut errors: Vec<String> = Vec::new();
 
     // Validate MANAGEMENT_API_KEY

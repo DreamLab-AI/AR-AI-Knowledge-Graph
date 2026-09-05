@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []                   # legacy ADR-011 dev-bypass clause distilled — not in this tree; see lineage
 superseded_by: []
-verified_commit: f326a3b1172df4fea8183e6a4344d3f55c575013
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/utils/auth.rs, src/middleware/rbac_gate.rs]
 owner: jjohare
 review_trigger: any change to the dev-auth feature gate, DEV_AUTH_LOOPBACK handling, or the report-mode ack check
@@ -93,3 +93,54 @@ no longer acknowledges; a future date does not pre-authorise), and on restart
 image digest — binding configuration and artefact identity to one pre-listener
 receipt still needs a build-side step. Peer/proxy handling and the full REST +
 WebSocket paths are unexercised. No live profile or network test ran.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `f326a3b11`:** `src/middleware/rbac_gate.rs` (+12/-11)
+only; `src/utils/auth.rs` is unchanged. The change is this record's own
+acceptance work landing: the dated-acknowledgement rule now has exactly one
+implementation.
+
+**Gate 1 — the dev token is still triple-gated.**
+`dev_bypass_permitted_for_addr` at `src/utils/auth.rs:122` (cited `:82` above —
+that citation predates the file's growth and is corrected here) requires
+`DEV_AUTH_LOOPBACK` at `:123` **and** a loopback peer; `dev_bypass_permitted`
+wraps it at `:139` using `req.peer_addr()`. The acceptance site is
+`:188-206` (cited `:130-144`): `Bearer dev-session-token` at `:188` is accepted
+only when `dev_bypass_permitted(req)` holds (`:189`), else it warns and falls
+through (`:200-205`). The whole block is inside the `#[cfg(any(debug_assertions,
+feature = "dev-auth"))]` fence, so it is compiled out of a production artefact.
+
+**Gate 2 — report mode no longer has its own copy of the rule.**
+`GateMode::from_env` at `src/middleware/rbac_gate.rs:83-103` (cited `:80`) now
+calls `report_mode_requested(&EnvSnapshot::from_process())` at `:85` and returns
+`Enforce` immediately when unset (`:86`); the unacknowledged path still logs the
+refusal and returns `Enforce` at `:95-101`. `report_acknowledged` at `:111-118`
+(cited `:105-110`) delegates to
+`config::security_profile::report_mode_acknowledged(env, BuildIdentity::current(),
+&today)`. The construction-time capture is unchanged — the consequence about
+non-expiry at UTC midnight still stands — but reaching it in a production
+artefact is now impossible: `assert_effective_profile_or_exit`
+(`src/main.rs:876`) rejects `RBAC_GATE_MODE=report` before the listener binds.
+
+**Status stays `partial`:** binary identity is still asserted from `cfg!` flags
+rather than an image digest, and no live profile or network test has run.
+
+**Commands run:** `git diff f326a3b11..HEAD -- src/utils/auth.rs
+src/middleware/rbac_gate.rs`; `grep -n` over `auth.rs` for
+`dev_bypass_permitted_for_addr|DEV_AUTH_LOOPBACK|dev-session-token`; `awk` dumps
+of `auth.rs:185-210` and `rbac_gate.rs:75-124`; `grep -n
+assert_effective_profile_or_exit src/main.rs`; `cargo test --lib
+--no-default-features security_profile` → **37 passed, 0 failed** (1230 filtered
+out).

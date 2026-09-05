@@ -21,7 +21,14 @@ sources:
   - agentbox/services/agentbox-manifest/src/stacks_env.rs
   - agentbox/config/entrypoint-unified.sh
   - agentbox/agentbox.toml
-verified_commit: b00c28a0d
+  - agentbox/mcp/servers/lib/ontology-local.js
+  - agentbox/config/nostr-gateway/gateway.cjs
+  - agentbox/config/tab0-bridge/deploy.sh
+  - agentbox/config/tab0-bridge/turn-sink.cjs
+  - agentbox/flake.nix
+  - agentbox/mcp/servers/lib/ontology-push.js
+  - agentbox/scripts/dream-inbox.mjs
+verified_commit: bed6b617d
 ---
 ## AB-08.1 Hook registration table part 1 — tool, prompt and session events
 ```mermaid
@@ -124,7 +131,7 @@ flowchart TB
     subgraph DIVG["divergences"]
     direction TB
     DIV1["DIVERGENCE: claude-flow-hook-adapter.cjs is never<br/>referenced by ~/.claude/settings.json #40;grep -n found 0 hits#41;.<br/>It is wired only into PER-PROFILE settings.json under<br/>workspace/profiles/#60;stack#62;/.claude/ by stacks.rs<br/>learning_hooks#40;#41; #40;stacks.rs:27-63#41;, default path<br/>stacks_env.rs:44-45. This tree's live session uses<br/>hook-handler.cjs instead #40;see AB-08.9#41;."]
-    DIV2["DIVERGENCE: agentbox.toml :102 sets<br/>#91;ontology_monitor#93; enabled=true, and stacks.rs :45-48<br/>wires ontology-monitor.cjs into SessionEnd when<br/>gates.ontology_monitor is set — but this live root<br/>settings.json's SessionEnd :195-209 has NO<br/>ontology-monitor.cjs entry. project-tracking-publish.cjs<br/>is wired NOWHERE #40;no hook, no entrypoint, no stacks.rs<br/>reference found#41; — it is a standalone CLI shelled by the<br/>management API, not a Claude Code hook."]
+    DIV2["RESOLVED ADR-2068 #40;2026-09-05#41;: the root gap is closed.<br/>config/entrypoint-unified.sh now seeds the ontology-monitor<br/>SessionEnd hook AND its AGENTBOX_ONTOLOGY_MONITOR master<br/>switch into the root settings.json from #91;ontology_monitor#93;<br/>enabled, and RETRACTS both when the gate is off<br/>#40;ADR-2020 byte-identical-when-off#41;. Separately,<br/>project-tracking-publish.cjs is correctly wired nowhere — it is<br/>a CLI the management API spawns, not a Claude Code hook.<br/>Which files here are hooks vs CLIs: config/hooks/README.md"]
     DIV3["DIVERGENCE: baked-vs-live path split.<br/>#47;opt#47;agentbox#47;... #40;image copy#41;: ruvnet-brain-ground.cjs :107,<br/>trust-seed.cjs :181, trajectory-recorder.cjs :239/:308.<br/>#47;home#47;devuser#47;workspace#47;project#47;agentbox#47;... #40;live checkout#41;:<br/>nostr-live-mirror.cjs :98/158/205/221,<br/>dream-inbox-surface.cjs :125, fleet-session-start.sh :172."]
     DIV1 --> DIV2 --> DIV3
     end
@@ -488,7 +495,7 @@ sequenceDiagram
     participant M as Model context
 
     rect rgb(245,235,255)
-    Note over CALLER,NPB: DIVERGENCE: this script is shelled directly by the management API,<br/>not registered in settings.json, entrypoint-unified.sh, or stacks.rs #40;grep -0 hits#41;
+    Note over CALLER,NPB: RESOLVED ADR-2068 #40;2026-09-05#41;: not a divergence — this is a CLI, not a hook.<br/>The management API spawns it from the /v1/projects publish route #40;routes/projects.js lines 28 and 322#41;.<br/>config/hooks/README.md section 3 names every file in config/hooks/ that is a CLI or helper rather than a hook
     CALLER->>PTP: node project-tracking-publish.cjs, optional ProjectTrackingDigest on stdin (:202,210-225)
     alt AGENTBOX_PROJECT_TRACKING_PUBLISH===0, or bridge secrets absent (:60-66,204-206)
         PTP-->>CALLER: return 0, silent no-op

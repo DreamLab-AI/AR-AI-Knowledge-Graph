@@ -20,7 +20,7 @@ sources:
   - agentbox/management-api/lib/bc20-provenance-bridge.js
   - agentbox/management-api/middleware/linked-data/surfaces/s04-did.js
   - agentbox/mcp/servers/lib/memory-tools.js
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 
 ## VC-23.1 Typed URN kind taxonomy — src/uri/mod.rs
@@ -312,12 +312,12 @@ flowchart TD
     Concept["urn:visionclaw:concept:DOMAIN:SLUG -- durable subject, src/uri/mod.rs:229-239"] --> Curie["vc:referencedBy -- RDF predicate CURIE only, src/actors/elevation_actor.rs:510"]
     Curie -.-> NotSubject["vc:DOMAIN/SLUG subject form -- NOT independently minted anywhere in src/ or crates/"]
     QS["vc:qualityScore -- provenance noted in a source comment only, src/actors/client_filter.rs:61-62 -- expanded qualityScore key is consumed, the CURIE itself is not emitted as a literal there"]
-    LegacyClass["urn:ngm:class:SLUG -- ad hoc format! mint, src/actors/elevation_actor.rs:502 -- not a typed constructor, not urn:visionclaw:concept, not ngm::node_iri/edge_iri"]
+    LegacyClass["urn:ngm:class:SLUG -- typed legacy mint ngm::class_iri, defined crates/visionclaw-domain/src/uri.rs:31 and re-exported src/uri/mod.rs:351 -- legacy scheme, not urn:visionclaw:concept"]
     OwnerScoped["visionclaw:owner:NPUB/kg/... -- legacy ADR-050 form"] -.-> Absent["grep across src/ and crates/ -- zero occurrences -- superseded by the hex-scoped urn:visionclaw:kg:PUBKEY:ADDRESS grammar"]
 
-    DivA["DIVERGENCE: vc:{domain}/{slug} is only an RDF predicate CURIE, never an independently minted subject -- IDENTIFIER-taxonomy.md Known divergences"]
+    DivA["DOC-CORRECTED 2026-09-05: vc:{domain}/{slug} is only an RDF predicate CURIE, never an independently minted subject<br/>IDENTIFIER-taxonomy.md now reconciles its section-1 kind table with this - no row mints a vc: CURIE and the durable<br/>concept subject is urn:visionclaw:concept:domain:slug"]
     DivB["DIVERGENCE: owner-scoped visionclaw:owner:{npub}/kg/... (legacy ADR-050) is not emitted anywhere in src/ or crates/"]
-    DriftX["DOC-DRIFT: elevation_actor.rs:502 mints urn:ngm:class:SLUG via raw format!, an untyped legacy mint that neither the taxonomy doc's kind table nor the typed ngm module (src/uri/mod.rs:320-404) accounts for"]
+    DriftX["RESOLVED ADR-2095 (2026-09-05): the class scheme is now a typed constructor paired with a parser<br/>CLASS_PREFIX and class_iri and parse_class_iri live in crates/visionclaw-domain/src/uri.rs:15-56 -- the domain crate, because<br/>visionclaw-adapters mints class IRIs and is upstream of the server crate -- and re-export from ngm at src/uri/mod.rs:351<br/>All five raw format! mints are routed through it: elevation_actor.rs:329 and :514, oxigraph_ontology_repository.rs:174 and :1598 and :1619<br/>Emitted strings are byte-identical -- the pre-existing literal assertion at elevation_actor.rs:1409 still passes"]
 ```
 
 ## VC-23.10 Per-kind URN grammar, mint/parse sites and live emission

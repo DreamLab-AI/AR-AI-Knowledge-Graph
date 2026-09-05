@@ -50,7 +50,10 @@ sources:
   - agentbox/scripts/ci/check-no-logseq-paths.sh
   - agentbox/docs/adr/ADR-2013-loopback-publish-except-9096.md
   - agentbox/docs/adr/ADR-2028-vault-manifest-path-authority.md
-verified_commit: b00c28a0d
+  - scripts/adr-index-gen.js
+  - scripts/launch.sh
+  - scripts/start.sh
+verified_commit: bed6b617d
 ---
 ## ES-09.1 The host-vs-container build trap — wrong path vs sanctioned path
 ```mermaid
@@ -458,7 +461,7 @@ sequenceDiagram
     end
     DEP->>WS: deployment_status success :631
     WS->>WS: POST notification to SOLID_POD_URL/.notifications :667-669
-    Note over VAL,WS: DOC-DRIFT: SOLID_POD_URL defaults to http://jss:3030 :31,<br/>but docker-compose.unified.yml has no jss service —<br/>Solid pod storage moved in-process (solid-pod-rs, ADR-032 M3)
+    Note over VAL,WS: RESOLVED ADR-2098 (2026-09-05): SOLID_POD_URL now defaults to http://localhost:4000/solid :31-38<br/>the scope the embedded solid-pod-rs serves in-process (ADR-032 M3)<br/>the POST to /.notifications is annotated as a best-effort no-op there - that path is a GET WebSocket upgrade
 ```
 
 ## ES-09.14 VisionClaw xr-godot-ci.yml — gdext + GUT headless, Quest 3 advisory

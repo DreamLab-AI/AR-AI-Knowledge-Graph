@@ -19,7 +19,7 @@ sources:
   - agentbox/agentbox.sh
   - agentbox/agentbox.toml
   - agentbox/docs/reference/claude-context/ruvector-memory-state.md
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 
 ## AB-20.1 Server boot — fail-closed on Postgres, advisory on Xinference

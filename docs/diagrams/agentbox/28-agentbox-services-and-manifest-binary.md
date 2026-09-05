@@ -32,7 +32,41 @@ sources:
   - agentbox/mcp/servers/mcp-ws-relay.js
   - agentbox/config/entrypoint-unified.sh
   - agentbox/agentbox.toml
-verified_commit: b00c28a0d
+  - agentbox/.agentic-qe/llm-config.json
+  - agentbox/flake.nix
+  - agentbox/mcp/mcp.json
+  - agentbox/services/agentbox-manifest/tests/golden.rs
+  - agentbox/services/agentbox-ops/tests/reaper_default_is_read_only.rs
+  - agentbox/skills/mcp.json
+  - scripts/diagram-index-gen.js
+  - agentbox/lib/agentbox-manifest.nix
+  - agentbox/lib/agentbox-mcp.nix
+  - agentbox/lib/agentbox-ops.nix
+  - agentbox/lib/dream-engine.nix
+  - agentbox/lib/ontology-tools.nix
+  - agentbox/lib/podcast-ingest.nix
+  - agentbox/lib/skill-tools.nix
+  - agentbox/mcp/servers/continual-harness.cjs
+  - agentbox/mcp/servers/ontology-bridge.js
+  - agentbox/mcp/servers/ontology-local.cjs
+  - agentbox/mcp/servers/ontology-propose.js
+  - agentbox/mcp/servers/ontology-workingset.cjs
+  - agentbox/mcp/servers/ruvector-mcp.cjs
+  - agentbox/services/agentbox-manifest/tests/consultant_model.rs
+  - agentbox/services/agentbox-manifest/tests/golden_entrypoint.rs
+  - agentbox/services/agentbox-mcp/src/gemini_url_context/api.rs
+  - agentbox/services/agentbox-mcp/src/imagemagick/args.rs
+  - agentbox/services/agentbox-mcp/src/imagemagick/exec.rs
+  - agentbox/services/agentbox-mcp/src/web_summary/fetch.rs
+  - agentbox/services/agentbox-mcp/src/web_summary/youtube.rs
+  - agentbox/services/skill-tools/src/docs_alignment/ascii_diagrams.rs
+  - agentbox/services/skill-tools/src/docs_alignment/links.rs
+  - agentbox/services/skill-tools/src/docs_alignment/links_external.rs
+  - agentbox/services/skill-tools/src/docs_alignment/mermaid.rs
+  - agentbox/services/skill-tools/src/docs_alignment/models.rs
+  - agentbox/services/skill-tools/src/docs_alignment/orchestrator.rs
+  - agentbox/services/skill-tools/src/docs_alignment/report_sections.rs
+verified_commit: bed6b617d
 ---
 
 ## AB-28.1 agentbox-manifest — the boot-time projection surface

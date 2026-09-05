@@ -26,7 +26,10 @@ sources:
   - Dockerfile.unified
   - Dockerfile.production
   - src/config/security_profile.rs
-verified_commit: b00c28a0d
+  - crates/visionclaw-gpu/build.rs
+  - src/middleware/rbac_gate.rs
+  - src/utils/advanced_logging.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-08.1 Health and readiness — what each probe actually asserts

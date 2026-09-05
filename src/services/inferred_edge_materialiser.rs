@@ -151,6 +151,49 @@ pub fn select_inferred_edges(
     out
 }
 
+/// IRI substring marking the OWL bottom class (`owl:Nothing`). A subclass axiom
+/// whose CHILD is bottom is a vacuous entailment (bottom is a subclass of
+/// everything) and is never materialised.
+pub const OWL_BOTTOM_MARKER: &str = "owl#Nothing";
+
+/// IRI substring marking the OWL top class (`owl:Thing`). A subclass axiom whose
+/// PARENT is top is a vacuous entailment (everything is a subclass of top) and is
+/// never materialised.
+pub const OWL_TOP_MARKER: &str = "owl#Thing";
+
+/// Whether a reasoner-entailed `SubClassOf` IRI pair is a materialisation
+/// candidate at all: not a self-subsumption, not rooted at `owl:Nothing`, not
+/// terminating at `owl:Thing`. This is the single definition of the vacuous-axiom
+/// filter — callers must not re-implement it (ADR-2071).
+pub fn is_materialisable_subclass_pair(child: &str, parent: &str) -> bool {
+    child != parent && !child.contains(OWL_BOTTOM_MARKER) && !parent.contains(OWL_TOP_MARKER)
+}
+
+/// Reduce raw reasoner `SubClassOf` IRI pairs to IMMEDIATE inferred parents.
+///
+/// Applies [`is_materialisable_subclass_pair`] to drop vacuous entailments, groups
+/// the survivors into the child → ancestor-IRI map that
+/// [`immediate_inferred_parents`] consumes, and returns its transitive reduction.
+/// This is the front door for any caller holding reasoner axioms: it keeps the
+/// vacuous-axiom filter and the transitive reduction in one place so the sync path
+/// and the pipeline path cannot drift (ADR-2071). Output is deterministic (sorted).
+pub fn immediate_parents_from_subclass_pairs<'a, I>(pairs: I) -> Vec<(String, String)>
+where
+    I: IntoIterator<Item = (&'a str, &'a str)>,
+{
+    let mut child_to_ancestors: HashMap<String, HashSet<String>> = HashMap::new();
+    for (child, parent) in pairs {
+        if !is_materialisable_subclass_pair(child, parent) {
+            continue;
+        }
+        child_to_ancestors
+            .entry(child.to_string())
+            .or_default()
+            .insert(parent.to_string());
+    }
+    immediate_inferred_parents(&child_to_ancestors)
+}
+
 /// End-to-end helper: given resolved candidate inferred pairs and the current
 /// graph edges, return the tagged [`Edge`]s to add (empty when disabled). Keeps
 /// the gate + set-logic + edge-construction in one testable place; the caller
@@ -336,6 +379,67 @@ mod tests {
         assert!(
             out.is_empty(),
             "all candidates already asserted → no new edges"
+        );
+    }
+
+    #[test]
+    fn vacuous_subclass_pairs_are_rejected() {
+        // ADR-2071: the single definition of the vacuous-axiom filter.
+        assert!(is_materialisable_subclass_pair("urn:c:A", "urn:c:B"));
+        assert!(
+            !is_materialisable_subclass_pair("urn:c:A", "urn:c:A"),
+            "self"
+        );
+        assert!(
+            !is_materialisable_subclass_pair("http://www.w3.org/2002/07/owl#Nothing", "urn:c:A"),
+            "bottom child"
+        );
+        assert!(
+            !is_materialisable_subclass_pair("urn:c:A", "http://www.w3.org/2002/07/owl#Thing"),
+            "top parent"
+        );
+        // Bottom as PARENT and top as CHILD are genuine (non-vacuous) entailments
+        // and are not filtered here.
+        assert!(is_materialisable_subclass_pair(
+            "urn:c:A",
+            "http://www.w3.org/2002/07/owl#Nothing"
+        ));
+    }
+
+    #[test]
+    fn pairs_front_door_filters_then_reduces() {
+        // Raw reasoner output for A ⊑ B ⊑ C, transitively closed, plus vacuous
+        // noise. One call must drop the noise AND the long-range A→C pair.
+        let got = immediate_parents_from_subclass_pairs([
+            ("A", "B"),
+            ("A", "C"),
+            ("B", "C"),
+            ("A", "A"),
+            ("owl#Nothing", "B"),
+            ("B", "owl#Thing"),
+        ]);
+        assert_eq!(
+            got,
+            vec![
+                ("A".to_string(), "B".to_string()),
+                ("B".to_string(), "C".to_string())
+            ],
+            "vacuous pairs dropped, A→C reduced out"
+        );
+    }
+
+    #[test]
+    fn pairs_front_door_matches_manual_map_construction() {
+        // Equivalence with the map-building the pipeline path does inline, so the
+        // two callers provably share one reduction.
+        let raw = [("D", "A"), ("D", "B"), ("D", "C"), ("B", "A"), ("C", "A")];
+        let mut m: HashMap<String, HashSet<String>> = HashMap::new();
+        for (c, p) in raw {
+            m.entry(c.to_string()).or_default().insert(p.to_string());
+        }
+        assert_eq!(
+            immediate_parents_from_subclass_pairs(raw),
+            immediate_inferred_parents(&m)
         );
     }
 }

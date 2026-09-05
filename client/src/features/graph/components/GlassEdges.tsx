@@ -315,7 +315,7 @@ export const GlassEdges = forwardRef<GlassEdgesHandle, GlassEdgesProps>(
         computeInstanceMatrices(m, points, capacityRef.current, EDGE_REVEAL_BATCH);
       }
       return { mesh: m, uniforms: u };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
     }, []);
 
     // Update material color and opacity when settings change.

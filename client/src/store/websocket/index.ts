@@ -444,12 +444,14 @@ export const useWebSocketStore = create<WebSocketState>()(
       on: (eventName, handler) => registerEventHandler(eventName, handler),
       emit,
 
+      // ADR-2100: the shared pod client owns the socket and its reconnect
+      // ladder, so no self-referential reconnect callback is threaded in here.
       connectSolid: () => {
-        connectSolidWebSocket(get, set, () => get().connectSolid());
+        connectSolidWebSocket(set);
       },
 
       disconnectSolid: () => {
-        disconnectSolidWebSocket(get, set);
+        disconnectSolidWebSocket(set);
       },
 
       subscribeSolidResource: (resourceUrl: string, callback: SolidNotificationCallback) =>

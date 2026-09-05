@@ -30,7 +30,9 @@ sources:
   - voice-stack/README.md
   - voice-stack/unmute/docker-compose.yml
   - xr-client/rust/src/webrtc_audio.rs
-verified_commit: b00c28a0d
+  - client/src/services/WebSocketEventBus.ts
+  - src/actors/elevation_actor.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-35.1 Push-to-talk state machine and the agent DID binding

@@ -217,10 +217,6 @@ pub struct UpdateMetadata {
     pub metadata: MetadataStore,
 }
 
-#[derive(Message)]
-#[rtype(result = "Result<(), String>")]
-pub struct RefreshMetadata;
-
 // ---------------------------------------------------------------------------
 // Auto-balance messages
 // ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ pub mod models;
 pub mod ports;
 pub mod telemetry;
 pub mod types;
+pub mod uri;
 pub mod utils;
 pub mod vault;
 

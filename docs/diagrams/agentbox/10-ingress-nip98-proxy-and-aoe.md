@@ -23,7 +23,8 @@ sources:
   - agentbox/docs/adr/ADR-2010-bearer-gated-behind-nip98.md
   - agentbox/docs/adr/ADR-2011-hex-canonical-identity.md
   - agentbox/docs/adr/ADR-2013-loopback-publish-except-9096.md
-verified_commit: b00c28a0d
+  - agentbox/docker-compose.voice.yml
+verified_commit: bed6b617d
 ---
 
 ## AB-10.1 Door inventory and port topology

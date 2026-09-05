@@ -328,6 +328,13 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
   const flyStartPosRef = useRef<THREE.Vector3 | null>(null)
   const flyStartTargetRef = useRef<THREE.Vector3 | null>(null)
   const flyCapturedForRef = useRef<THREE.Vector3 | null>(null)
+  // ADR-04 D10: persistent capture buffers, allocated once at mount, so the
+  // fly-to capture writes into them instead of allocating inside useFrame. The
+  // two *Ref values above alias these buffers while a fly is in flight; nothing
+  // else writes to them, and the next capture overwrites them at exactly the
+  // moment the refs are reassigned, so the alias is never stale.
+  const flyStartPosBuf = useRef(new THREE.Vector3())
+  const flyStartTargetBuf = useRef(new THREE.Vector3())
 
   const cancelFlyTo = useCallback(() => {
     flyToTargetRef.current = null
@@ -370,10 +377,10 @@ const GraphManager: React.FC<GraphManagerProps> = ({ onDragStateChange }) => {
       // Capture start endpoints once per new fly (destination object identity).
       if (flyCapturedForRef.current !== dest) {
         flyCapturedForRef.current = dest
-        flyStartPosRef.current = camera.position.clone()
+        flyStartPosRef.current = flyStartPosBuf.current.copy(camera.position)
         flyStartTargetRef.current = ctl?.target
-          ? ctl.target.clone()
-          : camera.getWorldDirection(new THREE.Vector3()).add(camera.position)
+          ? flyStartTargetBuf.current.copy(ctl.target)
+          : camera.getWorldDirection(flyStartTargetBuf.current).add(camera.position)
       }
 
       flyToProgressRef.current = Math.min(1, flyToProgressRef.current + delta / 0.6)

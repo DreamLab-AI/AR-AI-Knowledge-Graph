@@ -65,7 +65,7 @@ export function OntologyForcesPanel() {
   // should read as enabled (covers re-sync dispatch happening outside this UI).
   useEffect(() => {
     if (hasForces && !enabled) setEnabled(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [hasForces]);
 
   const onToggle = useCallback(async (next: boolean) => {

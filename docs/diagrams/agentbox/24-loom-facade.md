@@ -12,7 +12,9 @@ sources:
   - docker-compose.unified.yml
   - loom/README.md
   - agentbox/scripts/opf-router.py
-verified_commit: b00c28a0d
+  - agentbox/mcp/servers/lib/ontology-telemetry.js
+  - agentbox/flake.nix
+verified_commit: bed6b617d
 ---
 
 ## AB-24.1 Two deployments of one facade contract — topology
@@ -50,7 +52,7 @@ flowchart TB
     SIDE -->|"entrypoint copies .rvdb off :ro — opening redb mutates it"| TMPFS
     subgraph notes["Invariants and drift"]
         direction TB
-        N1["DIVERGENCE: ADR-045 one-front-door publishes TWO LAN doors — scaffolded :8084 and raw<br/>:8085 are both reachable and consumers must pick per task (GOVERNANCE-capabilities<br/>divergence 3)"]
+        N1["RESOLVED ADR-2070 #40;2026-09-05#41;: not a breach. ADR-045 one-front-door is an INGRESS rule<br/>#40;:9096, NIP-98, control surfaces reaching INTO the box#41; and says nothing about EGRESS to a LAN<br/>model host. The raw :8085 door is deliberate and named #40;flake.nix LOOM_RAW_BASE_URL, the loom-raw<br/>session seed#41; — agent-choice and benchmark-only for raw coding, never a fallback and never<br/>auto-routed when the facade errors. Knowledge-work consumers hold :8084. A third door needs an ADR"]
         N2["RESOLVED ADR-2055: opf-router is the PRIVACY-FILTER redaction sidecar on OPF_PORT<br/>9092 (agentbox.toml [privacy_filter].port, scripts/opf-router.py:41, flake.nix<br/>[program:opf-router]). BASELINE-container previously described it as an<br/>OpenAI-compatible facade on :8084 — corrected. No agentbox program serves<br/>:8084 — that is the Loom facade on machinelearn"]
         N3["The loom-facade implementation lives OUTSIDE this repo at /home/devuser/workspace/loom.<br/>This repo holds the deployment contract only (loom/README.md:8-15)"]
         N1 ~~~ N2 ~~~ N3
@@ -392,9 +394,9 @@ flowchart LR
     subgraph notes["Invariants and drift"]
         direction TB
         N1["RESOLVED ADR-2053: the dream engine's default provider is Z.AI by deliberate<br/>choice — GOVERNANCE-capabilities now states this and names the egress posture.<br/>loom_url/loom_model select the LAN-only path when llm_provider = loom. See AB-23"]
-        N2["DIVERGENCE: ADR-2023 implementation_status is partial — the ADR-051<br/>deferred-distillation MCP tools are still not a discrete server; only beads substrate<br/>primitives exist (see AB-26)"]
-        N3["DIVERGENCE: generation identity is asserted by CONFIGURATION not attested by the server<br/>— binding retrieval to the generation the Loom actually loaded needs a Loom-side<br/>identity surface that does not exist"]
-        N4["DIVERGENCE: agent retrieval uses /loom/search + /loom/sparql, NOT /loom/scaffold or chat<br/>— the Loom scaffold/chat benchmarks are no evidence for this path"]
+        N2["PROPOSED ADR-2074: the ADR-051 deferred-distillation tools become a discrete<br/>manifest-gated MCP server with a job URN kind and distill plus recombine beads<br/>ADR-2023 remaining is the ORIGIN of this gap, not its resolution (see AB-26)"]
+        N3["PROPOSED ADR-2075: the Loom exposes a generation descriptor and the client reports the<br/>ATTESTED generation - a configured value that disagrees fails labelled instead of being<br/>served or relabelled, and the cache keys on the attested id"]
+        N4["PROPOSED ADR-2076: benchmark /loom/search plus /loom/sparql on its own terms with a<br/>frozen recall band in the shape of the RuVector recall gate - scaffold and chat numbers<br/>are never cited as evidence for this path"]
         N5["app/ontology-mcp is a standalone stdio MCP server left in place with no build or run<br/>path from this repo, pending a decision on where it should live (loom/README.md:108-115)"]
         N1 ~~~ N2 ~~~ N3 ~~~ N4 ~~~ N5
     end

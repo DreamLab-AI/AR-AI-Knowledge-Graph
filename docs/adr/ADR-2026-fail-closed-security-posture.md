@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: f326a3b1172df4fea8183e6a4344d3f55c575013
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/middleware/rbac_gate.rs, src/main.rs, src/services/role_store.rs]
 owner: jjohare
 review_trigger: any new security-relevant env flag, or a request to soften the release boot-abort to a warning
@@ -91,3 +91,55 @@ passed, 0 failed.
 **Remains open.** The boot abort's exit code and message are asserted only in
 the pure evaluator, not by running a binary; `assert_effective_profile_or_exit`
 itself is not exercised end to end.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `f326a3b11`:** `src/main.rs`, `src/middleware/rbac_gate.rs`
+(+12/-11) and `src/services/role_store.rs` (+596/-38). None of them softens a
+fail-closed default; the main.rs change *adds* the ADR-2038 boot assertion.
+
+**All four constructs still live, line numbers refreshed:**
+
+- `public_reads_enabled()` at `src/middleware/rbac_gate.rs:122-129`, still ending
+  `.unwrap_or(false)` at `:128` (cited `:121-128` — off by one after the import
+  block grew).
+- Owner-less boot refusal at `src/main.rs:732-752`: `RBAC_ALLOW_OWNERLESS_ENV`
+  read at `:732`, the explicit opt-in logged at `:739`, and the
+  `PermissionDenied` abort at `:747-752` (cited `:729-739`; the block moved down
+  and grew).
+- `enforce_release_env_hygiene` at `src/main.rs:117-163` — **citation still
+  exact**. Argv `--allow-skip-auth` → `exit(1)` at `:120-126`; `SUSPECT_ENVS`
+  (`SETTINGS_AUTH_BYPASS`, `ALLOW_INSECURE_DEFAULTS`, `VISIONCLAW_DEV_MODE`) at
+  `:129-133`; the `NODE_ENV=development` + `DOCKER_ENV` pair at `:141-147`;
+  `exit(2)` at `:161`. Still gated `#[cfg(not(any(debug_assertions, feature =
+  "dev-auth")))]` at `:117` with the no-op dev stub at `:167-169`.
+- Role-lookup `Err` → `Viewer` has **moved**: it is now `effective_role`'s
+  `Err(e) => UserRole::Viewer` at `src/services/role_store.rs:369-372`, not
+  `:204-208` as cited above. Lines `:202-208` today hold `parse_default_role`'s
+  *other* fail-closed path (an unrecognised `RBAC_DEFAULT_ROLE` value logs and
+  resolves to `Viewer`) — so the invariant is now enforced in two places, and the
+  original citation points at the newer of them.
+
+**Strengthened, not weakened.** The posture now has a second enforcement point:
+`src/config/security_profile.rs` (landed `ac3e12dd1`) runs
+`assert_effective_profile_or_exit` at `src/main.rs:873`, before
+`HttpServer::new` (`:893`) and `.bind()` (`:1174`), extending presence-not-
+truthiness rejection to `DEV_AUTH_LOOPBACK` and `RBAC_GATE_MODE=report`, which
+`SUSPECT_ENVS` never covered. See ADR-2038.
+
+**Commands run:** `git diff --stat f326a3b11..HEAD -- src/middleware/rbac_gate.rs
+src/main.rs src/services/role_store.rs`; `awk` dumps of `main.rs:115-170` and
+`:856-896`, `role_store.rs:195-215` and `:355-395`; `grep -n -A10
+'fn public_reads_enabled' src/middleware/rbac_gate.rs`; `cargo test --lib
+--no-default-features security_profile` → **37 passed, 0 failed**.

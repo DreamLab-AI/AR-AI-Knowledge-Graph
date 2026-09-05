@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b00c28a0d766c8cf46cd00b100dab60ef2dd74a4
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [Cargo.toml, src/actors, crates/visionclaw-actors/src]
 owner: jjohare
 review_trigger: completion of the actor extraction into crates/visionclaw-actors, or a new subsystem that does not map to an existing crate layer
@@ -104,3 +104,68 @@ Claim-by-claim:
 
 `implementation_status: partial` and `activation_status: live` are retained: the
 manifest grew, the extraction did not.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**The frontmatter loosening flagged in the previous section is now reversed.**
+That pass emptied `verified_paths` and pinned `verified_commit` to a
+then-uncommitted tree, and said both "must be restored at the landing commit".
+Done: `verified_paths` is back to `[Cargo.toml, src/actors,
+crates/visionclaw-actors/src]` and `verified_commit` is the landing SHA
+`b0bc275f6`, so the staleness gate has its teeth back.
+
+**Governed changes since `b00c28a0d`:** `Cargo.toml`, sixteen files under
+`src/actors`, and two message files in `crates/visionclaw-actors/src` — landed by
+`346fff7af` (actor trim), `da2f5cac7` (GPU consolidation) and `35c2448a8` (dead
+module removal).
+
+**Workspace shape re-counted at HEAD.** `[workspace].members` has **12** entries:
+`"."` plus nine `crates/visionclaw-*` and two others — `crates/vault-migrate` and
+`crates/visionclaw-integration-tests` (`Cargo.toml:2-15`). This matches the
+2026-09-04 closeout's count exactly; the Decision's "root plus these nine
+`visionclaw-*` members" is still literally true, with the two non-`visionclaw-*`
+additions being the "current additions recorded below". `exclude` is unchanged at
+`["xr-client/rust", "agentbox/crates/headroom-napi"]` (`Cargo.toml:19`).
+
+**The extraction ratio moved — by shrinking the root, not by extracting.** The
+Verification block above cites "25 files against 4". At HEAD:
+
+- `ls src/actors/*.rs | wc -l` → **23** (was 25). Two files were **deleted**:
+  `src/actors/lifecycle.rs` and `src/actors/supervisor.rs`
+  (`git diff --name-status` shows `D` for both), removed as dead supervision
+  machinery under ADR-2045.
+- `ls crates/visionclaw-actors/src/*.rs | wc -l` → **4**, unchanged. The only
+  changes in that crate are two message files
+  (`messages/analytics_messages.rs`, `messages/mod.rs`), both `M`.
+
+So no actor was extracted this sprint. The gap narrowed from 25:4 to 23:4 purely
+by deleting dead code in the root. `implementation_status: partial` is not merely
+retained — it is confirmed by direct file-level evidence, and the `review_trigger`
+(completion of the actor extraction) is no closer.
+
+**Consequences text still accurate:** two source-of-truth trees still coexist, the
+live server still runs from `src/`, and `contracts` remains a deliberate leaf
+(`crates/visionclaw-contracts/Cargo.toml:19` still asserts it pulls no actix and
+no neo4rs).
+
+**Still open, unchanged:** allowed dependency directions are not machine-enforced,
+no forwarding-shim-versus-competing-implementation classification exists, and no
+incremental-build timing ran. File counts remain a proxy for extraction progress,
+not proof of independent responsibility.
+
+**Commands run:** `git diff --name-status b00c28a0d..HEAD -- src/actors
+crates/visionclaw-actors/src`; `git diff --stat` on the same;
+`ls src/actors/*.rs | wc -l`; `ls crates/visionclaw-actors/src/*.rs | wc -l`;
+`find src/actors -name '*.rs' | wc -l` → 59 recursive; a Python parse of
+`[workspace].members` → 12 entries.

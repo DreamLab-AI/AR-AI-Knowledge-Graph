@@ -446,7 +446,9 @@ Perplexity provides real-time web research with source citations. It is integrat
 | MCP Skill | `multi-agent-docker/skills/perplexity/` |
 | Rust Service | `src/services/perplexity_service.rs` |
 | API Handler | `src/handlers/perplexity_handler.rs` |
-| Config | `PERPLEXITY_API_KEY` environment variable |
+| Config (Rust service) | `AppFullSettings.perplexity` — `api_url`, `api_key`, `model` from settings, **not** env vars (`perplexity_service.rs:99-120`) |
+| Config (MCP skill layer) | `PERPLEXITY_API_KEY` environment variable |
+| Access gate | `PERPLEXITY_ENABLED_PUBKEYS` env (`feature_access.rs:20`) — who may call, not where it calls |
 
 ### Available Models
 

@@ -2,7 +2,7 @@
 id: VC-31
 title: R3F/Three.js graph render pipeline and WASM scene effects
 area: visionclaw
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 governing:
   - docs/BASELINE-architecture.md
 adrs: []
@@ -53,6 +53,7 @@ sources:
   - client/crates/scene-effects/src/particles.rs
   - client/crates/scene-effects/src/energy_wisps.rs
   - client/crates/scene-effects/src/atmosphere.rs
+  - client/src/wasm/scene-effects/scene_effects.js
 ---
 ## VC-31.1 Canvas consumers and shared child tree
 ```mermaid

@@ -50,11 +50,15 @@ pub mod oxigraph_graph_repository;
 pub mod sqlite_settings_repository;
 // WS-9: durable EnrichmentProposal lifecycle store (data/enrichment.sqlite3)
 pub mod sqlite_enrichment_repository;
+// ADR-2101: durable case-state authority for ADR-050 decision elevation —
+// a typed facade over the same enrichment store (data/enrichment.sqlite3)
+pub mod decision_elevation_store;
 // RES-a: durable LivenessCanary registry + fire log (data/liveness.sqlite3)
 pub mod sqlite_canary_repository;
 // REC-4: durable KPI snapshot + lineage store (data/kpi.sqlite3), ADR-130 D5
 pub mod sqlite_kpi_repository;
 
+pub use decision_elevation_store::{DecisionCase, DecisionElevationStore};
 pub use oxigraph_graph_repository::OxigraphGraphRepository;
 pub use oxigraph_ontology_repository::OxigraphOntologyRepository;
 pub use sqlite_canary_repository::{

@@ -28,7 +28,14 @@ on:
 
 env:
   ONTOLOGY_SOURCE_REPO: ${{ github.event.inputs.source_repo || 'jjohare/logseq' }}
-  SOLID_POD_URL: ${{ vars.SOLID_POD_URL || 'http://jss:3030' }}
+  # ADR-2098: solid-pod-rs is embedded in the VisionClaw server (ADR-032 M3) and
+  # the JSS sidecar is gone from docker-compose.unified.yml — there is no `jss`
+  # host left to resolve, so the old default could only ever fail DNS. The pod is
+  # served in-process under the `/solid` scope on the server's own listener
+  # (`src/handlers/solid_proxy_handler.rs`, `SYSTEM_NETWORK_PORT`, default 4000).
+  # Set the `SOLID_POD_URL` repository variable to the reachable base URL for the
+  # target deployment; this default names the in-process endpoint.
+  SOLID_POD_URL: ${{ vars.SOLID_POD_URL || 'http://localhost:4000/solid' }}
   JSS_PUBLIC_PATH: /public/ontology
   CACHE_DIR: .ontology-cache
   ARTIFACT_RETENTION_DAYS: 30
@@ -662,11 +669,14 @@ jobs:
           echo "Notification payload:"
           echo "$NOTIFICATION" | jq .
 
-          # Send to JSS notifications endpoint (triggers WebSocket broadcast)
-          # JSS will broadcast "pub /public/ontology/" to all subscribers
+          # ADR-2098: `/.notifications` on the embedded pod is a GET WebSocket
+          # upgrade (solid-0.1 protocol), NOT a POST trigger — the JSS sidecar's
+          # POST-to-broadcast endpoint went away with the sidecar. Subscribers are
+          # notified by the pod itself on the LDP writes above, so this POST is a
+          # best-effort no-op kept only for a deployment still fronted by JSS.
           curl -X POST "${{ env.SOLID_POD_URL }}/.notifications" \
             -H "Content-Type: application/json" \
-            -d "$NOTIFICATION" || echo "Direct notification endpoint not available"
+            -d "$NOTIFICATION" || echo "Direct notification endpoint not available (expected on the embedded pod)"
 
           # Alternative: Touch the index to trigger LDP notification
           curl -X PATCH "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/index.jsonld" \

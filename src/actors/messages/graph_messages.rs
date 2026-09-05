@@ -31,10 +31,9 @@ pub use visionclaw_actors::messages::graph_messages::{
     GetGraphData, GetMetadata, GetNodeIdMapping, GetNodeMap, GetNodePositions, GetNodeTypeArrays,
     GetPositionFrameSnapshot, GetWorkspace, GetWorkspaceCount, GetWorkspaces, InitializeActor,
     LoadWorkspaces, NodeIdMapping, NodeTypeArrays, PositionFrameSnapshot, PositionRow,
-    RefreshMetadata, ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata,
-    SaveWorkspaces, ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata,
-    UpdateNodeFromMetadata, UpdateNodeTypeArrays, UpdateWorkspace, WorkspaceChangeType,
-    WorkspaceStateChanged,
+    ReloadGraphFromDatabase, RemoveEdge, RemoveNode, RemoveNodeByMetadata, SaveWorkspaces,
+    ToggleFavoriteWorkspace, UpdateGraphData, UpdateMetadata, UpdateNodeFromMetadata,
+    UpdateNodeTypeArrays, UpdateWorkspace, WorkspaceChangeType, WorkspaceStateChanged,
 };
 
 // ---------------------------------------------------------------------------

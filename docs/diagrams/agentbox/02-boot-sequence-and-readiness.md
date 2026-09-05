@@ -4,7 +4,7 @@ title: Boot sequence, supervision tree and readiness
 area: agentbox
 governing:
   - agentbox/docs/BASELINE-container.md
-adrs: [ADR-2003, ADR-2007, ADR-2028, ADR-2029]
+adrs: [ADR-2003, ADR-2007, ADR-2028, ADR-2029, ADR-2034, ADR-2063]
 sources:
   - agentbox/config/entrypoint-unified.sh
   - agentbox/flake.nix
@@ -17,11 +17,20 @@ sources:
   - agentbox/config/harness-wrappers/_provider-url.sh
   - agentbox/services/agentbox-manifest/src/stacks.rs
   - agentbox/scripts/aoe-seed-sessions.mjs
+  - agentbox/services/agentbox-mcp/src/hub/mod.rs
+  - agentbox/services/agentbox-mcp/src/main.rs
   - agentbox/config/seccomp-agentbox.json
   - agentbox/docker-compose.yml
   - agentbox/scripts/ci/check-seccomp.sh
   - agentbox/docs/adr/ADR-2007-profile-isolation.md
-verified_commit: b00c28a0d
+  - agentbox/.agentic-qe/llm-config.json
+  - agentbox/agentbox.toml
+  - agentbox/mcp/servers/lib/ontology-index-build.js
+  - agentbox/mcp/servers/ontology-bridge.js
+  - agentbox/mcp/servers/ruvector-mcp.cjs
+  - agentbox/scripts/ruvector-aggregate-sweep.mjs
+  - agentbox/scripts/ruvector-pattern-distill.mjs
+verified_commit: bed6b617d
 ---
 ## AB-02.1 boot phases 1-3 — vault resolution, directories, sovereign identity
 ```mermaid
@@ -267,6 +276,7 @@ sequenceDiagram
     SV->>MGMT: spawn priority=20, user=devuser (:2039)
     SV->>SOLID: spawn priority=30, user=devuser, gated sovereign_mesh.enabled (:2067)
     Note over SV: every program below priority=99 launches in ascending<br/>priority order but does not block on prior RUNNING state
+    Note over SV,BOOT: RESOLVED ADR-2063 (2026-09-05) - a program that needs a file Stage B writes later<br/>waits for it with a bounded timeout instead of crashing into FATAL (see AB-02.17)
     SV->>SEAL: spawn priority=99 last, user=devuser (:2054-2058)
     SEAL->>SEAL: _required_programs() awk-scans /etc/supervisord.conf<br/>for AGENTBOX_REQUIRED_FOR_READINESS=true blocks (seal-bootstrap.sh:44-68)
     loop poll every 2s up to BOOTSTRAP_SEAL_TIMEOUT=120s (seal-bootstrap.sh:82-102)
@@ -526,3 +536,59 @@ flowchart TB
     CI -->|"CI gate on every PR"| PROFILE
 ```
 
+## AB-02.17 shared MCP hub — late config, bounded wait, restart on projection (ADR-2034, ADR-2063)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant SV as supervisord PID1
+    participant HUB as program:agentbox-mcp-hub<br/>flake.nix [program:agentbox-mcp-hub] priority=205
+    participant WAIT as hub::wait_for_config<br/>services/agentbox-mcp/src/hub/mod.rs
+    participant BOOT as program:bootstrap Stage B<br/>config/entrypoint-unified.sh mcp-hub projection block
+    participant FS as /run/agentbox/mcp-hub.json
+
+    SV->>HUB: spawn priority=205 (Stage B still in phase 7-8, file absent)
+    HUB->>WAIT: agentbox-mcp hub --config /run/agentbox/mcp-hub.json --wait-config-secs 600 (main.rs Hub)
+    loop poll every 500 ms, log every 15 s, give up after wait-config-secs
+        WAIT->>FS: exists?
+    end
+    Note right of WAIT: before ADR-2063 the load failed three times on the missing file and<br/>supervisord parked the hub FATAL - every hub-routed MCP server refused connections
+    BOOT->>FS: agentbox-manifest mcp-hub-project writes mcp-hub.json (0600 devuser)
+    BOOT->>SV: supervisorctl status agentbox-mcp-hub
+    alt RUNNING (waiting or serving an older config)
+        BOOT->>SV: supervisorctl restart agentbox-mcp-hub
+    else FATAL / EXITED / STOPPED / BACKOFF
+        BOOT->>SV: supervisorctl start agentbox-mcp-hub
+    end
+    WAIT-->>HUB: config present
+    HUB->>HUB: HubConfig::load, refuse a non-loopback bind, serve 127.0.0.1:9720
+    Note over HUB,FS: INVARIANT - the hub is loopback-only and never published (ADR-2034)
+```
+
+## AB-02.18 session seeds — persisted records, orphan reaper, native-agent model (ADR-2063)
+```mermaid
+sequenceDiagram
+    autonumber
+    participant E as entrypoint-unified.sh<br/>interaction-plane seed block
+    participant SEED as aoe-seed-sessions.mjs<br/>reapOrphanWorktrees, reconcileSessions
+    participant AOE as aoe serve 127.0.0.1:9095<br/>GET/POST /api/sessions
+    participant VOL as aoe-profiles volume<br/>~/.config/agent-of-empires/profiles
+    participant WT as PROJECT-worktrees/
+
+    E->>SEED: nohup node aoe-seed-sessions.mjs (fire-and-forget, fail-open)
+    SEED->>AOE: GET /api/sessions?state=all
+    AOE->>VOL: sessions.json survives a container restart (docker-compose.yml aoe-profiles)
+    Note right of VOL: before ADR-2063 ~/.config was a tmpfs - records died each boot while the<br/>worktrees persisted - 18 antigravity-N and 18 loom-N checkouts by 2026-09-05
+    SEED->>WT: for each dir named slug or slug-N of a worktree seed with no session project_path
+    alt not a registered git worktree
+        SEED->>WT: rename aside to dir.orphan-timestamp (never deleted)
+    else clean and zero commits beyond main
+        SEED->>WT: git worktree unlock, remove --force --force, branch -D
+    else dirty or ahead
+        SEED-->>SEED: warn, leave for a human
+    end
+    Note over SEED: INVARIANT - a managed-worktree session with no path makes the reaper refuse to act
+    loop each seed whose title is missing
+        SEED->>AOE: POST /api/sessions (extra_args --model is dropped by AoE 1.13 for native agents)
+    end
+    Note over SEED,AOE: codex / gemini / antigravity carry --model on agent_command_override instead<br/>antigravity runs env AGENTBOX_PROFILE=antigravity agy --model gemini-3.8-flash
+```

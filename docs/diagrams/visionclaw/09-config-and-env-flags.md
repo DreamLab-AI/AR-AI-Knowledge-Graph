@@ -20,7 +20,50 @@ sources:
   - src/handlers/socket_flow_handler/position_updates.rs
   - src/utils/auth.rs
   - docs/adr/ADR-2041-graph-settings-key-knowledge.md
-verified_commit: b00c28a0d
+  - client/src/types/generated/settings.ts
+  - crates/visionclaw-domain/src/config/visualisation.rs
+  - data/settings.yaml
+  - src/actors/agent_monitor_actor.rs
+  - src/actors/decision_elevation_actor.rs
+  - src/actors/elevation_actor.rs
+  - src/actors/optimized_settings_actor.rs
+  - src/actors/presence_actor.rs
+  - src/actors/task_orchestrator_actor.rs
+  - src/actors/voice_interface_actor.rs
+  - src/agent_events/ingest.rs
+  - src/bin/generate_types.rs
+  - src/config/dev_config.rs
+  - src/config/path_access.rs
+  - src/handlers/bots_handler.rs
+  - src/handlers/enrichment_proposals_handler.rs
+  - src/handlers/fastwebsockets_handler.rs
+  - src/handlers/image_gen_handler.rs
+  - src/handlers/liveness_harness_handler.rs
+  - src/handlers/mcp_relay_handler.rs
+  - src/handlers/nostr_handler.rs
+  - src/handlers/pay_handler.rs
+  - src/handlers/settings_handler/physics.rs
+  - src/handlers/socket_flow_handler/http_handler.rs
+  - src/handlers/solid_proxy_handler.rs
+  - src/services/bots_client.rs
+  - src/services/canary_nostr_tap.rs
+  - src/services/github_pr_service.rs
+  - src/services/github_sync_service.rs
+  - src/services/liveness_harness.rs
+  - src/services/local_file_sync_service.rs
+  - src/services/multi_mcp_agent_discovery.rs
+  - src/services/nostr_bead_publisher.rs
+  - src/services/nostr_bridge.rs
+  - src/services/nostr_service.rs
+  - src/services/ontology_class_index.rs
+  - src/services/proposal_spine.rs
+  - src/services/ragflow_service.rs
+  - src/services/speech_service.rs
+  - src/services/voice_intent_client.rs
+  - src/utils/advanced_logging.rs
+  - src/utils/gpu_diagnostics.rs
+  - src/utils/unified_gpu_compute/execution.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-09.1 Config load precedence — main() boot order

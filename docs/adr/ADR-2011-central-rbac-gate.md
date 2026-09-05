@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []                   # legacy ADR-011/ADR-142 distilled — not in this tree; see lineage
 superseded_by: []
-verified_commit: f326a3b1172df4fea8183e6a4344d3f55c575013
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/middleware/rbac_gate.rs, src/utils/auth.rs]
 owner: jjohare
 review_trigger: addition of an /api sub-scope with a distinct auth requirement, or any change to the public-prefix allowlist
@@ -82,3 +82,47 @@ rule including the date rollover.
 
 **Remains open.** The composed route policy, public-prefix methods, whoami and
 missing identity services are still not exercised through real routes.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `f326a3b11`:** `src/middleware/rbac_gate.rs` only
+(+12/-11). The whole delta is the ADR-2012 de-duplication — `GateMode::from_env`
+and `report_acknowledged` now call `config::security_profile::{report_mode_requested,
+report_mode_acknowledged}` instead of reading the env vars themselves. **No routing,
+matching or level-mapping logic changed.** `src/utils/auth.rs` is unchanged.
+
+**Every invariant re-confirmed, line numbers refreshed (the +3-line
+`security_profile` import shifted the file down):**
+
+- `required_level` at `:138` (was cited `:133`), still a pure function over
+  `(method, path, public_reads)`.
+- Whole-segment matching: `segments` at `:64-67`, `has_segment_prefix` at
+  `:69-72` (was cited `:60-66`); `required_level` uses them at `:143-147`.
+- Public allowlist `PUBLIC_SEGMENT_PREFIXES` at `:55-61` (was cited `:50`), still
+  a list of whole-segment slices — `api/auth`, `api/client-logs`, `api/health`,
+  `api/healthz`, `api/readyz`.
+- Admin surface: `has_segment_prefix(&segs, &["api", "admin"])` → `Admin` at
+  `:152-153` (was cited `:146-147`), ahead of the safe-method branch, so admin
+  **reads** stay Admin even with `RBAC_PUBLIC_READS=1`.
+- Mutations gate at `WriteGraph`, not `Authenticated`: `:169-173` (was cited
+  `:159-167`), with the rationale comment at `:163-168`. `src/utils/auth.rs:41`
+  `has_permission` still implements the lattice comparison, and the unit test at
+  `rbac_gate.rs:377-378` still asserts `ReadOnly` fails `WriteGraph` while
+  `Authenticated` passes it.
+- `/api/administrator` still does not inherit `/api/admin` — test at `:331-335`.
+
+**Commands run:** `git diff f326a3b11..HEAD -- src/middleware/rbac_gate.rs`
+(full patch read); `awk` dumps of `rbac_gate.rs:40-76`, `:75-124`, `:134-176`;
+`grep -n has_permission src/utils/auth.rs`; `cargo test --lib
+--no-default-features rbac` → **14 passed, 0 failed** (1253 filtered out).

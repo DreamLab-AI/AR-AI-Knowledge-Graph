@@ -37,7 +37,8 @@ sources:
   - agentbox/docs/adr/ADR-2013-loopback-publish-except-9096.md
   - docs/adr/ADR-2027-three-deployment-profiles.md
   - docs/adr/ADR-2025-cross-from-agentbox-closed-map.md
-verified_commit: b00c28a0d
+  - agentbox/lib/solid-pod-rs.nix
+verified_commit: bed6b617d
 ---
 ## ES-01.1 Substrate map — six repositories, five-participant identity mesh
 ```mermaid

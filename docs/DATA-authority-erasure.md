@@ -187,3 +187,18 @@ of immutable history or off-volume durability must be read with these limits.
   (`docker-compose.unified.yml:93,94`) and is ADR-2027's deliberate choice. Raised by estate ADR-2087,
   which found this document contradicting `docs/SECURITY-profiles.md`.
 - **ADR-2066** — the unwired `/api/inference/*` stack was removed; it is no longer a store consumer.
+
+- **ADR-2102** (proposed) — estate-wide subject-erasure orchestration across GitHub content,
+  Oxigraph, SQLite, RuVector and the append-only provenance graph: one durable erasure record,
+  five acknowledgements, partial erasure recorded and retryable. Forces the open
+  `GRAPH_PROVENANCE` question — crypto-shredding the per-subject key, or provenance declared out
+  of erasure scope — as an explicit choice. agentbox ADR-2060 is the RuVector-side half and is
+  referenced (`see`), not superseded.
+- **ADR-2103** (proposed) — Oxigraph point-in-time backup with a declared RPO (schedule) and RTO
+  (measured restore drill), as a **required** backup member under ADR-2069 semantics. Extends
+  ADR-2017's backup posture; `GRAPH_PROVENANCE` is restore-only because it cannot be re-derived.
+- **ADR-2104** (proposed) — forces a choice on legacy ADR-109: execute the SOPS rollout or
+  formally withdraw the 2026-05-09 acceptance. The tree shows a rollout that started and stopped
+  (a 43 MB gitignored `scripts/sops` binary dated to the acceptance day, none of the four
+  deliverables). Plaintext `.env` is documented as the interim state under either branch.
+- **ADR-2097** — `MetadataActor::refresh_metadata` is deleted, not implemented. It logged one line and returned `Ok(())`, and `RefreshMetadata` had no senders anywhere in the workspace. It could not be implemented honestly either: `MetadataStore` is a `HashMap` type alias, the actor is constructed empty, and `metadata.json` is owned by `FileService`, which pushes rebuilt stores in via `UpdateMetadata`. Single-writer ownership is now documented on the actor so a future reload requirement lands on `FileService` rather than resurrecting the stub.

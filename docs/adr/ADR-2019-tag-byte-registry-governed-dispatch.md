@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: 9a2c8087385bf6db08b1aeb91004e1a60203965b
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/utils/binary_protocol.rs, xr-client/rust/src/binary_protocol.rs, src/protocols/binary_settings_protocol.rs, crates/visionclaw-xr-presence/src/wire.rs, crates/visionclaw-xr-presence/src/agent_presence.rs]
 owner: jjohare
 review_trigger: allocation of a new opcode/version tag on any binary socket, or a proposal to share one demultiplexer across sockets
@@ -132,3 +132,56 @@ to the Rust module.
 **Open.** Fixtures are byte-equal to the encoder's output, but no frame was
 carried over a live socket in this pass, and the browser decoder's behaviour is
 verified in jsdom rather than in a running client.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `9a2c80873`:** only the two position codecs —
+`src/utils/binary_protocol.rs` and `xr-client/rust/src/binary_protocol.rs`.
+`src/protocols/binary_settings_protocol.rs`,
+`crates/visionclaw-xr-presence/src/wire.rs` and `.../agent_presence.rs` are
+**unchanged**, so the disjoint-space half of this decision was not disturbed.
+
+**Tag byte still selects the codec, and unknown tags are still rejected.**
+`match protocol_version` at `src/utils/binary_protocol.rs:588-601`:
+`1 =>` and `2 =>` return the explicit "no longer supported / please upgrade"
+errors (`:589-590`), `PROTOCOL_V3` routes the bare body (`:591`), the V5 branch
+skips `WIRE_V5_SEQ_SIZE` then delegates (`:598`), and the arm still ends
+`v => Err(format!("Unknown protocol version: {}", v))` at `:600` — rejected,
+never reinterpreted. Client-side the typed `DecodeError::BadVersion` is raised at
+`xr-client/rust/src/binary_protocol.rs:428`.
+
+**Per-socket disjointness re-confirmed by grep at HEAD:** settings writes tag
+`0x05` at `src/protocols/binary_settings_protocol.rs:234`; presence uses
+`OPCODE_AVATAR_POSE = 0x43` (`crates/visionclaw-xr-presence/src/wire.rs:9`) and
+`OPCODE_AGENT_PRESENCE = 0x44`
+(`crates/visionclaw-xr-presence/src/agent_presence.rs:40`). Graph `0x05` and
+settings `0x05` therefore still coexist legitimately on separate sockets, as the
+Decision requires.
+
+**The per-opcode policy matrix above is now backed by a shared fixture.**
+`crates/visionclaw-protocol/src/wire_fixtures.rs` (exported at
+`crates/visionclaw-protocol/src/lib.rs:31`) is pinned to the real server encoder
+by a server-side test and included verbatim into the isolated xr-client
+workspace at `xr-client/rust/tests/wire_freshness_and_frame_policy.rs:11-12`,
+which discharges the "use fixtures from the real server encoder in both decoders"
+half of the 2026-09-04 acceptance condition for the Rust consumers. The browser
+decoder is still fixture-free — that part remains open.
+
+**Commands run:** `git diff --stat 9a2c80873..HEAD -- <verified_paths>`;
+`grep -n 'match protocol_version|no longer supported|Unknown protocol version'
+src/utils/binary_protocol.rs`; `grep -rn '0x05|0x43|0x44|0x23'` over the settings
+and presence codecs; `grep -rn wire_fixtures xr-client/rust --include=*.rs`;
+`cargo test --lib --no-default-features binary_protocol` → **38 passed**;
+`cargo test --lib --no-default-features adr_20` → **35 passed**; `cargo test` in
+`xr-client/rust` → **226 lib + 83 integration passed, 0 failed**.

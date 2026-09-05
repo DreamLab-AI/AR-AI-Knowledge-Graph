@@ -33,7 +33,10 @@ sources:
   - src/actors/optimized_settings_actor.rs
   - src/handlers/settings_handler/helpers.rs
   - src/config/path_accessible_impls.rs
-verified_commit: b00c28a0d
+  - data/settings.yaml
+  - scripts/pre-commit-validate.sh
+  - src/handlers/validation_handler.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-21.1 GitHubSyncService::sync_graphs — full ingest path
@@ -174,11 +177,11 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant Bin as sync_local.rs<br/>src/bin/sync_local.rs:75
-    participant Svc as LocalFileSyncService::sync_with_github_delta<br/>src/services/local_file_sync_service.rs:88
-    participant Scan as scan_local_pages<br/>src/services/local_file_sync_service.rs:304
-    participant SHA as calculate_file_sha1<br/>src/services/local_file_sync_service.rs:353
-    participant GH as fetch_github_sha_map / fetch_and_update_file<br/>src/services/local_file_sync_service.rs:332,364
-    participant Proc as process_file_content<br/>src/services/local_file_sync_service.rs:399
+    participant Svc as LocalFileSyncService::sync_with_github_delta<br/>src/services/local_file_sync_service.rs:103
+    participant Scan as scan_local_pages<br/>src/services/local_file_sync_service.rs:319
+    participant SHA as calculate_file_sha1<br/>src/services/local_file_sync_service.rs:368
+    participant GH as fetch_github_sha_map / fetch_and_update_file<br/>src/services/local_file_sync_service.rs:347,379
+    participant Proc as process_file_content<br/>src/services/local_file_sync_service.rs:414
     participant KGP as KnowledgeGraphParser::parse<br/>src/services/parsers/knowledge_graph_parser.rs:68
     participant Onto as OntologyParser::parse + onto_repo.save_ontology
 
@@ -193,13 +196,13 @@ sequenceDiagram
             Svc->>Svc: fs::read_to_string(local_file)
         end
         Svc->>Proc: process_file_content(file_name, content, sha)
-        alt first 20 lines contain public:: true or public::true (case-insensitive)<br/>local_file_sync_service.rs:488-491
+        alt vault inclusion gate - public: true or a non-empty owl-class<br/>local_file_sync_service.rs:510 via page_is_kg_included :44
             Proc->>KGP: kg_parser.parse(content, file_name)
-            Note over Proc: DOC-DRIFT: this scan is a raw first-20-lines string match, NOT visionclaw_domain::vault::parse - ADR-2040's single parsing entry point does not cover this reader
+            Note over Proc: RESOLVED ADR-2096 (2026-09-05): the gate is visionclaw_domain::vault::parse(content).is_kg_included()<br/>the same delegation FileService and GitHubSyncService use - frontmatter is now seen and quoted markers no longer leak
             Proc->>Proc: enrichment_service.enrich_graph(parsed)
             Proc->>Proc: stats.kg_files_processed += 1
         end
-        alt content contains "### OntologyBlock"<br/>local_file_sync_service.rs:531
+        alt content contains ONTOLOGY_BLOCK_MARKER "### OntologyBlock"<br/>local_file_sync_service.rs:34,553
             Proc->>Onto: onto_parser.parse(content, file_name)
             Onto->>Onto: onto_repo.save_ontology(classes, properties, axioms)
             Proc->>Proc: stats.ontology_files_processed += 1

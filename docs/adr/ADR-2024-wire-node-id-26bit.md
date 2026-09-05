@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: eac01130366a25d758e2421ce6718b7854ab9174
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [src/utils/binary_protocol.rs]
 owner: jjohare
 review_trigger: node count approaching 2^26, or promotion of the debug_assert ceiling to a runtime guard
@@ -113,3 +113,55 @@ overflow. Per-generation durable-to-wire mapping, full/delta/reconnect map
 consistency and stale-map retirement across clients remain unaddressed; those are
 allocator and session-lifecycle concerns rather than encoder-boundary ones.
 `implementation_status` is unchanged.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed change since `eac011303`:** `src/utils/binary_protocol.rs` only.
+
+**The 26-bit contract is unchanged.** `NODE_ID_MASK = 0x03FFFFFF` at `:29` with
+the ceiling documented at `:27-28`; `AGENT_NODE_FLAG = 0x80000000` (`:18`),
+`KNOWLEDGE_NODE_FLAG = 0x40000000` (`:19`), ontology subtypes on bits 26-28
+(`:21`). Decode still strips flags via `& NODE_ID_MASK` (`:241`, `:253`).
+
+**The Verification block above is now understated and is corrected here.** It
+says "the five `set_*_flag` setters" carry the overflow guard. At HEAD there are
+**six** guarded branches, all routed through one helper
+`enforce_wire_id_bounds(node_id, WireIdClass)` (`:192-213`), whose behaviour is
+identical in debug and release — `debug_assert!` at `:194-199`, then
+`remap_wire_id` (`:224-226`) and an unconditional `log::error!` at `:204` naming
+the class and both ids before masking:
+
+| Branch | Site | Class |
+|---|---|---|
+| `set_agent_flag` | `:229` | `WireIdClass::Agent` |
+| `set_knowledge_flag` | `:233` | `WireIdClass::Knowledge` |
+| `set_ontology_class_flag` | `:283` | `WireIdClass::OntologyClass` |
+| `set_ontology_individual_flag` | `:287` | `WireIdClass::OntologyIndividual` |
+| `set_ontology_property_flag` | `:291` | `WireIdClass::OntologyProperty` |
+| untyped encoder branch | `:470` | `WireIdClass::Untyped` |
+
+The sixth row is the release-build gap the 2026-09-04 closeout identified — the
+untyped branch previously `debug_assert!`ed and then forwarded an over-range id
+**unchanged** onto the wire. It is closed: the untyped path now masks and logs
+like every other class. `WireIdClass` is defined at `:145-165`.
+
+**Consequences text still accurate:** the release guard logs and truncates; it
+does not reject. A hard `Result`-returning setter remains the open hardening
+tracked by `review_trigger`, and the node count is nowhere near 2^26.
+
+**Commands run:** `git diff --stat eac011303..HEAD -- src/utils/binary_protocol.rs`;
+`grep -n 'NODE_ID_MASK|AGENT_NODE_FLAG|KNOWLEDGE_NODE_FLAG|enforce_wire_id_bounds|
+remap_wire_id|WireIdClass|fn set_.*flag' src/utils/binary_protocol.rs`;
+`cargo test --lib --no-default-features binary_protocol` → **38 passed, 0
+failed**, including the `remap_wire_id` all-classes suite at `:785-800`.

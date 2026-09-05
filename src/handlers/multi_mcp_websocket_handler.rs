@@ -9,6 +9,7 @@ use actix_web_actors::ws;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -19,6 +20,34 @@ use crate::utils::network::{
     retry_with_backoff, CircuitBreaker, HealthCheckConfig, HealthCheckManager, RetryConfig,
     RetryableError, ServiceEndpoint, TimeoutConfig,
 };
+
+/// MCP services whose health gates discovery and performance responses.
+const MONITORED_SERVICES: &[&str] = &["claude-flow", "ruv-swarm", "flow-nexus"];
+
+/// How often the single per-connection health monitor re-probes.
+const HEALTH_MONITOR_INTERVAL: Duration = Duration::from_secs(30);
+
+/// Fold per-service probe results into the cached verdict.
+///
+/// Returns `(any service usable, names of the unhealthy ones)`. Split out as a
+/// pure function (ADR-2094) so the gating policy is testable without a live
+/// `HealthCheckManager` or a running actor.
+///
+/// An **empty** result set is treated as usable: it means nothing has been
+/// probed yet, and refusing every request before the first probe completes
+/// would break discovery on a freshly opened connection.
+fn fold_service_health(results: &[(&str, bool)]) -> (bool, Vec<String>) {
+    if results.is_empty() {
+        return (true, Vec::new());
+    }
+    let any_usable = results.iter().any(|(_, healthy)| *healthy);
+    let unhealthy = results
+        .iter()
+        .filter(|(_, healthy)| !*healthy)
+        .map(|(name, _)| (*name).to_string())
+        .collect();
+    (any_usable, unhealthy)
+}
 
 // Define a simple retryable error type for MCP operations
 #[derive(Debug, Clone)]
@@ -52,6 +81,10 @@ pub struct MultiMcpVisualizationWs {
     timeout_config: TimeoutConfig,
     circuit_breaker: Option<std::sync::Arc<CircuitBreaker>>,
     health_manager: Option<std::sync::Arc<HealthCheckManager>>,
+    /// Cached "at least one MCP service is usable" verdict, published by the
+    /// single health-monitor task started at connection init (ADR-2094).
+    /// Optimistic until the first probe lands.
+    healthy_services: std::sync::Arc<AtomicBool>,
     retry_config: RetryConfig,
     connection_failures: u32,
     last_successful_operation: Instant,
@@ -131,6 +164,7 @@ impl MultiMcpVisualizationWs {
             timeout_config: TimeoutConfig::websocket(),
             circuit_breaker: Some(circuit_breaker),
             health_manager: Some(health_manager_network),
+            healthy_services: std::sync::Arc::new(AtomicBool::new(true)),
             retry_config: RetryConfig::mcp_operations(),
             connection_failures: 0,
             last_successful_operation: Instant::now(),
@@ -165,47 +199,59 @@ impl MultiMcpVisualizationWs {
         });
     }
 
-    fn perform_health_checks(&mut self) {
-        if let Some(health_manager) = &self.health_manager {
-            let health_manager_clone = health_manager.clone();
-            let client_id = self.client_id.clone();
+    /// Start the single per-connection health monitor (ADR-2094).
+    ///
+    /// Exactly one task per WebSocket connection owns probing the MCP services
+    /// and publishing the verdict into [`Self::healthy_services`]. It holds a
+    /// [`Weak`](std::sync::Weak) handle on that cell, so when the actor is
+    /// dropped on disconnect the next tick fails to upgrade and the task
+    /// terminates — no task outlives its connection.
+    fn start_health_monitor(&self, health_manager: std::sync::Arc<HealthCheckManager>) {
+        let cache = std::sync::Arc::downgrade(&self.healthy_services);
+        let client_id = self.client_id.clone();
 
-            actix::spawn(async move {
-                for service in ["claude-flow", "ruv-swarm", "flow-nexus"] {
-                    let health_result = health_manager_clone.check_service_now(service).await;
-                    let is_healthy = health_result.map_or(false, |r| r.status.is_usable());
+        actix::spawn(async move {
+            loop {
+                tokio::time::sleep(HEALTH_MONITOR_INTERVAL).await;
 
-                    if !is_healthy {
-                        warn!(
-                            "[Multi-MCP] Service {} unhealthy for client {}",
-                            service, client_id
-                        );
-                    }
+                // The actor has gone: stop, rather than probing forever.
+                let Some(cache) = cache.upgrade() else {
+                    debug!(
+                        "[Multi-MCP] Health monitor for client {} stopping (client gone)",
+                        client_id
+                    );
+                    return;
+                };
+
+                let mut results = Vec::with_capacity(MONITORED_SERVICES.len());
+                for service in MONITORED_SERVICES {
+                    let is_healthy = health_manager
+                        .check_service_now(service)
+                        .await
+                        .is_some_and(|result| result.status.is_usable());
+                    results.push((*service, is_healthy));
                 }
-            });
-        }
+
+                let (any_usable, unhealthy) = fold_service_health(&results);
+                for service in &unhealthy {
+                    warn!(
+                        "[Multi-MCP] Service {} unhealthy for client {}",
+                        service, client_id
+                    );
+                }
+                cache.store(any_usable, Ordering::Relaxed);
+            }
+        });
     }
 
+    /// Read the cached health verdict.
+    ///
+    /// Pure read of an atomic — no task is spawned. The previous implementation
+    /// spawned a detached probe on *every* call and then unconditionally
+    /// returned `true`, so the answer was meaningless and each call leaked a
+    /// task.
     fn has_healthy_services(&self) -> bool {
-        if let Some(health_manager) = &self.health_manager {
-            let health_manager_clone = health_manager.clone();
-
-            tokio::spawn(async move {
-                for service in ["claude-flow", "ruv-swarm", "flow-nexus"] {
-                    if let Some(health_info) =
-                        health_manager_clone.get_service_health(service).await
-                    {
-                        if health_info.current_status.is_usable() {
-                            debug!("Service {} is healthy (cached)", service);
-                        }
-                    }
-                }
-            });
-
-            return true;
-        }
-
-        true
+        self.healthy_services.load(Ordering::Relaxed)
     }
 
     fn record_success(&mut self) {
@@ -431,11 +477,9 @@ impl Actor for MultiMcpVisualizationWs {
 
         if let Some(health_manager) = &self.health_manager {
             let health_manager = health_manager.clone();
+            let registrations = health_manager.clone();
             actix::spawn(async move {
-                for (i, service) in ["claude-flow", "ruv-swarm", "flow-nexus"]
-                    .iter()
-                    .enumerate()
-                {
+                for (i, service) in MONITORED_SERVICES.iter().enumerate() {
                     let endpoint = ServiceEndpoint {
                         name: service.to_string(),
                         host: "localhost".to_string(),
@@ -443,16 +487,17 @@ impl Actor for MultiMcpVisualizationWs {
                         config: HealthCheckConfig::default(),
                         additional_endpoints: vec![],
                     };
-                    health_manager.register_service(endpoint).await;
+                    registrations.register_service(endpoint).await;
                 }
             });
+
+            // ADR-2094: exactly one health task per connection, replacing both
+            // the 30s `run_interval` spawn and the per-call spawn that
+            // `has_healthy_services` used to leak.
+            self.start_health_monitor(health_manager);
         }
 
         self.start_position_updates(ctx);
-
-        ctx.run_interval(Duration::from_secs(30), |act, _ctx| {
-            act.perform_health_checks();
-        });
 
         ctx.run_interval(Duration::from_secs(60), |act, ctx| {
             let now = Instant::now();
@@ -896,5 +941,84 @@ impl MultiMcpVisualizationWs {
 
             ctx.close(None);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The regression ADR-2094 closes: the gate used to be a constant `true`
+    /// (with a leaked probe task on the side), so an all-unhealthy estate still
+    /// reported healthy. Now an all-unhealthy fold is `false`.
+    #[test]
+    fn all_services_unhealthy_is_not_usable() {
+        let (any_usable, unhealthy) = fold_service_health(&[
+            ("claude-flow", false),
+            ("ruv-swarm", false),
+            ("flow-nexus", false),
+        ]);
+        assert!(!any_usable, "no usable service must report unhealthy");
+        assert_eq!(unhealthy, vec!["claude-flow", "ruv-swarm", "flow-nexus"]);
+    }
+
+    /// One survivor is enough to keep discovery open, and only the dead ones
+    /// are named in the warning.
+    #[test]
+    fn one_healthy_service_keeps_the_gate_open() {
+        let (any_usable, unhealthy) = fold_service_health(&[
+            ("claude-flow", false),
+            ("ruv-swarm", true),
+            ("flow-nexus", false),
+        ]);
+        assert!(any_usable);
+        assert_eq!(unhealthy, vec!["claude-flow", "flow-nexus"]);
+    }
+
+    /// A fully healthy estate names nobody.
+    #[test]
+    fn all_healthy_warns_about_nothing() {
+        let (any_usable, unhealthy) =
+            fold_service_health(&[("claude-flow", true), ("ruv-swarm", true)]);
+        assert!(any_usable);
+        assert!(unhealthy.is_empty());
+    }
+
+    /// Before the first probe there are no results; the connection must not be
+    /// refused discovery on that basis.
+    #[test]
+    fn no_probe_yet_is_optimistic() {
+        let (any_usable, unhealthy) = fold_service_health(&[]);
+        assert!(any_usable, "pre-probe state must not block a fresh client");
+        assert!(unhealthy.is_empty());
+    }
+
+    /// `has_healthy_services` is a pure atomic read: calling it repeatedly must
+    /// neither spawn work nor change the cached verdict (the leak this closes).
+    #[test]
+    fn cached_verdict_reads_are_pure_and_stable() {
+        let cache = std::sync::Arc::new(AtomicBool::new(true));
+        for _ in 0..1_000 {
+            assert!(cache.load(Ordering::Relaxed));
+        }
+        cache.store(false, Ordering::Relaxed);
+        for _ in 0..1_000 {
+            assert!(!cache.load(Ordering::Relaxed));
+        }
+    }
+
+    /// The monitor's termination condition: once the actor's `Arc` is dropped
+    /// the task's `Weak` no longer upgrades, so the loop returns instead of
+    /// probing for the lifetime of the process.
+    #[test]
+    fn monitor_stops_when_the_client_is_dropped() {
+        let cache = std::sync::Arc::new(AtomicBool::new(true));
+        let observer = std::sync::Arc::downgrade(&cache);
+        assert!(observer.upgrade().is_some(), "live client keeps monitoring");
+        drop(cache);
+        assert!(
+            observer.upgrade().is_none(),
+            "dropped client must terminate the monitor task"
+        );
     }
 }

@@ -2,13 +2,13 @@
 id: ADR-2038
 title: "Boot-time deployment-profile assertion with illegal-combination abort"
 date: 2026-08-31
-decision_status: proposed
-implementation_status: complete
-activation_status: staged
+decision_status: accepted
+implementation_status: partial
+activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: b00c28a0d766c8cf46cd00b100dab60ef2dd74a4
-verified_paths: []
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+verified_paths: [src/config/security_profile.rs, src/main.rs]
 owner: jjohare
 review_trigger: adoption of a production deployment, or any change to the profile env vars (RBAC_PUBLIC_READS, PUBKEY_VISIBILITY_FILTER, RBAC_DEFAULT_ROLE)
 repo: visionclaw
@@ -164,3 +164,84 @@ drift: `cargo test --lib --no-default-features rbac` — 13 passed, 0 failed.
 `assert_effective_profile_or_exit` is not exercised end to end (it calls
 `process::exit`); only the pure evaluator it wraps is tested. Status left
 `none`/`inactive`: the assertion exists but no deployment has run it.
+
+## Verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; no production logic changed (verified by
+whitespace-normalised comparison of every changed file — only rustfmt artefacts
+remain). Line numbers below are re-derived positions over unchanged code.
+
+**The reason this record was held at `proposed` no longer holds.** That posture
+was chosen for one stated reason, quoted from the section above: the module and
+its call site were *uncommitted*, so "a clean checkout … contains neither, and
+re-verifying this record from that SHA will not find the assertion." That is
+false at this commit:
+
+- `git ls-tree HEAD src/config/security_profile.rs` returns the blob, and
+  `git log --oneline -1 -- src/config/security_profile.rs` → **`ac3e12dd1`**
+  (*feat(security): explicit runtime security profile + RBAC gate updates*).
+- `git show HEAD:src/main.rs | grep -c assert_effective_profile_or_exit` → **2**
+  (the import and the call), where the earlier check returned `0`.
+
+`decision_status` therefore moves `proposed` → **`accepted`**, and
+`verified_commit`/`verified_paths` are restored exactly as that section required.
+
+**Citations re-derived at this commit** (the file has grown to 1263 lines since
+the 1038 recorded above, and every line number in the previous section has
+moved):
+
+| Symbol | Cited above | Current |
+|---|---|---|
+| `assert_effective_profile_or_exit` | `:528` | **`security_profile.rs:612`** |
+| call site in `main.rs` | `:873` | **`main.rs:876`** (block `:871-881`, import `:873`) |
+| `HttpServer::new` | `:893` | **`main.rs:896`** |
+| `.bind()` | `:1146` | **`main.rs:1177`** |
+| boot receipt logged | `:879-883` | **`main.rs:882-886`** |
+| `DeploymentProfile` | `:79` | **`:84`** |
+| `expected_flags()` | `:120-136` | **`:125`** |
+| `SECURITY_PROFILE_ENV` | `:55` | **`:55`** (unchanged) |
+| `FORBIDDEN_DEV_VARS` | `:60-66` | **`:60`** |
+| `may_bind_listener` | `:358` | **`:383-385`** |
+| `evaluate_effective_profile` | — | **`:480`** |
+
+The assertion runs **before the listener binds**, unconditionally, in a committed
+build: `:876` precedes `HttpServer::new` (`:896`) and `.bind()` (`:1177`).
+`activation_status` moves `staged` → **`live`** on that basis.
+
+**`implementation_status` moves `complete` → `partial`, which is a downgrade, and
+deliberate.** The Decision states: *"A production selector (any deployment not
+explicitly opting into demo-open or single-tenant) MUST default to the
+**multi-user-locked** profile."* That is **not implemented**, and the code says so
+plainly at HEAD: `EffectiveProfile::classified` is an `Option<DeploymentProfile>`
+rendered `<unnamed>` in the boot receipt (`:388-395`) when no ratified profile
+matches, and an unnamed classification **raises no finding**. Since
+`may_bind_listener()` is `!is_production_artefact() || findings.is_empty()`
+(`:383-385`), a production deployment that declares nothing and lands on an
+unnamed flag combination still binds. `grep -n "unwrap_or(DeploymentProfile"` →
+no hit: there is no implicit profile anywhere.
+
+The highest-risk case *is* closed, but by a different rule and a different
+record: ADR-2043's unconditional full-disclosure pair check at `:544-552`, whose
+comment at `:531-536` names exactly this asymmetry — "a deployment that DECLARED
+one got `ProfileDrift` while a deployment that declared nothing was merely
+classified `Unnamed` and bound anyway. That is backwards relative to the risk."
+The general default remains open.
+
+This also reconciles an internal contradiction: the "Acceptance progress" section
+ends *"Status left `none`/`inactive`"* while the frontmatter read
+`complete`/`staged`. The frontmatter is now `partial`/`live`/`accepted` and is
+authoritative; the earlier prose is superseded by this section.
+
+**Tests at this commit.** `cargo test --lib --no-default-features
+security_profile` → **37 passed, 0 failed** (1230 filtered out) — the sections
+above record 29; the suite has grown since. The shared acknowledgement rule with
+ADR-2011's gate still holds: `cargo test --lib --no-default-features rbac` →
+**14 passed, 0 failed** (recorded as 13 above).
+
+**Still open, unchanged.** Image digest and feature closure are not bound to the
+boot receipt (`BuildIdentity` is derived from `cfg!` flags, not an artefact
+digest). `assert_effective_profile_or_exit` is still not exercised end to end
+because it calls `process::exit`; only the pure evaluator it wraps is tested. No
+deployment has run the assertion, and the shipped `docker-compose.unified.yml`
+still declares no `VISIONCLAW_SECURITY_PROFILE` (ADR-2027).

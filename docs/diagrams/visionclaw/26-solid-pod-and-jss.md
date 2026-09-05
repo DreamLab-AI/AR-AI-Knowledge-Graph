@@ -25,7 +25,12 @@ sources:
   - client/src/features/solid/components/SolidTabContent.tsx
   - client/src/features/control-center/panels/SolidPanel.tsx
   - client/src/store/websocket/solidWebSocket.ts
-verified_commit: b00c28a0d
+  - client/src/features/ontology/services/jss/schemaParser.ts
+  - client/src/features/solid/components/PodBrowser.tsx
+  - client/src/features/solid/components/PodSettings.tsx
+  - client/src/features/solid/components/ResourceEditor.tsx
+  - src/handlers/image_gen_handler.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-26.1 Deployment topology — embedded pod vs feature-off stub
@@ -40,19 +45,19 @@ flowchart TB
     FEAT -->|"cfg(not(feature = solid-pod-embed))"| OFF["OFF: stub build"]
 
     subgraph onpath["main.rs — feature ON"]
-        INIT["init_solid_state().await<br/>main.rs:837-838"]
-        APPDATA["app.app_data(solid_state.clone())<br/>main.rs:1012-1013"]
-        CFG["configure_solid_routes<br/>main.rs:1119"]
+        INIT["init_solid_state().await<br/>main.rs:841"]
+        APPDATA["app.app_data(solid_state.clone())<br/>main.rs:1016"]
+        CFG["configure_solid_routes<br/>main.rs:1126"]
         FS["FsBackend::new(SOLID_DATA_ROOT)<br/>solid_proxy_handler.rs:120,133"]
-        ROUTES["Full /solid scope: health, .notifications,<br/>pods*, LDP CRUD, DID<br/>solid_proxy_handler.rs:1821-1856"]
+        ROUTES["Full /solid scope: health, .notifications,<br/>pods*, LDP CRUD, DID<br/>solid_proxy_handler.rs:1752-1787"]
         INIT --> FS
         INIT --> APPDATA --> CFG --> ROUTES
     end
 
     subgraph offpath["main.rs — feature OFF"]
-        NOINIT["solid_state / pay_* app_data blocks<br/>compiled out (main.rs:837,843,1012-1023)"]
-        STUBCFG["configure_routes (stub)<br/>solid_proxy_handler.rs:1861-1888"]
-        STUBROUTES["Same route table, each handler<br/>returns 503 ServiceUnavailable"]
+        NOINIT["solid_state app_data block compiled out<br/>main.rs:840-841 and :1015-1016"]
+        STUBCFG["configure_routes (feature-off twin)<br/>solid_proxy_handler.rs:1799-1803"]
+        STUBROUTES["RESOLVED ADR-2067 — registers nothing at all<br/>/solid/*, /.well-known/did.json and /did/* all 404<br/>in a feature-off build (was: a full table of 503 stubs)"]
         NOINIT --> STUBCFG --> STUBROUTES
     end
 
@@ -383,23 +388,24 @@ sequenceDiagram
     end
     WS-->>PN: onmessage "protocol ..." | "ack ..." | "pub ..."<br/>podNotifications.ts:142-157
     alt msg starts with "pub "
-        PN->>PN: notifySubscribers(url) + parent container (podNotifications.ts:159-167)
+        PN->>PN: notifySubscribers(url) + parent container (podNotifications.ts:251-273)
         PN-->>Hook: callback({type:'pub', url})
     else msg starts with "ack "
         PN-->>Hook: callback({type:'ack', url})
     end
 
     alt connection drops (onclose)
-        PN->>PN: handleReconnect - backoff 1000ms * 2^attempt, max 5 attempts<br/>podNotifications.ts:169-183
-        loop until maxReconnectAttempts (5)
+        PN->>PN: handleReconnect - backoff SOLID_RECONNECT_DELAY_MS * 2^attempt<br/>podNotifications.ts:275-289
+        loop until SOLID_MAX_RECONNECT_ATTEMPTS (5, podNotifications.ts:32-33)
             PN->>WS: new WebSocket(JSS_WS_URL)
         end
     end
 
-    Note over SW,WS: DIVERGENCE: solidWebSocket.ts (Zustand store) is a SECOND,<br/>independent client to the same VITE_JSS_WS_URL (registry name<br/>solid-store vs solid-pod) - max 10 attempts not 5 (solidWebSocket.ts:17-18)
-    SW->>WS: connectSolidWebSocket() - separate WebSocket instance<br/>solidWebSocket.ts:125,148
-    WS-->>SW: onmessage - handleSolidMessage (solidWebSocket.ts:61-90)
-    SW->>SW: notifySolidSubscribers(url) + emit('solid-resource-changed')<br/>solidWebSocket.ts:32-56,84
+    Note over SW,WS: RESOLVED ADR-2100 (2026-09-05): there is ONE client. solidWebSocket.ts no longer opens<br/>its own socket - it is a thin store adapter over the podNotificationManager singleton<br/>(podNotifications.ts:300), registered once as solid-pod. The 10-vs-5 retry divergence is gone:<br/>both consumers share SOLID_MAX_RECONNECT_ATTEMPTS and SOLID_RECONNECT_DELAY_MS
+    SW->>PN: connectSolidWebSocket(set) - delegates, no second WebSocket<br/>solidWebSocket.ts:71
+    SW->>PN: subscribeSolidResource - podNotificationManager.subscribe<br/>solidWebSocket.ts:107
+    PN-->>SW: onLifecycle event mirrored to store state + emit('solid-resource-changed')<br/>podNotifications.ts:186, solidWebSocket.ts:32
+    Note over SW: state.solidSubscriptions is a BOOKKEEPING MIRROR only - it backs getSolidSubscriptions()<br/>and is never dispatched through, so a store callback fires exactly once
 ```
 
 ## VC-26.10 jss schemaParser — JSON-LD context load with cache

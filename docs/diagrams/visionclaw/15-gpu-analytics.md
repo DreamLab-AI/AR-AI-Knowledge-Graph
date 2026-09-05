@@ -42,7 +42,8 @@ sources:
   - crates/visionclaw-gpu/src/cuda_sources/pagerank.cu
   - crates/visionclaw-gpu/src/cuda_sources/gpu_landmark_apsp.cu
   - docs/GPU-wire-abi.md
-verified_commit: b00c28a0d
+  - crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-15.1 POST /analytics/clustering/run — spectral/kmeans/louvain/default dispatch with CPU fallback
@@ -674,10 +675,10 @@ classDiagram
 ```mermaid
 flowchart TD
     subgraph LIVE["Live GPU kernels (crates/visionclaw-gpu/src/cuda_sources)"]
-        LOUV["Louvain community detection<br/>gpu_clustering_kernels.cu:581 D1 fix marker"]
-        PR["PageRank<br/>pagerank.cu:263 D8 fix marker, global two-kernel dangling-mass path"]
-        DBS["DBSCAN<br/>gpu_clustering_kernels.cu:1079 border handling in propagate/finalise"]
-        LOF["LOF local outlier factor<br/>anomaly_detection_actor.rs:201 fixed and trustworthy"]
+        LOUV["Louvain community detection TRUSTED<br/>gpu_clustering_kernels.cu:581 D1 fix marker, output-verified by ADR-2061"]
+        PR["PageRank TRUSTED<br/>pagerank.cu:263 D8 fix marker, global two-kernel dangling-mass path, output-verified by ADR-2061"]
+        DBS["DBSCAN TRUSTED<br/>gpu_clustering_kernels.cu:1079 border handling in propagate/finalise, output-verified by ADR-2061"]
+        LOF["LOF local outlier factor BROKEN<br/>gpu_clustering_kernels.cu:404-417 lrd floors on the query k-distance not the neighbour<br/>so it computes a k-distance ratio and not Breunig LOF - ADR-2061"]
         ONT["Ontology constraints<br/>fixed and live, keystone wiring"]
     end
 
@@ -695,12 +696,12 @@ flowchart TD
         CPULOF["CPU reference lof :443"]
     end
 
-    LOUV -.->|"no benchmark comparison wired"| CPUMOD
-    PR -.->|"no benchmark comparison wired"| CPUPR
-    DBS -.->|"no benchmark comparison wired"| CPUDB
-    LOF -.->|"no benchmark comparison wired"| CPULOF
+    LOUV -.->|"conformance test PASSES"| CPUMOD
+    PR -.->|"conformance test PASSES"| CPUPR
+    DBS -.->|"conformance test PASSES"| CPUDB
+    LOF -.->|"conformance test FAILS 1e-3 bar"| CPULOF
 
-    NOTE["PROPOSED ADR-2061: Analytics outputs are code-fixed but not output-validated<br/>Louvain/PageRank/DBSCAN carry in-source fix markers but no reference-implementation<br/>benchmark has confirmed their outputs (docs/GPU-wire-abi.md Known divergences and open items)"]
+    NOTE["PARTIAL ADR-2061 (2026-09-05): kernels are now output-validated against the CPU oracle<br/>PageRank max delta 3.4e-11 and DBSCAN exact and Louvain 16 of 16 communities all TRUSTED<br/>LOF BROKEN at max delta 0.702 against a 1e-3 bar - query k-distance used in place of neighbour<br/>Test crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs and see docs/GPU-wire-abi.md trust table"]
     LIVE -.-> NOTE
     ORACLE -.->|"fixture crate only, not wired into any runtime request path"| LIVE
 ```

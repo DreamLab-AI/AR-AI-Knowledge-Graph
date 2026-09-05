@@ -18,7 +18,10 @@ sources:
   - agentbox/scripts/ruvector-recall-harness.mjs
   - agentbox/agentbox.toml
   - agentbox/flake.nix
-verified_commit: b00c28a0d
+  - agentbox/agentbox.sh
+  - agentbox/config/hooks/nostr-live-mirror.cjs
+  - agentbox/mcp/servers/ruvector-mcp.cjs
+verified_commit: bed6b617d
 ---
 
 ## AB-21.1 Capture — transcript-driven grading

@@ -30,6 +30,21 @@ use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 const BATCH_SIZE: usize = 50;
 const LOCAL_PAGES_DIR: &str = "/app/data/pages";
 
+/// The inline marker that admits a page to the OWL extraction path.
+const ONTOLOGY_BLOCK_MARKER: &str = "### OntologyBlock";
+
+/// The ADR-2040 §V4 inclusion gate for a vault page: frontmatter `public: true`,
+/// or a non-empty `owl-class`. Absence of both means private.
+///
+/// ADR-2096: delegates to `visionclaw_domain::vault`, the single parsing entry
+/// point, so this reader agrees with `FileService` and `GitHubSyncService`
+/// instead of carrying its own line scan. Logseq `public::` lines still count
+/// under the bounded legacy tolerance — but only in the leading property block,
+/// never mid-body and never inside a code fence.
+fn page_is_kg_included(content: &str) -> bool {
+    visionclaw_domain::vault::parse(content).is_kg_included()
+}
+
 #[derive(Clone)]
 pub struct LocalFileSyncService {
     content_api: Arc<EnhancedContentAPI>,
@@ -485,11 +500,18 @@ impl LocalFileSyncService {
         }
 
         // Process based on content type (Priority 1, 2, or 3)
-        // Priority 1 & 3: Knowledge graph files (public:: true)
-        if content.lines().take(20).any(|line| {
-            let trimmed = line.trim().to_lowercase();
-            trimmed == "public:: true" || trimmed == "public::true"
-        }) {
+        //
+        // ADR-2096: the inclusion gate is parsed ONCE, here, through the single
+        // vault parsing entry point. This reader used to run its own raw scan of
+        // the first 20 lines for a literal `public:: true` — exactly the
+        // duplicated carrier knowledge ADR-2040 forbids. That scan missed
+        // Obsidian frontmatter (`public: true`) entirely, and counted the marker
+        // anywhere in those 20 lines, a code fence or mid-body included.
+        let kg_included = page_is_kg_included(content);
+        let has_ontology_block = content.contains(ONTOLOGY_BLOCK_MARKER);
+
+        // Priority 1 & 3: Knowledge graph files (§V4 inclusion gate)
+        if kg_included {
             let mut parsed = self
                 .kg_parser
                 .parse(content, file_name)
@@ -528,7 +550,7 @@ impl LocalFileSyncService {
         }
 
         // Priority 1 & 2: Ontology files (OntologyBlock)
-        if content.contains("### OntologyBlock") {
+        if has_ontology_block {
             match self.onto_parser.parse(content, file_name) {
                 Ok(onto_data) => {
                     info!(
@@ -575,8 +597,12 @@ impl LocalFileSyncService {
             }
         }
 
-        // Skip files with no special markers
-        if !content.contains("public::") && !content.contains("### OntologyBlock") {
+        // Skip files with no special markers. ADR-2096: derived from the same
+        // two decisions the branches above took, rather than from a third raw
+        // `content.contains("public::")` scan that disagreed with both — a page
+        // merely *quoting* `public::` used to escape the skipped count while
+        // being ingested by nothing.
+        if !kg_included && !has_ontology_block {
             stats.skipped_files += 1;
         }
 
@@ -687,5 +713,55 @@ impl LocalFileSyncService {
             .map_err(|e| format!("Failed to save graph: {}", e))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_is_kg_included;
+
+    /// The pre-ADR-2096 behaviour this must preserve: a leading Logseq
+    /// `public:: true` property still admits the page.
+    #[test]
+    fn leading_logseq_public_property_is_included() {
+        assert!(page_is_kg_included("public:: true\n\n# Page\n\nBody.\n"));
+        assert!(page_is_kg_included("- public:: true\n\n# Page\n"));
+    }
+
+    /// What the raw 20-line scan could not see: the corpus's Obsidian
+    /// frontmatter carrier. These pages were silently dropped from local sync
+    /// while `GitHubSyncService` ingested them.
+    #[test]
+    fn obsidian_frontmatter_is_included() {
+        assert!(page_is_kg_included("---\npublic: true\n---\n\n# Page\n"));
+        assert!(page_is_kg_included(
+            "---\nowl-class: mv:Camera\n---\n\n# Camera\n"
+        ));
+    }
+
+    /// The leak the raw scan had: a page that merely *quotes* the marker inside
+    /// a code fence, or writes it mid-body, is private. The old scan matched it
+    /// anywhere in the first 20 lines and ingested it.
+    #[test]
+    fn quoted_or_mid_body_marker_is_not_included() {
+        assert!(!page_is_kg_included(
+            "# Example\n\nTo publish, write:\n\n```\npublic:: true\n```\n"
+        ));
+        assert!(!page_is_kg_included("Some prose first.\n\npublic:: true\n"));
+    }
+
+    /// Fail-closed: neither carrier present means private.
+    #[test]
+    fn a_page_with_no_metadata_is_private() {
+        assert!(!page_is_kg_included(
+            "# Just a heading\n\nSome body text.\n"
+        ));
+        assert!(!page_is_kg_included(""));
+    }
+
+    /// An explicit `public: false` with no class marker stays out.
+    #[test]
+    fn explicit_public_false_is_not_included() {
+        assert!(!page_is_kg_included("---\npublic: false\n---\n\n# Page\n"));
     }
 }

@@ -187,7 +187,7 @@ const WasmParticleInstances: React.FC<WasmParticleInstancesProps> = ({
 
     meshRef.current = m;
     return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, []);
 
   // Dispose GPU resources on unmount (geometry, material, InstancedMesh buffers)
@@ -283,7 +283,7 @@ const WasmWispInstances: React.FC<WasmWispInstancesProps> = ({
 
     meshRef.current = m;
     return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, []);
 
   // Dispose GPU resources on unmount
@@ -456,7 +456,7 @@ const FallbackParticles: React.FC<{ opacity: number }> = React.memo(({ opacity }
 
     meshRef.current = m;
     return { mesh: m, basePositions: pos, baseSpeeds: spd };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, []);
 
   // Dispose GPU resources on unmount
@@ -544,7 +544,7 @@ const FallbackWisps: React.FC<{ opacity: number; count: number }> = React.memo((
 
     meshRef.current = m;
     return { mesh: m, basePositions: pos, speeds: spd };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, []);
 
   // Dispose GPU resources on unmount
@@ -592,7 +592,7 @@ const FallbackFogPlane: React.FC<{ opacity: number }> = React.memo(({ opacity })
       uColorDeep: { value: new THREE.Color('#0a0a1e') },
       uColorLight: { value: new THREE.Color('#12122e') },
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
     [],
   );
 

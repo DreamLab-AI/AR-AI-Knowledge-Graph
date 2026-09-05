@@ -31,7 +31,17 @@ sources:
   - src/services/file_service.rs
   - src/services/graph_serialization.rs
   - src/app_state.rs
-verified_commit: b00c28a0d
+  - data/metadata/metadata.json
+  - src/handlers/ontology_handler.rs
+  - src/ports/knowledge_graph_repository.rs
+  - src/services/github_sync_service.rs
+  - src/services/liveness_harness.rs
+  - src/services/local_file_sync_service.rs
+  - src/services/management_api_client.rs
+  - src/services/nostr_bead_publisher.rs
+  - src/services/ontology_enrichment_service.rs
+  - src/services/schema_service.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-25.1 Insight loop trace assembly (REC-10, compute-on-read)
@@ -469,18 +479,15 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Caller as AppState / handler
-    participant MA as MetadataActor<br/>src/actors/metadata_actor.rs:9
+    participant MA as MetadataActor<br/>src/actors/metadata_actor.rs:23
 
     Note over MA: replaces Arc<RwLock<MetadataStore>> - started at src/app_state.rs:802 (BASELINE-architecture.md "Actor system topology")
     Caller->>MA: GetMetadata<br/>crates/visionclaw-actors/src/messages/graph_messages.rs:212
-    MA-->>Caller: Ok(MetadataStore clone)<br/>src/actors/metadata_actor.rs:50-55
+    MA-->>Caller: Ok(MetadataStore clone)<br/>src/actors/metadata_actor.rs:58-64
     Caller->>MA: UpdateMetadata{metadata}<br/>crates/visionclaw-actors/src/messages/graph_messages.rs:216
-    MA->>MA: update_metadata(new_metadata) - self.metadata = new_metadata<br/>src/actors/metadata_actor.rs:22-25,58-64
+    MA->>MA: update_metadata(new_metadata) - self.metadata = new_metadata<br/>src/actors/metadata_actor.rs:36-39,66-73
     MA-->>Caller: Ok(())
-    Caller->>MA: RefreshMetadata<br/>crates/visionclaw-actors/src/messages/graph_messages.rs:222
-    MA->>MA: refresh_metadata() - logs only, no reload logic implemented<br/>src/actors/metadata_actor.rs:27-31
-    Note right of MA: DIVERGENCE: refresh_metadata is a stub - returns Ok(()) without<br/>re-reading metadata.json or the Oxigraph store (src/actors/metadata_actor.rs:27-31)
-    MA-->>Caller: Ok(())
+    Note right of MA: RESOLVED ADR-2097 (2026-09-05): RefreshMetadata and refresh_metadata are deleted - the message had no senders<br/>and the actor holds no source. metadata.json is owned by FileService, which pushes rebuilt stores in via UpdateMetadata
 ```
 
 ## VC-25.13 file_service + graph_serialization + empty-graph guard

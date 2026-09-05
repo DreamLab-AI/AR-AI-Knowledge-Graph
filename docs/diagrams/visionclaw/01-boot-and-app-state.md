@@ -56,7 +56,15 @@ sources:
   - src/settings/api/settings_routes.rs
   - src/services/liveness_harness.rs
   - src/services/canary_nostr_tap.rs
-verified_commit: b00c28a0d
+  - src/config/security_profile.rs
+  - src/handlers/pay_handler.rs
+  - src/services/github/config.rs
+  - src/services/github_sync_service.rs
+  - src/services/kpi_compute.rs
+  - src/services/role_store.rs
+  - src/utils/auth.rs
+  - tests/resd_class_count_route.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-01.1 main() phase 1 — hygiene, logging, settings, stores
@@ -429,7 +437,7 @@ flowchart LR
     C --> B["bots::config<br/>scope /bots — src/handlers/api_handler/bots/mod.rs:11<br/>GET|POST /data, POST /update, POST /initialize-swarm, GET /status<br/>GET /agents, POST /spawn-agent-hybrid, POST /submit-task, POST /interrupt<br/>GET /task-status/{id}, DELETE /remove-task/{id}"]
     C --> AN["analytics::config<br/>scope /analytics — src/handlers/api_handler/analytics/mod.rs:169<br/>POST clustering/{focus,cancel,dbscan}, community/detect, anomaly/{detect,toggle}<br/>sssp/{params,compute,toggle}, feature-flags<br/>GET params, constraints, stats, gpu-{metrics,status,features}<br/>clustering/status, anomaly/{current,config}, insights, insights/realtime<br/>sssp/status, dashboard-status, health-check, feature-flags"]
     C --> NO["nostr_handler::config<br/>scope /auth/nostr — src/handlers/nostr_handler.rs:53 — see VC-05"]
-    C --> RF["ragflow_handler::config<br/>scope /ragflow — src/handlers/ragflow_handler.rs:751<br/>POST /session, /message, /chat, /session/enhanced<br/>GET /history/{session_id}, /history/enhanced/{session_id}"]
+    C --> RF["ragflow_handler::config<br/>scope /ragflow — src/handlers/ragflow_handler.rs:620<br/>POST /session, /message, /chat, /session/enhanced<br/>GET /history/{session_id}, /history/enhanced/{session_id}"]
     C --> CO["constraints_handler::config<br/>scope /constraints — src/handlers/constraints_handler.rs:13<br/>POST /define, /apply, /remove, /validate — GET /list"]
     C --> ON["ontology::config<br/>scope /ontology — src/handlers/api_handler/ontology/mod.rs:1654 — see VC-20"]
     C --> OP["ontology_physics::configure_routes<br/>scope /ontology-physics — src/handlers/api_handler/ontology_physics/mod.rs:502<br/>POST /enable, /disable — GET /constraints, /trust-status — PUT /weights"]
@@ -465,7 +473,7 @@ flowchart LR
     S --> GE["configure_graph_export_routes<br/>scope /graph-export — src/handlers/graph_export_handler.rs:319<br/>POST '', /share, /publish — GET /shared/{id}, /stats — DELETE /shared/{id}"]
     S --> OA["configure_ontology_agent_routes<br/>scope /ontology-agent — src/handlers/ontology_agent_handler.rs:434<br/>POST /discover, /read, /query, /traverse, /validate — GET /status<br/>nested scope /propose POST '' — see VC-05"]
     S --> DE["configure_decision_routes<br/>scope /decisions — src/handlers/decision_handler.rs:323<br/>GET /{urn}/trace — nested scope /record POST '' — PRD-022 W-B / ADR-048"]
-    S --> SO["configure_solid_routes<br/>src/handlers/solid_proxy_handler.rs:1831 — see VC-05"]
+    S --> SO["configure_solid_routes<br/>src/handlers/solid_proxy_handler.rs:1752<br/>re-exported at src/handlers/mod.rs:121 — see VC-05"]
     S --> IG["configure_image_gen_routes<br/>scope /image-gen — src/handlers/image_gen_handler.rs:776<br/>GET /health, /status/{job_id} — POST /submit, /agent-submit"]
     S --> BR["configure_briefing_routes<br/>scope /briefs — src/handlers/briefing_handler.rs:118<br/>POST '' submit_brief, POST /{brief_id}/debrief"]
     S --> MF["configure_memory_flash_routes<br/>POST /api/memory-flash and the batch route<br/>src/handlers/memory_flash_handler.rs:134-137"]

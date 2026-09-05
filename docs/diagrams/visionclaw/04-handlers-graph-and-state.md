@@ -47,7 +47,12 @@ sources:
   - src/handlers/quic_transport_handler.rs
   - src/handlers/mod.rs
   - src/main.rs
-verified_commit: b00c28a0d
+  - src/actors/gpu/analytics_telemetry.rs
+  - src/handlers/api_handler/analytics/performance_handlers.rs
+  - src/handlers/api_handler/analytics/sssp_handlers.rs
+  - src/utils/binary_protocol.rs
+  - src/utils/validation/sanitization.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-04.1 api_handler graph — read path (data, paginated, positions, fold, relations, expand, pattern)

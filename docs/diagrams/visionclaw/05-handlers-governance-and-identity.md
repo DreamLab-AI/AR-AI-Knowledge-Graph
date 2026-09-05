@@ -49,7 +49,12 @@ sources:
   - src/utils/nip98.rs
   - src/main.rs
   - docs/adr/ADR-2006-acsp-human-approval.md
-verified_commit: b00c28a0d
+  - agentbox/management-api/routes/broker-bridge.js
+  - src/config/feature_access.rs
+  - src/middleware/rbac_gate.rs
+  - src/services/management_api_client.rs
+  - src/services/nostr_bead_publisher.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-05.1 `admin_rbac_handler` — whoami / list / assign / revoke (ADR-2010)
@@ -305,7 +310,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as caller
-    participant SC as scope /decisions<br/>src/handlers/decision_handler.rs:321-333
+    participant SC as scope /decisions<br/>src/handlers/decision_handler.rs:321-331
     participant RA as RequireAuth::authenticated<br/>wraps nested scope /record only :326
     participant H as decision_handler<br/>record_decision :145, trace_decision :231
     participant DS as DecisionService::record_decision<br/>src/services/decision_service.rs:546
@@ -730,7 +735,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant SC as scope /solid<br/>src/handlers/solid_proxy_handler.rs:1821 configure_routes (feature solid-pod-embed)
+    participant SC as scope /solid<br/>src/handlers/solid_proxy_handler.rs:1752 configure_routes (feature solid-pod-embed)
     participant H as solid_proxy_handler
     participant RG as RbacGate<br/>/api scope wrap (WriteGraph on mutating /api/*, see VC-03.6)
     participant SD as SolidPodState::extract_user_identity<br/>:184 own NIP-98 verification

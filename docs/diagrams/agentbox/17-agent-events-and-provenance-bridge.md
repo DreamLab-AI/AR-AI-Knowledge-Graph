@@ -17,7 +17,8 @@ sources:
   - agentbox/management-api/lib/failure-taxonomy.js
   - agentbox/management-api/lib/uris.js
   - agentbox/management-api/routes/kg-elevation.js
-verified_commit: b00c28a0d
+  - agentbox/management-api/lib/agent-control-surface.js
+verified_commit: bed6b617d
 ---
 
 ## AB-17.1 The agent-event wire envelope — single canonical builder

@@ -20,7 +20,9 @@ sources:
   - src/handlers/layout_handler.rs
   - crates/visionclaw-domain/src/models/simulation_params.rs
   - Cargo.toml
-verified_commit: b00c28a0d
+  - src/handlers/constraints_handler.rs
+  - src/utils/visionflow_unified.ptx
+verified_commit: bed6b617d
 ---
 
 ## VC-11.1 Physics tick — phase 1, params and flag word

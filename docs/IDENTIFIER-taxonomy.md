@@ -80,6 +80,23 @@ above, and `vc:{domain}/{slug}` is its human/RDF rendering. Legacy `urn:ngm:grap
 named graphs remain the persistence named-graph IRIs and are not rewritten
 (`src/uri/mod.rs:464-466`).
 
+**Reconciliation with the §1 kind table (2026-09-05, ADR-2105 pass).** The two
+sections describe different planes and must not be read as competing kind lists.
+**No row of the §1 kind table mints `vc:{domain}/{slug}`, and none ever will**: §1
+enumerates the seven typed constructors of the durable persistence plane, and the
+only concept-bearing member is `concept` →
+`urn:visionclaw:concept:<domain>:<slug>`. §2 is a *rendering* plane, not a minting
+one — a `vc:` CURIE is produced by JSON-LD `@context` expansion at presentation
+time and is never allocated, stored, compared or joined on. Operationally: a `vc:`
+CURIE must never appear in a persisted subject position, a database column, a wire
+identifier or a cross-store join key; where one is observed there, the durable
+`urn:visionclaw:concept` is the identifier and the CURIE is its rendering. The
+`{domain}/{slug}` *subject* grammar of legacy ADR-100 is superseded by this
+document, which is why it has no kind-table row rather than a row marked
+unimplemented. Raised by diagram note VC-23.9
+(`docs/diagrams/visionclaw/23-identifiers-urn-did-sha12.md`), which read the
+absence of a row as an unreconciled gap.
+
 ### 3. Sovereign identity — `did:nostr:<hex-pubkey>` + display npub
 
 Identity is a DID, minted by `did_nostr()` (`src/uri/mod.rs:220`), prefix
@@ -172,6 +189,7 @@ surface must call `parse` (legacy ADR-105).
   string + unmapped marker rather than a synthetic ID. `bead` no longer falls into
   this arm — **Resolved — ADR-2072 (2026-09-05)** — it now crosses structurally
   (see the cross-substrate mapping table above).
+- **Invariant 7 (`parse` rejects `urn:ngm:*`, `parse_dual` accepts it) is deliberate, not drift — DELIBERATE (2026-09-05, agentbox ADR-2061).** It is a mint-vs-resolve split: `parse` refuses the retired namespace so no *new* durable ID can be minted under it, while `parse_dual` accepts it so IDs persisted before the ADR-105 cutover keep resolving. The two are meant to disagree, and collapsing them in either direction would either strand legacy IDs or re-open minting. Same review pass: agentbox ADR-2061 made the cross-substrate kind list a shared artefact `cross_from_agentbox` now derives from (`include_str!("../../agentbox/schema/federation-kinds.json")`), which shifted every `src/uri/mod.rs` citation in this document by roughly +125 lines — the mapping table above and the `:711-713` / `:650` references are stale by offset, not by content, pending a re-derivation pass by the owning lead.
 - **npub vs hex mixing risk.** `user_context` stores npub as the "primary user
   identifier" (`user_context.rs:16`) while the URN/DID layer is hex-canonical. No
   automatic conversion is enforced at that boundary — audit that npub never leaks into
@@ -227,3 +245,20 @@ ADR-2024's release overflow warning belongs to the typed flag setters. **Resolve
   development aid, not the bound. Also re-derives the `cross_from_agentbox` citation (`src/uri/mod.rs:650`).
 - **ADR-2072** — `cross_from_agentbox` maps `bead`, closing the cross-substrate asymmetry with the
   agentbox BC20 bridge (agentbox ADR-2061 holds the cross-repo contract and its parity test).
+
+- **ADR-2105** (proposed) — the agentbox authoring correlation id is a durable cross-repo
+  identifier: the proposal, approval, merge and served-corpus stages accept, persist and echo it,
+  and a request arriving without one is recorded `unlinked` rather than given a VisionClaw-side
+  synthetic mint. agentbox ADR-2022's own "Remaining" section is the ORIGIN of this gap and is
+  referenced (`see`), not superseded.
+- **Doc-correct (2026-09-05)** — §2 now carries a dated reconciliation paragraph stating that no
+  row of the §1 kind table mints `vc:{domain}/{slug}` and none will: §2 is a rendering plane, and
+  a `vc:` CURIE must never occupy a persisted subject, column, wire or join position. Raised by
+  diagram note VC-23.9.
+- **ADR-2095 (2026-09-05)** — the legacy `urn:ngm:class:<slug>` scheme is minted through a typed
+  constructor like every other durable identifier: `class_iri`/`parse_class_iri`/`CLASS_PREFIX` are
+  defined in `crates/visionclaw-domain/src/uri.rs:15-56` (the domain crate, so the adapters crate
+  can reach them) and re-exported from `uri::ngm` (`src/uri/mod.rs:351`). The five raw `format!`
+  mints are gone — `src/actors/elevation_actor.rs:329,514` and
+  `crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:174,1598,1619`. Emitted strings
+  are unchanged. Raised by diagram note VC-23.9.

@@ -31,7 +31,7 @@ sources:
   - src/handlers/socket_flow_handler/http_handler.rs
   - client/src/services/nostrAuthService.ts
   - client/src/types/nip07.d.ts
-verified_commit: b00c28a0d
+verified_commit: bed6b617d
 ---
 ## ES-04.1 verification mesh — who signs, who verifies whom
 ```mermaid

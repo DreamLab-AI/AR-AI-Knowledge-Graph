@@ -19,7 +19,8 @@
 //!
 //! All IRIs use the `vc:` prefix expanding to
 //! `https://narrativegoldmine.com/ns/v1#`. OntologyClass IRIs follow the
-//! pattern `urn:ngm:class:<slug>`; Properties
+//! pattern minted by `visionclaw_domain::uri::ngm::class_iri` (ADR-2095 —
+//! never by hand); Properties
 //! `urn:ngm:property:<slug>`; Axioms
 //! `urn:ngm:axiom:<sha256-12>` content-addressed.
 
@@ -40,6 +41,7 @@ use visionclaw_domain::ports::ontology_repository::{
     OwlAxiom, OwlClass, OwlProperty, PathfindingCacheEntry, PropertyType, Result as RepoResult,
     ValidationReport,
 };
+use visionclaw_domain::uri::ngm;
 
 /// Canonical IRIs for the four named graphs ADR-11 §D2 enumerates.
 /// Held as `&'static str` so SPARQL string construction is allocation-free.
@@ -169,7 +171,7 @@ fn class_iri(c: &OwlClass) -> String {
             .or(c.preferred_term.as_deref())
             .or(c.term_id.as_deref())
             .unwrap_or("unnamed");
-        format!("urn:ngm:class:{}", slug(basis))
+        ngm::class_iri(&slug(basis))
     }
 }
 
@@ -1593,7 +1595,7 @@ impl OntologyRepository for OxigraphOntologyRepository {
             let iri = node
                 .owl_class_iri
                 .clone()
-                .unwrap_or_else(|| format!("urn:ngm:class:{}", slug(&node.metadata_id)));
+                .unwrap_or_else(|| ngm::class_iri(&slug(&node.metadata_id)));
             update.push_str(&format!(
                 "    <{iri}> a <{T_VC_ONTOLOGY_CLASS}> , <{T_OWL_CLASS}> .\n"
             ));
@@ -1614,7 +1616,7 @@ impl OntologyRepository for OxigraphOntologyRepository {
             let iri = node
                 .owl_class_iri
                 .clone()
-                .unwrap_or_else(|| format!("urn:ngm:class:{}", slug(&node.metadata_id)));
+                .unwrap_or_else(|| ngm::class_iri(&slug(&node.metadata_id)));
             id_to_iri.insert(node.id, iri);
         }
         for edge in &graph.edges {

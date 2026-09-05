@@ -15,6 +15,7 @@ use crate::ports::knowledge_graph_repository::KnowledgeGraphRepository;
 use crate::services::decision_elevation::{decision_page_quads_logged, DECISIONS_DIR};
 use crate::services::github::content_enhanced::EnhancedContentAPI;
 use crate::services::github::types::GitHubFileBasicMetadata;
+use crate::services::inferred_edge_materialiser as mat;
 use crate::services::jsonld_ingest::{self, IngestOutcome, PageMetadata};
 use crate::services::parsers::KnowledgeGraphParser;
 use crate::services::semantic_type_registry::SEMANTIC_TYPE_REGISTRY;
@@ -28,6 +29,24 @@ use visionclaw_domain::models::canonical_entity::{CanonicalEntity, EntityKind};
 use visionclaw_domain::models::edge::Edge;
 use visionclaw_domain::ports::inference_engine::InferenceEngine;
 use visionclaw_domain::ports::ontology_repository::{AxiomType, OntologyRepository, OwlAxiom};
+
+/// Outcome of ADR-2071 inferred-edge selection on the post-sync Whelk path.
+///
+/// Split out from `run_post_sync_reasoning` so the selection rules are exercisable
+/// without a repository, a reasoner or a live corpus — see the tests at the foot of
+/// this file, which pin the new shared-module behaviour against a reference copy of
+/// the superseded hand-rolled loop.
+#[derive(Debug, Default)]
+pub(crate) struct InferredEdgeSelection {
+    /// Tagged edges to write, already asserted-pair suppressed and capped.
+    pub edges: Vec<Edge>,
+    /// `SubClassOf` axioms that survived the vacuous-axiom filter.
+    pub considered_axioms: usize,
+    /// `(child, parent)` IRI pairs left after the transitive reduction.
+    pub immediate_pairs: usize,
+    /// Endpoints of those pairs that no node could be resolved for (coverage gate).
+    pub unresolved_endpoints: usize,
+}
 
 const BATCH_SIZE: usize = 50;
 
@@ -1106,6 +1125,94 @@ impl GitHubSyncService {
         Ok(decisions)
     }
 
+    /// ADR-2071 — the pure half of post-sync inferred-edge materialisation.
+    ///
+    /// Delegates every selection rule to [`crate::services::inferred_edge_materialiser`]:
+    /// the vacuous-axiom filter (`is_materialisable_subclass_pair`), the reduction of
+    /// the reasoner's TRANSITIVE ancestors to IMMEDIATE parents
+    /// (`immediate_parents_from_subclass_pairs`), asserted-pair suppression plus the
+    /// per-child cap (`select_inferred_edges`), and edge construction with the
+    /// `inferred` provenance tag (`build_inferred_edge`). Nothing here re-implements
+    /// those rules, so the sync path and `OntologyPipelineService` cannot drift.
+    ///
+    /// `resolve` maps a class IRI to a node id (the `IriNodeResolver` in production);
+    /// `asserted` is the current graph's node-pair set in BOTH directions.
+    /// Deterministic: the same inputs always yield the same edge list.
+    pub(crate) fn select_inferred_edges_for_sync(
+        axioms: &[OwlAxiom],
+        resolve: &dyn Fn(&str) -> Option<u32>,
+        asserted: &std::collections::HashSet<(u32, u32)>,
+    ) -> InferredEdgeSelection {
+        // Step A: keep the non-vacuous SubClassOf entailments.
+        let mut considered_axioms = 0usize;
+        let mut subclass_pairs: Vec<(&str, &str)> = Vec::new();
+        for axiom in axioms {
+            if axiom.axiom_type == AxiomType::SubClassOf
+                && mat::is_materialisable_subclass_pair(&axiom.subject, &axiom.object)
+            {
+                considered_axioms += 1;
+                subclass_pairs.push((axiom.subject.as_str(), axiom.object.as_str()));
+            }
+        }
+
+        // Step B: Whelk emits the TRANSITIVE closure, so reduce to immediate parents
+        // — otherwise deep hierarchies materialise long-range grandparent edges.
+        let immediate = mat::immediate_parents_from_subclass_pairs(subclass_pairs);
+
+        // Step C: project IRI pairs to node-id pairs, counting unresolved endpoints
+        // for the ≥95% coverage gate. `pair_iris` keeps the first IRI pair that
+        // produced each node pair so the written edge keeps its provenance metadata.
+        let mut unresolved_endpoints = 0usize;
+        let mut candidates: Vec<(u32, u32)> = Vec::with_capacity(immediate.len());
+        let mut pair_iris: std::collections::HashMap<(u32, u32), (&str, &str)> =
+            std::collections::HashMap::new();
+        for (child_iri, parent_iri) in &immediate {
+            let child = resolve(child_iri);
+            let parent = resolve(parent_iri);
+            if child.is_none() {
+                unresolved_endpoints += 1;
+            }
+            if parent.is_none() {
+                unresolved_endpoints += 1;
+            }
+            if let (Some(c), Some(p)) = (child, parent) {
+                candidates.push((c, p));
+                pair_iris
+                    .entry((c, p))
+                    .or_insert((child_iri.as_str(), parent_iri.as_str()));
+            }
+        }
+
+        // Step D: the shared set-logic — self-loop drop, dedup, asserted-pair
+        // suppression (both directions), per-child cap — then tagged construction.
+        // Metadata is built only for the SELECTED pairs, not once per axiom.
+        let selected = mat::select_inferred_edges(
+            &candidates,
+            asserted,
+            mat::DEFAULT_MAX_INFERRED_PARENTS_PER_CHILD,
+        );
+        let edges = selected
+            .into_iter()
+            .map(|(c, p)| {
+                let mut edge = mat::build_inferred_edge(c, p)
+                    .add_metadata("axiom_type".to_string(), "SubClassOf".to_string());
+                if let Some((child_iri, parent_iri)) = pair_iris.get(&(c, p)) {
+                    edge = edge
+                        .add_metadata("source_iri".to_string(), (*child_iri).to_string())
+                        .add_metadata("target_iri".to_string(), (*parent_iri).to_string());
+                }
+                edge
+            })
+            .collect();
+
+        InferredEdgeSelection {
+            edges,
+            considered_axioms,
+            immediate_pairs: immediate.len(),
+            unresolved_endpoints,
+        }
+    }
+
     /// Run Whelk EL++ reasoning after all files have been synced.
     /// Loads OWL classes + axioms from Oxigraph, adds the NarrativeGoldmine
     /// property hierarchy, runs inference, stores results, and creates
@@ -1181,55 +1288,40 @@ impl GitHubSyncService {
             }
             None => visionclaw_ontology::services::iri_node_resolver::IriNodeResolver::new(),
         };
-        let resolve_endpoint = |iri: &str| -> Option<u32> { resolver.resolve(iri) };
+
+        // ADR-2071: edge selection is the SHARED `inferred_edge_materialiser`
+        // set-logic, not a hand-rolled loop. `select_inferred_edges_for_sync` is
+        // the pure, unit-testable half (axioms + resolver + asserted set → tagged
+        // edges). The asserted pairs come from the snapshot loaded immediately
+        // above, so suppression sees the CURRENT edge set — `materialise_domain_roots`
+        // and `fold_low_fanout_stubs` have already mutated the graph by this point
+        // in `sync_graphs`, which is why this load cannot be folded into an earlier
+        // one (see the ADR-2071 verification note).
+        let asserted = graph
+            .as_ref()
+            .map(|g| mat::asserted_pairs(&g.edges))
+            .unwrap_or_default();
+        let InferredEdgeSelection {
+            edges: inferred_edges,
+            considered_axioms,
+            immediate_pairs,
+            unresolved_endpoints,
+        } = Self::select_inferred_edges_for_sync(
+            &results.inferred_axioms,
+            &|iri| resolver.resolve(iri),
+            &asserted,
+        );
 
         let mut inferred_edge_count = 0;
-        let mut inferred_edges = Vec::new();
-        let mut unresolved_endpoints: usize = 0;
-        let mut considered_axioms: usize = 0;
-
-        for axiom in &results.inferred_axioms {
-            if axiom.axiom_type == AxiomType::SubClassOf
-                && !axiom.subject.contains("owl#Nothing")
-                && !axiom.object.contains("owl#Thing")
-                && axiom.subject != axiom.object
-            {
-                considered_axioms += 1;
-                let src = resolve_endpoint(&axiom.subject);
-                let tgt = resolve_endpoint(&axiom.object);
-                if src.is_none() {
-                    unresolved_endpoints += 1;
-                }
-                if tgt.is_none() {
-                    unresolved_endpoints += 1;
-                }
-                if let (Some(src_id), Some(tgt_id)) = (src, tgt) {
-                    let edge_id = format!("inferred_{}_{}", src_id, tgt_id);
-                    let mut edge_meta = std::collections::HashMap::new();
-                    edge_meta.insert("source_iri".to_string(), axiom.subject.clone());
-                    edge_meta.insert("target_iri".to_string(), axiom.object.clone());
-                    edge_meta.insert("axiom_type".to_string(), "SubClassOf".to_string());
-                    let edge = Edge {
-                        id: edge_id,
-                        source: src_id,
-                        target: tgt_id,
-                        weight: 0.4,
-                        edge_type: Some("inferred".to_string()),
-                        owl_property_iri: None,
-                        metadata: Some(edge_meta),
-                    };
-                    inferred_edges.push(edge);
-                }
-            }
-        }
-
         if !inferred_edges.is_empty() {
             info!(
-                "Creating {} inferred edges ({} axioms had no matching nodes)",
+                "Creating {} inferred edges (ADR-2071 shared selection: {} SubClassOf axioms → {} immediate parent pairs, capped at {} parents per child, asserted pairs suppressed)",
                 inferred_edges.len(),
-                results.inferred_axioms.len() - inferred_edges.len()
+                considered_axioms,
+                immediate_pairs,
+                mat::DEFAULT_MAX_INFERRED_PARENTS_PER_CHILD
             );
-            match self.kg_repo.batch_add_edges(inferred_edges.clone()).await {
+            match self.kg_repo.batch_add_edges(inferred_edges).await {
                 Ok(ids) => {
                     inferred_edge_count = ids.len();
                     stats.total_edges += inferred_edge_count;
@@ -1240,19 +1332,27 @@ impl GitHubSyncService {
 
         // WS-0 release gate: report IRI→node endpoint resolution coverage so
         // the historical "30–50% silent drop" is now observable, not silent.
-        let total_endpoints = considered_axioms * 2;
+        // ADR-2071: the denominator is the IMMEDIATE-parent pair set (post
+        // transitive reduction), not every considered axiom — those are the pairs
+        // materialisation actually has to resolve.
+        let total_endpoints = immediate_pairs * 2;
         if total_endpoints > 0 {
             let resolved = total_endpoints.saturating_sub(unresolved_endpoints);
             let coverage = (resolved as f64 / total_endpoints as f64) * 100.0;
             if unresolved_endpoints > 0 {
                 warn!(
-                    "IRI→node resolution: {}/{} endpoints resolved ({:.1}%); {} unresolved across {} SubClassOf axioms (target ≥95%)",
-                    resolved, total_endpoints, coverage, unresolved_endpoints, considered_axioms
+                    "IRI→node resolution: {}/{} endpoints resolved ({:.1}%); {} unresolved across {} immediate inferred parent pairs from {} SubClassOf axioms (target ≥95%)",
+                    resolved,
+                    total_endpoints,
+                    coverage,
+                    unresolved_endpoints,
+                    immediate_pairs,
+                    considered_axioms
                 );
             } else {
                 info!(
-                    "IRI→node resolution: {}/{} endpoints resolved (100.0%) across {} SubClassOf axioms",
-                    resolved, total_endpoints, considered_axioms
+                    "IRI→node resolution: {}/{} endpoints resolved (100.0%) across {} immediate inferred parent pairs from {} SubClassOf axioms",
+                    resolved, total_endpoints, immediate_pairs, considered_axioms
                 );
             }
         }
@@ -2499,5 +2599,378 @@ pub fn classify_by_iri_shape(iri: &str) -> OwlKind {
         OwlKind::Class
     } else {
         OwlKind::LinkedPage
+    }
+}
+
+#[cfg(test)]
+mod adr_2071_inferred_edge_tests {
+    //! ADR-2071 acceptance evidence — the post-sync Whelk path now shares the
+    //! `inferred_edge_materialiser` selection rules with `OntologyPipelineService`.
+    //!
+    //! [`legacy_select_inferred_edges`] is a verbatim reference copy of the
+    //! hand-rolled loop this change deleted from `run_post_sync_reasoning`. It
+    //! exists ONLY here, so the behavioural delta the ADR promises is asserted
+    //! rather than argued: same fixtures through both, differing edge sets.
+
+    use super::*;
+    use crate::services::inferred_edge_materialiser::edge_is_inferred;
+    use std::collections::{HashMap, HashSet};
+
+    fn axiom(subject: &str, object: &str) -> OwlAxiom {
+        OwlAxiom {
+            id: None,
+            axiom_type: AxiomType::SubClassOf,
+            subject: subject.to_string(),
+            object: object.to_string(),
+            annotations: HashMap::new(),
+        }
+    }
+
+    /// Identity resolver over a fixed IRI→node-id table.
+    fn table_resolver(pairs: &[(&'static str, u32)]) -> impl Fn(&str) -> Option<u32> {
+        let map: HashMap<String, u32> = pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        move |iri: &str| map.get(iri).copied()
+    }
+
+    /// REFERENCE COPY of the superseded hand-rolled selection (deleted from
+    /// production by ADR-2071). No transitive reduction, no asserted-pair
+    /// suppression, no per-child cap, `inferred` edge-type, no `inferred`
+    /// metadata key. Kept only to pin the delta.
+    fn legacy_select_inferred_edges(
+        axioms: &[OwlAxiom],
+        resolve: &dyn Fn(&str) -> Option<u32>,
+    ) -> Vec<Edge> {
+        let mut inferred_edges = Vec::new();
+        for axiom in axioms {
+            if axiom.axiom_type == AxiomType::SubClassOf
+                && !axiom.subject.contains("owl#Nothing")
+                && !axiom.object.contains("owl#Thing")
+                && axiom.subject != axiom.object
+            {
+                if let (Some(src_id), Some(tgt_id)) =
+                    (resolve(&axiom.subject), resolve(&axiom.object))
+                {
+                    let mut edge_meta = HashMap::new();
+                    edge_meta.insert("source_iri".to_string(), axiom.subject.clone());
+                    edge_meta.insert("target_iri".to_string(), axiom.object.clone());
+                    edge_meta.insert("axiom_type".to_string(), "SubClassOf".to_string());
+                    inferred_edges.push(Edge {
+                        id: format!("inferred_{}_{}", src_id, tgt_id),
+                        source: src_id,
+                        target: tgt_id,
+                        weight: 0.4,
+                        edge_type: Some("inferred".to_string()),
+                        owl_property_iri: None,
+                        metadata: Some(edge_meta),
+                    });
+                }
+            }
+        }
+        inferred_edges
+    }
+
+    fn pairs_of(edges: &[Edge]) -> Vec<(u32, u32)> {
+        let mut v: Vec<(u32, u32)> = edges.iter().map(|e| (e.source, e.target)).collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// A three-level chain A ⊑ B ⊑ C as Whelk emits it: the TRANSITIVE closure,
+    /// so A→C is present in the axiom set. Node ids: A=1, B=2, C=3.
+    fn chain_fixture() -> Vec<OwlAxiom> {
+        vec![
+            axiom("urn:c:A", "urn:c:B"),
+            axiom("urn:c:A", "urn:c:C"), // long-range grandparent entailment
+            axiom("urn:c:B", "urn:c:C"),
+        ]
+    }
+
+    const CHAIN_NODES: &[(&str, u32)] = &[("urn:c:A", 1), ("urn:c:B", 2), ("urn:c:C", 3)];
+
+    #[test]
+    fn three_level_hierarchy_drops_the_long_range_grandparent_edge() {
+        // ADR-2071 acceptance test 1: A→B and B→C survive; A→C does not.
+        let resolve = table_resolver(CHAIN_NODES);
+        let sel = GitHubSyncService::select_inferred_edges_for_sync(
+            &chain_fixture(),
+            &resolve,
+            &HashSet::new(),
+        );
+        assert_eq!(
+            pairs_of(&sel.edges),
+            vec![(1, 2), (2, 3)],
+            "immediate parents only — no A→C long-range edge"
+        );
+        assert_eq!(sel.considered_axioms, 3, "all three axioms are non-vacuous");
+        assert_eq!(
+            sel.immediate_pairs, 2,
+            "transitive reduction keeps two pairs"
+        );
+        assert_eq!(sel.unresolved_endpoints, 0);
+    }
+
+    #[test]
+    fn legacy_loop_emitted_the_long_range_edge_the_shared_path_suppresses() {
+        // The recorded delta: the superseded loop emits 3 edges for the same
+        // fixture, the shared path 2. This is the ADR's "edge counts will drop".
+        let resolve = table_resolver(CHAIN_NODES);
+        let legacy = legacy_select_inferred_edges(&chain_fixture(), &resolve);
+        let shared = GitHubSyncService::select_inferred_edges_for_sync(
+            &chain_fixture(),
+            &resolve,
+            &HashSet::new(),
+        );
+        assert_eq!(pairs_of(&legacy), vec![(1, 2), (1, 3), (2, 3)]);
+        assert_eq!(pairs_of(&shared.edges), vec![(1, 2), (2, 3)]);
+
+        // Every dropped pair is a transitive ancestor of a retained one
+        // (acceptance criterion 2): (1,3) is reachable 1→2→3.
+        let retained: HashSet<(u32, u32)> = pairs_of(&shared.edges).into_iter().collect();
+        for dropped in pairs_of(&legacy)
+            .into_iter()
+            .filter(|p| !retained.contains(p))
+        {
+            assert!(
+                retained.iter().any(|&(c, m)| c == dropped.0
+                    && retained.iter().any(|&(c2, p2)| c2 == m && p2 == dropped.1)),
+                "dropped {:?} is not a transitive ancestor of a retained edge",
+                dropped
+            );
+        }
+    }
+
+    #[test]
+    fn asserted_pairs_are_suppressed_on_the_sync_path() {
+        // The legacy loop had no asserted diff and would duplicate the asserted
+        // 1—2 hierarchy edge; the shared path suppresses it in both directions.
+        let resolve = table_resolver(CHAIN_NODES);
+        let asserted: HashSet<(u32, u32)> = [(2, 1), (1, 2)].into_iter().collect();
+        let legacy = legacy_select_inferred_edges(&chain_fixture(), &resolve);
+        assert!(pairs_of(&legacy).contains(&(1, 2)), "legacy duplicated it");
+
+        let shared = GitHubSyncService::select_inferred_edges_for_sync(
+            &chain_fixture(),
+            &resolve,
+            &asserted,
+        );
+        assert_eq!(
+            pairs_of(&shared.edges),
+            vec![(2, 3)],
+            "asserted 1—2 suppressed either direction"
+        );
+    }
+
+    #[test]
+    fn per_child_cap_applies_to_the_sync_path() {
+        // A child with more immediate inferred parents than the cap. Ten sibling
+        // parents, none an ancestor of another, so the reduction keeps all ten and
+        // only the cap can bound them.
+        let mut axioms = Vec::new();
+        let mut table: Vec<(&'static str, u32)> = vec![("urn:c:kid", 1)];
+        const PARENTS: &[&str] = &[
+            "urn:c:p0", "urn:c:p1", "urn:c:p2", "urn:c:p3", "urn:c:p4", "urn:c:p5", "urn:c:p6",
+            "urn:c:p7", "urn:c:p8", "urn:c:p9",
+        ];
+        for (i, p) in PARENTS.iter().enumerate() {
+            axioms.push(axiom("urn:c:kid", p));
+            table.push((p, 100 + i as u32));
+        }
+        let resolve = table_resolver(&table);
+
+        let legacy = legacy_select_inferred_edges(&axioms, &resolve);
+        assert_eq!(legacy.len(), 10, "legacy path had no cap");
+
+        let shared =
+            GitHubSyncService::select_inferred_edges_for_sync(&axioms, &resolve, &HashSet::new());
+        assert_eq!(
+            shared.edges.len(),
+            crate::services::inferred_edge_materialiser::DEFAULT_MAX_INFERRED_PARENTS_PER_CHILD,
+            "capped at 8 inferred parents per child"
+        );
+    }
+
+    #[test]
+    fn emitted_edges_carry_the_inferred_flag_the_client_reads() {
+        // The behavioural bug ADR-2071 fixes: the legacy edges set edge_type
+        // "inferred" but NOT metadata["inferred"], so `edge_is_inferred` — the
+        // predicate the broadcast path and the XR shader use — returned false and
+        // sync-produced edges never rendered on the inferred channel.
+        let resolve = table_resolver(CHAIN_NODES);
+        let legacy = legacy_select_inferred_edges(&chain_fixture(), &resolve);
+        assert!(
+            legacy.iter().all(|e| !edge_is_inferred(e)),
+            "legacy edges were invisible to edge_is_inferred"
+        );
+
+        let shared = GitHubSyncService::select_inferred_edges_for_sync(
+            &chain_fixture(),
+            &resolve,
+            &HashSet::new(),
+        );
+        assert!(
+            shared.edges.iter().all(edge_is_inferred),
+            "every shared-path edge classifies as inferred"
+        );
+        for e in &shared.edges {
+            assert_eq!(e.edge_type.as_deref(), Some("hierarchical"));
+            let meta = e.metadata.as_ref().expect("provenance metadata retained");
+            assert_eq!(
+                meta.get("axiom_type").map(String::as_str),
+                Some("SubClassOf")
+            );
+            assert!(meta.contains_key("source_iri") && meta.contains_key("target_iri"));
+        }
+    }
+
+    #[test]
+    fn vacuous_axioms_and_unresolved_endpoints_are_accounted_for() {
+        let axioms = vec![
+            axiom("urn:c:A", "http://www.w3.org/2002/07/owl#Thing"), // vacuous: top parent
+            axiom("http://www.w3.org/2002/07/owl#Nothing", "urn:c:A"), // vacuous: bottom child
+            axiom("urn:c:A", "urn:c:A"),                             // vacuous: self
+            axiom("urn:c:A", "urn:c:B"),                             // real
+            axiom("urn:c:A", "urn:c:missing"),                       // unresolvable parent
+        ];
+        let resolve = table_resolver(CHAIN_NODES);
+        let sel =
+            GitHubSyncService::select_inferred_edges_for_sync(&axioms, &resolve, &HashSet::new());
+        assert_eq!(
+            sel.considered_axioms, 2,
+            "three vacuous axioms filtered out"
+        );
+        assert_eq!(
+            sel.immediate_pairs, 2,
+            "A→B and A→missing survive reduction"
+        );
+        assert_eq!(sel.unresolved_endpoints, 1, "urn:c:missing counted");
+        assert_eq!(pairs_of(&sel.edges), vec![(1, 2)]);
+    }
+
+    #[test]
+    fn selection_is_deterministic_regardless_of_axiom_order() {
+        let resolve = table_resolver(CHAIN_NODES);
+        let mut reversed = chain_fixture();
+        reversed.reverse();
+        let a = GitHubSyncService::select_inferred_edges_for_sync(
+            &chain_fixture(),
+            &resolve,
+            &HashSet::new(),
+        );
+        let b =
+            GitHubSyncService::select_inferred_edges_for_sync(&reversed, &resolve, &HashSet::new());
+        assert_eq!(pairs_of(&a.edges), pairs_of(&b.edges));
+    }
+
+    /// ADR-2071 acceptance evidence — REAL reasoner output, not a hand-written
+    /// axiom list. Loads a corpus-shaped class hierarchy (a 6-level chain, a
+    /// diamond and a multi-parent leaf) into the production
+    /// [`WhelkInferenceEngine`], then runs the entailed axioms through BOTH the
+    /// superseded hand-rolled loop and the shared module, reporting the edge-count
+    /// delta the ADR requires. Stands in for the live Oxigraph shadow sync, which
+    /// is not reachable from the build container.
+    #[tokio::test]
+    async fn shadow_comparison_over_real_whelk_output() {
+        use visionclaw_domain::ports::ontology_repository::OwlClass;
+
+        // A ⊑ B ⊑ C ⊑ D ⊑ E ⊑ F (6-level chain), plus a diamond
+        // X ⊑ {Y,Z} ⊑ W, plus a leaf with three unrelated parents.
+        let chain = ["A", "B", "C", "D", "E", "F"];
+        let iri = |n: &str| format!("http://example.org/adr2071#{}", n);
+
+        let mut classes: Vec<OwlClass> = Vec::new();
+        let mut axioms: Vec<OwlAxiom> = Vec::new();
+        let sub = |child: &str, parent: &str, axioms: &mut Vec<OwlAxiom>| {
+            axioms.push(OwlAxiom {
+                id: None,
+                axiom_type: AxiomType::SubClassOf,
+                subject: iri(child),
+                object: iri(parent),
+                annotations: std::collections::HashMap::new(),
+            });
+        };
+        for name in chain
+            .iter()
+            .chain(["W", "X", "Y", "Z", "L", "P1", "P2", "P3"].iter())
+        {
+            classes.push(OwlClass {
+                iri: iri(name),
+                label: Some((*name).to_string()),
+                ..Default::default()
+            });
+        }
+        for w in chain.windows(2) {
+            sub(w[0], w[1], &mut axioms);
+        }
+        sub("X", "Y", &mut axioms);
+        sub("X", "Z", &mut axioms);
+        sub("Y", "W", &mut axioms);
+        sub("Z", "W", &mut axioms);
+        for p in ["P1", "P2", "P3"] {
+            sub("L", p, &mut axioms);
+        }
+        let asserted_axiom_count = axioms.len();
+
+        let mut engine = WhelkInferenceEngine::new();
+        engine
+            .load_ontology(classes, axioms)
+            .await
+            .expect("whelk load_ontology");
+        let results = engine.infer().await.expect("whelk infer");
+
+        // Node ids mirror the IRI order; the resolver is exact-IRI.
+        let table: std::collections::HashMap<String, u32> = chain
+            .iter()
+            .chain(["W", "X", "Y", "Z", "L", "P1", "P2", "P3"].iter())
+            .enumerate()
+            .map(|(i, n)| (iri(n), i as u32 + 1))
+            .collect();
+        let resolve = move |i: &str| table.get(i).copied();
+
+        let legacy = legacy_select_inferred_edges(&results.inferred_axioms, &resolve);
+        let shared = GitHubSyncService::select_inferred_edges_for_sync(
+            &results.inferred_axioms,
+            &resolve,
+            &HashSet::new(),
+        );
+
+        let legacy_pairs = pairs_of(&legacy);
+        let shared_pairs = pairs_of(&shared.edges);
+        // Printed with `--nocapture`; these are the counts recorded in the ADR.
+        println!(
+            "ADR-2071 shadow comparison: {} asserted axioms → {} Whelk entailments → \
+             legacy {} edges, shared {} edges (delta {})",
+            asserted_axiom_count,
+            results.inferred_axioms.len(),
+            legacy_pairs.len(),
+            shared_pairs.len(),
+            legacy_pairs.len() as i64 - shared_pairs.len() as i64
+        );
+
+        assert!(
+            shared_pairs.len() <= legacy_pairs.len(),
+            "the shared path never emits MORE edges than the legacy loop"
+        );
+        // Retained set is a subset of what the legacy loop emitted: this change
+        // only ever removes edges, it never invents new ones.
+        let legacy_set: HashSet<(u32, u32)> = legacy_pairs.iter().copied().collect();
+        for p in &shared_pairs {
+            assert!(
+                legacy_set.contains(p),
+                "retained {:?} is new — not allowed",
+                p
+            );
+        }
+        // Per-child cap holds over real reasoner output.
+        let mut per_child: HashMap<u32, usize> = HashMap::new();
+        for (c, _) in &shared_pairs {
+            *per_child.entry(*c).or_insert(0) += 1;
+        }
+        assert!(
+            per_child.values().all(|&n| n
+                <= crate::services::inferred_edge_materialiser::DEFAULT_MAX_INFERRED_PARENTS_PER_CHILD),
+            "per-child cap holds on real reasoner output"
+        );
+        // Every retained edge classifies as inferred for the client channel.
+        assert!(shared.edges.iter().all(edge_is_inferred));
     }
 }

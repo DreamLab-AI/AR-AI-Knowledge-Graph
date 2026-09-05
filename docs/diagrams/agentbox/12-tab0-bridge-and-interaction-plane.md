@@ -25,7 +25,9 @@ sources:
   - agentbox/flake.nix
   - agentbox/docker-compose.yml
   - agentbox/management-api/server.js
-verified_commit: b00c28a0d
+  - agentbox/scripts/ci/check-ports-loopback.mjs
+  - agentbox/config/nostr-gateway/nostr-send.cjs
+verified_commit: bed6b617d
 ---
 
 ## AB-12.1 Interaction-plane topology

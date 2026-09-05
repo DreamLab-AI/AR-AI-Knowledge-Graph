@@ -26,7 +26,18 @@ sources:
   - agentbox/tests/contract/adapter-lifecycle.contract.spec.js
   - agentbox/tests/contract/memory.contract.spec.js
   - agentbox/agentbox.sh
-verified_commit: b00c28a0d
+  - agentbox/schema/agentbox.toml.schema.json
+  - agentbox/scripts/agentbox-config-validate.js
+  - agentbox/tests/contract/beads.contract.spec.js
+  - agentbox/tests/contract/events.contract.spec.js
+  - agentbox/tests/contract/memory-encoder-bypass.contract.spec.js
+  - agentbox/tests/contract/orchestrator.contract.spec.js
+  - agentbox/tests/contract/pods.contract.spec.js
+  - agentbox/tests/contract/privacy-filter.contract.spec.js
+  - agentbox/agentbox.toml
+  - agentbox/management-api/routes/linked-objects.js
+  - agentbox/management-api/routes/sessions-boundary.js
+verified_commit: bed6b617d
 ---
 
 ## AB-04.1 resolveAdapters — slot to implementation resolution

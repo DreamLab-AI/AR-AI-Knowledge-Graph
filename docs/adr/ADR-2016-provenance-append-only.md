@@ -7,7 +7,7 @@ implementation_status: partial
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: 9a2c8087385bf6db08b1aeb91004e1a60203965b
+verified_commit: b0bc275f6501aae7751b85a72ce15fe1e730e7e8
 verified_paths: [crates/visionclaw-adapters/src/provenance_emitter.rs, crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs, src/services/ontology_mutation_service.rs]
 owner: jjohare
 review_trigger: a GDPR/right-to-erasure obligation landing on provenance-recorded subjects, or introduction of a redaction/crypto-shred mechanism
@@ -131,3 +131,67 @@ only partly advanced (ADR-2006 now preserves the signed event id on the decision
 side). Tamper detection and retention guarantees remain distinct from
 insert-only code and are not implemented. The separate SQLite-backed
 `GET /api/trace` consumer is untouched.
+
+## Re-verification — 2026-09-05 at b0bc275f6501aae7751b85a72ce15fe1e730e7e8
+
+
+**Range note.** `bed6b617d..b0bc275f6` is `cargo fmt --all` plus the test-side
+fixes that made `--all-targets` build; **no production logic changed**. Verified,
+not assumed: comparing every changed file with all whitespace stripped leaves
+only rustfmt artefacts — struct-literal reflow, import/module reordering and
+added trailing commas. The largest single case,
+`src/models/simulation_params.rs` (+303/-70 raw), is the `SIMPARAMS_MANIFEST`
+literal reflowed one-field-per-line: its field names and byte offsets hash
+identically on both sides. Citations below are
+therefore re-derived line numbers over unchanged code, not new findings.
+
+**Governed changes since `9a2c80873`:** `crates/visionclaw-adapters/src/provenance_emitter.rs`
+(+588, effectively a rewrite), `crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs`
+and `src/services/ontology_mutation_service.rs`, landed by `b47db377c` and
+`1b513295a`. The rewrite is this record's own acceptance work — the two-phase
+atomic write — not a change of decision.
+
+**Append-only still holds, and is now provably so.** The module header at
+`provenance_emitter.rs:32-33` still states the rule verbatim ("only `INSERT DATA`
+is permitted. No `DELETE`, `DROP`, or `CLEAR`"), and
+`grep -cE 'DELETE |DROP |CLEAR ' crates/visionclaw-adapters/src/provenance_emitter.rs`
+returns **0** at HEAD. Emission still funnels through one primitive:
+`reify_activity` (`:307`), reached by `emit_activity` (`:433`) and
+`emit_activity_nonfatal` (`:446`).
+
+**Two stale citations in the Verification block, corrected here:**
+
+| Cited | Correct at HEAD |
+|---|---|
+| `reify_activity` (line 97) | **`provenance_emitter.rs:307`** |
+| `src/services/ontology_mutation_service.rs:127` | **`:223`** |
+| `oxigraph_ontology_repository.rs:646` | `:646` — **still exact** (`emit_provenance` wraps `emit_activity` at `:650`) |
+
+The `reify_activity` move is large because the file more than doubled: the
+partial-write defect the 2026-09-04 closeout recorded (quads inserted one at a
+time, activity type written *before* the agent IRI was validated, so a late
+invalid IRI or storage failure left a torn record) is closed by splitting
+validation from commit — `build_activity_quads` (`:137`) validates every term
+with no store access, `commit_quads_with` (`:283`) writes them in a single
+`Store::transaction`, `MANDATORY_ACTIVITY_PREDICATES` (`:117`) defines
+completeness, and `find_incomplete_activities` (`:332`) is the SPARQL repair
+query for legacy partial records. `From<StorageError>` at `:105-109` keeps a
+storage fault a typed error rather than a panic.
+
+The two-call-site asymmetry the Verification block records is unchanged and still
+worth knowing: `ontology_mutation_service.rs:223` calls
+`emit_activity_nonfatal` **directly**, bypassing the repository's
+`emit_provenance` wrapper.
+
+**Commands run:** `git diff --stat 9a2c80873..HEAD -- <verified_paths>`;
+`grep -n` over `provenance_emitter.rs` for `build_activity_quads|commit_quads_with|
+reify_activity|find_incomplete_activities|MANDATORY_ACTIVITY_PREDICATES|emit_activity`;
+`sed -n` dumps of `:32-33`, `:105-123`, `oxigraph_ontology_repository.rs:646-650`
+and `ontology_mutation_service.rs:223`;
+`grep -cE 'DELETE |DROP |CLEAR '` → 0;
+`cargo test -p visionclaw-adapters --lib provenance` → **20 passed, 0 failed**
+(56 filtered out); `cargo test -p visionclaw-adapters` → **76 passed, 0 failed**.
+
+**Still open:** correlating completed provenance with mutation receipts
+(ADR-2006) and the separate SQLite-backed `GET /api/trace` consumer were not
+re-checked — they lie outside `verified_paths`.

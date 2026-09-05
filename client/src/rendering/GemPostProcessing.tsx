@@ -192,7 +192,7 @@ export const GemPostProcessing: React.FC<GemPostProcessingProps> = ({ enabled = 
     };
   // bloomParamsRef is intentionally NOT a dep — initial values are read from the ref,
   // and live updates are handled by the bloom uniform updater useEffect below.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [isEnabledWebGPU, gl, scene, camera]);
 
   // Update WebGPU bloom uniforms when settings change without full rebuild

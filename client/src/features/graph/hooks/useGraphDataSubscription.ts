@@ -158,6 +158,6 @@ export function useGraphDataSubscription(callbacks: GraphDataSubscriptionCallbac
       window.clearTimeout(fallbackTimer)
       unsubscribe()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Deps intentionally narrowed; react-hooks/exhaustive-deps is not enforced in this config.
   }, [])
 }

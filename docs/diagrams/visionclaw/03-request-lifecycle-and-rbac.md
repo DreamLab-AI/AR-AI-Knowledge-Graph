@@ -36,7 +36,8 @@ sources:
   - src/actors/client_filter.rs
   - src/uri/mod.rs
   - src/config/security_profile.rs
-verified_commit: b00c28a0d
+  - crates/visionclaw-domain/src/utils/visibility_filter.rs
+verified_commit: bed6b617d
 ---
 
 ## VC-03.1 REST request end-to-end — nginx to handler, real middleware order
@@ -548,7 +549,7 @@ sequenceDiagram
     VM->>R: service.call(req)
     Note over VAL: validators::{validate_iri, validate_url, validate_string_length,<br/>check_sql_injection, validate_enum, validate_range} (:183-283) — free functions<br/>callable from handlers, NOT invoked automatically by ValidationMiddleware
     Note over VM: MAX_ONTOLOGY_SIZE=10MiB (:18), MAX_REQUEST_SIZE=1MiB (:21, ValidationConfig::default),<br/>MAX_STRING_LENGTH=100KiB (:24). ValidateInput::for_ontology() sets 10MiB + check_injection=false.
-    Note over VM: DOC-DRIFT / dead-code — grep across src/main.rs and every handler configure() finds<br/>no .wrap(ValidateInput::...) call anywhere — this middleware is defined and unit-tested<br/>(validation.rs:288-325) but is NOT wired into the actix App chain in this commit.
+    Note over VM: DOC-DRIFT / dead-code — grep across src/main.rs and every handler configure() finds<br/>no .wrap(ValidateInput::...) call anywhere — this middleware is defined and unit-tested<br/>(validation.rs:284-323) but is NOT wired into the actix App chain in this commit.
 ```
 
 ## VC-03.15 Identity authority chain end-to-end — Nostr key to role

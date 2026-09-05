@@ -29,7 +29,9 @@ sources:
   - client/src/services/solidPod/agentMemory.ts
   - client/src/services/solidPod/wacManager.ts
   - client/src/services/solidPod/typeIndex.ts
-verified_commit: b00c28a0d
+  - bin/jss.js
+  - scripts/backup-sqlite.sh
+verified_commit: bed6b617d
 ---
 ## ES-08.1 Four coexisting Solid-pod deployments — topology contrast
 
@@ -85,7 +87,7 @@ sequenceDiagram
     ADP->>PS: buildPodNip98(manifest, opts) pod-signer.js:32
     alt sign_requests off or no stack resolved
         PS-->>ADP: return null (pod-signer.js:35,44-49)
-        Note over ADP,BASE: DIVERGENCE: unsigned pod-signing fallback (legacy ADR-026) —<br/>_solid-http-base.js constructs this._fetch=this._rawFetch (line 47)<br/>when nip98 is falsy, requests go out with no Authorization header
+        Note over ADP,BASE: RESOLVED ADR-2064 (2026-09-05): sign_requests now sets requireSigned on the adapter<br/>even when no signer could be built, so a falsy nip98 fails closed instead of going out unsigned
     else sign_requests on
         PS-->>ADP: nip98 fn method,url,body returning string or null
         ADP->>BASE: withSigner(cfg) attaches opts.nip98 adapters/index.js:61
@@ -98,8 +100,8 @@ sequenceDiagram
         PS->>PS: getSigner() lazy-load, cached (pod-signer.js:69-79)
         alt key load fails
             PS-->>BASE: null (loadFailed=true, cached — never retried)
-            Note over BASE,SRV: DIVERGENCE: unsigned fallback — _signedFetch:63-64<br/>"if (!header) return this._rawFetch(...)" — silent, no error surfaced
-            BASE->>SRV: PUT/POST (no Authorization header)
+            Note over BASE,SRV: RESOLVED ADR-2064 (2026-09-05): _signedFetch throws typed SigningUnavailable<br/>when requireSigned and no header can be built — no request is emitted
+            BASE-->>AG: throw SigningUnavailable (SIGNING_UNAVAILABLE, slot pods)
         else key loads
             PS->>BR: buildNip98Header(signer,method,url,body) pod-signer.js:84
             BR-->>PS: base64 kind-27235 event

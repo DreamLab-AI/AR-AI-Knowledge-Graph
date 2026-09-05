@@ -31,3 +31,7 @@ tokio = { version = "1", default-features = false, features = ["sync", "rt"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+# ADR-2061 — the CPU reference oracle the analytics kernels are asserted
+# against in tests/analytics_oracle_conformance.rs. Dev-only: it is a
+# dependency-free pure-std crate, so it adds nothing to the shipped artefact.
+visionclaw-analytics-oracle = { path = "../visionclaw-analytics-oracle" }

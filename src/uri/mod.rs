@@ -339,6 +339,17 @@ pub mod ngm {
     /// `urn:ngm:edge:<source>:<target>:<edge-id>` — the legacy edge IRI prefix.
     pub const EDGE_PREFIX: &str = "urn:ngm:edge:";
 
+    /// `urn:ngm:class:<slug>` — the canonical legacy OWL class IRI prefix,
+    /// re-exported with its constructor, parser and predicate.
+    ///
+    /// The definition lives in `visionclaw-domain` because the *adapters*
+    /// crate mints class IRIs too and is **upstream** of this crate: a typed
+    /// mint that only the server could reach would have left
+    /// `oxigraph_ontology_repository.rs` formatting the scheme by hand, which
+    /// is exactly the drift ADR-2095 closes. Re-exporting here keeps
+    /// `uri::ngm::*` the single lookup point for the legacy scheme.
+    pub use visionclaw_domain::uri::ngm::{class_iri, is_class_iri, parse_class_iri, CLASS_PREFIX};
+
     /// Mint the canonical legacy node IRI. The full 32-bit id (class bits
     /// included) is used so the IRI round-trips losslessly.
     pub fn node_iri(id: u32) -> String {
@@ -636,6 +647,124 @@ pub fn parse_dual(input: &str) -> Result<ParsedUri, UriError> {
 
 // ── BC20 cross-namespace ingest (urn:agentbox:* → urn:visionclaw:*) ──────────
 
+/// The shared federation kind artefact, embedded at build time (ADR-2061).
+///
+/// `agentbox/schema/federation-kinds.json` is the SINGLE versioned authority for
+/// which `urn:agentbox` kinds cross this boundary. The agentbox tree is the
+/// `./agentbox` submodule of this checkout, so the path resolves from `src/uri/`
+/// and the bytes compiled in here are byte-identical to the ones
+/// `management-api/lib/bc20-provenance-bridge.js` reads at load. Neither
+/// translator transcribes the kind list; [`cross_from_agentbox`] derives its
+/// closed map from this artefact, and the paired fixture
+/// `federation_kind_artefact_matches_translator` (plus its JS twin
+/// `tests/contract/federation-kind-parity.contract.spec.js`) turns any
+/// disagreement into a test failure.
+const FEDERATION_KINDS_JSON: &str = include_str!("../../agentbox/schema/federation-kinds.json");
+
+/// A fixture row: an input identifier and the output both translators must
+/// produce for it (`None` = the crossing is refused).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FederationFixture {
+    /// The identifier fed to the translator.
+    pub input: String,
+    /// The expected output, or `None` when the crossing must be refused.
+    #[serde(default)]
+    pub expect: Option<String>,
+}
+
+/// The arguments that would unlock a `deliberate` refusal, recorded so that
+/// "deliberately closed" stays distinguishable from "not implemented".
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FederationElevation {
+    /// Side-channel arguments the hot path does not carry (e.g. `domain`, `slug`).
+    pub required_args: Vec<String>,
+}
+
+/// One row of the shared kind artefact.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FederationKind {
+    /// The `urn:agentbox` kind this row governs.
+    pub kind: String,
+    /// Whether the kind crosses on the ingest hot path (no side information).
+    pub crosses: bool,
+    /// Whether crossing requires a 64-hex owner pubkey scope.
+    #[serde(default)]
+    pub requires_owner_scope: bool,
+    /// `identity` | `content-address-of-urn` | `structural-passthrough`.
+    #[serde(default)]
+    pub crossing_form: Option<String>,
+    /// The `urn:agentbox` grammar this row accepts.
+    pub source_grammar: String,
+    /// The VisionClaw target kind, when one exists at all.
+    #[serde(default)]
+    pub target_kind: Option<String>,
+    /// The grammar of the translated identifier.
+    #[serde(default)]
+    pub target_grammar: Option<String>,
+    /// `deliberate` | `not-federated`, when `crosses` is false.
+    #[serde(default)]
+    pub refusal_class: Option<String>,
+    /// Why the crossing is refused, when `crosses` is false.
+    #[serde(default)]
+    pub refusal_reason: Option<String>,
+    /// Present on `deliberate` refusals only.
+    #[serde(default)]
+    pub elevation: Option<FederationElevation>,
+    /// The canonical fixture both translators must agree on.
+    pub fixture: FederationFixture,
+    /// An owner-scope-less input that must be refused, where scope is required.
+    #[serde(default)]
+    pub unscoped_fixture: Option<FederationFixture>,
+}
+
+/// The already-converged `did:nostr` identity pass-through.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct IdentityPassthrough {
+    /// Inbound grammar.
+    pub source_grammar: String,
+    /// Outbound grammar (identical — identity round-trips structurally).
+    pub target_grammar: String,
+    /// A well-formed DID that must pass through unchanged.
+    pub fixture: FederationFixture,
+    /// A malformed DID that must be refused.
+    pub malformed_fixture: FederationFixture,
+}
+
+/// The parsed federation kind artefact.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FederationKindArtefact {
+    /// Artefact discriminator (`federation-kinds`).
+    pub artefact: String,
+    /// Semantic version of the kind list.
+    pub version: String,
+    /// The governing decision record (`ADR-2061`).
+    pub adr: String,
+    /// The `did:nostr` pass-through contract.
+    pub identity_passthrough: IdentityPassthrough,
+    /// One row per `urn:agentbox` kind.
+    pub kinds: Vec<FederationKind>,
+}
+
+/// The shared federation kind artefact, parsed once.
+///
+/// # Panics
+/// Panics if the embedded artefact is malformed. It is compiled in, so a parse
+/// failure is a build-time authoring error, not a runtime input.
+pub fn federation_kinds() -> &'static FederationKindArtefact {
+    static ARTEFACT: std::sync::OnceLock<FederationKindArtefact> = std::sync::OnceLock::new();
+    ARTEFACT.get_or_init(|| {
+        serde_json::from_str(FEDERATION_KINDS_JSON).expect(
+            "agentbox/schema/federation-kinds.json is malformed - the federation kind \
+             artefact is embedded at build time and must parse",
+        )
+    })
+}
+
+/// Look up the artefact row governing one `urn:agentbox` kind.
+pub fn federation_kind(kind: &str) -> Option<&'static FederationKind> {
+    federation_kinds().kinds.iter().find(|k| k.kind == kind)
+}
+
 /// A namespace crossing recorded at the federation boundary. Carries both ends
 /// so the ingest path stores the translation rather than an opaque foreign blob,
 /// and the audit surface can recover the agentbox source.
@@ -651,24 +780,32 @@ pub struct UrnCrossing {
 
 /// Translate an inbound `urn:agentbox:<kind>:<scope>:<local>` (or `did:nostr:*`)
 /// into its converged VisionClaw identifier — the VisionClaw-side counterpart of
-/// agentbox `bc20-provenance-bridge.js::toVisionclaw`. The closed kind map:
+/// agentbox `bc20-provenance-bridge.js::toVisionclaw`.
+///
+/// The kind map is **not written here**. It is derived from the shared artefact
+/// [`FEDERATION_KINDS_JSON`] (`agentbox/schema/federation-kinds.json`), the same
+/// bytes the JS bridge reads, so the two translators cannot drift. As of
+/// artefact 1.0.0 the crossing kinds are:
 ///
 ///   * `agent`    → `did:nostr:<pubkey>` (identity, structural round-trip)
 ///   * `activity` → `urn:visionclaw:execution:<sha256-12>` (unscoped)
 ///   * `thing`    → `urn:visionclaw:kg:<pubkey>:<sha256-12>`
 ///   * `bead`     → `urn:visionclaw:bead:<pubkey>:<sha256-12>` (structural
-///                  pass-through — see ADR-2072 / agentbox ADR-2061: agentbox
-///                  `bead` locals are already `sha256-12-<12hex>` content
-///                  addresses, so the crossing preserves the existing address
-///                  instead of re-hashing, matching
-///                  `bc20-provenance-bridge.js::toVisionclaw`'s `bead` arm)
-///   * `memory`   → `urn:visionclaw:concept:...` requires elevation {domain,slug},
-///                  which the ingest hot path does not have, so it is recorded as
-///                  a crossing-without-translation (returns `None`).
+///                  pass-through — ADR-2072 / agentbox ADR-2061: agentbox
+///                  `bead` locals are already
+///                  `sha256-12-<12hex>` content addresses, so the crossing
+///                  preserves the existing address instead of re-hashing)
+///
+/// and `memory` is a *recorded* refusal rather than an absent arm: it would
+/// reach `urn:visionclaw:concept:<domain>:<slug>`, but that needs a
+/// `{domain, slug}` elevation the ingest hot path does not carry, so the
+/// artefact marks it `crosses: false` with `refusal_class: "deliberate"` and
+/// names the arguments that would unlock it. Every other kind is
+/// `not-federated`. Consult [`federation_kind`] for a row's reason.
 ///
 /// A `did:nostr:*` input is already converged and round-trips structurally.
 /// Returns `None` (the caller records the raw string + an unmapped marker) for
-/// any unmapped kind, mirroring the agentbox B04 closed-map discipline.
+/// any refused or unknown kind, mirroring the agentbox B04 closed-map discipline.
 pub fn cross_from_agentbox(agentbox_urn: &str) -> Option<UrnCrossing> {
     // Already-converged identity passes through unchanged.
     if let Some(pk) = agentbox_urn.strip_prefix(DID_NOSTR_PREFIX) {
@@ -688,18 +825,27 @@ pub fn cross_from_agentbox(agentbox_urn: &str) -> Option<UrnCrossing> {
     let scope = tail.split(':').next().filter(|s| is_pubkey_hex(s));
     let owner_did = scope.and_then(|pk| did_nostr(pk).ok());
 
-    let visionclaw_id = match kind {
-        "agent" => {
-            let pk = scope?;
-            did_nostr(pk).ok()?
-        }
-        "activity" => execution(agentbox_urn),
-        "thing" => {
-            let pk = scope?;
-            kg(pk, agentbox_urn).ok()?
-        }
-        "bead" => {
-            // Structural pass-through (ADR-2072): the agentbox `bead` local is
+    // The closed map is DERIVED from the shared artefact (ADR-2061), never
+    // transcribed here. An unknown kind, or one the artefact records as a
+    // refusal, returns None — the caller stores the raw string plus an unmapped
+    // marker rather than a synthetic identifier (B04).
+    let spec = federation_kind(kind)?;
+    if !spec.crosses {
+        return None;
+    }
+
+    // Target kind -> the typed constructor that mints its grammar. This is the
+    // only mapping the Rust side owns; which kinds reach it is the artefact's
+    // decision. A crossing row naming a target with no arm falls to the final
+    // arm and is refused, and `federation_targets_all_have_an_arm` fails, so a
+    // one-sided artefact addition cannot ship as a silent drop.
+    let visionclaw_id = match spec.target_kind.as_deref() {
+        Some("did:nostr") => did_nostr(scope?).ok()?,
+        Some("execution") => execution(agentbox_urn),
+        Some("kg") => kg(scope?, agentbox_urn).ok()?,
+        Some("bead") => {
+            // Structural pass-through (ADR-2072 landed the arm, agentbox
+            // ADR-2061 the shared artefact): the agentbox `bead` local is
             // already a `sha256-12-<12hex>` content address (uris.js
             // KINDS.bead.contentAddressed = true), the same shape VisionClaw
             // uses, so the crossing preserves it rather than re-hashing the
@@ -708,8 +854,6 @@ pub fn cross_from_agentbox(agentbox_urn: &str) -> Option<UrnCrossing> {
             let local = tail.strip_prefix(pk)?.strip_prefix(':')?;
             bead_with_address(pk, local).ok()?
         }
-        // memory→concept needs the elevation {domain,slug} target, absent on the
-        // hot path; the crossing is recorded raw rather than mis-mapped.
         _ => return None,
     };
 
@@ -1241,11 +1385,55 @@ mod tests {
         assert!(iri.starts_with(ngm::EDGE_PREFIX));
     }
 
+    // ---- ADR-2095: the legacy class scheme, re-exported from the domain ----
+
+    /// The re-export is the same typed pair the adapters crate mints through,
+    /// so `uri::ngm` stays the single lookup point for the legacy scheme.
+    #[test]
+    fn legacy_class_iri_round_trips() {
+        for slug in ["camera", "finality-mechanism", "built-environment", "0"] {
+            let iri = ngm::class_iri(slug);
+            assert!(iri.starts_with(ngm::CLASS_PREFIX));
+            assert_eq!(ngm::parse_class_iri(&iri), Some(slug));
+            assert!(ngm::is_class_iri(&iri));
+        }
+    }
+
+    /// The constructor reproduces the exact literal the raw `format!` mints in
+    /// `elevation_actor.rs` and `oxigraph_ontology_repository.rs` emitted
+    /// before ADR-2095 — persisted class IRIs must not shift.
+    #[test]
+    fn legacy_class_iri_preserves_the_previous_literal() {
+        assert_eq!(
+            ngm::class_iri("finality-mechanism"),
+            "urn:ngm:class:finality-mechanism"
+        );
+        assert_eq!(ngm::class_iri("camera"), "urn:ngm:class:camera");
+    }
+
+    /// The class parser rejects the other legacy schemes and the empty slug,
+    /// exactly as `parse_node_iri`/`parse_edge_iri` reject theirs.
+    #[test]
+    fn legacy_class_iri_parser_rejects_other_schemes() {
+        assert_eq!(ngm::parse_class_iri("urn:ngm:class:"), None);
+        assert_eq!(ngm::parse_class_iri(&ngm::node_iri(5)), None);
+        assert_eq!(ngm::parse_class_iri(&ngm::edge_iri(1, 2, "1-2")), None);
+        assert_eq!(ngm::parse_class_iri("urn:ngm:property:has-part"), None);
+        assert_eq!(
+            ngm::parse_class_iri("urn:visionclaw:concept:xr:camera"),
+            None
+        );
+    }
+
     /// Legacy identifiers stay legacy: `parse` never claims them as converged
     /// VisionClaw URNs, and `parse_dual` resolves them as legacy.
     #[test]
     fn legacy_identifiers_are_not_converged_urns() {
-        for iri in [ngm::node_iri(5), ngm::edge_iri(5, 6, "5-6")] {
+        for iri in [
+            ngm::node_iri(5),
+            ngm::edge_iri(5, 6, "5-6"),
+            ngm::class_iri("camera"),
+        ] {
             assert!(
                 parse(&iri).is_err(),
                 "{iri} must not parse as a converged URN"
@@ -1272,6 +1460,219 @@ mod tests {
         assert!(
             matches!(parse(&legacy_shape), Err(UriError::Malformed(_))),
             "the pre-ADR-2021 execution shape must not parse"
+        );
+    }
+
+    // ── ADR-2061: federation kind-map parity (the Rust half of the fixture) ──
+    //
+    // Every case below is generated from `agentbox/schema/federation-kinds.json`
+    // — the same bytes `bc20-provenance-bridge.js` reads. Nothing here restates
+    // the kind list, so a kind added to one translator but not the other, or to
+    // the artefact with no arm on this side, fails rather than diverging
+    // silently. The JS twin is
+    // `agentbox/tests/contract/federation-kind-parity.contract.spec.js`.
+
+    /// The VisionClaw targets `cross_from_agentbox` has a constructor arm for.
+    /// Kept in step with the `match spec.target_kind` above.
+    const RUST_HANDLED_TARGETS: &[&str] = &["did:nostr", "execution", "kg", "bead"];
+
+    /// Expand a declared grammar (`urn:visionclaw:kg:<pubkey>:<sha256-12>`) into
+    /// a regex, so the artefact's prose grammar is executable rather than a
+    /// comment that can drift from the code.
+    fn grammar_to_regex(grammar: &str) -> regex::Regex {
+        let mut out = String::from("^");
+        let mut rest = grammar;
+        while let Some(start) = rest.find('<') {
+            let end = rest[start..]
+                .find('>')
+                .map(|i| start + i + 1)
+                .expect("grammar placeholder must be closed");
+            out.push_str(&regex::escape(&rest[..start]));
+            out.push_str(match &rest[start..end] {
+                "<pubkey>" => "[0-9a-f]{64}",
+                "<sha256-12>" => "sha256-12-[0-9a-f]{12}",
+                "<domain>" | "<slug>" => "[a-z0-9._-]+",
+                "<local>" | "<name>" => "[^:]+",
+                other => panic!("grammar placeholder {other} has no regex mapping"),
+            });
+            rest = &rest[end..];
+        }
+        out.push_str(&regex::escape(rest));
+        out.push('$');
+        regex::Regex::new(&out).expect("generated grammar regex must compile")
+    }
+
+    #[test]
+    fn federation_artefact_is_versioned_and_embedded() {
+        let art = federation_kinds();
+        assert_eq!(art.artefact, "federation-kinds");
+        assert_eq!(art.adr, "ADR-2061");
+        assert!(
+            art.version.split('.').count() == 3,
+            "artefact version must be semver, got {}",
+            art.version
+        );
+        assert!(
+            !art.kinds.is_empty(),
+            "the embedded artefact must enumerate the federated kinds"
+        );
+    }
+
+    /// Acceptance 2 + 4: this translator agrees with EVERY artefact row, for
+    /// crossing and for refusal alike, and the list is read, never restated.
+    #[test]
+    fn federation_kind_artefact_matches_translator() {
+        for row in &federation_kinds().kinds {
+            let got = cross_from_agentbox(&row.fixture.input).map(|c| c.visionclaw_id);
+            match (&row.fixture.expect, &got) {
+                (Some(want), Some(have)) => assert_eq!(
+                    want, have,
+                    "kind `{}` crossed to the wrong identifier",
+                    row.kind
+                ),
+                (None, None) => {}
+                (want, have) => panic!(
+                    "kind `{}` disagrees with the shared artefact: expected {want:?}, translator produced {have:?}. \
+                     Either add the arm on this side or amend agentbox/schema/federation-kinds.json.",
+                    row.kind
+                ),
+            }
+            // A crossing row must actually be marked as crossing, and vice
+            // versa — the fixture and the `crosses` flag cannot disagree.
+            assert_eq!(
+                row.crosses,
+                row.fixture.expect.is_some(),
+                "kind `{}`: `crosses` and the fixture expectation disagree",
+                row.kind
+            );
+        }
+    }
+
+    /// Acceptance 1 + 3: crossings satisfy the declared target grammar, and the
+    /// fixture targets — which were computed by the JS hasher — are reproduced
+    /// byte-for-byte by this side's independent sha256. That extends the
+    /// `entity_urn_matches_uris_js_golden` proof from the content address alone
+    /// to the whole crossing.
+    #[test]
+    fn federation_crossings_match_declared_grammar() {
+        for row in federation_kinds().kinds.iter().filter(|k| k.crosses) {
+            let grammar = row
+                .target_grammar
+                .as_deref()
+                .unwrap_or_else(|| panic!("crossing kind `{}` needs a target_grammar", row.kind));
+            let out = cross_from_agentbox(&row.fixture.input)
+                .unwrap_or_else(|| panic!("crossing kind `{}` must cross", row.kind))
+                .visionclaw_id;
+            assert!(
+                grammar_to_regex(grammar).is_match(&out),
+                "kind `{}` produced `{out}`, which does not match declared grammar `{grammar}`",
+                row.kind
+            );
+        }
+    }
+
+    /// A crossing row naming a target this translator cannot mint would drop
+    /// silently at the wildcard arm. Fail loudly instead — this is the gate that
+    /// makes a one-sided artefact addition a build failure.
+    #[test]
+    fn federation_targets_all_have_an_arm() {
+        for row in federation_kinds().kinds.iter().filter(|k| k.crosses) {
+            let target = row
+                .target_kind
+                .as_deref()
+                .unwrap_or_else(|| panic!("crossing kind `{}` needs a target_kind", row.kind));
+            assert!(
+                RUST_HANDLED_TARGETS.contains(&target),
+                "artefact crosses `{}` to `{target}`, which cross_from_agentbox has no arm for",
+                row.kind
+            );
+        }
+    }
+
+    /// A refusal must be *recorded*, with a reason, and a `deliberate` one must
+    /// name both the target it would reach and the arguments that would unlock
+    /// it — that is what keeps it distinguishable from "not implemented".
+    #[test]
+    fn federation_refusals_are_recorded_not_absent() {
+        let mut deliberate = 0;
+        for row in federation_kinds().kinds.iter().filter(|k| !k.crosses) {
+            let reason = row
+                .refusal_reason
+                .as_deref()
+                .unwrap_or_else(|| panic!("refused kind `{}` needs a refusal_reason", row.kind));
+            assert!(
+                reason.len() > 20,
+                "refused kind `{}` needs a substantive reason, got `{reason}`",
+                row.kind
+            );
+            match row.refusal_class.as_deref() {
+                Some("deliberate") => {
+                    deliberate += 1;
+                    assert!(
+                        row.target_kind.is_some(),
+                        "deliberate refusal `{}` must name the target it would reach",
+                        row.kind
+                    );
+                    let elev = row.elevation.as_ref().unwrap_or_else(|| {
+                        panic!("deliberate refusal `{}` must name its unlock", row.kind)
+                    });
+                    assert!(
+                        !elev.required_args.is_empty(),
+                        "deliberate refusal `{}` must list the missing arguments",
+                        row.kind
+                    );
+                }
+                Some("not-federated") => assert!(
+                    row.elevation.is_none(),
+                    "`{}` is not-federated, so it must not carry an elevation unlock",
+                    row.kind
+                ),
+                other => panic!("kind `{}` has unknown refusal_class {other:?}", row.kind),
+            }
+        }
+        assert!(
+            deliberate > 0,
+            "the artefact must record at least one deliberate refusal (memory)"
+        );
+    }
+
+    /// Scope-bearing crossings refuse an input with no 64-hex owner scope, on
+    /// both sides, rather than minting an unowned identifier.
+    #[test]
+    fn federation_unscoped_inputs_are_refused() {
+        let mut checked = 0;
+        for row in &federation_kinds().kinds {
+            let Some(fixture) = row.unscoped_fixture.as_ref() else {
+                continue;
+            };
+            checked += 1;
+            assert!(
+                fixture.expect.is_none(),
+                "an unscoped fixture must expect a refusal (`{}`)",
+                row.kind
+            );
+            assert!(
+                cross_from_agentbox(&fixture.input).is_none(),
+                "kind `{}` crossed without an owner scope: `{}`",
+                row.kind,
+                fixture.input
+            );
+        }
+        assert!(checked > 0, "expected at least one unscoped fixture");
+    }
+
+    /// The already-converged identity pass-through, and its malformed twin.
+    #[test]
+    fn federation_identity_passthrough_matches_artefact() {
+        let ip = &federation_kinds().identity_passthrough;
+        let crossed = cross_from_agentbox(&ip.fixture.input)
+            .expect("a well-formed did:nostr must pass through");
+        assert_eq!(Some(crossed.visionclaw_id.clone()), ip.fixture.expect);
+        assert_eq!(crossed.owner_did, Some(crossed.visionclaw_id.clone()));
+        assert!(grammar_to_regex(&ip.target_grammar).is_match(&crossed.visionclaw_id));
+        assert!(
+            cross_from_agentbox(&ip.malformed_fixture.input).is_none(),
+            "a malformed did:nostr must be refused, not passed through"
         );
     }
 }

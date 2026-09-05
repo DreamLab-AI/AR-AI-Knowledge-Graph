@@ -15,7 +15,12 @@ sources:
   - agentbox/management-api/lib/system-manifest.js
   - agentbox/agentbox.sh
   - agentbox/flake.lock
-verified_commit: b00c28a0d
+  - agentbox/lib/3dgs-stack.nix
+  - agentbox/lib/rune.nix
+  - agentbox/scripts/agentbox-config-validate.sh
+  - agentbox/scripts/post-deploy-cleanup.sh
+  - agentbox/docker-compose.yml
+verified_commit: bed6b617d
 ---
 
 ## AB-01.1 agentbox.toml gates to flake.nix conditionals to package set and supervisord text
