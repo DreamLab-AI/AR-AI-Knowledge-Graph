@@ -59,14 +59,6 @@ impl ConnHandle {
     }
 }
 
-fn with_token(url: &str, token: &str) -> String {
-    if token.is_empty() {
-        return url.to_owned();
-    }
-    let sep = if url.contains('?') { '&' } else { '?' };
-    format!("{url}{sep}token={token}")
-}
-
 // --- graph stream (/wss V3) --------------------------------------------------
 
 /// Connect to `/wss`, subscribe to binary position updates, and push every
@@ -76,26 +68,23 @@ fn with_token(url: &str, token: &str) -> String {
 /// message is sent after subscribe so the server accepts mutating messages.
 pub fn spawn_graph_stream(
     url: String,
-    token: String,
     nostr_secret_hex: String,
     inbox: Arc<Mutex<VecDeque<GraphInbound>>>,
 ) -> (ConnHandle, mpsc::UnboundedSender<String>) {
     let (tx, rx) = mpsc::unbounded_channel::<String>();
     let handle = runtime().spawn(async move {
-        graph_pump(url, token, nostr_secret_hex, inbox, rx).await;
+        graph_pump(url, nostr_secret_hex, inbox, rx).await;
     });
     (ConnHandle { handle }, tx)
 }
 
 async fn graph_pump(
     url: String,
-    token: String,
     nostr_secret_hex: String,
     inbox: Arc<Mutex<VecDeque<GraphInbound>>>,
     outbound: mpsc::UnboundedReceiver<String>,
 ) {
-    let full = with_token(&url, &token);
-    match connect_async_with_config(full.clone(), Some(ws_config()), false).await {
+    match connect_async_with_config(url.clone(), Some(ws_config()), false).await {
         Ok((ws, _resp)) => {
             let (mut sink, mut stream) = ws.split();
             if sink
@@ -119,7 +108,7 @@ async fn graph_pump(
                 // streaming still works without it.
                 if !nostr_secret_hex.trim().is_empty() {
                     match build_signer(&nostr_secret_hex)
-                        .map(|s| s.nip98_authenticate_json(&full, "GET"))
+                        .map(|s| s.nip98_authenticate_json(&url, "GET"))
                     {
                         Ok(auth_msg) => {
                             if sink.send(Message::Text(auth_msg)).await.is_err() {
@@ -402,16 +391,6 @@ impl WsTransport for TungsteniteWsTransport {
 mod tests {
     use super::*;
     use crate::ports::Signer;
-
-    #[test]
-    fn with_token_appends_query() {
-        assert_eq!(with_token("ws://h/wss", "abc"), "ws://h/wss?token=abc");
-        assert_eq!(
-            with_token("ws://h/wss?x=1", "abc"),
-            "ws://h/wss?x=1&token=abc"
-        );
-        assert_eq!(with_token("ws://h/wss", ""), "ws://h/wss");
-    }
 
     #[test]
     fn build_signer_empty_is_ephemeral() {

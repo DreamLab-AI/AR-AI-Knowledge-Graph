@@ -423,9 +423,50 @@ pub struct AgentRec {
     pub status: u8,
     /// Wire timestamp of the last action (server ms, `% u32::MAX` — may wrap).
     pub last_action_ts: u32,
+    /// Server-clock timestamp at which the JSON `state` channel last spoke about
+    /// this agent (ADR-2034). Zero until a state update arrives. Held separately
+    /// from [`last_action_ts`](Self::last_action_ts) so the two channels can be
+    /// ordered against each other rather than blindly overwriting.
+    pub last_state_ts: u32,
+    /// Whether the record has been demoted by [`RenderStore::expire_stale_agents`]
+    /// because no evidence arrived within the TTL. Purely informational — the
+    /// demotion itself already shows in `status`/`target_node_id`.
+    pub expired: bool,
     /// Current task line from the JSON `state` channel (empty until it arrives).
     pub task: String,
 }
+
+impl AgentRec {
+    /// Timestamp of the newest evidence applied to this record, from either
+    /// channel. This is the value an incoming update must beat to be applied.
+    pub fn evidence_ts(&self) -> u32 {
+        if ts_is_newer(self.last_state_ts, self.last_action_ts) {
+            self.last_state_ts
+        } else {
+            self.last_action_ts
+        }
+    }
+}
+
+/// Wrap-safe "is `candidate` strictly newer than `reference`?" on the server's
+/// millisecond clock (ADR-2034).
+///
+/// Action timestamps are `u32` server milliseconds taken `% u32::MAX`, so they
+/// **wrap** roughly every 49.7 days. A naive `a > b` would, at the wrap point,
+/// treat every fresh timestamp as ancient and freeze every agent's status. This
+/// is RFC 1982 serial-number arithmetic: the difference is interpreted as a
+/// signed offset, so `5 > u32::MAX - 5` correctly reads as "newer" while an
+/// genuinely old timestamp still reads as older.
+pub fn ts_is_newer(candidate: u32, reference: u32) -> bool {
+    (candidate.wrapping_sub(reference) as i32) > 0
+}
+
+/// Default time-to-live for live agent evidence (ADR-2034). An agent whose newest
+/// action or state update is older than this is no longer credible evidence of
+/// current work, so [`RenderStore::expire_stale_agents`] demotes it to idle and
+/// drops its beam. Thirty seconds is well beyond the action cadence but short
+/// enough that a disconnected agent stops claiming to be working.
+pub const AGENT_EVIDENCE_TTL_MS: u32 = 30_000;
 
 #[derive(Default)]
 pub struct RenderStore {
@@ -498,6 +539,11 @@ pub struct RenderStore {
     // Monotonic count of agent actions ever ingested — a liveness counter for the
     // P1 diagnostics surface (verifiable from the HP log before any visuals exist).
     agent_actions_total: u64,
+    // ADR-2034 precedence/expiry counters: actions and state updates dropped for
+    // arriving out of order, and records demoted once their evidence went stale.
+    agent_actions_stale: u64,
+    agent_states_stale: u64,
+    agent_expiries_total: u64,
 }
 
 /// Distinct query-variable palette colours before they cycle — matches the client
@@ -546,6 +592,9 @@ impl RenderStore {
         self.degree.clear();
         self.agent_registry.clear();
         self.agent_actions_total = 0;
+        self.agent_actions_stale = 0;
+        self.agent_states_stale = 0;
+        self.agent_expiries_total = 0;
     }
 
     /// Record a node's `file_size` (bytes) for the metadata size formula. Merges
@@ -624,6 +673,33 @@ impl RenderStore {
     /// intent string extracted from the action payload (empty when absent) — it
     /// only overwrites a prior task line when non-empty, so a bare action never
     /// blanks a task set by the richer JSON `state` channel.
+    /// # Precedence and expiry (ADR-2034)
+    ///
+    /// The two channels — binary `0x23` actions and the JSON `state` channel —
+    /// are independent producers writing to one record, so "last writer wins by
+    /// arrival order" is wrong: a delayed action could resurrect WORKING after a
+    /// completion had already been reported. The contract is instead:
+    ///
+    /// * Both channels carry a position on the same wrapping server-millisecond
+    ///   clock, compared with [`ts_is_newer`].
+    /// * An update is applied only if it is **strictly newer than the newest
+    ///   evidence already applied from either channel**
+    ///   ([`AgentRec::evidence_ts`]). An out-of-order or replayed update is
+    ///   dropped whole — it cannot change status, target, action type or task.
+    /// * Evidence goes stale: [`expire_stale_agents`](Self::expire_stale_agents)
+    ///   demotes a live status whose newest evidence is older than the TTL.
+    ///
+    /// Returns `true` when the action was applied, `false` when it was dropped
+    /// as out of order.
+    ///
+    /// `source_agent_id` may carry the `AGENT_NODE_FLAG` high bit (the server
+    /// stamps it); it is masked to node-id space for the registry key. An applied
+    /// action is live evidence the agent is WORKING, so status is set accordingly;
+    /// the target and action type are recorded for the hover glide (P2) and work
+    /// beam (P3). `task` is the optional intent string extracted from the action
+    /// payload (empty when absent) — it only overwrites a prior task line when
+    /// non-empty, so a bare action never blanks a task set by the richer JSON
+    /// `state` channel.
     pub fn record_agent_action(
         &mut self,
         source_agent_id: u32,
@@ -631,29 +707,124 @@ impl RenderStore {
         action_type: u8,
         timestamp: u32,
         task: &str,
-    ) {
+    ) -> bool {
         let key = source_agent_id & NODE_ID_MASK;
         let rec = self.agent_registry.entry(key).or_default();
+
+        // Reordered completion / replayed action: an action older than the newest
+        // evidence must not flip a reported completion back to WORKING.
+        let known = rec.target_node_id != 0 || rec.last_action_ts != 0 || rec.last_state_ts != 0;
+        if known && !ts_is_newer(timestamp, rec.evidence_ts()) {
+            self.agent_actions_stale = self.agent_actions_stale.saturating_add(1);
+            return false;
+        }
+
         rec.target_node_id = target_node_id & NODE_ID_MASK;
         rec.action_type = action_type;
         rec.status = AGENT_WORKING;
         rec.last_action_ts = timestamp;
+        rec.expired = false;
         if !task.is_empty() {
             rec.task = task.to_owned();
         }
         self.agent_actions_total = self.agent_actions_total.saturating_add(1);
+        true
     }
 
     /// Refine an agent's status + task line from the JSON `state` channel (or a
-    /// GDScript caller that parsed it). Creates the record if the beam frame has
-    /// not been seen yet. An empty `task` leaves the existing task line untouched.
-    pub fn set_agent_state(&mut self, agent_id: u32, status: &str, task: &str) {
+    /// GDScript caller that parsed it), treating the update as **current** —
+    /// i.e. newer than every action already seen. Creates the record if the beam
+    /// frame has not been seen yet. An empty `task` leaves the existing task line
+    /// untouched.
+    ///
+    /// The JSON channel carries no timestamp of its own, so "current" is the only
+    /// honest reading of an untimestamped update: it is the latest word as of its
+    /// arrival. It therefore supersedes evidence already applied, while a *later*
+    /// action still supersedes it. Use [`set_agent_state_at`](Self::set_agent_state_at)
+    /// when the caller does have a server timestamp and needs strict ordering.
+    pub fn set_agent_state(&mut self, agent_id: u32, status: &str, task: &str) -> bool {
+        let key = agent_id & NODE_ID_MASK;
+        let current = self
+            .agent_registry
+            .get(&key)
+            .map(|r| r.evidence_ts())
+            .unwrap_or(0);
+        self.set_agent_state_at(agent_id, status, task, current)
+    }
+
+    /// Apply a JSON `state` update stamped at a known server time, subject to the
+    /// same precedence rule as actions: it is dropped when it is older than the
+    /// newest evidence already applied. Returns `true` when applied.
+    ///
+    /// Note the deliberate asymmetry with [`set_agent_state`](Self::set_agent_state):
+    /// there, an equal timestamp still applies (an untimestamped update means
+    /// "now"); here, an update must be at least as new as the existing evidence,
+    /// so a genuinely older completion report loses to a newer action.
+    pub fn set_agent_state_at(
+        &mut self,
+        agent_id: u32,
+        status: &str,
+        task: &str,
+        timestamp: u32,
+    ) -> bool {
         let key = agent_id & NODE_ID_MASK;
         let rec = self.agent_registry.entry(key).or_default();
+        let known = rec.target_node_id != 0 || rec.last_action_ts != 0 || rec.last_state_ts != 0;
+        if known && timestamp != rec.evidence_ts() && !ts_is_newer(timestamp, rec.evidence_ts()) {
+            self.agent_states_stale = self.agent_states_stale.saturating_add(1);
+            return false;
+        }
         rec.status = agent_status_code(status);
+        rec.last_state_ts = timestamp;
+        rec.expired = false;
         if !task.is_empty() {
             rec.task = task.to_owned();
         }
+        true
+    }
+
+    /// Demote agents whose newest evidence is older than `ttl_ms` at `now_ms`
+    /// (ADR-2034). A live status (`WORKING`/`BLOCKED`) is only ever *derived*
+    /// from evidence that has since gone stale, so holding it indefinitely
+    /// renders a disconnected agent as permanently busy with a beam into a node
+    /// it may have long since left. Demoted agents become `AGENT_IDLE` with no
+    /// target, which removes the beam and stops the hover glide.
+    ///
+    /// Terminal `AGENT_DONE` is left alone: it is a reported outcome, not a live
+    /// claim, so it does not decay. Returns the number of records demoted.
+    pub fn expire_stale_agents(&mut self, now_ms: u32, ttl_ms: u32) -> usize {
+        let mut demoted = 0usize;
+        for rec in self.agent_registry.values_mut() {
+            if rec.status != AGENT_WORKING && rec.status != AGENT_BLOCKED {
+                continue;
+            }
+            let age = now_ms.wrapping_sub(rec.evidence_ts());
+            // Guard against a clock that has not reached the evidence yet (a
+            // future-stamped action): `age` would wrap to a huge value.
+            if (age as i32) > 0 && age > ttl_ms {
+                rec.status = AGENT_IDLE;
+                rec.target_node_id = 0;
+                rec.expired = true;
+                demoted += 1;
+            }
+        }
+        self.agent_expiries_total = self.agent_expiries_total.saturating_add(demoted as u64);
+        demoted
+    }
+
+    /// Total actions dropped as out of order since construction (ADR-2034 probe).
+    pub fn agent_actions_stale(&self) -> u64 {
+        self.agent_actions_stale
+    }
+
+    /// Total state updates dropped as out of order since construction.
+    pub fn agent_states_stale(&self) -> u64 {
+        self.agent_states_stale
+    }
+
+    /// Total agent records demoted by [`expire_stale_agents`](Self::expire_stale_agents).
+    pub fn agent_expiries_total(&self) -> u64 {
+        self.agent_expiries_total
     }
 
     /// Number of live agents in the registry (Swarm-tab roster size / diagnostics).
@@ -2468,5 +2639,147 @@ mod tests {
         let folded = s.build_node_buffer(&[1, 2, 3], 1.0, 0.7, 1.9);
         assert_eq!(s.render_ids()[0], 1, "representative drawn first");
         assert!(approx(folded[0], bare), "rep sizes by its own metadata, not the group's");
+    }
+
+    // ── ADR-2034: action/state precedence and evidence expiry ──────────────
+
+    #[test]
+    fn a_reordered_old_action_cannot_resurrect_a_completed_agent() {
+        // The closeout finding: every action set WORKING without checking the
+        // timestamp, so a delayed action arriving after a completion flipped the
+        // agent back to working and re-drew its beam.
+        let mut s = RenderStore::new();
+        assert!(s.record_agent_action(5, 20, 0, 1_000, "reading"));
+        assert!(s.set_agent_state_at(5, "done", "", 2_000));
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_DONE);
+
+        // An action stamped BEFORE the completion arrives late. It is dropped
+        // whole: status, target and action type all stand.
+        assert!(
+            !s.record_agent_action(5, 99, 3, 1_500, "stale work"),
+            "an action older than the newest evidence must be refused"
+        );
+        let rec = s.agent_rec(5).unwrap();
+        assert_eq!(rec.status, AGENT_DONE, "completion still stands");
+        assert_eq!(rec.target_node_id, 20, "stale action did not retarget");
+        assert_eq!(rec.task, "reading", "stale action did not rewrite the task");
+        assert_eq!(s.agent_actions_stale(), 1);
+        // The dropped action is not counted as ingested activity either.
+        assert_eq!(s.agent_actions_total(), 1);
+    }
+
+    #[test]
+    fn a_genuinely_newer_action_still_supersedes_a_completion() {
+        // Precedence is by timestamp, not by channel: the state channel does not
+        // get to freeze an agent for ever.
+        let mut s = RenderStore::new();
+        assert!(s.record_agent_action(5, 20, 0, 1_000, ""));
+        assert!(s.set_agent_state_at(5, "done", "", 2_000));
+        assert!(s.record_agent_action(5, 21, 1, 3_000, "next job"));
+        let rec = s.agent_rec(5).unwrap();
+        assert_eq!(rec.status, AGENT_WORKING);
+        assert_eq!(rec.target_node_id, 21);
+        assert_eq!(rec.task, "next job");
+    }
+
+    #[test]
+    fn an_out_of_order_state_update_is_refused() {
+        let mut s = RenderStore::new();
+        assert!(s.record_agent_action(5, 20, 0, 5_000, ""));
+        // A completion report stamped before the action we already applied.
+        assert!(!s.set_agent_state_at(5, "done", "", 4_000));
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_WORKING);
+        assert_eq!(s.agent_states_stale(), 1);
+    }
+
+    #[test]
+    fn an_untimestamped_state_update_is_treated_as_current() {
+        // The JSON channel carries no timestamp; "now" is the only honest reading,
+        // so it supersedes evidence already applied but not a later action.
+        let mut s = RenderStore::new();
+        s.record_agent_action(5, 20, 0, 1_000, "");
+        assert!(s.set_agent_state(5, "done", ""));
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_DONE);
+        // A later action still wins.
+        assert!(s.record_agent_action(5, 20, 0, 1_001, ""));
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_WORKING);
+    }
+
+    #[test]
+    fn timestamp_comparison_survives_the_u32_wrap() {
+        // Action timestamps are server ms % u32::MAX and wrap every ~49.7 days.
+        // A naive `a > b` would freeze every agent at the wrap point.
+        assert!(ts_is_newer(5, u32::MAX - 5), "just after the wrap is newer");
+        assert!(!ts_is_newer(u32::MAX - 5, 5), "and the reverse is older");
+        assert!(ts_is_newer(1_001, 1_000));
+        assert!(!ts_is_newer(1_000, 1_000), "equal is not strictly newer");
+
+        let mut s = RenderStore::new();
+        assert!(s.record_agent_action(5, 20, 0, u32::MAX - 5, ""));
+        // The clock wraps; this action is genuinely newer and must be applied.
+        assert!(s.record_agent_action(5, 21, 0, 5, ""));
+        assert_eq!(s.agent_rec(5).unwrap().target_node_id, 21);
+    }
+
+    #[test]
+    fn stale_evidence_expires_a_live_status_and_removes_its_beam() {
+        let mut s = RenderStore::new();
+        s.upsert(5, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.upsert(20, [0.0, 4.0, 0.0], 0, 0.0, 0.0);
+        s.record_agent_action(5, 20, 0, 1_000, "reading");
+        s.build_node_buffer(&[5, 20], 1.0, 0.7, 1.9);
+        assert_eq!(s.build_beam_buffer(1.0).len(), EDGE_STRIDE_TYPED, "beam while fresh");
+
+        // Well inside the TTL: nothing changes.
+        assert_eq!(s.expire_stale_agents(1_000 + AGENT_EVIDENCE_TTL_MS, AGENT_EVIDENCE_TTL_MS), 0);
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_WORKING);
+
+        // Past the TTL: demoted to idle, target dropped, beam gone.
+        assert_eq!(s.expire_stale_agents(1_001 + AGENT_EVIDENCE_TTL_MS, AGENT_EVIDENCE_TTL_MS), 1);
+        let rec = s.agent_rec(5).unwrap();
+        assert_eq!(rec.status, AGENT_IDLE);
+        assert_eq!(rec.target_node_id, 0);
+        assert!(rec.expired);
+        assert!(s.build_beam_buffer(1.0).is_empty(), "expired agent draws no beam");
+        assert_eq!(s.agent_expiries_total(), 1);
+    }
+
+    #[test]
+    fn expiry_demotes_blocked_but_leaves_a_reported_completion_alone() {
+        let mut s = RenderStore::new();
+        s.record_agent_action(5, 20, 0, 1_000, "");
+        s.set_agent_state_at(5, "blocked", "", 1_100);
+        s.record_agent_action(6, 21, 0, 1_000, "");
+        s.set_agent_state_at(6, "done", "", 1_100);
+
+        assert_eq!(s.expire_stale_agents(100_000, AGENT_EVIDENCE_TTL_MS), 1);
+        // BLOCKED is a live claim derived from stale evidence — it decays.
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_IDLE);
+        // DONE is a reported outcome, not a live claim — it does not decay.
+        assert_eq!(s.agent_rec(6).unwrap().status, AGENT_DONE);
+    }
+
+    #[test]
+    fn a_future_stamped_action_is_not_expired_by_a_lagging_clock() {
+        // If the render clock has not yet reached the action's timestamp the age
+        // subtraction wraps; expiry must not read that as ancient.
+        let mut s = RenderStore::new();
+        s.record_agent_action(5, 20, 0, 50_000, "");
+        assert_eq!(s.expire_stale_agents(1_000, AGENT_EVIDENCE_TTL_MS), 0);
+        assert_eq!(s.agent_rec(5).unwrap().status, AGENT_WORKING);
+    }
+
+    #[test]
+    fn refreshed_evidence_clears_the_expired_marker() {
+        let mut s = RenderStore::new();
+        s.record_agent_action(5, 20, 0, 1_000, "");
+        s.expire_stale_agents(100_000, AGENT_EVIDENCE_TTL_MS);
+        assert!(s.agent_rec(5).unwrap().expired);
+        // The agent comes back: a fresh action re-arms it.
+        assert!(s.record_agent_action(5, 22, 0, 100_001, ""));
+        let rec = s.agent_rec(5).unwrap();
+        assert!(!rec.expired);
+        assert_eq!(rec.status, AGENT_WORKING);
+        assert_eq!(rec.target_node_id, 22);
     }
 }

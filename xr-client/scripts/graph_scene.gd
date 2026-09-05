@@ -148,7 +148,6 @@ var _graph_ws_url: String = ""
 var _presence_ws_url: String = ""
 var _room_urn: String = ""
 var _display_name: String = ""
-var _graph_token: String = ""
 var _nostr_secret_hex: String = ""
 # Per-socket reconnect state. The graph (/wss) and presence (/ws/presence)
 # sockets fail and recover independently, so each owns its own backoff counter
@@ -1118,8 +1117,8 @@ func _on_hud_join_requested(room_urn: String) -> void:
 
 # Resolve graph/presence endpoints and credentials from the environment and open
 # both sockets. `XR_BACKEND_WS` is the base (scheme+host+port); the two well-known
-# paths are appended. Empty token/secret => anonymous graph stream / ephemeral
-# Nostr identity.
+# paths are appended. Empty secret => anonymous graph stream / ephemeral Nostr
+# identity.
 func _connect_from_env() -> void:
 	var base: String = _env_or("XR_BACKEND_WS", DEFAULT_BACKEND_WS).rstrip("/")
 	connect_to_server(
@@ -1127,7 +1126,6 @@ func _connect_from_env() -> void:
 		base + PRESENCE_PATH,
 		_env_or("XR_ROOM_URN", DEFAULT_ROOM_URN),
 		_env_or("XR_DISPLAY_NAME", DEFAULT_DISPLAY_NAME),
-		OS.get_environment("XR_GRAPH_TOKEN"),
 		OS.get_environment("XR_NOSTR_SECRET")
 	)
 
@@ -1156,14 +1154,12 @@ func connect_to_server(
 	presence_ws_url: String,
 	room_urn: String,
 	display_name: String,
-	graph_token: String = "",
 	nostr_secret_hex: String = ""
 ) -> void:
 	_graph_ws_url = graph_ws_url
 	_presence_ws_url = presence_ws_url
 	_room_urn = room_urn
 	_display_name = display_name
-	_graph_token = graph_token
 	_nostr_secret_hex = nostr_secret_hex
 	_reset_reconnect_state()
 	_attempt_connect()
@@ -1218,7 +1214,7 @@ func _connect_graph() -> void:
 	_two_hand_active = false
 	_manip_session_base_scale = -1.0
 	if _binary_client.has_method("connect_to_url"):
-		_binary_client.connect_to_url(_graph_ws_url, _graph_token, _nostr_secret_hex)
+		_binary_client.connect_to_url(_graph_ws_url, _nostr_secret_hex)
 
 
 func _connect_presence() -> void:

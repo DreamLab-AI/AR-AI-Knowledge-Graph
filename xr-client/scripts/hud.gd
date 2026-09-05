@@ -242,14 +242,35 @@ func _build_header() -> void:
 	_root.add_child(_hsep())
 
 
+# ── ADR-2033: every ray-driven control fires on PRESS ───────────────────────
+#
+# Pulling the Vive trigger jolts the pointer ray 20-30px. In Godot's default
+# release action mode the button waits for the release, which by then often lands
+# outside the control — so the press is silently cancelled and the user sees a
+# dead button (observed live 2026-08-31). Firing on press removes the jolt from
+# the dispatch path entirely.
+#
+# The rule is "every ray-driven control", so it must not be applied by hand at
+# each construction site: the closeout found eleven Button/CheckButton sites in
+# this file and only three assignments, leaving Query Execute/Clear, swarm
+# teleport, Join Room, Mute, Reconnect and both scroll arrows on release mode.
+# This helper is the single place the mode is set; route every new control
+# through it rather than assigning action_mode again.
+#
+# Returns the button so it can wrap a constructor inline:
+#     var b := _press_fire(Button.new())
+func _press_fire(b: BaseButton) -> BaseButton:
+	b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	return b
+
+
 func _build_tab_bar() -> void:
 	var bar := HBoxContainer.new()
 	bar.name = "TabBar"
 	bar.custom_minimum_size = Vector2(0, TABBAR_H)
 	bar.add_theme_constant_override("separation", 8)
 	for id: String in TAB_ORDER:
-		var b := Button.new()
-		b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS # see _action_btn
+		var b := _press_fire(Button.new()) as Button
 		b.text = TAB_LABELS[id]
 		b.custom_minimum_size = Vector2(0, TABBAR_H)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -401,7 +422,7 @@ func _build_query_page() -> VBoxContainer:
 	page.add_child(region)
 	var btns := _grid(2)
 	var exec_enabled: bool = _execute_enabled()
-	var exec := Button.new()
+	var exec := _press_fire(Button.new()) as Button
 	exec.custom_minimum_size = Vector2(0, BTN_H)
 	exec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if exec_enabled:
@@ -412,7 +433,7 @@ func _build_query_page() -> VBoxContainer:
 		exec.text = "Execute (soon)"
 		exec.disabled = true
 		exec.set_meta(HINT_META, "Query execution ships in a later phase")
-	var clr := Button.new()
+	var clr := _press_fire(Button.new()) as Button
 	clr.text = "Clear"
 	clr.custom_minimum_size = Vector2(0, BTN_H)
 	clr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -479,7 +500,7 @@ func _mk_swarm_row(r: Dictionary) -> Control:
 	if name_s == "":
 		name_s = "agent %d" % aid
 	var target_s: String = str(r.get("target", ""))
-	var btn := Button.new()
+	var btn := _press_fire(Button.new()) as Button
 	btn.text = "%s → %s" % [name_s, target_s if target_s != "" else "…"]
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.set_meta(HINT_META, "Teleport to %s" % name_s)
@@ -522,13 +543,13 @@ func _build_session_page() -> VBoxContainer:
 	_room_entry.custom_minimum_size = Vector2(0, BTN_H)
 	_room_entry.set_meta(HINT_META, "Type or paste a room URN, then Join")
 	page.add_child(_room_entry)
-	var join := Button.new()
+	var join := _press_fire(Button.new()) as Button
 	join.text = "Join Room"
 	join.custom_minimum_size = Vector2(0, BTN_H)
 	join.set_meta(HINT_META, "Join the room in the field above")
 	join.pressed.connect(_on_join_pressed)
 	page.add_child(join)
-	_mute_toggle = CheckButton.new()
+	_mute_toggle = _press_fire(CheckButton.new()) as CheckButton
 	_mute_toggle.text = "Mute"
 	_mute_toggle.custom_minimum_size = Vector2(0, BTN_H)
 	_mute_toggle.set_meta(HINT_META, "Mute / unmute your microphone")
@@ -536,7 +557,7 @@ func _build_session_page() -> VBoxContainer:
 	page.add_child(_mute_toggle)
 	_conn_status_label = _mk_label("Connection: off", "Graph socket state")
 	page.add_child(_conn_status_label)
-	var reconnect := Button.new()
+	var reconnect := _press_fire(Button.new()) as Button
 	reconnect.text = "Reconnect"
 	reconnect.custom_minimum_size = Vector2(0, BTN_H)
 	reconnect.set_meta(HINT_META, "Force-reconnect the graph & presence sockets")
@@ -626,15 +647,11 @@ func _grid(cols: int) -> GridContainer:
 # A button that re-broadcasts a named control_pressed intent (GraphScene owns the
 # effect). Carries a hover hint and a ≥56px hit target.
 func _action_btn(text: String, action: String, hint: String) -> Button:
-	var b := Button.new()
+	var b := _press_fire(Button.new()) as Button
 	b.text = text
 	b.custom_minimum_size = Vector2(0, BTN_H)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.set_meta(HINT_META, hint)
-	# Fire on PRESS, not release: pulling the Vive trigger jolts the ray 20-30px,
-	# so a release-mode button often sees the release land outside itself and
-	# silently cancels the click (observed live 2026-08-31).
-	b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
 	b.pressed.connect(func() -> void: emit_signal("control_pressed", action))
 	return b
 
@@ -643,8 +660,7 @@ func _action_btn(text: String, action: String, hint: String) -> Button:
 # press it flips its tracked bool, restyles ("Knowledge ✓" / "Knowledge ✕"), and
 # emits control_pressed "type_toggle:<key>:<1|0>" so GraphScene drives the store.
 func _type_toggle_btn(label: String, key: String) -> Button:
-	var b := Button.new()
-	b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS # see _action_btn
+	var b := _press_fire(Button.new()) as Button
 	b.custom_minimum_size = Vector2(0, BTN_H)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	b.set_meta(HINT_META, "Show / hide all %s nodes" % label.to_lower())
@@ -680,12 +696,12 @@ func _scroll_region(height: int) -> HBoxContainer:
 	wrap.add_child(sc)
 	var arrows := VBoxContainer.new()
 	arrows.add_theme_constant_override("separation", 6)
-	var up := Button.new()
+	var up := _press_fire(Button.new()) as Button
 	up.text = "▲"
 	up.custom_minimum_size = Vector2(72, BTN_H)
 	up.set_meta(HINT_META, "Scroll up")
 	up.pressed.connect(func() -> void: sc.scroll_vertical -= DOC_SCROLL_STEP)
-	var dn := Button.new()
+	var dn := _press_fire(Button.new()) as Button
 	dn.text = "▼"
 	dn.custom_minimum_size = Vector2(72, BTN_H)
 	dn.set_meta(HINT_META, "Scroll down")

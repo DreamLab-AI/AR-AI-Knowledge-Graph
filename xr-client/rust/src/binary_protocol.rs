@@ -386,6 +386,20 @@ fn json_u32(v: &serde_json::Value) -> Option<u32> {
 }
 
 pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeError> {
+    decode_position_frame_with_sequence(bytes).map(|(_, updates)| updates)
+}
+
+/// Decode a position frame and return its broadcast sequence alongside the
+/// records. `None` for V3, which carries no ordering information at all.
+///
+/// ADR-2018: [`decode_position_frame`] deliberately discards the sequence, which
+/// is why a V5 envelope alone never established consumer ordering. Callers that
+/// need freshness feed this sequence to a [`FreshnessGate`] — decoding a frame
+/// and *deciding whether to apply it* are separate steps, because a stale frame
+/// is still perfectly well-formed.
+pub fn decode_position_frame_with_sequence(
+    bytes: &[u8],
+) -> Result<(Option<u64>, Vec<NodeUpdate>), DecodeError> {
     if bytes.len() < HEADER_BYTES {
         return Err(DecodeError::TooShort {
             need: HEADER_BYTES,
@@ -393,10 +407,11 @@ pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeErro
         });
     }
     let version = bytes[0];
-    // V5 = [version][8-byte broadcast_seq][V3 node records]; the sequence number
-    // is a broadcast-ordering aid we don't need, so skip it and parse as V3.
-    let body_offset = match version {
-        PROTOCOL_V3 => HEADER_BYTES,
+    // V5 = [version][8-byte broadcast_seq][V3 node records]. The sequence is part
+    // of the envelope header: a frame cut off inside it is TooShort, never a
+    // zero-sequence frame.
+    let (body_offset, sequence) = match version {
+        PROTOCOL_V3 => (HEADER_BYTES, None),
         PROTOCOL_V5 => {
             let need = HEADER_BYTES + V5_SEQ_BYTES;
             if bytes.len() < need {
@@ -405,7 +420,9 @@ pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeErro
                     got: bytes.len(),
                 });
             }
-            need
+            let mut raw = [0u8; V5_SEQ_BYTES];
+            raw.copy_from_slice(&bytes[HEADER_BYTES..need]);
+            (need, Some(u64::from_le_bytes(raw)))
         }
         _ => {
             return Err(DecodeError::BadVersion {
@@ -428,7 +445,196 @@ pub fn decode_position_frame(bytes: &[u8]) -> Result<Vec<NodeUpdate>, DecodeErro
             out.push(rec);
         }
     }
-    Ok(out)
+    Ok((sequence, out))
+}
+
+/// Whether a position frame is a full snapshot or an incremental update.
+///
+/// ADR-2018: the V5 envelope carries no full/delta discriminator, so this is
+/// *consumer context*, not a wire field — the caller knows whether it asked for
+/// a snapshot (after connect/reconnect) or is reading the steady-state stream.
+/// The distinction matters only at one point: after a reconnect, the sequence
+/// space may have restarted, so only a Full frame is allowed to re-baseline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrameKind {
+    /// A complete snapshot of every visible node. Safe to apply against no prior
+    /// state, and the only frame permitted to re-baseline after a reconnect.
+    Full,
+    /// An incremental update that only makes sense applied on top of a baseline
+    /// established by an earlier accepted frame.
+    Delta,
+}
+
+/// The gate's verdict on one frame. Every variant names *why*, so a caller can
+/// report a stale-state incident rather than silently dropping a frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Freshness {
+    /// In order. Apply it; the watermark advanced to `sequence`.
+    Accept { sequence: u64 },
+    /// A V3 frame, which carries no sequence at all. Applied, but it makes no
+    /// ordering claim and leaves the watermark untouched — accepting it is a
+    /// statement about legacy compatibility, not about freshness.
+    AcceptUnsequenced,
+    /// A Full frame re-baselining the sequence space after a reconnect. The
+    /// sequence may legitimately move backwards here (the producer restarted),
+    /// which is precisely why a bare `seq > watermark` rule is not sufficient.
+    AcceptResync { sequence: u64, previous: Option<u64> },
+    /// Exactly the watermark: a re-delivery. Applying it is idempotent for a
+    /// Full frame but can double-apply a Delta, so it is refused either way.
+    RejectDuplicate { sequence: u64 },
+    /// Older than the watermark: a genuinely stale frame from a slower producer
+    /// or a reordered path. This is the case the closeout finding is about.
+    RejectStale { sequence: u64, watermark: u64 },
+    /// A Delta arriving after a reconnect, before any Full frame has re-established
+    /// a baseline. There is nothing coherent to apply it to.
+    RejectAwaitingResync { sequence: u64 },
+}
+
+impl Freshness {
+    /// Whether the caller should apply this frame's records.
+    pub fn is_accepted(self) -> bool {
+        matches!(
+            self,
+            Freshness::Accept { .. } | Freshness::AcceptUnsequenced | Freshness::AcceptResync { .. }
+        )
+    }
+}
+
+/// Running counts of gate verdicts, for the debug HUD and closeout probes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct FreshnessStats {
+    pub accepted: u64,
+    pub accepted_unsequenced: u64,
+    pub resyncs: u64,
+    pub rejected_duplicate: u64,
+    pub rejected_stale: u64,
+    pub rejected_awaiting_resync: u64,
+}
+
+/// Consumer-side ordering gate for the V5 broadcast sequence (ADR-2018).
+///
+/// # The contract
+///
+/// A sequence *envelope* only supplies ordering information; it does not enforce
+/// it. Ordered delivery on one socket does not prove that concurrent full/delta
+/// producers, or a reconnect to a restarted producer, can never hand this
+/// consumer older state than it already has. This gate is the missing half:
+///
+/// | Situation | Verdict |
+/// |---|---|
+/// | first sequenced frame | `Accept`, watermark set |
+/// | `seq > watermark` | `Accept`, watermark advances |
+/// | `seq == watermark` | `RejectDuplicate` |
+/// | `seq < watermark` | `RejectStale` |
+/// | V3 frame (no sequence) | `AcceptUnsequenced`, watermark untouched |
+/// | after [`reconnect`](Self::reconnect), Full frame | `AcceptResync`, watermark re-based |
+/// | after [`reconnect`](Self::reconnect), Delta frame | `RejectAwaitingResync` |
+///
+/// The watermark is monotonic *within* a connection epoch and only ever moves
+/// backwards through an explicit resync, so a stale frame can never overwrite
+/// newer positions.
+#[derive(Debug, Clone, Default)]
+pub struct FreshnessGate {
+    watermark: Option<u64>,
+    awaiting_resync: bool,
+    stats: FreshnessStats,
+}
+
+impl FreshnessGate {
+    /// A gate with no baseline yet: the first sequenced frame of either kind is
+    /// accepted and sets the watermark.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Highest sequence accepted in the current epoch, if any.
+    pub fn watermark(&self) -> Option<u64> {
+        self.watermark
+    }
+
+    /// Verdict counters since construction.
+    pub fn stats(&self) -> FreshnessStats {
+        self.stats
+    }
+
+    /// Whether the gate is waiting for a Full frame to re-establish a baseline.
+    pub fn awaiting_resync(&self) -> bool {
+        self.awaiting_resync
+    }
+
+    /// Note that the socket dropped and reconnected. The producer may have
+    /// restarted its sequence space, so the existing watermark can no longer be
+    /// compared against incoming sequences: the next Full frame re-baselines,
+    /// and until it arrives every Delta is refused.
+    pub fn reconnect(&mut self) {
+        self.awaiting_resync = true;
+    }
+
+    /// Judge one frame's sequence. `sequence` is `None` for an unsequenced V3
+    /// frame; `kind` is the caller's own full/delta context.
+    pub fn admit(&mut self, sequence: Option<u64>, kind: FrameKind) -> Freshness {
+        let Some(seq) = sequence else {
+            // V3 carries no ordering information. Accept for compatibility, but
+            // never let it move the watermark — an unsequenced frame must not be
+            // able to unblock a sequence the gate has already refused.
+            self.stats.accepted_unsequenced += 1;
+            return Freshness::AcceptUnsequenced;
+        };
+
+        if self.awaiting_resync {
+            return match kind {
+                FrameKind::Full => {
+                    let previous = self.watermark;
+                    self.watermark = Some(seq);
+                    self.awaiting_resync = false;
+                    self.stats.resyncs += 1;
+                    Freshness::AcceptResync { sequence: seq, previous }
+                }
+                FrameKind::Delta => {
+                    self.stats.rejected_awaiting_resync += 1;
+                    Freshness::RejectAwaitingResync { sequence: seq }
+                }
+            };
+        }
+
+        match self.watermark {
+            None => {
+                self.watermark = Some(seq);
+                self.stats.accepted += 1;
+                Freshness::Accept { sequence: seq }
+            }
+            Some(wm) if seq > wm => {
+                self.watermark = Some(seq);
+                self.stats.accepted += 1;
+                Freshness::Accept { sequence: seq }
+            }
+            Some(wm) if seq == wm => {
+                self.stats.rejected_duplicate += 1;
+                Freshness::RejectDuplicate { sequence: seq }
+            }
+            Some(wm) => {
+                self.stats.rejected_stale += 1;
+                Freshness::RejectStale { sequence: seq, watermark: wm }
+            }
+        }
+    }
+
+    /// Decode a frame and gate it in one step. Returns the records only when the
+    /// verdict admits them, so a caller cannot accidentally apply a rejected
+    /// frame it already decoded.
+    pub fn admit_frame(
+        &mut self,
+        bytes: &[u8],
+        kind: FrameKind,
+    ) -> Result<(Freshness, Option<Vec<NodeUpdate>>), DecodeError> {
+        let (sequence, updates) = decode_position_frame_with_sequence(bytes)?;
+        let verdict = self.admit(sequence, kind);
+        Ok(if verdict.is_accepted() {
+            (verdict, Some(updates))
+        } else {
+            (verdict, None)
+        })
+    }
 }
 
 /// Validate one decoded record. Returns `None` (drop it) when a position or
@@ -676,6 +882,16 @@ pub struct BinaryProtocolClient {
     /// data-plane liveness diagnostic (`last_agent_action_age_ms`). `None` until
     /// the first action arrives.
     last_agent_action: Option<Instant>,
+    /// ADR-2018 consumer freshness gate for the V5 broadcast sequence. Decoding
+    /// a frame and deciding whether to apply it are separate steps: a stale frame
+    /// is perfectly well-formed, and only this gate stops it overwriting newer
+    /// positions after a reorder or a reconnect to a restarted producer.
+    freshness: FreshnessGate,
+    /// ADR-2034 server-clock anchor: the newest action timestamp seen (server ms)
+    /// paired with the local instant it arrived. Agent evidence is stamped on the
+    /// server clock, which this client does not otherwise hold, so expiry ages
+    /// evidence against this anchor advanced by locally elapsed time.
+    clock_anchor: Option<(u32, Instant)>,
     base: Base<RefCounted>,
 }
 
@@ -716,23 +932,24 @@ impl BinaryProtocolClient {
             edge_types: Vec::new(),
             store: crate::render_store::RenderStore::new(),
             last_agent_action: None,
+            freshness: FreshnessGate::new(),
+            clock_anchor: None,
             base,
         })
     }
 
-    /// Connect to the `/wss` graph stream, authenticate via `?token=` query (if
-    /// non-empty), subscribe to binary position updates, and queue every frame
-    /// for `poll()` to decode on the main thread. Non-blocking: the connection
-    /// is established on the tokio runtime. `nostr_secret_hex` (optional)
-    /// additionally authenticates the session with a NIP-98 event so mutating
-    /// messages (node drag/pin) are accepted by the server.
+    /// Connect to the `/wss` graph stream, subscribe to binary position
+    /// updates, and queue every frame for `poll()` to decode on the main
+    /// thread. Non-blocking: the connection is established on the tokio
+    /// runtime. `nostr_secret_hex` (optional) authenticates the session with a
+    /// NIP-98 event so mutating messages (node drag/pin) are accepted by the
+    /// server; without it the stream is anonymous and read-only.
     #[func]
-    fn connect_to_url(&mut self, url: GString, token: GString, nostr_secret_hex: GString) {
+    fn connect_to_url(&mut self, url: GString, nostr_secret_hex: GString) {
         self.visuals.clear();
         self.store.clear();
         let (handle, outbound) = crate::transport::spawn_graph_stream(
             url.to_string(),
-            token.to_string(),
             nostr_secret_hex.to_string(),
             self.inbox.clone(),
         );
@@ -765,6 +982,10 @@ impl BinaryProtocolClient {
                         .emit_signal("connection_changed", &[Variant::from(true)]);
                 }
                 GraphInbound::Disconnected => {
+                    // ADR-2018: the producer may restart its sequence space, so the
+                    // watermark can no longer be compared against incoming
+                    // sequences. Arm a resync — the next full snapshot re-baselines.
+                    self.freshness.reconnect();
                     self.base_mut()
                         .emit_signal("connection_changed", &[Variant::from(false)]);
                 }
@@ -815,6 +1036,10 @@ impl BinaryProtocolClient {
                 }
             }
         }
+        // ADR-2034: age agent evidence once per frame so a disconnected agent
+        // stops claiming to be working and its beam disappears, rather than
+        // hanging on the last action it ever sent.
+        let _ = self.expire_stale_agents(0);
     }
 
     /// Flattened edge topology `[src0, tgt0, src1, tgt1, ...]` from the most
@@ -1189,6 +1414,59 @@ impl BinaryProtocolClient {
         }
     }
 
+    /// Estimated current server-clock time in milliseconds (ADR-2034), derived
+    /// from the newest action timestamp seen plus locally elapsed time. `None`
+    /// until the first action anchors the clock — with no anchor there is no
+    /// evidence to expire, so expiry is simply a no-op.
+    fn estimated_server_now_ms(&self) -> Option<u32> {
+        self.clock_anchor
+            .map(|(ts, at)| ts.wrapping_add(at.elapsed().as_millis().min(u32::MAX as u128) as u32))
+    }
+
+    /// Sweep agent records whose evidence has gone stale (ADR-2034), demoting a
+    /// live `WORKING`/`BLOCKED` status to idle and dropping its beam. Called once
+    /// per `poll`; also exposed so a scene can force a sweep. `ttl_ms <= 0` uses
+    /// [`AGENT_EVIDENCE_TTL_MS`](crate::render_store::AGENT_EVIDENCE_TTL_MS).
+    /// Returns the number of agents demoted.
+    #[func]
+    fn expire_stale_agents(&mut self, ttl_ms: i64) -> i64 {
+        let Some(now) = self.estimated_server_now_ms() else {
+            return 0;
+        };
+        let ttl = if ttl_ms > 0 {
+            (ttl_ms as u64).min(u32::MAX as u64) as u32
+        } else {
+            crate::render_store::AGENT_EVIDENCE_TTL_MS
+        };
+        self.store.expire_stale_agents(now, ttl) as i64
+    }
+
+    /// Position frames refused by the freshness gate since connect, split by
+    /// reason: `[stale, duplicate, awaiting_resync, resyncs]` (ADR-2018). A
+    /// non-zero stale/duplicate count is the observable signal that the ordering
+    /// problem the ADR describes is real on this deployment.
+    #[func]
+    fn freshness_counters(&self) -> PackedInt64Array {
+        let s = self.freshness.stats();
+        PackedInt64Array::from(&[
+            s.rejected_stale as i64,
+            s.rejected_duplicate as i64,
+            s.rejected_awaiting_resync as i64,
+            s.resyncs as i64,
+        ])
+    }
+
+    /// Agent evidence counters `[actions_dropped_stale, states_dropped_stale,
+    /// expiries]` (ADR-2034 precedence/expiry diagnostics).
+    #[func]
+    fn agent_evidence_counters(&self) -> PackedInt64Array {
+        PackedInt64Array::from(&[
+            self.store.agent_actions_stale() as i64,
+            self.store.agent_states_stale() as i64,
+            self.store.agent_expiries_total() as i64,
+        ])
+    }
+
     /// Whether a node class is currently visible (Feature 3).
     #[func]
     fn is_type_visible(&self, class_code: i64) -> bool {
@@ -1260,6 +1538,22 @@ impl BinaryProtocolClient {
             if let Some(actions) = decode_agent_action_frame(bytes) {
                 if !actions.is_empty() {
                     self.last_agent_action = Some(Instant::now());
+                    // ADR-2034: anchor the server clock on the newest timestamp in
+                    // this batch so expiry can age evidence without a server clock
+                    // of its own. Wrap-safe: only a genuinely newer stamp re-anchors.
+                    if let Some(newest) = actions
+                        .iter()
+                        .map(|a| a.timestamp)
+                        .reduce(|a, b| if crate::render_store::ts_is_newer(b, a) { b } else { a })
+                    {
+                        let readvance = self
+                            .clock_anchor
+                            .map(|(ts, _)| crate::render_store::ts_is_newer(newest, ts))
+                            .unwrap_or(true);
+                        if readvance {
+                            self.clock_anchor = Some((newest, Instant::now()));
+                        }
+                    }
                 }
                 for a in &actions {
                     self.store.record_agent_action(
@@ -1278,8 +1572,20 @@ impl BinaryProtocolClient {
             }
             return;
         }
-        let mut emit_buf: Vec<NodeUpdate> = Vec::new();
-        ingest_frame(Bytes::copy_from_slice(bytes), |u| emit_buf.push(u));
+        // ADR-2018: gate on the V5 broadcast sequence before applying anything.
+        // Position frames on this socket are full-state broadcasts, so a snapshot
+        // after a reconnect is what re-baselines the watermark.
+        let emit_buf: Vec<NodeUpdate> = match self.freshness.admit_frame(bytes, FrameKind::Full) {
+            Ok((_, Some(updates))) => updates,
+            Ok((verdict, None)) => {
+                warn!(?verdict, "dropping stale position frame");
+                return;
+            }
+            Err(e) => {
+                error!(err = %e, "graph position frame decode failed");
+                return;
+            }
+        };
         for u in emit_buf {
             // The Rust render store now owns positions (hunted per poll, packed into
             // MultiMesh buffers) — no per-node position_updated signal, which at 13k

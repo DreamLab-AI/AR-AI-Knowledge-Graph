@@ -21,7 +21,10 @@
 //! Together they produce the [`AgentPresence`] snapshot the codec
 //! (`visionclaw_xr_presence::agent_presence`) puts on the wire.
 
-use visionclaw_xr_presence::agent_presence::{AgentActivity, AgentPresence, AttentionTarget};
+use visionclaw_xr_presence::agent_presence::{
+    decode_agent_presence, AgentActivity, AgentPresence, AgentPresenceBatch, AttentionTarget,
+    OPCODE_AGENT_PRESENCE,
+};
 
 #[cfg(not(test))]
 use godot::prelude::*;
@@ -315,6 +318,119 @@ impl AgentAvatar {
 impl Default for AgentAvatar {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// --- Remote co-presence consumption (ADR-2020) -------------------------------
+
+/// Remote agents' co-presence, reconstructed from inbound `0x44` frames.
+///
+/// The server broadcasts *deltas*: unchanged fields are elided, so a consumer
+/// cannot read one frame in isolation. This store holds the last full state per
+/// transport `local_id` and folds each delta onto it, which is what makes the
+/// elision safe. It is the client half of the ADR-2020 integration — the codec
+/// existed on both sides, but nothing consumed a live frame.
+#[derive(Debug, Clone, Default)]
+pub struct RemotePresenceStore {
+    agents: std::collections::HashMap<u32, AgentPresence>,
+    /// Highest sequence folded in. A delta stream applied out of order silently
+    /// reconstructs a state that never existed on the server, so this mirrors the
+    /// ADR-2018 freshness gate on the graph socket.
+    watermark: Option<u64>,
+    stale_frames: u64,
+}
+
+impl RemotePresenceStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Number of remote agents currently known.
+    pub fn len(&self) -> usize {
+        self.agents.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.agents.is_empty()
+    }
+
+    /// Last known presence for a transport `local_id`.
+    pub fn get(&self, local_id: u32) -> Option<AgentPresence> {
+        self.agents.get(&local_id).copied()
+    }
+
+    /// The graph node this remote agent is attending to, if any. This is the
+    /// client side of node correlation: the id is in the same 26-bit wire space
+    /// as the position stream, so the scene can resolve the node it names.
+    pub fn attention_node(&self, local_id: u32) -> Option<u32> {
+        match self.agents.get(&local_id)?.attention {
+            AttentionTarget::GraphNode(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// Every known agent's transport id, ascending.
+    pub fn agent_ids(&self) -> Vec<u32> {
+        let mut ids: Vec<u32> = self.agents.keys().copied().collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    /// Highest broadcast sequence folded in.
+    pub fn watermark(&self) -> Option<u64> {
+        self.watermark
+    }
+
+    /// Frames refused for arriving out of order.
+    pub fn stale_frames(&self) -> u64 {
+        self.stale_frames
+    }
+
+    /// Remove an agent whose co-presence the server retired (stale removal —
+    /// the server announces this on the JSON room-event channel). Returns whether
+    /// anything was actually removed.
+    pub fn remove(&mut self, local_id: u32) -> bool {
+        self.agents.remove(&local_id).is_some()
+    }
+
+    /// Fold one decoded `0x44` batch into the store.
+    ///
+    /// Older or duplicate sequences are refused whole. Returns the number of
+    /// agents updated, or `None` when the batch was refused as stale.
+    pub fn apply_batch(&mut self, batch: &AgentPresenceBatch) -> Option<usize> {
+        if let Some(wm) = self.watermark {
+            if batch.seq <= wm {
+                self.stale_frames = self.stale_frames.saturating_add(1);
+                return None;
+            }
+        }
+        self.watermark = Some(batch.seq);
+        let mut updated = 0usize;
+        for delta in &batch.deltas {
+            // A delta for an unknown agent folds onto a neutral base, so a client
+            // that joined mid-stream still converges once a full delta arrives.
+            let base = self.agents.get(&delta.local_id).copied().unwrap_or_else(|| {
+                AgentPresence::new(AgentActivity::Idle, [0.0, 0.0, -1.0], AttentionTarget::None)
+            });
+            self.agents.insert(delta.local_id, delta.apply(&base));
+            updated += 1;
+        }
+        Some(updated)
+    }
+
+    /// Decode an inbound `0x44` frame and fold it in. Declines frames that are
+    /// not agent-presence frames, so a demultiplexer can offer every binary frame
+    /// to this store without it claiming a sibling opcode's bytes.
+    pub fn ingest_frame(&mut self, bytes: &[u8]) -> Result<Option<usize>, String> {
+        if bytes.first().copied() != Some(OPCODE_AGENT_PRESENCE) {
+            return Err(format!(
+                "not an agent-presence frame: opcode {:?}, expected {:#04x}",
+                bytes.first(),
+                OPCODE_AGENT_PRESENCE
+            ));
+        }
+        let batch = decode_agent_presence(bytes).map_err(|e| e.to_string())?;
+        Ok(self.apply_batch(&batch))
     }
 }
 
