@@ -6,12 +6,9 @@
 
 use std::sync::Arc;
 
-use visionclaw_server::gpu::streaming_pipeline::{
-    ClientLOD, CompressedEdge, FrameBuffer, SimplifiedNode, StreamingPipeline,
-};
-use visionclaw_server::gpu::visual_analytics::{
-    IsolationLayer, TSEdge, TSNode, Vec4, VisualAnalyticsGPU, VisualAnalyticsParams,
-};
+// REMOVED (ADR-2054): the `gpu::streaming_pipeline` import block, and `TSEdge`, `TSNode`,
+// `VisualAnalyticsGPU` from `gpu::visual_analytics` — all deleted as dead code by ADR-2054.
+use visionclaw_server::gpu::visual_analytics::{IsolationLayer, Vec4, VisualAnalyticsParams};
 use visionclaw_server::gpu::RenderData;
 use visionclaw_server::utils::gpu_safety::{
     GPUSafetyConfig, GPUSafetyError, GPUSafetyValidator, SafeKernelExecutor,
@@ -337,124 +334,14 @@ mod memory_bounds_tests {
     }
 }
 
+// REMOVED (ADR-2054): this module's `StreamingPipeline`, `SimplifiedNode`, `CompressedEdge`,
+// `ClientLOD` and `FrameBuffer` cases went with the `StreamingPipeline` module itself.
+// `test_render_data_validation` is retained and the module renamed to match: `RenderData` is a
+// live `gpu::types` export, and this case covers mismatched array sizes and non-finite values
+// that `safe_visual_analytics_tests::test_safe_render_data_validation` does not.
 #[cfg(test)]
-mod safe_streaming_pipeline_tests {
+mod render_data_validation_tests {
     use super::*;
-
-    #[test]
-    fn test_safe_simplified_node_validation() {
-        // Valid node
-        let valid_node = SimplifiedNode::new(1.0, 2.0, 3.0, 10, 20, 30, 0);
-        assert!(valid_node.is_ok());
-
-        // Invalid coordinates
-        assert!(SimplifiedNode::new(f32::NAN, 2.0, 3.0, 10, 20, 30, 0).is_err());
-        assert!(SimplifiedNode::new(f32::INFINITY, 2.0, 3.0, 10, 20, 30, 0).is_err());
-        assert!(SimplifiedNode::new(1e7, 2.0, 3.0, 10, 20, 30, 0).is_err());
-    }
-
-    #[test]
-    fn test_safe_compressed_edge_validation() {
-        // Valid edge
-        let edge = CompressedEdge {
-            source: 0,
-            target: 1,
-            weight: 128,
-            bundling_id: 5,
-        };
-        assert!(edge.validate(10).is_ok());
-
-        // Out of bounds
-        assert!(edge.validate(1).is_err());
-
-        // Self-loop
-        let self_loop = CompressedEdge {
-            source: 5,
-            target: 5,
-            weight: 128,
-            bundling_id: 5,
-        };
-        assert!(self_loop.validate(10).is_err());
-    }
-
-    #[test]
-    fn test_safe_client_lod_validation() {
-        // Valid LOD
-        let valid_lod = ClientLOD::Mobile {
-            max_nodes: 1000,
-            max_edges: 2000,
-            update_rate: 30,
-            compression: true,
-        };
-        assert!(valid_lod.validate().is_ok());
-
-        // Invalid update rate
-        let invalid_lod = ClientLOD::Mobile {
-            max_nodes: 1000,
-            max_edges: 2000,
-            update_rate: 0,
-            compression: true,
-        };
-        assert!(invalid_lod.validate().is_err());
-
-        // Excessive counts
-        let excessive_lod = ClientLOD::Mobile {
-            max_nodes: 20_000_000,
-            max_edges: 2000,
-            update_rate: 30,
-            compression: true,
-        };
-        assert!(excessive_lod.validate().is_err());
-    }
-
-    #[tokio::test]
-    async fn test_safe_frame_buffer() {
-        let bounds_checker = Arc::new(ThreadSafeMemoryBoundsChecker::new(1024 * 1024 * 1024));
-        let mut buffer =
-            visionclaw_server::gpu::streaming_pipeline::FrameBuffer::new(100, bounds_checker)
-                .unwrap();
-
-        let positions = vec![1.0f32; 400]; // 100 nodes * 4 components
-        let colors = vec![0.5f32; 400];
-        let importance = vec![0.8f32; 100];
-
-        // Valid update
-        assert!(buffer
-            .update_data(&positions, &colors, &importance, 1)
-            .is_ok());
-        assert_eq!(buffer.get_current_frame(), 1);
-        assert_eq!(buffer.get_node_count(), 100);
-
-        // Invalid data sizes
-        let invalid_positions = vec![1.0f32; 399]; // Not divisible by 4
-        assert!(buffer
-            .update_data(&invalid_positions, &colors, &importance, 2)
-            .is_err());
-
-        let mismatched_importance = vec![0.8f32; 50]; // Wrong count
-        assert!(buffer
-            .update_data(&positions, &colors, &mismatched_importance, 2)
-            .is_err());
-
-        // Invalid values
-        let invalid_positions = vec![f32::NAN; 400];
-        assert!(buffer
-            .update_data(&invalid_positions, &colors, &importance, 2)
-            .is_err());
-
-        let negative_importance = vec![-1.0f32; 100];
-        assert!(buffer
-            .update_data(&positions, &colors, &negative_importance, 2)
-            .is_err());
-
-        // Access tests
-        assert!(buffer.get_position(50, 0).is_ok());
-        assert!(buffer.get_position(150, 0).is_err()); // Out of bounds
-        assert!(buffer.get_position(50, 5).is_err()); // Invalid component
-
-        assert!(buffer.get_importance(50).is_ok());
-        assert!(buffer.get_importance(150).is_err()); // Out of bounds
-    }
 
     #[test]
     fn test_render_data_validation() {
@@ -520,72 +407,8 @@ mod safe_visual_analytics_tests {
         assert!(zero_vec.normalize().is_err());
     }
 
-    #[test]
-    fn test_safe_ts_node_validation() {
-        let mut node = TSNode::new();
-        assert!(node.validate().is_ok());
-
-        // Invalid position
-        node.position = Vec4 {
-            x: f32::NAN,
-            y: 0.0,
-            z: 0.0,
-            t: 0.0,
-        };
-        assert!(node.validate().is_err());
-
-        // Reset and test invalid temporal coherence
-        let mut node = TSNode::new();
-        node.temporal_coherence = -0.5;
-        assert!(node.validate().is_err());
-
-        // Reset and test invalid hierarchy level
-        let mut node = TSNode::new();
-        node.hierarchy_level = -1;
-        assert!(node.validate().is_err());
-
-        // Invalid importance values
-        let mut node = TSNode::new();
-        node.lod_importance = -1.0;
-        assert!(node.validate().is_err());
-
-        // Invalid clustering coefficient
-        let mut node = TSNode::new();
-        node.clustering_coefficient = 1.5; // Should be <= 1.0
-        assert!(node.validate().is_err());
-
-        // Invalid damping
-        let mut node = TSNode::new();
-        node.damping_local = 1.5; // Should be <= 1.0
-        assert!(node.validate().is_err());
-    }
-
-    #[test]
-    fn test_safe_ts_edge_validation() {
-        // Valid edge
-        assert!(TSEdge::new(0, 1).is_ok());
-
-        // Invalid indices
-        assert!(TSEdge::new(-1, 1).is_err());
-        assert!(TSEdge::new(0, -1).is_err());
-
-        // Self-loop
-        assert!(TSEdge::new(5, 5).is_err());
-
-        // Bounds checking
-        let edge = TSEdge::new(0, 1).unwrap();
-        assert!(edge.validate(10).is_ok());
-        assert!(edge.validate(1).is_err()); // target out of bounds
-
-        // Invalid weights
-        let mut edge = TSEdge::new(0, 1).unwrap();
-        edge.structural_weight = -1.0;
-        assert!(edge.validate(10).is_err());
-
-        let mut edge = TSEdge::new(0, 1).unwrap();
-        edge.formation_time = f32::INFINITY;
-        assert!(edge.validate(10).is_err());
-    }
+    // REMOVED (ADR-2054): `test_safe_ts_node_validation` and `test_safe_ts_edge_validation`
+    // exercised `TSNode` / `TSEdge`, deleted as dead code (no caller of `new()` in `src`).
 
     #[test]
     fn test_safe_isolation_layer_validation() {

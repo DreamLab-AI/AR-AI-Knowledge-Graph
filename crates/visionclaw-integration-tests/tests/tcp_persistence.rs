@@ -48,7 +48,11 @@ async fn connection_survives_repeated_requests() {
         let response = tcp.ping(json!(id)).await.unwrap_or_else(|| {
             panic!("ping {id} of 10 returned no response — connection dropped early")
         });
-        assert_eq!(response["id"], json!(id), "response id did not echo the request");
+        assert_eq!(
+            response["id"],
+            json!(id),
+            "response id did not echo the request"
+        );
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
@@ -81,13 +85,22 @@ async fn a_client_can_reconnect_after_disconnecting() {
             eprintln!("SKIP: {} refused the connection.", h.tcp_addr);
             return;
         };
-        assert!(first.ping(json!(1)).await.is_some(), "ping on the first connection failed");
+        assert!(
+            first.ping(json!(1)).await.is_some(),
+            "ping on the first connection failed"
+        );
     } // dropped: the socket closes here
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    let mut second = h.tcp().await.expect("could not reconnect after a clean disconnect");
-    assert!(second.ping(json!(2)).await.is_some(), "ping on the reconnected socket failed");
+    let mut second = h
+        .tcp()
+        .await
+        .expect("could not reconnect after a clean disconnect");
+    assert!(
+        second.ping(json!(2)).await.is_some(),
+        "ping on the reconnected socket failed"
+    );
 }
 
 #[tokio::test]
@@ -100,7 +113,11 @@ async fn five_clients_can_hold_connections_concurrently() {
 
     let mut clients = Vec::new();
     for i in 0..5u64 {
-        clients.push(h.tcp().await.unwrap_or_else(|| panic!("client {i} could not connect")));
+        clients.push(
+            h.tcp()
+                .await
+                .unwrap_or_else(|| panic!("client {i} could not connect")),
+        );
     }
 
     for (i, client) in clients.iter_mut().enumerate() {
@@ -115,7 +132,10 @@ async fn five_clients_can_hold_connections_concurrently() {
                 }))
                 .await
                 .unwrap_or_else(|| panic!("client {i} request {j} returned no response"));
-            assert_eq!(response["id"], id, "client {i} got a mismatched response id");
+            assert_eq!(
+                response["id"], id,
+                "client {i} got a mismatched response id"
+            );
         }
     }
 }
@@ -138,7 +158,10 @@ async fn a_one_megabyte_payload_does_not_break_the_connection() {
         }))
         .await;
 
-    assert!(response.is_some(), "the server gave no answer to a 1 MiB payload");
+    assert!(
+        response.is_some(),
+        "the server gave no answer to a 1 MiB payload"
+    );
     assert!(tcp.connected, "the connection died on a 1 MiB payload");
 
     assert!(
@@ -155,7 +178,10 @@ async fn a_slow_operation_answers_within_the_request_timeout() {
         return;
     };
 
-    assert!(tcp.ping(json!(1)).await.is_some(), "the warm-up ping failed");
+    assert!(
+        tcp.ping(json!(1)).await.is_some(),
+        "the warm-up ping failed"
+    );
 
     let response = tcp
         .request(&json!({

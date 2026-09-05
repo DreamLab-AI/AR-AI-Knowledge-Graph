@@ -142,9 +142,7 @@ fn namespace_pages_ingest_and_keep_a_stable_identity() {
     assert!(is_kg_included(&content));
 
     let parser = KnowledgeGraphParser::new();
-    let graph = parser
-        .parse(&content, "A___B Testing.md")
-        .expect("parses");
+    let graph = parser.parse(&content, "A___B Testing.md").expect("parses");
     let node = &graph.nodes[0];
 
     // The page name decodes to the `[[Ns/Title]]` form the corpus links with,
@@ -197,7 +195,8 @@ fn every_fixture_agrees_with_its_expected_verdict() {
 /// to the Obsidian-form fixtures in `tests/fixtures/vault/`.
 #[test]
 fn legacy_data_model_fixtures_still_gate_as_authored() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/data-model/valid/pages");
+    let dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/data-model/valid/pages");
 
     // 001-004 declare `public:: true` in their leading property block.
     for name in [
@@ -227,7 +226,10 @@ fn legacy_data_model_fixtures_still_gate_as_authored() {
         meta.owl_class, None,
         "the class lives in a json-ld fence, not a leading `owl:class::` line"
     );
-    assert!(content.contains("```json-ld"), "routed by the canonical path");
+    assert!(
+        content.contains("```json-ld"),
+        "routed by the canonical path"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,7 +303,11 @@ fn an_ambiguous_basename_prefers_the_linking_pages_own_folder() {
     let content = page("# Interop\n\nSee [[Security]].");
 
     let graph = parser
-        .parse_with_index(&content, "ETSI_Domain_Infrastructure/Interop.md", Some(&index))
+        .parse_with_index(
+            &content,
+            "ETSI_Domain_Infrastructure/Interop.md",
+            Some(&index),
+        )
         .expect("parses");
 
     assert_eq!(
@@ -335,10 +341,15 @@ fn a_subfolder_pages_identity_label_and_source_file_agree() {
     // `vault-migrate` writes the identity path into `title:`; that is not a
     // display title, so it must not produce a label inconsistent with
     // `source_file`.
-    let content = "---\npublic: true\ntitle: podcast-evidence/black-friday-gpt\n---\n\n# Black Friday GPT\n";
+    let content =
+        "---\npublic: true\ntitle: podcast-evidence/black-friday-gpt\n---\n\n# Black Friday GPT\n";
 
     let graph = parser
-        .parse_with_index(content, "podcast-evidence/black-friday-gpt.md", Some(&index))
+        .parse_with_index(
+            content,
+            "podcast-evidence/black-friday-gpt.md",
+            Some(&index),
+        )
         .expect("parses");
     let node = &graph.nodes[0];
 
@@ -351,7 +362,10 @@ fn a_subfolder_pages_identity_label_and_source_file_agree() {
     // Obsidian displays a namespaced page by its leaf, so the label is the
     // basename while identity keeps the full path.
     assert_eq!(node.label, "black-friday-gpt");
-    assert_eq!(node.id, parser.page_name_to_id("podcast-evidence/black-friday-gpt"));
+    assert_eq!(
+        node.id,
+        parser.page_name_to_id("podcast-evidence/black-friday-gpt")
+    );
 }
 
 #[test]
@@ -364,7 +378,10 @@ fn a_genuine_display_title_still_becomes_the_label() {
         .expect("parses");
 
     assert_eq!(graph.nodes[0].label, "Black Friday GPT");
-    assert_eq!(graph.nodes[0].metadata_id, "podcast-evidence/black-friday-gpt");
+    assert_eq!(
+        graph.nodes[0].metadata_id,
+        "podcast-evidence/black-friday-gpt"
+    );
 }
 
 #[test]

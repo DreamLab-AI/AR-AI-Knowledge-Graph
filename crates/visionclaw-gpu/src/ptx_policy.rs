@@ -90,11 +90,14 @@ impl NvccOutcome {
     pub fn diagnosis(&self) -> String {
         match self {
             NvccOutcome::LaunchFailed { reason } => {
-                format!("nvcc could not be launched ({reason}) — CUDA toolkit missing or not on PATH")
+                format!(
+                    "nvcc could not be launched ({reason}) — CUDA toolkit missing or not on PATH"
+                )
             }
             NvccOutcome::CompilerFailed { code } => format!(
                 "nvcc ran and failed (exit {}) — source or host-compiler error",
-                code.map(|c| c.to_string()).unwrap_or_else(|| "signal".into())
+                code.map(|c| c.to_string())
+                    .unwrap_or_else(|| "signal".into())
             ),
             NvccOutcome::Succeeded => "nvcc succeeded".to_string(),
         }
@@ -364,7 +367,10 @@ mod tests {
         let missing = NvccOutcome::classify(Some("No such file".into()), false, None);
         let failed = NvccOutcome::classify(None, false, Some(1));
         assert!(matches!(missing, NvccOutcome::LaunchFailed { .. }));
-        assert!(matches!(failed, NvccOutcome::CompilerFailed { code: Some(1) }));
+        assert!(matches!(
+            failed,
+            NvccOutcome::CompilerFailed { code: Some(1) }
+        ));
         assert_ne!(missing, failed);
 
         // The closeout's first finding: a missing executable used to panic before
@@ -407,7 +413,13 @@ mod tests {
         let ptx = minimal_ptx("9.10");
         match rewrite_ptx_version(&ptx, TARGET_PTX_ISA) {
             VersionRewrite::Rewritten { from, to, text } => {
-                assert_eq!(from, PtxVersion { major: 9, minor: 10 });
+                assert_eq!(
+                    from,
+                    PtxVersion {
+                        major: 9,
+                        minor: 10
+                    }
+                );
                 assert_eq!(to, TARGET_PTX_ISA);
                 assert!(text.contains(".version 9.0\n"), "got: {text}");
                 assert!(!text.contains("9.00"), "the 9.00 splice bug is gone");
@@ -453,7 +465,13 @@ mod tests {
         // Tab and multi-space separation both parse.
         assert_eq!(find_version_token(".version\t7.5\n").unwrap().0, "7.5");
         assert_eq!(find_version_token(".version   7.5\n").unwrap().0, "7.5");
-        assert_eq!(parse_version_token("9.10"), Some(PtxVersion { major: 9, minor: 10 }));
+        assert_eq!(
+            parse_version_token("9.10"),
+            Some(PtxVersion {
+                major: 9,
+                minor: 10
+            })
+        );
         assert_eq!(parse_version_token("9"), None);
         assert_eq!(parse_version_token("9."), None);
         assert_eq!(parse_version_token("x.y"), None);
@@ -479,7 +497,14 @@ mod tests {
     #[test]
     fn displaying_a_version_never_zero_pads_the_minor() {
         assert_eq!(PtxVersion { major: 9, minor: 0 }.to_string(), "9.0");
-        assert_eq!(PtxVersion { major: 9, minor: 10 }.to_string(), "9.10");
+        assert_eq!(
+            PtxVersion {
+                major: 9,
+                minor: 10
+            }
+            .to_string(),
+            "9.10"
+        );
     }
 
     // ── Output validation beyond "non-empty" ───────────────────────────────
@@ -536,8 +561,7 @@ mod tests {
     #[test]
     fn content_tags_distinguish_a_rewritten_artefact_from_its_original() {
         let original = minimal_ptx("9.10");
-        let VersionRewrite::Rewritten { text, .. } =
-            rewrite_ptx_version(&original, TARGET_PTX_ISA)
+        let VersionRewrite::Rewritten { text, .. } = rewrite_ptx_version(&original, TARGET_PTX_ISA)
         else {
             panic!("expected a rewrite");
         };

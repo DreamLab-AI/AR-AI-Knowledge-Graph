@@ -788,7 +788,9 @@ mod tests {
 
     #[test]
     fn frontmatter_aliases_and_tags_accept_yaml_lists() {
-        let meta = parse("---\npublic: true\naliases:\n  - One\n  - Two\ntags:\n  - alpha\n  - beta\n---\n");
+        let meta = parse(
+            "---\npublic: true\naliases:\n  - One\n  - Two\ntags:\n  - alpha\n  - beta\n---\n",
+        );
         assert_eq!(meta.aliases, vec!["One", "Two"]);
         assert_eq!(meta.tags, vec!["alpha", "beta"]);
     }
@@ -812,14 +814,23 @@ mod tests {
     #[test]
     fn unrecognised_keys_are_preserved_verbatim_in_extra() {
         let meta = parse("public:: true\nterm-id:: mv-0042\nmaturity:: draft\n");
-        assert_eq!(meta.extra.get("term-id").map(String::as_str), Some("mv-0042"));
-        assert_eq!(meta.extra.get("maturity").map(String::as_str), Some("draft"));
+        assert_eq!(
+            meta.extra.get("term-id").map(String::as_str),
+            Some("mv-0042")
+        );
+        assert_eq!(
+            meta.extra.get("maturity").map(String::as_str),
+            Some("draft")
+        );
     }
 
     #[test]
     fn frontmatter_unrecognised_keys_are_preserved_in_extra() {
         let meta = parse("---\npublic: true\nquality-score: 0.6\nmaturity: draft\n---\n");
-        assert_eq!(meta.extra.get("maturity").map(String::as_str), Some("draft"));
+        assert_eq!(
+            meta.extra.get("maturity").map(String::as_str),
+            Some("draft")
+        );
         assert_eq!(
             meta.extra.get("quality-score").map(String::as_str),
             Some("0.6")
@@ -859,7 +870,8 @@ mod tests {
 
     #[test]
     fn legacy_properties_anywhere_sees_indented_ontology_blocks() {
-        let page = "- Foo\n  - ### OntologyBlock\n    - term-id:: mv-0001\n    - owl:class:: mv:Foo\n";
+        let page =
+            "- Foo\n  - ### OntologyBlock\n    - term-id:: mv-0001\n    - owl:class:: mv:Foo\n";
         let props = legacy_properties_anywhere(page);
         assert_eq!(
             props,
@@ -988,7 +1000,10 @@ mod tests {
             "podcast-evidence/foo"
         );
         assert_eq!(
-            page_name_from_repo_path("mainKnowledgeGraph/pages/ETSI_Domain_Governance/Economy.md", &bases),
+            page_name_from_repo_path(
+                "mainKnowledgeGraph/pages/ETSI_Domain_Governance/Economy.md",
+                &bases
+            ),
             "ETSI_Domain_Governance/Economy"
         );
     }
@@ -1108,12 +1123,18 @@ mod tests {
         for (raw, expected) in [
             ("---\nowl-class: mv:Foo\n---\nbody\n", "mv:Foo"),
             ("---\nowl-class: \"mv:Foo\"\n---\nbody\n", "mv:Foo"),
-            ("---\nowl-class: rb-2:Some_Class.v2\n---\nbody\n", "rb-2:Some_Class.v2"),
+            (
+                "---\nowl-class: rb-2:Some_Class.v2\n---\nbody\n",
+                "rb-2:Some_Class.v2",
+            ),
             (
                 "---\nowl-class: https://narrativegoldmine.com/ns/v1#Thing\n---\nbody\n",
                 "https://narrativegoldmine.com/ns/v1#Thing",
             ),
-            ("---\nowl-class: urn:ngm:class:thing\n---\nbody\n", "urn:ngm:class:thing"),
+            (
+                "---\nowl-class: urn:ngm:class:thing\n---\nbody\n",
+                "urn:ngm:class:thing",
+            ),
         ] {
             let meta = parse(raw);
             assert_eq!(meta.owl_class.as_deref(), Some(expected), "{raw:?}");
@@ -1153,7 +1174,10 @@ mod tests {
             "mv:Fo\to",
             "mv:Fo\no",
         ] {
-            assert!(!is_class_marker(bad), "{bad:?} should not be a class marker");
+            assert!(
+                !is_class_marker(bad),
+                "{bad:?} should not be a class marker"
+            );
         }
         // Surrounding whitespace is trimmed, not rejected: a trailing newline
         // from a text carrier must not turn a valid marker into a rejection.
@@ -1232,7 +1256,10 @@ mod tests {
         ] {
             let meta = parse(raw);
             if meta.is_publishable() {
-                assert!(meta.is_kg_included(), "publishable must imply included: {raw:?}");
+                assert!(
+                    meta.is_kg_included(),
+                    "publishable must imply included: {raw:?}"
+                );
             }
         }
         let class_only = parse("---\nowl-class: mv:Foo\n---\nbody\n");

@@ -61,7 +61,10 @@ mod tests {
             legacy.get("logseq"),
             "legacy key must resolve"
         );
-        assert_eq!(knowledge_graph_value(&canonical), canonical.get("knowledge"));
+        assert_eq!(
+            knowledge_graph_value(&canonical),
+            canonical.get("knowledge")
+        );
         assert!(knowledge_graph_value(&serde_json::json!({ "visionclaw": {} })).is_none());
 
         assert!(graphs_map_has_knowledge(legacy.as_object().unwrap()));

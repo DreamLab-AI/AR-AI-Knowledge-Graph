@@ -462,7 +462,8 @@ pub struct GetSupervisedShortestPathStats;
 pub struct GetSupervisedComponentsStats;
 
 impl Handler<GetSupervisedShortestPathStats> for GraphAnalyticsSupervisor {
-    type Result = ResponseActFuture<Self, Result<super::shortest_path_actor::ShortestPathStats, String>>;
+    type Result =
+        ResponseActFuture<Self, Result<super::shortest_path_actor::ShortestPathStats, String>>;
 
     fn handle(
         &mut self,
@@ -489,10 +490,16 @@ impl Handler<GetSupervisedShortestPathStats> for GraphAnalyticsSupervisor {
 }
 
 impl Handler<GetSupervisedComponentsStats> for GraphAnalyticsSupervisor {
-    type Result =
-        ResponseActFuture<Self, Result<super::connected_components_actor::ConnectedComponentsStats, String>>;
+    type Result = ResponseActFuture<
+        Self,
+        Result<super::connected_components_actor::ConnectedComponentsStats, String>,
+    >;
 
-    fn handle(&mut self, _msg: GetSupervisedComponentsStats, _ctx: &mut Self::Context) -> Self::Result {
+    fn handle(
+        &mut self,
+        _msg: GetSupervisedComponentsStats,
+        _ctx: &mut Self::Context,
+    ) -> Self::Result {
         let addr = match &self.connected_components_actor {
             Some(a) if self.connected_components_state.is_running => a.clone(),
             _ => {

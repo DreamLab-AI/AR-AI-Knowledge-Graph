@@ -697,5 +697,4 @@ impl AgentVisualizationProtocol {
         let message = AgentVisualizationMessage::StateUpdate(msg);
         to_json(&message).unwrap_or_default()
     }
-
 }

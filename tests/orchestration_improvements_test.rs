@@ -272,7 +272,10 @@ mod event_bus_panic_isolation_tests {
 mod supervisor_drain_tests {
     use actix::prelude::*;
     use std::time::Duration;
-    use visionclaw_server::actors::supervisor::{
+    // ADR-2045: `src/actors/supervisor.rs` was deleted; the generic `SupervisorActor` now lives
+    // solely in the `visionclaw-actors` workspace crate, which carries the identical API.
+    // Repointed here so this drain test keeps covering the surviving implementation.
+    use visionclaw_actors::supervisor::{
         InitiateGracefulShutdown, RegisterActor, SupervisionStrategy, SupervisorActor,
     };
 

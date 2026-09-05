@@ -349,7 +349,13 @@ fn cuda_arch_change_rebuilds_without_any_file_edit() {
 
     let moved: Vec<(&str, &str)> = ENV
         .iter()
-        .map(|(k, v)| if *k == "CUDA_ARCH" { (*k, "75") } else { (*k, *v) })
+        .map(|(k, v)| {
+            if *k == "CUDA_ARCH" {
+                (*k, "75")
+            } else {
+                (*k, *v)
+            }
+        })
         .collect();
     let (reason, rebuild) = decide(scratch.path(), &binary, &stamp, &moved);
     assert!(rebuild, "a CUDA_ARCH change must rebuild: {reason}");

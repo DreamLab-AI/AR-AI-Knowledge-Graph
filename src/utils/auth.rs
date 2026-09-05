@@ -451,7 +451,10 @@ mod dev_bypass_tests {
         assert!(dev_full_bypass_active(), "=true must arm");
 
         std::env::set_var("VISIONCLAW_DEV_MODE", " TRUE ");
-        assert!(dev_full_bypass_active(), "whitespace/case-insensitive must arm");
+        assert!(
+            dev_full_bypass_active(),
+            "whitespace/case-insensitive must arm"
+        );
 
         std::env::set_var("VISIONCLAW_DEV_MODE", "0");
         assert!(!dev_full_bypass_active(), "=0 must be off");

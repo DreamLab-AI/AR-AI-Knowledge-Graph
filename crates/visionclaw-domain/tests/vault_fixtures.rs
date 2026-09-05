@@ -61,7 +61,10 @@ fn namespace_fixture_ingests_and_decodes() {
         vault::page_name_from_path("namespace/A___B Testing.md"),
         "namespace/A/B Testing"
     );
-    assert_eq!(vault::page_name_from_path("A___B Testing.md"), "A/B Testing");
+    assert_eq!(
+        vault::page_name_from_path("A___B Testing.md"),
+        "A/B Testing"
+    );
 }
 
 #[test]

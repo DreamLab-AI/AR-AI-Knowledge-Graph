@@ -996,7 +996,10 @@ mod tests {
         let now = Instant::now();
         let id = "expiring-cccccccccccccccccccccccccccccccccccccccccccccccccc";
 
-        assert!(claim_event_id(id, now).is_ok(), "initial claim should succeed");
+        assert!(
+            claim_event_id(id, now).is_ok(),
+            "initial claim should succeed"
+        );
 
         // Within the TTL → still a replay.
         assert!(matches!(
@@ -1395,14 +1398,10 @@ mod tests {
         let body = "{\"value\":1}";
         let bound = token_for(&keys, url, "POST", Some(body));
 
-        assert!(validate_nip98_token_bound(
-            &bound,
-            url,
-            "POST",
-            Some(body),
-            BodyBinding::Required
-        )
-        .is_ok());
+        assert!(
+            validate_nip98_token_bound(&bound, url, "POST", Some(body), BodyBinding::Required)
+                .is_ok()
+        );
     }
 
     /// A substituted body is refused even though the token itself is valid.
@@ -1452,9 +1451,7 @@ mod tests {
 
         // A tagless token is exactly what a no-body route expects.
         let plain = token_for(&keys, url, "GET", None);
-        assert!(
-            validate_nip98_token_bound(&plain, url, "GET", None, BodyBinding::NoBody).is_ok()
-        );
+        assert!(validate_nip98_token_bound(&plain, url, "GET", None, BodyBinding::NoBody).is_ok());
     }
 
     /// The legacy policy remains what the existing callers get, so the change

@@ -438,7 +438,10 @@ impl PresenceActor {
         }
 
         if let Err(node_id) = Self::check_node_correlation(&msg.presence) {
-            warn!(node_id, "agent presence attention target is outside wire id space");
+            warn!(
+                node_id,
+                "agent presence attention target is outside wire id space"
+            );
             return AgentPresenceOutcome::InvalidNodeCorrelation { node_id };
         }
 
@@ -1113,8 +1116,7 @@ mod tests {
 
     use actix::Addr;
     use visionclaw_xr_presence::agent_presence::{
-        decode_agent_presence, AgentActivity, AgentPresence, AttentionTarget,
-        OPCODE_AGENT_PRESENCE,
+        decode_agent_presence, AgentActivity, AgentPresence, AttentionTarget, OPCODE_AGENT_PRESENCE,
     };
 
     fn presence(activity: AgentActivity, gaze: [f32; 3], attn: AttentionTarget) -> AgentPresence {
@@ -1219,7 +1221,11 @@ mod tests {
         let outcome = actor
             .send(IngestAgentPresence {
                 avatar_id: outsider.clone(),
-                presence: presence(AgentActivity::Speaking, [0.0, 0.0, -1.0], AttentionTarget::User),
+                presence: presence(
+                    AgentActivity::Speaking,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::User,
+                ),
             })
             .await
             .unwrap();
@@ -1227,7 +1233,9 @@ mod tests {
 
         // Nothing was recorded for the outsider.
         assert!(actor
-            .send(GetAgentPresence { avatar_id: outsider })
+            .send(GetAgentPresence {
+                avatar_id: outsider
+            })
             .await
             .unwrap()
             .is_none());
@@ -1265,7 +1273,11 @@ mod tests {
         let outcome = actor
             .send(IngestAgentPresence {
                 avatar_id: a,
-                presence: presence(AgentActivity::Working, [0.0, 0.0, -1.0], AttentionTarget::None),
+                presence: presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::None,
+                ),
             })
             .await
             .unwrap();
@@ -1305,7 +1317,11 @@ mod tests {
         actor
             .send(IngestAgentPresence {
                 avatar_id: a.clone(),
-                presence: presence(AgentActivity::Speaking, [0.0, 0.0, -1.0], AttentionTarget::User),
+                presence: presence(
+                    AgentActivity::Speaking,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::User,
+                ),
             })
             .await
             .unwrap();
@@ -1480,7 +1496,11 @@ mod tests {
         actor
             .send(IngestAgentPresence {
                 avatar_id: a.clone(),
-                presence: presence(AgentActivity::Working, [0.0, 0.0, -1.0], AttentionTarget::None),
+                presence: presence(
+                    AgentActivity::Working,
+                    [0.0, 0.0, -1.0],
+                    AttentionTarget::None,
+                ),
             })
             .await
             .unwrap();
@@ -1496,7 +1516,9 @@ mod tests {
         let outcome = actor
             .send(IngestPose {
                 avatar_id: a.clone(),
-                frame_bytes: encode(&sample_frame(1_000), &sample_room(), &a).unwrap().to_vec(),
+                frame_bytes: encode(&sample_frame(1_000), &sample_room(), &a)
+                    .unwrap()
+                    .to_vec(),
             })
             .await
             .unwrap();
@@ -1505,7 +1527,10 @@ mod tests {
 
         let f = frames_b.lock().unwrap().clone();
         assert_eq!(f.len(), 2, "one presence frame and one pose frame");
-        assert_eq!(f[1].bytes[0], PREAMBLE_OPCODE, "the second is the 0x43 pose");
+        assert_eq!(
+            f[1].bytes[0], PREAMBLE_OPCODE,
+            "the second is the 0x43 pose"
+        );
 
         let still = actor
             .send(GetAgentPresence {
@@ -1574,6 +1599,9 @@ mod tests {
         let delta = &batch.deltas[0];
         assert_eq!(delta.state, Some(AgentActivity::Working));
         assert!(delta.gaze_dir.is_none(), "unchanged gaze must be elided");
-        assert!(delta.attention.is_none(), "unchanged attention must be elided");
+        assert!(
+            delta.attention.is_none(),
+            "unchanged attention must be elided"
+        );
     }
 }

@@ -106,7 +106,9 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
     validate(opts)?;
     if let Some(j) = opts.jobs {
         // Best-effort: a second call in the same process is a no-op.
-        let _ = rayon::ThreadPoolBuilder::new().num_threads(j.max(1)).build_global();
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(j.max(1))
+            .build_global();
     }
 
     let source = &opts.graph;
@@ -142,15 +144,20 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
                 for rel in collect_tree(path, &mut rep.errors) {
                     let abs = path.join(&rel);
                     if is_hidden(&rel) {
-                        actions.push(Action::Copy { src: abs, rel: Path::new("pages").join(&rel) });
+                        actions.push(Action::Copy {
+                            src: abs,
+                            rel: Path::new("pages").join(&rel),
+                        });
                         continue;
                     }
                     match paths::map_page(&rel) {
                         Some((out_rel, page_name)) => {
                             page_files.push((abs, Path::new("pages").join(out_rel), page_name))
                         }
-                        None => actions
-                            .push(Action::Copy { src: abs, rel: Path::new("pages").join(&rel) }),
+                        None => actions.push(Action::Copy {
+                            src: abs,
+                            rel: Path::new("pages").join(&rel),
+                        }),
                     }
                 }
             }
@@ -158,18 +165,20 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
                 for rel in collect_tree(path, &mut rep.errors) {
                     let abs = path.join(&rel);
                     if is_hidden(&rel) {
-                        actions
-                            .push(Action::Copy { src: abs, rel: Path::new("journals").join(&rel) });
+                        actions.push(Action::Copy {
+                            src: abs,
+                            rel: Path::new("journals").join(&rel),
+                        });
                         continue;
                     }
                     match paths::map_journal(&rel) {
-                        Some((out_rel, renamed)) => journal_files.push((
-                            abs,
-                            Path::new("journals").join(out_rel),
-                            renamed,
-                        )),
-                        None => actions
-                            .push(Action::Copy { src: abs, rel: Path::new("journals").join(&rel) }),
+                        Some((out_rel, renamed)) => {
+                            journal_files.push((abs, Path::new("journals").join(out_rel), renamed))
+                        }
+                        None => actions.push(Action::Copy {
+                            src: abs,
+                            rel: Path::new("journals").join(&rel),
+                        }),
                     }
                 }
             }
@@ -189,7 +198,10 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
                 for rel in collect_tree(path, &mut rep.errors) {
                     let r = Path::new("whiteboards").join(&rel);
                     rep.leftovers.whiteboards.push(r.display().to_string());
-                    actions.push(Action::Copy { src: path.join(&rel), rel: r });
+                    actions.push(Action::Copy {
+                        src: path.join(&rel),
+                        rel: r,
+                    });
                 }
             }
             // Managed by this converter; an existing one is never overwritten.
@@ -203,7 +215,10 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
                         });
                     }
                 } else {
-                    actions.push(Action::Copy { src: path.clone(), rel: PathBuf::from(name) });
+                    actions.push(Action::Copy {
+                        src: path.clone(),
+                        rel: PathBuf::from(name),
+                    });
                 }
             }
         }
@@ -244,7 +259,8 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
             Ok((rel, r, changed)) => {
                 rep.pages_total += 1;
                 let src_rel = abs.strip_prefix(source).unwrap_or(abs);
-                let moved = Path::new("pages").join(src_rel.strip_prefix("pages").unwrap_or(src_rel))
+                let moved = Path::new("pages")
+                    .join(src_rel.strip_prefix("pages").unwrap_or(src_rel))
                     != *rel_out;
                 if r.stats.already_obsidian {
                     rep.pages_already_obsidian += 1;
@@ -290,7 +306,11 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
         if claimed.contains(&rel) || target.join(&rel).exists() {
             continue;
         }
-        actions.push(Action::Write { rel, content, source: None });
+        actions.push(Action::Write {
+            rel,
+            content,
+            source: None,
+        });
     }
 
     actions.sort_by(|a, b| a.rel().cmp(b.rel()));
@@ -342,7 +362,11 @@ pub fn run(opts: &Options) -> Result<RunOutcome> {
         rename_moved_originals(source, &page_files, &journal_files, &mut rep.errors);
     }
 
-    Ok(RunOutcome { report: rep, drift, drift_examples })
+    Ok(RunOutcome {
+        report: rep,
+        drift,
+        drift_examples,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -405,8 +429,7 @@ fn resolve_collisions(
                 let mut resolved = vec![dest.display().to_string()];
                 // The first action keeps the natural destination.
                 for i in idxs.iter().skip(1) {
-                    let new_rel =
-                        next_free_suffixed(&dest, &claimed, &extra_claimed);
+                    let new_rel = next_free_suffixed(&dest, &claimed, &extra_claimed);
                     extra_claimed.insert(new_rel.clone());
                     resolved.push(new_rel.display().to_string());
                     *actions[*i].rel_mut() = new_rel;
@@ -467,7 +490,11 @@ would lose a page.\n",
         collisions.len()
     );
     for c in collisions {
-        out.push_str(&format!("  {} <- {}\n", c.destination, c.sources.join(", ")));
+        out.push_str(&format!(
+            "  {} <- {}\n",
+            c.destination,
+            c.sources.join(", ")
+        ));
     }
     out.push_str(
         "Resolve them in the source graph (rename or merge the pages), or re-run with \
@@ -517,9 +544,14 @@ fn validate(o: &Options) -> Result<()> {
     }
     if let Some(out) = &o.out {
         if !o.check && !o.dry_run && out.exists() {
-            let non_empty = fs::read_dir(out).map(|mut d| d.next().is_some()).unwrap_or(false);
+            let non_empty = fs::read_dir(out)
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false);
             if non_empty && !o.force {
-                bail!("{} exists and is not empty; pass --force to write into it", out.display());
+                bail!(
+                    "{} exists and is not empty; pass --force to write into it",
+                    out.display()
+                );
             }
         }
         if out.starts_with(&o.graph) && o.graph.starts_with(out) {
@@ -548,7 +580,10 @@ fn git_is_dirty(dir: &Path) -> bool {
 /// is a symlink to a sibling graph's asset store.
 fn collect_tree(root: &Path, errors: &mut Vec<String>) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    for e in walkdir::WalkDir::new(root).follow_links(true).sort_by_file_name() {
+    for e in walkdir::WalkDir::new(root)
+        .follow_links(true)
+        .sort_by_file_name()
+    {
         match e {
             Ok(e) if e.file_type().is_file() => {
                 if let Ok(rel) = e.path().strip_prefix(root) {
@@ -603,13 +638,22 @@ fn collect_leftovers(
 ) {
     let f = rel.display().to_string();
     if s.leftovers.block_refs > 0 {
-        block_refs.push(FileCount { file: f.clone(), count: s.leftovers.block_refs });
+        block_refs.push(FileCount {
+            file: f.clone(),
+            count: s.leftovers.block_refs,
+        });
     }
     if s.leftovers.body_properties > 0 {
-        body_props.push(FileCount { file: f.clone(), count: s.leftovers.body_properties });
+        body_props.push(FileCount {
+            file: f.clone(),
+            count: s.leftovers.body_properties,
+        });
     }
     if s.leftovers.scheduled_deadline > 0 {
-        sched.push(FileCount { file: f, count: s.leftovers.scheduled_deadline });
+        sched.push(FileCount {
+            file: f,
+            count: s.leftovers.scheduled_deadline,
+        });
     }
 }
 
@@ -693,14 +737,16 @@ fn same_file(a: &Path, b: &Path) -> bool {
 
 fn apply(a: &Action, dest: &Path, errors: &mut Vec<String>) -> Result<()> {
     if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("creating {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
     }
     match a {
         Action::Write { content, .. } => {
             // Skip the write when the bytes already match, so re-runs do not
             // churn mtimes across 8.6k files.
-            if fs::read(dest).map(|b| b == content.as_bytes()).unwrap_or(false) {
+            if fs::read(dest)
+                .map(|b| b == content.as_bytes())
+                .unwrap_or(false)
+            {
                 return Ok(());
             }
             // ADR-2042: write atomically. An interrupted run (SIGKILL, full

@@ -129,7 +129,8 @@ impl SocketFlowServer {
 
                         if let Ok(Ok(_iterations_val)) = settings_addr
                             .send(GetSettingByPath {
-                                path: "visualisation.graphs.knowledge.physics.iterations".to_string(),
+                                path: "visualisation.graphs.knowledge.physics.iterations"
+                                    .to_string(),
                             })
                             .await
                         {

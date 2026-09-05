@@ -66,8 +66,8 @@ impl Harness {
         };
 
         let host = host_of(&base_url);
-        let ws_url = std::env::var("VISIONCLAW_WS_URL")
-            .unwrap_or_else(|_| format!("ws://{host}:3002"));
+        let ws_url =
+            std::env::var("VISIONCLAW_WS_URL").unwrap_or_else(|_| format!("ws://{host}:3002"));
         let tcp_addr =
             std::env::var("VISIONCLAW_TCP_ADDR").unwrap_or_else(|_| format!("{host}:9500"));
 
@@ -78,7 +78,12 @@ impl Harness {
 
         let health = format!("{base_url}/health");
         match tokio::time::timeout(PROBE_TIMEOUT, client.get(&health).send()).await {
-            Ok(Ok(_)) => Some(Self { base_url, ws_url, tcp_addr, client }),
+            Ok(Ok(_)) => Some(Self {
+                base_url,
+                ws_url,
+                tcp_addr,
+                client,
+            }),
             _ => {
                 eprintln!("SKIP: {health} is unreachable — server not running.");
                 None
@@ -103,7 +108,12 @@ impl Harness {
 
     /// `POST <path>` with a JSON body, returning `None` on transport failure.
     pub async fn post_json(&self, path: &str, body: &Value) -> Option<reqwest::Response> {
-        self.client.post(self.url(path)).json(body).send().await.ok()
+        self.client
+            .post(self.url(path))
+            .json(body)
+            .send()
+            .await
+            .ok()
     }
 
     /// Open a JSON-RPC TCP probe against [`Self::tcp_addr`].
@@ -144,7 +154,10 @@ impl TcpProbe {
             .await
             .ok()?
             .ok()?;
-        Some(Self { reader: BufReader::new(stream), connected: true })
+        Some(Self {
+            reader: BufReader::new(stream),
+            connected: true,
+        })
     }
 
     /// Send one JSON-RPC request and read exactly one response line.
@@ -174,7 +187,10 @@ impl TcpProbe {
 
         let mut response = String::new();
         let read = self.reader.read_line(&mut response);
-        let bytes = tokio::time::timeout(REQUEST_TIMEOUT, read).await.ok()?.ok()?;
+        let bytes = tokio::time::timeout(REQUEST_TIMEOUT, read)
+            .await
+            .ok()?
+            .ok()?;
         if bytes == 0 {
             return None;
         }
@@ -269,7 +285,10 @@ mod tests {
     #[test]
     fn host_of_extracts_the_hostname() {
         assert_eq!(host_of("http://localhost:9501"), "localhost");
-        assert_eq!(host_of("https://visionclaw.internal:443/api"), "visionclaw.internal");
+        assert_eq!(
+            host_of("https://visionclaw.internal:443/api"),
+            "visionclaw.internal"
+        );
         assert_eq!(host_of("http://10.0.0.4"), "10.0.0.4");
     }
 

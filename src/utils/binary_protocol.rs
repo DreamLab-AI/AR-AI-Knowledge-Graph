@@ -10,8 +10,8 @@ use visionclaw_domain::models::constraints::{AdvancedParams, Constraint};
 // Protocol versions for wire format (V1 REMOVED - no backward compatibility)
 // PROTOCOL_V2 (value: 2) removed — server no longer sends or decodes V2 frames
 const PROTOCOL_V3: u8 = 3; // Analytics extension protocol (P0-4) - CURRENT
-// V5 broadcast envelope: wraps a V3 body with a monotonic sequence for client-side
-// drop/reorder detection. Owned by docs/PROTOCOL-registry.md, locked by ADR-2057.
+                           // V5 broadcast envelope: wraps a V3 body with a monotonic sequence for client-side
+                           // drop/reorder detection. Owned by docs/PROTOCOL-registry.md, locked by ADR-2057.
 const PROTOCOL_V5: u8 = 5;
 
 // Node type flag constants for u32 (server-side)

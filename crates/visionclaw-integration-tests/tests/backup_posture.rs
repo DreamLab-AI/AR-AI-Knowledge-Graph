@@ -137,7 +137,11 @@ fn only_backup_dir(backup_root: &Path) -> PathBuf {
         .map(|e| e.path())
         .filter(|p| p.is_dir())
         .collect();
-    assert_eq!(dirs.len(), 1, "expected exactly one backup dir in {backup_root:?}");
+    assert_eq!(
+        dirs.len(),
+        1,
+        "expected exactly one backup dir in {backup_root:?}"
+    );
     dirs.pop().expect("one dir")
 }
 

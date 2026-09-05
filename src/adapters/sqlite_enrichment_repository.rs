@@ -151,7 +151,12 @@ fn apply_additive_migrations(c: &rusqlite::Connection) -> rusqlite::Result<()> {
     // so locally minted decisions, which carry no event id, are never
     // constrained against each other.
     add_column_if_missing(c, "enrichment_decisions", "decision_event_id", "TEXT")?;
-    add_column_if_missing(c, "enrichment_decisions", "decision_created_at_s", "INTEGER")?;
+    add_column_if_missing(
+        c,
+        "enrichment_decisions",
+        "decision_created_at_s",
+        "INTEGER",
+    )?;
     c.execute_batch(
         "CREATE UNIQUE INDEX IF NOT EXISTS enrichment_decision_event_idx
              ON enrichment_decisions(decision_event_id)
@@ -1145,7 +1150,10 @@ mod tests {
 
         let rows = repo.decisions_for("case-sig").await.unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].decision_event_id.as_deref(), Some("e".repeat(64).as_str()));
+        assert_eq!(
+            rows[0].decision_event_id.as_deref(),
+            Some("e".repeat(64).as_str())
+        );
         assert_eq!(rows[0].decision_created_at_s, Some(1_700_000_000));
     }
 
@@ -1191,9 +1199,15 @@ mod tests {
     #[tokio::test]
     async fn local_decisions_without_an_event_id_are_not_deduplicated() {
         let repo = temp_repo().await;
-        repo.create_or_update(&proposal("case-local")).await.unwrap();
-        repo.record_decision(&decision("case-local", false)).await.unwrap();
-        repo.record_decision(&decision("case-local", false)).await.unwrap();
+        repo.create_or_update(&proposal("case-local"))
+            .await
+            .unwrap();
+        repo.record_decision(&decision("case-local", false))
+            .await
+            .unwrap();
+        repo.record_decision(&decision("case-local", false))
+            .await
+            .unwrap();
 
         assert_eq!(
             repo.decisions_for("case-local").await.unwrap().len(),
@@ -1220,7 +1234,9 @@ mod tests {
         let d = signed_decision("case-restart", "c".repeat(64).as_str());
         let first_id = {
             let repo = SqliteEnrichmentRepository::open(&path).await.unwrap();
-            repo.create_or_update(&proposal("case-restart")).await.unwrap();
+            repo.create_or_update(&proposal("case-restart"))
+                .await
+                .unwrap();
             repo.record_decision(&d).await.unwrap()
         };
 

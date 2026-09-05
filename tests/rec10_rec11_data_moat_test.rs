@@ -83,6 +83,9 @@ async fn rec10_insight_loop_closes_end_to_end_with_monotonic_stamps() {
         proposal_urn: Some("urn:visionclaw:kg:pk:sha256-12-deadbeef0000".into()),
         owner_did: Some("did:nostr:aaaa".into()),
         decided_at_ms: 1_700_000_002_000,
+        // ADR-2006: locally minted fixture decision — no signed kind-31403 event behind it.
+        decision_event_id: None,
+        decision_created_at_s: None,
     };
     repo.record_decision(&decision).await.unwrap();
 
@@ -171,6 +174,9 @@ async fn rec11_trace_joins_two_live_source_kinds_over_real_stores() {
             proposal_urn: None,
             owner_did: Some(did.into()),
             decided_at_ms: 1_700_000_003_000,
+            // ADR-2006: locally minted fixture decision — no signed kind-31403 event behind it.
+            decision_event_id: None,
+            decision_created_at_s: None,
         })
         .await
         .unwrap();

@@ -177,9 +177,7 @@ impl SpeechSocket {
                     pubkey
                 );
                 self.pubkey = Some(pubkey.clone());
-                ctx.text(
-                    json!({"type": "authenticate_success", "pubkey": pubkey}).to_string(),
-                );
+                ctx.text(json!({"type": "authenticate_success", "pubkey": pubkey}).to_string());
                 return;
             }
         }
@@ -244,9 +242,7 @@ impl SpeechSocket {
                 Some(pubkey) => {
                     info!("[SpeechSocket] NIP-98 authenticated: pubkey={}", pubkey);
                     act.pubkey = Some(pubkey.clone());
-                    ctx.text(
-                        json!({"type": "authenticate_success", "pubkey": pubkey}).to_string(),
-                    );
+                    ctx.text(json!({"type": "authenticate_success", "pubkey": pubkey}).to_string());
                 }
                 None => {
                     ctx.text(

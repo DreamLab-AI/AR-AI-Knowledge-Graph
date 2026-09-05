@@ -32,14 +32,20 @@ fn nvml() -> Option<Nvml> {
 fn a_cuda_device_is_present_and_identifiable() {
     let Some(nvml) = nvml() else { return };
 
-    let count = nvml.device_count().expect("NVML initialised but the device count failed");
+    let count = nvml
+        .device_count()
+        .expect("NVML initialised but the device count failed");
     assert!(count > 0, "NVML initialised but reports zero devices");
 
-    let device = nvml.device_by_index(0).expect("device 0 could not be opened");
+    let device = nvml
+        .device_by_index(0)
+        .expect("device 0 could not be opened");
     let name = device.name().expect("device 0 has no readable name");
     assert!(!name.is_empty(), "device 0 reported an empty name");
 
-    let memory = device.memory_info().expect("device 0 has no readable memory info");
+    let memory = device
+        .memory_info()
+        .expect("device 0 has no readable memory info");
     assert!(memory.total > 0, "device 0 reports zero total memory");
 
     eprintln!(
@@ -60,7 +66,10 @@ fn gpu_memory_reporting_is_stable_under_repeated_queries() {
         }
     };
 
-    let baseline = device.memory_info().expect("baseline memory read failed").total;
+    let baseline = device
+        .memory_info()
+        .expect("baseline memory read failed")
+        .total;
 
     // Ten reads over five seconds. Total memory is a fixed property of the
     // device: if it moves, the driver state is not what we think it is.
@@ -68,8 +77,14 @@ fn gpu_memory_reporting_is_stable_under_repeated_queries() {
         let memory = device
             .memory_info()
             .unwrap_or_else(|e| panic!("memory read {i} of 10 failed: {e}"));
-        assert_eq!(memory.total, baseline, "total memory changed between reads {i} and 0");
-        assert!(memory.used <= memory.total, "used memory exceeds total on read {i}");
+        assert_eq!(
+            memory.total, baseline,
+            "total memory changed between reads {i} and 0"
+        );
+        assert!(
+            memory.used <= memory.total,
+            "used memory exceeds total on read {i}"
+        );
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
@@ -89,16 +104,24 @@ fn concurrent_queries_do_not_destabilise_the_driver() {
             .map(|_| {
                 scope.spawn(|| {
                     let Ok(nvml) = Nvml::init() else { return false };
-                    let Ok(device) = nvml.device_by_index(0) else { return false };
+                    let Ok(device) = nvml.device_by_index(0) else {
+                        return false;
+                    };
                     (0..5).all(|_| device.memory_info().is_ok())
                 })
             })
             .collect();
-        handles.into_iter().map(|h| h.join().unwrap_or(false)).collect()
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or(false))
+            .collect()
     });
 
     let succeeded = outcomes.iter().filter(|ok| **ok).count();
-    assert_eq!(succeeded, 5, "only {succeeded} of 5 concurrent NVML readers succeeded");
+    assert_eq!(
+        succeeded, 5,
+        "only {succeeded} of 5 concurrent NVML readers succeeded"
+    );
 }
 
 #[tokio::test]
@@ -109,7 +132,11 @@ async fn the_health_endpoint_reports_gpu_status() {
         eprintln!("SKIP: /health did not answer.");
         return;
     };
-    assert!(response.status().is_success(), "/health answered {}", response.status());
+    assert!(
+        response.status().is_success(),
+        "/health answered {}",
+        response.status()
+    );
 
     let body: Value = match response.json().await {
         Ok(body) => body,
@@ -125,5 +152,8 @@ async fn the_health_endpoint_reports_gpu_status() {
         .iter()
         .any(|key| body.get(*key).is_some());
 
-    assert!(reported, "/health carries no GPU status field at all: {body}");
+    assert!(
+        reported,
+        "/health carries no GPU status field at all: {body}"
+    );
 }

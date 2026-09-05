@@ -141,7 +141,8 @@ pub fn map_properties(pairs: &[(String, String)]) -> (Frontmatter, FmStats) {
                 fm.map.insert("title".into(), Value::Scalar(raw.clone()));
             }
             "owl:class" | "owl-class" => {
-                fm.map.insert("owl-class".into(), Value::Scalar(raw.clone()));
+                fm.map
+                    .insert("owl-class".into(), Value::Scalar(raw.clone()));
             }
             "source-domain" => {
                 fm.map
@@ -157,8 +158,7 @@ pub fn map_properties(pairs: &[(String, String)]) -> (Frontmatter, FmStats) {
             // that would have targeted it are dangling in this corpus.
             "id" => st.id_dropped += 1,
             other => {
-                fm.map
-                    .insert(other.to_string(), Value::Scalar(raw.clone()));
+                fm.map.insert(other.to_string(), Value::Scalar(raw.clone()));
             }
         }
     }
@@ -339,7 +339,9 @@ pub fn parse_existing(lines: &[&str]) -> Option<(Frontmatter, usize)> {
 fn unquote(s: &str) -> String {
     let s = s.trim();
     if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
-        s[1..s.len() - 1].replace("\\\"", "\"").replace("\\\\", "\\")
+        s[1..s.len() - 1]
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
     } else if s.len() >= 2 && s.starts_with('\'') && s.ends_with('\'') {
         s[1..s.len() - 1].replace("''", "'")
     } else {
@@ -464,10 +466,7 @@ mod tests {
     fn unknown_keys_are_preserved_verbatim() {
         let (fm, _) = map_properties(&[("episode-url".into(), "https://x.test/a".into())]);
         // contains ':' -> quoted so the YAML stays valid
-        assert_eq!(
-            emit(&fm),
-            "---\nepisode-url: \"https://x.test/a\"\n---\n"
-        );
+        assert_eq!(emit(&fm), "---\nepisode-url: \"https://x.test/a\"\n---\n");
     }
 
     #[test]
@@ -530,7 +529,9 @@ mod tests {
     #[test]
     fn existing_frontmatter_wins_on_merge() {
         let mut existing = Frontmatter::default();
-        existing.map.insert("title".into(), Value::Scalar("Kept".into()));
+        existing
+            .map
+            .insert("title".into(), Value::Scalar("Kept".into()));
         let mut incoming = Frontmatter::default();
         incoming
             .map

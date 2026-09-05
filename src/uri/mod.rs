@@ -1070,10 +1070,7 @@ mod tests {
                 "{addr:?} must be rejected ({why})"
             );
             assert!(
-                matches!(
-                    kg_with_address(PK_A, addr),
-                    Err(UriError::Malformed(_))
-                ),
+                matches!(kg_with_address(PK_A, addr), Err(UriError::Malformed(_))),
                 "kg_with_address must reject {addr:?} ({why})"
             );
         }

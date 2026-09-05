@@ -467,8 +467,9 @@ mod adr2041_graph_settings_key {
 
     #[test]
     fn serialisation_emits_knowledge_only() {
-        let loaded: AppFullSettings = serde_json::from_value(as_legacy_document(&marked_settings()))
-            .expect("legacy should load");
+        let loaded: AppFullSettings =
+            serde_json::from_value(as_legacy_document(&marked_settings()))
+                .expect("legacy should load");
 
         let yaml = serde_yaml::to_string(&loaded).expect("should serialise to YAML");
         assert!(

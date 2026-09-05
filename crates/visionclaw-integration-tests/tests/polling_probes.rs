@@ -12,21 +12,26 @@ use serde_json::{json, Value};
 use tokio_tungstenite::tungstenite::Message;
 use visionclaw_integration_tests::{require_server, Harness};
 
-type WsStream = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// Open a WebSocket to the bridge, or `None` if it refused.
 async fn connect_ws(h: &Harness) -> Option<WsStream> {
     let connect = tokio_tungstenite::connect_async(&h.ws_url);
-    let (stream, _) = tokio::time::timeout(Duration::from_secs(10), connect).await.ok()?.ok()?;
+    let (stream, _) = tokio::time::timeout(Duration::from_secs(10), connect)
+        .await
+        .ok()?
+        .ok()?;
     Some(stream)
 }
 
 /// Send one JSON message and read one JSON reply.
 async fn ws_roundtrip(stream: &mut WsStream, message: &Value) -> Option<Value> {
     stream.send(Message::Text(message.to_string())).await.ok()?;
-    let reply = tokio::time::timeout(Duration::from_secs(5), stream.next()).await.ok()??.ok()?;
+    let reply = tokio::time::timeout(Duration::from_secs(5), stream.next())
+        .await
+        .ok()??
+        .ok()?;
     serde_json::from_str(reply.to_text().ok()?).ok()
 }
 
@@ -57,9 +62,13 @@ async fn a_websocket_client_can_reconnect() {
         let _ = first.close(None).await;
     }
 
-    let mut second = connect_ws(&h).await.expect("could not reconnect to the WebSocket bridge");
+    let mut second = connect_ws(&h)
+        .await
+        .expect("could not reconnect to the WebSocket bridge");
     assert!(
-        ws_roundtrip(&mut second, &json!({ "type": "ping" })).await.is_some(),
+        ws_roundtrip(&mut second, &json!({ "type": "ping" }))
+            .await
+            .is_some(),
         "the reconnected socket did not answer a ping"
     );
 }
@@ -79,7 +88,9 @@ async fn ten_concurrent_clients_each_receive_data() {
             let mut ws = connect_ws(&h).await?;
             let mut received = 0usize;
             for _ in 0..3 {
-                if ws_roundtrip(&mut ws, &json!({ "type": "data", "client": client })).await.is_some()
+                if ws_roundtrip(&mut ws, &json!({ "type": "data", "client": client }))
+                    .await
+                    .is_some()
                 {
                     received += 1;
                 }
@@ -95,7 +106,10 @@ async fn ten_concurrent_clients_each_receive_data() {
             assert!(received > 0, "a concurrent client received nothing at all");
         }
     }
-    assert!(clients > 0, "not one of the ten concurrent clients connected");
+    assert!(
+        clients > 0,
+        "not one of the ten concurrent clients connected"
+    );
 }
 
 #[tokio::test]
@@ -110,12 +124,17 @@ async fn messages_still_arrive_across_repeated_drops() {
     let mut delivered = 0usize;
 
     for drop_round in 0..3u64 {
-        let Some(mut ws) = connect_ws(&h).await else { continue };
+        let Some(mut ws) = connect_ws(&h).await else {
+            continue;
+        };
         reconnects += 1;
         for message in 0..3u64 {
-            if ws_roundtrip(&mut ws, &json!({ "type": "test", "round": drop_round, "n": message }))
-                .await
-                .is_some()
+            if ws_roundtrip(
+                &mut ws,
+                &json!({ "type": "test", "round": drop_round, "n": message }),
+            )
+            .await
+            .is_some()
             {
                 delivered += 1;
             }
@@ -124,7 +143,10 @@ async fn messages_still_arrive_across_repeated_drops() {
     }
 
     assert_eq!(reconnects, 3, "a reconnection after a drop failed");
-    assert!(delivered > 5, "only {delivered} of 9 messages survived the drops");
+    assert!(
+        delivered > 5,
+        "only {delivered} of 9 messages survived the drops"
+    );
 }
 
 #[tokio::test]
@@ -135,8 +157,11 @@ async fn an_unauthenticated_admin_command_is_refused() {
         return;
     };
 
-    let Some(reply) =
-        ws_roundtrip(&mut ws, &json!({ "type": "admin_command", "action": "get_all_users" })).await
+    let Some(reply) = ws_roundtrip(
+        &mut ws,
+        &json!({ "type": "admin_command", "action": "get_all_users" }),
+    )
+    .await
     else {
         return; // the bridge cut us off, which is itself a refusal
     };
@@ -163,7 +188,10 @@ async fn http_polling_returns_json() {
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    assert!(successes > 0, "three polls of /poll produced no parseable JSON");
+    assert!(
+        successes > 0,
+        "three polls of /poll produced no parseable JSON"
+    );
 }
 
 #[tokio::test]
@@ -184,9 +212,15 @@ async fn long_polling_returns_inside_thirty_seconds() {
         return;
     };
 
-    assert!(elapsed < Duration::from_secs(30), "long poll hung for {elapsed:?}");
+    assert!(
+        elapsed < Duration::from_secs(30),
+        "long poll hung for {elapsed:?}"
+    );
     let status = response.status().as_u16();
-    assert!(matches!(status, 200 | 204), "long poll answered {status}, expected 200 or 204");
+    assert!(
+        matches!(status, 200 | 204),
+        "long poll answered {status}, expected 200 or 204"
+    );
 }
 
 #[tokio::test]
@@ -205,5 +239,8 @@ async fn aggressive_polling_is_rate_limited() {
         }
     }
 
-    assert!(limited, "30 back-to-back polls drew no 429 — /poll is not rate limited");
+    assert!(
+        limited,
+        "30 back-to-back polls drew no 429 — /poll is not rate limited"
+    );
 }

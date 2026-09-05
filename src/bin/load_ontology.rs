@@ -24,7 +24,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use visionclaw_server::adapters::OxigraphOntologyRepository;
-use visionclaw_server::ports::ontology_repository::{OntologyRepository, OwlAxiom, OwlClass, OwlProperty};
+use visionclaw_server::ports::ontology_repository::{
+    OntologyRepository, OwlAxiom, OwlClass, OwlProperty,
+};
 use visionclaw_server::services::owl_extractor_service::OwlExtractorService;
 use visionclaw_server::services::parsers::OntologyParser;
 
@@ -66,7 +68,8 @@ fn collect_markdown_files(root: &Path, out: &mut Vec<PathBuf>) -> std::io::Resul
         if file_type.is_dir() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip)) || name.starts_with('.') {
+            if SKIP_DIRS.iter().any(|skip| name.eq_ignore_ascii_case(skip)) || name.starts_with('.')
+            {
                 continue;
             }
             collect_markdown_files(&path, out)?;
@@ -163,7 +166,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     onto_data.axioms.len()
                 );
 
-                match persist(&ontology_repo, &onto_data.classes, &onto_data.properties, &onto_data.axioms).await {
+                match persist(
+                    &ontology_repo,
+                    &onto_data.classes,
+                    &onto_data.properties,
+                    &onto_data.axioms,
+                )
+                .await
+                {
                     Ok(()) => {
                         stats.ontology_files_parsed += 1;
                         stats.classes_persisted += onto_data.classes.len();
@@ -197,11 +207,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Ontology load complete.");
     info!("  Corpus root:                {}", corpus_root.display());
     info!("  Markdown files scanned:      {}", stats.files_scanned);
-    info!("  OntologyBlock files parsed:  {}", stats.ontology_files_parsed);
+    info!(
+        "  OntologyBlock files parsed:  {}",
+        stats.ontology_files_parsed
+    );
     info!("  Parse errors:                {}", stats.parse_errors);
     info!("  Persist errors:              {}", stats.persist_errors);
     info!("  Classes persisted (this run):{}", stats.classes_persisted);
-    info!("  Properties persisted:        {}", stats.properties_persisted);
+    info!(
+        "  Properties persisted:        {}",
+        stats.properties_persisted
+    );
     info!("  Axioms persisted:            {}", stats.axioms_persisted);
     info!(
         "  Classes with horned-owl blocks: {} ({} axioms)",
@@ -215,9 +231,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(50));
     println!("  Corpus root:                 {}", corpus_root.display());
     println!("  Markdown files scanned:      {}", stats.files_scanned);
-    println!("  OntologyBlock files parsed:  {}", stats.ontology_files_parsed);
-    println!("  Classes persisted (this run): {}", stats.classes_persisted);
-    println!("  Properties persisted:        {}", stats.properties_persisted);
+    println!(
+        "  OntologyBlock files parsed:  {}",
+        stats.ontology_files_parsed
+    );
+    println!(
+        "  Classes persisted (this run): {}",
+        stats.classes_persisted
+    );
+    println!(
+        "  Properties persisted:        {}",
+        stats.properties_persisted
+    );
     println!("  Axioms persisted:            {}", stats.axioms_persisted);
     println!(
         "  Classes with horned-owl blocks: {} ({} axioms)",

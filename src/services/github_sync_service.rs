@@ -1612,14 +1612,7 @@ impl GitHubSyncService {
                 // populate the force-directed graph as `page` nodes joined by
                 // their wikilinks — the dual-source ingest the system was
                 // designed for.
-                self.process_plain_vault_file(
-                    file,
-                    content,
-                    nodes,
-                    edges,
-                    stub_ids,
-                    vault_ctx,
-                );
+                self.process_plain_vault_file(file, content, nodes, edges, stub_ids, vault_ctx);
                 return Ok(());
             }
             Err(e) => {
@@ -1791,19 +1784,20 @@ impl GitHubSyncService {
         // pages (`ETSI_Domain_Infrastructure/Security` with the root
         // `Security`) and orphaned every bare link into a subfolder.
         let vault_path = format!("{}.md", vault_ctx.identity_of(&file.path));
-        let parsed = match self
-            .kg_parser
-            .parse_with_index(content, &vault_path, Some(vault_ctx.index()))
-        {
-            Ok(p) => p,
-            Err(e) => {
-                debug!(
-                    "Plain logseq parse failed for {}: {} — skipping",
-                    file.name, e
-                );
-                return;
-            }
-        };
+        let parsed =
+            match self
+                .kg_parser
+                .parse_with_index(content, &vault_path, Some(vault_ctx.index()))
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    debug!(
+                        "Plain logseq parse failed for {}: {} — skipping",
+                        file.name, e
+                    );
+                    return;
+                }
+            };
 
         // Design gate: the working knowledge graph only surfaces *published*
         // pages. A plain page (no `owl:class::`) becomes a graph node ONLY when

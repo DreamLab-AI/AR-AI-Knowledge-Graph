@@ -3597,10 +3597,7 @@ mod tests {
         for (position, bad, expected) in cases {
             let repo = in_memory_repo();
             let err = repo
-                .append_derived_quads(vec![
-                    quad(GRAPH_ONTOLOGY_SUMMARY, S, P, "legitimate"),
-                    bad,
-                ])
+                .append_derived_quads(vec![quad(GRAPH_ONTOLOGY_SUMMARY, S, P, "legitimate"), bad])
                 .await
                 .unwrap_err();
             assert!(
@@ -3645,14 +3642,9 @@ mod tests {
         let repo = in_memory_repo();
         let hostile_literal =
             "value\" . } INSERT DATA { GRAPH <urn:ngm:graph:ontology:assert> { <urn:e> <urn:p> \"x";
-        repo.append_derived_quads(vec![quad(
-            GRAPH_ONTOLOGY_SUMMARY,
-            S,
-            P,
-            hostile_literal,
-        )])
-        .await
-        .expect("a literal is escaped, not refused");
+        repo.append_derived_quads(vec![quad(GRAPH_ONTOLOGY_SUMMARY, S, P, hostile_literal)])
+            .await
+            .expect("a literal is escaped, not refused");
 
         assert_eq!(graph_len(&repo, GRAPH_ONTOLOGY_SUMMARY), 1);
         assert_eq!(

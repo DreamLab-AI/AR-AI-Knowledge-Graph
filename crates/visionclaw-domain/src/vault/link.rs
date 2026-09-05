@@ -309,7 +309,11 @@ mod tests {
         // Linking page is at the vault root and shares no folder with either
         // candidate's folder... except the root-level `Security`, which wins.
         let resolved = vault().resolve("[[Security]]", "Agentic AI");
-        assert_eq!(resolved.target(), "Security", "same folder (root) preferred");
+        assert_eq!(
+            resolved.target(),
+            "Security",
+            "same folder (root) preferred"
+        );
 
         // From a third folder, neither matches, so sorted order decides —
         // deterministically, so the same sync twice gives the same graph.

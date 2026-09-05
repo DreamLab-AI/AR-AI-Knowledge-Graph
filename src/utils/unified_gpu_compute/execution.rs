@@ -1219,7 +1219,10 @@ mod peripheral_shell_tests {
             }
         }
 
-        assert!(r <= bounds, "escaped shell must return inside bounds, got {r}");
+        assert!(
+            r <= bounds,
+            "escaped shell must return inside bounds, got {r}"
+        );
     }
 
     /// The sign inversion at the heart of the fix, stated directly.

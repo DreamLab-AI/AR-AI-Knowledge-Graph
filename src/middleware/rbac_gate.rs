@@ -110,7 +110,11 @@ impl GateMode {
     /// already have exited.
     fn report_acknowledged() -> bool {
         let today = Utc::now().format("%Y-%m-%d").to_string();
-        report_mode_acknowledged(&EnvSnapshot::from_process(), BuildIdentity::current(), &today)
+        report_mode_acknowledged(
+            &EnvSnapshot::from_process(),
+            BuildIdentity::current(),
+            &today,
+        )
     }
 }
 

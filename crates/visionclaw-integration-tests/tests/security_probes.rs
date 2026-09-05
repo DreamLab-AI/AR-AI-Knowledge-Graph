@@ -35,15 +35,24 @@ async fn sql_injection_is_rejected() {
 async fn xss_payloads_are_not_reflected() {
     let h = require_server!();
     for payload in payloads::XSS {
-        let Some(response) = h.post_json("/api/content", &json!({ "data": payload })).await else {
+        let Some(response) = h
+            .post_json("/api/content", &json!({ "data": payload }))
+            .await
+        else {
             continue;
         };
         if response.status() != reqwest::StatusCode::OK {
             continue;
         }
         let body = response.text().await.unwrap_or_default();
-        assert!(!body.contains("<script>"), "a 200 response reflected a script tag: {payload}");
-        assert!(!body.contains("javascript:"), "a 200 response reflected a js: URL: {payload}");
+        assert!(
+            !body.contains("<script>"),
+            "a 200 response reflected a script tag: {payload}"
+        );
+        assert!(
+            !body.contains("javascript:"),
+            "a 200 response reflected a js: URL: {payload}"
+        );
     }
 }
 
@@ -98,17 +107,30 @@ async fn rate_limiting_is_enforced() {
         }
     }
 
-    assert!(limited, "no 429 after {sent} requests — rate limiting is not enforced");
+    assert!(
+        limited,
+        "no 429 after {sent} requests — rate limiting is not enforced"
+    );
     assert!(sent < 50, "the limiter allowed all 50 requests through");
 }
 
 #[tokio::test]
 async fn protected_endpoints_demand_authentication() {
     let h = require_server!();
-    for path in ["/api/admin", "/api/user/profile", "/api/settings", "/api/secure-data"] {
-        let Some(response) = h.get(path).await else { continue };
+    for path in [
+        "/api/admin",
+        "/api/user/profile",
+        "/api/settings",
+        "/api/secure-data",
+    ] {
+        let Some(response) = h.get(path).await else {
+            continue;
+        };
         let status = response.status().as_u16();
-        assert!(matches!(status, 401 | 403), "{path} answered {status}, so it is unprotected");
+        assert!(
+            matches!(status, 401 | 403),
+            "{path} answered {status}, so it is unprotected"
+        );
     }
 }
 
@@ -133,7 +155,9 @@ async fn authentication_cannot_be_bypassed() {
         if let Some(value) = attempt {
             request = request.header("Authorization", value);
         }
-        let Some(response) = request.send().await.ok() else { continue };
+        let Some(response) = request.send().await.ok() else {
+            continue;
+        };
         let status = response.status().as_u16();
         assert!(
             matches!(status, 401 | 403),
@@ -157,9 +181,14 @@ async fn malformed_input_is_rejected() {
     ];
 
     for payload in &invalid {
-        let Some(response) = h.post_json("/api/validate", payload).await else { continue };
+        let Some(response) = h.post_json("/api/validate", payload).await else {
+            continue;
+        };
         let status = response.status().as_u16();
-        assert!(matches!(status, 400 | 422), "invalid input accepted with {status}: {payload}");
+        assert!(
+            matches!(status, 400 | 422),
+            "invalid input accepted with {status}: {payload}"
+        );
     }
 }
 
@@ -175,7 +204,10 @@ async fn security_headers_hold_their_documented_values() {
     // Present-and-wrong is a failure; absent is a warning, exactly as the
     // Python suite treated it — these are hardening headers, not a contract.
     if let Some(value) = headers.get("X-Content-Type-Options") {
-        assert_eq!(value, "nosniff", "X-Content-Type-Options has a non-standard value");
+        assert_eq!(
+            value, "nosniff",
+            "X-Content-Type-Options has a non-standard value"
+        );
     }
     if let Some(value) = headers.get("X-Frame-Options") {
         let value = value.to_str().unwrap_or_default();
@@ -185,10 +217,17 @@ async fn security_headers_hold_their_documented_values() {
         );
     }
     if let Some(value) = headers.get("X-XSS-Protection") {
-        assert_eq!(value, "1; mode=block", "X-XSS-Protection has a non-standard value");
+        assert_eq!(
+            value, "1; mode=block",
+            "X-XSS-Protection has a non-standard value"
+        );
     }
 
-    for header in ["X-Content-Type-Options", "X-Frame-Options", "Content-Security-Policy"] {
+    for header in [
+        "X-Content-Type-Options",
+        "X-Frame-Options",
+        "Content-Security-Policy",
+    ] {
         if !headers.contains_key(header) {
             eprintln!("WARN: security header absent: {header}");
         }
@@ -204,7 +243,10 @@ async fn oversized_payloads_are_refused() {
         return; // the connection was cut — that is a refusal
     };
     let status = response.status().as_u16();
-    assert!(matches!(status, 400 | 413), "a 10 MiB body was accepted with {status}");
+    assert!(
+        matches!(status, 400 | 413),
+        "a 10 MiB body was accepted with {status}"
+    );
 }
 
 #[tokio::test]
@@ -229,23 +271,36 @@ async fn connection_flooding_is_throttled() {
         }
     }
 
-    assert!(blocked > 0, "100 concurrent requests all succeeded — no flood protection");
+    assert!(
+        blocked > 0,
+        "100 concurrent requests all succeeded — no flood protection"
+    );
 }
 
 #[tokio::test]
 async fn debug_endpoints_do_not_leak_secrets() {
     let h = require_server!();
 
-    for path in
-        ["/api/config", "/api/environment", "/api/debug", "/api/status", "/.env", "/config.json"]
-    {
-        let Some(response) = h.get(path).await else { continue };
+    for path in [
+        "/api/config",
+        "/api/environment",
+        "/api/debug",
+        "/api/status",
+        "/.env",
+        "/config.json",
+    ] {
+        let Some(response) = h.get(path).await else {
+            continue;
+        };
         if response.status() != reqwest::StatusCode::OK {
             continue;
         }
         let body = response.text().await.unwrap_or_default().to_lowercase();
         for marker in payloads::SECRET_MARKERS {
-            assert!(!body.contains(marker), "{path} returned 200 exposing `{marker}`");
+            assert!(
+                !body.contains(marker),
+                "{path} returned 200 exposing `{marker}`"
+            );
         }
     }
 }

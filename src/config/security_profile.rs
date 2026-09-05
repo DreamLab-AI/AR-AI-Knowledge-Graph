@@ -806,10 +806,10 @@ mod tests {
     fn dev_auth_loopback_is_covered() {
         assert!(FORBIDDEN_DEV_VARS.contains(&"DEV_AUTH_LOOPBACK"));
         let env = with(&clean_env(), "DEV_AUTH_LOOPBACK", "0");
-        assert!(findings(&env, PRODUCTION)
-            .iter()
-            .any(|f| matches!(f, ProfileFinding::ForbiddenDevVariable { name, .. }
-                if name == "DEV_AUTH_LOOPBACK")));
+        assert!(findings(&env, PRODUCTION).iter().any(
+            |f| matches!(f, ProfileFinding::ForbiddenDevVariable { name, .. }
+                if name == "DEV_AUTH_LOOPBACK")
+        ));
     }
 
     // ---- report mode construction, rollover, restart -------------------------
@@ -955,7 +955,11 @@ mod tests {
 
     #[test]
     fn development_container_fingerprint_is_rejected() {
-        let env = with(&with(&clean_env(), "NODE_ENV", "development"), "DOCKER_ENV", "1");
+        let env = with(
+            &with(&clean_env(), "NODE_ENV", "development"),
+            "DOCKER_ENV",
+            "1",
+        );
         assert!(findings(&env, PRODUCTION)
             .iter()
             .any(|f| matches!(f, ProfileFinding::DevelopmentNodeEnvInContainer)));
@@ -965,7 +969,11 @@ mod tests {
         assert!(findings(&only_docker, PRODUCTION).is_empty());
         let only_node = with(&clean_env(), "NODE_ENV", "development");
         assert!(findings(&only_node, PRODUCTION).is_empty());
-        let node_prod = with(&with(&clean_env(), "NODE_ENV", "production"), "DOCKER_ENV", "1");
+        let node_prod = with(
+            &with(&clean_env(), "NODE_ENV", "production"),
+            "DOCKER_ENV",
+            "1",
+        );
         assert!(findings(&node_prod, PRODUCTION).is_empty());
     }
 
@@ -1166,7 +1174,10 @@ mod tests {
                     FlagExpectation::Exactly(val) => Some((k.to_string(), val.to_string())),
                 })
                 .collect();
-            pairs.push((SECURITY_PROFILE_ENV.to_string(), profile.as_str().to_string()));
+            pairs.push((
+                SECURITY_PROFILE_ENV.to_string(),
+                profile.as_str().to_string(),
+            ));
             let env = EnvSnapshot::from_pairs(pairs);
             assert!(
                 !has_full_disclosure(&env),
@@ -1194,9 +1205,11 @@ mod tests {
     fn absent_flags_do_not_trip_the_rule() {
         // Both absent = auth-required reads and filter-on: the fail-closed
         // default pair, which must be silent.
-        assert!(!has_full_disclosure(&EnvSnapshot::from_pairs(
-            Vec::<(String, String)>::new()
-        )));
+        assert!(!has_full_disclosure(&EnvSnapshot::from_pairs(Vec::<(
+            String,
+            String
+        )>::new(
+        ))));
     }
 
     #[test]
@@ -1222,7 +1235,10 @@ mod tests {
         )));
         for off in ["0", "false", "off", "no", "OFF", " no "] {
             let env = EnvSnapshot::from_pairs([("PUBKEY_VISIBILITY_FILTER", off)]);
-            assert!(!visibility_filter_enabled_in(&env), "{off:?} should disable");
+            assert!(
+                !visibility_filter_enabled_in(&env),
+                "{off:?} should disable"
+            );
         }
         for on in ["1", "true", "banana", ""] {
             let env = EnvSnapshot::from_pairs([("PUBKEY_VISIBILITY_FILTER", on)]);
@@ -1239,6 +1255,9 @@ mod tests {
         let profile = evaluate_effective_profile(&env, PRODUCTION, TODAY);
         assert!(!profile.may_bind_listener());
         let profile_dev = evaluate_effective_profile(&env, DEBUG, TODAY);
-        assert!(profile_dev.may_bind_listener(), "a dev build reports and continues");
+        assert!(
+            profile_dev.may_bind_listener(),
+            "a dev build reports and continues"
+        );
     }
 }

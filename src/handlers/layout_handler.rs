@@ -19,8 +19,13 @@ use actix_web::{web, HttpResponse, Result};
 // applied unconditionally whenever it is > 0, regardless of the selected
 // layout mode. Selecting `Clustered` is therefore currently indistinguishable
 // from `ForceDirected` — it is not advertised until that gap is wired up.
-const LIVE_LAYOUT_MODES: [&str; 5] =
-    ["forceDirected", "hierarchical", "radial", "spectral", "temporal"];
+const LIVE_LAYOUT_MODES: [&str; 5] = [
+    "forceDirected",
+    "hierarchical",
+    "radial",
+    "spectral",
+    "temporal",
+];
 
 pub async fn get_layout_modes(_data: web::Data<AppState>) -> Result<HttpResponse> {
     ok_json!(serde_json::json!({

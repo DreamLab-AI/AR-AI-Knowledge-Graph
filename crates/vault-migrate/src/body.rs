@@ -21,7 +21,10 @@ macro_rules! re {
 
 re!(fence_re, r"^(\s*)(```+|~~~+)(.*)$");
 re!(embed_page_re, r"\{\{embed\s+\[\[([^\]]+)\]\]\s*\}\}");
-re!(task_re, r"^(\s*[-*+]\s+)(TODO|DOING|NOW|LATER|DONE)\s+(.*)$");
+re!(
+    task_re,
+    r"^(\s*[-*+]\s+)(TODO|DOING|NOW|LATER|DONE)\s+(.*)$"
+);
 re!(multiword_tag_re, r"#\[\[([^\]\n]+)\]\]");
 re!(asset_re, r"\]\((?:\.\./)+assets/");
 re!(
@@ -179,9 +182,7 @@ pub fn rewrite(body: &[&str]) -> BodyOutcome {
         let n = embed_page_re().find_iter(&line).count();
         if n > 0 {
             out.counts.embeds += n;
-            line = embed_page_re()
-                .replace_all(&line, "![[$1]]")
-                .into_owned();
+            line = embed_page_re().replace_all(&line, "![[$1]]").into_owned();
         }
 
         if let Some(c) = task_re().captures(&line) {
@@ -257,7 +258,10 @@ mod tests {
     #[test]
     fn block_embed_is_left_literal_and_reported() {
         let o = run("- {{embed ((661d5f74-f334-4872-ba92-51244c2fb490))}}");
-        assert_eq!(o.lines[0], "- {{embed ((661d5f74-f334-4872-ba92-51244c2fb490))}}");
+        assert_eq!(
+            o.lines[0],
+            "- {{embed ((661d5f74-f334-4872-ba92-51244c2fb490))}}"
+        );
         assert_eq!(o.counts.embeds, 0);
         assert_eq!(o.leftovers.block_refs, 1);
     }
@@ -274,19 +278,28 @@ mod tests {
     #[test]
     fn task_markers_keep_indentation() {
         assert_eq!(text("\t\t- TODO nested"), "\t\t- [ ] nested");
-        assert_eq!(text("    - DONE nested"), "    - [ ] nested".replace("[ ]", "[x]"));
+        assert_eq!(
+            text("    - DONE nested"),
+            "    - [ ] nested".replace("[ ]", "[x]")
+        );
     }
 
     #[test]
     fn task_marker_mid_sentence_is_not_a_task() {
-        assert_eq!(text("We should TODO this later"), "We should TODO this later");
+        assert_eq!(
+            text("We should TODO this later"),
+            "We should TODO this later"
+        );
         assert_eq!(text("- a TODO in prose"), "- a TODO in prose");
     }
 
     #[test]
     fn multiword_tag_collapses_whitespace_and_keeps_case() {
         assert_eq!(text("#[[Virtual Reality]]"), "#Virtual-Reality");
-        assert_eq!(text("#[[Active Research Projects Registry]]"), "#Active-Research-Projects-Registry");
+        assert_eq!(
+            text("#[[Active Research Projects Registry]]"),
+            "#Active-Research-Projects-Registry"
+        );
     }
 
     #[test]
@@ -300,15 +313,15 @@ mod tests {
             text("![image.png](../assets/image_1717159684964_0.png)"),
             "![image.png](assets/image_1717159684964_0.png)"
         );
-        assert_eq!(
-            text("[zip](../../assets/a.zip)"),
-            "[zip](assets/a.zip)"
-        );
+        assert_eq!(text("[zip](../../assets/a.zip)"), "[zip](assets/a.zip)");
     }
 
     #[test]
     fn plain_wikilink_is_untouched() {
-        assert_eq!(text("see [[Ns/Title]] and [[Other|alias]]"), "see [[Ns/Title]] and [[Other|alias]]");
+        assert_eq!(
+            text("see [[Ns/Title]] and [[Other|alias]]"),
+            "see [[Ns/Title]] and [[Other|alias]]"
+        );
     }
 
     #[test]

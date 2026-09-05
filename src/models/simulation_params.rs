@@ -325,59 +325,271 @@ pub const SIMPARAMS_ABI_VERSION: u32 = 1;
 /// fails [`verify_simparams_abi`] with a precise [`AbiDrift`] rather than passing
 /// a size check. Keep it ordered exactly as the struct is declared.
 pub const SIMPARAMS_MANIFEST: [SimParamsField; 53] = [
-    SimParamsField { name: "dt", ty: FieldType::F32, offset: 0 },
-    SimParamsField { name: "damping", ty: FieldType::F32, offset: 4 },
-    SimParamsField { name: "warmup_iterations", ty: FieldType::U32, offset: 8 },
-    SimParamsField { name: "cooling_rate", ty: FieldType::F32, offset: 12 },
-    SimParamsField { name: "spring_k", ty: FieldType::F32, offset: 16 },
-    SimParamsField { name: "rest_length", ty: FieldType::F32, offset: 20 },
-    SimParamsField { name: "repel_k", ty: FieldType::F32, offset: 24 },
-    SimParamsField { name: "repulsion_cutoff", ty: FieldType::F32, offset: 28 },
-    SimParamsField { name: "repulsion_softening_epsilon", ty: FieldType::F32, offset: 32 },
-    SimParamsField { name: "center_gravity_k", ty: FieldType::F32, offset: 36 },
-    SimParamsField { name: "max_force", ty: FieldType::F32, offset: 40 },
-    SimParamsField { name: "max_velocity", ty: FieldType::F32, offset: 44 },
-    SimParamsField { name: "grid_cell_size", ty: FieldType::F32, offset: 48 },
-    SimParamsField { name: "feature_flags", ty: FieldType::U32, offset: 52 },
-    SimParamsField { name: "seed", ty: FieldType::U32, offset: 56 },
-    SimParamsField { name: "iteration", ty: FieldType::I32, offset: 60 },
-    SimParamsField { name: "separation_radius", ty: FieldType::F32, offset: 64 },
-    SimParamsField { name: "cluster_strength", ty: FieldType::F32, offset: 68 },
-    SimParamsField { name: "alignment_strength", ty: FieldType::F32, offset: 72 },
-    SimParamsField { name: "temperature", ty: FieldType::F32, offset: 76 },
-    SimParamsField { name: "viewport_bounds", ty: FieldType::F32, offset: 80 },
-    SimParamsField { name: "sssp_alpha", ty: FieldType::F32, offset: 84 },
-    SimParamsField { name: "boundary_damping", ty: FieldType::F32, offset: 88 },
-    SimParamsField { name: "constraint_ramp_frames", ty: FieldType::U32, offset: 92 },
-    SimParamsField { name: "constraint_max_force_per_node", ty: FieldType::F32, offset: 96 },
-    SimParamsField { name: "stability_threshold", ty: FieldType::F32, offset: 100 },
-    SimParamsField { name: "min_velocity_threshold", ty: FieldType::F32, offset: 104 },
-    SimParamsField { name: "world_bounds_min", ty: FieldType::F32, offset: 108 },
-    SimParamsField { name: "world_bounds_max", ty: FieldType::F32, offset: 112 },
-    SimParamsField { name: "cell_size_lod", ty: FieldType::F32, offset: 116 },
-    SimParamsField { name: "k_neighbors_max", ty: FieldType::U32, offset: 120 },
-    SimParamsField { name: "anomaly_detection_radius", ty: FieldType::F32, offset: 124 },
-    SimParamsField { name: "learning_rate_default", ty: FieldType::F32, offset: 128 },
-    SimParamsField { name: "norm_delta_cap", ty: FieldType::F32, offset: 132 },
-    SimParamsField { name: "position_constraint_attraction", ty: FieldType::F32, offset: 136 },
-    SimParamsField { name: "lof_score_min", ty: FieldType::F32, offset: 140 },
-    SimParamsField { name: "lof_score_max", ty: FieldType::F32, offset: 144 },
-    SimParamsField { name: "weight_precision_multiplier", ty: FieldType::F32, offset: 148 },
-    SimParamsField { name: "gravity", ty: FieldType::F32, offset: 152 },
-    SimParamsField { name: "lin_log_mode", ty: FieldType::U32, offset: 156 },
-    SimParamsField { name: "scaling_ratio", ty: FieldType::F32, offset: 160 },
-    SimParamsField { name: "adaptive_speed", ty: FieldType::U32, offset: 164 },
-    SimParamsField { name: "global_speed", ty: FieldType::F32, offset: 168 },
-    SimParamsField { name: "dag_bias_k", ty: FieldType::F32, offset: 172 },
-    SimParamsField { name: "dag_level_distance", ty: FieldType::F32, offset: 176 },
-    SimParamsField { name: "layout_mode", ty: FieldType::U32, offset: 180 },
-    SimParamsField { name: "plane_bias_k", ty: FieldType::F32, offset: 184 },
-    SimParamsField { name: "plane_spacing", ty: FieldType::F32, offset: 188 },
-    SimParamsField { name: "radial_center_x", ty: FieldType::F32, offset: 192 },
-    SimParamsField { name: "radial_center_y", ty: FieldType::F32, offset: 196 },
-    SimParamsField { name: "radial_center_z", ty: FieldType::F32, offset: 200 },
-    SimParamsField { name: "layer_bias_k", ty: FieldType::F32, offset: 204 },
-    SimParamsField { name: "layer_spacing", ty: FieldType::F32, offset: 208 },
+    SimParamsField {
+        name: "dt",
+        ty: FieldType::F32,
+        offset: 0,
+    },
+    SimParamsField {
+        name: "damping",
+        ty: FieldType::F32,
+        offset: 4,
+    },
+    SimParamsField {
+        name: "warmup_iterations",
+        ty: FieldType::U32,
+        offset: 8,
+    },
+    SimParamsField {
+        name: "cooling_rate",
+        ty: FieldType::F32,
+        offset: 12,
+    },
+    SimParamsField {
+        name: "spring_k",
+        ty: FieldType::F32,
+        offset: 16,
+    },
+    SimParamsField {
+        name: "rest_length",
+        ty: FieldType::F32,
+        offset: 20,
+    },
+    SimParamsField {
+        name: "repel_k",
+        ty: FieldType::F32,
+        offset: 24,
+    },
+    SimParamsField {
+        name: "repulsion_cutoff",
+        ty: FieldType::F32,
+        offset: 28,
+    },
+    SimParamsField {
+        name: "repulsion_softening_epsilon",
+        ty: FieldType::F32,
+        offset: 32,
+    },
+    SimParamsField {
+        name: "center_gravity_k",
+        ty: FieldType::F32,
+        offset: 36,
+    },
+    SimParamsField {
+        name: "max_force",
+        ty: FieldType::F32,
+        offset: 40,
+    },
+    SimParamsField {
+        name: "max_velocity",
+        ty: FieldType::F32,
+        offset: 44,
+    },
+    SimParamsField {
+        name: "grid_cell_size",
+        ty: FieldType::F32,
+        offset: 48,
+    },
+    SimParamsField {
+        name: "feature_flags",
+        ty: FieldType::U32,
+        offset: 52,
+    },
+    SimParamsField {
+        name: "seed",
+        ty: FieldType::U32,
+        offset: 56,
+    },
+    SimParamsField {
+        name: "iteration",
+        ty: FieldType::I32,
+        offset: 60,
+    },
+    SimParamsField {
+        name: "separation_radius",
+        ty: FieldType::F32,
+        offset: 64,
+    },
+    SimParamsField {
+        name: "cluster_strength",
+        ty: FieldType::F32,
+        offset: 68,
+    },
+    SimParamsField {
+        name: "alignment_strength",
+        ty: FieldType::F32,
+        offset: 72,
+    },
+    SimParamsField {
+        name: "temperature",
+        ty: FieldType::F32,
+        offset: 76,
+    },
+    SimParamsField {
+        name: "viewport_bounds",
+        ty: FieldType::F32,
+        offset: 80,
+    },
+    SimParamsField {
+        name: "sssp_alpha",
+        ty: FieldType::F32,
+        offset: 84,
+    },
+    SimParamsField {
+        name: "boundary_damping",
+        ty: FieldType::F32,
+        offset: 88,
+    },
+    SimParamsField {
+        name: "constraint_ramp_frames",
+        ty: FieldType::U32,
+        offset: 92,
+    },
+    SimParamsField {
+        name: "constraint_max_force_per_node",
+        ty: FieldType::F32,
+        offset: 96,
+    },
+    SimParamsField {
+        name: "stability_threshold",
+        ty: FieldType::F32,
+        offset: 100,
+    },
+    SimParamsField {
+        name: "min_velocity_threshold",
+        ty: FieldType::F32,
+        offset: 104,
+    },
+    SimParamsField {
+        name: "world_bounds_min",
+        ty: FieldType::F32,
+        offset: 108,
+    },
+    SimParamsField {
+        name: "world_bounds_max",
+        ty: FieldType::F32,
+        offset: 112,
+    },
+    SimParamsField {
+        name: "cell_size_lod",
+        ty: FieldType::F32,
+        offset: 116,
+    },
+    SimParamsField {
+        name: "k_neighbors_max",
+        ty: FieldType::U32,
+        offset: 120,
+    },
+    SimParamsField {
+        name: "anomaly_detection_radius",
+        ty: FieldType::F32,
+        offset: 124,
+    },
+    SimParamsField {
+        name: "learning_rate_default",
+        ty: FieldType::F32,
+        offset: 128,
+    },
+    SimParamsField {
+        name: "norm_delta_cap",
+        ty: FieldType::F32,
+        offset: 132,
+    },
+    SimParamsField {
+        name: "position_constraint_attraction",
+        ty: FieldType::F32,
+        offset: 136,
+    },
+    SimParamsField {
+        name: "lof_score_min",
+        ty: FieldType::F32,
+        offset: 140,
+    },
+    SimParamsField {
+        name: "lof_score_max",
+        ty: FieldType::F32,
+        offset: 144,
+    },
+    SimParamsField {
+        name: "weight_precision_multiplier",
+        ty: FieldType::F32,
+        offset: 148,
+    },
+    SimParamsField {
+        name: "gravity",
+        ty: FieldType::F32,
+        offset: 152,
+    },
+    SimParamsField {
+        name: "lin_log_mode",
+        ty: FieldType::U32,
+        offset: 156,
+    },
+    SimParamsField {
+        name: "scaling_ratio",
+        ty: FieldType::F32,
+        offset: 160,
+    },
+    SimParamsField {
+        name: "adaptive_speed",
+        ty: FieldType::U32,
+        offset: 164,
+    },
+    SimParamsField {
+        name: "global_speed",
+        ty: FieldType::F32,
+        offset: 168,
+    },
+    SimParamsField {
+        name: "dag_bias_k",
+        ty: FieldType::F32,
+        offset: 172,
+    },
+    SimParamsField {
+        name: "dag_level_distance",
+        ty: FieldType::F32,
+        offset: 176,
+    },
+    SimParamsField {
+        name: "layout_mode",
+        ty: FieldType::U32,
+        offset: 180,
+    },
+    SimParamsField {
+        name: "plane_bias_k",
+        ty: FieldType::F32,
+        offset: 184,
+    },
+    SimParamsField {
+        name: "plane_spacing",
+        ty: FieldType::F32,
+        offset: 188,
+    },
+    SimParamsField {
+        name: "radial_center_x",
+        ty: FieldType::F32,
+        offset: 192,
+    },
+    SimParamsField {
+        name: "radial_center_y",
+        ty: FieldType::F32,
+        offset: 196,
+    },
+    SimParamsField {
+        name: "radial_center_z",
+        ty: FieldType::F32,
+        offset: 200,
+    },
+    SimParamsField {
+        name: "layer_bias_k",
+        ty: FieldType::F32,
+        offset: 204,
+    },
+    SimParamsField {
+        name: "layer_spacing",
+        ty: FieldType::F32,
+        offset: 208,
+    },
 ];
 
 /// Feature-flag bit manifest (ADR-2028). The `feature_flags` word is as much a
@@ -387,10 +599,19 @@ pub const SIMPARAMS_FEATURE_BITS: [(&str, u32); 7] = [
     ("ENABLE_REPULSION", FeatureFlags::ENABLE_REPULSION),
     ("ENABLE_SPRINGS", FeatureFlags::ENABLE_SPRINGS),
     ("ENABLE_CENTERING", FeatureFlags::ENABLE_CENTERING),
-    ("ENABLE_TEMPORAL_COHERENCE", FeatureFlags::ENABLE_TEMPORAL_COHERENCE),
+    (
+        "ENABLE_TEMPORAL_COHERENCE",
+        FeatureFlags::ENABLE_TEMPORAL_COHERENCE,
+    ),
     ("ENABLE_CONSTRAINTS", FeatureFlags::ENABLE_CONSTRAINTS),
-    ("ENABLE_STRESS_MAJORIZATION", FeatureFlags::ENABLE_STRESS_MAJORIZATION),
-    ("ENABLE_SSSP_SPRING_ADJUST", FeatureFlags::ENABLE_SSSP_SPRING_ADJUST),
+    (
+        "ENABLE_STRESS_MAJORIZATION",
+        FeatureFlags::ENABLE_STRESS_MAJORIZATION,
+    ),
+    (
+        "ENABLE_SSSP_SPRING_ADJUST",
+        FeatureFlags::ENABLE_SSSP_SPRING_ADJUST,
+    ),
 ];
 
 /// The layout the compiler actually produced for [`SimParams`], read with
@@ -545,7 +766,6 @@ pub fn simparams_abi_digest(fields: &[SimParamsField]) -> u64 {
     }
     h
 }
-
 
 impl From<&SimParams> for SimulationParams {
     fn from(params: &SimParams) -> Self {
@@ -830,10 +1050,10 @@ mod adr_2028_abi_manifest {
             "the size is unchanged; the manifest is what catches this"
         );
         assert!(
-            drifts.iter().any(
-                |d| matches!(d, AbiDrift::Name { expected, actual, .. }
-                    if *expected == "dt" && *actual == "damping")
-            ),
+            drifts
+                .iter()
+                .any(|d| matches!(d, AbiDrift::Name { expected, actual, .. }
+                    if *expected == "dt" && *actual == "damping")),
             "expected a name drift at dt's slot, got {drifts:#?}"
         );
     }
@@ -844,13 +1064,20 @@ mod adr_2028_abi_manifest {
         let mut drifted = SIMPARAMS_MANIFEST.to_vec();
         let i = drifted.iter().position(|f| f.name == "dt").unwrap();
         drifted[i].ty = FieldType::U32;
-        let drifts =
-            verify_simparams_abi(&SIMPARAMS_MANIFEST, &drifted, SIMPARAMS_SIZE, SIMPARAMS_SIZE);
-        assert!(drifts.iter().any(|d| matches!(
-            d,
-            AbiDrift::Type { name, expected: FieldType::F32, actual: FieldType::U32 }
-                if *name == "dt"
-        )), "expected a type drift on dt, got {drifts:#?}");
+        let drifts = verify_simparams_abi(
+            &SIMPARAMS_MANIFEST,
+            &drifted,
+            SIMPARAMS_SIZE,
+            SIMPARAMS_SIZE,
+        );
+        assert!(
+            drifts.iter().any(|d| matches!(
+                d,
+                AbiDrift::Type { name, expected: FieldType::F32, actual: FieldType::U32 }
+                    if *name == "dt"
+            )),
+            "expected a type drift on dt, got {drifts:#?}"
+        );
     }
 
     #[test]
@@ -915,8 +1142,14 @@ mod adr_2028_abi_manifest {
     fn the_manifest_covers_the_fields_the_force_derivation_reads() {
         // Cross-check against the fields ADR-2029's final device word writes, so
         // the two ADRs cannot drift apart silently.
-        for required in ["dt", "damping", "feature_flags", "repel_k", "spring_k", "center_gravity_k"]
-        {
+        for required in [
+            "dt",
+            "damping",
+            "feature_flags",
+            "repel_k",
+            "spring_k",
+            "center_gravity_k",
+        ] {
             assert!(
                 SIMPARAMS_MANIFEST.iter().any(|f| f.name == required),
                 "{required} missing from the manifest"

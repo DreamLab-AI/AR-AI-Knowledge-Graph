@@ -39,7 +39,6 @@ use visionclaw_domain::ports::ontology_repository::{
 };
 use visionclaw_domain::vault;
 
-
 /// Generate a vault page for a proposal: a §V2 YAML frontmatter block
 /// followed by the definition prose (ADR-2040 §V5).
 ///
@@ -50,11 +49,7 @@ use visionclaw_domain::vault;
 /// invisible to the §V4 gate as well. `owl-class` alone would admit the
 /// page; `public: true` is emitted because these pages are published
 /// ontology terms.
-fn generate_vault_markdown(
-    proposal: &NoteProposal,
-    term_id: &str,
-    user_id: &str,
-) -> String {
+fn generate_vault_markdown(proposal: &NoteProposal, term_id: &str, user_id: &str) -> String {
     let today = Utc::now().format("%Y-%m-%d").to_string();
 
     let mut extra: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
@@ -88,8 +83,7 @@ fn generate_vault_markdown(
         public: true,
         owl_class: (!proposal.owl_class.is_empty()).then(|| proposal.owl_class.clone()),
         source_domain: (!proposal.domain.is_empty()).then(|| proposal.domain.clone()),
-        title: (!proposal.preferred_term.is_empty())
-            .then(|| proposal.preferred_term.clone()),
+        title: (!proposal.preferred_term.is_empty()).then(|| proposal.preferred_term.clone()),
         extra,
         ..vault::PageMeta::default()
     };
@@ -97,7 +91,11 @@ fn generate_vault_markdown(
     let body = if proposal.definition.trim().is_empty() {
         format!("# {}\n", proposal.preferred_term)
     } else {
-        format!("# {}\n\n{}\n", proposal.preferred_term, proposal.definition.trim())
+        format!(
+            "# {}\n\n{}\n",
+            proposal.preferred_term,
+            proposal.definition.trim()
+        )
     };
 
     vault::render_page(&meta, &body)
@@ -114,7 +112,6 @@ fn wikilink_list(targets: &[String]) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
-
 
 /// Error-string sentinel prefix: a blocking conflict-integrity report. The
 /// handler maps this to HTTP 409 and returns the serialised [`ConflictReport`].
@@ -505,8 +502,7 @@ impl OntologyMutationService {
         let (mut meta, body) = vault::split(&existing_markdown);
 
         if let Some(ref new_def) = amendment.update_definition {
-            meta.extra
-                .insert("definition".to_string(), new_def.clone());
+            meta.extra.insert("definition".to_string(), new_def.clone());
         }
 
         for (rel_type, targets) in &amendment.add_relationships {
@@ -1171,7 +1167,6 @@ mod provenance_wiring_tests {
     }
 }
 
-
 #[cfg(test)]
 mod vault_writer_tests {
     use super::*;
@@ -1209,7 +1204,10 @@ mod vault_writer_tests {
         assert_eq!(meta.format, PageFormat::Obsidian);
         assert!(meta.is_kg_included());
         assert!(meta.public);
-        assert_eq!(meta.owl_class.as_deref(), Some("mv:ArbitrationDecisionEngine"));
+        assert_eq!(
+            meta.owl_class.as_deref(),
+            Some("mv:ArbitrationDecisionEngine")
+        );
         assert_eq!(meta.source_domain.as_deref(), Some("mv"));
         assert_eq!(meta.title.as_deref(), Some("Arbitration Decision Engine"));
     }
@@ -1219,8 +1217,14 @@ mod vault_writer_tests {
         let markdown = generate_vault_markdown(&proposal(), "MV-0042", "did:nostr:abc");
         let meta = vault::parse(&markdown);
 
-        assert_eq!(meta.extra.get("term-id").map(String::as_str), Some("MV-0042"));
-        assert_eq!(meta.extra.get("maturity").map(String::as_str), Some("draft"));
+        assert_eq!(
+            meta.extra.get("term-id").map(String::as_str),
+            Some("MV-0042")
+        );
+        assert_eq!(
+            meta.extra.get("maturity").map(String::as_str),
+            Some("draft")
+        );
         assert_eq!(
             meta.extra.get("contributed-by").map(String::as_str),
             Some("did:nostr:abc")

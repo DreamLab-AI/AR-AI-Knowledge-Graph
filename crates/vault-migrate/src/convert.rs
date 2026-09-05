@@ -93,7 +93,8 @@ fn convert_inner(text: &str, page_name: Option<&str>) -> PageResult {
             let h1 = rest[consumed..]
                 .iter()
                 .find_map(|l| l.strip_prefix("# ").map(|t| t.trim()));
-            let confirmed = matches!((fm.map.get("title"), h1), (Some(Value::Scalar(t)), Some(h)) if t == h);
+            let confirmed =
+                matches!((fm.map.get("title"), h1), (Some(Value::Scalar(t)), Some(h)) if t == h);
             if !confirmed {
                 fm.map.remove("title");
                 stats.title_echo_removed += 1;
@@ -108,7 +109,8 @@ fn convert_inner(text: &str, page_name: Option<&str>) -> PageResult {
                 .iter()
                 .find_map(|l| l.strip_prefix("# ").map(|t| t.trim()));
             if h1 == Some(name) {
-                fm.map.insert("title".into(), Value::Scalar(name.to_string()));
+                fm.map
+                    .insert("title".into(), Value::Scalar(name.to_string()));
             }
         }
     }
@@ -227,7 +229,10 @@ mod tests {
         let r = convert_page("public:: true\n\n# Child\n", "Ns/Child");
         assert!(!r.content.contains("\ntitle: "));
         // idempotent: a second run keeps it (H1 confirms) — no echo removal
-        let r2 = convert_page(&convert_page("public:: true\n\n# TCP/IP\n", "TCP/IP").content, "TCP/IP");
+        let r2 = convert_page(
+            &convert_page("public:: true\n\n# TCP/IP\n", "TCP/IP").content,
+            "TCP/IP",
+        );
         assert!(r2.content.contains("title: TCP/IP"));
         assert_eq!(r2.stats.title_echo_removed, 0);
     }
@@ -237,7 +242,10 @@ mod tests {
         let src = "# Trust Attitudes\n- public:: true\n\t- KPMG\n";
         let r = convert_page(src, "Trust Attitudes");
         assert!(r.content.starts_with("---\npublic: true\n---\n"));
-        assert!(r.content.contains("- public:: true"), "body line stays as inert content");
+        assert!(
+            r.content.contains("- public:: true"),
+            "body line stays as inert content"
+        );
         assert_eq!(r.stats.public_promoted_from_body, 1);
         assert!(r.stats.public_true);
         // idempotent: second run has the key and promotes nothing
@@ -314,7 +322,10 @@ mod tests {
                    ![i](../assets/i.png)\n[[Ns___L]]\n```\n- TODO fenced\n```\n";
         let once = convert_page(src, "Ns/Title");
         let twice = convert_page(&once.content, "Ns/Title");
-        assert_eq!(once.content, twice.content, "second pass must be byte-identical");
+        assert_eq!(
+            once.content, twice.content,
+            "second pass must be byte-identical"
+        );
         assert_eq!(twice.stats.counts.tasks, 0, "nothing left to rewrite");
         assert!(twice.content.contains("- TODO fenced"), "fence preserved");
     }

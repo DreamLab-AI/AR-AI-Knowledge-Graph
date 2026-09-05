@@ -1,11 +1,11 @@
 use super::api::GitHubClient;
 use super::types::GitHubFileBasicMetadata;
+use super::url_path::{contents_url, raw_download_url};
 use crate::errors::VisionClawResult;
 use crate::utils::time;
 use chrono::{DateTime, Utc};
 use log::{debug, error, info, warn};
 use serde_json::Value;
-use super::url_path::{contents_url, raw_download_url};
 use std::sync::Arc;
 
 #[derive(Clone)]

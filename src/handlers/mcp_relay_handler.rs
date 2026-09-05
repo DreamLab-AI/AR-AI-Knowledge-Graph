@@ -1,8 +1,8 @@
+use crate::app_state::AppState;
 use crate::utils::network::{
     CircuitBreaker, HealthCheckConfig, HealthCheckManager, ServiceEndpoint, TimeoutConfig,
 };
 use actix::{Actor, ActorContext, Addr, AsyncContext, Handler, Message, StreamHandler};
-use crate::app_state::AppState;
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use futures_util::{stream::SplitSink, SinkExt, StreamExt};

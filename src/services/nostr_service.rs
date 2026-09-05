@@ -750,7 +750,11 @@ mod session_expiry_tests {
     #[test]
     fn fresh_session_inside_the_window_is_accepted() {
         assert!(NostrService::session_is_fresh(NOW - 1, NOW, EXPIRY));
-        assert!(NostrService::session_is_fresh(NOW - EXPIRY + 1, NOW, EXPIRY));
+        assert!(NostrService::session_is_fresh(
+            NOW - EXPIRY + 1,
+            NOW,
+            EXPIRY
+        ));
     }
 
     #[test]
@@ -760,15 +764,27 @@ mod session_expiry_tests {
 
     #[test]
     fn session_past_the_window_is_rejected() {
-        assert!(!NostrService::session_is_fresh(NOW - EXPIRY - 1, NOW, EXPIRY));
-        assert!(!NostrService::session_is_fresh(NOW - 10 * EXPIRY, NOW, EXPIRY));
+        assert!(!NostrService::session_is_fresh(
+            NOW - EXPIRY - 1,
+            NOW,
+            EXPIRY
+        ));
+        assert!(!NostrService::session_is_fresh(
+            NOW - 10 * EXPIRY,
+            NOW,
+            EXPIRY
+        ));
     }
 
     #[test]
     fn future_last_seen_beyond_the_window_is_rejected_not_granted() {
         // A clock stepped backwards must not turn into an unbounded lease:
         // the age is compared on its absolute value.
-        assert!(!NostrService::session_is_fresh(NOW + EXPIRY + 1, NOW, EXPIRY));
+        assert!(!NostrService::session_is_fresh(
+            NOW + EXPIRY + 1,
+            NOW,
+            EXPIRY
+        ));
     }
 
     #[test]

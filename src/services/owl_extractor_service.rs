@@ -19,26 +19,21 @@
 // use in `parse_owl_blocks` and a `flat_map`/`sum` type error in
 // `count_axioms`), fixed below against the real, pinned API.
 
-
-
-use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 use log::{debug, info, warn};
 use regex::Regex;
 use std::sync::Arc;
+use visionclaw_domain::ports::ontology_repository::OntologyRepository;
 
 pub struct OwlExtractorService<R: OntologyRepository> {
     repo: Arc<R>,
 }
 
 impl<R: OntologyRepository> OwlExtractorService<R> {
-    
     pub fn new(repo: Arc<R>) -> Self {
         Self { repo }
     }
 
-    
     pub async fn extract_owl_from_class(&self, class_iri: &str) -> Result<ExtractedOwl, String> {
-        
         let class = self
             .repo
             .get_owl_class(class_iri)
@@ -54,7 +49,6 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
         self.parse_owl_blocks(markdown_content, class_iri)
     }
 
-    
     pub async fn extract_all_owl(&self) -> Result<Vec<ExtractedOwl>, String> {
         info!("Extracting OWL from all classes in database...");
 
@@ -94,9 +88,7 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
         Ok(extracted)
     }
 
-    
     fn parse_owl_blocks(&self, markdown: &str, class_iri: &str) -> Result<ExtractedOwl, String> {
-        
         let code_block_pattern = Regex::new(r"```(?:clojure|owl-functional)\s*\n([\s\S]*?)```")
             .map_err(|e| format!("Regex error: {}", e))?;
 
@@ -106,7 +98,6 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
             if let Some(block_match) = cap.get(1) {
                 let owl_text = block_match.as_str().trim();
 
-                
                 if owl_text.contains("Declaration")
                     || owl_text.contains("SubClassOf")
                     || owl_text.contains("ObjectSomeValuesFrom")
@@ -136,7 +127,6 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
         })
     }
 
-
     fn count_axioms(&self, blocks: &[String]) -> usize {
         let axiom_patterns = [
             "Declaration",
@@ -160,7 +150,6 @@ impl<R: OntologyRepository> OwlExtractorService<R> {
             .sum()
     }
 
-    
     // ADR-2064: `parse_with_horned_owl` and `build_complete_ontology` were removed.
     // They referenced `AnnotatedOntology` and `horned_functional::io::reader::read`
     // and could never compile: `horned-functional` 0.4.0 binds `horned-owl` 0.11.0
@@ -204,9 +193,8 @@ Some description
 More content
 "#;
 
-        
-        
-        let pattern = Regex::new(r"```(?:clojure|owl-functional)\s*\n([\s\S]*?)```").expect("Invalid regex pattern");
+        let pattern = Regex::new(r"```(?:clojure|owl-functional)\s*\n([\s\S]*?)```")
+            .expect("Invalid regex pattern");
         let captures: Vec<_> = pattern.captures_iter(markdown).collect();
 
         assert_eq!(captures.len(), 1);

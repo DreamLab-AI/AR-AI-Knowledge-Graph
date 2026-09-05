@@ -280,7 +280,10 @@ async fn main() -> std::io::Result<()> {
     if visionclaw_server::utils::auth::dev_full_bypass_active() {
         warn!("╔══════════════════════════════════════════════════════════════════╗");
         warn!("║  VISIONCLAW_DEV_MODE=1 — LAN-LOCAL AUTH BYPASS ACTIVE             ║");
-        warn!("║  Every request is granted dev-admin ({}).      ║", visionclaw_server::utils::auth::DEV_MODE_PUBKEY);
+        warn!(
+            "║  Every request is granted dev-admin ({}).      ║",
+            visionclaw_server::utils::auth::DEV_MODE_PUBKEY
+        );
         warn!("║  NO NIP-98 / token / peer check. Dev headset only — NEVER expose  ║");
         warn!("║  this port beyond the trusted LAN. Absent from release binaries.  ║");
         warn!("╚══════════════════════════════════════════════════════════════════╝");

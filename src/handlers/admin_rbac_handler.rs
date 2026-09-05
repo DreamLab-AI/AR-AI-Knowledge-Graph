@@ -257,10 +257,7 @@ fn role_error_response(op: &str, target: &str, e: RoleStoreError) -> HttpRespons
         // is a stale-request conflict, not a permanent denial — the client
         // re-authenticates and retries, and the retry gets a plain 403 if the
         // demotion stands.
-        E::CallerAuthorityChanged {
-            admission,
-            current,
-        } => {
+        E::CallerAuthorityChanged { admission, current } => {
             warn!(
                 "RBAC {op} {target} refused: caller authority changed mid-request \
 (admitted as {admission}, now {current})"

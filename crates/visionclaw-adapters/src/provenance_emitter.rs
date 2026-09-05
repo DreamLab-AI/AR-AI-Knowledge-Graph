@@ -140,11 +140,7 @@ pub fn build_activity_quads(record: &ActivityRecord) -> Result<Vec<Quad>, Proven
     let graph: GraphName = make_named_node(GRAPH_PROVENANCE)?.into();
     let subject = make_named_node(&record.activity_urn)?;
     let agent = make_named_node(&record.agent_did)?;
-    let used_node = record
-        .used
-        .as_deref()
-        .map(make_named_node)
-        .transpose()?;
+    let used_node = record.used.as_deref().map(make_named_node).transpose()?;
     let generated_node = record
         .generated
         .as_deref()
@@ -185,12 +181,7 @@ pub fn build_activity_quads(record: &ActivityRecord) -> Result<Vec<Quad>, Proven
 
     // <agent> a prov:Agent — completes the Entity/Activity/Agent triad so
     // agent-scoped SPARQL (`?a a prov:Agent`) works.
-    quads.push(Quad::new(
-        agent.clone(),
-        p_type,
-        prov_agent,
-        graph.clone(),
-    ));
+    quads.push(Quad::new(agent.clone(), p_type, prov_agent, graph.clone()));
 
     // <activity> prov:startedAtTime "<ts>"^^xsd:dateTime
     quads.push(Quad::new(

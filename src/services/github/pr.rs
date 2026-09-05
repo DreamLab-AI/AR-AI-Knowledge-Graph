@@ -141,12 +141,8 @@ impl PullRequestAPI {
     ) -> VisionClawResult<String> {
         // Percent-encoded per segment: a page path may contain a literal `%`
         // (see `url_path`). The branch travels in the request body, not a ref.
-        let url = super::url_path::contents_url(
-            self.client.owner(),
-            self.client.repo(),
-            file_path,
-            None,
-        );
+        let url =
+            super::url_path::contents_url(self.client.owner(), self.client.repo(), file_path, None);
 
         let encoded_content = BASE64.encode(content);
 

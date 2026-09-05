@@ -635,7 +635,10 @@ impl FileService {
     /// an explicit directory. Separated so the inclusion gate can be exercised
     /// against a fixture corpus without a configured markdown directory.
     pub fn scan_local_files_to_metadata_in(markdown_dir: &Path) -> Result<MetadataStore, String> {
-        info!("Scanning local markdown files from {}", markdown_dir.display());
+        info!(
+            "Scanning local markdown files from {}",
+            markdown_dir.display()
+        );
 
         if !markdown_dir.exists() {
             return Err(format!(

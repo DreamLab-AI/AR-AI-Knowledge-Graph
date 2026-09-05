@@ -598,7 +598,10 @@ mod tests {
         let meta = vault::parse(&markdown);
 
         assert!(meta.public, "still ingests");
-        assert_eq!(meta.title, None, "the `Decision` placeholder is not a title");
+        assert_eq!(
+            meta.title, None,
+            "the `Decision` placeholder is not a title"
+        );
         assert!(markdown.contains("# Decision"));
     }
 

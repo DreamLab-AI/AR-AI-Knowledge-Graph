@@ -217,7 +217,9 @@ impl ResourceSupervisor {
                 graph_service_addr: graph_service_addr.clone(),
                 correlation_id: None,
             }) {
-                Ok(()) => info!("ResourceSupervisor: Context delivered to GraphAnalyticsSupervisor"),
+                Ok(()) => {
+                    info!("ResourceSupervisor: Context delivered to GraphAnalyticsSupervisor")
+                }
                 Err(e) => {
                     error!(
                         "ResourceSupervisor: FAILED to deliver GPU context to GraphAnalyticsSupervisor: {} \

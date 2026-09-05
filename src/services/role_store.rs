@@ -560,7 +560,9 @@ impl RoleStore {
 
         let previous_role = match outcome {
             TxRemoval::Removed { previous_role } => previous_role,
-            TxRemoval::Other(other) => return Err(other.into_result(UserRole::Viewer).unwrap_err()),
+            TxRemoval::Other(other) => {
+                return Err(other.into_result(UserRole::Viewer).unwrap_err())
+            }
         };
 
         let effective_after = if target_is_power_user {
@@ -838,7 +840,10 @@ mod tests {
     /// power-user flag) — an admission role conjured from nothing is exactly
     /// the stale authority the store now refuses.
     async fn caller_with_role(store: &RoleStore, pubkey: &str, role: UserRole) -> CallerAuthority {
-        store.set(pubkey, role, None).await.expect("seed caller row");
+        store
+            .set(pubkey, role, None)
+            .await
+            .expect("seed caller row");
         CallerAuthority::new(pubkey, false, role)
     }
 

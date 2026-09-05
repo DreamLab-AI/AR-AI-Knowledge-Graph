@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use vault_migrate::{run, CollisionPolicy, Options};
 
 fn fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
 }
 
 fn base(graph: PathBuf, out: Option<PathBuf>) -> Options {
@@ -37,7 +39,12 @@ fn tree(root: &Path) -> BTreeMap<String, Vec<u8>> {
         if !e.file_type().is_file() {
             continue;
         }
-        let rel = e.path().strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
+        let rel = e
+            .path()
+            .strip_prefix(root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         m.insert(rel, std::fs::read(e.path()).unwrap());
     }
     m
@@ -47,7 +54,13 @@ fn assert_trees_equal(a: &Path, b: &Path) {
     let (ta, tb) = (tree(a), tree(b));
     let ka: Vec<&String> = ta.keys().collect();
     let kb: Vec<&String> = tb.keys().collect();
-    assert_eq!(ka, kb, "file sets differ\n  {}\n  {}", a.display(), b.display());
+    assert_eq!(
+        ka,
+        kb,
+        "file sets differ\n  {}\n  {}",
+        a.display(),
+        b.display()
+    );
     for (k, va) in &ta {
         let vb = &tb[k];
         if va != vb {
@@ -87,13 +100,25 @@ fn report_counts_match_the_fixture_rules() {
     assert_eq!(r.aliases, 2);
     assert_eq!(r.namespace_moved, 2, "Ns___Child and TCP%2FIP");
     assert_eq!(r.journals_renamed, 1);
-    assert_eq!(r.embeds, 1, "only the page embed; the block embed is a leftover");
-    assert_eq!(r.tasks, 6, "5 in Tasks.md + 1 in the journal; none in the fence");
+    assert_eq!(
+        r.embeds, 1,
+        "only the page embed; the block embed is a leftover"
+    );
+    assert_eq!(
+        r.tasks, 6,
+        "5 in Tasks.md + 1 in the journal; none in the fence"
+    );
     assert_eq!(r.multiword_tags, 2, "the fenced #[[not a tag]] is excluded");
-    assert_eq!(r.asset_paths, 3, "2 in the body + 1 in a property value; the fenced one is excluded");
+    assert_eq!(
+        r.asset_paths, 3,
+        "2 in the body + 1 in a property value; the fenced one is excluded"
+    );
     assert_eq!(r.collapsed_dropped, 2, "one leading, one body-level");
     assert_eq!(r.id_dropped, 1);
-    assert_eq!(r.title_echo_removed, 0, "Already Converted.md's title is confirmed by its H1 and kept");
+    assert_eq!(
+        r.title_echo_removed, 0,
+        "Already Converted.md's title is confirmed by its H1 and kept"
+    );
 
     let l = &rep.leftovers;
     assert_eq!(l.block_refs.len(), 2);
@@ -102,7 +127,10 @@ fn report_counts_match_the_fixture_rules() {
     assert_eq!(l.body_properties[0].count, 2);
     assert_eq!(l.scheduled_deadline.len(), 1);
     assert_eq!(l.scheduled_deadline[0].count, 2);
-    assert_eq!(l.whiteboards, vec!["whiteboards/board.whiteboard".to_string()]);
+    assert_eq!(
+        l.whiteboards,
+        vec!["whiteboards/board.whiteboard".to_string()]
+    );
 }
 
 #[test]
@@ -148,7 +176,9 @@ fn check_detects_drift_when_a_page_regresses() {
 
     // Reintroduce a legacy construct.
     let p = out.join("pages/Tasks.md");
-    let s = std::fs::read_to_string(&p).unwrap().replace("- [ ] write the converter", "- TODO write the converter");
+    let s = std::fs::read_to_string(&p)
+        .unwrap()
+        .replace("- [ ] write the converter", "- TODO write the converter");
     std::fs::write(&p, s).unwrap();
 
     let mut o = base(out, None);
@@ -187,7 +217,10 @@ fn logseq_config_is_archived_on_request() {
     o.keep_logseq_config = true;
     run(&o).unwrap();
     assert!(out.join(".logseq-archive/config.edn").is_file());
-    assert!(!out.join("logseq").exists(), "never at the live config path");
+    assert!(
+        !out.join("logseq").exists(),
+        "never at the live config path"
+    );
 }
 
 #[test]
@@ -198,7 +231,10 @@ fn dry_run_writes_nothing_but_still_reports() {
     o.dry_run = true;
     let r = run(&o).unwrap();
     assert_eq!(r.report.pages_total, 10);
-    assert!(!out.exists(), "dry run must not create the output directory");
+    assert!(
+        !out.exists(),
+        "dry run must not create the output directory"
+    );
 }
 
 #[test]
@@ -214,7 +250,10 @@ fn refuses_a_non_empty_output_directory_without_force() {
     let mut forced = base(fixture("logseq-mini"), Some(out.clone()));
     forced.force = true;
     run(&forced).unwrap();
-    assert_eq!(std::fs::read_to_string(out.join("existing.md")).unwrap(), "keep me");
+    assert_eq!(
+        std::fs::read_to_string(out.join("existing.md")).unwrap(),
+        "keep me"
+    );
 }
 
 #[test]
@@ -240,7 +279,11 @@ fn the_source_graph_is_never_modified() {
     let before = tree(&src);
     let tmp = tempfile::tempdir().unwrap();
     run(&base(src.clone(), Some(tmp.path().join("v")))).unwrap();
-    assert_eq!(before, tree(&src), "output-dir mode must not touch the source");
+    assert_eq!(
+        before,
+        tree(&src),
+        "output-dir mode must not touch the source"
+    );
 }
 
 #[test]
@@ -248,7 +291,12 @@ fn assets_and_whiteboards_are_copied_verbatim() {
     let tmp = tempfile::tempdir().unwrap();
     let out = tmp.path().join("v");
     run(&base(fixture("logseq-mini"), Some(out.clone()))).unwrap();
-    for rel in ["assets/diagram.png", "assets/bundle.zip", "whiteboards/board.whiteboard", "README.md"] {
+    for rel in [
+        "assets/diagram.png",
+        "assets/bundle.zip",
+        "whiteboards/board.whiteboard",
+        "README.md",
+    ] {
         assert_eq!(
             std::fs::read(fixture("logseq-mini").join(rel)).unwrap(),
             std::fs::read(out.join(rel)).unwrap(),
@@ -269,8 +317,14 @@ fn in_place_completes_the_namespace_rename() {
     let r = run(&o).unwrap();
     assert!(r.report.errors.is_empty(), "{:?}", r.report.errors);
 
-    assert!(graph.join("pages/Ns/Child.md").is_file(), "new path written");
-    assert!(!graph.join("pages/Ns___Child.md").exists(), "legacy name removed");
+    assert!(
+        graph.join("pages/Ns/Child.md").is_file(),
+        "new path written"
+    );
+    assert!(
+        !graph.join("pages/Ns___Child.md").exists(),
+        "legacy name removed"
+    );
     assert!(graph.join("journals/2026-09-02.md").is_file());
     assert!(!graph.join("journals/2026_09_02.md").exists());
 
@@ -436,7 +490,11 @@ fn suffix_resolution_is_deterministic_across_runs() {
         opts.on_collision = CollisionPolicy::Suffix;
         run(&opts).expect("run");
     }
-    assert_eq!(tree(&first), tree(&second), "suffixing must be deterministic");
+    assert_eq!(
+        tree(&first),
+        tree(&second),
+        "suffixing must be deterministic"
+    );
     let _ = std::fs::remove_dir_all(&first);
     let _ = std::fs::remove_dir_all(&second);
 }
@@ -460,7 +518,11 @@ fn three_way_collision_gets_distinct_suffixes() {
         "pages/Ns/Title (2).md",
         "pages/Ns/Title (3).md",
     ] {
-        assert!(written.contains_key(name), "missing {name}: {:?}", written.keys().collect::<Vec<_>>());
+        assert!(
+            written.contains_key(name),
+            "missing {name}: {:?}",
+            written.keys().collect::<Vec<_>>()
+        );
     }
     let _ = std::fs::remove_dir_all(&out);
 }
@@ -558,8 +620,7 @@ fn a_truncated_destination_is_repaired_by_the_next_run() {
     assert!(!complete.is_empty());
 
     // Simulate an interrupted write: half the bytes on disk.
-    std::fs::write(out.join("pages/Alpha.md"), &complete[..complete.len() / 2])
-        .expect("truncate");
+    std::fs::write(out.join("pages/Alpha.md"), &complete[..complete.len() / 2]).expect("truncate");
 
     let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
     opts.force = true;
@@ -571,7 +632,9 @@ fn a_truncated_destination_is_repaired_by_the_next_run() {
         "the truncated page must be restored in full"
     );
     assert!(
-        !tree(&out).keys().any(|k| k.contains("vault-migrate-") && k.ends_with(".tmp")),
+        !tree(&out)
+            .keys()
+            .any(|k| k.contains("vault-migrate-") && k.ends_with(".tmp")),
         "no staging file may survive a completed run"
     );
     let _ = std::fs::remove_dir_all(&out);
@@ -587,8 +650,7 @@ fn check_reports_a_truncated_destination_as_drift() {
     run(&base(g.path().to_path_buf(), Some(out.clone()))).expect("first run");
 
     let complete = std::fs::read(out.join("pages/Alpha.md")).expect("read");
-    std::fs::write(out.join("pages/Alpha.md"), &complete[..complete.len() / 2])
-        .expect("truncate");
+    std::fs::write(out.join("pages/Alpha.md"), &complete[..complete.len() / 2]).expect("truncate");
 
     let mut opts = base(g.path().to_path_buf(), Some(out.clone()));
     opts.check = true;
@@ -610,7 +672,13 @@ fn case_differing_page_names_are_distinct_destinations() {
         Ok(outcome) => {
             // Case-sensitive filesystem: two destinations, no collision.
             assert!(outcome.report.collisions.is_empty());
-            assert_eq!(tree(&out).keys().filter(|k| k.starts_with("pages/")).count(), 2);
+            assert_eq!(
+                tree(&out)
+                    .keys()
+                    .filter(|k| k.starts_with("pages/"))
+                    .count(),
+                2
+            );
         }
         Err(e) => {
             // Case-insensitive filesystem: the fixture could not even be

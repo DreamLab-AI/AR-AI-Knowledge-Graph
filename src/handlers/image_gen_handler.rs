@@ -78,7 +78,10 @@ fn check_agent_key(expected: Option<&str>, provided: Option<&str>) -> bool {
 /// time. There is no bypass codepath here (ADR-2093, estate fail-closed posture).
 #[cfg(not(any(debug_assertions, feature = "dev-auth")))]
 fn agent_key_authorised(provided: Option<&str>) -> bool {
-    check_agent_key(std::env::var("VISIONCLAW_AGENT_KEY").ok().as_deref(), provided)
+    check_agent_key(
+        std::env::var("VISIONCLAW_AGENT_KEY").ok().as_deref(),
+        provided,
+    )
 }
 
 /// Dev / `dev-auth` builds keep the unauthenticated agent-submit flow, matching

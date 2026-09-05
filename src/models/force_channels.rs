@@ -544,7 +544,10 @@ mod adr_2029_dispatch_authority {
 
         i.num_constraints = 1;
         assert!(
-            has(derive_dispatch_feature_flags(i), FeatureFlags::ENABLE_CONSTRAINTS),
+            has(
+                derive_dispatch_feature_flags(i),
+                FeatureFlags::ENABLE_CONSTRAINTS
+            ),
             "a single resident constraint must enable the kernel loop"
         );
 
@@ -558,7 +561,10 @@ mod adr_2029_dispatch_authority {
         // buffer that no longer describes anything.
         i.num_constraints = 0;
         assert!(
-            !has(derive_dispatch_feature_flags(i), FeatureFlags::ENABLE_CONSTRAINTS),
+            !has(
+                derive_dispatch_feature_flags(i),
+                FeatureFlags::ENABLE_CONSTRAINTS
+            ),
             "removing every constraint must clear the bit"
         );
     }
@@ -682,8 +688,7 @@ mod adr_2029_dispatch_authority {
         );
 
         // Three constraints are resident on the device.
-        let dispatch =
-            derive_dispatch_feature_flags(ForceDispatchInputs::new(&params, 3, false));
+        let dispatch = derive_dispatch_feature_flags(ForceDispatchInputs::new(&params, 3, false));
         assert!(
             has(dispatch, FeatureFlags::ENABLE_CONSTRAINTS),
             "the dispatch word adds the residency-derived bit the converter cannot know"

@@ -476,7 +476,9 @@ pub async fn get_physics_settings(
     }
 
     match state.settings_addr.send(GetSettings).await {
-        Ok(Ok(settings)) => HttpResponse::Ok().json(settings.visualisation.graphs.knowledge.physics),
+        Ok(Ok(settings)) => {
+            HttpResponse::Ok().json(settings.visualisation.graphs.knowledge.physics)
+        }
         Ok(Err(e)) => {
             error!("Failed to get physics settings: {}", e);
             HttpResponse::InternalServerError().json(ErrorResponse {

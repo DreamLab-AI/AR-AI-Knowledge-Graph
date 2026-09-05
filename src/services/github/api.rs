@@ -185,12 +185,8 @@ impl GitHubClient {
 
         info!("get_contents_url: Raw repository path: '{}'", full_path);
 
-        let url = super::url_path::contents_url(
-            &self.owner,
-            &self.repo,
-            &full_path,
-            Some(&self.branch),
-        );
+        let url =
+            super::url_path::contents_url(&self.owner, &self.repo, &full_path, Some(&self.branch));
 
         info!("get_contents_url: Final GitHub API URL: '{}'", url);
 
