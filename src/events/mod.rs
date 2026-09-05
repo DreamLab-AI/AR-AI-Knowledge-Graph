@@ -5,9 +5,6 @@ pub mod middleware;
 pub mod store;
 pub mod types;
 
-// Phase 7: Inference triggers
-pub mod inference_triggers;
-
 pub use types::{
     DomainEvent, EventError, EventHandler, EventMetadata, EventMiddleware, EventResult,
     EventSnapshot, StoredEvent,
@@ -33,6 +30,7 @@ pub use handlers::{
     AuditEventHandler, GraphEventHandler, NotificationEventHandler, OntologyEventHandler,
 };
 
-pub use inference_triggers::{
-    register_inference_triggers, AutoInferenceConfig, InferenceTriggerHandler, OntologyEvent,
-};
+// ADR-2066: `inference_triggers` (`register_inference_triggers`,
+// `AutoInferenceConfig`, `InferenceTriggerHandler`, its own `OntologyEvent`) was
+// dead code — `register_inference_triggers` was never called from anywhere.
+// Removed alongside the rest of the unwired Phase 7 inference stack.

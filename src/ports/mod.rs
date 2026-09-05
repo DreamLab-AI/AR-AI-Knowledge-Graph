@@ -8,7 +8,6 @@
 // Legacy ports (to be refactored)
 pub mod graph_repository;
 pub mod physics_simulator;
-pub mod semantic_analyzer;
 
 // Webxr-local ports
 pub mod knowledge_graph_repository;
@@ -17,7 +16,6 @@ pub mod settings_repository;
 // Legacy exports
 pub use graph_repository::GraphRepository;
 pub use physics_simulator::PhysicsSimulator;
-pub use semantic_analyzer::SemanticAnalyzer;
 
 // New hexser-based exports (canonical paths in visionclaw-domain)
 pub use knowledge_graph_repository::KnowledgeGraphRepository;

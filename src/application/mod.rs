@@ -77,10 +77,9 @@ pub mod semantic_service;
 pub use physics_service::PhysicsService;
 pub use semantic_service::SemanticService;
 
-// Phase 7: Inference service
-pub mod inference_service;
-
-pub use inference_service::{InferenceEvent, InferenceService, InferenceServiceConfig};
+// ADR-2066: the Phase 7 `InferenceService` (formerly `inference_service`) was
+// never constructed anywhere — dead code alongside `src/handlers/inference_handler.rs`
+// and `src/events/inference_triggers.rs`. Removed.
 
 // Re-export events
 pub use events::DomainEvent;

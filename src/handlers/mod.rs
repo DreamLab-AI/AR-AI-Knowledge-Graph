@@ -41,10 +41,16 @@ pub use physics_handler::configure_routes as configure_physics_routes;
 pub use schema_handler::configure_schema_routes;
 pub use semantic_handler::configure_routes as configure_semantic_routes;
 
-// Phase 7: Inference handler
-pub mod inference_handler;
-
-pub use inference_handler::configure_routes as configure_inference_routes;
+// ADR-2066: the Phase 7 inference handler (`src/handlers/inference_handler.rs`),
+// its `InferenceService` (`src/application/inference_service.rs`) and event
+// triggers (`src/events/inference_triggers.rs`) were dead code — every handler
+// extracted `web::Data<Arc<RwLock<InferenceService>>>`, but nothing ever
+// constructed or registered that `InferenceService` as app_data, so every
+// `/api/inference/*` route 500'd at runtime. All three were removed, together
+// with the `.configure(configure_inference_routes)` call in `src/main.rs`, so no
+// no-op shim is retained — a shim would be the same dead code in a new shape.
+// The live Whelk reasoning path is `GitHubSyncService::run_post_sync_reasoning`,
+// which this stack had no connection to.
 
 pub mod semantic_pathfinding_handler;
 #[cfg(test)]
@@ -102,7 +108,11 @@ pub use ontology_class_count_handler::configure_routes as configure_ontology_cla
 pub mod layout_handler;
 pub use layout_handler::configure_layout_routes;
 
-// High-Performance Networking (QUIC/WebTransport + fastwebsockets)
+// High-Performance Networking (fastwebsockets). `quic_transport_handler` is kept
+// only as a home for the `PostcardNodeUpdate`/`PostcardBatchUpdate` wire types
+// that `fastwebsockets_handler` imports directly — the QUIC/WebTransport server
+// itself (`QuicTransportServer` and friends) was dead code, never constructed or
+// routed, and was removed under ADR-2066.
 pub mod fastwebsockets_handler;
 pub mod quic_transport_handler;
 
@@ -124,12 +134,6 @@ pub use pay_handler::configure_pay_routes;
 
 // PRD-008: XR presence WebSocket (`/ws/presence`)
 pub mod presence_handler;
-
-pub use quic_transport_handler::{
-    calculate_deltas, decode_postcard_batch, encode_postcard_batch, ControlMessage,
-    PostcardBatchUpdate, PostcardDeltaUpdate, PostcardNodeUpdate, QuicServerConfig,
-    QuicTransportServer, TopologyEdge, TopologyNode,
-};
 
 pub use fastwebsockets_handler::{
     negotiate_protocol, FastWebSocketConfig, FastWebSocketServer, NegotiatedProtocol,

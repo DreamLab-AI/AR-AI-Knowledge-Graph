@@ -66,11 +66,11 @@ pub mod semantic_constraints;
 pub mod simd_forces;
 pub mod stress_majorization;
 
-// Phase 5 (ADR-01 D5): LayoutEngine trait + five engine implementations.
-// Feature-gated behind `physics-v2`; legacy dispatch via
-// `src/layout/engines.rs::compute_layout` remains the production path.
-#[cfg(feature = "physics-v2")]
-pub mod engines;
+// The Phase 5 (ADR-01 D5) `LayoutEngine` trait + five engine implementations
+// (formerly `engines/`, feature-gated behind `physics-v2`) were removed —
+// closeout 2026-07-03: the rewrite never left stub `step()` bodies and was
+// never on the production path. Legacy dispatch via
+// `src/layout/engines.rs::compute_layout` remains the (only) production path.
 
 #[cfg(test)]
 mod integration_tests;

@@ -856,6 +856,32 @@ async fn main() -> std::io::Result<()> {
         )
     };
 
+    // ADR-2038 — boot-time effective-profile assertion, evaluated BEFORE the
+    // listener binds. ADR-2026's `enforce_release_env_hygiene()` above covers
+    // three suspect variables and the argv flag; this covers the *whole*
+    // effective profile: the dev-token opt-in (ADR-2012), the RBAC report mode
+    // that a dated acknowledgement could otherwise activate in a release build,
+    // the dev-auth artefact identity (ADR-2037) and drift from the declared
+    // ADR-2027 profile. In a production artefact any finding exits(2) here, so
+    // a mis-promoted image never accepts a request; a development build logs
+    // and continues.
+    let boot_profile = {
+        use visionclaw_server::config::security_profile::{
+            assert_effective_profile_or_exit, BuildIdentity, EnvSnapshot,
+        };
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        assert_effective_profile_or_exit(
+            &EnvSnapshot::from_process(),
+            BuildIdentity::current(),
+            &today,
+        )
+    };
+    info!(
+        "main: effective security profile — {} (observed flags: {:?})",
+        boot_profile.summary(),
+        boot_profile.observed_flags
+    );
+
     info!("main: All services and actors initialized. Configuring HTTP server.");
     // RES-a: capture the harness handle before `app_state_data` moves into the
     // server factory closure, so the KG watchdog spawned below can reach it.
@@ -1066,7 +1092,11 @@ async fn main() -> std::io::Result<()> {
                     .configure(visionclaw_server::handlers::configure_nl_query_routes)
                     .configure(visionclaw_server::handlers::configure_pathfinding_routes)
                     .configure(visionclaw_server::handlers::configure_semantic_routes)
-                    .configure(visionclaw_server::handlers::configure_inference_routes)
+                    // ADR-2066: `/api/inference/*` removed. Every handler in the
+                    // Phase 7 inference stack extracted an `InferenceService` that
+                    // was never registered as app data, so each route 500'd at the
+                    // extractor. The live reasoning path is
+                    // `GitHubSyncService::run_post_sync_reasoning`, untouched.
 
                     // Health and monitoring
                     .configure(consolidated_health_handler::configure_routes)

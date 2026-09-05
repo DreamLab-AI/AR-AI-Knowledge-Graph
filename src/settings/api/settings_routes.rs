@@ -428,6 +428,36 @@ pub fn validate_quality_gate_settings(settings: &QualityGateSettings) -> Result<
     }
 }
 
+/// Tell every other connected session that a settings category changed.
+///
+/// ADR-2047: settings writes used to be split between categories that told other
+/// sessions and categories that did not — `rendering` and `node-filter`
+/// broadcast, while `physics`, `constraints`, `quality-gates`, `visual` and the
+/// profile routes stayed silent, so a second open browser kept stale values
+/// until it happened to re-read. The asymmetry was incidental, not a decision:
+/// the payload was copy-pasted into the two handlers that needed it first.
+///
+/// This is the single emitter. It is fire-and-forget by design — a settings
+/// write must not fail because a broadcast could not be serialised or the
+/// coordinator's mailbox was full, so failures are logged and swallowed.
+fn broadcast_settings_change(state: &web::Data<AppState>, category: &str, updated_by: &str) {
+    let payload = serde_json::json!({
+        "type": "settingsUpdated",
+        "category": category,
+        "updatedBy": updated_by,
+        "timestamp": chrono::Utc::now().timestamp_millis()
+    });
+    match serde_json::to_string(&payload) {
+        Ok(message) => {
+            state
+                .client_manager_addr
+                .do_send(BroadcastMessage { message });
+            info!("{category} settings change broadcast sent to connected clients");
+        }
+        Err(e) => warn!("failed to serialise {category} settings broadcast: {e}"),
+    }
+}
+
 // ============================================================================
 // Physics Settings Routes
 // ============================================================================
@@ -632,6 +662,11 @@ pub async fn update_physics_settings(
                 }
             }
 
+            // ADR-2047: tell the other sessions. Physics is the category most
+            // visible to a second viewer — the layout visibly moves — and was
+            // the one that never announced itself.
+            broadcast_settings_change(&state, "physics", &auth.pubkey);
+
             HttpResponse::Ok().json(&new_physics)
         }
         Ok(Err(e)) => {
@@ -823,21 +858,10 @@ pub async fn update_rendering_settings(
                 Ok(Ok(())) => {
                     info!("Rendering settings updated successfully by {}", auth.pubkey);
 
-                    // Propagate rendering changes to connected clients via broadcast
-                    // Rendering settings (ambient light, shadows, environment) are applied
-                    // client-side; notify all clients so they pick up the new values.
-                    let broadcast_payload = serde_json::json!({
-                        "type": "settingsUpdated",
-                        "category": "rendering",
-                        "updatedBy": auth.pubkey,
-                        "timestamp": chrono::Utc::now().timestamp_millis()
-                    });
-                    if let Ok(msg_str) = serde_json::to_string(&broadcast_payload) {
-                        state
-                            .client_manager_addr
-                            .do_send(BroadcastMessage { message: msg_str });
-                        info!("Rendering settings change broadcast sent to connected clients");
-                    }
+                    // ADR-2047: rendering settings (ambient light, shadows,
+                    // environment) are applied client-side, so other sessions
+                    // must be told. Now routed through the single emitter.
+                    broadcast_settings_change(&state, "rendering", &auth.pubkey);
 
                     HttpResponse::Ok().json(&new_rendering)
                 }
