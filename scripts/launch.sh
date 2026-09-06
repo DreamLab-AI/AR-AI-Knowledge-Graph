@@ -814,14 +814,14 @@ rebuild_agent_container() {
     # Check for .env file
     if [[ ! -f .env ]]; then
         warning ".env file not found"
-        if [[ -f .env.example ]]; then
-            info "Creating from .env.example..."
-            cp .env.example .env
+        if [[ -f env.example ]]; then
+            info "Creating from env.example..."
+            cp env.example .env
             success "Created .env from template"
             warning "IMPORTANT: Edit .env and add your API keys before continuing!"
             read -p "Press Enter to continue (or Ctrl+C to exit and edit .env)..."
         else
-            error ".env.example not found"
+            error "env.example not found"
             exit 1
         fi
     fi
