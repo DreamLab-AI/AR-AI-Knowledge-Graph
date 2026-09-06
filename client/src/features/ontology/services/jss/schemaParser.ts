@@ -7,7 +7,7 @@
 
 import { debugState } from '../../../../utils/clientDebugState';
 import { createErrorMetadata } from '../../../../utils/loggerConfig';
-import { fetchWithAuth, getOntologyUrl, logger } from './contextLoader';
+import { fetchWithAuth, getOntologyJsonLdUrl, getOntologyTurtleUrl, logger } from './contextLoader';
 
 export interface JsonLdContext {
   '@vocab'?: string;
@@ -75,7 +75,7 @@ export async function fetchJsonLd(
   }
 
   const startTime = performance.now();
-  const url = getOntologyUrl();
+  const url = getOntologyJsonLdUrl();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
@@ -128,7 +128,7 @@ export async function fetchTurtle(
   }
 
   const startTime = performance.now();
-  const url = getOntologyUrl();
+  const url = getOntologyTurtleUrl();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 

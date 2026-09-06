@@ -840,6 +840,13 @@ async fn main() -> std::io::Result<()> {
     #[cfg(feature = "solid-pod-embed")]
     let solid_state = visionclaw_server::handlers::init_solid_state().await;
 
+    // ADR-2106: the published ontology (ontology-publish.yml, release
+    // `ontology-latest`) is pulled INTO the pod at boot and re-checked on an
+    // interval, because a hosted runner cannot reach this in-process pod.
+    // Fail-open: the pod keeps what it has if the release is unreachable.
+    #[cfg(feature = "solid-pod-embed")]
+    visionclaw_server::services::ontology_pull::spawn_boot_pull(Arc::clone(&solid_state.storage));
+
     // HTTP 402 payments + exchange state (Web Ledgers + AMM). Default-disabled via
     // PAY_ENABLED=false; ledger and order book persist to PAY_LEDGER_DIR. Built once
     // here and cloned into each Actix worker via app_data, matching presence/solid.

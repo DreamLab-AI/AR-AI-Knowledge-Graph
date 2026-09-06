@@ -440,17 +440,19 @@ sequenceDiagram
     end
 ```
 
-## ES-09.13 VisionClaw ontology-publish.yml — vault pipeline to pod federation
+## ES-09.13 VisionClaw ontology-publish.yml — vault pipeline to pod, pull model
 ```mermaid
 sequenceDiagram
     autonumber
     participant GH as push/PR/dispatch<br/>ontology-publish.yml:3-27
     participant VAL as validate-source job<br/>ontology-publish.yml:44
     participant BLD as build-ontology job<br/>ontology-publish.yml:135
-    participant DEP as deploy-jss job<br/>ontology-publish.yml:215
-    participant WS as notify-websocket job<br/>ontology-publish.yml:325
-    participant PRP as pr-preview job<br/>ontology-publish.yml:404
-    participant MIS as deploy-target-missing job<br/>ontology-publish.yml:459
+    participant REL as publish-release job<br/>ontology-publish.yml:220
+    participant SRV as visionclaw-server boot<br/>src/services/ontology_pull.rs
+    participant DEP as deploy-jss job (push path)<br/>ontology-publish.yml:290
+    participant WS as notify-websocket job<br/>ontology-publish.yml:400
+    participant PRP as pr-preview job<br/>ontology-publish.yml:479
+    participant MIS as deploy-target-missing job<br/>ontology-publish.yml:533
 
     GH->>VAL: preflight gh repo view on the private ontology source :65-73<br/>ONTOLOGY_SOURCE_TOKEN, falling back to GITHUB_TOKEN :67-68
     alt source unreadable
@@ -463,21 +465,27 @@ sequenceDiagram
     BLD->>BLD: python -m pipeline.build knowledge/pages (the vault's own converter) :168-171
     BLD->>BLD: pack-pod-resources.py: copy public-only TTL, compact JSON-LD against the vault context,<br/>LDP index manifest, substance floor 4000 classes / 100k triples :176-181
     BLD->>BLD: re-parse packed resources :183-199, upload ontology-ttl :201-206 and ontology-jsonld :208-213
-    alt vars.SOLID_POD_URL set
-        BLD->>DEP: needs build-ontology, ref main :218-219
-        DEP->>DEP: backup current pod index for rollback :234-246
-        DEP->>DEP: PUT visionflow.ttl, context/ontology/index jsonld :249-281, verify :284-310
+    BLD->>REL: main only, needs validate-source + build-ontology :223-224
+    REL->>REL: assemble five assets + SHA256SUMS :239-252, create or move release tag ontology-latest :253-272
+    REL->>REL: upload --clobber :273-278, verify the public download path diffs SHA256SUMS :279-289
+    Note over SRV: ADR-2106 pull model. At boot and every ONTOLOGY_PULL_INTERVAL_SECS:<br/>GET index.jsonld, compare visionflow:buildSha with the pod's; if moved, GET SHA256SUMS + files,<br/>verify every digest, write via Storage: containers, /public/ontology/.acl (public read, only if absent),<br/>content, manifest last. Fail-open: unreachable release leaves the pod as it was.
+    SRV->>REL: GET releases/download/ontology-latest/{index.jsonld, SHA256SUMS, ...}
+    alt vars.SOLID_POD_URL set (a pod a runner can reach)
+        BLD->>DEP: needs build-ontology, ref main :293-294
+        DEP->>DEP: backup current pod index for rollback :309-321
+        DEP->>DEP: PUT visionflow.ttl, context/ontology/index jsonld :324-356, verify :359-385
         alt deployment fails
-            DEP->>DEP: rollback to backed-up index :311-324
+            DEP->>DEP: rollback to backed-up index :386-399
         end
-        DEP->>WS: deployment_status success :328-329
-        WS->>WS: POST to SOLID_POD_URL/.notifications :368-372, PATCH index.jsonld :373-378
-    else unset (the in-process pod is not reachable from a hosted runner)
-        BLD->>MIS: ::notice naming vars.SOLID_POD_URL and the artefacts :462-466
+        DEP->>WS: deployment_status success :403-404
+        WS->>WS: POST to SOLID_POD_URL/.notifications :443-447, PATCH index.jsonld :448-453
+    else unset (default: the in-process pod is not reachable from a hosted runner)
+        REL->>MIS: ::notice: push deploy skipped, pull model in effect :536-540
     end
-    GH->>PRP: pull_request only: comment with stats and SHAs :407-408
+    GH->>PRP: pull_request only: comment with stats and SHAs :482-483
     Note over VAL,WS: RESOLVED ADR-2098 (2026-09-05): SOLID_POD_URL now defaults to http://localhost:4000/solid :31-38<br/>the scope the embedded solid-pod-rs serves in-process (ADR-032 M3)<br/>the POST to /.notifications is annotated as a best-effort no-op there - that path is a GET WebSocket upgrade
     Note over BLD: RESOLVED 2026-09-06: the inline md_to_ttl.py + pyld converters (read Logseq key:: lines, never the json-ld fence)<br/>produced 0 owl:Class from 380 pages on run 34045488066; replaced by the vault pipeline (8,434 classes, 265k triples)
+    Note over SRV,MIS: RESOLVED ADR-2106 (2026-09-06): deploy-jss had never run and could not from a hosted runner;<br/>delivery inverted to a boot pull from the ontology-latest release
 ```
 
 ## ES-09.14 VisionClaw xr-godot-ci.yml — gdext + GUT headless, Quest 3 advisory

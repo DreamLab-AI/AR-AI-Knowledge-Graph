@@ -44,6 +44,8 @@ pub mod ontology_enrichment_service;
 pub mod ontology_file_cache;
 pub mod ontology_mutation_service;
 pub mod ontology_pipeline_service;
+#[cfg(feature = "solid-pod-embed")]
+pub mod ontology_pull;
 pub mod ontology_query_service;
 pub mod ontology_reasoner;
 pub mod ontology_reasoning_service;

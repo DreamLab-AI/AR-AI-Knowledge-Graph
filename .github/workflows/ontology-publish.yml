@@ -212,6 +212,81 @@ jobs:
           path: output/pod/ontology-jsonld/
           retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
 
+  # ADR-2106 pull model. A hosted runner cannot reach the in-process pod, so
+  # the resources are attached to the rolling release `ontology-latest` and
+  # the server pulls them at boot (src/services/ontology_pull.rs), verifying
+  # every file against SHA256SUMS. The release tag is moved to the current
+  # commit on each publish; assets are replaced with --clobber.
+  publish-release:
+    name: Publish ontology-latest release
+    runs-on: ubuntu-latest
+    needs: [validate-source, build-ontology]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ontology-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Assemble release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          cp artifacts/ontology-ttl/visionflow.ttl \
+             artifacts/ontology-ttl/visionflow.stats.json \
+             artifacts/ontology-jsonld/context.jsonld \
+             artifacts/ontology-jsonld/ontology.jsonld \
+             artifacts/ontology-jsonld/index.jsonld \
+             release/
+          cd release
+          sha256sum visionflow.ttl visionflow.stats.json context.jsonld ontology.jsonld index.jsonld > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create or move the release tag
+        run: |
+          set -euo pipefail
+          notes="Ontology pod resources built by ontology-publish.yml run ${{ github.run_number }}.
+
+          - build: ${{ github.sha }}
+          - source: ${{ env.ONTOLOGY_SOURCE_REPO }} @ ${{ needs.validate-source.outputs.source_sha }}
+          - classes / triples: see index.jsonld (visionflow:classes, visionflow:triples)
+
+          Consumed by the VisionClaw server at boot (ADR-2106, ONTOLOGY_PULL_URL). Assets are verified against SHA256SUMS before any write."
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --target "${{ github.sha }}" --notes "$notes" --prerelease --latest=false
+          else
+            gh release create "$RELEASE_TAG" --target "${{ github.sha }}" --title "Ontology pod resources (rolling)" --notes "$notes" --prerelease --latest=false
+          fi
+          # The tag object must follow the release target; `gh release edit --target`
+          # only moves it when no tag exists yet, so move it explicitly.
+          git tag -f "$RELEASE_TAG" "${{ github.sha }}"
+          git push -f origin "refs/tags/$RELEASE_TAG"
+
+      - name: Upload assets
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" release/* --clobber
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[] | "\(.name) \(.size)B"'
+
+      - name: Verify the public download path (what the server will fetch)
+        run: |
+          set -euo pipefail
+          base="https://github.com/${{ github.repository }}/releases/download/$RELEASE_TAG"
+          for i in 1 2 3 4 5 6; do
+            if curl -fsSL "$base/SHA256SUMS" -o /tmp/SHA256SUMS; then break; fi
+            sleep 10
+          done
+          diff <(sort release/SHA256SUMS) <(sort /tmp/SHA256SUMS)
+          curl -fsSL "$base/index.jsonld" | python3 -c 'import sys,json; m=json.load(sys.stdin); print("public manifest:", m["visionflow:buildSha"], m["visionflow:classes"], "classes")'
+
   deploy-jss:
     name: Deploy to JSS
     runs-on: ubuntu-latest
@@ -451,16 +526,15 @@ jobs:
               body: comment
             });
 
-  # The pod is served in-process by the VisionClaw server (ADR-2098), which a
-  # GitHub-hosted runner cannot reach; the env default names localhost and can
-  # only ever fail. Until the SOLID_POD_URL repository variable names a
-  # reachable base URL (or a LAN self-hosted runner exists), deploy-jss is
-  # skipped and the ontology-ttl / ontology-jsonld artefacts are the deliverable.
+  # deploy-jss is the PUSH path, only for a deployment whose pod is reachable
+  # from a runner (vars.SOLID_POD_URL). The default delivery is the PULL model
+  # (ADR-2106): publish-release above + the server's boot pull. This job makes
+  # the skip legible in the run view.
   deploy-target-missing:
-    name: Deploy target not configured
+    name: Push deploy skipped (pull model in effect)
     runs-on: ubuntu-latest
-    needs: build-ontology
+    needs: [build-ontology, publish-release]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.SOLID_POD_URL == ''
     steps:
       - run: |
-          echo "::notice title=Deploy skipped::SOLID_POD_URL repository variable is unset; the in-process pod is not reachable from a hosted runner. Artefacts ontology-ttl and ontology-jsonld were built and attached to this run. Set vars.SOLID_POD_URL (or register a LAN self-hosted runner) to enable deploy-jss."
+          echo "::notice title=Push deploy skipped::vars.SOLID_POD_URL is unset, so deploy-jss did not run. The resources were published to the ontology-latest release and the VisionClaw server pulls them into /public/ontology/ at boot and every ONTOLOGY_PULL_INTERVAL_SECS (ADR-2106). Set vars.SOLID_POD_URL only for a pod a runner can reach."
