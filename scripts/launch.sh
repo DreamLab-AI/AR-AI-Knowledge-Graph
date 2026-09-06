@@ -490,6 +490,7 @@ needs_image_rebuild() {
         "$PROJECT_ROOT/nginx.production.conf"
         "$PROJECT_ROOT/scripts/dev-entrypoint.sh"
         "$PROJECT_ROOT/scripts/rust-backend-wrapper.sh"
+        "$PROJECT_ROOT/scripts/lib/build-inputs.sh"
         "$PROJECT_ROOT/scripts/production-startup.sh"
     )
 
@@ -513,11 +514,22 @@ hotpatch_config() {
     info "Hot-patching config files into $container_name (skipping full image rebuild)..."
 
     local patches=0
+    # Destinations must match where the image actually puts these files and where
+    # the running process actually reads them, or the patch silently no-ops and we
+    # restart the container claiming a change that never landed:
+    #   * dev-entrypoint.sh execs `supervisord -c /app/supervisord.dev.conf`, so
+    #     the old /app/supervisord.conf destination was never read;
+    #   * supervisord runs /app/scripts/rust-backend-wrapper.sh (Dockerfile copies
+    #     it to ./scripts/), so the old /app/rust-backend-wrapper.sh was a stray
+    #     file nothing executed.
     local config_map=(
-        "supervisord.dev.conf:/app/supervisord.conf"
+        "supervisord.dev.conf:/app/supervisord.dev.conf"
         "nginx.dev.conf:/etc/nginx/nginx.conf"
         "scripts/dev-entrypoint.sh:/app/dev-entrypoint.sh"
-        "scripts/rust-backend-wrapper.sh:/app/rust-backend-wrapper.sh"
+        "scripts/rust-backend-wrapper.sh:/app/scripts/rust-backend-wrapper.sh"
+        # ADR-2008: the wrapper sources this; patch the pair or the wrapper runs
+        # against a stale inventory.
+        "scripts/lib/build-inputs.sh:/app/scripts/lib/build-inputs.sh"
     )
 
     for mapping in "${config_map[@]}"; do
