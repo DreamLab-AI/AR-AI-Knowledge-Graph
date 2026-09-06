@@ -41,14 +41,18 @@ uniform float query_pulse_depth = 0.5; // 0..1 fraction the pulse swings energy
 //   .b = query-variable flag > 0     — flagship query builder
 //   .a = reserved (1)
 // Per-instance colour arrives via MultiMesh use_colors as vertex COLOR — the halo
-// tint follows the node's colour exactly like the base pass.
+// tint follows the node's colour exactly like the base pass. COLOR.a is the
+// co-proximate label fade (render_store.rs LABEL_FADE_ALPHA, 1.0 when no label is
+// showing): the rim dims with the sphere so the text inside stays legible.
 varying vec3 halo_tint;
+varying float halo_alpha;
 varying float halo_cen;
 varying float halo_badge;
 varying float halo_query;
 
 void vertex() {
 	halo_tint = COLOR.rgb;
+	halo_alpha = COLOR.a;
 	halo_cen = INSTANCE_CUSTOM.r;
 	halo_badge = INSTANCE_CUSTOM.g;
 	halo_query = INSTANCE_CUSTOM.b;
@@ -79,5 +83,5 @@ void fragment() {
 	// Unshaded + additive: ALBEDO is the emitted colour, ALPHA (with SRC_ALPHA,ONE)
 	// scales how much is added, so a thin bright rim fades to nothing face-on.
 	ALBEDO = halo_tint * halo_energy * cen_mul * badge_mul * query_mul;
-	ALPHA = fres * cen_mul * query_mul;
+	ALPHA = fres * cen_mul * query_mul * halo_alpha;
 }

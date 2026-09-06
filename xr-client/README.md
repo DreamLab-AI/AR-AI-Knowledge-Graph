@@ -142,7 +142,7 @@ Read by `scripts/graph_scene.gd`; the registration lives in
 
 | Class | Module | Signals |
 |---|---|---|
-| `BinaryProtocolClient` | `binary_protocol.rs` (+ `render_store.rs`) | `position_updated(node_id: u32, position: Vector3, velocity: Vector3)` — also fronts the Rust **`RenderStore`** render offload via `#[func]` adapters (`build_node_buffer`, `build_edge_buffer`, `hunt`, `nodes_near`, `upsert`, `set_meta`); decodes Protocol V3 **and** the V5 wrapper (`0x05` + 8-byte broadcast seq) |
+| `BinaryProtocolClient` | `binary_protocol.rs` (+ `render_store.rs`) | `position_updated(node_id: u32, position: Vector3, velocity: Vector3)` — also fronts the Rust **`RenderStore`** render offload via `#[func]` adapters (`build_node_buffer`, `faded_node_buffer`, `set_labelled`, `build_edge_buffer`, `hunt`, `nodes_near`, `upsert`, `set_meta`); decodes Protocol V3 **and** the V5 wrapper (`0x05` + 8-byte broadcast seq) |
 | `PresenceClientNode` | `presence.rs` | `avatar_joined(did, display_name, avatar_id)`, `avatar_left(avatar_id)`, `avatar_pose_updated(avatar_id, head_pos, head_rot, has_left, has_right)`, `presence_kicked(reason)` |
 | `XrInteraction` | `interaction.rs` | `node_targeted(node_id, distance)`, `node_grabbed(node_id, position)`, `haptic_pulse(controller, intensity)` |
 | `LodPolicy` | `lod.rs` | (no signals; `should_recompute()` + `classify_distance()` getters) |

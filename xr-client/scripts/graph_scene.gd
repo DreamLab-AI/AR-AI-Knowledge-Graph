@@ -141,6 +141,10 @@ const LABEL_TITLE_PX: float = 0.0006          # pixel_size → ~1.9 cm title tex
 const LABEL_TITLE_FONT: int = 32
 const LABEL_DETAIL_FONT: int = 20
 const LABEL_DETAIL_OFFSET_M: float = 0.028
+# Label overlays with a distance-fade alpha at or below this are treated as not
+# showing: the node's own fade (Rust LABEL_FADE_ALPHA, 30 %) tracks exactly the
+# labels the user can actually read.
+const LABEL_VISIBLE_MIN_A: float = 0.05
 var _label_pool: Array = []                   # Array[Node3D] anchors, each Title+Detail
 var _label_accum: float = 0.0
 
@@ -378,6 +382,10 @@ var _teleport_pulse_applied: bool = false
 
 @onready var graph_root: Node3D = $GraphRoot
 @onready var nodes_multi: MultiMeshInstance3D = $GraphRoot/NodesMulti
+# Transparent twin of NodesMulti (gem_faded.tres): the nodes whose proximity/grab
+# label is showing are packed here by Rust at 30 % alpha so the co-located text
+# reads through the sphere. Optional — the scene works without it (no fade).
+@onready var nodes_faded_multi: MultiMeshInstance3D = get_node_or_null("GraphRoot/NodesFadedMulti")
 @onready var edges_multi: MultiMeshInstance3D = $GraphRoot/EdgesMulti
 # Work-beam layer (ADR-140, Pillar 2 / P3): the reserved AgentMulti MultiMesh, now
 # carrying one cylinder per active agent→target-node beam (agent_beam material).
@@ -598,6 +606,7 @@ func _update_proximity_labels() -> void:
 			continue
 		if _binary_client.label_of(id) != "":
 			shown.append(id)
+	var labelled: PackedInt32Array = PackedInt32Array()
 	for i: int in range(LABEL_POOL_SIZE):
 		var anchor: Node3D = _label_pool[i]
 		if i >= shown.size():
@@ -645,11 +654,26 @@ func _update_proximity_labels() -> void:
 			)
 		title.modulate = Color(1.0, 1.0, 1.0, a)
 		detail.modulate = Color(0.8, 0.85, 0.95, a)
+		if a > LABEL_VISIBLE_MIN_A:
+			labelled.append(node_id)
+	_set_labelled_nodes(labelled)
 
 
 func _hide_all_labels() -> void:
 	for anchor: Node3D in _label_pool:
 		anchor.visible = false
+	_set_labelled_nodes(PackedInt32Array())
+
+
+# Co-proximate label fade: the nodes whose label overlay is showing drop to 30 %
+# alpha (Rust LABEL_FADE_ALPHA) for exactly the duration of the display, so the
+# text sitting inside the sphere reads through it. Rust eases the alpha and routes
+# those nodes to the transparent NodesFadedMulti pass (see _update_multimesh); the
+# opaque NodesMulti material never changes.
+func _set_labelled_nodes(ids: PackedInt32Array) -> void:
+	if _binary_client == null or not _binary_client.has_method("set_labelled"):
+		return
+	_binary_client.set_labelled(ids)
 
 
 # Eye-gaze capability probe (copresence brief §Godot API availability; the
@@ -1789,6 +1813,19 @@ func _update_multimesh() -> void:
 		mm.instance_count = count
 	if count > 0:
 		mm.buffer = buf
+	# Transparent pass: the labelled / fading nodes the same build routed away from
+	# the opaque buffer (COLOR.a = fade alpha). Usually 0-13 instances.
+	if nodes_faded_multi == null or nodes_faded_multi.multimesh == null:
+		return
+	if not _binary_client.has_method("faded_node_buffer"):
+		return
+	var fbuf: PackedFloat32Array = _binary_client.faded_node_buffer()
+	var fmm: MultiMesh = nodes_faded_multi.multimesh
+	var fcount: int = fbuf.size() / 20
+	if fmm.instance_count != fcount:
+		fmm.instance_count = fcount
+	if fcount > 0:
+		fmm.buffer = fbuf
 
 
 # Edge MultiMesh: Rust filters the ranked pairs to both-endpoints-drawn and packs

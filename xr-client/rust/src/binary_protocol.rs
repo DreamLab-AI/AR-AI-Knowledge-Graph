@@ -1214,6 +1214,24 @@ impl BinaryProtocolClient {
         PackedFloat32Array::from(v.as_slice())
     }
 
+    /// Set the nodes whose proximity/grab label overlay is showing. They ease to
+    /// 30 % alpha (`LABEL_FADE_ALPHA`) and are packed into the transparent-pass
+    /// buffer (`faded_node_buffer`) instead of the opaque one, so the co-located
+    /// label reads through the sphere. Pass empty to fade everything back.
+    #[func]
+    fn set_labelled(&mut self, ids: PackedInt32Array) {
+        let v: Vec<u32> = ids.as_slice().iter().map(|&x| x as u32).collect();
+        self.store.set_labelled(&v);
+    }
+
+    /// The transparent-pass node buffer from the last `build_node_buffer` (same
+    /// 20-float stride, COLOR.a = fade alpha). Assign it to NodesFadedMulti right
+    /// after the opaque buffer; empty when nothing is labelled or fading.
+    #[func]
+    fn faded_node_buffer(&self) -> PackedFloat32Array {
+        PackedFloat32Array::from(self.store.faded_node_buffer())
+    }
+
     /// Pack the edge MultiMesh buffer for the ranked `pairs` (16 floats/instance:
     /// 12 transform + 4 INSTANCE_CUSTOM, custom `.a` = relation-type style code).
     /// Only edges with both endpoints in the last node buffer's drawn set survive.

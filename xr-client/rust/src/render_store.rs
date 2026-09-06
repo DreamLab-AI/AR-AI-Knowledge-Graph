@@ -96,6 +96,15 @@ struct NodeMeta {
 
 /// Floats per node instance in the MultiMesh buffer (12 transform + 4 colour + 4 custom).
 pub const NODE_STRIDE: usize = 20;
+
+/// Alpha a node settles to while its proximity/grab label overlay is showing.
+/// The label sits co-located with the node, so the sphere must read as glass for
+/// the text inside it to be legible; 30 % keeps the node's colour and silhouette.
+pub const LABEL_FADE_ALPHA: f32 = 0.3;
+/// Per-build alpha step of the label fade. `build_node_buffer` runs at ~45 Hz on
+/// the desktop-Vive path, so 0.1/build is a ~0.15 s ramp each way — fast enough to
+/// track the 4 Hz label cadence, slow enough not to pop.
+pub const LABEL_FADE_STEP: f32 = 0.1;
 /// Floats per **semantic-plane** edge instance (12 transform only — plane edges
 /// are uniform-tinted, no per-instance channel).
 pub const EDGE_STRIDE: usize = 12;
@@ -516,6 +525,15 @@ pub struct RenderStore {
     // rim-glow them. Kept separate from `color` (community colour) so unmarking a
     // node restores its original colour with no reload.
     query_vars: HashMap<u32, u8>,
+    // Co-proximate label fade. `labelled` = ids whose label overlay is showing
+    // right now (GDScript replaces it at the label cadence); `label_alpha` = the
+    // per-node current alpha, eased toward LABEL_FADE_ALPHA while labelled and
+    // back to 1.0 after, pruned once fully opaque again. Any node with an entry is
+    // packed into `faded_buf` (the transparent NodesFadedMulti pass) instead of the
+    // opaque main buffer, so the opaque pass never needs a transparent material.
+    labelled: HashSet<u32>,
+    label_alpha: HashMap<u32, f32>,
+    faded_buf: Vec<f32>,
     // Wave 2 relation-type grammar (Feature 4). Per-edge style code keyed by
     // directed (source,target); 0 untyped / 1 typed / 2 subclass. Populated from
     // initialGraphLoad and additively extended by radial expansion. Looked up by
@@ -586,6 +604,9 @@ impl RenderStore {
         self.folding.clear();
         self.unfolding.clear();
         self.query_vars.clear();
+        self.labelled.clear();
+        self.label_alpha.clear();
+        self.faded_buf.clear();
         self.edge_styles.clear();
         self.node_kind.clear();
         self.type_hidden = [false; 4];
@@ -925,6 +946,44 @@ impl RenderStore {
     /// Whether a node is currently marked as a query variable.
     pub fn is_query_var(&self, node_id: u32) -> bool {
         self.query_vars.contains_key(&node_id)
+    }
+
+    /// Replace the set of nodes whose label overlay is showing (proximity or
+    /// grab). A newly labelled node starts fading to [`LABEL_FADE_ALPHA`] on the
+    /// next build; a node dropped from the set fades back and rejoins the opaque
+    /// buffer once it reaches 1.0. Pass empty to fade everything back.
+    pub fn set_labelled(&mut self, ids: &[u32]) {
+        self.labelled.clear();
+        self.labelled.extend(ids.iter().copied());
+        for &id in ids {
+            self.label_alpha.entry(id).or_insert(1.0);
+        }
+    }
+
+    /// Current label-fade alpha of a node: 1.0 unless it is labelled or still
+    /// fading back.
+    pub fn label_alpha_of(&self, node_id: u32) -> f32 {
+        self.label_alpha.get(&node_id).copied().unwrap_or(1.0)
+    }
+
+    /// The transparent-pass node buffer packed by the last `build_node_buffer`:
+    /// every labelled / fading node, same [`NODE_STRIDE`] layout, COLOR.a = alpha.
+    pub fn faded_node_buffer(&self) -> &[f32] {
+        &self.faded_buf
+    }
+
+    /// Advance every label fade one step (once per `build_node_buffer`).
+    fn step_label_fades(&mut self) {
+        let labelled = &self.labelled;
+        self.label_alpha.retain(|id, a| {
+            if labelled.contains(id) {
+                *a = (*a - LABEL_FADE_STEP).max(LABEL_FADE_ALPHA);
+                true
+            } else {
+                *a = (*a + LABEL_FADE_STEP).min(1.0);
+                *a < 1.0
+            }
+        });
     }
 
     /// Apply a server fold plan. `hidden` are ids to suppress (L1); `members[i]`
@@ -1382,6 +1441,9 @@ impl RenderStore {
         self.drawn.clear();
         self.render_ids.clear();
         self.render_positions.clear();
+        self.step_label_fades();
+        let mut faded = std::mem::take(&mut self.faded_buf);
+        faded.clear();
         let mut buf = Vec::with_capacity(ids.len() * NODE_STRIDE);
         for &raw in ids {
             let id0 = raw as u32;
@@ -1397,12 +1459,12 @@ impl RenderStore {
                 continue;
             }
             if let Some(&rep) = self.folding.get(&id0) {
-                self.emit_node(rep, &mut buf, scale_comp, size_lo, size_hi);
-                self.emit_node(id0, &mut buf, scale_comp, size_lo, size_hi);
+                self.emit_node(rep, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
+                self.emit_node(id0, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
             } else if let Some(&rep) = self.fold_remap.get(&id0) {
-                self.emit_node(rep, &mut buf, scale_comp, size_lo, size_hi);
+                self.emit_node(rep, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
             } else {
-                self.emit_node(id0, &mut buf, scale_comp, size_lo, size_hi);
+                self.emit_node(id0, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
             }
         }
         // Guarantee in-transit fold animations stay visible even if the LOD budget
@@ -1410,22 +1472,34 @@ impl RenderStore {
         if !self.folding.is_empty() || !self.unfolding.is_empty() {
             let folding: Vec<(u32, u32)> = self.folding.iter().map(|(&m, &r)| (m, r)).collect();
             for (m, r) in folding {
-                self.emit_node(r, &mut buf, scale_comp, size_lo, size_hi);
-                self.emit_node(m, &mut buf, scale_comp, size_lo, size_hi);
+                self.emit_node(r, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
+                self.emit_node(m, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
             }
             let unfolding: Vec<u32> = self.unfolding.iter().copied().collect();
             for m in unfolding {
-                self.emit_node(m, &mut buf, scale_comp, size_lo, size_hi);
+                self.emit_node(m, &mut buf, &mut faded, scale_comp, size_lo, size_hi);
             }
         }
+        self.faded_buf = faded;
         buf
     }
 
     /// Append one node instance for `id` to `buf`, updating the drawn set + render
     /// arrays. No-op if the id is L1-hidden, type-filtered out, already drawn this
     /// build, or absent from the store. Shared by the fold-aware draw path so a
-    /// representative and its in-transit members are packed uniformly.
-    fn emit_node(&mut self, id: u32, buf: &mut Vec<f32>, scale_comp: f32, size_lo: f32, size_hi: f32) {
+    /// representative and its in-transit members are packed uniformly. A node with
+    /// a live label fade is packed into `faded` (transparent pass, COLOR.a = its
+    /// alpha) instead of `buf`; it still enters the drawn set and render arrays so
+    /// edges attach and the interaction ray can hit it.
+    fn emit_node(
+        &mut self,
+        id: u32,
+        buf: &mut Vec<f32>,
+        faded: &mut Vec<f32>,
+        scale_comp: f32,
+        size_lo: f32,
+        size_hi: f32,
+    ) {
         if self.fold_hidden.contains(&id) || !self.node_visible(id) || self.drawn.contains(&id) {
             return;
         }
@@ -1461,9 +1535,16 @@ impl RenderStore {
                 halo = halo.max(AGENT_HALO_MIN);
             }
         }
-        buf.extend_from_slice(&node_transform12(size, pos));
-        buf.extend_from_slice(&col);
-        buf.extend_from_slice(&[halo, badge, query_flag, 1.0]);
+        let target: &mut Vec<f32> = match self.label_alpha.get(&id) {
+            Some(&a) => {
+                col[3] = a;
+                faded
+            }
+            None => buf,
+        };
+        target.extend_from_slice(&node_transform12(size, pos));
+        target.extend_from_slice(&col);
+        target.extend_from_slice(&[halo, badge, query_flag, 1.0]);
         self.drawn.insert(id);
         self.render_ids.push(id);
         self.render_positions.push(pos);
@@ -2330,6 +2411,71 @@ mod tests {
         assert!(s.is_query_var(1) && s.is_query_var(2));
         s.clear_query_vars();
         assert!(!s.is_query_var(1) && !s.is_query_var(2));
+    }
+
+    // Co-proximate label fade: a labelled node leaves the opaque buffer for the
+    // transparent one and eases to LABEL_FADE_ALPHA; COLOR.a is float 15.
+    #[test]
+    fn labelled_node_moves_to_faded_buffer_and_eases_to_label_alpha() {
+        let mut s = RenderStore::new();
+        s.upsert(1, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.upsert(2, [1.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.set_labelled(&[1]);
+        let main = s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        assert_eq!(main.len(), NODE_STRIDE, "node 1 leaves the opaque buffer");
+        assert!(approx(main[15], 1.0), "opaque node keeps alpha 1");
+        let faded = s.faded_node_buffer().to_vec();
+        assert_eq!(faded.len(), NODE_STRIDE, "node 1 is in the faded buffer");
+        assert!(approx(faded[15], 1.0 - LABEL_FADE_STEP), "first build steps once");
+        for _ in 0..20 {
+            s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        }
+        assert!(approx(s.faded_node_buffer()[15], LABEL_FADE_ALPHA), "settles at 30 %");
+        assert!(approx(s.label_alpha_of(1), LABEL_FADE_ALPHA));
+        assert!(approx(s.label_alpha_of(2), 1.0));
+        // Both endpoints still count as drawn, so the edge between them survives.
+        assert_eq!(s.build_edge_buffer(&[1, 2], 1.0).len(), EDGE_STRIDE_TYPED);
+        assert_eq!(s.render_ids().len(), 2, "faded node stays hittable");
+    }
+
+    #[test]
+    fn unlabelled_node_fades_back_then_returns_to_opaque_buffer() {
+        let mut s = RenderStore::new();
+        s.upsert(1, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.upsert(2, [1.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.set_labelled(&[1]);
+        for _ in 0..20 {
+            s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        }
+        s.set_labelled(&[]);
+        let main = s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        assert_eq!(main.len(), NODE_STRIDE, "still fading: stays in the faded pass");
+        assert!(approx(s.faded_node_buffer()[15], LABEL_FADE_ALPHA + LABEL_FADE_STEP));
+        for _ in 0..20 {
+            s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        }
+        let main = s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9);
+        assert_eq!(main.len(), 2 * NODE_STRIDE, "fully opaque again: back in main");
+        assert!(s.faded_node_buffer().is_empty());
+        assert!(approx(s.label_alpha_of(1), 1.0));
+    }
+
+    #[test]
+    fn set_labelled_replaces_the_set_and_clear_resets_fades() {
+        let mut s = RenderStore::new();
+        s.upsert(1, [0.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.upsert(2, [1.0, 0.0, 0.0], 0, 0.0, 0.0);
+        s.set_labelled(&[1]);
+        for _ in 0..3 {
+            s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9); // 1 → 0.7
+        }
+        s.set_labelled(&[2]); // 1 drops out (fades back), 2 comes in
+        s.build_node_buffer(&[1, 2], 1.0, 0.7, 1.9); // 1 → 0.8, 2 → 0.9
+        assert!(approx(s.label_alpha_of(1), 0.8) && approx(s.label_alpha_of(2), 0.9));
+        assert_eq!(s.faded_node_buffer().len(), 2 * NODE_STRIDE, "both mid-fade");
+        s.clear();
+        assert!(approx(s.label_alpha_of(1), 1.0) && approx(s.label_alpha_of(2), 1.0));
+        assert!(s.faded_node_buffer().is_empty());
     }
 
     #[test]
