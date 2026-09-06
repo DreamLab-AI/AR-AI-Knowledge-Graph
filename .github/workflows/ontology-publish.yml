@@ -149,7 +149,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+          # no pip cache: setup-python keys it on a requirements file this repo does not have
 
       - name: Install RDF tools
         run: |
@@ -413,7 +413,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
+          # no pip cache: setup-python keys it on a requirements file this repo does not have
 
       - name: Install JSON-LD tools
         run: |
