@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       source_repo:
-        description: 'Source repository for ontology (e.g., jjohare/logseq)'
+        description: 'Source repository for ontology (e.g., jjohare/visionGraph)'
         required: false
-        default: 'jjohare/logseq'
+        default: 'jjohare/visionGraph'
       force_sync:
         description: 'Force full sync even if no changes detected'
         required: false
@@ -27,7 +27,7 @@ on:
         type: boolean
 
 env:
-  ONTOLOGY_SOURCE_REPO: ${{ github.event.inputs.source_repo || 'jjohare/logseq' }}
+  ONTOLOGY_SOURCE_REPO: ${{ github.event.inputs.source_repo || 'jjohare/visionGraph' }}
   # ADR-2098: solid-pod-rs is embedded in the VisionClaw server (ADR-032 M3) and
   # the JSS sidecar is gone from docker-compose.unified.yml — there is no `jss`
   # host left to resolve, so the old default could only ever fail DNS. The pod is
@@ -56,7 +56,7 @@ jobs:
           fetch-depth: 2
 
       # The ontology source is a PRIVATE repository owned by another account
-      # (jjohare/logseq). The automatic GITHUB_TOKEN is scoped to this repository
+      # (jjohare/visionGraph). The automatic GITHUB_TOKEN is scoped to this repository
       # alone, so it can never read it: actions/checkout retries three times and
       # then reports only the opaque
       #   "Not Found - https://docs.github.com/rest/repos/repos#get-a-repository"
@@ -738,7 +738,7 @@ jobs:
 
           ### Pipeline
           \`\`\`
-          jjohare/logseq -> Markdown -> TTL -> JSON-LD -> JSS -> WebSocket -> React
+          jjohare/visionGraph -> Markdown -> TTL -> JSON-LD -> JSS -> WebSocket -> React
           \`\`\`
 
           WebSocket subscribers notified at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
