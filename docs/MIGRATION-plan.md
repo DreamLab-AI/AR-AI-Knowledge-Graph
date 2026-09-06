@@ -2,7 +2,7 @@
 
 **Cut date:** 2026-08-31
 **Scope:** two repos — this repo (`/home/devuser/workspace/project`) and the vendored `agentbox/` tree.
-**Status:** AWAITING RATIFICATION. No moves have been executed. This document is the plan only.
+**Status:** EXECUTED 2026-08-31 (ADR-2001). §2 is kept as the historical record of the cut; the §4 redirect table remains the authority for repointing legacy citations.
 
 ## 1. Rationale
 
@@ -15,7 +15,7 @@ cross-references survive, then repoint (or archive-qualify) the code comments th
 
 The cut is a single `git mv` commit per repo so it reverts cleanly (see §6).
 
-## 2. Exact move commands — DO NOT RUN until ratified
+## 2. Exact move commands — executed 2026-08-31 (historical record)
 
 Run from the repo root. `git mv` preserves history; the archive dirs already exist as empty
 holders, so we move the child dirs into them.

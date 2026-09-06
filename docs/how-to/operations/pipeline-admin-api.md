@@ -13,15 +13,15 @@ difficulty-level: intermediate
 
 # Pipeline Admin API Guide
 
-> **OBSOLETE / REMOVED (ADR-11)**: The pipeline-admin routes and the
+> **OBSOLETE / REMOVED (ADR-2004)**: The pipeline-admin routes and the
 > `pipeline_admin_handler` / `PipelineAdminState` types described here were
 > **deleted** during the Neo4j → Oxigraph persistence migration (the handlers were
 > SQLite-pipeline-specific). See the comment at `src/main.rs` ("Pipeline admin routes
-> removed … in Oxigraph migration, ADR-11"). This document is retained only as a record
+> removed … in Oxigraph migration, ADR-2004"). This document is retained only as a record
 > of the former API and should not be followed for the current system. Recommend
 > archiving or deleting once a replacement admin surface (if any) is documented.
 
-**Status**: REMOVED — superseded by ADR-11
+**Status**: REMOVED — superseded by ADR-2004
 **Last Updated**: January 29, 2026 (content no longer reflects the codebase)
 
 ---
@@ -287,7 +287,7 @@ Register routes:
 ### Automatic Execution
 
 ```
-GitHub Sync → OWL Parse → Neo4j → [TRIGGER]
+GitHub Sync → OWL Parse → Oxigraph → [TRIGGER]
                                             ↓
                                        Reasoning
                                             ↓

@@ -232,11 +232,11 @@ the code above, the code wins and the divergence is recorded here.
 
 ## RBAC closeout qualification — 2026-09-04
 
-ADR-2010 is partial against broad atomic-authority claims: target checks transact, caller role is passed from an earlier resolution. Explicit-role removal restores fallback authority and is not necessarily access revocation. ADR-2011's central gate includes public-prefix and report-mode branches; its dated acknowledgement is checked at construction, not continuously. [Source evidence and acceptance](../../VisionFlow/docs/estate-review/role-authority.md) require concurrency, composed-route, audit and lifecycle receipts before complete-system claims.
+ADR-2010 is partial against broad atomic-authority claims: target checks transact, caller role is passed from an earlier resolution. Explicit-role removal restores fallback authority and is not necessarily access revocation. ADR-2011's central gate includes public-prefix and report-mode branches; its dated acknowledgement is checked at construction, not continuously. [Source evidence and acceptance](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/role-authority.md) require concurrency, composed-route, audit and lifecycle receipts before complete-system claims.
 
 ## Request-credential review — 2026-09-04
 
-ADR-2009's browser migration trigger is reached in current source: the ordinary API interceptor signs NIP-98. Server legacy header acceptance remains. Eleven mocked interceptor tests cover header construction, not full-route authentication. Session age is relative to mutable last_seen. ADR-2013's enterprise/delegation deferral does not imply a single request-credential realm or govern other repositories' verifiers. See the [estate review](../../VisionFlow/docs/estate-review/role-authority.md#request-realms-and-deferred-delegation) for consumer retirement, session recovery and delegated-authority acceptance.
+ADR-2009's browser migration trigger is reached in current source: the ordinary API interceptor signs NIP-98. Server legacy header acceptance remains. Eleven mocked interceptor tests cover header construction, not full-route authentication. Session age is relative to mutable last_seen. ADR-2013's enterprise/delegation deferral does not imply a single request-credential realm or govern other repositories' verifiers. See the [estate review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/role-authority.md#request-realms-and-deferred-delegation) for consumer retirement, session recovery and delegated-authority acceptance.
 
 ## Remediation — 2026-09-05
 

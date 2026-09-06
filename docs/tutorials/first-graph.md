@@ -38,7 +38,7 @@ Ports that must be free:
 | 4000 | Rust backend API |
 
 > The graph store is an **embedded Oxigraph** triple store running in-process inside
-> the Rust backend (ADR-11). There is no separate database container, browser UI, or
+> the Rust backend (ADR-2004). There is no separate database container, browser UI, or
 > network port to expose — its RocksDB dataset lives at `${DATA_DIR}/oxigraph/`.
 
 Complete the [Installation Guide](installation.md) before continuing. Confirm readiness:
@@ -295,7 +295,7 @@ When agents finish:
 | [Deployment Guide](../how-to/deployment.md) | Run VisionClaw in production with TLS and persistent volumes |
 | [Development Guide](../how-to/development.md) | Contribute to the codebase; frontend, Rust backend, CUDA kernel |
 | [Agent Orchestration](../how-to/agent-orchestration.md) | Advanced agent topologies, Byzantine fault tolerance, hive-mind consensus |
-| [Graph Schema](../reference/graph-schema.md) | Full node and relationship schema (Oxigraph/RDF logical model, ADR-11) |
+| [Graph Schema](../reference/graph-schema.md) | Full node and relationship schema (Oxigraph/RDF logical model, ADR-2004) |
 
 ---
 

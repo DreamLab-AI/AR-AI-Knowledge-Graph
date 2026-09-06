@@ -287,20 +287,20 @@ change). Historical rationale stays in the legacy corpus
 ADR-2004 retains the embedded shared-store decision and now names its CP-01/06/08
 closeout boundary: shared Oxigraph ownership does not establish a cross-store
 transaction, actor reload consistency or restore correctness. See the current
-[graph runtime evidence](../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md)
+[graph runtime evidence](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/visionclaw-data-runtime.md)
 and the data-authority governing document for sync, provenance and backup limits.
 
 ## ACSP workflow closeout — 2026-09-04
 
-ADR-2006 distinguishes the forum event surface from stateful consumers and durable case reconciliation. The retained domain kernel's presence does not prove integration into the elevation actor or inbox DTO. Require signed-event/request correlation, case authority and failure/restart receipts through gate and PR outcomes. See [estate ACSP review](../../VisionFlow/docs/estate-review/forum-decisions.md#visionclaw-acsp-consumption-and-recovery). Current source review does not certify a complete human-approval journey.
+ADR-2006 distinguishes the forum event surface from stateful consumers and durable case reconciliation. The retained domain kernel's presence does not prove integration into the elevation actor or inbox DTO. Require signed-event/request correlation, case authority and failure/restart receipts through gate and PR outcomes. See [estate ACSP review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/forum-decisions.md#visionclaw-acsp-consumption-and-recovery). Current source review does not certify a complete human-approval journey.
 
 ## Crate and supervision closeout — 2026-09-04
 
-ADR-2005 remains partial; the current workspace adds converter and integration-test members to the historical census. ADR-2007 is partial: four supervisors exist, but context delivery uses direct messages plus optional bus publication. Require responsibility/dependency acceptance, acknowledged context generations and failure/restart evidence. See [estate architecture](../../VisionFlow/docs/estate-review/vision-and-architecture.md#server-extraction-and-enforceable-boundaries) and [supervision review](../../VisionFlow/docs/estate-review/rendered-state.md#gpu-supervision-and-context-delivery).
+ADR-2005 remains partial; the current workspace adds converter and integration-test members to the historical census. ADR-2007 is partial: four supervisors exist, but context delivery uses direct messages plus optional bus publication. Require responsibility/dependency acceptance, acknowledged context generations and failure/restart evidence. See [estate architecture](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/vision-and-architecture.md#server-extraction-and-enforceable-boundaries) and [supervision review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#gpu-supervision-and-context-delivery).
 
 ## Development and corpus acceptance — 2026-09-04
 
-ADR-2008 is partial: normal development startup uses a timestamp-gated supervisor wrapper, with demonstrated misses for crate CUDA and manifest edits. ADR-2001 retains partial/staged corpus status despite complete closeout-extension coverage of the operative series. Four stale baselines still fail the current validator. See [development inputs](../../VisionFlow/docs/estate-review/configuration-projection.md#development-restart-and-build-input-coverage) and [corpus debt](../../VisionFlow/docs/estate-review/canon-and-verification.md#visionclaw-operative-pack-coverage-and-baseline-debt).
+ADR-2008 is partial: normal development startup uses a timestamp-gated supervisor wrapper, with demonstrated misses for crate CUDA and manifest edits. ADR-2001 retains partial/staged corpus status despite complete closeout-extension coverage of the operative series. Four stale baselines still fail the current validator. See [development inputs](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/configuration-projection.md#development-restart-and-build-input-coverage) and [corpus debt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/canon-and-verification.md#visionclaw-operative-pack-coverage-and-baseline-debt).
 
 ## Remediation — 2026-09-05
 

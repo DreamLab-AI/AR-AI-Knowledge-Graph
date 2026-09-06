@@ -194,6 +194,6 @@ adb logcat -s visionclaw-xr | grep -E 'ws|auth'   # network + auth
   query builder.
 - [XR Architecture](../explanation/xr-architecture.md) — Godot + OpenXR design,
   boot sequence, frame loop.
-- [PRD-008 — XR Client Replacement](../prd/PRD-008-xr-godot-replacement.md).
-- [ADR-071 — Godot 4 + godot-rust + OpenXR](../adr/ADR-071-godot-rust-xr-replacement.md).
+- [PRD-008 — XR Client Replacement](../archive/prd/PRD-008-xr-godot-replacement.md).
+- [ADR-071 — Godot 4 + godot-rust + OpenXR](../archive/adr/ADR-071-godot-rust-xr-replacement.md).
 </content>

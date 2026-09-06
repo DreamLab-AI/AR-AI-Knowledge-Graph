@@ -88,10 +88,10 @@ sigmoid is not clipping.
 | `visionclaw_solid_pod_rs_requests_total` | counter | — | Requests routed into the embedded solid-pod-rs subsystem |
 | `visionclaw_solid_pod_rs_wac_denied_total` | counter | — | Requests denied by WAC evaluation |
 
-Parent ADRs: [ADR-028-ext](../../adr/ADR-028-ext-optional-auth.md),
-[ADR-050](../../adr/ADR-050-pod-backed-kgnode-schema.md),
-[ADR-051](../../adr/ADR-051-visibility-transitions.md),
-[ADR-053](../../adr/ADR-053-solid-pod-rs-crate-extraction.md).
+Parent ADRs: [ADR-028-ext](../../archive/adr/ADR-028-ext-optional-auth.md),
+[ADR-050](../../archive/adr/ADR-050-pod-backed-kgnode-schema.md),
+[ADR-051](../../archive/adr/ADR-051-visibility-transitions.md),
+[ADR-053](../../archive/adr/ADR-053-solid-pod-rs-crate-extraction.md).
 
 ## Scraping
 

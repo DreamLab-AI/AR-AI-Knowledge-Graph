@@ -62,9 +62,9 @@ CP-01 revision/ownership mapping and the relevant corpus or authority contract.
 
 **Current evidence:** The repository method rejects forbidden graph names and unsafe IRIs before submitting its combined update. The fence is scoped to this method. Other governed runtime writers can update asserted ontology, as the sync source explicitly records.
 
-See [runtime analysis](../../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md),
-[source hashes](../../../VisionFlow/docs/estate-review/evidence/visionclaw-data-snapshot.json)
-and [backup receipt](../../../VisionFlow/docs/estate-review/evidence/visionclaw-backup-probe.json).
+See [runtime analysis](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/visionclaw-data-runtime.md),
+[source hashes](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-data-snapshot.json)
+and [backup receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-backup-probe.json).
 Source was inspected at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`. Earlier verification at `e0f8cd896`
 remains historical evidence; this annex does not claim a new deployed activation
 or complete verification of every older assertion.

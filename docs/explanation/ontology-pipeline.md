@@ -11,7 +11,7 @@ tags: [ontology, owl, whelk, oxigraph, sparql, shacl, prov-o, reasoning, pipelin
 
 VisionClaw maintains a formal OWL 2 ontology alongside its display knowledge graph. The pipeline ingests vault Markdown (Obsidian frontmatter, see [`VAULT-corpus-format.md`](../VAULT-corpus-format.md)) from a GitHub repository, extracts OWL axioms, reasons over them with a native Rust EL reasoner, stores everything as RDF in an embedded triple store, and validates and signs each contribution. This document explains the stages, the data contracts between them, and where each lives in the `visionclaw-ontology` and `visionclaw-adapters` crates.
 
-The graph store is an **embedded Oxigraph** RDF quad-store (in-process, RocksDB-backed, W3C SPARQL 1.1). It is the sole store for both knowledge-graph and ontology data under the persistence migration (ADR-11), implemented by the triple-store migration framework (ADR-101). Neo4j is fully removed: there is no Bolt URI, no `NEO4J_*` configuration, and no separate database-browser UI. User settings persist in an embedded SQLite store.
+The graph store is an **embedded Oxigraph** RDF quad-store (in-process, RocksDB-backed, W3C SPARQL 1.1). It is the sole store for both knowledge-graph and ontology data under the persistence migration (ADR-2004), implemented by the triple-store migration framework (ADR-101). Neo4j is fully removed: there is no Bolt URI, no `NEO4J_*` configuration, and no separate database-browser UI. User settings persist in an embedded SQLite store.
 
 ---
 
@@ -240,6 +240,6 @@ VisionClaw is the **host** ontology platform: it ingests, reasons, validates, an
 - [Bounded Contexts](bounded-contexts.md) — where the ontology context sits in the system
 - [MCP Tools reference](../reference/mcp-tools.md) · [Graph Schema reference](../reference/graph-schema.md)
 - agentbox [ecosystem](../../agentbox/docs/developer/ecosystem.md) — the KG-elevation bridge subsystem
-- Governing decisions: [ADR-101 — Triple-Store Migration Framework (Oxigraph, the ADR-11 persistence migration)](../adr/ADR-101-triple-store-migration-framework.md), [ADR-099 — Whelk EL Reasoner Posture](../adr/ADR-099-reasoner-posture-whelk-el-primary.md), [ADR-014 — Semantic Pipeline Unification](../adr/ADR-014-semantic-pipeline-unification.md), [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-127 — Semantic Trust Layer](../adr/ADR-127-semantic-trust-layer.md), [ADR-011 — Auth Enforcement (SPARQL SERVICE fence)](../adr/ADR-011-auth-enforcement.md), [PRD-022 — Semantic Trust Layer](../prd/PRD-022-semantic-trust-layer.md)
+- Governing decisions: [ADR-101 — Triple-Store Migration Framework (Oxigraph, the ADR-2004 persistence migration)](../archive/adr/ADR-101-triple-store-migration-framework.md), [ADR-099 — Whelk EL Reasoner Posture](../archive/adr/ADR-099-reasoner-posture-whelk-el-primary.md), [ADR-014 — Semantic Pipeline Unification](../archive/adr/ADR-014-semantic-pipeline-unification.md), [ADR-090 — Hexagonal Crate Modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-127 — Semantic Trust Layer](../archive/adr/ADR-127-semantic-trust-layer.md), [ADR-011 — Auth Enforcement (SPARQL SERVICE fence)](../archive/adr/ADR-011-auth-enforcement.md), [PRD-022 — Semantic Trust Layer](../archive/prd/PRD-022-semantic-trust-layer.md)
 </content>
 </invoke>

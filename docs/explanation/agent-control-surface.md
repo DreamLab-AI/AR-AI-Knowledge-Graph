@@ -20,7 +20,7 @@ This page explains the model, the kind vocabulary, and the decision loop. The
 exact wire schema (per-kind JSON, the `field_type` catalogue, dos and don'ts) is
 owned by the agentbox subsystem and is **not duplicated here** — see the
 [agentbox producer reference](../../agentbox/docs/developer/agent-control-surface-panels.md).
-The governing decision is [ADR-110](../adr/ADR-110-agentic-actors-acsp-control-surfaces.md).
+The governing decision is [ADR-110](../archive/adr/ADR-110-agentic-actors-acsp-control-surfaces.md).
 
 ## Why a protocol instead of an endpoint
 
@@ -234,4 +234,4 @@ key present, with each actor behind its own flag (`ELEVATION_ACTOR_ENABLED=1`).
 - [Ontology Pipeline](ontology-pipeline.md) — the elevation loop's corpus and OWL context
 - [Subsystems](subsystems.md) — VisionClaw and agentbox as composed subsystems
 - [Security Model](security-model.md) — identity, signing, and the registration gate in context
-- [ADR-110: Agentic Actors Project Control Surfaces into the Forum (ACSP)](../adr/ADR-110-agentic-actors-acsp-control-surfaces.md) — the governing decision
+- [ADR-110: Agentic Actors Project Control Surfaces into the Forum (ACSP)](../archive/adr/ADR-110-agentic-actors-acsp-control-surfaces.md) — the governing decision

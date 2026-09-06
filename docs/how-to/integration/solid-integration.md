@@ -295,7 +295,7 @@ Ensure your Nostr session is active and the NIP-98 signature is valid. Try loggi
 
 ## Architecture Decision Records
 
-- [ADR-027: Pod-backed Graph Views](../../adr/ADR-027-pod-backed-graph-views.md)
-- [ADR-106: SPARQL PATCH for Ontology](../../adr/ADR-106-sparql-patch-ontology.md) (renumbered from ADR-028)
-- [ADR-029: Type Index Discovery](../../adr/ADR-029-type-index-discovery.md)
-- [ADR-030: Agent Memory in Pods](../../adr/ADR-030-agent-memory-pods.md)
+- [ADR-027: Pod-backed Graph Views](../../archive/adr/ADR-027-pod-backed-graph-views.md)
+- [ADR-106: SPARQL PATCH for Ontology](../../archive/adr/ADR-106-sparql-patch-ontology.md) (renumbered from ADR-028)
+- [ADR-029: Type Index Discovery](../../archive/adr/ADR-029-type-index-discovery.md)
+- [ADR-030: Agent Memory in Pods](../../archive/adr/ADR-030-agent-memory-pods.md)

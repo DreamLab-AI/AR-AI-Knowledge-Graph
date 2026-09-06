@@ -45,7 +45,7 @@ VisionClaw's compact wire format for WebSocket communication. Version 2 uses 36 
 Graph algorithm that identifies clusters of densely connected nodes. VisionClaw supports Louvain, Label Propagation, and Modularity optimization algorithms. See [REST API](./rest-api.md).
 
 ### Cypher
-A declarative graph query language. VisionClaw originally ran on Neo4j Cypher; since ADR-11 the graph store is embedded Oxigraph (W3C SPARQL 1.1). Some endpoints still accept a `cypher` field for backwards compatibility, but queries resolve against Oxigraph, not Neo4j. See [Graph Schema](./graph-schema.md).
+A declarative graph query language. VisionClaw originally ran on Neo4j Cypher; since ADR-2004 the graph store is embedded Oxigraph (W3C SPARQL 1.1). Some endpoints still accept a `cypher` field for backwards compatibility, but queries resolve against Oxigraph, not Neo4j. See [Graph Schema](./graph-schema.md).
 
 ---
 
@@ -82,7 +82,7 @@ The update rate for real-time graph visualization. VisionClaw targets 60 FPS wit
 ## G
 
 ### GDS (Graph Data Science)
-A library of graph algorithms (centrality, community detection, pathfinding). Historically VisionClaw used Neo4j GDS; since ADR-11 these analytics run in-process over the embedded Oxigraph store and GPU pipeline. See [Graph Schema](./graph-schema.md).
+A library of graph algorithms (centrality, community detection, pathfinding). Historically VisionClaw used Neo4j GDS; since ADR-2004 these analytics run in-process over the embedded Oxigraph store and GPU pipeline. See [Graph Schema](./graph-schema.md).
 
 ### GPU Acceleration
 Using graphics processing units for parallel computation. VisionClaw supports CUDA (NVIDIA) for physics simulation. See [Configuration Reference](./configuration.md).
@@ -191,7 +191,7 @@ The first byte of binary WebSocket messages identifying the format. V2 is curren
 ## Q
 
 ### Query
-A request for data from the graph store. Since ADR-11 the store is embedded Oxigraph, queried with W3C SPARQL 1.1 (a `cypher` field is still accepted on some endpoints for backwards compatibility). See [Graph Schema](./graph-schema.md).
+A request for data from the graph store. Since ADR-2004 the store is embedded Oxigraph, queried with W3C SPARQL 1.1 (a `cypher` field is still accepted on some endpoints for backwards compatibility). See [Graph Schema](./graph-schema.md).
 
 ---
 

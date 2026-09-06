@@ -510,7 +510,7 @@ ws.onmessage = (event: MessageEvent) => {
 setInterval(() => ws.send(JSON.stringify({ type: 'heartbeat' })), 25_000)
 ```
 
-The server emits one binary protocol — there are no versions. The preamble byte (0x42) is a fixed sanity check, not a version dispatch. Sticky GPU outputs (`cluster_id`, `community_id`, `anomaly_score`, `sssp_distance`, `sssp_parent`) ride a separate `analytics_update` JSON message at recompute cadence. See [docs/binary-protocol.md](../reference/binary-protocol.md) and [ADR-061](../adr/ADR-061-binary-protocol-unification.md).
+The server emits one binary protocol — there are no versions. The preamble byte (0x42) is a fixed sanity check, not a version dispatch. Sticky GPU outputs (`cluster_id`, `community_id`, `anomaly_score`, `sssp_distance`, `sssp_parent`) ride a separate `analytics_update` JSON message at recompute cadence. See [docs/binary-protocol.md](../reference/binary-protocol.md) and [ADR-061](../archive/adr/ADR-061-binary-protocol-unification.md).
 
 ---
 

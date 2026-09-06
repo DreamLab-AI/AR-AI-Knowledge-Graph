@@ -1,6 +1,6 @@
 # VIVE Pro Close-Out Session — Evidence Record (2026-08-20)
 
-**Scope ruling:** [ADR-136](../adr/ADR-136-desktop-openxr-vive-validation-target.md) —
+**Scope ruling:** [ADR-136](../archive/adr/ADR-136-desktop-openxr-vive-validation-target.md) —
 desktop OpenXR (SteamVR, VIVE Pro, HP-Desktop) accepted as the close-out
 validation target for the PRD-008 §7.3 copresence layer; Quest 3 remains the
 sole ship target. Executed by a Fable-queen / Opus mesh (WS-A backend

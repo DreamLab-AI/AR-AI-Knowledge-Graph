@@ -37,7 +37,7 @@ Text construction: `"{preferred_term}: {definition}. {scope_note}"`
 
 Nodes with similar definitions cluster together even if they live in completely different parts of the ontology hierarchy. For example, "Machine Learning" and "Statistical Learning" would be near-neighbours in content space despite potentially being in different sub-trees.
 
-The embedding service calls an external MiniLM endpoint in batches of 64, storing results as a `content_embedding_384` property on each graph node (embedded Oxigraph store — ADR-11).
+The embedding service calls an external MiniLM endpoint in batches of 64, storing results as a `content_embedding_384` property on each graph node (embedded Oxigraph store — ADR-2004).
 
 ### Topology Embeddings (128-dim)
 
@@ -113,4 +113,4 @@ These are designed to run post-sync (after new ontology data is ingested from Gi
 
 ## Bounded Context
 
-The feature engineering pipeline sits downstream of Ontology Ingest (reads nodes and edges) and upstream of both GPU Physics (materialised edges, force config) and Client Discovery (similarity search API). See [DDD Feature Engineering Context](../ddd/ddd-feature-engineering-context.md) for the full domain model.
+The feature engineering pipeline sits downstream of Ontology Ingest (reads nodes and edges) and upstream of both GPU Physics (materialised edges, force config) and Client Discovery (similarity search API). See [DDD Feature Engineering Context](../archive/ddd/ddd-feature-engineering-context.md) for the full domain model.

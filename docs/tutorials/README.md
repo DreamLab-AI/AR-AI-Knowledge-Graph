@@ -45,4 +45,4 @@ Once you have finished the path:
 - [System Overview](../explanation/system-overview.md) — how the pieces fit together
 - [Reference Hub](../reference/README.md) — exhaustive API and configuration details
 - [Troubleshooting](../how-to/operations/troubleshooting.md) — fixes for common setup problems
-- Governing ADRs: [ADR-090 Hexagonal crate modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-112 Ontology augmentation retrieval spine](../adr/ADR-112-ontology-augmentation-retrieval-spine.md)
+- Governing ADRs: [ADR-090 Hexagonal crate modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-112 Ontology augmentation retrieval spine](../archive/adr/ADR-112-ontology-augmentation-retrieval-spine.md)

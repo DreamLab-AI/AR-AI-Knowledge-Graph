@@ -1117,7 +1117,7 @@ There is no `/api/semantic-forces/compute`, `/weights`, or `/reset` — those ar
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/nl-query/translate` | Translate natural language to a Cypher-style query (resolved against the embedded Oxigraph store; `cypher` field kept for backwards compatibility, ADR-11) |
+| POST | `/api/nl-query/translate` | Translate natural language to a Cypher-style query (resolved against the embedded Oxigraph store; `cypher` field kept for backwards compatibility, ADR-2004) |
 | GET | `/api/nl-query/examples` | Get example queries |
 | POST | `/api/nl-query/explain` | Explain a query |
 | POST | `/api/nl-query/validate` | Validate query syntax |
@@ -1154,7 +1154,7 @@ Only files tagged `public:: true` become knowledge graph page nodes. Ontology da
 
 ## Discovery & Feature Engineering — `/api/discovery/*` (design-stage — not registered)
 
-There is no `discovery_handler.rs` and no `/api/discovery/*` route in the router (zero grep hits across `src/`). Everything in this section is unbuilt design, not a current contract. It combines content embeddings (MiniLM-L6, 384-dim) with topology embeddings (TransE, 128-dim) for semantic search and ontology gap detection. See [ADR-072](../adr/ADR-072-autordf2gml-feature-engineering.md).
+There is no `discovery_handler.rs` and no `/api/discovery/*` route in the router (zero grep hits across `src/`). Everything in this section is unbuilt design, not a current contract. It combines content embeddings (MiniLM-L6, 384-dim) with topology embeddings (TransE, 128-dim) for semantic search and ontology gap detection. See [ADR-072](../archive/adr/ADR-072-autordf2gml-feature-engineering.md).
 
 > **Don't conflate this with the operational memory stack:** the MiniLM-L6
 > embedding model named here is part of this unbuilt discovery design

@@ -501,7 +501,7 @@ sequenceDiagram
     participant GSS as GraphSerializationService::export_graph<br/>src/services/graph_serialization.rs:29
 
     Boot->>FS: load_graph_from_files(graph_repo)
-    FS->>Repo: load_graph() - idempotency guard (ADR-11, not in docs/adr/ ledger)<br/>src/services/file_service.rs:1177
+    FS->>Repo: load_graph() - idempotency guard (ADR-2004, not in docs/adr/ ledger)<br/>src/services/file_service.rs:1177
     alt existing.nodes not empty
         Repo-->>FS: existing graph populated
         FS-->>Boot: Ok(()) - skip local-file seed, GitHub sync is authoritative<br/>src/services/file_service.rs:1178-1185

@@ -275,3 +275,6 @@ scratchpad/
 !docs/screenshots/2026-09-02-desktop-ontology-panel.jpg
 !docs/assets/media/
 !docs/assets/media/2026-09-02-immersive-agent-actions.mp4
+
+# Untracked tidy-sweep attic (see archive/attic/README.md)
+archive/attic/

@@ -12,9 +12,9 @@ This reference covers two subsystems that landed with the 2026-08-31 XR/layout
 programme:
 
 - **RenderStore** — the render-offload and per-frame draw path introduced by
-  [ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md).
+  [ADR-137](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md).
 - **The GPU force-channel registry** and **pinned-node mask** —
-  [ADR-138](../adr/ADR-138-gpu-force-channel-registry.md).
+  [ADR-138](../archive/adr/ADR-138-gpu-force-channel-registry.md).
 
 Every structural claim below cites `file:symbol` (line numbers are indicative and
 drift with edits). Where a common assumption is wrong, it is flagged inline.
@@ -218,7 +218,7 @@ deferred array-backed step 2.
 
 ## 5. Related ADRs
 
-- [ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md) — render offload, runtime quality dials, full-3D-default layout, Protocol V5.
-- [ADR-138](../adr/ADR-138-gpu-force-channel-registry.md) — force-channel registry (mapping layer now, array-backed later) and the pinned-node mask.
-- [ADR-139](../adr/ADR-139-immersive-interaction-adoption-programme.md), [ADR-140](../adr/ADR-140-xr-agent-swarm-visualisation.md), [ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md) — the consumers.
+- [ADR-137](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md) — render offload, runtime quality dials, full-3D-default layout, Protocol V5.
+- [ADR-138](../archive/adr/ADR-138-gpu-force-channel-registry.md) — force-channel registry (mapping layer now, array-backed later) and the pinned-node mask.
+- [ADR-139](../archive/adr/ADR-139-immersive-interaction-adoption-programme.md), [ADR-140](../archive/adr/ADR-140-xr-agent-swarm-visualisation.md), [ADR-141](../archive/adr/ADR-141-constrained-layout-engine-programme.md) — the consumers.
 - [`binary-protocol.md`](binary-protocol.md) — the V5 position wrapper.

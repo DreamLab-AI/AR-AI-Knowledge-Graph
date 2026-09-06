@@ -10,7 +10,7 @@ updated-date: 2026-05-28
 
 This guide walks through locating and diagnosing performance bottlenecks in VisionClaw across four domains: GPU physics, WebSocket/broadcast throughput, client rendering, and graph-store queries. Each section gives concrete commands, observable symptoms, and the expected baseline numbers derived from the benchmark suite.
 
-> **Graph store changed (ADR-11)**: the graph store is now an **embedded Oxigraph** RDF triple store (W3C SPARQL 1.1, RocksDB-backed, in-process). There is no separate Neo4j container, Bolt port, `cypher-shell`, or Neo4j Browser. Cypher/`EXPLAIN`/`PROFILE` examples below are retained for historical context only and **no longer apply** — profile graph queries against the in-process Oxigraph store and SPARQL.
+> **Graph store changed (ADR-2004)**: the graph store is now an **embedded Oxigraph** RDF triple store (W3C SPARQL 1.1, RocksDB-backed, in-process). There is no separate Neo4j container, Bolt port, `cypher-shell`, or Neo4j Browser. Cypher/`EXPLAIN`/`PROFILE` examples below are retained for historical context only and **no longer apply** — profile graph queries against the in-process Oxigraph store and SPARQL.
 
 ---
 
@@ -271,7 +271,7 @@ Root cause: `InstancedLabels` Phase 2 reads `nodePositionsRef.current` after the
 
 ## Graph-Store Query Profiling
 
-> **ADR-11**: the graph store is now an **embedded Oxigraph** triple store (in-process,
+> **ADR-2004**: the graph store is now an **embedded Oxigraph** triple store (in-process,
 > RocksDB-backed, W3C SPARQL 1.1). There is no Neo4j Browser, Bolt port, or `cypher-shell`.
 > Profile graph queries by timing the SPARQL calls inside the Rust adapter
 > (`OxigraphGraphRepository` / `OxigraphOntologyRepository`) — instrument the repository

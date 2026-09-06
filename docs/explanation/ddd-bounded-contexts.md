@@ -8,12 +8,12 @@ updated-date: 2026-04-09
 
 # DDD Bounded Contexts - VisionClaw
 
-> **ADR-11 update**: Wherever this map names "Neo4j" as a persistence target, the live
+> **ADR-2004 update**: Wherever this map names "Neo4j" as a persistence target, the live
 > backing store is the **embedded Oxigraph** RDF triple store (in-process, RocksDB-backed;
 > settings in SQLite). The repository **ports** are unchanged — only the adapter
 > implementations differ (`OxigraphGraphRepository`, `SqliteSettingsRepository`).
 >
-> **Correction (2026-07-22 doc-drift audit): scope widened.** The ADR-11
+> **Correction (2026-07-22 doc-drift audit): scope widened.** The ADR-2004
 > update above applies to this **entire document**, not only the literal
 > string "Neo4j" — every bounded-context entry below (BC1-BC10, both Mermaid
 > diagrams, and any persistence/port description) should be read as

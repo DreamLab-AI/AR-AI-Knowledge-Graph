@@ -71,7 +71,7 @@ rebuilds, and prints the service URLs on completion.
 docker network create visionclaw_network
 
 # Configure environment (the graph store is embedded — no DB password)
-cp .env.example .env
+cp env.example .env
 # edit .env: set JWT_SECRET, ENABLE_GPU, CUDA_ARCH for your hardware
 
 # Start the development stack (auto-detects source changes, ~2 min warm)
@@ -326,4 +326,4 @@ the [operations guides](operations/README.md).
 - [CLI reference](../reference/cli.md) — `launch.sh` commands and `visionclaw-server` flags
 - [Development guide](development.md) — local dev workflow and hot reload
 - [Operations runbooks](operations/README.md) — production hardening, TLS, maintenance
-- Governing ADRs: [ADR-070 (CUDA integration hardening)](../adr/ADR-070-cuda-integration-hardening.md), [ADR-090 (hexagonal crate modularisation)](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-101 (triple-store migration framework)](../adr/ADR-101-triple-store-migration-framework.md)
+- Governing ADRs: [ADR-070 (CUDA integration hardening)](../archive/adr/ADR-070-cuda-integration-hardening.md), [ADR-090 (hexagonal crate modularisation)](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-101 (triple-store migration framework)](../archive/adr/ADR-101-triple-store-migration-framework.md)

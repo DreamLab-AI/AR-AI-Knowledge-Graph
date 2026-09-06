@@ -19,7 +19,7 @@ updated-date: 2026-06-03
 
 VisionClaw's Rust backend coordinates 23 specialised Actix actors under a hierarchical supervision tree. Actors handle all concurrent concerns — WebSocket client management, GPU physics coordination, graph state, semantic processing, GitHub ingestion, agent monitoring, and task orchestration — without shared mutable state. Communication is exclusively via typed asynchronous messages.
 
-> **Note**: `GraphServiceActor` no longer exists as an active component. It was decomposed into the current 23-actor hierarchy and replaced by `GraphServiceSupervisor` (which supervises `GraphStateActor` and `GraphUpdateActor`) backed by the embedded Oxigraph store (ADR-11). Any reference to `GraphServiceActor` in older documentation is historical.
+> **Note**: `GraphServiceActor` no longer exists as an active component. It was decomposed into the current 23-actor hierarchy and replaced by `GraphServiceSupervisor` (which supervises `GraphStateActor` and `GraphUpdateActor`) backed by the embedded Oxigraph store (ADR-2004). Any reference to `GraphServiceActor` in older documentation is historical.
 
 ---
 

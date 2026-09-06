@@ -210,7 +210,7 @@ Press `Ctrl+K` and type `Digital Signature` again to fly to the node and confirm
 3. Edit the proposed parent class or the axioms in the right pane of the Decision Canvas to resolve the conflict.
 4. Approve again. A new PR is opened.
 
-If you are unsure how to resolve the conflict, read the [Ontology Pipeline explanation](../explanation/ontology-pipeline.md) for background on how Whelk checks consistency, and inspect the class hierarchy via the REST API (`GET /api/graph/data?graph_type=ontology`) to understand the existing disjointness structure. (The graph store is the embedded Oxigraph triple store — there is no separate database browser, ADR-11.)
+If you are unsure how to resolve the conflict, read the [Ontology Pipeline explanation](../explanation/ontology-pipeline.md) for background on how Whelk checks consistency, and inspect the class hierarchy via the REST API (`GET /api/graph/data?graph_type=ontology`) to understand the existing disjointness structure. (The graph store is the embedded Oxigraph triple store — there is no separate database browser, ADR-2004.)
 
 ### Broker rejects with reason
 
@@ -232,8 +232,8 @@ You have completed the full migration loop from note to live ontology class. Fro
 | Topic | Where to go |
 |-------|-------------|
 | Understand why the loop is designed this way | [Insight Migration Loop explanation](../explanation/insight-migration-loop.md) |
-| Learn about the two-tier identity model | [ADR-048](../adr/ADR-048-dual-tier-identity-model.md) |
-| Understand the broker workflow in detail | [ADR-049](../adr/ADR-049-insight-migration-broker-workflow.md) |
+| Learn about the two-tier identity model | [ADR-048](../archive/adr/ADR-048-dual-tier-identity-model.md) |
+| Understand the broker workflow in detail | [ADR-049](../archive/adr/ADR-049-insight-migration-broker-workflow.md) |
 | See how Whelk checks consistency | [Ontology Pipeline](../explanation/ontology-pipeline.md) |
 | Understand the DDD model behind migration | [DDD: Insight Migration Context](../explanation/ddd-insight-migration-context.md) |
-| Configure candidate scoring thresholds | [PRD §6 and §8](../prd/prd-insight-migration-loop.md) |
+| Configure candidate scoring thresholds | [PRD §6 and §8](../archive/prd/prd-insight-migration-loop.md) |

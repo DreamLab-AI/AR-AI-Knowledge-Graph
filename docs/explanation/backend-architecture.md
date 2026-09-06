@@ -15,7 +15,7 @@ This page explains the shape and the reasoning. For the live actor supervision t
 
 ## Hexagonal at a glance
 
-The dependency rule points inwards. The domain core knows nothing about HTTP, CUDA, Oxigraph or Actix; it only knows the port traits it declares. Adapters on the outside implement those traits against concrete technology, and the binary wires concrete adapters to handlers at startup. Swapping a persistence backend — as happened when Neo4j was replaced by an embedded Oxigraph + SQLite store (ADR-11) — touches only the adapter layer, never the domain or application layers.
+The dependency rule points inwards. The domain core knows nothing about HTTP, CUDA, Oxigraph or Actix; it only knows the port traits it declares. Adapters on the outside implement those traits against concrete technology, and the binary wires concrete adapters to handlers at startup. Swapping a persistence backend — as happened when Neo4j was replaced by an embedded Oxigraph + SQLite store (ADR-2004) — touches only the adapter layer, never the domain or application layers.
 
 ```mermaid
 flowchart TB
@@ -96,7 +96,7 @@ Not every read is a hexser handler. The graph-navigation and layout surfaces tha
 | `POST /api/graph/query/pattern` | `query_pattern` (triple patterns, ≤16 triples / 8 vars) | `src/handlers/api_handler/graph/mod.rs` |
 | `GET /api/layout/modes`, `POST /api/layout/mode`, `POST /api/layout/radial`, `GET /api/layout/status`, `POST /api/layout/zones` | `configure_layout_routes` — `set_layout_mode`, `set_radial_layout` (ADR-141) | `src/handlers/layout_handler.rs` |
 
-The layout routes are the API face of the [ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md) constrained-layout programme: `set_layout_mode` selects one of `forceDirected`/`hierarchical`/`radial`/`spectral`/`temporal`/`clustered`, and `set_radial_layout` re-keys the GPU radial-bias term through a `SetRadialLayout` actor message with `RadialMode` `dagRank`/`typeTier`/`ego` (`crates/visionclaw-domain/src/types/layout.rs`). GPU-resident modes route into the physics actor; the CPU one-shot modes (spectral/temporal) compute placement in the handler. The `expand`/`relations` handlers implement the "ask what relations exist, then pull one predicate" model shared with the XR radial menu.
+The layout routes are the API face of the [ADR-141](../archive/adr/ADR-141-constrained-layout-engine-programme.md) constrained-layout programme: `set_layout_mode` selects one of `forceDirected`/`hierarchical`/`radial`/`spectral`/`temporal`/`clustered`, and `set_radial_layout` re-keys the GPU radial-bias term through a `SetRadialLayout` actor message with `RadialMode` `dagRank`/`typeTier`/`ego` (`crates/visionclaw-domain/src/types/layout.rs`). GPU-resident modes route into the physics actor; the CPU one-shot modes (spectral/temporal) compute placement in the handler. The `expand`/`relations` handlers implement the "ask what relations exist, then pull one predicate" model shared with the XR radial menu.
 
 ### Directive lifecycle
 
@@ -159,7 +159,7 @@ Adapters live in `src/adapters/` (some extracted into `crates/visionclaw-adapter
 
 The two remaining adapters are the implicit Actix transport bridges — an HTTP route adapter and a WebSocket broadcast adapter — that translate between actix-web / WebSocket frames and application calls; they bring the count to 12. The `ActorGraphRepository` is the interesting one: it satisfies the `GraphRepository` port by sending Actix messages to `GraphStateActor`, letting non-actor handler code reach live, actor-owned graph state through the standard port interface rather than reaching into the actor directly.
 
-The graph store is an **embedded Oxigraph** RDF triple store with **SQLite** for settings and enrichment proposals (ADR-11). The former Neo4j / Bolt / Cypher adapters were deleted; there is no external database and no database browser UI.
+The graph store is an **embedded Oxigraph** RDF triple store with **SQLite** for settings and enrichment proposals (ADR-2004). The former Neo4j / Bolt / Cypher adapters were deleted; there is no external database and no database browser UI.
 
 ---
 
@@ -208,7 +208,7 @@ The boundary is deliberate: ports keep the domain testable and technology-agnost
 
 ## Why this shape
 
-- **Replaceable infrastructure.** Ports let the Neo4j → Oxigraph/SQLite migration (ADR-11) land entirely in the adapter layer.
+- **Replaceable infrastructure.** Ports let the Neo4j → Oxigraph/SQLite migration (ADR-2004) land entirely in the adapter layer.
 - **Honest dispatch.** Removing the dead CQRS bus (ADR-089) collapsed a misleading "114-handler bus" headline into the real architecture: 44 directly-dispatched hexser handlers plus actor mailboxes.
 - **Fast iteration.** The 8-crate split (ADR-090) turns the build from a 12-minute monolith pass into ~2-minute incremental rebuilds without sacrificing release-binary performance.
 - **Separation of concerns.** Directives validate-then-mutate-then-emit; queries are pure reads — which lets the read path be optimised independently of write consistency.
@@ -224,4 +224,4 @@ The boundary is deliberate: ports keep the domain testable and technology-agnost
 - [Physics & GPU Engine](physics-gpu-engine.md) — the CUDA layout engine behind the GPU adapters
 - [Technology Choices](technology-choices.md) — Rust, Actix-Web, Oxigraph rationale
 - [REST API reference](../reference/rest-api.md) · [WebSocket protocol](../reference/websocket-protocol.md) · [Binary protocol](../reference/binary-protocol.md)
-- Governing decisions: [ADR-089 — CQRS Dead Bus Removal](../adr/ADR-089-cqrs-bus-removal.md) · [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md) · [ADR-141 — Constrained-Layout Engine Programme](../adr/ADR-141-constrained-layout-engine-programme.md) (the layout route handlers)
+- Governing decisions: [ADR-089 — CQRS Dead Bus Removal](../archive/adr/ADR-089-cqrs-bus-removal.md) · [ADR-090 — Hexagonal Crate Modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md) · [ADR-141 — Constrained-Layout Engine Programme](../archive/adr/ADR-141-constrained-layout-engine-programme.md) (the layout route handlers)

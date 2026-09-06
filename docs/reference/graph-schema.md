@@ -11,7 +11,7 @@ VisionClaw stores its graph as RDF in an **embedded Oxigraph** triple store: in-
 RocksDB-backed, exposing W3C **SPARQL 1.1 Query and Update** over the dataset at
 `${DATA_DIR}/oxigraph/`. There is no external database server, no Bolt port, and no Cypher
 engine. User settings persist separately in **SQLite** (`SqliteSettingsRepository`); they are
-not triples. Per [ADR-132](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md), Oxigraph is the sole primary
+not triples. Per [ADR-132](../archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md), Oxigraph is the sole primary
 graph store — any reference to Neo4j, Cypher, or a graph database browser describes a
 historical state that has been removed.
 
@@ -170,7 +170,7 @@ forces — not for general rendering.
 |------|------|---------|
 | 31 | `0x80000000` | Agent node |
 | 30 | `0x40000000` | Knowledge / page node |
-| 29 | `0x20000000` | Reserved (historical private-opacity flag; retired post-[ADR-061](../adr/ADR-061-binary-protocol-unification.md)) |
+| 29 | `0x20000000` | Reserved (historical private-opacity flag; retired post-[ADR-061](../archive/adr/ADR-061-binary-protocol-unification.md)) |
 | 28–26 | `0x1C000000` | Ontology subtype encoding (3 bits) |
 | 25–0 | `0x03FFFFFF` | Sequential ID (`NODE_ID_MASK`), max 67,108,863 |
 
@@ -185,7 +185,7 @@ production graphs sit far below that. `vf:nodeId` is stored with the flag bits i
 them with `id & 0x03FFFFFF` to recover the raw sequential value when joining against
 storage-layer records.
 
-**Wire visibility is not carried in the node id.** Since [ADR-061](../adr/ADR-061-binary-protocol-unification.md),
+**Wire visibility is not carried in the node id.** Since [ADR-061](../archive/adr/ADR-061-binary-protocol-unification.md),
 the binary protocol transmits the raw u32 with no flag manipulation; private nodes are filtered
 at the broadcast boundary (`ClientCoordinator::broadcast_with_filter`) so non-owners receive no
 position, label, or metadata for them. See [Binary protocol](binary-protocol.md).
@@ -488,8 +488,8 @@ draft contributions remain pod-local. See
 - [MCP tools](mcp-tools.md) — ontology read/query/traverse over the same graphs
 - [Ontology pipeline](../explanation/ontology-pipeline.md) — Whelk-rs OWL 2 EL reasoning
 - [System overview](../explanation/system-overview.md) — store role within the architecture
-- Governing ADR: [ADR-132 — Neo4j removal; embedded Oxigraph + SQLite graph store](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md)
-- Related: [ADR-050 — pod-backed KGNode schema](../adr/ADR-050-pod-backed-kgnode-schema.md),
-  [ADR-051 — visibility transitions](../adr/ADR-051-visibility-transitions.md),
-  [ADR-061 — binary protocol unification](../adr/ADR-061-binary-protocol-unification.md),
-  [ADR-066 — pod-federated graph storage](../adr/ADR-066-pod-federated-graph-storage.md)
+- Governing ADR: [ADR-132 — Neo4j removal; embedded Oxigraph + SQLite graph store](../archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md)
+- Related: [ADR-050 — pod-backed KGNode schema](../archive/adr/ADR-050-pod-backed-kgnode-schema.md),
+  [ADR-051 — visibility transitions](../archive/adr/ADR-051-visibility-transitions.md),
+  [ADR-061 — binary protocol unification](../archive/adr/ADR-061-binary-protocol-unification.md),
+  [ADR-066 — pod-federated graph storage](../archive/adr/ADR-066-pod-federated-graph-storage.md)

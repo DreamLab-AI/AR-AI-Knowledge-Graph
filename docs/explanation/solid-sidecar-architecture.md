@@ -9,7 +9,7 @@ updated-date: 2026-04-09
 # Solid Sidecar Architecture
 ## Technical Architecture for Decentralized Data Storage
 
-> **ADR-11 update**: The "Neo4j (Graph DB)" component shown throughout this design is now
+> **ADR-2004 update**: The "Neo4j (Graph DB)" component shown throughout this design is now
 > the **embedded Oxigraph** RDF triple store running in-process inside the Rust backend —
 > there is no separate graph-database container, Bolt URI, or DB password. The sync tool
 > names below (`neo4j-to-solid` / `solid-to-neo4j`) are historical; the live equivalents
@@ -28,7 +28,7 @@ updated-date: 2026-04-09
 **Version:** 1.0
 **Date:** 2025-12-29
 **Target:** VisionClaw with Solid/LDP Integration
-**Status:** Architecture Design (graph store updated per ADR-11)
+**Status:** Architecture Design (graph store updated per ADR-2004)
 
 ---
 
@@ -490,7 +490,7 @@ services:
     networks:
       - visionclaw-internal
     # The graph store is embedded in the backend process (Oxigraph) — no separate
-    # graph-database service or network entry is required (ADR-11).
+    # graph-database service or network entry is required (ADR-2004).
 ```
 
 ---

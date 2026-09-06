@@ -47,7 +47,7 @@ The strategic domain-driven design model — where the boundaries are drawn and 
 | [DDD Enterprise Contexts](ddd-enterprise-contexts.md) | Enterprise-facing contexts and their integration seams. |
 | [DDD Contributor Enablement Context](ddd-contributor-enablement-context.md) | The contributor-support and enablement context. |
 
-The full per-context catalogue lives in the [DDD documents](../ddd/README.md).
+The full per-context catalogue lives in the [DDD documents](../archive/ddd/README.md).
 
 ---
 
@@ -70,8 +70,8 @@ VisionClaw as a coordination platform, and how it composes with the agentbox sub
 
 | Page | What it explains |
 |------|------------------|
-| [VisionFlow Coordination Platform](visionflow-coordination-platform.md) | VisionFlow as a multi-agent coordination surface over the graph. |
-| [VisionFlow Wardley Map](visionflow-wardley-map.md) | A strategic Wardley map of the platform's value chain and evolution. |
+| [VisionClaw Coordination Platform](visionflow-coordination-platform.md) | VisionClaw as a multi-agent coordination surface over the graph. |
+| [VisionClaw Wardley Map](visionflow-wardley-map.md) | A strategic Wardley map of the platform's value chain and evolution. |
 | [Subsystems](subsystems.md) | How VisionClaw composes with the [agentbox subsystem](../../agentbox/docs/README.md) — what each owns and where the seam sits. |
 | [Agent Control Surface](agent-control-surface.md) | How agents are observed and steered through the live graph. |
 | [Ecosystem Convergence](ecosystem-convergence.md) | The convergence of the knowledge-graph, agent, and pod ecosystems. |
@@ -93,6 +93,6 @@ VisionClaw as a coordination platform, and how it composes with the agentbox sub
 ## See also
 
 - [Tutorials](../tutorials/README.md) · [How-To Guides](../how-to/README.md) · [Reference](../reference/README.md)
-- [DDD Documents](../ddd/README.md) · [Product Requirement Documents](../prd/README.md)
+- [DDD Documents](../archive/ddd/README.md) · [Product Requirement Documents](../archive/prd/README.md)
 - [agentbox subsystem documentation](../../agentbox/docs/README.md)
-- Governing ADRs: [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md) · [ADR-089 — CQRS Bus Removal](../adr/ADR-089-cqrs-bus-removal.md) · [ADR-112 — Ontology Augmentation Retrieval Spine](../adr/ADR-112-ontology-augmentation-retrieval-spine.md) · [ADR-011 — Auth Enforcement](../adr/ADR-011-auth-enforcement.md)
+- Governing ADRs: [ADR-090 — Hexagonal Crate Modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md) · [ADR-089 — CQRS Bus Removal](../archive/adr/ADR-089-cqrs-bus-removal.md) · [ADR-112 — Ontology Augmentation Retrieval Spine](../archive/adr/ADR-112-ontology-augmentation-retrieval-spine.md) · [ADR-011 — Auth Enforcement](../archive/adr/ADR-011-auth-enforcement.md)

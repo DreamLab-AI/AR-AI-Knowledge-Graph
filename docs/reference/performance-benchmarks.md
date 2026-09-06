@@ -148,7 +148,7 @@ xychart-beta
 
 ## 4. Graph Store Performance (embedded Oxigraph)
 
-> The graph store is now an embedded Oxigraph RDF triple store ([ADR-132](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md) — corrected citation; this section previously mis-cited "ADR-11", which does not exist as this ADR). The numbers below were
+> The graph store is now an embedded Oxigraph RDF triple store ([ADR-132](../archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md) — corrected citation; this section previously mis-cited "ADR-2004", which does not exist as this ADR). The numbers below were
 > originally measured on the Neo4j-era store, **pre-Oxigraph-migration**; they are retained as a planning baseline for
 > comparable graph operations and are not current Oxigraph figures — they should be re-benchmarked against Oxigraph/SPARQL before being relied on.
 

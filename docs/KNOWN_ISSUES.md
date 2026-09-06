@@ -36,7 +36,7 @@ None currently active.
 > parked. The four-tier `Admin > Broker > Auditor > Contributor` /
 > `X-Enterprise-Role` design described below was **never adopted** — it was a
 > reference only; the shipped taxonomy is `Owner/Admin/Editor/Viewer`. See
-> [ADR-142](adr/ADR-142-multi-user-rbac.md).
+> [ADR-142](archive/adr/ADR-142-multi-user-rbac.md).
 
 > Correction (2026-07-22 doc-drift audit): the entry below asserts that
 > `src/middleware/enterprise_auth.rs` (the four-tier Admin > Broker > Auditor >
@@ -48,7 +48,7 @@ None currently active.
 > `enterprise_auth.rs` to `main` vs. leave it on the branch) is **deferred to the
 > final-mile sprint tock, pending operator decision**. Read the RBAC-implemented
 > claims below as branch-only. Tracked in
-> [ADR-131](adr/ADR-131-doc-drift-reconciliation-2026-07.md) §3 (AUTH-001).
+> [ADR-131](archive/adr/ADR-131-doc-drift-reconciliation-2026-07.md) §3 (AUTH-001).
 
 **Status**: Native multi-user RBAC resolved-by-implementation (ADR-142, 2026-08-31); OIDC/SAML SSO federation still pending (ADR-040 Phase 1)
 **Impact**: VisionClaw's enterprise RBAC middleware (`src/middleware/enterprise_auth.rs`) now supports two authentication paths: (1) NIP-98 Schnorr signature verification with pubkey-to-role resolution via `Nip98RoleResolver` (enabled by the `nip98-auth` compile-time feature), and (2) `X-Enterprise-Role` header extraction for dev/gateway deployments. The four-tier role hierarchy (Admin > Broker > Auditor > Contributor) is enforced on all enterprise-gated routes.
@@ -57,7 +57,7 @@ None currently active.
 
 **Workaround**: Deploy behind a trusted API gateway that sets the `X-Enterprise-Role` header based on its own SSO verification, or enable the `nip98-auth` feature and populate the `Nip98RoleResolver` with pubkey-to-role mappings for known enterprise users.
 
-**Fix Direction**: Implement ADR-040 Phase 1 (OIDC login flow, ephemeral keypair generation, session management). See [ADR-040](adr/ADR-040-enterprise-identity-strategy.md) and [ADR-088](adr/ADR-088-auth-service-extraction.md) for the auth consolidation plan.
+**Fix Direction**: Implement ADR-040 Phase 1 (OIDC login flow, ephemeral keypair generation, session management). See [ADR-040](archive/adr/ADR-040-enterprise-identity-strategy.md) and [ADR-088](archive/adr/ADR-088-auth-service-extraction.md) for the auth consolidation plan.
 
 ---
 
@@ -96,7 +96,7 @@ Previously known issues that are now fixed. Listed here so that old bug reports,
 | Issue | Status | Fixed In | Reference |
 |-------|--------|----------|-----------|
 | ONT-001: Ontology Edge Gap — 62% of ontology nodes isolated due to empty `iri_to_id` map in `neo4j_adapter.rs` | Fixed Apr 2026 | `neo4j_adapter.rs` — added `iri_to_id` population loop after KGNode loading | `docs/explanation/ontology-pipeline.md` |
-| WS-001: Delta Encoding — permanently retired; caused position state divergence and latency spikes | Resolved by design | [ADR-037](adr/superseded/ADR-037-binary-protocol-consolidation.md), [ADR-061](adr/ADR-061-binary-protocol-unification.md) | [docs/binary-protocol.md](reference/binary-protocol.md) |
+| WS-001: Delta Encoding — permanently retired; caused position state divergence and latency spikes | Resolved by design | [ADR-037](archive/adr/superseded/ADR-037-binary-protocol-consolidation.md), [ADR-061](archive/adr/ADR-061-binary-protocol-unification.md) | [docs/binary-protocol.md](reference/binary-protocol.md) |
 | GPU-002: Analytics actors missing SharedGPUContext — PageRank, SSSP, APSP endpoints returned "GPU context not initialized" | Fixed Apr 2026 | Forward `SetSharedGPUContext` from `PhysicsSupervisor` to `AnalyticsSupervisor` | `src/actors/gpu/` |
 | PHYS-001: No graph position reset endpoint — extreme parameters could not be recovered without container restart | Fixed Apr 2026 | `POST /api/graph/reset-positions` randomizes GPU positions and triggers reheat | `src/actors/gpu/force_compute_actor.rs` |
 | UI-001: Client slider init race — sliders sent values before fetching server state | Fixed Apr 2026 | Slider ranges capped; `settingsLoaded` gate added | `client/src/features/physics/` |

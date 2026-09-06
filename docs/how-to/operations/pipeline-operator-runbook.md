@@ -433,7 +433,7 @@ curl -X POST http://localhost:8080/api/admin/pipeline/pause \
   -H "Content-Type: application/json" \
   -d '{"reason": "Weekly maintenance"}'
 
-# 2. Backup the graph store (embedded Oxigraph — archive its RocksDB dataset; ADR-11)
+# 2. Backup the graph store (embedded Oxigraph — archive its RocksDB dataset; ADR-2004)
 #    DATA_DIR defaults to ./data (Docker images set it to /app/data)
 tar czf /backups/oxigraph-$(date +%Y%m%d).tgz -C "${DATA_DIR:-/app/data}" oxigraph
 
@@ -461,7 +461,7 @@ curl http://localhost:8080/api/admin/pipeline/status
 
 **Check Database Size**
 ```bash
-# Embedded Oxigraph RocksDB dataset (ADR-11)
+# Embedded Oxigraph RocksDB dataset (ADR-2004)
 du -sh "${DATA_DIR:-/app/data}/oxigraph/"
 ```
 

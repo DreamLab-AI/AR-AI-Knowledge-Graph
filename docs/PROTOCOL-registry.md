@@ -261,7 +261,7 @@ process above. Ratification: reviewed against the code at the recorded `verified
 
 ## Estate closeout qualification — 2026-09-04
 
-See the [rendered-state review](../../VisionFlow/docs/estate-review/rendered-state.md) and [source/test receipt](../../VisionFlow/docs/estate-review/evidence/xr-render-snapshot.json). XR discards V5 sequence values; envelope compatibility is not consumer ordering enforcement. Its 0x23 parser accepts complete events before truncation, whereas malformed position framing is rejected. Codec-specific rejection and freshness policies need explicit tests. The 0x44 codec remains staged without a located live integration. Agent-events transport authenticates a session, but frame processing does not receive that session identity; structural provenance alone does not bind the claimed agent to the sender.
+See the [rendered-state review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md) and [source/test receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/xr-render-snapshot.json). XR discards V5 sequence values; envelope compatibility is not consumer ordering enforcement. Its 0x23 parser accepts complete events before truncation, whereas malformed position framing is rejected. Codec-specific rejection and freshness policies need explicit tests. The 0x44 codec remains staged without a located live integration. Agent-events transport authenticates a session, but frame processing does not receive that session identity; structural provenance alone does not bind the claimed agent to the sender.
 
 ## Remediation — 2026-09-05
 

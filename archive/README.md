@@ -23,7 +23,7 @@ history. The canonical, maintained documentation now lives in:
 | Path | Contents | Reason |
 |:-----|:---------|:-------|
 | `visionclaw-docs/` | Ephemeral process docs: `audit/`, `audits/`, `control-surface-audit/`, `data-sprint/`, `migration-sprint/`, `eval/`, `design/`, `integration-research/`, `qe/`, `testing/`, `use-cases/`, the old `architecture/` map, `how-to/infrastructure/`, the consumed merge-source files (`binary-protocol.md`, `gpu-physics-architecture.md`, `security.md`, `xr-godot-*.md`, `neo4j-schema-unified.md`, `websocket-binary.md`, …) and the obsolete Neo4j guides | Sprint/audit artefacts whose durable decisions already landed as ADRs; merge sources folded into the new canonical docs; Neo4j removed per ADR-11 (store is Oxigraph + SQLite) |
-| `visionclaw-process/` | Process PRD/DDD notes (`PRD-001-pipeline-alignment`, `PRD-013-closeout`, `PRD-014-addendum-qe-fleet-validation`, `PRD-QE-001/002`, `PRD-agent-orchestration-improvements`, `ddd-code-hygiene-context`, `ddd-qe-traceability-graph-context`, …) | Closeout / addendum / QE-sprint planning notes. The substantive PRD/DDD records were kept under `../docs/prd/` and `../docs/ddd/` |
+| `visionclaw-process/` | Process PRD/DDD notes (`PRD-001-pipeline-alignment`, `PRD-013-closeout`, `PRD-014-addendum-qe-fleet-validation`, `PRD-QE-001/002`, `PRD-agent-orchestration-improvements`, `ddd-code-hygiene-context`, `ddd-qe-traceability-graph-context`, …) | Closeout / addendum / QE-sprint planning notes. The substantive PRD/DDD records were kept under `../docs/prd/` and `../docs/ddd/` (frozen into `../docs/archive/prd/` and `../docs/archive/ddd/` by the 2026-08-31 archive cut) |
 | `agentbox-docs/` | `regen-2026-06-14/`, `reference/.claude-flow/`, `00-anomaly-register.md`, superseded images | One-shot regeneration / tooling-state artefacts |
 | `media/` | Large videos (`complexGraph.mp4` 153 MB, `complexGraph-web.mp4` 65 MB, `complexGraph-tiny.mp4`, `visionclaw.mp4`) | Unreferenced large binaries removed from the docs tree to keep the repo lean; host externally if needed |
 
@@ -35,5 +35,12 @@ git mv archive/<path>/<file> docs/<destination>/
 git log --follow -- archive/<path>/<file>
 ```
 
-The clean-room rebuild verified **every** Mermaid diagram compiles for GitHub and
-**every** internal forward/back link resolves across both published packs.
+The clean-room rebuild verified every Mermaid diagram compiled for GitHub and every
+internal link resolved *at that time*; link integrity is re-checked per sweep, most recently
+in the 2026-09-06 tidy.
+
+## `attic/` — untracked sweep
+
+`attic/` is gitignored and holds the low-value working-tree material swept out of both repos
+on 2026-09-06 (sprint notes, executed plans, tooling session state, unreferenced media). Its
+layout mirrors the original paths; see [`attic/README.md`](attic/README.md).

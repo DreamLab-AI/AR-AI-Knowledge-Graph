@@ -271,11 +271,11 @@ ADR-098, ADR-141) as evidence only; live code is ground truth.
 
 ## Layout and force closeout — 2026-09-04
 
-ADR-2028/2029 now distinguish host layout parity, total-size guards and final dispatch authority. The extracted Rust/C++ declarations agree at all 53 offsets; a temporary dt/damping swap preserves size and passes the original assertion. No CUDA/device path ran. Require actual toolchain/module identity, drift-negative CI, coordinated consumer upgrades and actor-to-device constraint/SSSP transition receipts. See [estate simulation review](../../VisionFlow/docs/estate-review/rendered-state.md#simulation-layout-and-force-authority).
+ADR-2028/2029 now distinguish host layout parity, total-size guards and final dispatch authority. The extracted Rust/C++ declarations agree at all 53 offsets; a temporary dt/damping swap preserves size and passes the original assertion. No CUDA/device path ran. Require actual toolchain/module identity, drift-negative CI, coordinated consumer upgrades and actor-to-device constraint/SSSP transition receipts. See [estate simulation review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#simulation-layout-and-force-authority).
 
 ## PTX closeout — 2026-09-04
 
-ADR-2030 is partial after six isolated build-phase cases distinguished missing/failed nvcc, nonempty/valid output and warning/actual version changes. Runtime loading separately selects and rewrites PTX; its structural substring check is not driver or required-symbol validation. Require selected-module hashes, host ABI agreement, native/stub identity and actual driver/kernel receipts. See [estate PTX review](../../VisionFlow/docs/estate-review/rendered-state.md#ptx-build-acceptance-and-loaded-artefact-identity). No full build or GPU execution ran in this pass.
+ADR-2030 is partial after six isolated build-phase cases distinguished missing/failed nvcc, nonempty/valid output and warning/actual version changes. Runtime loading separately selects and rewrites PTX; its structural substring check is not driver or required-symbol validation. Require selected-module hashes, host ABI agreement, native/stub identity and actual driver/kernel receipts. See [estate PTX review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#ptx-build-acceptance-and-loaded-artefact-identity). No full build or GPU execution ran in this pass.
 
 ## Remediation — 2026-09-05
 

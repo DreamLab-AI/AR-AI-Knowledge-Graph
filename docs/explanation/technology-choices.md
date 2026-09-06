@@ -29,11 +29,11 @@ dependencies:
 
 **Why VisionClaw uses Rust, React, an embedded Oxigraph RDF triple store, and CUDA—and the trade-offs we accepted.**
 
-> **Persistence update (ADR-11)**: the original graph store was Neo4j. It has since been
+> **Persistence update (ADR-2004)**: the original graph store was Neo4j. It has since been
 > replaced by an **embedded Oxigraph** RDF triple store (W3C SPARQL 1.1, RocksDB-backed,
 > opened in-process by the `visionclaw-server` binary — no separate database container).
 > The "Database: Why Neo4j?" section below is retained for historical rationale but is
-> **superseded**; see [ADR-11 — Persistence Strategy Migration](../reference/graph-schema.md).
+> **superseded**; see [ADR-2004 — Persistence Strategy Migration](../reference/graph-schema.md).
 
 ## Overview
 
@@ -44,9 +44,9 @@ VisionClaw combines technologies from different ecosystems to achieve a unique b
 | Layer | Technology | Primary Reason |
 |-------|------------|----------------|
 | **Backend** | Rust + Actix Web | Memory safety + native performance |
-| **Graph store** | Embedded Oxigraph (SPARQL 1.1, RocksDB) | In-process RDF triple store; named graphs; no separate DB container (ADR-11) |
+| **Graph store** | Embedded Oxigraph (SPARQL 1.1, RocksDB) | In-process RDF triple store; named graphs; no separate DB container (ADR-2004) |
 | **Frontend (desktop)** | React + Three.js | Component model + WebGL ecosystem |
-| **XR client (Quest 3)** | Godot 4.3 + godot-rust + OpenXR | Native APK; lifts WebXR ceiling; aligns with Rust substrate ([ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md)) |
+| **XR client (Quest 3)** | Godot 4.3 + godot-rust + OpenXR | Native APK; lifts WebXR ceiling; aligns with Rust substrate ([ADR-071](../archive/adr/ADR-071-godot-rust-xr-replacement.md)) |
 | **GPU Compute** | CUDA 12.4 | 100x speedup + mature ecosystem |
 | **AI Orchestration** | MCP Protocol + Claude | Multi-agent coordination + context management |
 | **Ontology** | OWL/RDF + Whelk | Semantic reasoning + open standards |
@@ -212,13 +212,13 @@ Rust's FFI (Foreign Function Interface) provides safe bindings to CUDA:
 
 ---
 
-## Database: Why Neo4j? (SUPERSEDED — see ADR-11)
+## Database: Why Neo4j? (SUPERSEDED — see ADR-2004)
 
 > **SUPERSEDED**: The graph store is now an **embedded Oxigraph** RDF triple store
 > (SPARQL 1.1, RocksDB-backed, in-process) — there is no Neo4j container in the current
 > stack. The graph-shaped data model and index-free-adjacency reasoning below still hold,
 > but the engine and query language changed (Cypher → SPARQL). See
-> [ADR-11](../reference/graph-schema.md). The rest of this
+> [ADR-2004](../reference/graph-schema.md). The rest of this
 > section documents the original Neo4j decision for historical context.
 
 ### The Decision
@@ -403,8 +403,8 @@ React Three Fiber on the desktop renders the **non-XR** graph view —
 XR has been moved off the browser entirely. The Quest 3 immersive client
 is a **native APK** built from a Godot 4.3 project with godot-rust (gdext)
 hot paths and OpenXR runtime access — see the **XR Client** section
-below ([ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md),
-[PRD-008](../prd/PRD-008-xr-godot-replacement.md)).
+below ([ADR-071](../archive/adr/ADR-071-godot-rust-xr-replacement.md),
+[PRD-008](../archive/prd/PRD-008-xr-godot-replacement.md)).
 
 The desktop R3F path remains the entry point for users without an XR
 headset; it consumes the same V3 52 B/node binary protocol the APK consumes.
@@ -429,8 +429,8 @@ headset; it consumes the same V3 52 B/node binary protocol the APK consumes.
 - ✅ Comprehensive 3D engines (physics, animation, PBR) exist
 - ❌ Still browser-bound — same WebXR feature ceiling that pushed us to a native APK
 - **Decision:** XR is not a browser concern in VisionClaw v2. The native Quest 3 APK
-  per [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md) /
-  [PRD-008](../prd/PRD-008-xr-godot-replacement.md) is the only XR surface — see the
+  per [ADR-071](../archive/adr/ADR-071-godot-rust-xr-replacement.md) /
+  [PRD-008](../archive/prd/PRD-008-xr-godot-replacement.md) is the only XR surface — see the
   **XR Client** section below.
 
 **Svelte + Threlte:**
@@ -464,8 +464,8 @@ The Quest 3 immersive client is a **native Android APK** built from a
 **Godot 4.3** project, with performance-critical paths in **Rust via
 godot-rust (gdext)** and runtime XR access through **OpenXR**.
 
-The full decision record is [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md);
-the product spec is [PRD-008](../prd/PRD-008-xr-godot-replacement.md). This
+The full decision record is [ADR-071](../archive/adr/ADR-071-godot-rust-xr-replacement.md);
+the product spec is [PRD-008](../archive/prd/PRD-008-xr-godot-replacement.md). This
 section summarises the rationale for the technology-choice doc.
 
 ### Rationale
@@ -954,7 +954,7 @@ struct WireNodeDataItemV3 {
 - Binary messages can't be inspected in browser DevTools
 - Mitigation: Logging middleware (decode to JSON for debugging), binary inspector tool
 
-**Evolution Strategy** (post-[ADR-061](../adr/ADR-061-binary-protocol-unification.md)):
+**Evolution Strategy** (post-[ADR-061](../archive/adr/ADR-061-binary-protocol-unification.md)):
 - The wire format is fixed at 24 bytes/node and is not versioned
 - Mitigation: any future evolution is a new endpoint, not a version negotiation; sticky GPU outputs ride a separate `analytics_update` JSON message
 
@@ -998,7 +998,7 @@ VisionClaw's technology choices reflect three core principles:
 - **Rust backend** - Native performance without GC pauses
 - **CUDA GPU compute** - 100x speedup for physics
 - **Binary protocol** - 80% bandwidth reduction
-- **Embedded Oxigraph store** - in-process RDF triples, zero network hop (ADR-11)
+- **Embedded Oxigraph store** - in-process RDF triples, zero network hop (ADR-2004)
 
 ### 2. Standards Over Lock-In
 - **OWL/RDF ontologies** - W3C standards, interoperable

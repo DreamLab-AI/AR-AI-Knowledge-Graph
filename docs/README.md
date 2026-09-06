@@ -13,20 +13,20 @@ VisionClaw is a governed agentic mesh for real-time 3D knowledge-graph explorati
 
 ```bash
 git clone https://github.com/DreamLab-AI/VisionClaw.git
-cd VisionClaw && cp .env.example .env
+cd VisionClaw && cp env.example .env
 ./scripts/launch.sh up dev
 ```
 
-`./scripts/launch.sh up dev` is the canonical launcher. The explicit fallback is `docker compose -f docker-compose.unified.yml --profile dev up -d` — `docker-compose.unified.yml` is the only compose file shipped.
+`./scripts/launch.sh up dev` is the canonical launcher. The explicit fallback is `docker compose -f docker-compose.unified.yml --profile dev up -d` — `docker-compose.unified.yml` is the application compose file; `docker-compose.cloudflared.yml` is an optional standalone tunnel overlay that `launch.sh` does not use.
 
 | Service | URL | Notes |
 |---------|-----|-------|
 | 3D graph frontend | <http://localhost:3001> | nginx |
 | REST API | <http://localhost:4000/api> | HTTP + WebSocket |
 | Solid pod | <http://localhost:8484> | per-user pod storage |
-| Legacy MCP (TCP) | `localhost:9500` | deprecated, default-off (`ENABLE_MCP_BRIDGE`); listener never built — see [ADR-059](adr/ADR-059-bidirectional-agent-channel-server.md) |
+| MCP TCP (agentbox) | `multi-agent-container:9500` (`MCP_TCP_PORT`) | outbound poll by `bots_client.rs` for agent-state snapshots; WebSocket cutover planned — see [ADR-2084](adr/ADR-2084-9500-load-bearing-doc-correct-plan-ws-cutover.md) |
 
-The graph store is the embedded Oxigraph triple store backed by SQLite (ADR-11). Neo4j is fully removed ([ADR-132](adr/ADR-132-neo4j-removal-oxigraph-adoption.md)) and there is no separate database browser UI.
+The graph store is the embedded Oxigraph triple store backed by SQLite ([ADR-2004](adr/ADR-2004-oxigraph-sqlite-persistence.md)). Neo4j is fully removed ([ADR-132](archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md)) and there is no separate database browser UI.
 
 ## System at a glance
 
@@ -37,11 +37,11 @@ The graph store is the embedded Oxigraph triple store backed by SQLite (ADR-11).
 | Client | 465 TypeScript/TSX files (422 non-test, ~103K LOC); 16 feature modules |
 | Ontology | Whelk-rs OWL 2 EL + SHACL-lite + JSON-LD validation + PROV-O provenance (PRD-022); 7 MCP ontology tools |
 | Wire protocol | Full-snapshot V3 (52 B/node) / V5 (V3 body + 8-byte broadcast seq) — **delta encoding prohibited by design** (BROADCAST-001); clients tween to server targets |
-| Decision record | 117 ADRs (ADR-011..141, with early records folded), 22 PRDs (to PRD-025), 13 DDD context maps |
+| Decision record | 99 living ADR-2xxx records in [adr/](adr/README.md); the frozen legacy corpus under [archive/](archive/) holds 120 ADRs, 26 PRDs and 15 DDD context maps |
 
 ## Documentation map
 
-Documentation follows the [Diátaxis](https://diataxis.fr/) framework — each quadrant serves a distinct need.
+Documentation follows the [Diátaxis](https://diataxis.fr/) framework — each quadrant serves a distinct need. Outside the four quadrants, `docs/` also carries the security audit, screenshots and media assets, diagram sources, gap-close evidence, estate-closeout receipts and the dream-cycle ledger.
 
 | Category | Purpose | Start here |
 |----------|---------|-----------|
@@ -50,7 +50,7 @@ Documentation follows the [Diátaxis](https://diataxis.fr/) framework — each q
 | Explanation | Concepts and rationale — architecture, physics, ontology, security | [explanation/](explanation/system-overview.md) |
 | Reference | Exhaustive specifications — REST, WebSocket, binary protocol, schema, config | [reference/](reference/README.md) |
 | Decisions | Architecture Decision Records governing every major design choice | [adr/](adr/) |
-| Formal record | Product Requirements, Domain-Driven Design context maps, and ADRs | [prd/](prd/) · [ddd/](ddd/) · [adr/](adr/) |
+| Formal record (frozen) | Legacy Product Requirements and Domain-Driven Design context maps — rationale only, never authority | [archive/prd/](archive/prd/) · [archive/ddd/](archive/ddd/) |
 
 ### Entry points by audience
 

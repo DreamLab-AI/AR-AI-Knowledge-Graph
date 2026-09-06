@@ -7,7 +7,7 @@ This Wardley map positions VisionClaw's components along the evolution axis (Gen
 ![VisionClaw Strategic Wardley Map](visionflow-wardley-map.png)
 
 <details>
-<summary>Mermaid source (wardleyMap syntax, requires Mermaid 12+)</summary>
+<summary>Mermaid source (quadrantChart with a YAML config block, Mermaid 10+)</summary>
 
 ```mermaid
 ---

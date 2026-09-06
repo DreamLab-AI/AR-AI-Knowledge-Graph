@@ -19,11 +19,11 @@ surfaces, and they must not be confused:
    lives in the [agentbox](../../agentbox/docs/developer/ecosystem.md) subsystem
    and *proxies* to VisionClaw's REST API. They are cross-referenced here, not
    redocumented — agentbox owns them.
-3. **Legacy MCP TCP `:9500`** — a deprecated JSON-RPC swarm-orchestration
-   bridge, gated off by default. See the final section.
+3. **MCP TCP `:9500`** — the live outbound poll VisionClaw makes to agentbox's
+   MCP TCP server for agent-state snapshots (ADR-2084). See the final section.
 
 The native tools are governed by
-[ADR-023 — VisionClaw Ontology Bridge via MCP](../../agentbox/docs/reference/adr/ADR-023-ontology-bridge.md).
+[ADR-023 — VisionClaw Ontology Bridge via MCP](../../agentbox/docs/archive/adr/ADR-023-ontology-bridge.md).
 
 ---
 
@@ -66,7 +66,7 @@ flowchart LR
     REST["REST handler<br/>/ontology-agent/*"]
     QSVC["OntologyQueryService<br/>(read tools)"]
     MSVC["OntologyMutationService<br/>(propose)"]
-    OXI["Oxigraph + SQLite<br/>(ADR-11)"]
+    OXI["Oxigraph + SQLite<br/>(ADR-2004)"]
     WHELK["Whelk-rs<br/>OWL 2 EL reasoner"]
     AGENT -->|"tool call"| ROUTER
     ROUTER -->|"HTTP :4000"| REST
@@ -353,19 +353,20 @@ rather than blocking agentbox startup.
 Full documentation:
 [agentbox · Ecosystem integration](../../agentbox/docs/developer/ecosystem.md)
 and its governing
-[ADR-023 — VisionClaw Ontology Bridge via MCP](../../agentbox/docs/reference/adr/ADR-023-ontology-bridge.md).
+[ADR-023 — VisionClaw Ontology Bridge via MCP](../../agentbox/docs/archive/adr/ADR-023-ontology-bridge.md).
 
 ---
 
-## Legacy MCP TCP `:9500`
+## MCP TCP `:9500`
 
-A legacy JSON-RPC 2.0 swarm-orchestration bridge once listened on TCP `:9500`
-(`MCP_TCP_PORT`), carrying methods such as `swarm_init`, `agent_spawn`,
-`task_orchestrate`, `swarm_status`, and `agent_terminate`. It is **deprecated**.
-The TCP bridge is gated behind `ENABLE_MCP_BRIDGE` (**default off**) pending full
-retirement; when enabled it carries agent **state** snapshots only. New
-integrations must use the native ontology tools above and the REST/WebSocket
-surfaces — not the TCP bridge.
+VisionClaw polls agentbox's MCP TCP server (`MCP_TCP_PORT`, default `9500`) every
+2 s for agent-state snapshots (`bots_client.rs`); it is the live, sole source of
+those snapshots ([ADR-2084](../adr/ADR-2084-9500-load-bearing-doc-correct-plan-ws-cutover.md)).
+The swarm-orchestration methods once carried over this transport (`swarm_init`,
+`agent_spawn`, `task_orchestrate`, `swarm_status`, `agent_terminate`) are legacy,
+and a WebSocket cutover is planned in ADR-2084. There is no `ENABLE_MCP_BRIDGE`
+gate. New integrations must use the native ontology tools above and the
+REST/WebSocket surfaces — not the TCP transport.
 
 ---
 
@@ -376,4 +377,4 @@ surfaces — not the TCP bridge.
 - [Ontology pipeline](../explanation/ontology-pipeline.md) — Whelk, SHACL, and PROV-O concepts
 - [Agent control surface](../explanation/agent-control-surface.md) — how agents drive these tools
 - [agentbox · Ecosystem integration](../../agentbox/docs/developer/ecosystem.md) — the 10 bridge tools
-- Governing ADR: [ADR-023 — VisionClaw Ontology Bridge via MCP](../../agentbox/docs/reference/adr/ADR-023-ontology-bridge.md)
+- Governing ADR: [ADR-023 — VisionClaw Ontology Bridge via MCP](../../agentbox/docs/archive/adr/ADR-023-ontology-bridge.md)

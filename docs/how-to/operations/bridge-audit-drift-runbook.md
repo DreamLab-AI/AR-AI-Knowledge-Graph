@@ -2,7 +2,7 @@
 
 **Risk**: `BridgeEdgeService::promote` commits to the graph store (embedded Oxigraph) BEFORE signing kind-30100 audit event. Signing failures leave `:BRIDGE_TO` edges without corresponding relay events.
 
-**Ref**: [ADR-055 / R1](../../adr/ADR-055-sovereign-debt-payoff-sprint.md)
+**Ref**: [ADR-055 / R1](../../archive/adr/ADR-055-sovereign-debt-payoff-sprint.md)
 
 ---
 

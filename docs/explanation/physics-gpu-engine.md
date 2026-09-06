@@ -236,7 +236,7 @@ perturbs the layout around it exactly as expected. The host source of truth is
 populated by `PinNodePositions` from server-authoritative drags. The mask slice is
 padded to the allocated buffer length with `0`, so over-allocated trailing slots
 never read as pinned. This is the pinned-node half of
-[ADR-138](../adr/ADR-138-gpu-force-channel-registry.md).
+[ADR-138](../archive/adr/ADR-138-gpu-force-channel-registry.md).
 
 ### Force-channel registry
 
@@ -244,7 +244,7 @@ The layout's force terms are configured through a flat, `repr(C)`, 180-byte
 `SimParams` struct of ad-hoc scalars (`repel_k`, `spring_k`, `center_gravity_k`, …)
 plus a `feature_flags` bitset. That layout offers no enumerable "what channels
 exist, are they on, and how strong are they" view, and nothing forces a new kernel
-term to be registered anywhere. [ADR-138](../adr/ADR-138-gpu-force-channel-registry.md)
+term to be registered anywhere. [ADR-138](../archive/adr/ADR-138-gpu-force-channel-registry.md)
 adds a **named force-channel registry** as a *mapping layer* over the existing
 struct — the migration seam toward an eventual array-backed `SimParams`, with **zero**
 change to the struct layout, the CUDA kernels, or the settings wire.
@@ -260,11 +260,11 @@ kernels apply) — and `ForceChannel::apply` writes it back preserving kernel
 semantics. When the array-backed refactor lands, only the bodies of `state`/`apply`
 change; every caller keeps working. The `DagRadialBias` channel (`dag_bias_k`, fed by
 the per-node DAG rank in `upload_node_rank`) is the GPU term the radial layout modes
-of [ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md) re-key.
+of [ADR-141](../archive/adr/ADR-141-constrained-layout-engine-programme.md) re-key.
 
 ### Render offload and runtime quality dials
 
-[ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md) is a client-
+[ADR-137](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md) is a client-
 side decision but it changes two things this engine's output must respect. First,
 **runtime-derived instance budgets**: clients now size their node/edge draw budgets
 from the received topology (bounded by a safety ceiling) rather than the old
@@ -324,7 +324,7 @@ SSSP distances feed back into the layout: when the SSSP spring-adjust flag is
 active, graph-distance is used to set spring rest lengths so the Euclidean layout
 better reflects geodesic distance. The single-writer-per-field rule from ADR-031
 is what makes it safe for these independent algorithms to share one analytics
-record without races. See [ADR-031](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md)
+record without races. See [ADR-031](../archive/adr/ADR-031-gpu-analytics-correctness-and-wiring.md)
 for the correctness and wiring decisions.
 
 ---
@@ -367,7 +367,7 @@ multi-stage Docker builds the target architecture must be promoted from `ARG` to
 `ENV` so it propagates into child stages; otherwise the kernels compile for the
 wrong compute capability. On CachyOS hosts the toolkit lives at `/opt/cuda`, not
 `/usr/local/cuda`. The crate boundaries that keep this GPU code isolated behind
-ports are set out in [ADR-090](../adr/ADR-090-hexagonal-crate-modularisation.md).
+ports are set out in [ADR-090](../archive/adr/ADR-090-hexagonal-crate-modularisation.md).
 
 When no CUDA device is available the engine falls back to a Rayon + SIMD CPU path
 (AVX2 / SSE4.1 with a scalar fallback for non-x86), which stays interactive up to
@@ -383,4 +383,4 @@ roughly 10K nodes. Above that, the GPU is required for sub-frame step times.
 - [Ontology Pipeline](ontology-pipeline.md) — how OWL axioms become GPU constraints
 - [Physics Parameters](../reference/physics-parameters.md) — every tunable and its bounds
 - [Binary Protocol](../reference/binary-protocol.md) · [WebSocket Protocol](../reference/websocket-protocol.md) — how positions reach clients
-- Governing ADRs: [ADR-031 — GPU Analytics Correctness and Wiring](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-137 — XR Render Offload and Runtime Quality Dials](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md), [ADR-138 — GPU Force-Channel Registry](../adr/ADR-138-gpu-force-channel-registry.md), [ADR-141 — Constrained-Layout Engine Programme](../adr/ADR-141-constrained-layout-engine-programme.md)
+- Governing ADRs: [ADR-031 — GPU Analytics Correctness and Wiring](../archive/adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-090 — Hexagonal Crate Modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-137 — XR Render Offload and Runtime Quality Dials](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md), [ADR-138 — GPU Force-Channel Registry](../archive/adr/ADR-138-gpu-force-channel-registry.md), [ADR-141 — Constrained-Layout Engine Programme](../archive/adr/ADR-141-constrained-layout-engine-programme.md)

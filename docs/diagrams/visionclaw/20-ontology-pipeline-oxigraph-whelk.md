@@ -98,7 +98,7 @@ erDiagram
         string contents "append-only PROV-O activity triples, see VC-22"
     }
     OxigraphOntologyRepository ||--o{ GRAPH_ONTOLOGY_ASSERT : "add_owl_class add_axiom lines 1676 2415"
-    OxigraphOntologyRepository ||--o{ GRAPH_ONTOLOGY_INFERRED : "store_inference_results CLEAR+INSERT line 2466 ADR-11 D9"
+    OxigraphOntologyRepository ||--o{ GRAPH_ONTOLOGY_INFERRED : "store_inference_results CLEAR+INSERT line 2466 ADR-2004 D9"
     OxigraphGraphRepository ||--o{ GRAPH_KNOWLEDGE : "src/adapters/oxigraph_graph_repository.rs:6"
     OxigraphGraphRepository ||--o{ GRAPH_AGENT : "src/adapters/oxigraph_graph_repository.rs:16"
     OxigraphOntologyRepository ||--o{ GRAPH_SHAPES : "load_shacl_shapes line 408"
@@ -135,7 +135,7 @@ sequenceDiagram
     end
     Note over Engine: DOC-DRIFT - module doc calls this bounded EL reasoning but infer() lines 397-452 has no tokio timeout or axiom-count cap
     Sync->>Repo: store_inference_results(results) (line 1270, defn line 2466)
-    Repo->>Repo: CLEAR GRAPH GRAPH_ONTOLOGY_INFERRED then atomic INSERT (ADR-11 D9, ADR-099 D3, lines 2466-2560)
+    Repo->>Repo: CLEAR GRAPH GRAPH_ONTOLOGY_INFERRED then atomic INSERT (ADR-2004 D9, ADR-099 D3, lines 2466-2560)
     Note over Sync: DIVERGENCE - OntologyReasoningService::infer_axioms (ontology_reasoning_service.rs:107) runs CustomReasoner<br/>not this Whelk engine, its WhelkInferenceEngine field is legacy (line 77) and OntologyReasoningService::new is<br/>never called outside tests
 ```
 

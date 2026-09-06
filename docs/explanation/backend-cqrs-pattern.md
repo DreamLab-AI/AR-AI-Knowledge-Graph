@@ -17,4 +17,4 @@ That page covers the 9 ports, 12 adapters, the 44 hexser handlers (19 `Directive
 
 - [Backend Architecture](backend-architecture.md) — the canonical page
 - [Actor Hierarchy](actor-hierarchy.md)
-- Governing decisions: [ADR-089 — CQRS Dead Bus Removal](../adr/ADR-089-cqrs-bus-removal.md) · [ADR-090 — Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md)
+- Governing decisions: [ADR-089 — CQRS Dead Bus Removal](../archive/adr/ADR-089-cqrs-bus-removal.md) · [ADR-090 — Hexagonal Crate Modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md)

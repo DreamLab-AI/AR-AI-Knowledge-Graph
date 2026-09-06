@@ -512,11 +512,11 @@ docker exec multi-agent-container supervisorctl restart mcp-bridge
 **Diagnostic**:
 ```bash
 # Monitor MCP messages
-docker exec multi-agent-container tail -f /workspace/logs/mcp-server.log
+docker exec agentbox tail -f /home/devuser/workspace/logs/mcp-server.log
 
 # Test agent-to-agent communication
 # From inside container:
-docker exec multi-agent-container /workspace/mcp-helper.sh test-connection
+docker exec agentbox nc -zv localhost 9500
 ```
 
 **Prevention**: Use TCP transport for reliability over Unix sockets

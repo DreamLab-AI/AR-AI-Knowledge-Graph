@@ -62,9 +62,9 @@ CP-01 revision/ownership mapping and the relevant corpus or authority contract.
 
 **Current evidence:** Source confirms AppState opens one Oxigraph handle and shares it between ontology and graph repositories, plus separate SQLite files. This verifies storage composition, not a cross-store transaction or consistent serving generation.
 
-See [runtime analysis](../../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md),
-[source hashes](../../../VisionFlow/docs/estate-review/evidence/visionclaw-data-snapshot.json)
-and [backup receipt](../../../VisionFlow/docs/estate-review/evidence/visionclaw-backup-probe.json).
+See [runtime analysis](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/visionclaw-data-runtime.md),
+[source hashes](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-data-snapshot.json)
+and [backup receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-backup-probe.json).
 Source was inspected at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`. Earlier verification at `4fed5663dfbc0940c6b19a175dfcc8a9c67f2ab8`
 remains historical evidence; this annex does not claim a new deployed activation
 or complete verification of every older assertion.

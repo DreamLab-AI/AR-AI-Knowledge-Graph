@@ -96,4 +96,4 @@ Running and maintaining VisionClaw in production. See the [Operations index](ope
 - [Tutorials](../tutorials/README.md) — start here if you are learning VisionClaw from scratch.
 - [Reference](../reference/README.md) — exhaustive API, protocol, and configuration lookups.
 - [System Overview](../explanation/system-overview.md) · [Deployment Topology](../explanation/deployment-topology.md) · [Security Model](../explanation/security-model.md) — the concepts behind these tasks.
-- Governing ADRs: [ADR-080 — Forum-Kit Deployment Topology Patterns](../adr/ADR-080-forum-kit-deployment-topology-patterns.md) · [ADR-011 — Auth Enforcement](../adr/ADR-011-auth-enforcement.md)
+- Governing ADRs: [ADR-080 — Forum-Kit Deployment Topology Patterns](../archive/adr/ADR-080-forum-kit-deployment-topology-patterns.md) · [ADR-011 — Auth Enforcement](../archive/adr/ADR-011-auth-enforcement.md)

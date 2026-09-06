@@ -60,7 +60,7 @@ CP-04/05/08. Owner remains jjohare with authentication/runtime maintainers. Curr
 
 **Acceptance condition:** Test combined wall-clock freshness and monotonic expiry at exact boundaries and clock steps; retain explicit restart/replica policy. Define route-specific body binding because the validator compares payload only when both supplied body and tag exist. Trace token consumption through user resolution, authorisation and mutation failure; specify fresh-token retries and application idempotency after response loss. Verify capacity failure handling without opening an authentication fallback. Reopen on window/TTL, scaling, route body handling, retry or cache lifecycle changes.
 
-See the [review](../../../VisionFlow/docs/estate-review/runtime-ingress.md#visionclaw-replay-and-operation-boundaries), [reproducer](../../../VisionFlow/docs/estate-review/evidence/replay-cache-probe.py) and [receipt](../../../VisionFlow/docs/estate-review/evidence/replay-cache-probe.json). The extracted helper test does not exercise signatures, mutex concurrency, HTTP mutation or a deployed service; historical tests remain separately identified.
+See the [review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/runtime-ingress.md#visionclaw-replay-and-operation-boundaries), [reproducer](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/replay-cache-probe.py) and [receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/replay-cache-probe.json). The extracted helper test does not exercise signatures, mutex concurrency, HTTP mutation or a deployed service; historical tests remain separately identified.
 
 ## Acceptance progress — 2026-09-05
 

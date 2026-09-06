@@ -70,9 +70,9 @@ CP-01 revision/ownership mapping and the relevant corpus or authority contract.
 
 **Current evidence:** The real host backup script restored a committed WAL row in a temporary fixture, with integrity_check=ok. It also returned exit zero when one of two requested databases was missing, and the default destination was inside the source data directory. Full sync clears knowledge and agent graphs before batches, then separately rebuilds asserted ontology; runtime assertions absent from the corpus can be removed.
 
-See [runtime analysis](../../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md),
-[source hashes](../../../VisionFlow/docs/estate-review/evidence/visionclaw-data-snapshot.json)
-and [backup receipt](../../../VisionFlow/docs/estate-review/evidence/visionclaw-backup-probe.json).
+See [runtime analysis](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/visionclaw-data-runtime.md),
+[source hashes](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-data-snapshot.json)
+and [backup receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-backup-probe.json).
 Source was inspected at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`. Earlier verification at `7a95e17d3d0c2f5e502e8edd29cea94c314c12cb`
 remains historical evidence; this annex does not claim a new deployed activation
 or complete verification of every older assertion.

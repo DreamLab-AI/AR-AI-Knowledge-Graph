@@ -8,7 +8,7 @@ updated-date: 2026-04-20
 
 # DDD Contributor Enablement Contexts — VisionClaw
 
-> **ADR-11 update**: "Neo4j" throughout this document denotes the project's graph
+> **ADR-2004 update**: "Neo4j" throughout this document denotes the project's graph
 > persistence layer / read-model projection, now the **embedded Oxigraph** RDF triple
 > store (in-process, RocksDB-backed; no Bolt URI, container, or password). The `:Label`
 > notations describe the **RDF logical model**, not Neo4j labels. Solid Pods remain the
@@ -735,7 +735,7 @@ These extend the enterprise aggregate design rules:
 
 ---
 
-## Graph-Store Node Type Extensions (RDF logical model — embedded Oxigraph, ADR-11)
+## Graph-Store Node Type Extensions (RDF logical model — embedded Oxigraph, ADR-2004)
 
 | Node Type | Label | Stratum Context | Properties |
 |-----------|-------|-----------------|------------|

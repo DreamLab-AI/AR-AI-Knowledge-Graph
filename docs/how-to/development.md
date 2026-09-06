@@ -78,7 +78,7 @@ docker network create visionclaw_network
 
 # Configure environment
 cp .env.example .env
-# Edit .env -- minimum: set JWT_SECRET (graph store is embedded Oxigraph; no DB password — ADR-11)
+# Edit .env -- minimum: set JWT_SECRET (graph store is embedded Oxigraph; no DB password — ADR-2004)
 nano .env
 
 # Install frontend dependencies
@@ -146,7 +146,7 @@ curl http://localhost:3001/api/health
 
 ## Project Structure
 
-VisionClaw is a Rust/Actix-web backend with a React 19 + Three.js frontend, an embedded Oxigraph RDF triple store (in-process, RocksDB-backed; ADR-11), and CUDA GPU physics kernels. The backend follows hexagonal (ports and adapters) architecture.
+VisionClaw is a Rust/Actix-web backend with a React 19 + Three.js frontend, an embedded Oxigraph RDF triple store (in-process, RocksDB-backed; ADR-2004), and CUDA GPU physics kernels. The backend follows hexagonal (ports and adapters) architecture.
 
 ### Repository Root
 
@@ -711,7 +711,7 @@ cargo test -- --nocapture
 | `tests/ontology_smoke_test.rs` | Ontology loading and OWL parsing |
 | `tests/ontology_agent_integration_test.rs` | Ontology actor lifecycle |
 | `tests/ontology_reasoning_integration_test.rs` | Whelk reasoning engine |
-| `tests/settings_repository_integration_tests.rs` | Settings persistence to SQLite (ADR-11) |
+| `tests/settings_repository_integration_tests.rs` | Settings persistence to SQLite (ADR-2004) |
 | `tests/settings_validation_tests.rs` | Settings schema validation |
 | `tests/voice_agent_integration_test.rs` | Voice pipeline integration |
 | `tests/gpu_safety_tests.rs` | GPU memory management and fallback |

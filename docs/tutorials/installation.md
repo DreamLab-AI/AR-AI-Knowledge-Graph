@@ -141,7 +141,7 @@ flowchart TD
     B -->|No| D[CPU-only mode\nset ENABLE_GPU=false]
     C --> E[Clone Repository]
     D --> E
-    E --> F[Copy .env.example\n→ .env]
+    E --> F[Copy env.example\n→ .env]
     F --> G[Configure environment\nGitHub token · secrets]
     G --> H[docker compose up -d]
     H --> I[Verify services healthy]
@@ -185,7 +185,7 @@ git clone https://github.com/visionclaw/visionclaw.git
 cd visionclaw
 
 # Copy environment template
-cp .env.example .env
+cp env.example .env
 ```
 
 #### Step 2: Edit Configuration

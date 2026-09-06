@@ -15,7 +15,7 @@ difficulty-level: intermediate
 
 ## What this covers
 
-VisionClaw's graph store is [Oxigraph/SPARQL](../../adr/ADR-132-neo4j-removal-oxigraph-adoption.md),
+VisionClaw's graph store is [Oxigraph/SPARQL](../../archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md),
 not Neo4j — the old "type a sentence, get Cypher back" flow was removed by
 ADR-132. Two query surfaces exist today:
 
@@ -165,6 +165,6 @@ the graph.
   marking variables and running queries.
 - [Intelligent Pathfinding Guide](intelligent-pathfinding.md) — GPU shortest
   paths, a complement to pattern queries.
-- [ADR-132 — Neo4j removal, Oxigraph adoption](../../adr/ADR-132-neo4j-removal-oxigraph-adoption.md).
+- [ADR-132 — Neo4j removal, Oxigraph adoption](../../archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md).
 </content>
 </invoke>

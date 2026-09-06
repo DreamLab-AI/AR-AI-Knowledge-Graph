@@ -57,7 +57,7 @@ state it IS accepted, so code and comment now agree.
 
 CP-01/02/06/08. Owner remains jjohare with ingest/layout/XR maintainers. Complete/live is retained for the scoped label-accept implementation. The source comment now agrees with acceptance, but the existing predicate test still expects hierarchical to be rejected. The unchanged extracted predicate/test fails on that label. This reveals a contract/test conflict, not evidence that current deployed ingest has the wrong edges.
 
-**Acceptance condition:** Ratify the collapsed label's producer semantics with subclass and domain-membership fixtures, reconcile the stale test, and verify orientation, mixed cyclic/disconnected inputs, rank upload and displayed layout. Reopen on ingest labels, edge provenance, ranking or folding changes. See [review](../../../VisionFlow/docs/estate-review/rendered-state.md#xr-control-coverage-and-hierarchy-semantics) and [extracted test receipt](../../../VisionFlow/docs/estate-review/evidence/xr-decision-probe.json). No full actor suite or GPU layout ran.
+**Acceptance condition:** Ratify the collapsed label's producer semantics with subclass and domain-membership fixtures, reconcile the stale test, and verify orientation, mixed cyclic/disconnected inputs, rank upload and displayed layout. Reopen on ingest labels, edge provenance, ranking or folding changes. See [review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#xr-control-coverage-and-hierarchy-semantics) and [extracted test receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/xr-decision-probe.json). No full actor suite or GPU layout ran.
 
 ## Acceptance progress — 2026-09-05
 

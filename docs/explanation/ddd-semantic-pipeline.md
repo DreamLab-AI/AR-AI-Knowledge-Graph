@@ -27,7 +27,7 @@ Markdown Source (Aggregate Root)
   ├── Wikilinks (Value Object)              → "explicit_link" edge, weight 1.0
   └── Namespace Prefix (derived)            → "namespace" edge, weight 0.3
 
-Graph Store — embedded Oxigraph (Repository; ADR-11)
+Graph Store — embedded Oxigraph (Repository; ADR-2004)
   ├── :KGNode — display nodes
   ├── :OwlClass — ontology concepts
   ├── :EDGE — wikilink + relationship edges (with relation_type, owl_property_iri)
@@ -55,7 +55,7 @@ Client Rendering (Presentation)
   └── ClusterHulls: convex hull per domain/cluster with domain colour
 ```
 
-*Flowchart of the semantic pipeline domain model — from Markdown source through the embedded Oxigraph store, GPU physics, analytics, and into client rendering. The `:KGNode`/`:EDGE`/`:SUBCLASS_OF` labels denote the RDF logical model, not Neo4j labels (ADR-11).*
+*Flowchart of the semantic pipeline domain model — from Markdown source through the embedded Oxigraph store, GPU physics, analytics, and into client rendering. The `:KGNode`/`:EDGE`/`:SUBCLASS_OF` labels denote the RDF logical model, not Neo4j labels (ADR-2004).*
 
 %%{init: {'theme': 'base', 'themeVariables': {'primaryColor': '#4A90D9', 'primaryTextColor': '#fff', 'lineColor': '#2C3E50'}}}%%
 ```mermaid

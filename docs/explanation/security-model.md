@@ -560,4 +560,4 @@ These are recorded trade-offs, not oversights.
 - [Technology Choices](technology-choices.md) — Oxigraph, Nostr, Solid rationale
 - [Binary Protocol](../reference/binary-protocol.md) · [WebSocket Protocol](../reference/websocket-protocol.md) · [REST API](../reference/rest-api.md) · [URN ↔ Solid mapping](../reference/urn-solid-mapping.md)
 - [Nostr Auth How-To](../how-to/features/nostr-auth.md) · [Security Operations](../how-to/operations/security.md) · [Server Nostr Identity](../how-to/operations/server-nostr-identity.md)
-- Governing ADRs: [ADR-011 Auth Enforcement](../adr/ADR-011-auth-enforcement.md) · [ADR-028-ext Optional Auth](../adr/ADR-028-ext-optional-auth.md) · [ADR-088 Auth Service Extraction](../adr/ADR-088-auth-service-extraction.md) · [ADR-109 SOPS Secrets Management](../adr/ADR-109-sops-secrets-management.md)
+- Governing ADRs: [ADR-011 Auth Enforcement](../archive/adr/ADR-011-auth-enforcement.md) · [ADR-028-ext Optional Auth](../archive/adr/ADR-028-ext-optional-auth.md) · [ADR-088 Auth Service Extraction](../archive/adr/ADR-088-auth-service-extraction.md) · [ADR-109 SOPS Secrets Management](../archive/adr/ADR-109-sops-secrets-management.md)

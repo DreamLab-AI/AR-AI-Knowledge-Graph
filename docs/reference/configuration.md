@@ -266,7 +266,7 @@ diagram note VC-28.3 (`docs/diagrams/visionclaw/28-external-services.md`).
 
 The primary graph store is an **embedded Oxigraph RDF triple store backed by
 SQLite** (ADR-101); it runs in-process with no container, network endpoint, or
-password. **Neo4j is fully removed** ([ADR-132](../adr/ADR-132-neo4j-removal-oxigraph-adoption.md))
+password. **Neo4j is fully removed** ([ADR-132](../archive/adr/ADR-132-neo4j-removal-oxigraph-adoption.md))
 — `NEO4J_*` variables are no longer read.
 Reset the graph by stopping the server and running `rm -rf ${DATA_DIR}/oxigraph`.
 See [Graph schema](graph-schema.md).
@@ -403,4 +403,4 @@ Named volumes persist data and build caches:
 - [Deployment topology](../explanation/deployment-topology.md) — service layout and networks.
 - [Ontology pipeline](../explanation/ontology-pipeline.md) — embedded reasoning stack.
 - [REST API](rest-api.md) · [WebSocket protocol](websocket-protocol.md) · [Binary protocol](binary-protocol.md)
-- Governing ADRs: [ADR-011 Auth enforcement](../adr/ADR-011-auth-enforcement.md), [ADR-070 CUDA integration hardening](../adr/ADR-070-cuda-integration-hardening.md), [ADR-090 Hexagonal crate modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-101 Triple-store migration framework](../adr/ADR-101-triple-store-migration-framework.md).
+- Governing ADRs: [ADR-011 Auth enforcement](../archive/adr/ADR-011-auth-enforcement.md), [ADR-070 CUDA integration hardening](../archive/adr/ADR-070-cuda-integration-hardening.md), [ADR-090 Hexagonal crate modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-101 Triple-store migration framework](../archive/adr/ADR-101-triple-store-migration-framework.md).

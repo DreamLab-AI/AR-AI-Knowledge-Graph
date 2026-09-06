@@ -10,8 +10,8 @@ Performance engineering for the Godot 4 + godot-rust + OpenXR Quest 3 client and
 3. **Regression gate** — `xr-perf-regression` diffs a fresh result against
    `crates/visionclaw-xr-presence/benches/baseline.json` and exits non-zero on regression.
 
-Authoritative perf budgets live in [PRD-008 §6](../../docs/PRD-008-xr-godot-replacement.md)
-and the architecture deep-dive at [`docs/xr-godot-system-architecture.md`](../../docs/xr-godot-system-architecture.md).
+Authoritative perf budgets live in [PRD-008 §6](../../docs/archive/prd/PRD-008-xr-godot-replacement.md)
+and the architecture deep-dive at [`docs/explanation/xr-architecture.md`](../../docs/explanation/xr-architecture.md).
 
 ## Perf budgets (from PRD-008 §6)
 
@@ -40,7 +40,7 @@ and the architecture deep-dive at [`docs/xr-godot-system-architecture.md`](../..
 | `presence_0x43_round_trip` | gdext crate | **234 ns** | Encode + decode sanity for transport stack. |
 
 Quest 3 ARM perf is **not yet measured** — these are Linux x86_64 dev baselines. Self-hosted
-Quest 3 runner (per [PRD-QE-002 §4.7](../../docs/PRD-QE-002-xr-godot-quality-engineering.md))
+Quest 3 runner (per [PRD-QE-002 §4.7](../../archive/visionclaw-process/PRD-QE-002-xr-godot-quality-engineering.md))
 will replace these on first green nightly run via `--update-baseline`.
 
 ## Running locally

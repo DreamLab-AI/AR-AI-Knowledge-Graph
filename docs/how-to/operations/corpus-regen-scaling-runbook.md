@@ -2,7 +2,7 @@
 
 **Risk**: `regenerate_corpus_jsonl` executes in full on every publish/unpublish transition. O(n) cost per operation where n = public-node-count. Power users with 1000+ nodes experience sustained latency spikes and Pod write saturation.
 
-**Ref**: [ADR-054 § corpus](../../adr/ADR-054-urn-solid-and-solid-apps-alignment.md) and Sprint-2 Audit / R3
+**Ref**: [ADR-054 § corpus](../../archive/adr/ADR-054-urn-solid-and-solid-apps-alignment.md) and Sprint-2 Audit / R3
 
 ---
 

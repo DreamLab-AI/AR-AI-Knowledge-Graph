@@ -24,9 +24,9 @@ VisionClaw maintains two distinct populations of nodes, and understanding the di
 
 A **KGNode** is a narrative node — a vault page authored with `public: true` in its frontmatter. It is part of your personal or team knowledge graph: exploratory, fast-changing, opinionated. It can be edited every hour without ceremony. An **OntologyClass** is a vocabulary node — a named class in the shared OWL 2 T-Box (the "terminology box", the schema). It changes slowly, only through a broker-reviewed pull request. It is what Whelk reasons over, what agents cite when they make structural claims, and what auditors trace when they need provenance.
 
-The two tiers share one identity scheme (`vc:{domain}/{slug}`), so any external consumer sees a single namespace. But they live separately in the graph store (embedded Oxigraph, ADR-11): `KGNode` and `OntologyClass` are distinct logical types, and a `BRIDGE_TO` edge carries the relationship between a note and its potential or confirmed class. Promotion is never a rewrite — the note keeps existing, the class keeps existing, and the bridge edge between them advances from `candidate` through `promoted`. This means rollback is cheap: change the edge label, not the nodes.
+The two tiers share one identity scheme (`vc:{domain}/{slug}`), so any external consumer sees a single namespace. But they live separately in the graph store (embedded Oxigraph, ADR-2004): `KGNode` and `OntologyClass` are distinct logical types, and a `BRIDGE_TO` edge carries the relationship between a note and its potential or confirmed class. Promotion is never a rewrite — the note keeps existing, the class keeps existing, and the bridge edge between them advances from `candidate` through `promoted`. This means rollback is cheap: change the edge label, not the nodes.
 
-[ADR-048](../adr/ADR-048-dual-tier-identity-model.md) documents the full identity model, the IRI scheme, and the graph schema additions (now realised as RDF in the embedded Oxigraph store, ADR-11).
+[ADR-048](../archive/adr/ADR-048-dual-tier-identity-model.md) documents the full identity model, the IRI scheme, and the graph schema additions (now realised as RDF in the embedded Oxigraph store, ADR-2004).
 
 ---
 
@@ -82,7 +82,7 @@ All of this happens in the [Judgment Broker Workbench](../explanation/ddd-insigh
 
 ## The Migration KPIs
 
-The loop's health is measured by six KPIs defined in [PRD §8](../prd/prd-insight-migration-loop.md). These are not vanity metrics. They measure whether the loop is doing its job: surfacing candidates that deserve promotion, clearing the broker's queue in reasonable time, keeping the ontology stable after promotion, and ensuring provenance is never silent.
+The loop's health is measured by six KPIs defined in [PRD §8](../archive/prd/prd-insight-migration-loop.md). These are not vanity metrics. They measure whether the loop is doing its job: surfacing candidates that deserve promotion, clearing the broker's queue in reasonable time, keeping the ontology stable after promotion, and ensuring provenance is never silent.
 
 Think of them as the pulse of the feedback cycle. High clearance rate and high surface precision together mean the discovery engine is proposing well and the broker is keeping up. Low rollback rate means promotions are lasting. Low ontology incoherence means Whelk is catching axiom problems before they reach production. These six signals give the platform owner visibility into whether the loop is tightening or fragmenting.
 
@@ -102,8 +102,8 @@ The **Judgment Broker Workbench** is the seat from which migration decisions are
 
 ## Further Reading
 
-- [PRD: Insight Migration Loop (MVP)](../prd/prd-insight-migration-loop.md)
-- [ADR-048: Dual-Tier Identity Model](../adr/ADR-048-dual-tier-identity-model.md)
-- [ADR-049: Insight Migration Broker Workflow](../adr/ADR-049-insight-migration-broker-workflow.md)
+- [PRD: Insight Migration Loop (MVP)](../archive/prd/prd-insight-migration-loop.md)
+- [ADR-048: Dual-Tier Identity Model](../archive/adr/ADR-048-dual-tier-identity-model.md)
+- [ADR-049: Insight Migration Broker Workflow](../archive/adr/ADR-049-insight-migration-broker-workflow.md)
 - Master Design: Insight Migration Loop
 - [DDD: Insight Migration Context](./ddd-insight-migration-context.md)

@@ -130,4 +130,4 @@ When you are ready to grow your own ontology, [Promoting a Note to the Ontology]
 - [Physics GPU Engine](../explanation/physics-gpu-engine.md) — the CUDA layout solver
 - [Ontology Pipeline](../explanation/ontology-pipeline.md) — reasoning, SHACL and provenance
 - [Agent Control Surface](../explanation/agent-control-surface.md) — how AI agents read and enrich the graph
-- Governing ADRs: [ADR-090 (crate modularisation)](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-101 (triple-store migration)](../adr/ADR-101-triple-store-migration-framework.md), [ADR-112 (ontology spine)](../adr/ADR-112-ontology-augmentation-retrieval-spine.md)
+- Governing ADRs: [ADR-090 (crate modularisation)](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-101 (triple-store migration)](../archive/adr/ADR-101-triple-store-migration-framework.md), [ADR-112 (ontology spine)](../archive/adr/ADR-112-ontology-augmentation-retrieval-spine.md)

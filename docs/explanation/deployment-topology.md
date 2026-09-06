@@ -36,7 +36,7 @@ The table below lists every service defined across the compose files. The `profi
 | Service | Port(s) | Role | Profile | depends_on |
 |---------|---------|------|---------|------------|
 | `nginx` | 3001 (HTTP) | Reverse proxy — routes `/api/*` to Actix-web, `/` to Vite; terminates TLS in prod | dev | visionclaw |
-| `visionclaw` | 4000 (HTTP + WS: `/wss`, `/ws/speech`, `/ws/mcp-relay`) | Rust Actix-web backend (`visionclaw-server` binary, `visionclaw_container`) — graph API, physics orchestration, WebSocket binary stream. Embeds the Oxigraph RDF triple store in-process (ADR-11) and SQLite settings; connects out to the agent container's MCP TCP server (:9500). No relational-database dependency | dev, prod | — |
+| `visionclaw` | 4000 (HTTP + WS: `/wss`, `/ws/speech`, `/ws/mcp-relay`) | Rust Actix-web backend (`visionclaw-server` binary, `visionclaw_container`) — graph API, physics orchestration, WebSocket binary stream. Embeds the Oxigraph RDF triple store in-process (ADR-2004) and SQLite settings; connects out to the agent container's MCP TCP server (:9500). No relational-database dependency | dev, prod | — |
 | `vite` | 5173 (HTTP), 24678 (WS HMR) | Vite dev server — Three.js/React frontend with Hot Module Replacement | dev | visionclaw |
 | `jss` | 3030 (HTTP), 9090 (Solid WS) | JavaScript Solid Server — Linked Data Platform for per-user RDF pods | all | visionclaw |
 | `solid-pod` | 9090 (HTTP) | Solid pod storage endpoint (separate from JSS in some deployments) | prod | jss |
@@ -134,7 +134,7 @@ graph LR
 
 The critical path at startup is:
 
-1. The `visionclaw` container starts; inside it the Rust backend opens its embedded Oxigraph dataset and populates it from local files before serving graph data. (There is no graph-database container — ADR-11. There is no relational database dependency; the backend has no PostgreSQL client.)
+1. The `visionclaw` container starts; inside it the Rust backend opens its embedded Oxigraph dataset and populates it from local files before serving graph data. (There is no graph-database container — ADR-2004. There is no relational database dependency; the backend has no PostgreSQL client.)
 2. nginx (`:3001`) and, in the dev profile, the Vite dev server (`:5173`) proxy to the backend on `:4000`.
 3. `cloudflared` (prod, optional) starts after the `visionclaw` container.
 4. External voice containers (`livekit`, `turbo-whisper`, `kokoro-tts`) start independently of the compose stack; `turbo-whisper` needs `livekit`.
@@ -182,7 +182,7 @@ sequenceDiagram
 Key observations from this flow:
 
 - **Auth is checked in-process** — the backend issues UUID session bearer tokens after NIP-98 verification (`nostr_service.rs`) and holds session state itself. There is no Redis hop on the hot path (a `redis` integration exists only behind an optional cargo feature).
-- **Graph data comes from the embedded Oxigraph triple store** (ADR-11), queried in-process via SPARQL over named graphs — there is no network round-trip to a separate graph-database container. Live node positions are held in RAM by the physics actors and only snapshotted back to Oxigraph periodically; the hot loop never reads positions back from Oxigraph (cold start does, so layout resumes rather than restarting).
+- **Graph data comes from the embedded Oxigraph triple store** (ADR-2004), queried in-process via SPARQL over named graphs — there is no network round-trip to a separate graph-database container. Live node positions are held in RAM by the physics actors and only snapshotted back to Oxigraph periodically; the hot loop never reads positions back from Oxigraph (cold start does, so layout resumes rather than restarting).
 - **Physics position data flows over the `/wss` WebSocket**, not HTTP polling. The current wire format is **V3** (`docs/binary-protocol.md`): a version byte `0x03` followed by 52-byte node records (id+flags, position, velocity, SSSP distance/parent, cluster id, anomaly score, community id, centrality).
 - **Settings persist to SQLite** (`SqliteSettingsRepository`); SQLite wins for physics parameters. Agent memory writes to RuVector happen from the MCP agent tooling (which owns the MiniLM-L6-v2 embedding pipeline), not from the Rust backend.
 
@@ -249,7 +249,7 @@ The voice overlay requires additional environment variables: `LIVEKIT_API_KEY`, 
 
 ### XR Profile (`docker-compose.vircadia.yml`) — DEPRECATED
 
-> **Deprecated**: Vircadia has been removed from the stack. The XR client is now a native Godot 4 APK that connects directly to the VisionClaw backend via the binary protocol WebSocket and presence WebSocket. See [XR Architecture](xr-architecture.md) and [ADR-071](../adr/ADR-071-godot-rust-xr-replacement.md). This compose file will be removed in a future release.
+> **Deprecated**: Vircadia has been removed from the stack. The XR client is now a native Godot 4 APK that connects directly to the VisionClaw backend via the binary protocol WebSocket and presence WebSocket. See [XR Architecture](xr-architecture.md) and [ADR-071](../archive/adr/ADR-071-godot-rust-xr-replacement.md). This compose file will be removed in a future release.
 
 ---
 
@@ -263,7 +263,7 @@ Persistent data is managed through named Docker volumes. Bind mounts (host path 
 |--------|---------------|---------|---------|
 | `postgres_data` | `/var/lib/postgresql/data` in `postgres` | PostgreSQL data directory — all relational tables | all |
 | `redis_data` | `/data` in `redis` | Redis persistence (AOF or RDB snapshots) | all |
-| `visionclaw_data` | `/app/data` in `visionclaw` | Application data — downloaded markdown, metadata, processed knowledge files, **and the embedded Oxigraph dataset** (`/app/data/oxigraph/`, RocksDB column families — ADR-11) | all |
+| `visionclaw_data` | `/app/data` in `visionclaw` | Application data — downloaded markdown, metadata, processed knowledge files, **and the embedded Oxigraph dataset** (`/app/data/oxigraph/`, RocksDB column families — ADR-2004) | all |
 | `visionclaw_logs` | `/app/logs` in `visionclaw` | Rust tracing output, Nginx access logs | all |
 | `npm-cache` | `/root/.npm` in `visionclaw` | npm package cache (speeds up reinstalls) | dev |
 | `cargo-cache` | `/usr/local/cargo/registry` in `visionclaw` | Cargo registry cache (avoids re-downloading crates) | dev |
@@ -306,7 +306,7 @@ When running multiple `visionclaw` replicas, the WebSocket physics broadcast pat
 
 | Service | Constraint | Path to scale |
 |---------|------------|--------------|
-| Oxigraph store (embedded in `visionclaw`) | Single-writer RocksDB-backed triple store opened in-process; it is not a separate, independently scalable service (ADR-11) | Scaling the graph store means scaling the backend it lives inside — i.e. a single graph-authoritative `visionclaw` instance. A separately replicated SPARQL endpoint would be a future architecture change, not a config toggle |
+| Oxigraph store (embedded in `visionclaw`) | Single-writer RocksDB-backed triple store opened in-process; it is not a separate, independently scalable service (ADR-2004) | Scaling the graph store means scaling the backend it lives inside — i.e. a single graph-authoritative `visionclaw` instance. A separately replicated SPARQL endpoint would be a future architecture change, not a config toggle |
 | `postgres` | Single primary; read replicas possible with streaming replication | Patroni or Citus for HA; PgBouncer for connection pooling at scale |
 | `redis` | Single instance in default config | Redis Cluster or Redis Sentinel for HA; Valkey is a drop-in alternative |
 | `qdrant` | Single node in default config | QDrant distributed mode with a collection replication factor ≥ 2 |

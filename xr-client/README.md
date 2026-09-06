@@ -1,14 +1,14 @@
 # VisionClaw XR — Godot OpenXR client
 
 Godot + godot-rust (gdext) + OpenXR client per
-[PRD-008](../docs/PRD-008-xr-godot-replacement.md) and
-[ADR-071](../docs/adr/ADR-071-godot-rust-xr-replacement.md).
+[PRD-008](../docs/archive/prd/PRD-008-xr-godot-replacement.md) and
+[ADR-071](../docs/archive/adr/ADR-071-godot-rust-xr-replacement.md).
 
 **Two run targets, one codebase:**
 - **Quest 3 native APK** — the sole *ship* target. Cross-build is currently
   **frozen** (no Android NDK provisioned in this environment; see below).
 - **Desktop OpenXR (SteamVR / VIVE Pro)** — the close-out *validation* target
-  per [ADR-136](../docs/adr/ADR-136-desktop-openxr-vive-validation-target.md).
+  per [ADR-136](../docs/archive/adr/ADR-136-desktop-openxr-vive-validation-target.md).
   This is the path that has **actually rendered on a headset** — see
   "VIVE Pro desktop-OpenXR bring-up (2026-08-22)" below.
 
@@ -214,7 +214,7 @@ NVIDIA 580 open + native X11 + SteamVR** on HP-Desktop, VIVE Pro.
 The 2026-08-22 section above rendered a **capped subset** (640 nodes) with per-frame
 GDScript hot loops that collapsed at density. This branch made it full-density and
 production-shaped — decision record in
-[ADR-137](../docs/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md).
+[ADR-137](../docs/archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md).
 
 **Architecture — render offload.** The per-frame position-hunt and MultiMesh buffer
 packing moved from GDScript into a pure Rust `RenderStore` (`rust/src/render_store.rs`),
@@ -259,10 +259,10 @@ still sacrificed on Compat.
 ## Immersive interaction — Graph2VR-class controls (2026-08-30)
 
 Wave-1 (commit `92b2d9588`), the pinch-manipulation commit (`f7113226a`), the GPU
-pin/DAG/force-channel commit (`82abb6776`, [ADR-138](../docs/adr/ADR-138-gpu-force-channel-registry.md)),
+pin/DAG/force-channel commit (`82abb6776`, [ADR-138](../docs/archive/adr/ADR-138-gpu-force-channel-registry.md)),
 and the flagship working tree together add a full linked-data interaction
 vocabulary. Provenance and licence governance for the mined features:
-[ADR-139](../docs/adr/ADR-139-immersive-interaction-adoption-programme.md).
+[ADR-139](../docs/archive/adr/ADR-139-immersive-interaction-adoption-programme.md).
 
 **Controls (VR).**
 - **A / X face button → node radial menu.** Opens `RadialMenu`
@@ -321,10 +321,10 @@ group's representative.
 
 ## Cross-references
 
-- **Mining provenance & governance**: [ADR-139](../docs/adr/ADR-139-immersive-interaction-adoption-programme.md)
-- **Fold ladder**: [PRD-fold-ladder-hierarchical-density](../docs/prd/PRD-fold-ladder-hierarchical-density.md)
-- **Visual query builder**: [prd-visual-query-builder-semantic-planes](../docs/prd/prd-visual-query-builder-semantic-planes.md)
+- **Mining provenance & governance**: [ADR-139](../docs/archive/adr/ADR-139-immersive-interaction-adoption-programme.md)
+- **Fold ladder**: [PRD-fold-ladder-hierarchical-density](../docs/archive/prd/PRD-fold-ladder-hierarchical-density.md)
+- **Visual query builder**: [prd-visual-query-builder-semantic-planes](../docs/archive/prd/prd-visual-query-builder-semantic-planes.md)
 - **Wire format**: [`crates/visionclaw-xr-presence/src/wire.rs`](../crates/visionclaw-xr-presence/src/wire.rs) — opcode 0x43 single source of truth
-- **Bounded context**: [`docs/ddd-xr-godot-context.md`](../docs/ddd-xr-godot-context.md) BC22
-- **Threat model**: [`docs/xr-godot-threat-model.md`](../docs/xr-godot-threat-model.md)
-- **Architecture**: [`docs/xr-godot-system-architecture.md`](../docs/xr-godot-system-architecture.md)
+- **Bounded context**: [`docs/ddd-xr-godot-context.md`](../docs/archive/ddd/ddd-xr-godot-context.md) BC22
+- **Threat model**: [`docs/XR-client.md`](../docs/XR-client.md) (governing doc; the retired threat-model note is on the `archive/visionclaw-docs/` shelf)
+- **Architecture**: [`docs/explanation/xr-architecture.md`](../docs/explanation/xr-architecture.md)

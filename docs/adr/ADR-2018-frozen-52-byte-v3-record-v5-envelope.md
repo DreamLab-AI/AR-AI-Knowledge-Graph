@@ -72,7 +72,7 @@ The XR decoder skips V5 sequence bytes; a sequence envelope alone does not estab
 
 Dependencies: CP-01 release identity and CP-04 authority where authenticated actions cross the wire. Reopen on the existing review trigger, a changed opcode or a failing freshness/visibility probe. Existing verification and activation fields retain their historical scope; this annex records source/local tests at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`, not a new live certification.
 
-See [rendered-state review](../../../VisionFlow/docs/estate-review/rendered-state.md) and [receipt](../../../VisionFlow/docs/estate-review/evidence/xr-render-snapshot.json).
+See [rendered-state review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md) and [receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/xr-render-snapshot.json).
 
 ## Acceptance progress — 2026-09-05
 

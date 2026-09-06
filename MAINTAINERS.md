@@ -17,8 +17,6 @@ a Rust port of Melvin Carvalho's [JavaScriptSolidServer (JSS)](https://github.co
 Agent identities use `did:nostr` and Solid Pods for cryptographic data provenance. Protocol-level
 decisions and spec alignment defer to the upstream JSS repository.
 
-See [.github/CODEOWNERS](.github/CODEOWNERS) for path-level review routing.
-
 ## Process
 
 Maintainers follow the same workflow as other contributors (issue → branch → PR → review → merge).

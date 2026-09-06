@@ -19,7 +19,7 @@ with a re-imagined shell: the canvas is the hero, controls are a glass DOM overl
 that appears on demand, and the 205 fields are organised by **user intent** instead
 of by implementation area. This page explains the design thesis, the component map,
 and the registry that keeps it honest against the backend. The governing decision is
-[ADR-129](../adr/ADR-129-control-center-reimagination.md).
+[ADR-129](../archive/adr/ADR-129-control-center-reimagination.md).
 
 VisionClaw now has **three** control surfaces, and this page covers all three: the
 React desktop Control Center below (the bulk of the page); the **desktop graph-
@@ -29,8 +29,8 @@ predicate expansion — that turns the canvas itself into a control surface
 **XR HUD control centre**, the headset's own tabbed, wand-operated equivalent
 ([§XR HUD control centre](#the-xr-hud-control-centre)). The desktop trio and the XR
 HUD both descend from the Graph2VR-class interaction programme
-([ADR-139](../adr/ADR-139-immersive-interaction-adoption-programme.md)) and the XR
-agent-swarm work ([ADR-140](../adr/ADR-140-xr-agent-swarm-visualisation.md)).
+([ADR-139](../archive/adr/ADR-139-immersive-interaction-adoption-programme.md)) and the XR
+agent-swarm work ([ADR-140](../archive/adr/ADR-140-xr-agent-swarm-visualisation.md)).
 
 ## Design thesis
 
@@ -416,7 +416,7 @@ variables); see [Client Architecture](client-architecture.md) and
 
 The headset has its own control centre — not a port of the React overlay but a
 world-anchored, wand-operated equivalent rebuilt on the same "one control surface"
-thesis ([ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md)
+thesis ([ADR-137](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md)
 discipline: zero per-frame GDScript). `xr-client/scripts/hud.gd` draws a single
 wand-grabbable quad whose SubViewport hosts a tabbed `Control` tree; a wand ray hit-
 tests the viewport exactly as it does the radial menu. It replaces a pre-redesign
@@ -425,10 +425,10 @@ single-VBox that stacked 34 controls past the 640 px fold. The tab order
 
 | Tab | Role |
 |---|---|
-| **Graph** | Physics/layout controls and the six layout modes + node-type show/hide filters ([ADR-141](../adr/ADR-141-constrained-layout-engine-programme.md)) |
+| **Graph** | Physics/layout controls and the six layout modes + node-type show/hide filters ([ADR-141](../archive/adr/ADR-141-constrained-layout-engine-programme.md)) |
 | **Query** | The in-graph visual query builder (triple-pattern marks → `/api/graph/query/pattern`) |
 | **Pins** | Pinned-node roster and pin/unpin controls |
-| **Swarm** | Agent-swarm roster with tap-to-teleport and the four status→dot colours (idle slate / working green / blocked amber-red / done cyan-white, `hud.gd:161`) — the HUD half of [ADR-140](../adr/ADR-140-xr-agent-swarm-visualisation.md)'s embodied-swarm work |
+| **Swarm** | Agent-swarm roster with tap-to-teleport and the four status→dot colours (idle slate / working green / blocked amber-red / done cyan-white, `hud.gd:161`) — the HUD half of [ADR-140](../archive/adr/ADR-140-xr-agent-swarm-visualisation.md)'s embodied-swarm work |
 | **Session** | Room picker, mute, presence status |
 | **Help** | The "Vive Wand — Controls" controller cheat-sheet |
 
@@ -452,14 +452,14 @@ detail — embodiment, work beams, the RenderStore offload — is in
 - [Agent Control Surface](agent-control-surface.md) — the ACSP governance-panel
   protocol, a separate concern from the client-side agent status/spawner surface
   described here.
-- [ADR-129: Control Center Re-imagination](../adr/ADR-129-control-center-reimagination.md)
+- [ADR-129: Control Center Re-imagination](../archive/adr/ADR-129-control-center-reimagination.md)
   — the governing decision for the desktop overlay.
-- [ADR-139: Immersive interaction adoption programme](../adr/ADR-139-immersive-interaction-adoption-programme.md)
-  and [ADR-140: XR agent-swarm visualisation](../adr/ADR-140-xr-agent-swarm-visualisation.md)
+- [ADR-139: Immersive interaction adoption programme](../archive/adr/ADR-139-immersive-interaction-adoption-programme.md)
+  and [ADR-140: XR agent-swarm visualisation](../archive/adr/ADR-140-xr-agent-swarm-visualisation.md)
   — the desktop trio and the XR HUD control centre (including the Swarm tab).
-- [ADR-141: Constrained-layout engine programme](../adr/ADR-141-constrained-layout-engine-programme.md)
+- [ADR-141: Constrained-layout engine programme](../archive/adr/ADR-141-constrained-layout-engine-programme.md)
   — the layout modes the HUD Graph tab and the Motion & Forces group both drive.
-- [ADR-046: Enterprise UI Architecture](../adr/ADR-046-enterprise-ui-architecture.md)
+- [ADR-046: Enterprise UI Architecture](../archive/adr/ADR-046-enterprise-ui-architecture.md)
   — a historical, superseded-by-removal (ADR-103) enterprise sidebar proposal;
   unrelated to this rebuild but referenced here because it describes the same
   `IntegratedControlPanel` this page replaces, as it stood in 2026-04.

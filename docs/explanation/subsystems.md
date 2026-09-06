@@ -45,7 +45,7 @@ Every arrow carries the same `did:nostr` identity primitive. No arrow carries a 
 
 ## agentbox — the agent container
 
-**Repository:** [github.com/DreamLab-AI/agentbox](https://github.com/DreamLab-AI/agentbox) · **In-tree as:** git submodule at `agentbox/` ([agentbox ADR-004: upstream sync](../../agentbox/docs/reference/adr/ADR-004-upstream-sync.md))
+**Repository:** [github.com/DreamLab-AI/agentbox](https://github.com/DreamLab-AI/agentbox) · **In-tree as:** git submodule at `agentbox/` ([agentbox ADR-004: upstream sync](../../agentbox/docs/archive/adr/ADR-004-upstream-sync.md))
 
 agentbox is the sovereign, Nix-built container that runs `did:nostr`-keyed AI agents. It is the **only** data-manipulation surface in the ecosystem: agents reason over the knowledge base and propose enrichments; VisionClaw never edits triples directly. agentbox carries its own documentation pack — **do not duplicate its internals here.** Read it at source:
 
@@ -61,15 +61,15 @@ Three contracts bridge agentbox to VisionClaw. Everything else stays inside agen
 
 | Seam | Direction | Contract |
 |------|-----------|----------|
-| **`/wss/agent-events`** | agentbox → VisionClaw | Authenticated WebSocket ingest. Inbound `agent_action` events carry the legacy numeric IDs **plus** optional `source_urn`, `target_urn`, and `pubkey` (agentbox URN grammar). They drive a transient beam against the existing GPU semantic-forces kernels (delivered); the gluon attractive-force effect is deferred pending a transient-edge GPU buffer (see the ADR-059 addendum). Outbound `focus`/`select`/`hover`/`drag` events push user attention back so agents can react. Governed by [ADR-059](../adr/ADR-059-bidirectional-agent-channel-server.md). |
+| **`/wss/agent-events`** | agentbox → VisionClaw | Authenticated WebSocket ingest. Inbound `agent_action` events carry the legacy numeric IDs **plus** optional `source_urn`, `target_urn`, and `pubkey` (agentbox URN grammar). They drive a transient beam against the existing GPU semantic-forces kernels (delivered); the gluon attractive-force effect is deferred pending a transient-edge GPU buffer (see the ADR-059 addendum). Outbound `focus`/`select`/`hover`/`drag` events push user attention back so agents can react. Governed by [ADR-059](../archive/adr/ADR-059-bidirectional-agent-channel-server.md). |
 | **ACSP kinds 31400–31405** | both → relay → forum | The Agent Control Surface Protocol. VisionClaw's producer (`src/services/acsp/`) publishes panel definitions (31400), panel state (31401/31404), broker cases (31402), and consumes signed case decisions (31403). agentbox agents publish operational state on the same kinds. The relay mesh AUTH-gates these to registry-listed agent pubkeys. |
-| **REST status poll `:9090`** | VisionClaw → agentbox | Legacy one-way path: `agent_monitor_actor` polls the agentbox management API for `AgentStatus` records. [ADR-059](../adr/ADR-059-bidirectional-agent-channel-server.md) supersedes this with the bidirectional channel above; the poll remains until the `:9500` state-poll cutover lands. |
+| **REST status poll `:9090`** | VisionClaw → agentbox | Legacy one-way path: `agent_monitor_actor` polls the agentbox management API for `AgentStatus` records. [ADR-059](../archive/adr/ADR-059-bidirectional-agent-channel-server.md) supersedes this with the bidirectional channel above; the poll remains until the `:9500` state-poll cutover lands. |
 
 The **BC20 anti-corruption layer** is the bounded-context boundary that translates between the two URN namespaces — `urn:visionclaw:<kind>:<hex>:<local>` and `urn:agentbox:<kind>:[<scope>:]<local>` — at the federation edge. Neither side leaks its internal aggregates into the other. See [Bounded Contexts](./bounded-contexts.md) for the full context map.
 
-A fourth, read-only seam runs the other way: agentbox's **ontology bridge** ([agentbox ADR-023](../../agentbox/docs/reference/adr/ADR-023-ontology-bridge.md)) proxies agents into VisionClaw's 7 [MCP ontology tools](../reference/mcp-tools.md) (`discover`, `read`, `query`, `traverse`, `propose`, `validate`, `status`) against the embedded Oxigraph SPARQL store. Agents ground their reasoning in the formal ontology without holding a database handle.
+A fourth, read-only seam runs the other way: agentbox's **ontology bridge** ([agentbox ADR-023](../../agentbox/docs/archive/adr/ADR-023-ontology-bridge.md)) proxies agents into VisionClaw's 7 [MCP ontology tools](../reference/mcp-tools.md) (`discover`, `read`, `query`, `traverse`, `propose`, `validate`, `status`) against the embedded Oxigraph SPARQL store. Agents ground their reasoning in the formal ontology without holding a database handle.
 
-Integration scope and acceptance criteria live in [PRD-004: Agentbox–VisionClaw Integration](../prd/PRD-004-agentbox-visionclaw-integration.md).
+Integration scope and acceptance criteria live in [PRD-004: Agentbox–VisionClaw Integration](../archive/prd/PRD-004-agentbox-visionclaw-integration.md).
 
 ---
 
@@ -133,5 +133,5 @@ Because the boundaries are clean, each repository releases independently. A Visi
 - [Bounded Contexts](./bounded-contexts.md) — the BC20 anti-corruption layer and context map
 - [Agent Control Surface](./agent-control-surface.md) — ACSP kinds 31400–31405 in detail
 - [Solid Sidecar Architecture](./solid-sidecar-architecture.md) — the embedded pod
-- **Governing decisions:** [ADR-059: Bi-directional Agent Channel](../adr/ADR-059-bidirectional-agent-channel-server.md) · [PRD-004: Agentbox–VisionClaw Integration](../prd/PRD-004-agentbox-visionclaw-integration.md)
-- **Cross-pack (agentbox subsystem):** [ADR-004: Upstream Sync](../../agentbox/docs/reference/adr/ADR-004-upstream-sync.md) · [ADR-023: Ontology Bridge](../../agentbox/docs/reference/adr/ADR-023-ontology-bridge.md)
+- **Governing decisions:** [ADR-059: Bi-directional Agent Channel](../archive/adr/ADR-059-bidirectional-agent-channel-server.md) · [PRD-004: Agentbox–VisionClaw Integration](../archive/prd/PRD-004-agentbox-visionclaw-integration.md)
+- **Cross-pack (agentbox subsystem):** [ADR-004: Upstream Sync](../../agentbox/docs/archive/adr/ADR-004-upstream-sync.md) · [ADR-023: Ontology Bridge](../../agentbox/docs/archive/adr/ADR-023-ontology-bridge.md)

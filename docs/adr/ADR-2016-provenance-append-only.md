@@ -75,9 +75,9 @@ CP-01 revision/ownership mapping and the relevant corpus or authority contract.
 
 **Current evidence:** reify_activity inserts individual quads without an enclosing transaction. The activity type is inserted before the agent IRI is validated; later invalid input or storage failure can leave a partial record. This is source evidence, not a production fault reproduction.
 
-See [runtime analysis](../../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md),
-[source hashes](../../../VisionFlow/docs/estate-review/evidence/visionclaw-data-snapshot.json)
-and [backup receipt](../../../VisionFlow/docs/estate-review/evidence/visionclaw-backup-probe.json).
+See [runtime analysis](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/visionclaw-data-runtime.md),
+[source hashes](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-data-snapshot.json)
+and [backup receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visionclaw-backup-probe.json).
 Source was inspected at `b00c28a0d766c8cf46cd00b100dab60ef2dd74a4`. Earlier verification at `9a2c8087385bf6db08b1aeb91004e1a60203965b`
 remains historical evidence; this annex does not claim a new deployed activation
 or complete verification of every older assertion.
@@ -86,7 +86,7 @@ or complete verification of every older assertion.
 
 ## Consumer closeout extension — 2026-09-05
 
-The [joined-trace review](../../../VisionFlow/docs/estate-review/joined-provenance-trace.md) traces the separate SQLite-backed `GET /api/trace` consumer. It does not query this ADR's Oxigraph provenance graph. Shared-identity grouping and a two-source canary are insufficient evidence of a causally complete action. CP-01/04/08 acceptance must establish original-record correlation, resource-authorised reads, capture health, bounded time/volume and any actual pod integration. This source-only extension preserves the append-only decision and its earlier storage obligations; no endpoint or deployment acceptance ran.
+The [joined-trace review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/joined-provenance-trace.md) traces the separate SQLite-backed `GET /api/trace` consumer. It does not query this ADR's Oxigraph provenance graph. Shared-identity grouping and a two-source canary are insufficient evidence of a causally complete action. CP-01/04/08 acceptance must establish original-record correlation, resource-authorised reads, capture health, bounded time/volume and any actual pod integration. This source-only extension preserves the append-only decision and its earlier storage obligations; no endpoint or deployment acceptance ran.
 
 ## Acceptance progress — 2026-09-05
 

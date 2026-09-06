@@ -60,7 +60,7 @@ difficulty-level: intermediate
 #### **Understand the Architecture**
 1.
 2.
-3. [Graph Schema](../reference/graph-schema.md) (Oxigraph/RDF, ADR-11)
+3. [Graph Schema](../reference/graph-schema.md) (Oxigraph/RDF, ADR-2004)
 
 #### **Use the API**
 1. 
@@ -85,7 +85,7 @@ difficulty-level: intermediate
 | **AI Agents** |  |
 | **Multi-Agent System** | Architecture |
 | **XR/VR** | [XR Architecture](../explanation/xr-architecture.md) • [VR Development](../explanation/xr-architecture.md) |
-| **Graph Store** | [Schema](../reference/graph-schema.md) (Oxigraph/RDF, ADR-11) |
+| **Graph Store** | [Schema](../reference/graph-schema.md) (Oxigraph/RDF, ADR-2004) |
 | **Binary Protocol** | [WebSocket](../reference/websocket-protocol.md) • [Specification](../reference/binary-protocol.md) |
 
 ### Key Features

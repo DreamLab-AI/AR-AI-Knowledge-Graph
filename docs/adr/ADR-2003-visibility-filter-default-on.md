@@ -56,7 +56,7 @@ CP-02/04/06/08. Owner remains jjohare with graph/identity/rendering maintainers.
 
 **Acceptance condition:** Trace authority for visibility/owner metadata through ingest and updates, normalise owner identity, and inventory every output path. Exercise anonymous/owner/non-owner callers, public-to-private transitions, owner changes, reauthentication, concurrent sync and cached client state. Confirm node/edge/label/analytics behaviour together. First-use flag caching requires release/process evidence for opt-out changes; later environment edits do not change the captured value. Reopen on metadata schema, ingest authority, output routes or client retention changes.
 
-See the [review](../../../VisionFlow/docs/estate-review/rendered-state.md#visibility-defaults-and-output-coverage) and [receipt](../../../VisionFlow/docs/estate-review/evidence/visibility-snapshot.json). Pure filter tests do not exercise a socket, browser, metadata mutation or live revocation. Dependencies are CP-02 metadata integrity, CP-04 identity and CP-08 release evidence.
+See the [review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#visibility-defaults-and-output-coverage) and [receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/visibility-snapshot.json). Pure filter tests do not exercise a socket, browser, metadata mutation or live revocation. Dependencies are CP-02 metadata integrity, CP-04 identity and CP-08 release evidence.
 
 ## Acceptance progress — 2026-09-05
 

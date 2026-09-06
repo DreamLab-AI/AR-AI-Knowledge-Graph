@@ -107,7 +107,7 @@ data.
 implementations (writes) and 25 `QueryHandler` implementations (reads) sit behind
 9 ports with 12 concrete adapters. The Directive/Query split is a typing
 discipline, not a runtime message bus — **there is no CQRS dispatch bus**. The
-bus was removed under [ADR-089](../adr/ADR-089-cqrs-bus-removal.md); handlers are
+bus was removed under [ADR-089](../archive/adr/ADR-089-cqrs-bus-removal.md); handlers are
 invoked directly as plain async calls, which removed a layer of indirection
 without losing the read/write separation.
 
@@ -117,12 +117,12 @@ Read the detail in [Backend Architecture](backend-architecture.md) and the
 ### Data layer
 
 Three stores, each with a distinct job. None is Neo4j — Neo4j was removed
-entirely (ADR-11); there is no graph database container and no DB browser UI.
+entirely (ADR-2004); there is no graph database container and no DB browser UI.
 
 - **Oxigraph** — an embedded, RocksDB-backed RDF quad store opened in-process.
   It holds both the knowledge graph and the ontology as named graphs, queried
   with W3C SPARQL 1.1. SHACL-lite shapes gate writes; PROV-O provenance is
-  reified into an append-only graph (PRD-022, [ADR-127](../adr/ADR-127-semantic-trust-layer.md)).
+  reified into an append-only graph (PRD-022, [ADR-127](../archive/adr/ADR-127-semantic-trust-layer.md)).
 - **SQLite** — an embedded store for user settings, kept relational because
   settings are key/value rather than graph-shaped.
 - **RuVector** — a pgvector-backed semantic memory (MiniLM-L6-v2, 384-dim,
@@ -158,7 +158,7 @@ Computed positions stream out over the binary protocol. See
 ## Workspace structure
 
 The backend is split into 8 workspace crates under
-[ADR-090](../adr/ADR-090-hexagonal-crate-modularisation.md), so a one-line change
+[ADR-090](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), so a one-line change
 to a domain type recompiles one crate and the linker rather than the whole
 server:
 
@@ -257,7 +257,7 @@ tiers; the cryptographic primitive is the coordination primitive.
 - [Subsystems](subsystems.md) — how VisionClaw, agentbox, and the mesh compose
 - [Deployment Topology](deployment-topology.md) — where each component runs
 - [Architecture Decision Records](../adr/README.md) — governing ADRs, especially
-  [ADR-089 (CQRS bus removal)](../adr/ADR-089-cqrs-bus-removal.md),
-  [ADR-090 (crate modularisation)](../adr/ADR-090-hexagonal-crate-modularisation.md),
-  [ADR-112 (ontology spine)](../adr/ADR-112-ontology-augmentation-retrieval-spine.md),
-  and [ADR-127 (semantic trust layer)](../adr/ADR-127-semantic-trust-layer.md)
+  [ADR-089 (CQRS bus removal)](../archive/adr/ADR-089-cqrs-bus-removal.md),
+  [ADR-090 (crate modularisation)](../archive/adr/ADR-090-hexagonal-crate-modularisation.md),
+  [ADR-112 (ontology spine)](../archive/adr/ADR-112-ontology-augmentation-retrieval-spine.md),
+  and [ADR-127 (semantic trust layer)](../archive/adr/ADR-127-semantic-trust-layer.md)

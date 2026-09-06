@@ -25,7 +25,7 @@ The client-side filtering feature allows authenticated clients to filter which g
 1. **ClientFilter** (`src/actors/client_coordinator_actor.rs`)
    - Per-client filter configuration
    - Stores threshold settings and filtered node IDs
-   - Persisted to the SQLite settings store for authenticated users (ADR-11)
+   - Persisted to the SQLite settings store for authenticated users (ADR-2004)
 
 2. **Filter Logic** (`src/actors/client_filter.rs`)
    - `recompute_filtered_nodes()` - Main filtering function

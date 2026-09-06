@@ -230,15 +230,15 @@ explicitly amend one here with rationale.
 
 ## Cross-repository acceptance qualification — 2026-09-04
 
-The shared local fixture confirms sha256-12 output for identical tested UTF-8 bytes, not arbitrary-object canonicalisation. Precomputed KG addresses are prefix-checked and accept malformed suffixes; complete grammar validation remains open. Rust and JS crossing maps differ on beads, so closed-map correctness does not imply equal coverage. ADR-2023/2025 retain their scoped decisions with these acceptance requirements. See the [estate identifier review](../../VisionFlow/docs/estate-review/federation-identifiers.md).
+The shared local fixture confirms sha256-12 output for identical tested UTF-8 bytes, not arbitrary-object canonicalisation. Precomputed KG addresses are prefix-checked and accept malformed suffixes; complete grammar validation remains open. Rust and JS crossing maps differ on beads, so closed-map correctness does not imply equal coverage. ADR-2023/2025 retain their scoped decisions with these acceptance requirements. See the [estate identifier review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/federation-identifiers.md).
 
 ## Mint and identity closeout qualification — 2026-09-04
 
-ADR-2021 is partial against universal constructor use: direct provenance formatting and legacy graph mint sites remain. ADR-2022's canonical naming must be distinguished from signed proof and role authority. [Source evidence and acceptance](../../VisionFlow/docs/estate-review/federation-identifiers.md#mint-site-coverage-and-proof-of-identity) require mint/lookup/persistence coverage and explicit migration exceptions; no named graph or stored ID is authorised for rewrite by this review.
+ADR-2021 is partial against universal constructor use: direct provenance formatting and legacy graph mint sites remain. ADR-2022's canonical naming must be distinguished from signed proof and role authority. [Source evidence and acceptance](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/federation-identifiers.md#mint-site-coverage-and-proof-of-identity) require mint/lookup/persistence coverage and explicit migration exceptions; no named graph or stored ID is authorised for rewrite by this review.
 
 ## Wire capacity closeout — 2026-09-04
 
-ADR-2024's release overflow warning belongs to the typed flag setters. **Resolved since — ADR-2070 (2026-09-05):** the untyped branch no longer debug-asserts and passes the ID through unchanged; it calls the same `enforce_wire_id_bounds` as the five typed branches (`src/utils/binary_protocol.rs:445`), so all six log `error!` and mask in release. **Still open:** shared 26-bit masks do not prove allocator safety or generation consistency, and reconnect mapping evidence per class is still required; see [estate wire review](../../VisionFlow/docs/estate-review/rendered-state.md#wire-identifier-overflow-coverage).
+ADR-2024's release overflow warning belongs to the typed flag setters. **Resolved since — ADR-2070 (2026-09-05):** the untyped branch no longer debug-asserts and passes the ID through unchanged; it calls the same `enforce_wire_id_bounds` as the five typed branches (`src/utils/binary_protocol.rs:445`), so all six log `error!` and mask in release. **Still open:** shared 26-bit masks do not prove allocator safety or generation consistency, and reconnect mapping evidence per class is still required; see [estate wire review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#wire-identifier-overflow-coverage).
 
 ## Remediation — 2026-09-05
 

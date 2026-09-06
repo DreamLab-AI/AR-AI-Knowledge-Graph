@@ -56,9 +56,9 @@ lockstep; the raw-copy path and tail-append discipline are intact.
 
 ## Closeout extension — 2026-09-04
 
-CP-01/06/08. Owner remains jjohare with GPU/protocol/release maintainers. Complete/live is retained for the flat representation and paired size guards. The [host layout probe](../../../VisionFlow/docs/estate-review/evidence/simparams-layout-probe.json) matches all 53 field offsets at size 212/alignment 4. A temporary same-size field swap still compiles under the original assertion: size guards do not prove field order or type identity.
+CP-01/06/08. Owner remains jjohare with GPU/protocol/release maintainers. Complete/live is retained for the flat representation and paired size guards. The [host layout probe](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/simparams-layout-probe.json) matches all 53 field offsets at size 212/alignment 4. A temporary same-size field swap still compiles under the original assertion: size guards do not prove field order or type identity.
 
-**Acceptance condition:** Version field/type/offset and feature-bit manifests; compare actual Rust/CUDA toolchains and loaded device-module identity in CI and release evidence. Include same-size drift negatives, copy-size and old/new consumer cases, and coordinated rollout/rollback before tail growth. Reopen on any field, compiler, precompiled module or consumer change. See [simulation compatibility review](../../../VisionFlow/docs/estate-review/rendered-state.md#simulation-layout-and-force-authority). This pass ran host extracted declarations only, with no CUDA or GPU execution.
+**Acceptance condition:** Version field/type/offset and feature-bit manifests; compare actual Rust/CUDA toolchains and loaded device-module identity in CI and release evidence. Include same-size drift negatives, copy-size and old/new consumer cases, and coordinated rollout/rollback before tail growth. Reopen on any field, compiler, precompiled module or consumer change. See [simulation compatibility review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#simulation-layout-and-force-authority). This pass ran host extracted declarations only, with no CUDA or GPU execution.
 
 ## Acceptance progress — 2026-09-05
 

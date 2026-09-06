@@ -218,19 +218,19 @@ evidence, not authority — cite it, do not defer to it.
 
 ## Replay closeout qualification — 2026-09-04
 
-ADR-2002's bounded process-local cache remains implemented in the inspected source. [Isolated helper evidence](../../VisionFlow/docs/estate-review/runtime-ingress.md#visionclaw-replay-and-operation-boundaries) confirms capacity and TTL semantics without certifying full authentication. Acceptance still needs combined clock boundaries, restart/replicas, route-specific payload binding and fresh-token/idempotent retries after downstream failure. Single-use authentication does not itself establish exactly-once mutation.
+ADR-2002's bounded process-local cache remains implemented in the inspected source. [Isolated helper evidence](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/runtime-ingress.md#visionclaw-replay-and-operation-boundaries) confirms capacity and TTL semantics without certifying full authentication. Acceptance still needs combined clock boundaries, restart/replicas, route-specific payload binding and fresh-token/idempotent retries after downstream failure. Single-use authentication does not itself establish exactly-once mutation.
 
 ## Visibility closeout qualification — 2026-09-04
 
-ADR-2003's default-on parser and both inspected initial/position output filters are present. Six domain filter tests pass. [Output coverage and acceptance](../../VisionFlow/docs/estate-review/rendered-state.md#visibility-defaults-and-output-coverage) still require metadata write authority, canonical owner identity, alternate output inventory and client-state behaviour after visibility/owner changes. A flag default is not proof of every private-data boundary.
+ADR-2003's default-on parser and both inspected initial/position output filters are present. Six domain filter tests pass. [Output coverage and acceptance](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/rendered-state.md#visibility-defaults-and-output-coverage) still require metadata write authority, canonical owner identity, alternate output inventory and client-state behaviour after visibility/owner changes. A flag default is not proof of every private-data boundary.
 
 ## Development/release acceptance qualification — 2026-09-04
 
-ADR-2037/2038 remain proposed controls, not established release-image/profile assertions. Nine [extracted-helper build cases](../../VisionFlow/docs/estate-review/role-authority.md#development-bypass-and-release-identity) confirm that non-debug plus dev-auth still allows the full bypass, whereas non-debug without it rejects any present VISIONCLAW_DEV_MODE value. ADR-2039's dependency wording is corrected. Shipped feature identity, pre-listener profile validation, report-mode interaction and actual REST/WS/headset behaviour require separate receipts.
+ADR-2037/2038 remain proposed controls, not established release-image/profile assertions. Nine [extracted-helper build cases](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/role-authority.md#development-bypass-and-release-identity) confirm that non-debug plus dev-auth still allows the full bypass, whereas non-debug without it rejects any present VISIONCLAW_DEV_MODE value. ADR-2039's dependency wording is corrected. Shipped feature identity, pre-listener profile validation, report-mode interaction and actual REST/WS/headset behaviour require separate receipts.
 
 ## Profile dependency reconciliation — 2026-09-04
 
-ADR-2012 is partial: report mode is reachable with acknowledgement in a non-debug build and does not expire automatically in an existing middleware instance. ADR-2026's hygiene evidence applies only without debug/dev-auth; ADR-2027 remains a partial four-setting profile model. [Effective-policy requirements](../../VisionFlow/docs/estate-review/role-authority.md#profile-claims-and-effective-policy) add build features, full bypass, report mode, public prefixes and power-user fallback to release acceptance. Prior helper source hashes still match; no live profile was certified.
+ADR-2012 is partial: report mode is reachable with acknowledgement in a non-debug build and does not expire automatically in an existing middleware instance. ADR-2026's hygiene evidence applies only without debug/dev-auth; ADR-2027 remains a partial four-setting profile model. [Effective-policy requirements](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/role-authority.md#profile-claims-and-effective-policy) add build features, full bypass, report mode, public prefixes and power-user fallback to release acceptance. Prior helper source hashes still match; no live profile was certified.
 
 ## Remediation — 2026-09-05
 

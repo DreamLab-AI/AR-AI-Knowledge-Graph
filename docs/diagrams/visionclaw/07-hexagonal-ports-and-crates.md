@@ -67,7 +67,7 @@ flowchart TB
     end
     subgraph ADAPT["src/adapters — implementation side"]
         A1["ActorGraphRepository<br/>src/adapters/actor_graph_repository.rs"]
-        A2["OxigraphGraphRepository (ADR-11 canonical)<br/>src/adapters/oxigraph_graph_repository.rs"]
+        A2["OxigraphGraphRepository (ADR-2004 canonical)<br/>src/adapters/oxigraph_graph_repository.rs"]
         A3["SqliteSettingsRepository<br/>src/adapters/sqlite_settings_repository.rs"]
         A4["SqliteEnrichmentRepository — data/enrichment.sqlite3 (WS-9)"]
         A5["SqliteCanaryRepository — data/liveness.sqlite3 (RES-a)"]
@@ -87,7 +87,7 @@ flowchart TB
     ADAPT --> XCRATE
     N1["INVARIANT (BASELINE) — persistence is Oxigraph (data/oxigraph) plus per-domain SQLite<br/>under DATA_DIR. One Oxigraph store is shared by the ontology and graph repositories.<br/>No networked graph DB. ADR-2004."]
     ADAPT --- N1
-    N2["src/repositories/mod.rs is documentation only — all legacy Neo4j and SQL repositories<br/>were removed. Canonical adapters named there are OxigraphOntologyRepository,<br/>OxigraphGraphRepository, SqliteSettingsRepository (ADR-11)."]
+    N2["src/repositories/mod.rs is documentation only — all legacy Neo4j and SQL repositories<br/>were removed. Canonical adapters named there are OxigraphOntologyRepository,<br/>OxigraphGraphRepository, SqliteSettingsRepository (ADR-2004)."]
     ADAPT --- N2
 ```
 

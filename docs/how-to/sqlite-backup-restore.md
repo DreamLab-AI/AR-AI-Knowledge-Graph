@@ -58,9 +58,8 @@ pruned at the end of each successful run. With a daily schedule that is a
 two-week window. Raise `KEEP` for a longer retention tail.
 
 **Physical-disk separation (already satisfied by the default).** The default
-`BACKUP_ROOT=./data/backups` is not the same disk as the live data: the repo
-working tree lives on `/mnt/mldata`, whereas the live `visionclaw-data` volume
-is on `/mnt/nvme`. So a default-configured backup already lands on a *different
+`BACKUP_ROOT=./data/backups` is not the same disk as the live data on the reference host: the checkout and
+the live `visionclaw-data` volume sit on different physical disks. So a default-configured backup already lands on a *different
 physical disk* from the source — a single-disk failure cannot take both. Point
 `BACKUP_ROOT` at a third host/disk (or off-box entirely) for defence against
 whole-host loss.

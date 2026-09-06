@@ -269,7 +269,7 @@ schema.
 - [URN ↔ Solid mapping](../../reference/urn-solid-mapping.md) — how pod URLs map to `urn:visionclaw:` identifiers
 - [Solid sidecar architecture](../../explanation/solid-sidecar-architecture.md) — why the pod is a git remote, an LDP server, and a renderable site at once
 - [Security model](../../explanation/security-model.md) — WAC, NIP-98, and the DID trust chain
-- Governing ADRs: [ADR-086 Git-over-HTTP Ingest Unification](../../adr/ADR-086-git-over-http-ingest-unification.md), [ADR-032 Embed solid-pod-rs Library](../../adr/ADR-032-embed-solid-pod-rs-library.md), [ADR-033 Git Bead Provenance](../../adr/ADR-033-git-bead-provenance.md), [ADR-107 GitHub Creds in Pod](../../adr/ADR-107-github-creds-in-pod.md)
+- Governing ADRs: [ADR-086 Git-over-HTTP Ingest Unification](../../archive/adr/ADR-086-git-over-http-ingest-unification.md), [ADR-032 Embed solid-pod-rs Library](../../archive/adr/ADR-032-embed-solid-pod-rs-library.md), [ADR-033 Git Bead Provenance](../../archive/adr/ADR-033-git-bead-provenance.md), [ADR-107 GitHub Creds in Pod](../../archive/adr/ADR-107-github-creds-in-pod.md)
 
 ### External references
 

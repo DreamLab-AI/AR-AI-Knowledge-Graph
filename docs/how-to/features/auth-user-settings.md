@@ -13,7 +13,7 @@ difficulty-level: advanced
 
 # Per-User Settings Implementation
 
-> **ADR-11 update**: Settings persistence no longer uses Neo4j. The backing adapter is
+> **ADR-2004 update**: Settings persistence no longer uses Neo4j. The backing adapter is
 > now `SqliteSettingsRepository` (`src/adapters/sqlite_settings_repository.rs`), backed by
 > a SQLite file under `${DATA_DIR}` (no Bolt URI, no DB password). The user/settings/filter
 > entities below describe the **logical** model; the Cypher snippet is retained only as a
@@ -89,7 +89,7 @@ Sessions are validated through NostrService:
 3. Call `nostr_service.validate_session(&pubkey, &token)`
 4. Check expiry against `AUTH_TOKEN_EXPIRY` env var (default 3600s)
 
-### Logical Schema (conceptual — actual storage is SQLite, ADR-11)
+### Logical Schema (conceptual — actual storage is SQLite, ADR-2004)
 ```cypher
 // User node
 CREATE (u:User {
@@ -176,14 +176,14 @@ cargo test user_filter -- --ignored
 ```
 
 ## Environment Variables
-- `DATA_DIR` - Base data directory holding the SQLite settings DB and Oxigraph dataset (default: `./data`; Docker images set `/app/data`). The former `NEO4J_*` variables are obsolete (ADR-11).
+- `DATA_DIR` - Base data directory holding the SQLite settings DB and Oxigraph dataset (default: `./data`; Docker images set `/app/data`). The former `NEO4J_*` variables are obsolete (ADR-2004).
 - `AUTH_TOKEN_EXPIRY` - Token expiry in seconds (default: 3600)
 - `POWER_USER_PUBKEYS` - Comma-separated list of power user pubkeys
 
 ## Files Modified
 - `/src/settings/api/settings_routes.rs` - Added filter endpoints, per-user settings lookup
 - `/src/main.rs` - Registers `SqliteSettingsRepository` in app data
-- `/src/adapters/sqlite_settings_repository.rs` - SQLite-backed settings persistence (ADR-11)
+- `/src/adapters/sqlite_settings_repository.rs` - SQLite-backed settings persistence (ADR-2004)
 - `/src/settings/auth_extractor.rs` - Already existed (no changes needed)
 
 ---
@@ -192,7 +192,7 @@ cargo test user_filter -- --ignored
 
 - [Client-Side Filtering Implementation](filtering-nodes.md)
 
-- [Graph Schema Guide](../../reference/graph-schema.md) (Oxigraph/RDF, ADR-11)
+- [Graph Schema Guide](../../reference/graph-schema.md) (Oxigraph/RDF, ADR-2004)
 - [Docker Compose Unified Configuration - Usage Guide](../deployment.md)
 - [Developer Guides](../../CONTRIBUTING.md)
 

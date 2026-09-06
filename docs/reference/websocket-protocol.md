@@ -360,7 +360,7 @@ the binary `broadcast_sequence` shows a gap on resume, send
 `request_full_snapshot` rather than accumulating against a stale base. The
 desktop client decomposes this reconnect/resubscribe state machine into the
 WebSocket store described in
-[ADR-012](../adr/ADR-012-websocket-store-decomposition.md).
+[ADR-012](../archive/adr/ADR-012-websocket-store-decomposition.md).
 
 ---
 
@@ -379,9 +379,9 @@ WebSocket store described in
 - [Agent control surface](../explanation/agent-control-surface.md) — the
   agent-events channel in context.
 - Governing records:
-  [ADR-059](../adr/ADR-059-bidirectional-agent-channel-server.md) (bidirectional
+  [ADR-059](../archive/adr/ADR-059-bidirectional-agent-channel-server.md) (bidirectional
   agent channel),
-  [ADR-060](../adr/ADR-060-pubkey-filtered-binary-encoder.md) (pubkey-filtered
+  [ADR-060](../archive/adr/ADR-060-pubkey-filtered-binary-encoder.md) (pubkey-filtered
   broadcasts),
-  [ADR-031](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md) (heartbeat
+  [ADR-031](../archive/adr/ADR-031-gpu-analytics-correctness-and-wiring.md) (heartbeat
   directives).

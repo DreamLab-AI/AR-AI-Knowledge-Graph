@@ -19,7 +19,7 @@ dependencies:
   - Docker installation
 ---
 
-> **DEPRECATED**: This document describes the legacy `multi-agent-docker` ComfyUI integration. For the current Nix-based agentbox deployment, see [agentbox ComfyUI docs](../../../agentbox/docs/user/comfyui.md). The paths below reference `multi-agent-docker/` which is on deprecation track per [ADR-058](../../adr/ADR-058-mad-to-agentbox-migration.md).
+> **DEPRECATED**: This document describes the legacy `multi-agent-docker` ComfyUI integration. For the current Nix-based agentbox deployment, see [agentbox ComfyUI docs](../../../agentbox/docs/user/comfyui.md). The paths below reference `multi-agent-docker/` which is on deprecation track per [ADR-058](../../archive/adr/ADR-058-mad-to-agentbox-migration.md).
 
 # ComfyUI Service Integration - Automatic Startup
 

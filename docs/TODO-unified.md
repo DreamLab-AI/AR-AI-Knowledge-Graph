@@ -1,7 +1,7 @@
 # Unified TODO - VisionClaw + agentbox
 
 **Status:** Living document, single combined register. Reconciled **2026-09-06** against the 2026-09-01..06 sprint using the estate evidence pack: resolved rows removed with evidence (bottom), partial rows rewritten to say exactly what landed and what remains, stale citations repointed at the repo that actually holds the record. The 2026-09-02 slim board is in git history (`git show 3ea6e9e:docs/TODO-unified.md` or the commit preceding this one); the 2026-08-31 long form is at `git show e8fab1098:docs/TODO-unified.md`.
-**Governed by:** [PRD-024 Final-Mile Closeout](prd/PRD-024-final-mile-closeout.md), [ADR-133](adr/ADR-133-final-mile-sprint.md)
+**Governed by:** [PRD-024 Final-Mile Closeout](archive/prd/PRD-024-final-mile-closeout.md), [ADR-133](archive/adr/ADR-133-final-mile-sprint.md)
 **Rule:** one unblock state per entry; closures cite evidence; remove rows when done. Open count: **42 before (recount; the previous header's "40" combined the paired L-6+L-1 and DR-1+DR-2 rows into one each), 37 carried + 9 new = 46 after, then G-20 closed the same day: **45 open** (6 removed, see bottom). Evening reconciliation 2026-09-06 (estate mesh, session 017UpCFJ): +7 new rows G-23..G-29, V-1 narrowed; **52 open** (12 removed).
 **Repo-qualified IDs:** agentbox and VisionClaw independently mint `ADR-2002`, `ADR-2016`, `ADR-2017` and `ADR-2031` for unrelated topics. Every ADR reference below is prefixed `VC` or `AB`. Fixing the collision itself is G-14.
 

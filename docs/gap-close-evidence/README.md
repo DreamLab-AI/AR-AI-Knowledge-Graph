@@ -7,13 +7,13 @@ description: Per-item evidence records for the VisionClaw gap-close sprints (PRD
 
 > [VisionClaw Docs](../README.md) · Gap-Close Evidence
 
-Closed-item evidence records for the gap-close sprints ([PRD-023](../prd/PRD-023-gap-close-visionclaw.md),
-[PRD-024](../prd/PRD-024-final-mile-closeout.md)) and the final-mile process
-([ADR-133](../adr/ADR-133-final-mile-sprint.md)). Each file pins one closed gap to
+Closed-item evidence records for the gap-close sprints ([PRD-023](../archive/prd/PRD-023-gap-close-visionclaw.md),
+[PRD-024](../archive/prd/PRD-024-final-mile-closeout.md)) and the final-mile process
+([ADR-133](../archive/adr/ADR-133-final-mile-sprint.md)). Each file pins one closed gap to
 its shipped evidence — the code locus, the regression canary, and the honesty
 correction. Records are append-only; they are retained as provenance rather than
 rewritten. Companion evidence for PRD-scoped items lives under
-[`../prd/gap-close-evidence/`](../prd/gap-close-evidence/README.md).
+[`../prd/gap-close-evidence/`](../archive/prd/gap-close-evidence/README.md).
 
 ## P0 — correctness / honesty must-fixes
 
@@ -54,6 +54,6 @@ rewritten. Companion evidence for PRD-scoped items lives under
 
 ## See also
 
-- [PRD-024 — Final-Mile Closeout](../prd/PRD-024-final-mile-closeout.md)
-- [PRD-023 — Gap-Close VisionClaw](../prd/PRD-023-gap-close-visionclaw.md)
-- [ADR-136 — Desktop OpenXR VIVE Validation Target](../adr/ADR-136-desktop-openxr-vive-validation-target.md) (cites the P2-M* records)
+- [PRD-024 — Final-Mile Closeout](../archive/prd/PRD-024-final-mile-closeout.md)
+- [PRD-023 — Gap-Close VisionClaw](../archive/prd/PRD-023-gap-close-visionclaw.md)
+- [ADR-136 — Desktop OpenXR VIVE Validation Target](../archive/adr/ADR-136-desktop-openxr-vive-validation-target.md) (cites the P2-M* records)

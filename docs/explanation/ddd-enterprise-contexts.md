@@ -8,7 +8,7 @@ updated-date: 2026-04-14
 
 # DDD Enterprise Bounded Contexts - VisionClaw
 
-> **ADR-11 update**: Throughout this document, "Neo4j" denotes the project's graph
+> **ADR-2004 update**: Throughout this document, "Neo4j" denotes the project's graph
 > persistence layer, which is now the **embedded Oxigraph** RDF triple store (in-process,
 > RocksDB-backed; no Bolt URI, container, or DB password). The `:Label` and relationship
 > notations describe the **RDF logical model**, not Neo4j labels. Repository ports are
@@ -23,7 +23,7 @@ thesis. It also extends the identity contexts defined in
 pipeline contexts defined in [`ddd-semantic-pipeline.md`](ddd-semantic-pipeline.md).
 
 The enterprise contexts implement the six workstreams from the
-[Enterprise PRD](../prd/PRD-002-enterprise-ui.md): Judgment Broker
+[Enterprise PRD](../archive/prd/PRD-002-enterprise-ui.md): Judgment Broker
 Workbench, Insight Ingestion Loop, Organisational KPI & Observability,
 Enterprise Identity & Access, Discovery Connectors, and Provenance, Policy,
 and Digital Twin Reframing.
@@ -813,7 +813,7 @@ Broker investigates drift in Decision Canvas
 | PolicyOverride | BC17 | Application DB | Audit log + Nostr event | Overrides are signed provenance events |
 
 **Storage Legend**:
-- **Neo4j** (now embedded Oxigraph, ADR-11): Graph entities that participate in the knowledge graph, visible in the coordination digital twin
+- **Neo4j** (now embedded Oxigraph, ADR-2004): Graph entities that participate in the knowledge graph, visible in the coordination digital twin
 - **Application DB**: Operational data (SQLite via `SqliteSettingsRepository`) that does not need graph traversal
 - **Solid Pod**: User-owned data under the user's sovereignty
 - **Nostr**: Signed, append-only provenance events
@@ -835,7 +835,7 @@ These rules extend the aggregate design rules from the core DDD document:
 
 ---
 
-## Graph-Store Node Type Extensions (RDF logical model — embedded Oxigraph, ADR-11)
+## Graph-Store Node Type Extensions (RDF logical model — embedded Oxigraph, ADR-2004)
 
 The enterprise contexts add the following node types to the existing type system
 (see ADR-036 for the consolidated node type enum):

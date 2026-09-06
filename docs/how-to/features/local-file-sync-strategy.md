@@ -15,7 +15,7 @@ difficulty-level: advanced
 
 # Local File Sync Strategy with Two-Pass Parser + Pod-First Saga
 
-> **ADR-11 update**: The graph-commit phase writes to the embedded Oxigraph store, not
+> **ADR-2004 update**: The graph-commit phase writes to the embedded Oxigraph store, not
 > Neo4j. "Pod-first / graph-second" naming below refers to the Oxigraph commit. There is
 > no Neo4j container, Bolt URI, or `cypher-shell`; verification is via the REST API.
 
@@ -64,7 +64,7 @@ Background orphan retraction job:
 
 **Private Stubs**: No label, no content, canonical IRI + HMAC opaque_id generated at query-time (never at write-time).
 
-### Pod-First / Graph-Second Saga (ADR-051; graph store = embedded Oxigraph, ADR-11)
+### Pod-First / Graph-Second Saga (ADR-051; graph store = embedded Oxigraph, ADR-2004)
 
 **Phase ordering ensures crash safety:**
 

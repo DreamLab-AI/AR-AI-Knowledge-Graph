@@ -300,8 +300,8 @@ VisionClaw publishes a signed Nostr event (kind 30001, NIP-33) to the JSS relay 
 completed brief → debrief cycle, providing cryptographic provenance. The
 `BeadLifecycleOrchestrator` coordinates the full
 lifecycle with retry, outcome classification, and learning capture (see
-[ADR-034](../../adr/ADR-034-needle-bead-provenance.md) and
-[PRD](../../prd/prd-bead-provenance-upgrade.md)).
+[ADR-034](../../archive/adr/ADR-034-needle-bead-provenance.md) and
+[PRD](../../archive/prd/prd-bead-provenance-upgrade.md)).
 
 ```bash
 # Bridge bot private key (64-char hex). Generate with: openssl rand -hex 32

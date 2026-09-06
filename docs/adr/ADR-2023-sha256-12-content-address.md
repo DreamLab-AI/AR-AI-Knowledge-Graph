@@ -58,7 +58,7 @@ records the byte-for-byte agentbox `sha12()` equivalence.
 
 CP-01/02/04/05. Owner remains jjohare with agentbox identifier maintainers. Five UTF-8 string fixtures match the agentbox BC20 hash helper. The Rust precomputed KG constructor/parser accepts malformed suffixes after the prefix; hash emission and input validation are separate guarantees.
 
-**Acceptance condition:** bind bytes/serialisation, complete address grammar and kind/elevation support to a shared versioned fixture run in both repositories. Test malformed precomputed addresses and persisted round-trip recovery. Preserve explicit unmapped outcomes and existing decision status. Reopen on hash, parser, scope or kind-map changes. See the [identifier review](../../../VisionFlow/docs/estate-review/federation-identifiers.md) and [paired receipt](../../../VisionFlow/docs/estate-review/evidence/federation-identity-probe.json). These are helper-level results, not deployed-ingest certification.
+**Acceptance condition:** bind bytes/serialisation, complete address grammar and kind/elevation support to a shared versioned fixture run in both repositories. Test malformed precomputed addresses and persisted round-trip recovery. Preserve explicit unmapped outcomes and existing decision status. Reopen on hash, parser, scope or kind-map changes. See the [identifier review](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/federation-identifiers.md) and [paired receipt](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/evidence/federation-identity-probe.json). These are helper-level results, not deployed-ingest certification.
 
 ## Acceptance progress — 2026-09-05
 

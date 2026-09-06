@@ -164,7 +164,7 @@ Particle and environment effects are implemented in a Rust crate compiled to WAS
 
 The pipeline above draws the graph; a second, canvas-level control surface lets the
 user *navigate and grow* it by direct manipulation, adopted from the Graph2VR-class
-interaction programme ([ADR-139](../adr/ADR-139-immersive-interaction-adoption-programme.md))
+interaction programme ([ADR-139](../archive/adr/ADR-139-immersive-interaction-adoption-programme.md))
 and shared, contract-for-contract, with the immersive client. All of it rides the
 node/expand/relations/fold/pattern REST routes — the wire shapes live in
 [reference/rest-api.md](../reference/rest-api.md), not here.
@@ -194,7 +194,7 @@ node/expand/relations/fold/pattern REST routes — the wire shapes live in
 The immersive client is a **separate native binary** (Godot + godot-rust), not this
 renderer. It reaches the same visual result through a different substrate: its
 per-frame position-hunt and MultiMesh packing are offloaded to a Rust **`RenderStore`**
-([ADR-137](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md),
+([ADR-137](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md),
 `xr-client/rust/src/render_store.rs`) — the XR analogue of this client's
 SharedArrayBuffer hot path — and it decodes the same binary stream including the V5
 sequenced wrapper. ADR-137's runtime quality dials (the `initialNodeLimit` settings
@@ -213,5 +213,5 @@ in [XR Architecture](xr-architecture.md).
 - [Binary protocol reference](../reference/binary-protocol.md) and [WebSocket protocol reference](../reference/websocket-protocol.md) — wire-level detail.
 - [Control Center](control-center.md) — the settings overlay and the desktop graph-interaction trio in full.
 - [REST API reference](../reference/rest-api.md) — the node/expand/relations/fold/pattern and layout routes the navigation surfaces call.
-- Governing ADRs: [ADR-012 WebSocket store decomposition](../adr/ADR-012-websocket-store-decomposition.md), [ADR-013 render performance](../adr/ADR-013-render-performance.md), [ADR-031 GPU analytics correctness and wiring](../adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-039 settings consolidation](../adr/ADR-039-settings-consolidation.md), [ADR-061 binary protocol unification](../adr/ADR-061-binary-protocol-unification.md).
-- Interaction and layout programme ADRs: [ADR-137 XR render offload + runtime quality dials](../adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md), [ADR-138 GPU force-channel registry](../adr/ADR-138-gpu-force-channel-registry.md), [ADR-139 immersive interaction adoption](../adr/ADR-139-immersive-interaction-adoption-programme.md), [ADR-140 XR agent-swarm visualisation](../adr/ADR-140-xr-agent-swarm-visualisation.md), [ADR-141 constrained-layout engine programme](../adr/ADR-141-constrained-layout-engine-programme.md).
+- Governing ADRs: [ADR-012 WebSocket store decomposition](../archive/adr/ADR-012-websocket-store-decomposition.md), [ADR-013 render performance](../archive/adr/ADR-013-render-performance.md), [ADR-031 GPU analytics correctness and wiring](../archive/adr/ADR-031-gpu-analytics-correctness-and-wiring.md), [ADR-039 settings consolidation](../archive/adr/ADR-039-settings-consolidation.md), [ADR-061 binary protocol unification](../archive/adr/ADR-061-binary-protocol-unification.md).
+- Interaction and layout programme ADRs: [ADR-137 XR render offload + runtime quality dials](../archive/adr/ADR-137-xr-render-offload-and-runtime-quality-dials.md), [ADR-138 GPU force-channel registry](../archive/adr/ADR-138-gpu-force-channel-registry.md), [ADR-139 immersive interaction adoption](../archive/adr/ADR-139-immersive-interaction-adoption-programme.md), [ADR-140 XR agent-swarm visualisation](../archive/adr/ADR-140-xr-agent-swarm-visualisation.md), [ADR-141 constrained-layout engine programme](../archive/adr/ADR-141-constrained-layout-engine-programme.md).

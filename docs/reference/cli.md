@@ -52,7 +52,7 @@ environment.
 |---------|---------|--------|
 | `gpu` | yes | CUDA GPU physics kernels (82 `__global__` kernels, 9 `.cu` files) |
 | `ontology` | yes | OWL 2 EL reasoning, SHACL-lite + JSON-LD validation, PROV-O |
-| `persistence-oxigraph` | yes | Oxigraph SPARQL store + SQLite (ADR-11). Always-on; flag gates compile guards |
+| `persistence-oxigraph` | yes | Oxigraph SPARQL store + SQLite (ADR-2004). Always-on; flag gates compile guards |
 | `solid-pod-embed` | yes | Embedded Solid pod (port 8484) |
 | `redis` | no | Optional Redis distributed caching |
 | `physics-v2` | no | Phase 5 GPU buffer/`LayoutEngine` rewrite (ADR-01); legacy path is production |
@@ -342,5 +342,5 @@ docker network inspect visionclaw_network   # shared external network
 - [Configuration](configuration.md) — environment variables and `.env.<env>` reference
 - [Performance Benchmarks](performance-benchmarks.md) — GPU vs CPU physics (55× at 100K nodes)
 - [Reference index](README.md)
-- ADR-090 — [Hexagonal crate modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md) (workspace crate split)
-- ADR-011 — [Auth enforcement](../adr/ADR-011-auth-enforcement.md) (`dev-auth` compile-time gate)
+- ADR-090 — [Hexagonal crate modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md) (workspace crate split)
+- ADR-011 — [Auth enforcement](../archive/adr/ADR-011-auth-enforcement.md) (`dev-auth` compile-time gate)

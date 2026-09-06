@@ -70,4 +70,4 @@ Reference is one of four Diátaxis categories. Use the others when you need some
 
 - [Documentation Hub](../README.md) — top-level entry point for all VisionClaw docs
 - [System Overview](../explanation/system-overview.md) — architecture context for the contracts indexed here
-- Governing ADRs: [ADR-064 Typed Graph Schema](../adr/ADR-064-typed-graph-schema.md), [ADR-061 Binary Protocol Unification](../adr/ADR-061-binary-protocol-unification.md), [ADR-090 Hexagonal Crate Modularisation](../adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-089 CQRS Bus Removal](../adr/ADR-089-cqrs-bus-removal.md)
+- Governing ADRs: [ADR-064 Typed Graph Schema](../archive/adr/ADR-064-typed-graph-schema.md), [ADR-061 Binary Protocol Unification](../archive/adr/ADR-061-binary-protocol-unification.md), [ADR-090 Hexagonal Crate Modularisation](../archive/adr/ADR-090-hexagonal-crate-modularisation.md), [ADR-089 CQRS Bus Removal](../archive/adr/ADR-089-cqrs-bus-removal.md)

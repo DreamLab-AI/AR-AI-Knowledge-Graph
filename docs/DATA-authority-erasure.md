@@ -165,7 +165,7 @@ explicitly accepting each as a signed-off trade-off with a named owner.
 ## Complete-system closeout qualification — 2026-09-04
 
 ADR-2015/2016/2017 now carry CP-02/04/05/08 acceptance conditions backed by
-[current source and a temporary backup probe](../../VisionFlow/docs/estate-review/visionclaw-data-runtime.md).
+[current source and a temporary backup probe](https://github.com/DreamLab-AI/VisionFlow/blob/main/docs/estate-review/visionclaw-data-runtime.md).
 The derived-writeback method is fenced; that does not exclude other governed
 asserted-graph writers. Full sync drops knowledge and agent graphs before batch
 processing and separately rebuilds asserted ontology, so no corpus-wide atomic

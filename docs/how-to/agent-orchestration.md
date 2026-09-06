@@ -85,7 +85,7 @@ docker compose --profile dev up -d
 curl http://localhost:4000/api/bots/agents
 
 # Check the MCP TCP server
-curl http://localhost:9500/health
+nc -zv localhost 9500   # raw JSON-RPC over TCP, not HTTP
 
 # Verify VisionClaw API health
 curl http://localhost:4000/api/health
@@ -118,7 +118,7 @@ graph LR
 The core graph and physics engine:
 
 - Rust backend (`visionclaw-server`, Actix-web)
-- Embedded Oxigraph RDF triple store (in-process graph store — ADR-11)
+- Embedded Oxigraph RDF triple store (in-process graph store — ADR-2004)
 - CUDA physics engine (NVIDIA 12.0)
 - React + Three.js desktop client (the Quest 3 XR client is now a native Godot APK — ADR-071)
 - Whelk EL++ ontology reasoner
@@ -288,7 +288,7 @@ Fetch a full ontology note with axioms, relationships, and schema context.
 
 Submit a Cypher-style query that `OntologyQueryService::validate_and_execute_cypher`
 validates against the OWL schema and resolves against the embedded Oxigraph store
-(ADR-11). The request field is still named `cypher` for backwards compatibility; the
+(ADR-2004). The request field is still named `cypher` for backwards compatibility; the
 backing engine is no longer Neo4j.
 
 **REST**: `POST /api/ontology-agent/query`
@@ -753,7 +753,7 @@ settings.agents.spawn.maxConcurrentAgents = 20
 
 ```bash
 # TCP server health
-curl http://localhost:9500/health
+nc -zv localhost 9500   # raw JSON-RPC over TCP, not HTTP
 
 # Check MCP server process
 docker exec agentic-workstation mcp-tcp-status
