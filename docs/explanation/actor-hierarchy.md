@@ -8,6 +8,8 @@ updated-date: 2026-06-03
 
 # VisionClaw Actor System Hierarchy
 
+> **Superseded for the actor set (2026-09-05).** Commit 346fff7af trimmed the actor tree and ADR-2045/2046/2053/2097 removed the generic `SupervisorActor`, `ActorLifecycleManager`, the dead `SettingsActor`, the standalone analytics actors and `RefreshMetadata`. The authoritative picture is `docs/BASELINE-architecture.md` (actors section) and the sequence diagrams in `docs/diagrams/visionclaw/02-actor-supervision.md`; this explainer is kept as narrative history until it is rewritten against them.
+
 > **Updated 2026-06-03.** Wire format corrected from 34 B (V1) to 52 B V3
 > (ADR-031). `ForceComputeActor` profile updated to describe display-only disc
 > projection. Settings change pipeline diagram updated to the verified single

@@ -1,10 +1,11 @@
 ---
 title: Protocol Registry — Wire Frames, Endpoints & Version Policy
 doc_id: VC-PROTOCOL
-version: 0.1.2
+version: 0.1.3
 status: draft-for-ratification
-verified_commit: 73540faa0
+verified_commit: 
 changelog:
+  - "0.1.3 (2026-09-06): Remediation — 2026-09-05 section: Wave 3 ADRs (2094–2101, 2061, 2071, 2085; proposed 2102–2105) and the ledger/diagram re-verification landed in 2cf222406 — re-verified at "
   - "0.1.2: 2026-09-05 remediation — ADR-2057 compile-time 52-byte and V5-seq locks (assertion language corrected); ADR-2058 header-only WS auth (?token= divergence resolved); ADR-2060 citation corrections after line drift (V5 :513→:592, 0x23 :1354/:1125-1135/:1501→:1721/:1490/:1500, 52B asserts :712,809→compile-time :93 plus tests :1077,1174); TS client V5/V2 parity recorded as open"
   - "0.1.1: correct RBAC_PUBLIC_READS citation (rbac_gate.rs/compose, not main.rs — code fails closed); reword WIRE_V3_ITEM_SIZE asserts as unit-test (not static) assertions; cite /ws/presence route registration at main.rs:996 not construction at :816"
 sources:

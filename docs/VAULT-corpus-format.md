@@ -1,8 +1,8 @@
 ---
 title: VAULT — authored corpus format (Obsidian vault)
-version: 1.4.1
+version: 1.4.2
 status: living
-verified_commit:
+verified_commit: 
 owner: jjohare
 domain: VAULT-corpus-format
 ledger: [ADR-2040, ADR-2041, ADR-2042]

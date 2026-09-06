@@ -1,10 +1,11 @@
 ---
 title: GPU & Wire ABI
 doc_id: VC-GPU-ABI
-version: 0.1.4
+version: 0.1.5
 status: draft-for-ratification
-verified_commit: 73540faa0
+verified_commit: 
 changelog:
+  - "0.1.5 (2026-09-06): Remediation — 2026-09-05 section: Wave 3 ADRs (2094–2101, 2061, 2071, 2085; proposed 2102–2105) and the ledger/diagram re-verification landed in 2cf222406 — re-verified at "
   - "0.1.4: 2026-09-05 ADR-2061 landed — the analytics kernel trust status is now a measured test result (crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs) rather than an assertion: PageRank, DBSCAN and Louvain TRUSTED; LOF recorded BROKEN at max |delta| 0.702 against a 1e-3 bar"
   - "0.1.3: 2026-09-05 remediation — ADR-2053 context delivery, ADR-2054 dead-code removal, ADR-2055 physics-v2 retirement, ADR-2056 single PTX rewrite, ADR-2059 inert flag removal, ADR-2060 citation corrections (ENABLE_CONSTRAINTS repointed to force_channels.rs derive_dispatch_feature_flags; 180-byte comment corrected in code); ADR-2061 proposed for the analytics validation gap"
   - 0.1.1: correct path-3 actor call-site citation (force_compute_actor.rs 1557 → 2057); fix stale 180-byte comment line ref (:7 → :5)

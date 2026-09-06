@@ -1,9 +1,9 @@
 ---
 title: VisionClaw Current Architecture Baseline
 doc_id: VC-BASELINE
-version: 0.2.0
+version: 0.2.1
 status: draft-for-ratification
-verified_commit: 73540faa0
+verified_commit: 
 date: 2026-08-31
 sources:
   - Cargo.toml
@@ -21,8 +21,9 @@ sources:
   - crates/visionclaw-protocol/src/protocols/binary_settings_protocol.rs
   - src/utils/binary_protocol.rs
 changelog:
-  - 0.2.0 — Data pipeline: the authored corpus is an Obsidian vault (docs/VAULT-corpus-format.md); inclusion gate is frontmatter `public: true` or `owl-class` (ADR-2040), superseding the Logseq `public:: true` property line.
-  - 0.1.1 — Corrected wire-protocol citation: WireNodeDataItemV3 struct is defined in src/utils/binary_protocol.rs (webxr crate), not the visionclaw-protocol lib.rs doc-comment.
+  - "0.2.1 (2026-09-06): Remediation — 2026-09-05 section: Wave 3 ADRs (2094–2101, 2061, 2071, 2085; proposed 2102–2105) and the ledger/diagram re-verification landed in 2cf222406 — re-verified at "
+  - "0.2.0 — Data pipeline: the authored corpus is an Obsidian vault (docs/VAULT-corpus-format.md); inclusion gate is frontmatter `public: true` or `owl-class` (ADR-2040), superseding the Logseq `public:: true` property line."
+  - "0.1.1 — Corrected wire-protocol citation: WireNodeDataItemV3 struct is defined in src/utils/binary_protocol.rs (webxr crate), not the visionclaw-protocol lib.rs doc-comment."
 ---
 
 # VisionClaw Current Architecture Baseline
@@ -117,8 +118,10 @@ the supervisor's own child has an empty client registry. Peer actors started in
 frames), plus `OntologyActor`, `SemanticProcessorActor`, `MetadataActor`,
 `OptimizedSettingsActor`, `ProtectedSettingsActor`, `WorkspaceActor`,
 `PresenceActor`, `TaskOrchestratorActor`, `ElevationActor`,
-`DecisionElevationActor`, `VoiceInterfaceActor`, `MultiMcpVisualizationActor`,
+`DecisionElevationActor`, `VoiceInterfaceActor`,
 `AgentMonitorActor` (each `impl Actor` in the corresponding `src/actors/*.rs`).
+`SemanticProcessorActor` is started by `GraphServiceSupervisor`
+(`src/actors/graph_service_supervisor.rs:719`), not by `AppState`; `MultiMcpVisualizationActor` is declared in `src/actors/mod.rs` but started nowhere in `src/` (2026-09-06 grep) — a removal candidate for the next dead-code pass.
 
 `GraphServiceSupervisor` is now the **only** supervision mechanism. Two others existed and both
 were dead; `ADR-2045` removed them. A generic restart supervisor (`SupervisorActor`, formerly

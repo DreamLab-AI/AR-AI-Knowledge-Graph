@@ -246,7 +246,7 @@ CLASS AgentPodClient:
 
     CONSTRUCTOR(user_npub: string, session_id: string):
         self.user_npub = user_npub
-        self.SOLID_POD_BASE_URL = env("SOLID_POD_URL", "http://jss:3030")
+        self.SOLID_POD_BASE_URL = env("SOLID_POD_URL", "http://localhost:4000/solid")  # in-process pod, ADR-2098
 
         # Load delegation for this session
         self.delegation_token = load_delegation(session_id)

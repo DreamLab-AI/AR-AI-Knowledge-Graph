@@ -1,10 +1,12 @@
 ---
 title: Identifier Taxonomy
 doc_id: VC-IDENTIFIERS
-version: 0.1.1
+version: 0.1.2
 status: draft-for-ratification
-verified_commit: 73540faa0
-changelog: "0.1.1 — corrected presence_actor room-URN citation (test, not live emission), Invariant 6 debug_assert/release-truncation caveat, qualityScore CURIE-in-comment framing"
+verified_commit: 
+changelog:
+  - "0.1.2 (2026-09-06): Remediation — 2026-09-05 section: Wave 3 ADRs (2094–2101, 2061, 2071, 2085; proposed 2102–2105) and the ledger/diagram re-verification landed in 2cf222406 — re-verified at "
+  - "0.1.1 — corrected presence_actor room-URN citation (test, not live emission), Invariant 6 debug_assert/release-truncation caveat, qualityScore CURIE-in-comment framing"
 sources:
   - src/uri/mod.rs
   - src/utils/binary_protocol.rs

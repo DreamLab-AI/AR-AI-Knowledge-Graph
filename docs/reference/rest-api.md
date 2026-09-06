@@ -639,7 +639,8 @@ also defined `/settings/path`, `/settings/schema`, `/settings/current`,
 `/settings/reset`, `/settings/save`), which is dead code: its `.configure()`
 call is commented out at `api_handler/mod.rs:138-139` ("OLD settings_handler
 disabled — using new SettingsActor routes"). All endpoints below are the live
-`SettingsActor`-backed replacement. All mutation endpoints require
+`OptimizedSettingsActor`-backed replacement (the never-started `SettingsActor` was
+deleted by ADR-2046 on 2026-09-05). All mutation endpoints require
 authentication; reads are open.
 
 ### GET /api/settings/all

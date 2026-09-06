@@ -1,12 +1,13 @@
 ---
 title: Data Authority & Erasure
 doc_id: VC-DATA
-version: 0.2.0
+version: 0.2.1
 status: draft-for-ratification
-verified_commit: 73540faa0
+verified_commit: 
 changelog:
-  - 0.2.0 — Authored-content owner restated as the Obsidian vault gate (frontmatter `public: true` / `owl-class`, ADR-2040); citations marked `:~` pending re-verification against the vault reader.
-  - 0.1.1 — fix GRAPH_PROVENANCE citation 53→55; widen named-graph range 50-55→46-55; add RBAC_ALLOW_OWNERLESS file:line citations
+  - "0.2.1 (2026-09-06): Remediation — 2026-09-05 section: Wave 3 ADRs (2094–2101, 2061, 2071, 2085; proposed 2102–2105) and the ledger/diagram re-verification landed in 2cf222406 — re-verified at "
+  - "0.2.0 — Authored-content owner restated as the Obsidian vault gate (frontmatter `public: true` / `owl-class`, ADR-2040); citations marked `:~` pending re-verification against the vault reader."
+  - "0.1.1 — fix GRAPH_PROVENANCE citation 53→55; widen named-graph range 50-55→46-55; add RBAC_ALLOW_OWNERLESS file:line citations"
 sources:
   - crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs
   - src/services/role_store.rs

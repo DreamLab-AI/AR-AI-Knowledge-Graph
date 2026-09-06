@@ -1,9 +1,9 @@
 ---
 title: Security Profiles & Flag Matrix
 doc_id: VC-SECURITY
-version: 0.1.0
+version: 0.1.1
 status: draft-for-ratification
-verified_commit: 73540faa0
+verified_commit: 
 sources:
   - src/middleware/rbac_gate.rs
   - src/services/role_store.rs

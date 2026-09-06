@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-09-05 sprint, diagrams-as-code overhaul and Wave 3 remediation
+
+- **Sprint (2026-09-05):** actor set trimmed to graph-service / agent-beam / presence (346fff7af); GPU actor and compute pipeline consolidated onto `visionclaw-gpu` (da2f5cac7); dead settings, config and physics-v1 modules removed (35c2448a8); explicit runtime security profile and RBAC gate (ac3e12dd1); Oxigraph/SQLite repository and vault-migrate (b47db377c); agent-visualisation, provenance and vault services (1b513295a); backup-posture and dev-build-input contract tests (ca80eafa5); client websocket/binary-protocol and settings surface (1d68d8eb1); xr-client render-store, transport and HUD (f21d30922).
+- **Diagrams as code:** `docs/diagrams/{visionclaw,agentbox,estate}` — 71 topic files, 841 mermaid diagrams, every fact a `path:line` citation, gated by `scripts/diagram-index-gen.js` (structure and mmdc render). Phase 2 ADRs 2043–2093 remediated the findings the diagrams exposed.
+- **Wave 3 (2026-09-05/06, 2cf222406):** fail-closed `MANAGEMENT_API_KEY` in `AgentMonitorActor` and a cached health verdict (ADR-2094); typed `urn:ngm:class` mint (ADR-2095); vault reader through `vault::parse` (ADR-2096); dead `RefreshMetadata` deleted (ADR-2097); `SOLID_POD_URL` names the in-process pod (ADR-2098); dead V4 0x23 client branch removed and one Solid socket client (ADR-2099/2100); durable decision-elevation state with boot reconciliation (ADR-2101); inferred edges through the shared materialiser and now carrying the `inferred` key (ADR-2071); GPU analytics kernels measured against the CPU oracle — PageRank, DBSCAN, Louvain trusted, LOF broken and recorded (ADR-2061); briefing workflow integration tests (ADR-2085); federation kind map from one shared artefact. Proposed: cross-store erasure orchestration (2102), Oxigraph point-in-time backup (2103), SOPS execute-or-withdraw (2104), correlated promotion chain (2105).
+- **Build:** three test targets that no longer compiled at HEAD and two stale integration tests fixed test-side; `cargo fmt --all` (57 files); `vault-migrate` and the hermetic integration contracts added to CI; ESLint errors 25 → 0.
+- **Ledger:** 22 stale records re-verified with citations re-derived after formatting; ADR-2038 promoted; ADR-2045 complete; the actor-supervision and external-services diagrams redrawn against surviving code; 360 diagram `sources:` entries added.
+
 ### XR immersive-interaction + constrained-layout programme (ADR-137–141)
 
 Landed the week of 2026-08-31 across the Godot/OpenXR client, the GPU layout
