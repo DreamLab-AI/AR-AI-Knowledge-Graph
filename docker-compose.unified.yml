@@ -124,6 +124,16 @@ services:
       - ${HOST_PROJECT_ROOT:-.}/build.rs:/app/build.rs:ro
       - ${HOST_PROJECT_ROOT:-.}/crates:/app/crates:ro
       - ${HOST_PROJECT_ROOT:-.}/docs:/app/docs:ro
+      # src/uri/mod.rs include_str!s agentbox/schema/federation-kinds.json at COMPILE
+      # time, so it must exist under /app or cargo cannot build the lib at all. The
+      # dev image carries no source (it all arrives via these mounts), so without
+      # this line every dev build fails with
+      #   error: couldn't read `src/uri/../../agentbox/schema/federation-kinds.json`
+      # Mount schema/ ONLY, never the whole submodule: agentbox carries 262 files
+      # that ADR-2008 counts as build inputs (an entire unrelated Rust crate), so
+      # mounting all of it would make every agentbox bump force a spurious ~12min
+      # rebuild of visionclaw. schema/ is JSON alone and matches no input glob.
+      - ${HOST_PROJECT_ROOT:-.}/agentbox/schema:/app/agentbox/schema:ro
       # solid-pod-rs + whelk-rs are crates.io deps — fetched into cargo cache, no bind mount needed.
       - ${HOST_PROJECT_ROOT:-.}/client/src:/app/client/src:ro
       - ${HOST_PROJECT_ROOT:-.}/client/public:/app/client/public:ro

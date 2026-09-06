@@ -193,6 +193,12 @@ FROM rust-deps AS rust-builder
 # Copy actual source code
 COPY src ./src
 COPY data/schema ./data/schema
+# src/uri/mod.rs embeds agentbox/schema/federation-kinds.json via include_str! at
+# compile time (the single versioned authority for federation kinds), exactly as
+# visionclaw-ontology embeds docs/data-sprint above. agentbox is a git submodule,
+# so without this COPY the build dies with
+#   error: couldn't read `src/uri/../../agentbox/schema/federation-kinds.json`
+COPY agentbox/schema ./agentbox/schema
 
 # Force cargo to recompile: Docker COPY preserves host mtimes which may be
 # older than Stage 2 build artifacts, causing cargo to skip recompilation
@@ -305,6 +311,12 @@ COPY supervisord.dev.conf ./supervisord.dev.conf
 # Copy entrypoint scripts
 COPY scripts/dev-entrypoint.sh ./
 COPY scripts/rust-backend-wrapper.sh ./scripts/
+# ADR-2008: the wrapper sources scripts/lib/build-inputs.sh for the rebuild
+# decision. It is a hard dependency — the wrapper runs under `set -e`, so a
+# missing lib/ kills rust-backend at line 48 before cargo or the binary is ever
+# reached. Copy the whole lib/ dir: anything the wrapper learns to source next
+# lands here too. /app/scripts is NOT bind-mounted, so the image must carry it.
+COPY scripts/lib/ ./scripts/lib/
 RUN chmod +x ./dev-entrypoint.sh ./scripts/rust-backend-wrapper.sh
 
 # Development environment variables
