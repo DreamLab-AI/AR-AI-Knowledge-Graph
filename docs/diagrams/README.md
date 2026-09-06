@@ -59,10 +59,16 @@ citation meant: if it was already pointing at the wrong line, a re-anchoring pas
 fresh `verified_commit` on it. Re-derive a citation from the SYMBOL (`grep -n` the name, then read the body),
 never from a computed offset.
 
-Its blind spots: a bare `:NNN` continuation (`Dockerfile.unified:255<br/>… ENTRYPOINT:340`), a basename two
-`sources:` entries share (`ci.yml`), a `governing:` doc that is not also a source, and — unfixably — a
-citation that resolves to a real, non-blank line describing behaviour that has since been deleted. Those still
-need a human reading the code at each cited line.
+Its blind spots: a bare `:NNN` continuation (`Dockerfile.unified:255<br/>… ENTRYPOINT:340`), an extensionless
+path (`Makefile:12`, `Dockerfile:40` — the matcher requires a `.ext`), a basename two `sources:` entries share
+(`ci.yml`), a `governing:` doc that is not also a source, and — unfixably — a citation that resolves to a real,
+non-blank line describing behaviour that has since been deleted. Those still need a human reading the code at
+each cited line.
+
+One rule follows from all of it: **verify a landing line by reading it, never by adding a shift to the old
+one.** A diff shift tells you where a line moved, not whether the citation was pointing at the right line
+before it moved — and a wrong citation plus a correct shift is still a wrong citation, now wearing a fresh
+`verified_commit`.
 
 `mmdc` is the Nix-installed Mermaid CLI (11.16). For a visual check, copy an SVG from `rendered/` to
 `/home/devuser/gui-tools/` and open `file:///home/devuser/exchange/<name>.svg` in the browsercontainer
