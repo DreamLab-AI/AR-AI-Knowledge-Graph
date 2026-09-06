@@ -7,7 +7,7 @@ implementation_status: complete
 activation_status: live
 supersedes: []
 superseded_by: []
-verified_commit: 2cf2224062a0bc0d71d72f1eb4f82e02809a9042
+verified_commit: c9734a52494a0d46f199ff0d6344a13ec5916d92
 verified_paths: [src/utils/nip98.rs, docs/SECURITY-profiles.md]
 owner: jjohare
 review_trigger: horizontal scaling of the backend (replicas/load balancer), or any change to TOKEN_MAX_AGE_SECONDS
@@ -143,3 +143,7 @@ docs/SECURITY-profiles.md`.
 ## Landing re-verification — 2026-09-06 (2cf222406)
 
 Governed paths changed in the Wave 3 landing commit: docs/SECURITY-profiles.md: invariant 6 citation re-pinned to `.bind()` at main.rs:1177 by the ledger lead; src/utils/nip98.rs is token-identical across the range. Decision unaffected; `verified_commit` moved to the landing commit. Gates at that commit: cargo check --workspace --all-targets exit 0, 827 crate + 1600 root + 309 xr-client tests, vitest 809, fmt and lint clean.
+
+## Landing re-verification — 2026-09-06 (c9734a524)
+
+Governed paths changed in the doc-sync commit: docs/SECURITY-profiles.md — frontmatter `version`/`verified_commit` bump and changelog entry for the Remediation — 2026-09-05 section, plus narrative corrections; no code or citation this record depends on changed. `verified_commit` moved to the doc-sync commit.
