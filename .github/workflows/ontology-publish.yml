@@ -123,14 +123,25 @@ jobs:
           restore-keys: |
             ontology-state-${{ runner.os }}-
 
-  convert-ontology:
-    name: Convert Markdown to RDF
+  # One converter, the vault's own. The two jobs this replaces (convert-ontology
+  # and convert-jsonld, an inline md_to_ttl.py plus an rdflib→pyld re-serialise)
+  # read Logseq `key:: value` lines and never looked at the fenced json-ld block
+  # that carries every page's identity and typing in the ADR-2040 vault format.
+  # Run 34045488066 was the first to get past the source preflight and shipped
+  # 380 untyped nodes and 0 owl:Class under an example.org vocabulary, with
+  # valid syntax and matching digests. jjohare/visionGraph's pipeline.build is
+  # what narrativegoldmine.com publishes from (8,4xx classes, ~265k triples,
+  # public-only, narrativegoldmine.com IRIs); the pod now holds exactly that.
+  build-ontology:
+    name: Build ontology (vault pipeline)
     runs-on: ubuntu-latest
     needs: validate-source
     if: needs.validate-source.outputs.has_changes == 'true'
     outputs:
-      ttl_sha: ${{ steps.convert.outputs.ttl_sha }}
-      conversion_status: ${{ steps.convert.outputs.status }}
+      ttl_sha: ${{ steps.pack.outputs.ttl_sha }}
+      jsonld_sha: ${{ steps.pack.outputs.jsonld_sha }}
+      context_sha: ${{ steps.pack.outputs.context_sha }}
+      conversion_status: ${{ steps.pack.outputs.status }}
 
     steps:
       - name: Checkout repository
@@ -141,424 +152,70 @@ jobs:
         with:
           repository: ${{ env.ONTOLOGY_SOURCE_REPO }}
           path: logseq-source
-          # Same private cross-owner source as validate-source above; this step
-          # passed no token at all, so it defaulted to the unusable GITHUB_TOKEN.
           token: ${{ secrets.ONTOLOGY_SOURCE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           # no pip cache: setup-python keys it on a requirements file this repo does not have
 
-      - name: Install RDF tools
+      # The vault pipeline's only third-party import; pinned floor matches
+      # visionGraph/.github/workflows/publish.yml.
+      - name: Install rdflib
+        run: pip install "rdflib>=7.0.0"
+
+      - name: Run the vault's JSON-LD publishing pipeline
+        working-directory: logseq-source
         run: |
-          pip install rdflib pyld markdown pyyaml
+          python -m pipeline.build knowledge/pages "$GITHUB_WORKSPACE/output/vault"
 
-      - name: Create conversion script
+      # Copies the public-only Turtle, compacts it to JSON-LD against the
+      # vault's context, writes the LDP index manifest, and refuses to pack an
+      # ontology below the substance floor (scripts/ontology/pack-pod-resources.py).
+      - name: Pack pod resources
+        id: pack
+        env:
+          ONTOLOGY_SOURCE_SHA: ${{ needs.validate-source.outputs.source_sha }}
         run: |
-          mkdir -p scripts
-          cat > scripts/md_to_ttl.py << 'PYTHON_SCRIPT'
-          #!/usr/bin/env python3
-          """
-          Markdown to Turtle (TTL) Converter for Logseq Ontology
+          python scripts/ontology/pack-pod-resources.py output/vault output/pod
 
-          Parses Logseq markdown pages with ontology annotations and generates
-          valid OWL/RDF Turtle format for federation.
-          """
-          import os
-          import re
-          import sys
-          import yaml
-          import hashlib
-          from pathlib import Path
-          from rdflib import Graph, Namespace, Literal, URIRef, BNode
-          from rdflib.namespace import RDF, RDFS, OWL, XSD, FOAF
-
-          # Custom namespaces
-          ONTO = Namespace("https://example.org/ontology/")
-          LOGSEQ = Namespace("https://logseq.com/ns/")
-          VISION = Namespace("https://visionflow.io/ontology/")
-
-          def parse_logseq_page(filepath: Path) -> dict:
-              """Parse a Logseq markdown page for ontology content."""
-              with open(filepath, 'r', encoding='utf-8') as f:
-                  content = f.read()
-
-              # Extract YAML frontmatter if present
-              frontmatter = {}
-              if content.startswith('---'):
-                  parts = content.split('---', 2)
-                  if len(parts) >= 3:
-                      try:
-                          frontmatter = yaml.safe_load(parts[1]) or {}
-                      except yaml.YAMLError:
-                          pass
-                      content = parts[2]
-
-              # Extract properties from Logseq format
-              # e.g., type:: [[Class]], subClassOf:: [[Thing]]
-              properties = {}
-              for match in re.finditer(r'^(\w+):: (.+)$', content, re.MULTILINE):
-                  key = match.group(1)
-                  value = match.group(2)
-                  # Handle Logseq links [[Link]]
-                  links = re.findall(r'\[\[([^\]]+)\]\]', value)
-                  if links:
-                      properties[key] = links
-                  else:
-                      properties[key] = [value.strip()]
-
-              # Extract title from first heading or filename
-              title_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
-              title = title_match.group(1) if title_match else filepath.stem
-
-              # Extract description from content
-              desc_match = re.search(r'^(?!#|-)(.+)$', content, re.MULTILINE)
-              description = desc_match.group(1).strip() if desc_match else None
-
-              return {
-                  'title': title,
-                  'description': description,
-                  'frontmatter': frontmatter,
-                  'properties': properties,
-                  'filepath': str(filepath)
-              }
-
-          def create_ontology_graph(pages: list) -> Graph:
-              """Create RDF graph from parsed Logseq pages."""
-              g = Graph()
-
-              # Bind namespaces
-              g.bind('owl', OWL)
-              g.bind('rdfs', RDFS)
-              g.bind('xsd', XSD)
-              g.bind('foaf', FOAF)
-              g.bind('onto', ONTO)
-              g.bind('logseq', LOGSEQ)
-              g.bind('vision', VISION)
-
-              # Create ontology declaration
-              ontology_uri = VISION['visionflow-ontology']
-              g.add((ontology_uri, RDF.type, OWL.Ontology))
-              g.add((ontology_uri, RDFS.label, Literal("VisionFlow Ontology", lang="en")))
-              g.add((ontology_uri, OWL.versionInfo, Literal("1.0")))
-
-              for page in pages:
-                  props = page.get('properties', {})
-                  title = page['title']
-
-                  # Generate IRI from title
-                  iri = ONTO[re.sub(r'[^\w]', '_', title)]
-
-                  # Determine type
-                  page_type = props.get('type', ['Thing'])[0]
-
-                  if page_type.lower() in ['class', 'concept']:
-                      g.add((iri, RDF.type, OWL.Class))
-                      g.add((iri, RDFS.label, Literal(title, lang="en")))
-
-                      # Handle subClassOf
-                      for parent in props.get('subClassOf', props.get('parent', [])):
-                          parent_iri = ONTO[re.sub(r'[^\w]', '_', parent)]
-                          g.add((iri, RDFS.subClassOf, parent_iri))
-
-                  elif page_type.lower() in ['property', 'relation']:
-                      prop_range = props.get('range', ['Thing'])[0]
-
-                      if prop_range.lower() in ['string', 'integer', 'boolean', 'date']:
-                          g.add((iri, RDF.type, OWL.DatatypeProperty))
-                      else:
-                          g.add((iri, RDF.type, OWL.ObjectProperty))
-
-                      g.add((iri, RDFS.label, Literal(title, lang="en")))
-
-                      # Domain and range
-                      for domain in props.get('domain', []):
-                          domain_iri = ONTO[re.sub(r'[^\w]', '_', domain)]
-                          g.add((iri, RDFS.domain, domain_iri))
-
-                      for range_val in props.get('range', []):
-                          if range_val.lower() == 'string':
-                              g.add((iri, RDFS.range, XSD.string))
-                          elif range_val.lower() == 'integer':
-                              g.add((iri, RDFS.range, XSD.integer))
-                          else:
-                              range_iri = ONTO[re.sub(r'[^\w]', '_', range_val)]
-                              g.add((iri, RDFS.range, range_iri))
-
-                  elif page_type.lower() in ['individual', 'instance']:
-                      instance_of = props.get('instanceOf', props.get('a', ['Thing']))[0]
-                      class_iri = ONTO[re.sub(r'[^\w]', '_', instance_of)]
-                      g.add((iri, RDF.type, class_iri))
-                      g.add((iri, RDFS.label, Literal(title, lang="en")))
-
-                  # Add description if present
-                  if page.get('description'):
-                      g.add((iri, RDFS.comment, Literal(page['description'], lang="en")))
-
-                  # Add source tracking
-                  g.add((iri, LOGSEQ.sourcePage, Literal(page['filepath'])))
-
-              return g
-
-          def main():
-              if len(sys.argv) < 3:
-                  print("Usage: md_to_ttl.py <input_dir> <output_file>")
-                  sys.exit(1)
-
-              input_dir = Path(sys.argv[1])
-              output_file = Path(sys.argv[2])
-
-              # Find all markdown files
-              md_files = list(input_dir.rglob("*.md"))
-              print(f"Found {len(md_files)} markdown files")
-
-              # Parse pages
-              pages = []
-              for md_file in md_files:
-                  try:
-                      page = parse_logseq_page(md_file)
-                      if page['properties']:  # Only include pages with properties
-                          pages.append(page)
-                  except Exception as e:
-                      print(f"Warning: Failed to parse {md_file}: {e}")
-
-              print(f"Parsed {len(pages)} pages with ontology content")
-
-              # Create graph
-              graph = create_ontology_graph(pages)
-
-              # Serialize to Turtle
-              output_file.parent.mkdir(parents=True, exist_ok=True)
-              graph.serialize(destination=str(output_file), format='turtle')
-
-              # Calculate SHA1
-              with open(output_file, 'rb') as f:
-                  sha1 = hashlib.sha1(f.read()).hexdigest()
-
-              print(f"Generated {output_file} with {len(graph)} triples")
-              print(f"SHA1: {sha1}")
-
-              # Output stats
-              with open(output_file.with_suffix('.stats.json'), 'w') as f:
-                  import json
-                  json.dump({
-                      'triples': len(graph),
-                      'pages_processed': len(pages),
-                      'sha1': sha1
-                  }, f)
-
-          if __name__ == '__main__':
-              main()
-          PYTHON_SCRIPT
-          chmod +x scripts/md_to_ttl.py
-
-      - name: Convert Markdown to TTL
-        id: convert
+      - name: Validate packed resources
         run: |
-          mkdir -p output/ontology
-
-          python scripts/md_to_ttl.py logseq-source output/ontology/visionflow.ttl
-
-          if [ -f output/ontology/visionflow.ttl ]; then
-            TTL_SHA=$(sha1sum output/ontology/visionflow.ttl | cut -d' ' -f1)
-            echo "ttl_sha=$TTL_SHA" >> $GITHUB_OUTPUT
-            echo "status=success" >> $GITHUB_OUTPUT
-          else
-            echo "status=failed" >> $GITHUB_OUTPUT
-            exit 1
-          fi
-
-      - name: Validate TTL syntax
-        run: |
-          python -c "
+          python - <<'PY'
+          import json
           from rdflib import Graph
           g = Graph()
-          g.parse('output/ontology/visionflow.ttl', format='turtle')
-          print(f'Validation passed: {len(g)} triples')
-
-          # Basic OWL validation
-          owl_classes = list(g.subjects(predicate=None, object=None))
-          print(f'Found {len(set(owl_classes))} unique subjects')
-          "
+          g.parse('output/pod/ontology-ttl/visionflow.ttl', format='turtle')
+          print(f'Turtle re-parses: {len(g)} triples')
+          with open('output/pod/ontology-jsonld/ontology.jsonld') as f:
+              ld = json.load(f)
+          assert '@context' in ld and ld.get('@graph'), 'ontology.jsonld lacks @context/@graph'
+          print(f'JSON-LD: {len(ld["@graph"])} graph nodes')
+          with open('output/pod/ontology-jsonld/index.jsonld') as f:
+              manifest = json.load(f)
+          assert len(manifest['ldp:contains']) == 3, 'manifest must list three resources'
+          print(f'Manifest: {manifest["visionflow:classes"]} classes, {manifest["visionflow:triples"]} triples')
+          PY
 
       - name: Upload TTL artifact
         uses: actions/upload-artifact@v4
         with:
           name: ontology-ttl
-          path: output/ontology/
+          path: output/pod/ontology-ttl/
           retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
-
-  convert-jsonld:
-    name: Convert TTL to JSON-LD
-    runs-on: ubuntu-latest
-    needs: convert-ontology
-    if: needs.convert-ontology.outputs.conversion_status == 'success'
-    outputs:
-      jsonld_sha: ${{ steps.convert.outputs.jsonld_sha }}
-      context_sha: ${{ steps.convert.outputs.context_sha }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download TTL artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ontology-ttl
-          path: output/ontology/
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          # no pip cache: setup-python keys it on a requirements file this repo does not have
-
-      - name: Install JSON-LD tools
-        run: |
-          pip install rdflib pyld
-
-      - name: Convert TTL to JSON-LD
-        id: convert
-        run: |
-          mkdir -p output/jsonld
-
-          python << 'PYTHON_SCRIPT'
-          import json
-          import hashlib
-          from datetime import datetime, timezone
-          from rdflib import Graph
-          from pyld import jsonld
-
-          # Load TTL
-          g = Graph()
-          g.parse('output/ontology/visionflow.ttl', format='turtle')
-
-          # Serialize to JSON-LD
-          jsonld_str = g.serialize(format='json-ld', indent=2)
-          jsonld_data = json.loads(jsonld_str)
-
-          # Create optimized context
-          context = {
-              "@context": {
-                  "@vocab": "https://example.org/ontology/",
-                  "owl": "http://www.w3.org/2002/07/owl#",
-                  "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
-                  "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-                  "xsd": "http://www.w3.org/2001/XMLSchema#",
-                  "foaf": "http://xmlns.com/foaf/0.1/",
-                  "vision": "https://visionflow.io/ontology/",
-                  "logseq": "https://logseq.com/ns/",
-                  "label": {"@id": "rdfs:label", "@language": "en"},
-                  "comment": {"@id": "rdfs:comment", "@language": "en"},
-                  "subClassOf": {"@id": "rdfs:subClassOf", "@type": "@id"},
-                  "domain": {"@id": "rdfs:domain", "@type": "@id"},
-                  "range": {"@id": "rdfs:range", "@type": "@id"}
-              }
-          }
-
-          # Write context
-          with open('output/jsonld/context.jsonld', 'w') as f:
-              json.dump(context, f, indent=2)
-
-          # Compact JSON-LD with context
-          try:
-              compacted = jsonld.compact(jsonld_data, context['@context'])
-          except:
-              compacted = jsonld_data
-
-          # Write compacted ontology
-          with open('output/jsonld/ontology.jsonld', 'w') as f:
-              json.dump(compacted, f, indent=2)
-
-          # Calculate SHA1 hashes
-          with open('output/jsonld/ontology.jsonld', 'rb') as f:
-              jsonld_sha = hashlib.sha1(f.read()).hexdigest()
-          with open('output/jsonld/context.jsonld', 'rb') as f:
-              context_sha = hashlib.sha1(f.read()).hexdigest()
-
-          # Create index manifest
-          manifest = {
-              "@context": "https://www.w3.org/ns/ldp",
-              "@id": "/public/ontology/",
-              "@type": ["ldp:Container", "ldp:BasicContainer"],
-              "dcterms:title": "VisionFlow Ontology Federation",
-              "dcterms:modified": datetime.now(timezone.utc).isoformat(),
-              "ldp:contains": [
-                  {
-                      "@id": "ontology.jsonld",
-                      "@type": "ldp:Resource",
-                      "dcterms:format": "application/ld+json",
-                      "digest:sha1": jsonld_sha
-                  },
-                  {
-                      "@id": "context.jsonld",
-                      "@type": "ldp:Resource",
-                      "dcterms:format": "application/ld+json",
-                      "digest:sha1": context_sha
-                  },
-                  {
-                      "@id": "visionflow.ttl",
-                      "@type": "ldp:Resource",
-                      "dcterms:format": "text/turtle",
-                      "digest:sha1": "${{ needs.convert-ontology.outputs.ttl_sha }}"
-                  }
-              ],
-              "visionflow:sourceRepository": "${{ env.ONTOLOGY_SOURCE_REPO }}",
-              "visionflow:buildSha": "${{ github.sha }}",
-              "visionflow:buildNumber": "${{ github.run_number }}"
-          }
-
-          with open('output/jsonld/index.jsonld', 'w') as f:
-              json.dump(manifest, f, indent=2)
-
-          print(f"Generated JSON-LD files")
-          print(f"ontology.jsonld SHA1: {jsonld_sha}")
-          print(f"context.jsonld SHA1: {context_sha}")
-
-          # Write hashes for GitHub Actions
-          with open('hashes.txt', 'w') as f:
-              f.write(f"jsonld_sha={jsonld_sha}\n")
-              f.write(f"context_sha={context_sha}\n")
-          PYTHON_SCRIPT
-
-          # Export hashes to outputs
-          source hashes.txt
-          echo "jsonld_sha=$jsonld_sha" >> $GITHUB_OUTPUT
-          echo "context_sha=$context_sha" >> $GITHUB_OUTPUT
-
-      - name: Validate JSON-LD
-        run: |
-          python -c "
-          import json
-          from pyld import jsonld
-
-          with open('output/jsonld/ontology.jsonld') as f:
-              data = json.load(f)
-
-          # Expand to verify structure
-          expanded = jsonld.expand(data)
-          print(f'JSON-LD validation passed: {len(expanded)} top-level items')
-
-          with open('output/jsonld/index.jsonld') as f:
-              manifest = json.load(f)
-
-          assert 'ldp:contains' in manifest, 'Manifest missing ldp:contains'
-          print(f'Manifest contains {len(manifest[\"ldp:contains\"])} resources')
-          "
 
       - name: Upload JSON-LD artifact
         uses: actions/upload-artifact@v4
         with:
           name: ontology-jsonld
-          path: output/jsonld/
+          path: output/pod/ontology-jsonld/
           retention-days: ${{ env.ARTIFACT_RETENTION_DAYS }}
 
   deploy-jss:
     name: Deploy to JSS
     runs-on: ubuntu-latest
-    needs: [convert-ontology, convert-jsonld]
+    needs: build-ontology
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.SOLID_POD_URL != ''
     environment: production
     outputs:
@@ -691,9 +348,9 @@ jobs:
                 "ttl": "${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl"
               },
               "hashes": {
-                "ttl": "${{ needs.convert-ontology.outputs.ttl_sha }}",
-                "jsonld": "${{ needs.convert-jsonld.outputs.jsonld_sha }}",
-                "context": "${{ needs.convert-jsonld.outputs.context_sha }}"
+                "ttl": "${{ needs.build-ontology.outputs.ttl_sha }}",
+                "jsonld": "${{ needs.build-ontology.outputs.jsonld_sha }}",
+                "context": "${{ needs.build-ontology.outputs.context_sha }}"
               }
             }
           }
@@ -732,9 +389,9 @@ jobs:
 
           | Resource | SHA1 | URL |
           |----------|------|-----|
-          | TTL | \`${{ needs.convert-ontology.outputs.ttl_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl) |
-          | JSON-LD | \`${{ needs.convert-jsonld.outputs.jsonld_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld) |
-          | Context | \`${{ needs.convert-jsonld.outputs.context_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/context.jsonld](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/context.jsonld) |
+          | TTL | \`${{ needs.build-ontology.outputs.ttl_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/visionflow.ttl) |
+          | JSON-LD | \`${{ needs.build-ontology.outputs.jsonld_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/ontology.jsonld) |
+          | Context | \`${{ needs.build-ontology.outputs.context_sha }}\` | [${{ env.JSS_PUBLIC_PATH }}/context.jsonld](${{ env.SOLID_POD_URL }}${{ env.JSS_PUBLIC_PATH }}/context.jsonld) |
 
           ### Pipeline
           \`\`\`
@@ -747,7 +404,7 @@ jobs:
   pr-preview:
     name: PR Preview (Dry Run)
     runs-on: ubuntu-latest
-    needs: [convert-ontology, convert-jsonld]
+    needs: build-ontology
     if: github.event_name == 'pull_request'
 
     steps:
@@ -774,8 +431,8 @@ jobs:
             const comment = `## Ontology Conversion Preview
 
             **Conversion Status**: Success
-            **TTL SHA1**: \`${{ needs.convert-ontology.outputs.ttl_sha }}\`
-            **JSON-LD SHA1**: \`${{ needs.convert-jsonld.outputs.jsonld_sha }}\`
+            **TTL SHA1**: \`${{ needs.build-ontology.outputs.ttl_sha }}\`
+            **JSON-LD SHA1**: \`${{ needs.build-ontology.outputs.jsonld_sha }}\`
 
             ### Statistics
             - Triples generated: ${stats.triples}
@@ -802,7 +459,7 @@ jobs:
   deploy-target-missing:
     name: Deploy target not configured
     runs-on: ubuntu-latest
-    needs: [convert-ontology, convert-jsonld]
+    needs: build-ontology
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.SOLID_POD_URL == ''
     steps:
       - run: |

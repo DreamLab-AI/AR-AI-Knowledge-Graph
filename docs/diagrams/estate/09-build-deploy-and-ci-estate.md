@@ -440,17 +440,17 @@ sequenceDiagram
     end
 ```
 
-## ES-09.13 VisionClaw ontology-publish.yml — logseq to JSS federation pipeline
+## ES-09.13 VisionClaw ontology-publish.yml — vault pipeline to pod federation
 ```mermaid
 sequenceDiagram
     autonumber
     participant GH as push/PR/dispatch<br/>ontology-publish.yml:3-27
     participant VAL as validate-source job<br/>ontology-publish.yml:44
-    participant CONV as convert-ontology job<br/>ontology-publish.yml:126
-    participant JLD as convert-jsonld job<br/>ontology-publish.yml:393
-    participant DEP as deploy-jss job<br/>ontology-publish.yml:558
-    participant WS as notify-websocket job<br/>ontology-publish.yml:668
-    participant PRP as pr-preview job<br/>ontology-publish.yml:747
+    participant BLD as build-ontology job<br/>ontology-publish.yml:135
+    participant DEP as deploy-jss job<br/>ontology-publish.yml:215
+    participant WS as notify-websocket job<br/>ontology-publish.yml:325
+    participant PRP as pr-preview job<br/>ontology-publish.yml:404
+    participant MIS as deploy-target-missing job<br/>ontology-publish.yml:459
 
     GH->>VAL: preflight gh repo view on the private ontology source :65-73<br/>ONTOLOGY_SOURCE_TOKEN, falling back to GITHUB_TOKEN :67-68
     alt source unreadable
@@ -458,20 +458,26 @@ sequenceDiagram
     end
     GH->>VAL: checkout ontology source with the same token :89-95
     VAL->>VAL: detect changed markdown files :96-117
-    VAL->>CONV: has_changes true, needs validate-source :129-131
-    CONV->>CONV: md_to_ttl.py parses Logseq pages -> Turtle :158-372
-    CONV->>CONV: validate TTL syntax :373-385, upload ontology-ttl artifact :386-391
-    CONV->>JLD: needs convert-ontology, status success :396-398
-    JLD->>JLD: TTL -> JSON-LD :422-530, validate :531-550, upload :551-557
-    JLD->>DEP: needs both convert jobs, ref main :561-563
-    DEP->>DEP: backup current JSS index for rollback :577-591
-    DEP->>DEP: PUT visionflow.ttl, context/ontology/index jsonld :592-626, verify :627-653
-    alt deployment fails
-        DEP->>DEP: rollback to backed-up index :654-667
+    VAL->>BLD: has_changes true, needs validate-source :138-139
+    BLD->>BLD: checkout jjohare/visionGraph again with the token :150-155
+    BLD->>BLD: python -m pipeline.build knowledge/pages (the vault's own converter) :168-171
+    BLD->>BLD: pack-pod-resources.py: copy public-only TTL, compact JSON-LD against the vault context,<br/>LDP index manifest, substance floor 4000 classes / 100k triples :176-181
+    BLD->>BLD: re-parse packed resources :183-199, upload ontology-ttl :201-206 and ontology-jsonld :208-213
+    alt vars.SOLID_POD_URL set
+        BLD->>DEP: needs build-ontology, ref main :218-219
+        DEP->>DEP: backup current pod index for rollback :234-246
+        DEP->>DEP: PUT visionflow.ttl, context/ontology/index jsonld :249-281, verify :284-310
+        alt deployment fails
+            DEP->>DEP: rollback to backed-up index :311-324
+        end
+        DEP->>WS: deployment_status success :328-329
+        WS->>WS: POST to SOLID_POD_URL/.notifications :368-372, PATCH index.jsonld :373-378
+    else unset (the in-process pod is not reachable from a hosted runner)
+        BLD->>MIS: ::notice naming vars.SOLID_POD_URL and the artefacts :462-466
     end
-    DEP->>WS: deployment_status success :671-672
-    WS->>WS: POST to SOLID_POD_URL/.notifications :711-715, PATCH index.jsonld :716-721
+    GH->>PRP: pull_request only: comment with stats and SHAs :407-408
     Note over VAL,WS: RESOLVED ADR-2098 (2026-09-05): SOLID_POD_URL now defaults to http://localhost:4000/solid :31-38<br/>the scope the embedded solid-pod-rs serves in-process (ADR-032 M3)<br/>the POST to /.notifications is annotated as a best-effort no-op there - that path is a GET WebSocket upgrade
+    Note over BLD: RESOLVED 2026-09-06: the inline md_to_ttl.py + pyld converters (read Logseq key:: lines, never the json-ld fence)<br/>produced 0 owl:Class from 380 pages on run 34045488066; replaced by the vault pipeline (8,434 classes, 265k triples)
 ```
 
 ## ES-09.14 VisionClaw xr-godot-ci.yml — gdext + GUT headless, Quest 3 advisory
@@ -577,7 +583,7 @@ sequenceDiagram
         AGG->>GH: aggregate gate fails, branch protection blocks merge
     end
     Note over AGG: structurally-identical family (each is its own workflow<br/>file, one job, checkout+setup+run+upload pattern) —<br/>flake-check.yml (Nix eval x86_64/aarch64, statix lint)<br/>secret-scan.yml (gitleaks), shellcheck.yml (severity matrix)<br/>image-scan.yml (Trivy HIGH/CRITICAL gate + SBOM CycloneDX/SPDX)<br/>deepsec.yml (deepsec-gate against PR diff, Anthropic route)<br/>tui-tests.yml (cargo clippy+test services/agentbox-manifest)<br/>build-multi-arch.yml (Nix image build, GHCR push, manifest list)<br/>nix-flake-update.yml (scheduled flake update + PR)<br/>release.yml (CHANGELOG-derived GitHub Release body)
-    Note over AGG: agentbox/.github/workflows/ontology-publish.yml is a<br/>byte-identical duplicate of VisionClaw ontology-publish.yml<br/>(same jobs, see ES-09.13) — not independently re-diagrammed
+    Note over AGG: agentbox/.github/workflows/ontology-publish.yml is a stale copy of the<br/>pre-2026-09-06 VisionClaw ontology-publish.yml (inline md_to_ttl.py converter, jjohare/logseq<br/>default, no token preflight); fails on every push, no agentbox consumer — not re-diagrammed
 ```
 
 ## ES-09.19 End-to-end artefact flow — source to running container

@@ -831,7 +831,7 @@
 | [ES-09.10 agentbox flake rebuild gate, and the submodule pointer-bump flow](estate/09-build-deploy-and-ci-estate.md#es-0910-agentbox-flake-rebuild-gate-and-the-submodule-pointer-bump-flow) | flowchart | ES-09 |
 | [ES-09.11 VisionClaw ci.yml — Rust CPU/client blocking gates, GPU excluded](estate/09-build-deploy-and-ci-estate.md#es-0911-visionclaw-ciyml-rust-cpuclient-blocking-gates-gpu-excluded) | sequenceDiagram | ES-09 |
 | [ES-09.12 VisionClaw docs-ci.yml — ADR ledger gate and documentation quality score](estate/09-build-deploy-and-ci-estate.md#es-0912-visionclaw-docs-ciyml-adr-ledger-gate-and-documentation-quality-score) | sequenceDiagram | ES-09 |
-| [ES-09.13 VisionClaw ontology-publish.yml — logseq to JSS federation pipeline](estate/09-build-deploy-and-ci-estate.md#es-0913-visionclaw-ontology-publishyml-logseq-to-jss-federation-pipeline) | sequenceDiagram | ES-09 |
+| [ES-09.13 VisionClaw ontology-publish.yml — vault pipeline to pod federation](estate/09-build-deploy-and-ci-estate.md#es-0913-visionclaw-ontology-publishyml-vault-pipeline-to-pod-federation) | sequenceDiagram | ES-09 |
 | [ES-09.14 VisionClaw xr-godot-ci.yml — gdext + GUT headless, Quest 3 advisory](estate/09-build-deploy-and-ci-estate.md#es-0914-visionclaw-xr-godot-ciyml-gdext-gut-headless-quest-3-advisory) | sequenceDiagram | ES-09 |
 | [ES-09.15 agentbox invariants.yml — security invariant gates including loopback-publish](estate/09-build-deploy-and-ci-estate.md#es-0915-agentbox-invariantsyml-security-invariant-gates-including-loopback-publish) | sequenceDiagram | ES-09 |
 | [ES-09.16 agentbox contract-tests.yml — adapter contract suites](estate/09-build-deploy-and-ci-estate.md#es-0916-agentbox-contract-testsyml-adapter-contract-suites) | sequenceDiagram | ES-09 |
