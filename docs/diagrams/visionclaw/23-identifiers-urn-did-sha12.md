@@ -20,7 +20,7 @@ sources:
   - agentbox/management-api/lib/bc20-provenance-bridge.js
   - agentbox/management-api/middleware/linked-data/surfaces/s04-did.js
   - agentbox/mcp/servers/lib/memory-tools.js
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-23.1 Typed URN kind taxonomy — src/uri/mod.rs
@@ -111,7 +111,7 @@ sequenceDiagram
     end
     Note over Caller,U: INVARIANT mint rejects what parse tolerates -- ADR-2021
     rect rgb(255,230,204)
-    Note over U: DIVERGENCE ADR-2021 closeout -- emit_proposal_provenance formats urn:visionclaw:execution ad hoc, bypassing<br/>uri::execution and sha256-12 addressing, src/services/ontology_mutation_service.rs:184-196
+    Note over U: DIVERGENCE ADR-2021 closeout -- emit_proposal_provenance formats urn:visionclaw:execution ad hoc, bypassing<br/>uri::execution and sha256-12 addressing, src/services/ontology_mutation_service.rs:181-193
     Note over U: DIVERGENCE oxigraph_graph_repository.rs:88,97 format! urn:ngm:node / urn:ngm:edge inline instead of calling ngm::node_iri / ngm::edge_iri, src/uri/mod.rs:328,343
     end
 ```
@@ -121,39 +121,39 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant MintOrValidate as mint / strict resolve
-    participant P as parse<br/>src/uri/mod.rs:493
+    participant P as parse<br/>src/uri/mod.rs:504
     participant ResolveSurface as resolve / lookup surface
-    participant PD as parse_dual<br/>src/uri/mod.rs:603
+    participant PD as parse_dual<br/>src/uri/mod.rs:614
     MintOrValidate->>P: parse(input)
     alt input has did:nostr: prefix
-        P->>P: is_pubkey_hex check, src/uri/mod.rs:494-497
+        P->>P: is_pubkey_hex check, src/uri/mod.rs:505-508
         alt pubkey invalid
             P-->>MintOrValidate: Err(InvalidPubkey)
         else pubkey valid
             P-->>MintOrValidate: Ok(ParsedUri::DidNostr)
         end
     else input has urn:visionclaw: prefix
-        P->>P: split kind token, src/uri/mod.rs:507-512
+        P->>P: split kind token, src/uri/mod.rs:518-523
         alt kind token unrecognised
-            P-->>MintOrValidate: Err(UnknownKind) src/uri/mod.rs:512
+            P-->>MintOrValidate: Err(UnknownKind) src/uri/mod.rs:523
         else kind recognised
-            P->>P: per-kind structural validation, src/uri/mod.rs:514-587
+            P->>P: per-kind structural validation, src/uri/mod.rs:525-598
             P-->>MintOrValidate: Ok(ParsedUri kind variant)
         end
     else any other namespace, including urn:ngm
-        P-->>MintOrValidate: Err(NotVisionclaw) src/uri/mod.rs:503-505
+        P-->>MintOrValidate: Err(NotVisionclaw) src/uri/mod.rs:514-516
     end
     ResolveSurface->>PD: parse_dual(input)
     PD->>P: parse(input)
     alt parse succeeds
         P-->>PD: Ok(ParsedUri)
-        PD-->>ResolveSurface: Ok(ParsedUri) unchanged, src/uri/mod.rs:605
+        PD-->>ResolveSurface: Ok(ParsedUri) unchanged, src/uri/mod.rs:616
     else parse returns NotVisionclaw and input has urn:ngm: prefix
-        PD-->>ResolveSurface: Ok(ParsedUri::LegacyNgm) src/uri/mod.rs:607-613
+        PD-->>ResolveSurface: Ok(ParsedUri::LegacyNgm) src/uri/mod.rs:618-624
     else parse returns NotVisionclaw and no urn:ngm prefix
-        PD-->>ResolveSurface: Err(NotVisionclaw) src/uri/mod.rs:615
+        PD-->>ResolveSurface: Err(NotVisionclaw) src/uri/mod.rs:626
     else parse returns any other UriError
-        PD-->>ResolveSurface: Err propagated unchanged, src/uri/mod.rs:617
+        PD-->>ResolveSurface: Err propagated unchanged, src/uri/mod.rs:628
     end
     Note over MintOrValidate,PD: INVARIANT parse rejects urn:ngm, parse_dual accepts it -- mint calls parse, resolve calls parse_dual, ADR-2021
     Note over PD: DIVERGENCE open governance item -- legacy ADR-100/105/050/053/063 identifier prose is superseded by this code<br/>where it diverges, per IDENTIFIER-taxonomy.md Known divergences
@@ -204,14 +204,14 @@ sequenceDiagram
     autonumber
     participant Caller
     participant VC as content_address<br/>src/uri/mod.rs:179
-    participant AB as sha12 (bc20-provenance-bridge)<br/>agentbox/management-api/lib/bc20-provenance-bridge.js:108
+    participant AB as sha12 (bc20-provenance-bridge)<br/>agentbox/management-api/lib/bc20-provenance-bridge.js:132
     participant MT as sha12 (memory-tools)<br/>agentbox/mcp/servers/lib/memory-tools.js:60
     Caller->>VC: content_address(bytes)
     VC->>VC: Sha256::digest(input), take 6 bytes, 2 hex chars each, src/uri/mod.rs:180-186
     VC-->>Caller: sha256-12-HEX (CONTENT_ADDR_PREFIX + 12 lowercase hex), src/uri/mod.rs:187
     par agentbox BC20 side
         Caller->>AB: sha12(input)
-        AB->>AB: sha256 hex digest, slice(0,12), agentbox/management-api/lib/bc20-provenance-bridge.js:108-111
+        AB->>AB: sha256 hex digest, slice(0,12), agentbox/management-api/lib/bc20-provenance-bridge.js:132-135
         AB-->>Caller: sha256-12-HEX
     and agentbox memory-tools side
         Caller->>MT: sha12(v)
@@ -219,7 +219,7 @@ sequenceDiagram
         MT-->>Caller: bare 12 hex chars, no sha256-12- prefix added by this helper
     end
     Note over VC,AB: INVARIANT byte-identical -- both truncate to the first 6 bytes (12 hex chars) of the same SHA-256 digest, ADR-2023
-    Note over VC: verified fixture sha256-12-b94d27b9934d for input hello world, src/uri/mod.rs:707-719
+    Note over VC: verified fixture sha256-12-b94d27b9934d for input hello world, src/uri/mod.rs:853-863
     Note over MT: DIVERGENCE memory-tools.js:60 returns the bare 12-hex digest with no sha256-12- prefix, unlike CONTENT_ADDR_PREFIX-enforced VisionClaw and bc20-provenance-bridge sides
 ```
 
@@ -228,49 +228,51 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant CallerAB as agentbox caller
-    participant JS as toVisionclaw<br/>agentbox/management-api/lib/bc20-provenance-bridge.js:134
+    participant JS as toVisionclaw<br/>agentbox/management-api/lib/bc20-provenance-bridge.js:158
     participant CallerVC as VisionClaw ingest caller
-    participant RS as cross_from_agentbox<br/>src/uri/mod.rs:650
+    participant RS as cross_from_agentbox<br/>src/uri/mod.rs:809
     rect rgb(230,230,250)
     Note over CallerAB,JS: federation trust boundary -- agentbox to VisionClaw
     CallerAB->>JS: toVisionclaw(agentboxUrn, opts)
     alt kind is agent
-        JS-->>CallerAB: did:nostr:PUBKEY, bc20-provenance-bridge.js:145-152
+        JS-->>CallerAB: did:nostr:PUBKEY, bc20-provenance-bridge.js:169-176
     else kind is execution
-        JS-->>CallerAB: urn:visionclaw:execution:sha256-12-HEX, bc20-provenance-bridge.js:164-167
+        JS-->>CallerAB: urn:visionclaw:execution:sha256-12-HEX, bc20-provenance-bridge.js:188-191
     else kind is bead, structural passthrough
-        JS-->>CallerAB: urn:visionclaw:bead:PUBKEY:sha256-12-LOCAL, bc20-provenance-bridge.js:167-183
+        JS-->>CallerAB: urn:visionclaw:bead:PUBKEY:sha256-12-LOCAL, bc20-provenance-bridge.js:191-207
     else kind is kg
-        JS-->>CallerAB: urn:visionclaw:kg:PUBKEY:sha256-12-HEX, bc20-provenance-bridge.js:183-190
+        JS-->>CallerAB: urn:visionclaw:kg:PUBKEY:sha256-12-HEX, bc20-provenance-bridge.js:207-214
     else kind is memory/concept and opts.domain+opts.slug present
-        JS-->>CallerAB: urn:visionclaw:concept:DOMAIN:SLUG, bc20-provenance-bridge.js:190-197
+        JS-->>CallerAB: urn:visionclaw:concept:DOMAIN:SLUG, bc20-provenance-bridge.js:214-221
     else kind is memory/concept but elevation target missing, or kind unmapped
-        JS-->>CallerAB: null, onDrop logged (never silent), bc20-provenance-bridge.js:156-161,192-196
+        JS-->>CallerAB: null, onDrop logged (never silent), bc20-provenance-bridge.js:180-185,192-196
     end
     end
     rect rgb(220,245,220)
     Note over CallerVC,RS: VisionClaw side closed map -- narrower than agentbox
     CallerVC->>RS: cross_from_agentbox(agentbox_urn)
     alt already-converged did:nostr passthrough
-        RS-->>CallerVC: Some(UrnCrossing), src/uri/mod.rs:652-661
+        RS-->>CallerVC: Some(UrnCrossing), src/uri/mod.rs:811-819
     else kind is agent
-        RS-->>CallerVC: Some(did:nostr:PUBKEY), src/uri/mod.rs:670-673
+        RS-->>CallerVC: Some(did:nostr:PUBKEY), src/uri/mod.rs:843
     else kind is activity
-        RS-->>CallerVC: Some(urn:visionclaw:execution:sha256-12-HEX), src/uri/mod.rs:674
+        RS-->>CallerVC: Some(urn:visionclaw:execution:sha256-12-HEX), src/uri/mod.rs:844
     else kind is thing
-        RS-->>CallerVC: Some(urn:visionclaw:kg:PUBKEY:sha256-12-HEX), src/uri/mod.rs:675-678
-    else kind is memory, bead, or any other kind
-        RS-->>CallerVC: None -- closed-map default arm, src/uri/mod.rs:679-681
+        RS-->>CallerVC: Some(urn:visionclaw:kg:PUBKEY:sha256-12-HEX), src/uri/mod.rs:845
+    else kind is bead
+        RS-->>CallerVC: Some(urn:visionclaw:bead:PUBKEY:sha256-12-HEX), src/uri/mod.rs:846-856
+    else kind is memory (crosses false, deliberate) or any not-federated kind
+        RS-->>CallerVC: None -- artefact refusal at src/uri/mod.rs:832-835, closed-map default arm :857
     end
     end
-    Note over JS,RS: RESOLVED ADR-2072 -- cross_from_agentbox now has a bead arm (src/uri/mod.rs:700-707) that crosses<br/>structurally via bead_with_address (:284), PRESERVING the existing sha256-12 address rather than re-hashing,<br/>matching bc20-provenance-bridge.js:167-183. agentbox ADR-2061 holds the cross-repo parity test.
-    Note over CallerVC,RS: INVARIANT callers record the raw string plus an unmapped marker, never a synthetic ID, on None -- ADR-2025, src/uri/mod.rs:679-681
+    Note over JS,RS: RESOLVED ADR-2072 -- cross_from_agentbox now has a bead arm (src/uri/mod.rs:846-856) that crosses<br/>structurally via bead_with_address (:284), PRESERVING the existing sha256-12 address rather than re-hashing,<br/>matching bc20-provenance-bridge.js:191-206. agentbox ADR-2061 holds the cross-repo parity test. The kind map<br/>itself is DERIVED from agentbox/schema/federation-kinds.json, never transcribed (src/uri/mod.rs:828-832).
+    Note over CallerVC,RS: INVARIANT callers record the raw string plus an unmapped marker, never a synthetic ID, on None -- ADR-2025, src/uri/mod.rs:828-831
 ```
 
 ## VC-23.7 Wire node-id u32 bit layout and overflow policy (ADR-2024)
 ```mermaid
 flowchart TD
-    subgraph WireU32["u32 wire node id -- src/utils/binary_protocol.rs:14-26"]
+    subgraph WireU32["u32 wire node id -- src/utils/binary_protocol.rs:17-29"]
         B31["bit 31 -- AGENT_NODE_FLAG -- 0x80000000 -- line 15"]
         B30["bit 30 -- KNOWLEDGE_NODE_FLAG -- 0x40000000 -- line 16"]
         BOnt["bits 26-28 -- ONTOLOGY_TYPE_MASK -- 0x1C000000 -- line 19"]
@@ -347,9 +349,9 @@ flowchart TD
         direction TB
         K8["LegacyNgm<br/>urn:ngm:SUB opaque<br/>accepted only by parse_dual :603-619<br/>rejected by parse :503-505<br/>typed ngm module :320-404 -- ADR-2021"]
     end
-    XR["Room has no production emission site -- only RoomId::parse under cfg(test), presence_actor.rs:917-918"]
+    XR["Room has no production emission site -- only RoomId::parse under cfg(test), presence_actor.rs:920-921"]
     K7 -.-> XR
-    CROSS["UrnCrossing -- federation boundary record, src/uri/mod.rs:627-634 -- see VC-23.6"]
+    CROSS["UrnCrossing -- federation boundary record, src/uri/mod.rs:638-645 -- see VC-23.6"]
     ID --> CROSS
     OWNED --> CROSS
     UNSCOPED --> CROSS

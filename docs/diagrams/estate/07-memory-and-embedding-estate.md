@@ -18,7 +18,7 @@ sources:
   - src/handlers/memory_flash_handler.rs
   - src/main.rs
   - src/actors/agent_monitor_actor.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-07.1 Every RuVector client and the one shared embedder
 ```mermaid
@@ -31,7 +31,7 @@ flowchart TB
         SONA["ruvector-sona-feeder.mjs"]
         HARNESS["ruvector-recall-harness.mjs"]
         VCMF["VisionClaw memory_flash_handler<br/>src/handlers/memory_flash_handler.rs:41<br/>OBSERVER ONLY — broadcasts access events"]
-        AMA["agent_monitor_actor.rs:417-421<br/>narrates RuVector Memory Specialist activity"]
+        AMA["agent_monitor_actor.rs:496-500<br/>narrates RuVector Memory Specialist activity"]
     end
     subgraph store["ruvector-postgres"]
         PG["host=ruvector-postgres port=5432<br/>dbname=ruvector user=ruvector<br/>$RUVECTOR_PG_CONNINFO — ruvector-mcp.cjs:48-57"]
@@ -165,10 +165,10 @@ flowchart LR
     end
     subgraph learn["Learning-loop namespaces"]
         N4["memory-learning-aggregates<br/>mapped onto the memory slot, no new slot<br/>agentbox.toml:408"]
-        N5["code-harness-lessons<br/>trajectory sink — agentbox.toml:557"]
+        N5["code-harness-lessons<br/>trajectory sink — agentbox.toml:576"]
     end
     subgraph prot["Protected"]
-        N6["ruvnet-kb — reference corpus, INGEST-ONLY writes<br/>appended to RUVECTOR_PROTECTED_NAMESPACES<br/>so agents cannot mutate it (agentbox.toml:610)"]
+        N6["ruvnet-kb — reference corpus, INGEST-ONLY writes<br/>appended to RUVECTOR_PROTECTED_NAMESPACES<br/>so agents cannot mutate it (agentbox.toml:629)"]
     end
     SCOPE["Pubkey scoping — NIP-98 callers are scoped to their own<br/>pubkey namespace (AGENTBOX_X_ONLY_PUBKEY_HEX /<br/>AGENTBOX_PUBKEY). A session cannot read another session's<br/>per-project namespace. agentbox.toml:333-346"]
     LOW["DIVERGENCE — ruvnet-kb and knowledge-* namespaces have<br/>LOW scoped recall (R@10 ~9-11%) until candidate-bounded<br/>hybrid search lands."]
@@ -188,7 +188,7 @@ sequenceDiagram
     participant R as route table<br/>configure_routes:133
     participant WS as all WebSocket clients
 
-    Note over R: POST /api/memory-flash and the batch sibling are wired<br/>at src/main.rs:1128 via configure_memory_flash_routes
+    Note over R: POST /api/memory-flash and the batch sibling are wired<br/>at src/main.rs:1131 via configure_memory_flash_routes
     AG->>H: POST /api/memory-flash {key, namespace, action}
     H->>H: namespace = body.namespace.unwrap_or_default()<br/>memory_flash_handler.rs:45
     H->>WS: broadcast MemoryFlashEvent{key, namespace, action}

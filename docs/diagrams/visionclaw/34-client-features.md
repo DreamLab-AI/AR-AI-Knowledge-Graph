@@ -100,7 +100,7 @@ sources:
   - client/src/features/design-system/components/SearchInput.tsx
   - client/src/features/ontology/components/OntologyContribution.tsx
   - src/services/broker_events.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## VC-34.1 settings — field edit to server PUT
 ```mermaid

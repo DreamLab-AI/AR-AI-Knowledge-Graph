@@ -46,7 +46,7 @@ sources:
   - src/application/settings/directives.rs
   - src/application/settings/queries.rs
   - src/handlers/utils.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-07.1 The hexagon — ports, adapters and where each canonical type lives
@@ -303,7 +303,7 @@ sequenceDiagram
 
     CL->>H: GET /api/config
     H->>QH: LoadAllSettingsHandler::new(state.settings_repository.clone()) (src/handlers/api_handler/mod.rs:43)
-    Note over H,QH: state.settings_repository is Arc<dyn SettingsRepository> — src/app_state.rs:309
+    Note over H,QH: state.settings_repository is Arc<dyn SettingsRepository> — src/app_state.rs:314
     H->>EX: execute_in_thread(move || handler.handle(LoadAllSettings)) (:45)
     Note over EX: hexser QueryHandler trait — the direct dispatch path, no CQRS bus
     EX->>QH: handle(LoadAllSettings)

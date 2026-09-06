@@ -27,7 +27,7 @@ sources:
   - agentbox/management-api/server.js
   - agentbox/scripts/ci/check-ports-loopback.mjs
   - agentbox/config/nostr-gateway/nostr-send.cjs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-12.1 Interaction-plane topology
@@ -60,7 +60,7 @@ flowchart TB
     Bridge -->|"tmux send-keys -t agentbox:0, fail-open fallback"| Tmux
     Bridge -->|"POST /api/sessions/:id/send, Bearer aoe daemon token"| AoE
 
-Divergence["RESOLVED ADR-2047: 8443 and 8444 are SANCTIONED exposures, not a breach.<br/>agentbox/scripts/ci/check-ports-loopback.mjs:75-86 lists ten sanctioned publishes with a<br/>per-entry citation at :55-73, voice 8443/8444 among them as the second LAN ingress,<br/>modelled not hidden. 9096 remains the sole IDENTITY-gated ingress to the AoE plane."]
+Divergence["RESOLVED ADR-2047: 8443 and 8444 are SANCTIONED exposures, not a breach.<br/>agentbox/scripts/ci/check-ports-loopback.mjs:92-103 lists ten sanctioned publishes with a<br/>per-entry citation at :55-73, voice 8443/8444 among them as the second LAN ingress,<br/>modelled not hidden. 9096 remains the sole IDENTITY-gated ingress to the AoE plane."]
     style Divergence fill:#ddf5dd,stroke:#2e7d32,color:#000
     Caddy8444 -.-> Divergence
 
@@ -73,18 +73,18 @@ Drift["RESOLVED ADR-2047: agentbox/voice/README.md now routes /feed and /bridge/
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Sup as Supervisor<br/>agentbox/flake.nix:2298
+    participant Sup as Supervisor<br/>agentbox/flake.nix:2315
     participant Dep as deploy.sh<br/>agentbox/config/tab0-bridge/deploy.sh:1
     participant Node as server.mjs<br/>agentbox/config/tab0-bridge/server.mjs:45
     participant AoEd as AoE daemon :9095
 
-    Sup->>Dep: bash deploy.sh reconcile (flake.nix:2299)
+    Sup->>Dep: bash deploy.sh reconcile (flake.nix:2316)
     Dep->>Dep: copy server.mjs, turn-sink.cjs, start.sh, package.json via md5 compare (deploy.sh:27-35)
     opt node_modules/ws missing
         Dep->>Dep: npm install --omit=dev (deploy.sh:37-39)
     end
     Dep-->>Sup: exit 0, reconcile-only mode, no launch (deploy.sh:44-46)
-    Sup->>Node: exec node server.mjs, foreground, autorestart (flake.nix:2299)
+    Sup->>Node: exec node server.mjs, foreground, autorestart (flake.nix:2316)
     Node->>Node: read BRIDGE_PORT, default 8971 (server.mjs:45)
     Node->>Node: read BRIDGE_TMUX_SESSION, default agentbox (server.mjs:47)
     Node->>Node: read BRIDGE_TOKEN, default empty string (server.mjs:49)

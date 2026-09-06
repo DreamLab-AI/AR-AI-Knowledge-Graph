@@ -17,7 +17,7 @@ sources:
   - crates/visionclaw-xr-presence/src/error.rs
   - src/handlers/presence_handler.rs
   - src/actors/presence_actor.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-17.1 Presence session handshake and authentication
@@ -27,7 +27,7 @@ sequenceDiagram
     autonumber
     participant C as XR client<br/>xr-client/rust
     participant PS as PresenceSession<br/>src/handlers/presence_handler.rs:434
-    participant PA as PresenceActor<br/>src/actors/presence_actor.rs:652
+    participant PA as PresenceActor<br/>src/actors/presence_actor.rs:655
 
     C->>PS: WebSocket upgrade on /ws/presence
     PS->>PS: phase = SessionPhase::Challenged{nonce, ts_us} :156
@@ -66,7 +66,7 @@ sequenceDiagram
     participant PS as PresenceSession<br/>presence_handler.rs:355 handle_pose_frame
     participant W as wire::decode<br/>crates/visionclaw-xr-presence/src/wire.rs
     participant V as validators<br/>crates/visionclaw-xr-presence/src/validate.rs
-    participant PA as PresenceActor<br/>presence_actor.rs:739 IngestPose
+    participant PA as PresenceActor<br/>presence_actor.rs:742 IngestPose
     participant PEERS as Other sessions in room
 
     HMD->>PS: ws::Message::Binary routed to handle_pose_frame :462
@@ -102,7 +102,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant AG as Agent runtime
-    participant PA as PresenceActor<br/>presence_actor.rs:811 IngestAgentPresence
+    participant PA as PresenceActor<br/>presence_actor.rs:814 IngestAgentPresence
     participant AP as agent_presence codec<br/>crates/visionclaw-xr-presence/src/agent_presence.rs
     participant PEERS as Room members
 

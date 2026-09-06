@@ -20,7 +20,7 @@ sources:
   - agentbox/mcp/servers/substrate-tools.js
   - agentbox/mcp/servers/ontology-propose.js
   - agentbox/mcp/servers/ruvector-mcp.cjs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-09.1 Registry ownership classes — what the projector may touch

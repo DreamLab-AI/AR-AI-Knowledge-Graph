@@ -38,7 +38,7 @@ sources:
   - agentbox/voice/unmute-override.yml
   - agentbox/docker-compose.voice.yml
   - agentbox/scripts/qgis_mcp_standalone.py
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-27.1 ComfyUI — builtin loopback gate vs external sidecar integration
@@ -48,7 +48,7 @@ sequenceDiagram
     autonumber
     participant Agent as Claude / agent
     participant Skill as comfyui MCP skill<br/>agentbox/skills/comfyui/mcp-server/server.js:11
-    participant Builtin as comfyui-builtin<br/>agentbox/flake.nix:2196
+    participant Builtin as comfyui-builtin<br/>agentbox/flake.nix:2213
     participant MgmtAPI as ComfyUIManager<br/>agentbox/management-api/utils/comfyui-manager.js:25
     participant Gen as comfyui-generate<br/>agentbox/services/agentbox-ops/src/bin/comfyui-generate.rs:15
     participant Ext as comfyui:8188<br/>visionclaw_network sidecar
@@ -99,9 +99,9 @@ sequenceDiagram
     participant BlenderApp as Blender + BlenderMCP addon<br/>agentbox/gui-tools-sidecar/supervisord.conf:38
 
     Agent->>UVX: MCP tool call (stdio, BLENDER_HOST=localhost BLENDER_PORT=9876)
-    alt skills.spatial_and_3d.blender = true (agentbox.toml:504)
+    alt skills.spatial_and_3d.blender = true (agentbox.toml:523)
         UVX->>Proxy: TCP connect 127.0.0.1:9876
-        Note over Proxy: [program:blender-mcp] agentbox/flake.nix:1781<br/>apply_class rebuild (system-manifest.js:125)
+        Note over Proxy: [program:blender-mcp] agentbox/flake.nix:1798<br/>apply_class rebuild (system-manifest.js:125)
         Proxy->>Sidecar: bridge -> GUI_CONTAINER_HOST:GUI_BLENDER_PORT (default gui-tools-service:9876)
         Sidecar->>Launch: supervisord [program:blender] startsecs=15
         alt vglrun present (launch-blender.sh:18)
@@ -114,9 +114,9 @@ sequenceDiagram
         BlenderApp-->>UVX: BlenderMCP socket response
         UVX-->>Agent: tool result
     else skills.spatial_and_3d.blender = false
-        Note over Proxy: [program:blender-mcp] omitted (flake.nix:2107 lib.optionalString)<br/>ADR-2020: package + supervisor block both absent, no runtime trace
+        Note over Proxy: [program:blender-mcp] omitted (flake.nix:2124 lib.optionalString)<br/>ADR-2020: package + supervisor block both absent, no runtime trace
     end
-    Note over BlenderApp: DIVERGENCE — flake.nix:1078-1082 also nixGL-wraps pkgs.blender<br/>in the MAIN image (ADR-2006) but that wrapped package serves nothing here,<br/>because Blender is only ever run from this sidecar, never in-container
+    Note over BlenderApp: DIVERGENCE — flake.nix:1095-1099 also nixGL-wraps pkgs.blender<br/>in the MAIN image (ADR-2006) but that wrapped package serves nothing here,<br/>because Blender is only ever run from this sidecar, never in-container
 ```
 
 ## AB-27.3 QGIS MCP dispatch — headless offscreen server in the same sidecar
@@ -126,15 +126,15 @@ sequenceDiagram
     autonumber
     participant Agent as Claude / agent
     participant PyClient as qgis MCP client<br/>agentbox/mcp/mcp.json:66
-    participant Standalone as qgis_mcp_standalone.py<br/>agentbox/flake.nix:1756
+    participant Standalone as qgis_mcp_standalone.py<br/>agentbox/flake.nix:1773
     participant Sidecar as gui-tools-service:9877<br/>agentbox/docker-compose.gui-tools.yml
     participant QLaunch as launch-qgis.sh<br/>agentbox/gui-tools-sidecar/launch-qgis.sh:17
     participant QgisApp as QgsApplication + QgisMCPServer<br/>agentbox/gui-tools-sidecar/qgis-mcp-headless.py
 
     Agent->>PyClient: MCP tool call (stdio, QGIS_HOST=localhost QGIS_PORT=9877)
-    alt skills.spatial_and_3d.qgis = true (agentbox.toml:503)
+    alt skills.spatial_and_3d.qgis = true (agentbox.toml:522)
         PyClient->>Standalone: TCP connect 127.0.0.1:9877
-        Note over Standalone: [program:qgis-mcp] flake.nix:1756<br/>thin TCP proxy (localhost:9877 -> gui-tools-service:9877)<br/>apply_class rebuild (system-manifest.js:122)
+        Note over Standalone: [program:qgis-mcp] flake.nix:1773<br/>thin TCP proxy (localhost:9877 -> gui-tools-service:9877)<br/>apply_class rebuild (system-manifest.js:122)
         Standalone->>Sidecar: proxy -> GUI_CONTAINER_HOST:9877
         Sidecar->>QLaunch: supervisord [program:qgis] startsecs=15
         QLaunch->>QgisApp: python3 qgis-mcp-headless.py<br/>QT_QPA_PLATFORM=offscreen (launch-qgis.sh:15)
@@ -142,7 +142,7 @@ sequenceDiagram
         QgisApp-->>PyClient: JSON-RPC response
         PyClient-->>Agent: tool result
     else skills.spatial_and_3d.qgis = false
-        Note over Standalone: [program:qgis-mcp] omitted (flake.nix:2106 lib.optionalString)<br/>ADR-2020: package + supervisor block both absent, no runtime trace
+        Note over Standalone: [program:qgis-mcp] omitted (flake.nix:2123 lib.optionalString)<br/>ADR-2020: package + supervisor block both absent, no runtime trace
     end
     Note over QgisApp: DIVERGENCE — QGIS does NOT share Blender's vglrun GPU path (see AB-27.12):<br/>the desktop QGIS full app never initialises headlessly in this sidecar (no window<br/>manager)
 ```
@@ -160,7 +160,7 @@ sequenceDiagram
     participant CLI as magick/convert binary<br/>exec.rs:60
 
     Agent->>Registry: spawn agentbox-mcp imagemagick (stdio, IMAGEMAGICK_TIMEOUT=300)
-    Registry->>Bin: rmcp::transport::stdio() serve() main.rs:53-56
+    Registry->>Bin: rmcp::transport::stdio() serve() main.rs:57-60
     Note over Router: 7 tools (mod.rs:34-41): create_image, convert_image,<br/>resize_image, crop_image, composite_images, identify_image, batch_process
     Agent->>Router: call_tool(name, params)
     Router->>Exec: run_imagemagick(args, timeout) or run_identify(path, verbose)
@@ -169,7 +169,7 @@ sequenceDiagram
     Exec-->>Router: json result (success/error shape preserved from Python original)
     Router-->>Agent: CallToolResult
 
-    Note over Bin: [program:imagemagick-mcp] flake.nix:2095, gate skills.media.imagemagick<br/>(agentbox.toml:325, apply_class rebuild, system-manifest.js:128)<br/>runs the SAME binary as a redundant always-on supervisord instance<br/>whose stdio goes to /var/log/imagemagick-mcp.log, not a live MCP client
+    Note over Bin: [program:imagemagick-mcp] flake.nix:2112, gate skills.media.imagemagick<br/>(agentbox.toml:325, apply_class rebuild, system-manifest.js:128)<br/>runs the SAME binary as a redundant always-on supervisord instance<br/>whose stdio goes to /var/log/imagemagick-mcp.log, not a live MCP client
 ```
 
 ## AB-27.5 JupyterLab dispatch
@@ -179,15 +179,15 @@ sequenceDiagram
     autonumber
     participant Op as Operator / agent browser
     participant Sup as supervisord
-    participant Lab as jupyter-lab<br/>agentbox/flake.nix:1852
+    participant Lab as jupyter-lab<br/>agentbox/flake.nix:1869
 
-    alt skills.data_science.jupyter = true (agentbox.toml:509)
-        Sup->>Lab: jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser<br/>--IdentityProvider.token= (flake.nix:1853)
+    alt skills.data_science.jupyter = true (agentbox.toml:528)
+        Sup->>Lab: jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser<br/>--IdentityProvider.token= (flake.nix:1870)
         Note right of Lab: --IdentityProvider.token= disables the token/password prompt entirely
         Op->>Lab: GET http://<host>:8888/lab
         Lab-->>Op: notebook UI, kernel execution
     else skills.data_science.jupyter = false
-        Note over Sup: [program:jupyter-lab] omitted (flake.nix:2108 lib.optionalString)<br/>apply_class rebuild (system-manifest.js:54), no runtime trace
+        Note over Sup: [program:jupyter-lab] omitted (flake.nix:2125 lib.optionalString)<br/>apply_class rebuild (system-manifest.js:54), no runtime trace
     end
 ```
 
@@ -198,15 +198,15 @@ sequenceDiagram
     autonumber
     participant Op as Operator browser
     participant Sup as supervisord
-    participant CS as code-server<br/>agentbox/flake.nix:2180
+    participant CS as code-server<br/>agentbox/flake.nix:2197
 
-    alt toolchains.code_server = true (agentbox.toml:1309)
-        Sup->>CS: code-server --bind-addr 0.0.0.0:8080 --auth none<br/>--user-data-dir /home/devuser/.local/share/code-server (flake.nix:2180)
+    alt toolchains.code_server = true (agentbox.toml:1344)
+        Sup->>CS: code-server --bind-addr 0.0.0.0:8080 --auth none<br/>--user-data-dir /home/devuser/.local/share/code-server (flake.nix:2197)
         Note right of CS: DIVERGENCE — binds 0.0.0.0:8080 with --auth none while every<br/>other surface binds 127.0.0.1 (BASELINE-container.md Known divergences)
         Op->>CS: GET http://<host>:8080
         CS-->>Op: VS Code web UI over /home/devuser/workspace
     else toolchains.code_server = false
-        Note over Sup: [program:code-server] omitted (flake.nix:2177 lib.optionalString)<br/>apply_class rebuild (system-manifest.js:51), no runtime trace
+        Note over Sup: [program:code-server] omitted (flake.nix:2194 lib.optionalString)<br/>apply_class rebuild (system-manifest.js:51), no runtime trace
     end
 ```
 
@@ -224,7 +224,7 @@ sequenceDiagram
     participant Unmute as Kyutai Unmute backend<br/>voice-stack/unmute (external, not vendored)
 
     Op->>CLI: ./agentbox.sh voice up
-    Note over CLI: [voice] agentbox.toml:1289 enabled=false — comment says "sidecar state,<br/>its own lifecycle, not agentbox up" — system-manifest.js:164 catalogues<br/>gate 'voice' apply_class 'live' (id voice-console)
+    Note over CLI: [voice] agentbox.toml:1324 enabled=false — comment says "sidecar state,<br/>its own lifecycle, not agentbox up" — system-manifest.js:164 catalogues<br/>gate 'voice' apply_class 'live' (id voice-console)
     CLI->>Certs: gen self-signed TLS if absent (agentbox.sh:1892-1904)
     CLI->>Compose: up docker-compose.voice.yml + voice/unmute-override.yml<br/>(+ VOICE_UNMUTE_DIR clone's own compose.yml)
     alt BRIDGE_TOKEN unset/empty
@@ -253,14 +253,14 @@ sequenceDiagram
     participant Server as helix pipeline server<br/>OPENMED_SERVER_ENTRY (operator-provisioned)
 
     Op->>CLI: ./agentbox.sh openmed up
-    Note over CLI: [privacy_filter.openmed] agentbox.toml:1001 enabled=false (default)<br/>no system-manifest.js catalogue id — only the generic 'privacy-filter'<br/>entry (:198) mentions openmed as "compose-managed, separately fail-closed gated"
+    Note over CLI: [privacy_filter.openmed] agentbox.toml:1036 enabled=false (default)<br/>no system-manifest.js catalogue id — only the generic 'privacy-filter'<br/>entry (:198) mentions openmed as "compose-managed, separately fail-closed gated"
     CLI->>Compose: docker compose up -d --build (agentbox.sh:1847)
     Compose->>Entry: container starts, OPENMED_* env from [privacy_filter.openmed]
     Entry->>Prereq: bash prereq-check.sh
     alt all three of license_acknowledged, governance_acknowledged, onnx_runtime_present = true<br/>AND model_artifact exists AND sha256 matches artifact_lock_sha256
         Prereq-->>Entry: "prerequisites satisfied" (prereq-check.sh:40)
         Entry->>Server: exec node ${OPENMED_SERVER_ENTRY:-/opt/openmed/server/index.js}
-        Server-->>Op: clinical redaction routes (per [privacy_filter.openmed.policy] agentbox.toml:1014:<br/>pods=strict, memory=strict, inbound=soft, outbound=soft)
+        Server-->>Op: clinical redaction routes (per [privacy_filter.openmed.policy] agentbox.toml:1049:<br/>pods=strict, memory=strict, inbound=soft, outbound=soft)
     else any prerequisite false (documented default — all three false)
         Prereq--xEntry: fail() exit 1, e.g. "license_acknowledged is false" (prereq-check.sh:19-20)
         Note over Entry: SERVER path is unreachable with default gates (entrypoint.sh comment, :12-13)
@@ -276,18 +276,18 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Op as Operator
-    participant Toml as agentbox.toml:505<br/>skills.spatial_and_3d.gaussian_splatting
-    participant Flake as flake.nix gauss3dPackages<br/>agentbox/flake.nix:427
+    participant Toml as agentbox.toml:524<br/>skills.spatial_and_3d.gaussian_splatting
+    participant Flake as flake.nix gauss3dPackages<br/>agentbox/flake.nix:434
     participant Nix3dgs as lib/3dgs-stack.nix makeLichtfeld<br/>agentbox/lib/3dgs-stack.nix:79
     participant Bridge as lichtfeld_mcp_bridge.py<br/>agentbox/skills/lichtfeld-studio/SKILL.md:32
     participant LFS as LichtFeld-Studio binary :45677<br/>workspace/gaussians (external, ungated)
 
     alt gaussian_splatting = true (requires gpu.backend = local-cuda, E006)
-        Flake->>Nix3dgs: makeGaussianSplattingPackages (colmap, metis, lichtfeld) wrapGpuAll<br/>(flake.nix:1084-1086)
+        Flake->>Nix3dgs: makeGaussianSplattingPackages (colmap, metis, lichtfeld) wrapGpuAll<br/>(flake.nix:1101-1103)
         Nix3dgs--xFlake: PROPOSED ADR-2057: throw at eval — lichtfeldRev is the placeholder<br/>"0000...0" (3dgs-stack.nix:85-96): "gaussian_splatting cannot be enabled"
         Note over Toml: E006 validator (scripts/agentbox-config-validate.js:221-226)<br/>additionally requires gpu.backend="local-cuda"
-    else gaussian_splatting = false (documented default, agentbox.toml:505)
-        Note over Flake: gauss3dPackages = [] (flake.nix:427 lib.optionals)<br/>apply_class rebuild (system-manifest.js:229, id gaussian-splatting)
+    else gaussian_splatting = false (documented default, agentbox.toml:524)
+        Note over Flake: gauss3dPackages = [] (flake.nix:434 lib.optionals)<br/>apply_class rebuild (system-manifest.js:242, id gaussian-splatting)
     end
     Note over Bridge,LFS: DIVERGENCE — the actually-used lichtfeld-studio skill is<br/>completely independent of this gate: Claude spawns lichtfeld_mcp_bridge.py<br/>(stdio) which HTTP-POSTs JSON-RPC to a manually built<br/>/home/devuser/workspace/gaussians/LichtFeld-Studio/build/LichtFeld-Studio<br/>at 127.0.0.1:45677 — never baked by lib/3dgs-stack.nix, never gated by this toml key
     Op->>Bridge: tools/lfs-mcp.sh call training.get_state
@@ -301,13 +301,13 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     SUP["supervisord (PID 1, root)<br/>agentbox/flake.nix"]
-    SUP -->|priority 210| IM["imagemagick-mcp<br/>flake.nix:2095"]
-    SUP -->|priority 220| CB["comfyui-builtin :8188 loopback<br/>flake.nix:2196"]
-    SUP -->|priority 230| QM["qgis-mcp :9877 -> proxy<br/>flake.nix:1756"]
-    SUP -->|priority 231| BM["blender-mcp :9876 -> proxy<br/>flake.nix:1781"]
-    SUP -->|priority 232| JL["jupyter-lab :8888<br/>flake.nix:1852"]
-    SUP -->|priority 50| CS["code-server 0.0.0.0:8080<br/>flake.nix:2179"]
-    SUP -->|priority 250, always-on, ungated| PC["podcast-cron (supercronic)<br/>flake.nix:2322 — PROPOSED ADR-2057: NOT manifest-gated. Routed to the<br/>flake/manifest owner."]
+    SUP -->|priority 210| IM["imagemagick-mcp<br/>flake.nix:2112"]
+    SUP -->|priority 220| CB["comfyui-builtin :8188 loopback<br/>flake.nix:2213"]
+    SUP -->|priority 230| QM["qgis-mcp :9877 -> proxy<br/>flake.nix:1773"]
+    SUP -->|priority 231| BM["blender-mcp :9876 -> proxy<br/>flake.nix:1798"]
+    SUP -->|priority 232| JL["jupyter-lab :8888<br/>flake.nix:1869"]
+    SUP -->|priority 50| CS["code-server 0.0.0.0:8080<br/>flake.nix:2196"]
+    SUP -->|priority 250, always-on, ungated| PC["podcast-cron (supercronic)<br/>flake.nix:2339 — PROPOSED ADR-2057: NOT manifest-gated. Routed to the<br/>flake/manifest owner."]
 
     QM -->|TCP 9877| GTS["gui-tools-service<br/>docker-compose.gui-tools.yml"]
     BM -->|TCP 9876| GTS
@@ -443,18 +443,18 @@ classDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Nix as main image Nix package set<br/>agentbox/flake.nix:1073-1082
-    participant Wrap as wrapGpuBin (flake.nix:167) -> gpuWrap.wrapGpuBins<br/>agentbox/lib/gpu-wrap.nix:76
+    participant Nix as main image Nix package set<br/>agentbox/flake.nix:1090-1099
+    participant Wrap as wrapGpuBin (flake.nix:174) -> gpuWrap.wrapGpuBins<br/>agentbox/lib/gpu-wrap.nix:76
     participant BlenderProxy as blender-mcp proxy (main image)
     participant QgisProxy as qgis-mcp proxy (main image)
     participant Sidecar as gui-tools-service (FHS container)<br/>agentbox/gui-tools-sidecar/Dockerfile
     participant BLaunch as launch-blender.sh:18-22
     participant QLaunch as launch-qgis.sh:15
 
-    Note over Nix,Wrap: ADR-2006 — gpu.backend == "local-cuda" (agentbox.toml:843)<br/>gpuActive gate flake.nix:166 — wrapGpuBin appends host driver dirs to<br/>LD_LIBRARY_PATH with --suffix (gpu-wrap.nix:56-63), CUDA-only, no GLX/Vulkan surface
-    Nix->>Wrap: wrapGpuBin pkgs.qgis ["qgis"] (flake.nix:1074-1076)
-    Nix->>Wrap: wrapGpuBin pkgs.blender ["blender"] (flake.nix:1078-1082)
-    Note over Wrap: DIVERGENCE — these two nixGL-wrapped derivations exist in the<br/>main image's package set but are NEVER what serves blender-mcp/qgis-mcp:<br/>both MCP servers proxy to the separate gui-tools-service sidecar instead<br/>(flake.nix:1749-1752 comment: "nix-built QGIS in agentbox-main cannot reach<br/>the nvidia driver libs ... the same constraint as Blender")
+    Note over Nix,Wrap: ADR-2006 — gpu.backend == "local-cuda" (agentbox.toml:878)<br/>gpuActive gate flake.nix:173 — wrapGpuBin appends host driver dirs to<br/>LD_LIBRARY_PATH with --suffix (gpu-wrap.nix:56-63), CUDA-only, no GLX/Vulkan surface
+    Nix->>Wrap: wrapGpuBin pkgs.qgis ["qgis"] (flake.nix:1091-1093)
+    Nix->>Wrap: wrapGpuBin pkgs.blender ["blender"] (flake.nix:1095-1099)
+    Note over Wrap: DIVERGENCE — these two nixGL-wrapped derivations exist in the<br/>main image's package set but are NEVER what serves blender-mcp/qgis-mcp:<br/>both MCP servers proxy to the separate gui-tools-service sidecar instead<br/>(flake.nix:1766-1769 comment: "nix-built QGIS in agentbox-main cannot reach<br/>the nvidia driver libs ... the same constraint as Blender")
 
     BlenderProxy->>Sidecar: TCP 9876 (gui-tools-service, own Xvfb :2 + FHS rootfs)
     Sidecar->>BLaunch: [program:blender] supervisord.conf:30

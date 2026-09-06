@@ -33,7 +33,7 @@ sources:
   - agentbox/scripts/dream-inbox.mjs
   - agentbox/scripts/dream-machine-nightly.mjs
   - agentbox/scripts/dream-night-digest.mjs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-23.1 One repo-night — run phases
@@ -84,7 +84,7 @@ stateDiagram-v2
 ```mermaid
 sequenceDiagram
     autonumber
-    participant SUP as supervisord<br/>agentbox/flake.nix:2218
+    participant SUP as supervisord<br/>agentbox/flake.nix:2235
     participant ENG as Engine<br/>agentbox/services/dream-engine/src/engine.rs:59
     participant ROS as roster<br/>agentbox/services/dream-engine/src/roster.rs
     participant RS as runstate::begin<br/>agentbox/services/dream-engine/src/runstate.rs:132
@@ -95,15 +95,15 @@ sequenceDiagram
     participant LED as ledger<br/>agentbox/services/dream-engine/src/ledger.rs
 
     SUP->>ENG: dream-engine --loop --agentbox-toml /etc/agentbox.toml
-    Note over SUP,ENG: autostart=true autorestart=true priority=230 user=devuser (flake.nix:2218-2228)
-    alt [dream_machine] enabled = false (agentbox/agentbox.toml:1610)
+    Note over SUP,ENG: autostart=true autorestart=true priority=230 user=devuser (flake.nix:2235-2245)
+    alt [dream_machine] enabled = false (agentbox/agentbox.toml:1645)
         ENG-->>SUP: byte-identical-when-off — no supervisor block is generated at all
     else enabled
         loop nightly window
-            ENG->>ENG: UTC hour within window_start 1 .. window_end 5 (agentbox.toml:1634-1635)
+            ENG->>ENG: UTC hour within window_start 1 .. window_end 5 (agentbox.toml:1669-1670)
             ENG->>ROS: least-recently-dreamed ordering, durable file
-            Note over ROS: replaces alphabetical-sort-plus-truncate so max_repos_per_night 5 rotates the whole<br/>roster and survives a restart (agentbox.toml:1641)
-            alt dry streak — last prune_dry_streak 5 ledger rows ALL INCONCLUSIVE (agentbox.toml:1645)
+            Note over ROS: replaces alphabetical-sort-plus-truncate so max_repos_per_night 5 rotates the whole<br/>roster and survives a restart (agentbox.toml:1676)
+            alt dry streak — last prune_dry_streak 5 ledger rows ALL INCONCLUSIVE (agentbox.toml:1680)
                 ENG->>ENG: skip repo in nightly mode
                 Note over ENG: REJECT counts as learning and RESETS the streak — revive via --target or a harness fix
             end
@@ -168,7 +168,7 @@ sequenceDiagram
         Note over RDY: an echo, a true, a bare colon — green every night, informative never<br/>(readiness.rs:39-41)
     else darwin entrypoint without a sandbox flag
         RDY-->>ENG: Unusable::DarwinSandboxMissing
-        Note over RDY: INVARIANT ADR-2024 — every @metaharness/darwin entrypoint MUST run --sandbox mock or<br/>--sandbox agent, never the no-op real default which is documented surface-INDEPENDENT<br/>and emits the same output regardless of the code under test (agentbox.toml:1628-1633)
+        Note over RDY: INVARIANT ADR-2024 — every @metaharness/darwin entrypoint MUST run --sandbox mock or<br/>--sandbox agent, never the no-op real default which is documented surface-INDEPENDENT<br/>and emits the same output regardless of the code under test (agentbox.toml:1663-1668)
     else usable
         RDY-->>ENG: admitted
     end
@@ -280,11 +280,11 @@ sequenceDiagram
     else accepted
         G->>PA: persist_accept(...)
         PA->>BN: branch_name(deep, date)
-        Note over BN: branchPrefix "dream/" (agentbox/dream.config.json:69)
+        Note over BN: branchPrefix "dream/" (agentbox/dream.config.json:64)
         PA->>BW: build_branch_worktree(...)
         PA->>PR: push_and_open_pr(...)
         PR-->>H: PrOutcome — a PULL REQUEST, never a merge
-        Note over CFG: autoMerge = false (agentbox/dream.config.json:74). labels dream-cycle, agentbox-self<br/>(:70-73)
+        Note over CFG: autoMerge = false (agentbox/dream.config.json:69). labels dream-cycle, agentbox-self<br/>(:65-68)
         alt the change touches services/dream-engine — a SELF-REFERENTIAL hypothesis
             Note over PA,H: INVARIANT: agentbox contains the dream-engine that dreams it. A change to that crate<br/>changes the dreamer itself — apply EXTRA review scrutiny and NEVER let a self-modifying<br/>hypothesis bypass the human-merge gate. Still evidence-gated, still witnessed<br/>(dream.config.json:57 extraDisciplines self-referential)
         end
@@ -463,7 +463,7 @@ sequenceDiagram
     participant CC as Claude Code UserPromptSubmit
     participant HK as dream-inbox-surface.cjs<br/>agentbox/config/hooks/dream-inbox-surface.cjs:1
     participant INBOX as dream-inbox.json<br/>/home/devuser/workspace/.agentbox/dream-inbox.json
-    participant EP as entrypoint registration<br/>agentbox/config/entrypoint-unified.sh:1278
+    participant EP as entrypoint registration<br/>agentbox/config/entrypoint-unified.sh:1350
 
     Note over EP: the entrypoint prefers /opt/agentbox/config/hooks/dream-inbox-surface.cjs and falls back<br/>to the repo path, then dedupes on the command substring (:1279,:1291)
     U->>CC: submits a prompt
@@ -512,7 +512,7 @@ flowchart TB
         L1["dream-ledger.js parseLedger :52 · verdictStats :80 · latestNights :91<br/>discoverNominatedRepos :117 · pendingMerges :202<br/>readRepoDreamStatus :215 · aggregateDreamStatus :264"]
     end
     subgraph out["Outputs"]
-        O1["docs/dream-cycle/LEDGER.md<br/>ledgerPath, agentbox/dream.config.json:68"]
+        O1["docs/dream-cycle/LEDGER.md<br/>ledgerPath, agentbox/dream.config.json:63"]
         O2["docs/dream-cycle/FORUM-SUGGESTIONS.md"]
         O3["dream-inbox.json — see AB-23.9"]
         O4["voice/console/site/dream.html"]

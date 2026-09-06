@@ -37,7 +37,7 @@ sources:
   - agentbox/management-api/lib/authority.js
   - agentbox/management-api/lib/uris.js
   - agentbox/skills/lint-skills.sh
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-14.1 Governance plane — surfaces that reach the decision point vs surfaces that miss it
@@ -46,9 +46,9 @@ verified_commit: bed6b617d
 flowchart TB
     subgraph SURF["Agent-initiated side-effect surfaces GOVERNANCE-capabilities.md:39-63"]
         DTC["Direct tool call<br/>MCP fleet mcp/mcp.json"]
-        CMS["Code-mode sub-call<br/>codeact / code-interpreter agentbox.toml:539,554"]
-        ACISHELL["ACI shell<br/>test allowlist agentbox.toml:585<br/>raw Bash still reachable outside it"]
-        CONSULT["Consultant / subagent action<br/>tree-search-coder agentbox.toml:621"]
+        CMS["Code-mode sub-call<br/>codeact / code-interpreter agentbox.toml:558,554"]
+        ACISHELL["ACI shell<br/>test allowlist agentbox.toml:604<br/>raw Bash still reachable outside it"]
+        CONSULT["Consultant / subagent action<br/>tree-search-coder agentbox.toml:640"]
         DREAM["Background job dream-engine<br/>01:00-05:00 UTC unattended"]
         BEADS["Background job beads work-DAG<br/>spawn_child mcp/mcp.json:197"]
         ALTHARNESS["Alternate harness path<br/>non-Claude harness"]

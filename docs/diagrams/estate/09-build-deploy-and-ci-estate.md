@@ -53,7 +53,7 @@ sources:
   - scripts/adr-index-gen.js
   - scripts/launch.sh
   - scripts/start.sh
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-09.1 The host-vs-container build trap — wrong path vs sanctioned path
 ```mermaid
@@ -121,7 +121,7 @@ sequenceDiagram
     Note over T6,DD: container/host process boundary — build MUST cross here, never from CC
     Dev->>T6: tmux send-keys -t 6 ./scripts/launch.sh up dev Enter
     T6->>DD: docker compose --profile dev up -d
-    DD->>DD: resolve HOST_PROJECT_ROOT bind mounts<br/>docker-compose.unified.yml:121-144
+    DD->>DD: resolve HOST_PROJECT_ROOT bind mounts<br/>docker-compose.unified.yml:121-154
     DD->>DC: recreate container with correct host-side binds
     end
     DC->>W: supervisord starts program:rust-backend<br/>supervisord.dev.conf:20
@@ -143,13 +143,13 @@ sequenceDiagram
 ## ES-09.3 Dockerfile.unified — multi-stage build, dev vs prod target divergence
 ```mermaid
 flowchart LR
-    BASE["base<br/>Dockerfile.unified:27<br/>cachyos-v3 pinned digest<br/>ARG CUDA_ARCH=75 promoted to ENV:39-46"]
-    RUSTDEPS["rust-deps<br/>Dockerfile.unified:145<br/>COPY Cargo.toml/crates, cargo fetch,<br/>cargo build --release --features gpu:184"]
-    RUSTBUILD["rust-builder<br/>Dockerfile.unified:191<br/>COPY src, cargo build --release --features gpu:208<br/>strip target/release/visionclaw-server"]
-    NODEDEPS["node-deps<br/>Dockerfile.unified:216<br/>npm ci --prefer-offline --no-audit:228"]
-    NODEBUILD["node-builder<br/>Dockerfile.unified:233<br/>npx vite build:242"]
-    DEV["development target<br/>Dockerfile.unified:249<br/>FROM base — NO rust-builder/node-builder<br/>COPY src+client SOURCE (not binaries):283-288<br/>ENTRYPOINT dev-entrypoint.sh:328"]
-    PROD["production target<br/>Dockerfile.unified:336<br/>FROM cachyos-v3 fresh, NOT from base<br/>COPY --from=rust-builder binary:395<br/>COPY --from=node-builder dist:398<br/>USER appuser, ENTRYPOINT prod-entrypoint.sh:416-426"]
+    BASE["base<br/>Dockerfile.unified:27<br/>cachyos-v3 pinned digest<br/>ARG CUDA_ARCH=75 (:30) promoted to ENV:39-46"]
+    RUSTDEPS["rust-deps<br/>Dockerfile.unified:145<br/>COPY Cargo.toml/crates, cargo fetch:184,<br/>cargo build --release --features gpu:185"]
+    RUSTBUILD["rust-builder<br/>Dockerfile.unified:191<br/>COPY src:194, cargo build --release --features gpu:214<br/>strip target/release/visionclaw-server:215"]
+    NODEDEPS["node-deps<br/>Dockerfile.unified:222<br/>npm ci --prefer-offline --no-audit:234"]
+    NODEBUILD["node-builder<br/>Dockerfile.unified:239<br/>npx vite build:248"]
+    DEV["development target<br/>Dockerfile.unified:255<br/>FROM base — NO rust-builder/node-builder<br/>COPY src SOURCE (not binaries):289, COPY client:294<br/>ENTRYPOINT ./dev-entrypoint.sh at Dockerfile.unified:340"]
+    PROD["production target<br/>Dockerfile.unified:348<br/>FROM cachyos-v3 fresh, NOT from base<br/>COPY --from=rust-builder binary:407<br/>COPY --from=node-builder dist:410<br/>USER appuser:428, ENTRYPOINT ./prod-entrypoint.sh:438"]
 
     BASE --> RUSTDEPS --> RUSTBUILD
     BASE --> NODEDEPS --> NODEBUILD
@@ -165,12 +165,12 @@ flowchart LR
 ## ES-09.4 Dockerfile.production — cache-optimised 5-stage pipeline
 ```mermaid
 flowchart LR
-    TOOLCHAIN["toolchain<br/>Dockerfile.production:13<br/>ARG CUDA_ARCH=86, ENV CUDA_ARCH promoted:17-22<br/>cachyos-v3 pinned digest, rustup stable, node 20.18.3"]
-    DEPS["deps<br/>Dockerfile.production:59<br/>FROM toolchain — stub src/main.rs, stub build.rs:89<br/>cargo build --release (deps only):90"]
-    CUDAPTX["cuda-ptx<br/>Dockerfile.production:96<br/>FROM toolchain — re-declares ARG CUDA_ARCH=86:98<br/>nvcc -ptx -arch sm_CUDA_ARCH:109"]
-    FRONTEND["frontend<br/>Dockerfile.production:116<br/>FROM toolchain — npm ci, npx vite build:132"]
-    BUILDER["builder<br/>Dockerfile.production:137<br/>FROM deps — COPY real src, cargo build --release:153<br/>COPY --from=cuda-ptx ptx:143"]
-    RUNTIME["runtime (final, unnamed)<br/>Dockerfile.production:160<br/>fresh cachyos-v3 — NOT from toolchain<br/>USER appuser:232, ENTRYPOINT start.sh:234"]
+    TOOLCHAIN["toolchain<br/>Dockerfile.production:13<br/>ARG CUDA_ARCH=86:15, ENV CUDA_ARCH promoted:17-22<br/>cachyos-v3 pinned digest, rustup stable, node 20.18.3"]
+    DEPS["deps<br/>Dockerfile.production:59<br/>FROM toolchain — stub src/main.rs:74, stub build.rs:89<br/>cargo fetch --locked:101, cargo build --release (deps only):102"]
+    CUDAPTX["cuda-ptx<br/>Dockerfile.production:108<br/>FROM toolchain — re-declares ARG CUDA_ARCH=86:110<br/>nvcc -ptx -arch sm_CUDA_ARCH:121"]
+    FRONTEND["frontend<br/>Dockerfile.production:128<br/>FROM toolchain — npm ci:139, npx vite build:144"]
+    BUILDER["builder<br/>Dockerfile.production:149<br/>FROM deps — COPY real src:159, cargo build --release:165<br/>COPY --from=cuda-ptx ptx:155"]
+    RUNTIME["runtime (final, unnamed)<br/>Dockerfile.production:172<br/>fresh cachyos-v3 — NOT from toolchain<br/>COPY --from=builder binary:231, USER appuser:244<br/>ENTRYPOINT /app/start.sh at Dockerfile.production:246"]
 
     TOOLCHAIN --> DEPS
     TOOLCHAIN --> CUDAPTX
@@ -203,8 +203,8 @@ sequenceDiagram
     P->>P: ARG CUDA_ARCH=86 (:15, scoped to toolchain stage only)
     P->>P: ENV CUDA_ARCH=CUDA_ARCH (:21, promotes ARG into ENV)
     P->>C2: FROM toolchain AS cuda-ptx
-    Note over C2: re-declares ARG CUDA_ARCH=86 (:98) redundantly,<br/>ENV already inherited from toolchain — both agree
-    C2->>C2: nvcc -ptx -arch sm_CUDA_ARCH (:109)
+    Note over C2: re-declares ARG CUDA_ARCH=86 (:110) redundantly,<br/>ENV already inherited from toolchain — both agree
+    C2->>C2: nvcc -ptx -arch sm_CUDA_ARCH (:121)
 
     Note over U,P: DIVERGENCE (ADR-2008 vs ADR-2037): dev image builds<br/>cargo build --release --features gpu,dev-auth<br/>(scripts/rust-backend-wrapper.sh:66) — a release binary that<br/>still carries enforce_release_env_hygiene as a no-op stub<br/>(src/main.rs:169, cfg debug_assertions OR feature dev-auth)
     Note over U,P: ADR-2037 (proposed, implementation_status none): no CI or<br/>image-build assertion yet verifies a shipped release binary<br/>omits dev-auth — a mis-targeted pipeline could promote the<br/>stubbed-hygiene binary to production undetected
@@ -289,7 +289,7 @@ flowchart TB
     subgraph EXTFILE["docker-compose.cloudflared.yml (standalone)"]
         CFSTANDALONE["cloudflared<br/>joins external visionclaw_network<br/>alias visionclaw-server:3001"]
     end
-    NET["visionclaw_network (external, pre-created)<br/>docker-compose.unified.yml:353-356"]
+    NET["visionclaw_network (external, pre-created)<br/>docker-compose.unified.yml:363-366"]
 
     DEVSVC --> NET
     PRODSVC --> NET
@@ -344,8 +344,8 @@ flowchart LR
 flowchart TB
     subgraph FLAKE["agentbox/flake.nix — image composition (3602 lines)"]
         NIXPKG["Nix package set<br/>e.g. toolchains.ruflo gate :202-219"]
-        SUPTEXT["supervisorText string<br/>flake.nix:2002-2062<br/>program blocks e.g. management-api, bootstrap-seal"]
-        SUPWRITE["writeText supervisord.conf<br/>flake.nix:2943-2948"]
+        SUPTEXT["supervisorText string<br/>flake.nix:2019-2079<br/>program blocks e.g. management-api, bootstrap-seal"]
+        SUPWRITE["writeText supervisord.conf<br/>flake.nix:2968-2973"]
     end
     subgraph TOML["agentbox/agentbox.toml — RUNNING config, not a template"]
         GATEKEY["gate key e.g. interaction_plane.enabled"]
@@ -387,24 +387,29 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     autonumber
-    participant GH as GitHubPush/PR<br/>ci.yml:37-42
-    participant FMT as rust-fmt job<br/>ci.yml:57 blocking
-    participant CPU as rust-cpu job<br/>ci.yml:71 blocking
-    participant CLI as client job<br/>ci.yml:107 blocking
-    participant LINT as client-quality job<br/>ci.yml:129 advisory
-    participant PW as playwright job<br/>ci.yml:159 manual only
+    participant GH as GitHubPush/PR<br/>ci.yml:41-46
+    participant FMT as rust-fmt job<br/>ci.yml:61 blocking
+    participant CPU as rust-cpu job<br/>ci.yml:75 blocking
+    participant CLI as client job<br/>ci.yml:121 blocking
+    participant GATE as dev-auth-release-gate job<br/>ci.yml:142 blocking
+    participant LINT as client-quality job<br/>ci.yml:218 advisory
+    participant PW as playwright job<br/>ci.yml:248 manual only
 
-    GH->>FMT: cargo fmt --all --check :69
-    GH->>CPU: cargo build -p 8 CPU-only crates :98-99
-    CPU->>CPU: cargo clippy --all-targets :103
-    CPU->>CPU: cargo test :105
-    GH->>CLI: npm ci, then npm run test (vitest) :122-126
-    GH->>LINT: eslint + tsc --noEmit :147-150
-    Note over LINT: continue-on-error true :135, never a required check
-    opt workflow_dispatch only
-        GH->>PW: npx playwright install, npm run test:e2e :180-182
+    GH->>FMT: cargo fmt --all --check :72-73
+    GH->>CPU: cargo build CPU_CRATES :103-104
+    CPU->>CPU: cargo clippy CPU_CRATES --all-targets :105-108
+    CPU->>CPU: cargo test CPU_CRATES :109-110
+    CPU->>CPU: cargo clippy/test -p visionclaw-integration-tests :116-119
+    GH->>CLI: npm ci :135-136, then npm run test (vitest) :140
+    GH->>GATE: hermetic text assertion over the committed Dockerfiles/entrypoints :151-155
+    GATE->>GATE: no --release cargo line may name dev-auth :162-167
+    GH->>LINT: npm run lint (ESLint) :236-237, npx tsc --noEmit :238-239
+    Note over LINT: continue-on-error true :224, never a required check
+    opt workflow_dispatch only :254
+        GH->>PW: npx playwright install :269, npm run test:e2e :271
     end
-    Note over CPU: DIVERGENCE: visionclaw-gpu and root server crate link<br/>CUDA at runtime, removed from hosted CI 2026-07-24
+    Note over GATE: INVARIANT: ADR-2037 via ADR-2086 - a production/release image must never carry the<br/>dev-auth cargo feature (it compiles in the Bearer dev-session-token bypass and stubs<br/>enforce_release_env_hygiene to a no-op). No cargo, no docker, no network - ci.yml:143-150
+    Note over CPU: DIVERGENCE: visionclaw-gpu and root server crate link<br/>CUDA at runtime, removed from hosted CI 2026-07-24 (ci.yml:241-243)
     Note over CPU: GPU crates validated only on the developer CUDA<br/>host via scripts/launch.sh, not by any GitHub runner
 ```
 
@@ -440,27 +445,28 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant GH as push/PR/dispatch<br/>ontology-publish.yml:3-27
-    participant VAL as validate-source job<br/>ontology-publish.yml:37
-    participant CONV as convert-ontology job<br/>ontology-publish.yml:88
-    participant JLD as convert-jsonld job<br/>ontology-publish.yml:352
-    participant DEP as deploy-jss job<br/>ontology-publish.yml:517
-    participant WS as notify-websocket job<br/>ontology-publish.yml:627
+    participant VAL as validate-source job<br/>ontology-publish.yml:44
+    participant CONV as convert-ontology job<br/>ontology-publish.yml:126
+    participant JLD as convert-jsonld job<br/>ontology-publish.yml:393
+    participant DEP as deploy-jss job<br/>ontology-publish.yml:558
+    participant WS as notify-websocket job<br/>ontology-publish.yml:668
+    participant PRP as pr-preview job<br/>ontology-publish.yml:747
 
-    GH->>VAL: checkout jjohare/logseq source :51-56
-    VAL->>VAL: detect changed markdown files :58-78
-    VAL->>CONV: has_changes true, needs validate-source :92
-    CONV->>CONV: md_to_ttl.py parses Logseq pages -> Turtle :117-330
-    CONV->>CONV: sha1 checksum, upload ontology-ttl artifact :296-350
-    CONV->>JLD: needs convert-ontology, status success :356
-    JLD->>JLD: TTL -> JSON-LD, write index.jsonld manifest :381-483
-    JLD->>DEP: needs both convert jobs, ref main :521
-    DEP->>DEP: backup current JSS index for rollback :536-549
-    DEP->>DEP: PUT visionflow.ttl, context/ontology/index jsonld :551-581
+    GH->>VAL: verify access :65-88, checkout the private ontology source with a dedicated token :89-95
+    VAL->>VAL: detect changed markdown files :96-117
+    VAL->>CONV: has_changes true, needs validate-source :129-131
+    CONV->>CONV: md_to_ttl.py parses Logseq pages -> Turtle :158-372
+    CONV->>CONV: validate TTL syntax :373-385, upload ontology-ttl artifact :386-391
+    CONV->>JLD: needs convert-ontology, status success :396-398
+    JLD->>JLD: TTL -> JSON-LD :422-530, validate :531-550, upload :551-557
+    JLD->>DEP: needs both convert jobs, ref main :561-563
+    DEP->>DEP: backup current JSS index for rollback :577-591
+    DEP->>DEP: PUT visionflow.ttl, context/ontology/index jsonld :592-626, verify :627-653
     alt deployment fails
-        DEP->>DEP: rollback to backed-up index :613-625
+        DEP->>DEP: rollback to backed-up index :654-667
     end
-    DEP->>WS: deployment_status success :631
-    WS->>WS: POST notification to SOLID_POD_URL/.notifications :667-669
+    DEP->>WS: deployment_status success :671-672
+    WS->>WS: POST to SOLID_POD_URL/.notifications :711-715, PATCH index.jsonld :716-721
     Note over VAL,WS: RESOLVED ADR-2098 (2026-09-05): SOLID_POD_URL now defaults to http://localhost:4000/solid :31-38<br/>the scope the embedded solid-pod-rs serves in-process (ADR-032 M3)<br/>the POST to /.notifications is annotated as a best-effort no-op there - that path is a GET WebSocket upgrade
 ```
 
@@ -580,7 +586,7 @@ flowchart LR
     COMPOSEUP["docker compose --profile dev|production up<br/>docker-compose.unified.yml"]
     CONTAINER["visionclaw_container or visionclaw_prod_container<br/>supervisord manages nginx + rust-backend (+vite-dev in dev)"]
     NGINXROUTE["nginx.dev.conf or nginx.production.conf<br/>route table (ES-09.9)"]
-    HEALTH["/api/health, /readyz<br/>docker-compose.unified.yml:158,232"]
+    HEALTH["/api/health, /readyz<br/>docker-compose.unified.yml:168,232"]
 
     SRC --> CIGATE
     CIGATE --> DOCKERBUILD

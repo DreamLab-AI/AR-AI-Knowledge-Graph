@@ -19,7 +19,7 @@ sources:
   - agentbox/skills/email-search/SKILL.md
   - agentbox/docs/adr/ADR-2027-secret-custody-rotation-break-glass.md
   - scripts/backup-secrets.sh
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-16.1 Container hardening posture — what actually confines the box
@@ -27,7 +27,7 @@ verified_commit: bed6b617d
 ```mermaid
 flowchart TB
     subgraph HOST["docker host"]
-        CMP["docker-compose.yml:88-142"]
+        CMP["docker-compose.yml:88-143"]
     end
     subgraph CTR["agentbox container"]
         SUP["supervisord PID 1 as ROOT<br/>required at boot for tmpfs subdirs, cert gen, chown to uid 1000"]
@@ -130,7 +130,7 @@ sequenceDiagram
     D->>SUP: PID 1 as root — tmpfs subdir creation, cert generation, chown runtime dirs to uid 1000
     SUP->>EP: run bootstrap
     rect rgb(255,248,235)
-    Note over EP,SET: trust pre-acceptance — entrypoint-unified.sh:1117-1132
+    Note over EP,SET: trust pre-acceptance — entrypoint-unified.sh:1124-1139
     EP->>SET: read settings.json hooks.SessionStart
     alt a hook command already contains trust-seed.cjs
         SET-->>EP: log "[trust] trust-seed hook already registered"

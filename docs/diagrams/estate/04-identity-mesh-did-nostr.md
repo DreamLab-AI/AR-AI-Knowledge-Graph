@@ -31,7 +31,7 @@ sources:
   - src/handlers/socket_flow_handler/http_handler.rs
   - client/src/services/nostrAuthService.ts
   - client/src/types/nip07.d.ts
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-04.1 verification mesh — who signs, who verifies whom
 ```mermaid
@@ -50,12 +50,12 @@ flowchart LR
     subgraph agentbox["agentbox host processes"]
         PROXY["nip98-proxy :9096<br/>agentbox/config/nip98-proxy/proxy.mjs:96"]
         NBB["NostrBridge.verifyNip98<br/>agentbox/mcp/servers/nostr-bridge.js:459"]
-        PS["pod-signer buildPodNip98<br/>agentbox/management-api/lib/pod-signer.js:32"]
+        PS["pod-signer buildPodNip98<br/>agentbox/management-api/lib/pod-signer.js:42"]
         AGID["agent-identity loadOrMint<br/>agentbox/management-api/lib/agent-identity.js:107"]
         AEA["agent-event-auth verifyAgentEventRequest<br/>agentbox/management-api/lib/agent-event-auth.js:46"]
     end
     subgraph aoe["AoE daemon :9095<br/>loopback only"]
-        AOE["aoe serve --auth token --behind-proxy<br/>agentbox/flake.nix:2247"]
+        AOE["aoe serve --auth token --behind-proxy<br/>agentbox/flake.nix:2264"]
     end
     subgraph solid["EXTERNAL: solid-pod-rs<br/>default-deny pod"]
         POD["Solid pod HTTP endpoint"]
@@ -190,19 +190,19 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant CALLER as management-api caller
-    participant B as buildPodNip98<br/>agentbox/management-api/lib/pod-signer.js:32
+    participant B as buildPodNip98<br/>agentbox/management-api/lib/pod-signer.js:42
     participant S as signer (lazy-loaded, cached)
-    participant H as buildNip98Header<br/>deps injection, pod-signer.js:26
+    participant H as buildNip98Header<br/>deps injection, pod-signer.js:36
     participant POD as Solid pod
 
     CALLER->>B: buildPodNip98(manifest, deps)
     alt pod signing enabled in the manifest
-        B-->>CALLER: async (method, url, body) => header<br/>pod-signer.js:81
+        B-->>CALLER: async (method, url, body) => header<br/>pod-signer.js:91
         CALLER->>H: nip98(method, url, body)
         H->>S: resolve signer (loaded lazily on first use, then cached)
         alt signer available
             S-->>H: signer
-            H->>H: buildNip98Header(s, method, url, {body})<br/>pod-signer.js:84
+            H->>H: buildNip98Header(s, method, url, {body})<br/>pod-signer.js:94
             H-->>CALLER: Authorization header carrying the kind-27235 event
             CALLER->>POD: LDP write with the signed header
             POD-->>CALLER: 2xx

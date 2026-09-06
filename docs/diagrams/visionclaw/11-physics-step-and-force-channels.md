@@ -22,7 +22,7 @@ sources:
   - Cargo.toml
   - src/handlers/constraints_handler.rs
   - src/utils/visionflow_unified.ptx
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-11.1 Physics tick — phase 1, params and flag word
@@ -198,7 +198,7 @@ sequenceDiagram
     alt num_constraints > 0
         EX->>EX: ENABLE_CONSTRAINTS set :502-504 and constraint_force_ptr bound :221
     else num_constraints == 0
-        Note over EX: bit CLEARS - required, or force_pass_kernel keeps walking a buffer that no longer describes anything (force_channels.rs:557-559)
+        Note over EX: bit CLEARS - required, or force_pass_kernel keeps walking a buffer that no longer describes anything (force_channels.rs:560-562)
     end
     Note over CA,EX: INVARIANT ADR-2029 - enablement is owned by residency, never by settings
     Note over OCA: class_id, class_charge and class_mass are uploaded as separate per-node device buffers and passed to force_pass_kernel, not carried in SimParams

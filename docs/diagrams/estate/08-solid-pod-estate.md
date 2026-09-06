@@ -6,7 +6,7 @@ governing:
   - agentbox/docs/BASELINE-container.md
   - docs/DATA-authority-erasure.md
   - agentbox/docs/INGRESS-identity.md
-adrs: [ADR-2015, ADR-2016, ADR-2017, ADR-2068]
+adrs: [ADR-2015, ADR-2016, ADR-2017, ADR-2064, ADR-2068]
 sources:
   - Cargo.toml
   - src/handlers/solid_proxy_handler.rs
@@ -31,7 +31,7 @@ sources:
   - client/src/services/solidPod/typeIndex.ts
   - bin/jss.js
   - scripts/backup-sqlite.sh
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-08.1 Four coexisting Solid-pod deployments — topology contrast
 
@@ -46,9 +46,9 @@ flowchart TB
     end
 
     subgraph AB["agentbox container — supervised service"]
-        SUP["supervisord [program:solid-pod]<br/>agentbox/flake.nix:2064-2073"]
+        SUP["supervisord [program:solid-pod]<br/>agentbox/flake.nix:2081-2090"]
         SRV["solid-pod-rs-server :8484<br/>agentbox/agentbox.toml:459-467"]
-        HTTPS["[program:https-bridge]<br/>agentbox/flake.nix:2081-2090"]
+        HTTPS["[program:https-bridge]<br/>agentbox/flake.nix:2098-2107"]
         SUP -->|"exec solidPodRsLauncher"| SRV
         HTTPS -->|"TLS terminate to :8484"| SRV
     end
@@ -77,44 +77,46 @@ sequenceDiagram
     autonumber
     participant AG as Agent<br/>internal caller
     participant ADP as adapters/index.js<br/>slotConfig:53-70
-    participant PS as pod-signer<br/>buildPodNip98:32
+    participant PS as pod-signer<br/>buildPodNip98:42
     participant BR as nostr-bridge<br/>loadSigner/buildNip98Header
-    participant BASE as SolidHttpPodsAdapter<br/>_solid-http-base.js:26
+    participant BASE as SolidHttpPodsAdapter<br/>_solid-http-base.js:32
     participant SRV as solid-pod-rs-server<br/>port 8484
 
-    Note over ADP,PS: INVARIANT: nip98 is null unless integrations.solid_pod_rs.sign_requests=true<br/>(pod-signer.js:35) — default keeps prior unsigned behaviour byte-identical
+    Note over ADP,PS: INVARIANT: nip98 is null unless integrations.solid_pod_rs.sign_requests=true<br/>(pod-signer.js:45) — default keeps prior unsigned behaviour byte-identical (pod-signer.js:16-17)
 
-    ADP->>PS: buildPodNip98(manifest, opts) pod-signer.js:32
+    ADP->>PS: buildPodNip98(manifest, opts) pod-signer.js:42
     alt sign_requests off or no stack resolved
-        PS-->>ADP: return null (pod-signer.js:35,44-49)
+        PS-->>ADP: return null (pod-signer.js:45,50-59)
         Note over ADP,BASE: RESOLVED ADR-2064 (2026-09-05): sign_requests now sets requireSigned on the adapter<br/>even when no signer could be built, so a falsy nip98 fails closed instead of going out unsigned
     else sign_requests on
         PS-->>ADP: nip98 fn method,url,body returning string or null
-        ADP->>BASE: withSigner(cfg) attaches opts.nip98 adapters/index.js:61
+        ADP->>BASE: withSigner(cfg) attaches opts.nip98 AND opts.requireSigned adapters/index.js:74-77
     end
 
-    AG->>BASE: write(uri, body) _solid-http-base.js:74
-    BASE->>BASE: this._fetch = this._nip98 ? _signedFetch : _rawFetch (line 47)
+    AG->>BASE: write(uri, body) _solid-http-base.js:119
+    BASE->>BASE: this._fetch = (this._nip98 || this._requireSigned) ? _signedFetch : _rawFetch (line 62-64)
     alt signer configured (this._nip98 set)
-        BASE->>PS: nip98(method,url,body) _signedFetch:60-65
-        PS->>PS: getSigner() lazy-load, cached (pod-signer.js:69-79)
+        BASE->>PS: nip98(method,url,body) _signedFetch:78,95
+        PS->>PS: getSigner() lazy-load, cached (pod-signer.js:79-89)
         alt key load fails
             PS-->>BASE: null (loadFailed=true, cached — never retried)
             Note over BASE,SRV: RESOLVED ADR-2064 (2026-09-05): _signedFetch throws typed SigningUnavailable<br/>when requireSigned and no header can be built — no request is emitted
-            BASE-->>AG: throw SigningUnavailable (SIGNING_UNAVAILABLE, slot pods)
+            BASE-->>AG: throw SigningUnavailable (_solid-http-base.js:103-106)
         else key loads
-            PS->>BR: buildNip98Header(signer,method,url,body) pod-signer.js:84
+            PS->>BR: buildNip98Header(signer,method,url,body) pod-signer.js:94
             BR-->>PS: base64 kind-27235 event
             PS-->>BASE: Authorization header, Nostr token
             BASE->>SRV: PUT/POST with Authorization Nostr token
         end
-    else no signer (nip98 null)
-        BASE->>SRV: PUT/POST (unsigned, this._rawFetch)
+    else no signer and requireSigned (sign_requests on, signer unbuildable)
+        BASE-->>AG: throw SigningUnavailable — no bytes emitted (_solid-http-base.js:84-91)
+    else no signer and flag off
+        BASE->>SRV: PUT/POST (unsigned, this._rawFetch — the pre-signing baseline)
     end
     SRV-->>BASE: 2xx / 401 / 403 (WAC — see ES-08.4)
 
     Note over PS: Lifecycle mirrors lib/elevation-publisher.js bridge+signer built ONCE,<br/>loaded lazily on first use, cached — a load failure is cached and never retried
-    Note over AG,SRV: A degraded boot combining this unsigned fallback with the<br/>did:nostr:local placeholder (agent-identity.js:175,184) can silently<br/>produce a non-sovereign identity writing unsigned to a default-deny pod
+    Note over AG,SRV: RESOLVED ADR-2064: the degraded-boot hole is closed with sign_requests on -<br/>a did:nostr:local placeholder boot (agent-identity.js:175,184) can no longer write<br/>unsigned to a default-deny pod - the slot throws instead. It remains reachable only<br/>with the flag off, where unsigned is the declared baseline
 ```
 
 ## ES-08.3 User pod write — SolidPodService through ldpClient
@@ -128,7 +130,7 @@ sequenceDiagram
     participant PROXY as VisionClaw "/solid" proxy<br/>ES-08.1
     participant SRV as embedded solid-pod-rs<br/>solid_proxy_handler.rs:307
 
-    UI->>UI: setPreference(key,value) SolidPodService.ts:209
+    UI->>UI: setPreference(key,value) SolidPodService.ts:212
     UI->>UI: getPodStructure calls initPod() ts:198,168
     UI->>LDP: putResource(path, doc) ldpClient.ts:158
     LDP->>LDP: resolvePath(path) rewrites JSS hostnames to SOLID_POD_BASE_URL ldpClient.ts:53
@@ -166,7 +168,7 @@ sequenceDiagram
     participant WAC as evaluate_access<br/>solid_pod_rs::wac (imported line 55)
     participant FS as FsBackend storage
 
-    C->>H: GET /solid/tail solid_proxy_handler.rs:1843
+    C->>H: GET /solid/{tail:.*} solid_proxy_handler.rs:1774
     H->>AUTH: authenticate_request(req) line 316
     AUTH->>AUTH: extract_user_identity, parse NIP-98 Authorization header
     alt NIP-98 present and valid
@@ -406,7 +408,7 @@ sequenceDiagram
     participant SRV as embedded solid-pod-rs<br/>ES-08.1
     participant RV as RuVector Postgres<br/>mcp claude-flow memory_search HNSW
 
-    UI->>AM: deleteAgentMemory(podPath, agentId, key) SolidPodService.ts:363-366
+    UI->>AM: deleteAgentMemory(podPath, agentId, key) SolidPodService.ts:366-369
     AM->>AM: agentMemoryContainerPath(podPath, agentId) agentMemory.ts:200
     AM->>LDP: deleteResource(containerPath plus safeKey plus .jsonld) agentMemory.ts:202-204
     LDP->>SRV: DELETE, HTTP DELETE ldpClient.ts:206-216

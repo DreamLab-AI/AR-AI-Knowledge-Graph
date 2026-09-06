@@ -18,7 +18,7 @@ sources:
   - src/config/feature_access.rs
   - src/handlers/fastwebsockets_handler.rs
   - src/handlers/mod.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## VC-28.1 ragflow_service — outbound RAGFlow agent API
 ```mermaid
@@ -164,7 +164,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant IG as submit_image_job<br/>src/handlers/image_gen_handler.rs:272
+    participant IG as submit_image_job<br/>src/handlers/image_gen_handler.rs:275
     participant ENV as env
     participant CF as ComfyUI native API<br/>COMFYUI_URL :31
     participant SOLID as Solid proxy<br/>SOLID_INTERNAL_URL :41
@@ -214,7 +214,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant A as MCP Agent
-    participant AS as agent_submit_image_job<br/>src/handlers/image_gen_handler.rs:495
+    participant AS as agent_submit_image_job<br/>src/handlers/image_gen_handler.rs:498
     participant ENV as env
     participant SAL as ComfyUI Salad wrapper<br/>COMFYUI_SALAD_URL :36
     participant POD as embedded solid-pod-rs

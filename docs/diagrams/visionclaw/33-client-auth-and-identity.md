@@ -35,7 +35,7 @@ sources:
   - src/services/nostr_service.rs
   - src/utils/auth.rs
   - src/utils/nip98.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## VC-33.1 NIP-07 extension login (client-asserted, no server verify round-trip)
 ```mermaid
@@ -257,7 +257,7 @@ sequenceDiagram
     participant U as User
     participant H as useNostrAuth<br/>useNostrAuth.ts:81
     participant NA as NostrAuthService<br/>nostrAuthService.ts:427
-    participant SPS as SolidPodService<br/>client/src/services/SolidPodService.ts:423
+    participant SPS as SolidPodService<br/>client/src/services/SolidPodService.ts:426
     participant LS as localStorage
     participant SS as sessionStorage
 
@@ -278,7 +278,7 @@ sequenceDiagram
     Note over NA,SS: NOT cleared by logout(). sessionStorage ephemeral_session_pubkey (dev mode tab<br/>identity, nostrAuthService.ts:323-327) survives — it is only ever read in<br/>isDevMode(), so it has no effect on a normal logged-out session
     par app-level teardown wired at client/src/app/App.tsx:60,65
         Note over SPS: App.tsx effect on authenticated=false calls solidPodService.disconnect()
-        SPS->>SPS: notifications.disconnect() SolidPodService.ts:423
+        SPS->>SPS: notifications.disconnect() SolidPodService.ts:426
     end
     Note right of SS: window beforeunload listener also wipes _localKeyHex on tab close nostrAuthService.ts:40-47, independent of explicit logout
 ```
@@ -308,10 +308,10 @@ sequenceDiagram
         Ctl->>Ctl: show "Power User - Full access" badge NostrAuthControl.tsx:56-60
     end
 
-    Note over Row,Ctl: DIVERGENCE. this is the ENTIRE client-side gating surface — a binary<br/>power-user flag, not the server's UserRole lattice (Owner greater than Admin greater<br/>than Editor greater than Viewer, docs/BASELINE-architecture.md:200). The client never<br/>fetches its own resolved role. All real enforcement happens server-side per-request in<br/>RbacGate and a rejected write surfaces only as a 401/403 after the fact, not as<br/>pre-emptive UI disablement of non-power-user fields tied to WriteGraph/Admin
-    Note over Row: DOC-DRIFT. docs/BASELINE-architecture.md:196-208 documents server RBAC<br/>posture only. It makes no claim the client UI reflects role — none of the governing docs<br/>claim client-side role gating exists, matching what was found here
+    Note over Row,Ctl: DIVERGENCE. this is the ENTIRE client-side gating surface — a binary<br/>power-user flag, not the server's UserRole lattice (Owner greater than Admin greater<br/>than Editor greater than Viewer, docs/BASELINE-architecture.md:203). The client never<br/>fetches its own resolved role. All real enforcement happens server-side per-request in<br/>RbacGate and a rejected write surfaces only as a 401/403 after the fact, not as<br/>pre-emptive UI disablement of non-power-user fields tied to WriteGraph/Admin
+    Note over Row: DOC-DRIFT. docs/BASELINE-architecture.md:199-211 documents server RBAC<br/>posture only. It makes no claim the client UI reflects role — none of the governing docs<br/>claim client-side role gating exists, matching what was found here
 
-    Note over Row,Ctl: server posture (not client-enforced). structural default<br/>RBAC_PUBLIC_READS=false src/middleware/rbac_gate.rs:122-128 unwrap_or(false), but<br/>docker-compose.unified.yml:93 sets RBAC_PUBLIC_READS=1 in the dev/unified compose<br/>service. An unassigned authenticated pubkey resolves to Editor via<br/>UserRole::default_authenticated() src/models/rbac.rs:68-70,<br/>src/services/role_store.rs:188,196-198 — see docs/BASELINE-architecture.md:200-208
+    Note over Row,Ctl: server posture (not client-enforced). structural default<br/>RBAC_PUBLIC_READS=false src/middleware/rbac_gate.rs:126-132 unwrap_or(false), but<br/>docker-compose.unified.yml:93 sets RBAC_PUBLIC_READS=1 in the dev/unified compose<br/>service. An unassigned authenticated pubkey resolves to Editor via<br/>UserRole::default_authenticated() src/models/rbac.rs:68-70,<br/>src/services/role_store.rs:188,196-198 — see docs/BASELINE-architecture.md:203-211
     Note over Row,Ctl: DIVERGENCE. compose ships public reads open and<br/>unassigned-pubkey-is-Editor by default, while the Rust struct-level default is<br/>fail-closed (no public reads) — two different postures depending whether you read the<br/>binary default or the shipped compose env
 ```
 
@@ -337,25 +337,25 @@ sequenceDiagram
     participant NA as NostrAuthService (delegate)
     participant S as Solid/JSS server via /solid proxy
 
-    U->>SPS: connectToPod(npub) SolidPodService.ts:381
-    SPS->>SPS: validate npub startsWith npub1 SolidPodService.ts:383
+    U->>SPS: connectToPod(npub) SolidPodService.ts:384
+    SPS->>SPS: validate npub startsWith npub1 SolidPodService.ts:386
     alt invalid format
-        SPS-->>U: throw Invalid npub format SolidPodService.ts:383
+        SPS-->>U: throw Invalid npub format SolidPodService.ts:386
     else
-        SPS->>LDP: fetchWithAuth POST pods/connect body npub SolidPodService.ts:386-389
+        SPS->>LDP: fetchWithAuth POST pods/connect body npub SolidPodService.ts:389-392
         LDP->>NA: isAuthenticated() / isDevMode() / signRequest(url,method,body) ldpClient.ts:97-113
         Note over LDP: SAME dual-branch NIP-98/dev-token pattern as VC-33.2/VC-33.3 — no<br/>separate Solid-specific OIDC login exists in this client. WebID identity is bootstrapped<br/>FROM the Nostr pubkey (solid:oidcIssuer = did:nostr:hex-pubkey, per<br/>client/src/__tests__/agent-pod/pod-provisioning.test.ts:104), not via a browser OIDC<br/>redirect flow
         LDP->>S: fetch credentials include ldpClient.ts:122
         alt ok
             S-->>LDP: {podUrl, webId} pods/connect response
-            SPS->>SPS: notifications.connect() if JSS_WS_URL and not connected SolidPodService.ts:397
+            SPS->>SPS: notifications.connect() if JSS_WS_URL and not connected SolidPodService.ts:400
         else error
             S-->>LDP: non-2xx
-            SPS-->>U: throw Pod connection failed SolidPodService.ts:391-394
+            SPS-->>U: throw Pod connection failed SolidPodService.ts:394-397
         end
     end
 
-    Note over SPS: Session restore. getPodStructure()/initPod() is called on every operation<br/>(setPreference, saveGraphView, etc) — POST pods/init is idempotent and re-derives<br/>podUrl/webId/structure from the current NIP-98 identity each time. No separate WebID<br/>session token is cached client-side SolidPodService.ts:168-203
+    Note over SPS: Session restore. getPodStructure()/initPod() is called on every operation<br/>(setPreference, saveGraphView, etc) — POST pods/init is idempotent and re-derives<br/>podUrl/webId/structure from the current NIP-98 identity each time. No separate WebID<br/>session token is cached client-side SolidPodService.ts:171-206
     Note over SPS,S: Auth boundary only. Full Solid data path (LDP CRUD, WAC ACLs, Type<br/>Index discovery, agent memory) — see VC-26
 ```
 

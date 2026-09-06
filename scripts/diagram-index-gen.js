@@ -12,6 +12,10 @@
  *               hero/ + archive/ subtrees are skipped.
  *   --check     validate frontmatter, heading ids and block structure only; do
  *               not write the indexes (still exits 1 on error).
+ *   --cite-check resolve every `path:line` citation inside a diagram against the
+ *               file's `sources:` list and assert the file is long enough; warns
+ *               when the cited line is blank or a lone closing brace. Warnings
+ *               only \u2014 it never fails the run.
  *   --render    additionally render every mermaid block through `mmdc` (the
  *               Mermaid CLI) into <dir>/rendered/<file>/<id>.svg; any parse
  *               error fails the run and is reported as file:block-id:line, and
@@ -59,18 +63,19 @@ const REQUIRED = ['id', 'title', 'area', 'governing', 'adrs', 'sources', 'verifi
 
 function usage(msg) {
   if (msg) console.error(msg);
-  console.error('Usage: node scripts/diagram-index-gen.js <dir> [--check] [--render] [--jobs N] [--only S]');
+  console.error('Usage: node scripts/diagram-index-gen.js <dir> [--check] [--render] [--cite-check] [--jobs N] [--only S]');
   process.exit(2);
 }
 
 const argv = process.argv.slice(2);
 if (argv.length < 1) usage();
 const root = path.resolve(argv[0]);
-const flags = { check: false, render: false, jobs: 6, only: null };
+const flags = { check: false, render: false, cite: false, jobs: 6, only: null };
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--check') flags.check = true;
   else if (a === '--render') flags.render = true;
+  else if (a === '--cite-check') flags.cite = true;
   else if (a === '--jobs') flags.jobs = parseInt(argv[++i], 10) || 6;
   else if (a === '--only') flags.only = argv[++i];
   else usage(`unknown flag ${a}`);
@@ -194,6 +199,50 @@ function parseTopic(file, errors) {
   if (diagrams.length === 0) errors.push(`${rel}: no mermaid diagrams`);
   if (proseLines > diagrams.length * 3) errors.push(`${rel}: ${proseLines} prose lines for ${diagrams.length} diagrams — this tree is diagrams-only (max 3 lines per diagram)`);
   return { file, rel, fm, diagrams };
+}
+
+// ---------------------------------------------------------------- citation check
+// Every fact in this tree is anchored as a `path:line` (or `path:a-b`) inside a
+// participant, message or Note. The path is usually written short (a basename or
+// a trailing fragment), so resolve it against the file's own `sources:` list.
+const CITE_RE = /([A-Za-z0-9_./-]*[A-Za-z0-9_-]\.[A-Za-z0-9]{1,12}):(\d+)(?:\s*-\s*(\d+))?/g;
+function citeCheck(topics) {
+  const warnings = [];
+  const lineCache = new Map();
+  const linesOf = (p) => {
+    if (!lineCache.has(p)) {
+      try { lineCache.set(p, fs.readFileSync(path.join(repoRoot, p), 'utf8').split('\n')); }
+      catch { lineCache.set(p, null); }
+    }
+    return lineCache.get(p);
+  };
+  for (const t of topics) {
+    for (const d of t.diagrams) {
+      for (const m of d.src.matchAll(CITE_RE)) {
+        const [, cited, a, b] = m;
+        const hits = (t.fm.sources || []).filter((s) => {
+          const sp = s.split(':')[0];
+          return sp === cited || sp.endsWith('/' + cited);
+        });
+        if (hits.length !== 1) continue; // ambiguous or not a source of this file
+        const src = hits[0].split(':')[0];
+        const lines = linesOf(src);
+        if (!lines) continue;
+        // Both endpoints must exist; only the anchor line's CONTENT is judged —
+        // a range legitimately ends on a closing brace.
+        for (const n of [a, b].filter(Boolean).map(Number)) {
+          if (n > lines.length) warnings.push(`${t.rel}:${d.id} — ${src}:${n} past EOF (file has ${lines.length} lines)`);
+        }
+        const n = Number(a);
+        if (n <= lines.length) {
+          const txt = (lines[n - 1] || '').trim();
+          if (!txt) warnings.push(`${t.rel}:${d.id} — ${src}:${n} is blank`);
+          else if (/^[)\]}>;,]+$/.test(txt)) warnings.push(`${t.rel}:${d.id} — ${src}:${n} is punctuation only ('${txt}')`);
+        }
+      }
+    }
+  }
+  return warnings;
 }
 
 // ---------------------------------------------------------------- render
@@ -326,6 +375,11 @@ function writeIndexes(topics) {
   }
   const total = topics.reduce((n, t) => n + t.diagrams.length, 0);
   console.log(`parsed ${topics.length} topic files, ${total} mermaid diagrams`);
+  if (flags.cite) {
+    const w = citeCheck(topics);
+    console.log(`cite-check: ${w.length} warning(s)`);
+    for (const x of w) console.warn(`  ! ${x}`);
+  }
   if (flags.render) {
     const { errors: rerr, count } = await renderAll(topics);
     console.log(`rendered ${count - rerr.length}/${count} diagrams via mmdc`);

@@ -72,7 +72,7 @@ sources:
   - client/src/features/control-center/primitives/NostrAuthControl.tsx
   - client/src/features/control-center/status/StatusFlyout.tsx
   - client/src/services/nostrAuthService.ts
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## VC-30.1 Provider nesting and top-level render states
 ```mermaid
@@ -221,7 +221,7 @@ classDiagram
     }
     class useWebSocketStore {
       client/src/store/websocketStore.ts:9-16 re-export shim (36 lines)
-      real impl client/src/store/websocket/index.ts:514 lines
+      real impl client/src/store/websocket/index.ts:516 lines
       socket WebSocket~null~ storeState.ts:48
       isConnected bool storeState.ts:49
       isServerReady bool storeState.ts:50
@@ -346,23 +346,23 @@ sequenceDiagram
         Retry->>Retry: stopRetryProcessor() when retryQueue.size==0<br/>settingsRetryManager.ts:57-59
     end
 ```
-## VC-30.5 WebSocketRegistry and WebSocketEventBus fan-out across four sockets
+## VC-30.5 WebSocketRegistry and WebSocketEventBus fan-out across three sockets
 ```mermaid
 sequenceDiagram
     autonumber
     participant Graph as websocket/index.ts connect()<br/>client/src/store/websocket/index.ts:171
     participant Voice as VoiceWebSocketService<br/>client/src/services/VoiceWebSocketService.ts:87
-    participant Solid as solidWebSocket.ts connect()<br/>client/src/store/websocket/solidWebSocket.ts:154
-    participant Pod as podNotifications.ts<br/>client/src/services/solidPod/podNotifications.ts:62
+    participant Solid as solidWebSocket store adapter<br/>client/src/store/websocket/solidWebSocket.ts:71
+    participant Pod as podNotificationManager<br/>client/src/services/solidPod/podNotifications.ts:92
     participant Reg as webSocketRegistry<br/>client/src/services/WebSocketRegistry.ts:22
-    participant Bus as webSocketEventBus<br/>client/src/services/WebSocketEventBus.ts:41
+    participant Bus as webSocketEventBus<br/>client/src/services/WebSocketEventBus.ts:39
     participant Bots as BotsWebSocketIntegration<br/>client/src/features/bots/services/BotsWebSocketIntegration.ts:53
 
     Note over Reg: connections Map~string,RegistryEntry~ keyed by name - WebSocketRegistry.ts:23
     Graph->>Reg: register("graph", url, socket)<br/>websocket/index.ts:171
     Voice->>Reg: register(REGISTRY_NAME="voice", url, socket)<br/>VoiceWebSocketService.ts:87
-    Solid->>Reg: register("solid-store", wsUrl, socket)<br/>solidWebSocket.ts:154
-    Pod->>Reg: register(REGISTRY_NAME="pod", url, socket)<br/>podNotifications.ts:62
+    Solid->>Pod: connect() - the adapter registers nothing of its own<br/>solidWebSocket.ts:81
+    Pod->>Reg: register(REGISTRY_NAME="solid-pod", url, socket)<br/>podNotifications.ts:20,92
     alt name already registered
         Reg->>Reg: unregister(name) first - removes old listeners, prevents orphaned handlers<br/>WebSocketRegistry.ts:33-35
     end
@@ -374,14 +374,14 @@ sequenceDiagram
     and
         Voice->>Bus: emit("connection:open",{name:"voice",url})<br/>VoiceWebSocketService.ts:88
     and
-        Solid->>Bus: emit("connection:open",{name:"solid-store",url})<br/>solidWebSocket.ts:155
-    and
-        Pod->>Bus: emit("connection:open",{name:"pod",url})<br/>podNotifications.ts:63
+        Pod->>Bus: emit("connection:open",{name:"solid-pod",url})<br/>podNotifications.ts:93
+        Pod-->>Solid: onLifecycle{type:"open"} -> isSolidConnected, emit("solid-connected")<br/>podNotifications.ts:94, solidWebSocket.ts:36-41
     end
+    Note over Solid,Pod: INVARIANT: ADR-2100 - the store adapter is NOT a fourth registrant. It opened its own<br/>socket to the same VITE_JSS_WS_URL and registered as "solid-store" with a 10-attempt ladder -<br/>both are deleted. One socket, one registry entry ("solid-pod"), one 5-attempt ladder - see VC-32.16
 
     Bots->>Bus: emit("message:bots",{data:message})<br/>BotsWebSocketIntegration.ts:53
     Voice->>Bus: emit("message:voice",{data:message})<br/>VoiceWebSocketService.ts:141
-    Pod->>Bus: emit("message:pod",{data:msg})<br/>podNotifications.ts:68
+    Pod->>Bus: emit("message:pod",{data:msg})<br/>podNotifications.ts:99
     Note over Bus: RESOLVED ADR-2077: the message:graph event type is DELETED. It was<br/>declared in the union and payload map but never emitted, so a switch over<br/>the bus events is now exhaustive over events that actually fire.
 
     Bus->>Bus: on(event,handler) adds to handlers Map~string,Set~Handler~~<br/>WebSocketEventBus.ts:47-54, returns unsubscribe closure calling off()

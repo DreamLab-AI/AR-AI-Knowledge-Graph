@@ -37,7 +37,7 @@ sources:
   - src/uri/mod.rs
   - src/config/security_profile.rs
   - crates/visionclaw-domain/src/utils/visibility_filter.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-03.1 REST request end-to-end — nginx to handler, real middleware order
@@ -45,22 +45,22 @@ verified_commit: bed6b617d
 sequenceDiagram
     autonumber
     participant NG as nginx :3001
-    participant AC as actix HttpServer<br/>src/main.rs:968-1027
-    participant LG as Logger<br/>wrap #1 src/main.rs:969
-    participant CO as cors<br/>wrap #2 src/main.rs:970
-    participant CP as Compress<br/>wrap #3 src/main.rs:971
-    participant TO as TimeoutMiddleware<br/>wrap #4 src/main.rs:972-975
-    participant SC as scope /api<br/>src/main.rs:1044
-    participant PD as PublicDemoGuard::from_env<br/>src/main.rs:1048
-    participant RG as RbacGate::from_env<br/>src/main.rs:1055
-    participant RL as RateLimit::per_minute 60<br/>src/main.rs:1062 (scope /api/settings only)
+    participant AC as actix HttpServer<br/>src/main.rs:971-1030
+    participant LG as Logger<br/>wrap #1 src/main.rs:972
+    participant CO as cors<br/>wrap #2 src/main.rs:973
+    participant CP as Compress<br/>wrap #3 src/main.rs:974
+    participant TO as TimeoutMiddleware<br/>wrap #4 src/main.rs:975-978
+    participant SC as scope /api<br/>src/main.rs:1047
+    participant PD as PublicDemoGuard::from_env<br/>src/main.rs:1051
+    participant RG as RbacGate::from_env<br/>src/main.rs:1058
+    participant RL as RateLimit::per_minute 60<br/>src/main.rs:1065 (scope /api/settings only)
     participant H as route handler
 
     Note over LG,RG: actix applies .wrap() in REVERSE registration order at request time<br/>last .wrap() call = outermost layer that sees the request first
     Note over LG,TO: registration order in main.rs is Logger,cors,Compress,TimeoutMiddleware (969-972)<br/>so the REAL request-time order is TimeoutMiddleware,Compress,cors,Logger,then routing
     NG->>AC: HTTP request
     AC->>TO: enter (outermost of the four)
-    TO->>TO: get_timeout(path) — default 30s, override 600s for "/api/admin/sync" (src/main.rs:973-974)
+    TO->>TO: get_timeout(path) — default 30s, override 600s for "/api/admin/sync" (src/main.rs:976-977)
     TO->>CP: enter
     CP->>CO: enter
     CO->>LG: enter
@@ -91,7 +91,7 @@ sequenceDiagram
     participant WS as socket_flow_handler<br/>src/handlers/socket_flow_handler/http_handler.rs
     participant NS as NostrService::get_session<br/>src/services/nostr_service.rs:574
 
-    Note over WS: routes registered src/main.rs:1026-1035 — /wss, /wss/agent-events,<br/>/ws/speech, /ws/mcp-relay, /ws/client-messages, /ws/presence
+    Note over WS: routes registered src/main.rs:1029-1038 — /wss, /wss/agent-events,<br/>/ws/speech, /ws/mcp-relay, /ws/client-messages, /ws/presence
     C->>WS: GET /wss (Upgrade: websocket)
     WS->>WS: require Upgrade header (http_handler.rs:100)
     alt Origin header present
@@ -107,7 +107,7 @@ sequenceDiagram
         end
     end
     WS->>WS: token = Authorization Bearer OR query "?token=" (http_handler.rs:139-150)
-    Note over WS: DEPRECATED ADR-2044 — query-param token accepted on the upgrade routes (one release):<br/>http_handler.rs:155 — fastwebsockets_handler.rs:238 — client_messages_handler.rs:127 —<br/>mcp_relay_handler.rs:461 — multi_mcp_websocket_handler.rs:798 — filter_auth.rs:138 (WS message body).<br/>Kept for XR and native clients that cannot set headers on an upgrade — the header path is<br/>preferred and the query path leaks into proxy and access logs. CORRECTION — speech_socket_handler<br/>has NO query path and does full NIP-98 verification (verify_nip98_auth, :230) — it was wrongly<br/>listed here in the Phase 1 pass.
+    Note over WS: DEPRECATED ADR-2044 — query-param token accepted on the upgrade routes (one release):<br/>http_handler.rs:155 — fastwebsockets_handler.rs:238 — client_messages_handler.rs:127 —<br/>mcp_relay_handler.rs:461 — multi_mcp_websocket_handler.rs:843 — filter_auth.rs:138 (WS message body).<br/>Kept for XR and native clients that cannot set headers on an upgrade — the header path is<br/>preferred and the query path leaks into proxy and access logs. CORRECTION — speech_socket_handler<br/>has NO query path and does full NIP-98 verification (verify_nip98_auth, :230) — it was wrongly<br/>listed here in the Phase 1 pass.
     alt token present
         WS->>NS: get_session(token)
         alt session found
@@ -285,8 +285,8 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant R as request
-    participant RG as RbacGateMiddleware::call<br/>src/middleware/rbac_gate.rs:238
-    participant RL as required_level<br/>src/middleware/rbac_gate.rs:134
+    participant RG as RbacGateMiddleware::call<br/>src/middleware/rbac_gate.rs:242
+    participant RL as required_level<br/>src/middleware/rbac_gate.rs:138
     participant VA as verify_access<br/>src/utils/auth.rs:142
 
     RG->>RL: required_level(method, path, public_reads)
@@ -508,7 +508,7 @@ sequenceDiagram
     else allowed
         RL->>R: service.call(req)
     end
-    Note over RL: applied at src/main.rs:1062 as RateLimit::per_minute(60) on the /api/settings<br/>scope only (rate_limit.rs:169) — 60 requests / 60s window, keyed by realip (use_user_id off by default)
+    Note over RL: applied at src/main.rs:1065 as RateLimit::per_minute(60) on the /api/settings<br/>scope only (rate_limit.rs:169) — 60 requests / 60s window, keyed by realip (use_user_id off by default)
 ```
 
 ## VC-03.13 `TimeoutMiddleware` — default 30s, per-path override
@@ -520,7 +520,7 @@ sequenceDiagram
     participant SVC as inner service chain
 
     TO->>TO: timeout_duration = config.get_timeout(path) (:37-41)
-    Note over TO: TimeoutConfig::new(Duration::from_secs(30)).with_override("/api/admin/sync", 600s)<br/>constructed at src/main.rs:972-975 — endpoint_overrides is an exact-path HashMap match
+    Note over TO: TimeoutConfig::new(Duration::from_secs(30)).with_override("/api/admin/sync", 600s)<br/>constructed at src/main.rs:975-978 — endpoint_overrides is an exact-path HashMap match
     TO->>SVC: tokio::time::timeout(timeout_duration, service.call(req))
     alt completes within timeout_duration
         SVC-->>TO: Ok(result)
@@ -565,7 +565,7 @@ sequenceDiagram
 
     K->>U: pubkey (64-char lowercase hex, Schnorr)
     U->>U: did_nostr(pubkey) -> "did:nostr:{pubkey}" (DID_NOSTR_PREFIX, uri/mod.rs:47)
-    Note over U: parse() round-trips did:nostr:* to ParsedUri::DidNostr (uri/mod.rs:491-498)<br/>cross_from_agentbox treats an already-converged did:nostr:* as identity, structural passthrough (:636-655)
+    Note over U: parse() round-trips did:nostr:* to ParsedUri::DidNostr (uri/mod.rs:502-509)<br/>cross_from_agentbox treats an already-converged did:nostr:* as identity, structural passthrough (:636-655)
     K->>NS: sign kind-27235 NIP-98 event (see VC-03.4)
     NS-->>K: NostrUser{pubkey, is_power_user}
     opt Solid pod provisioning

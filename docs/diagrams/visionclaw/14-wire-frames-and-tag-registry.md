@@ -20,7 +20,7 @@ sources:
   - client/src/types/__tests__/wireFixtures.test.ts
   - client/src/types/binaryProtocol.ts
   - src/actors/presence_actor.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-14.1 V3 position record — 52 bytes, little-endian

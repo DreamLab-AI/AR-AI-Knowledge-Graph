@@ -17,6 +17,7 @@ sources:
   - client/src/store/websocket/filterSync.ts
   - client/src/store/websocket/textMessageHandler.ts
   - client/src/store/websocket/solidWebSocket.ts
+  - client/src/services/solidPod/podNotifications.ts
   - client/src/services/BinaryWebSocketProtocol.ts
   - client/src/services/binaryProtocol/frameTypes.ts
   - client/src/services/binaryProtocol/agentMessages.ts
@@ -33,7 +34,7 @@ sources:
   - client/src/utils/validation.ts
   - src/handlers/socket_flow_handler/http_handler.rs
   - src/settings/api/settings_routes.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## VC-32.1 Connect + NIP-98 WS authenticate handshake
 ```mermaid
@@ -259,8 +260,8 @@ classDiagram
       ONTOLOGY_PROPERTY_FLAG 0x10000000
     }
     WireNodeId --> OntologySubtype : bits26to28 when ontology
-    note for WireNodeId "INVARIANT, no DIVERGENCE. Client client/src/types/binaryProtocol.ts:108-118, Godot<br/>decoder xr-client/rust/src/binary_protocol.rs:37-43, and<br/>docs/IDENTIFIER-taxonomy.md:105-110 all agree exactly on mask and flag hex values.<br/>getActualNodeId(nodeId) is nodeId AND NODE_ID_MASK<br/>(types/binaryProtocol.ts:144-146)."
-    note for WireNodeId "docs/IDENTIFIER-taxonomy.md:112-117: ids are sequential u32 from a NEXT_NODE_ID<br/>atomic counter; encoders debug_assert id less-or-equal NODE_ID_MASK before OR-ing<br/>the flag, but in release the assert compiles out and an over-range id is silently<br/>truncated to its low 26 bits (binary_protocol.rs:118-136)."
+    note for WireNodeId "INVARIANT, no DIVERGENCE. Client client/src/types/binaryProtocol.ts:108-118, Godot<br/>decoder xr-client/rust/src/binary_protocol.rs:37-43, and<br/>docs/IDENTIFIER-taxonomy.md:124-129 all agree exactly on mask and flag hex values.<br/>getActualNodeId(nodeId) is nodeId AND NODE_ID_MASK<br/>(types/binaryProtocol.ts:144-146)."
+    note for WireNodeId "docs/IDENTIFIER-taxonomy.md:131-136: ids are sequential u32 from a NEXT_NODE_ID<br/>atomic counter; encoders debug_assert id less-or-equal NODE_ID_MASK before OR-ing<br/>the flag, but in release the assert compiles out and an over-range id is silently<br/>truncated to its low 26 bits (binary_protocol.rs:118-136)."
 ```
 ## VC-32.7 getNodeType(): flag precedence decision order
 ```mermaid
@@ -511,29 +512,41 @@ classDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as store<br/>websocket/index.ts:447
-    participant SW as connectSolidWebSocket<br/>websocket/solidWebSocket.ts:125
+    participant C as store<br/>websocket/index.ts:449
+    participant SW as solidWebSocket store adapter<br/>websocket/solidWebSocket.ts:71
+    participant PN as podNotificationManager (singleton)<br/>services/solidPod/podNotifications.ts:300
     participant JSS as JSS WebSocket<br/>VITE_JSS_WS_URL
 
-    C->>SW: connectSolid() index.ts:447-449
-    alt VITE_JSS_WS_URL not configured solidWebSocket.ts:135
-        SW->>SW: logger.warn, return solidWebSocket.ts:136-137
+    C->>SW: connectSolid() index.ts:449-451
+    SW->>SW: bindLifecycle(set) once, never torn down solidWebSocket.ts:30-34
+    alt podNotificationManager.isConnected solidWebSocket.ts:74
+        SW->>SW: re-sync mirror from the socket the other consumer opened solidWebSocket.ts:77
     else
-        SW->>JSS: new WebSocket(wsUrl) solidWebSocket.ts:148
-        JSS-->>SW: onopen -> isSolidConnected=true, webSocketRegistry.register(solid-store) solidWebSocket.ts:150-156
-        JSS-->>SW: onmessage(msg) solidWebSocket.ts:159-162
-        alt msg starts with protocol solidWebSocket.ts:65
-            SW->>JSS: resubscribe: send(sub url) for every tracked subscription solidWebSocket.ts:70-73
-        else msg starts with ack
-            SW->>SW: notifySolidSubscribers(type=ack) solidWebSocket.ts:76-79
-        else msg starts with pub
-            SW->>SW: notifySolidSubscribers(type=pub), emit(solid-resource-changed) solidWebSocket.ts:80-84
-        else msg starts with error
-            SW->>SW: emit(solid-error) solidWebSocket.ts:85-88
+        SW->>PN: connect() solidWebSocket.ts:81
+        alt VITE_JSS_WS_URL unset or not ws:/wss: podNotifications.ts:70,82
+            PN->>PN: logger.warn/error, return podNotifications.ts:71-72,83-84
+        else
+            PN->>JSS: new WebSocket(validatedUrl.href) podNotifications.ts:87
+            JSS-->>PN: onopen -> webSocketRegistry.register("solid-pod") podNotifications.ts:89-95
+            PN-->>SW: onLifecycle{type:"open"} -> isSolidConnected=true, emit(solid-connected) solidWebSocket.ts:38-41
+            JSS-->>PN: onmessage(msg) -> handleMessage podNotifications.ts:97-101,225
+            alt msg starts with "protocol " podNotifications.ts:226
+                PN->>JSS: resubscribe send("sub url") for every tracked URL podNotifications.ts:229-231
+                PN-->>SW: onLifecycle{protocol} -> emit(solid-protocol) solidWebSocket.ts:52-54
+            else msg starts with "ack " podNotifications.ts:233
+                PN->>PN: notifySubscribers(url,{type:"ack"}) podNotifications.ts:236
+            else msg starts with "pub " podNotifications.ts:237
+                PN->>PN: notifySubscribers(url,{type:"pub"}) + container URL podNotifications.ts:240,251-259
+                PN-->>SW: onLifecycle{pub} -> emit(solid-resource-changed) solidWebSocket.ts:55-57
+            else msg starts with "error " podNotifications.ts:242
+                PN-->>SW: onLifecycle{server-error} -> emit(solid-error) solidWebSocket.ts:49-51
+            end
+            JSS-->>PN: onclose -> unregister, emit connection:close podNotifications.ts:109-117
+            PN-->>SW: onLifecycle{close} -> isSolidConnected=false, solidSocket=null solidWebSocket.ts:42-45
+            PN->>PN: handleReconnect - SOLID_RECONNECT_DELAY_MS * 2^attempt podNotifications.ts:275-289
         end
-        JSS-->>SW: onclose -> isSolidConnected=false solidWebSocket.ts:170-179
-        SW->>SW: attemptSolidReconnect: 1000ms times 2 pow attempts, cap 10 attempts solidWebSocket.ts:94-113
     end
-    Note over SW: subscribeSolidResource sends sub url only on first callback for a URL, unsubscribeSolidResource sends unsub when the last callback is removed solidWebSocket.ts:223-276
+    Note over SW,PN: INVARIANT: ADR-2100 - ONE socket for VITE_JSS_WS_URL. solidWebSocket.ts no longer<br/>constructs a WebSocket, keeps no subscription wire and owns no backoff ladder - it is a thin<br/>store adapter over podNotificationManager, registered once as "solid-pod". The retired<br/>"solid-store" registry entry and its 10-attempt ladder are gone - see VC-30.5, VC-26.9
+    Note over SW: subscribeSolidResource delegates to podNotificationManager.subscribe (sub on the first<br/>callback for a URL) and mirrors into state.solidSubscriptions for getSolidSubscriptions()<br/>only, so a callback fires exactly once solidWebSocket.ts:107-140, podNotifications.ts:130-149
     Note over JSS: see VC-33 for the JSS/Solid Pod ownership boundary this socket crosses into
 ```

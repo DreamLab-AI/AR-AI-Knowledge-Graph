@@ -29,7 +29,7 @@ sources:
   - crates/visionclaw-gpu/build.rs
   - src/middleware/rbac_gate.rs
   - src/utils/advanced_logging.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-08.1 Health and readiness — what each probe actually asserts
@@ -58,21 +58,21 @@ sequenceDiagram
     K->>U: GET /api/health
     U-->>K: composed health JSON with a `status` field
     Note over U: this is the endpoint the KG watchdog self-polls — see VC-08.2
-    Note over K,U: registration — root /healthz and /readyz at src/main.rs:1026-1027 (outside /api, so no<br/>RbacGate and no PublicDemoGuard) — a second /api/healthz and /api/readyz pair for back-compat<br/>at src/handlers/consolidated_health_handler.rs:488-489. See VC-01.7
+    Note over K,U: registration — root /healthz and /readyz at src/main.rs:1029-1030 (outside /api, so no<br/>RbacGate and no PublicDemoGuard) — a second /api/healthz and /api/readyz pair for back-compat<br/>at src/handlers/consolidated_health_handler.rs:488-489. See VC-01.7
 ```
 
 ## VC-08.2 KG watchdog — the self-poll that drives kg_backend_up
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M as main<br/>src/main.rs:1176-1194
+    participant M as main<br/>src/main.rs:1179-1197
     participant W as run_kg_watchdog<br/>src/services/liveness_harness.rs:444
     participant P as probe_once
     participant V as health_verdict<br/>src/services/liveness_harness.rs:494-514
     participant H as LivenessHarness::record_kg_state<br/>src/services/liveness_harness.rs:422
 
     M->>W: tokio::spawn(run_kg_watchdog(harness, self_url, period))
-    Note over M,W: VISIONCLAW_SELF_URL default http 127.0.0.1 port (src/main.rs:1181)<br/>VISIONCLAW_KG_WATCHDOG_SECS default 30 (src/main.rs:1183)
+    Note over M,W: VISIONCLAW_SELF_URL default http 127.0.0.1 port (src/main.rs:1184)<br/>VISIONCLAW_KG_WATCHDOG_SECS default 30 (src/main.rs:1186)
     loop every period (default 30s)
         W->>P: GET {self_url}/api/health
         Note over P: this server IS the KG backend — the watchdog polls itself
@@ -149,7 +149,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     autonumber
-    participant M as main<br/>src/main.rs:1204-1213
+    participant M as main<br/>src/main.rs:1207-1216
     participant T as CanaryNostrTap::from_env<br/>src/services/canary_nostr_tap.rs:245
     participant R as Nostr relay
     participant E as TapEvent::from_value<br/>src/services/canary_nostr_tap.rs:88
@@ -194,7 +194,7 @@ sequenceDiagram
     participant AS as AppState
 
     CL->>MH: GET /api/metrics (route registered src/handlers/metrics_handler.rs:92)
-    MH->>PS: read ProcessStartTime(Instant) — injected at src/main.rs:987
+    MH->>PS: read ProcessStartTime(Instant) — injected at src/main.rs:990
     MH->>EB: collect_event_bus_metrics(&app_state)
     EB->>AS: read bus counters
     EB-->>MH: EventBusMetrics (:24)
@@ -240,7 +240,7 @@ sequenceDiagram
     participant T as telemetry sink
 
     B->>RG: POST /api/client-logs
-    Note over RG: ALLOWLISTED — client-logs bypasses the RBAC requirement.<br/>Registered FIRST inside /api at src/main.rs:1057 to avoid scope conflicts. See VC-03.6
+    Note over RG: ALLOWLISTED — client-logs bypasses the RBAC requirement.<br/>Registered FIRST inside /api at src/main.rs:1060 to avoid scope conflicts. See VC-03.6
     RG->>H: forward
     H->>T: append client-side log records
     H-->>B: ack
@@ -345,7 +345,7 @@ sequenceDiagram
     rect rgb(232,240,232)
     Note over DU,SD: development image
     DU->>DU: cargo build --release --features gpu (Dockerfile.unified:185 and :208)
-    DU->>SD: COPY supervisord.dev.conf ./supervisord.dev.conf (Dockerfile.unified:303)
+    DU->>SD: COPY supervisord.dev.conf ./supervisord.dev.conf (Dockerfile.unified:309)
     SD->>WR: program rust-backend runs the wrapper at container start
     WR->>RT: cargo build --release --features "gpu,ontology,dev-auth" then exec
     Note over WR,RT: dev-auth is added at CONTAINER START by the wrapper's BUILD_FEATURES default,<br/>not at image-build time. The image layer itself carries no dev-auth binary.
@@ -353,12 +353,12 @@ sequenceDiagram
     rect rgb(244,236,236)
     Note over DP,SP: production image
     DP->>DP: cargo build --release (Dockerfile.production:153) — NO --features, so no dev-auth
-    DP->>SP: COPY supervisord.production.conf (Dockerfile.unified:403)
+    DP->>SP: COPY supervisord.production.conf (Dockerfile.unified:415)
     DP->>RT: the shipped binary is a production artefact
     Note over RT: ADR-2037 — with dev-auth absent, every bypass codepath is #[cfg]-stripped.<br/>enforce_release_env_hygiene becomes the real impl (src/main.rs:118) rather than the stub (:169)
     end
     RT->>RT: enforce_release_env_hygiene() at src/main.rs:195 — see VC-09.3
-    RT->>RT: assert_effective_profile_or_exit() at src/main.rs:873 — see VC-09.4
+    RT->>RT: assert_effective_profile_or_exit() at src/main.rs:876 — see VC-09.4
     Note over RT: ADR-2038 — BuildIdentity::current() reports dev_auth true for a dev-auth artefact, which is<br/>itself the finding DevAuthFeatureInArtefact (src/config/security_profile.rs:271). A dev-auth<br/>binary promoted to production refuses to bind at all.
     Note over DU,RT: RESOLVED ADR-2049 — the warm-up stage used to run cargo build --release || true twice,<br/>which shell precedence made unfailable, so a broken lockfile or an uncompilable dependency<br/>produced a green layer. It now gates on cargo fetch --locked (must succeed) and tolerates<br/>only the crate compile, which legitimately fails against the stub build.rs.
 ```
@@ -375,7 +375,7 @@ sequenceDiagram
 
     B->>P: evaluate the effective security profile
     P->>L: info "security profile OK — build=X declared=Y classified=Z findings=N"
-    Note over P,L: EffectiveProfile::summary() src/config/security_profile.rs:363<br/>main logs it with observed_flags at src/main.rs:879-883 — the boot receipt
+    Note over P,L: EffectiveProfile::summary() src/config/security_profile.rs:363<br/>main logs it with observed_flags at src/main.rs:882-886 — the boot receipt
     alt production artefact with findings
         P->>O: eprintln FATAL per finding then "refusing to bind a listener (ADR-2038)" then exit(2)
         Note over P,O: the remediation line names the three options — remove the offending variables,<br/>rebuild without --features dev-auth, or set VISIONCLAW_SECURITY_PROFILE to what this really is

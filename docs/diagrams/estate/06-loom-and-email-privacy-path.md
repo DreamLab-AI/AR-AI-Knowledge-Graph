@@ -13,7 +13,7 @@ sources:
   - docker-compose.unified.yml
   - agentbox/flake.nix
   - agentbox/agentbox.toml
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-06.1 Topology — the gateway holds a façade, never a model port
 ```mermaid
@@ -23,7 +23,7 @@ flowchart LR
     end
     subgraph vcnet["visionclaw_network (docker bridge)"]
         GW["email-mcp-gateway:8765<br/>streamable-HTTP MCP, bearer auth"]
-        LOOMB["loom sidecar — Deployment B<br/>hostname loom, LOOM_FACADE_PORT 8080<br/>compose profile loom, docker-compose.unified.yml:288"]
+        LOOMB["loom sidecar — Deployment B<br/>hostname loom, LOOM_FACADE_PORT 8080<br/>compose profile loom, docker-compose.unified.yml:298"]
         XI["xinference:9997/v1<br/>bge-small-en-v1.5 / 384"]
     end
     subgraph ml["machinelearn .132"]

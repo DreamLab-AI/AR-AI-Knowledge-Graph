@@ -20,7 +20,7 @@ sources:
   - src/gpu/dynamic_buffer_manager.rs
   - src/gpu/memory_manager.rs
   - src/utils/gpu_diagnostics.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## VC-12.1 SimParams full 212-byte repr(C) layout
 ```mermaid
@@ -306,25 +306,25 @@ sequenceDiagram
             opt a fallback file exists
                 FS-->>BR: fallback path found
                 BR->>FS: fs::copy(fallback, ptx_output) (build.rs:181)
-                BR->>BR: provenance = FallbackAfterLaunchFailure or FallbackAfterCompilerFailure (ptx_policy.rs:117-122, build.rs:182)
+                BR->>BR: provenance = FallbackAfterLaunchFailure or FallbackAfterCompilerFailure (ptx_policy.rs:120-125, build.rs:182)
             end
             break no fallback file exists at any candidate path
                 BR->>BR: panic! PTX unavailable for NAME, no fallback found (build.rs:185-193)
             end
         end
         BR->>FS: read_to_string(ptx_output) (build.rs:199-200)
-        BR->>Policy: rewrite_ptx_version(original, TARGET_PTX_ISA=9.0) (build.rs:207, ptx_policy.rs:230-251)
-        alt found version <= 9.0 (VersionRewrite::Unchanged, ptx_policy.rs:239-240)
+        BR->>Policy: rewrite_ptx_version(original, TARGET_PTX_ISA=9.0) (build.rs:207, ptx_policy.rs:233-254)
+        alt found version <= 9.0 (VersionRewrite::Unchanged, ptx_policy.rs:242-243)
             Policy-->>BR: Unchanged version - content untouched, no downgrade warning emitted (build.rs:208-211)
-        else found version > 9.0, e.g. CUDA 13.x emits 9.2 (VersionRewrite::Rewritten, ptx_policy.rs:242-250)
-            Policy-->>BR: Rewritten from,to,text - splice by parsed token span, not fixed width (ptx_policy.rs:176-192)
+        else found version > 9.0, e.g. CUDA 13.x emits 9.2 (VersionRewrite::Rewritten, ptx_policy.rs:245-253)
+            Policy-->>BR: Rewritten from,to,text - splice by parsed token span, not fixed width (ptx_policy.rs:179-195)
             BR->>FS: fs::write(ptx_output, downgraded text) (build.rs:214)
             BR->>BR: cargo:warning declared ISA rewritten to 9.0 (build.rs:215-219)
-        else no .version token or unparseable token (VersionRewrite::Defective, ptx_policy.rs:231-238)
+        else no .version token or unparseable token (VersionRewrite::Defective, ptx_policy.rs:234-241)
             BR->>BR: panic! PTX unusable after provenance phase (build.rs:222-227)
         end
-        BR->>Policy: validate_ptx(final_text, required_symbols) (build.rs:238, ptx_policy.rs:259-285)
-        Note over BR,Policy: required_symbols = force_pass_kernel, integrate_pass_kernel<br/>visionclaw_unified module only (build.rs:233-237)<br/>REQUIRED_UNIFIED_SYMBOLS at ptx_policy.rs:346
+        BR->>Policy: validate_ptx(final_text, required_symbols) (build.rs:238, ptx_policy.rs:262-288)
+        Note over BR,Policy: required_symbols = force_pass_kernel, integrate_pass_kernel<br/>visionclaw_unified module only (build.rs:233-237)<br/>REQUIRED_UNIFIED_SYMBOLS at ptx_policy.rs:349
         alt validate_ptx returns Err (empty, missing .version/.target/.entry, or missing required symbol)
             BR->>BR: panic! PTX validation failed for NAME (build.rs:239-245)
         else Ok

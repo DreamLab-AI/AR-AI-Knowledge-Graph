@@ -32,7 +32,7 @@ sources:
   - agentbox/scripts/ci/check-no-npx-latest.sh
   - agentbox/scripts/ci/check-secret-not-in-env.sh
   - agentbox/scripts/ci/check-single-metrics.js
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-06.1 Compose overlay topology on visionclaw_network
@@ -73,7 +73,7 @@ flowchart TB
     AND --- NET
     CF --- NET
     HP["docker-compose.hp.yml — host overlay<br/>agentbox env_file/volumes/GPU reservations :6-37"] -.-> BASE
-    Note1["DOC-DRIFT: docker-compose.yml:52 still says --auth none. The generator<br/>(flake.nix:2532-2534) is already correct - the committed artefact is stale<br/>and regenerates."]
+    Note1["DOC-DRIFT: docker-compose.yml:52 still says --auth none. The generator<br/>(flake.nix:2557-2559) is already correct - the committed artefact is stale<br/>and regenerates."]
     BASE -.-> Note1
 ```
 
@@ -86,7 +86,7 @@ flowchart TD
     WALK --> NORM["normalise every spelling to one tuple —<br/>long-form host_ip/published/target and<br/>short 0.0.0.0:8080:80 judge identically (:31-32)"]
     NORM --> J{"host_ip is 127.0.0.1?<br/>LOOPBACK const :89"}
     J -->|yes| PASS["pass"]
-    J -->|no| S{"on the SANCTIONED list?<br/>check-ports-loopback.mjs:76-87 matched on<br/>file + host_ip + published + target + protocol (:611)"}
+    J -->|no| S{"on the SANCTIONED list?<br/>check-ports-loopback.mjs:93-104 matched on<br/>file + host_ip + published + target + protocol (:611)"}
     S -->|yes| PASS
     S -->|no| FAIL["violation — publishes X, not loopback and not sanctioned (:638)"]
     S --> L1["docker-compose.yml 9096 to 9096 host_ip null — :77"]
@@ -146,7 +146,7 @@ sequenceDiagram
         CH-->>S: result
         S-->>A: tool result
     end
-    Note over S,CH: raw CDP is also reachable — published 9222 on the host mapping to container 9223 (docker-compose.browsercontainer.yml:53, SANCTIONED at check-ports-loopback.mjs:82)
+    Note over S,CH: raw CDP is also reachable — published 9222 on the host mapping to container 9223 (docker-compose.browsercontainer.yml:53, SANCTIONED at check-ports-loopback.mjs:99)
     Note over S: VNC :5903 for eyes-on debugging (browsercontainer.yml:48)
     Note over A,S: GPU reservation and NVIDIA device request in the deploy block (browsercontainer.yml:33-45)
     Note over A,V: extra_hosts host.docker.internal maps to host-gateway (browsercontainer.yml:57-58)
@@ -226,7 +226,7 @@ flowchart TB
     end
     Q3 -.-> AND["android comment: this is an authenticated Google session,<br/>never expose it on 0.0.0.0, prefer docker exec (android.yml:38-39)"]
     Q2 -.-> OM["openmed refuses to serve until the operator sets<br/>OPENMED_LICENSE_ACKNOWLEDGED, _ONNX_RUNTIME_PRESENT and<br/>_GOVERNANCE_ACKNOWLEDGED — all default false (openmed.yml:17-21)"]
-    Q1 -.-> CS["DIVERGENCE — the HOST publish for code-server is loopback, but the CONTAINER bind is not:<br/>[program:code-server] runs code-server --bind-addr 0.0.0.0:8080 --auth none, so it is reachable unauthenticated<br/>from any sibling container on visionclaw_network. BASELINE flags this and cites flake.nix:1910, which is stale"]
+    Q1 -.-> CS["DIVERGENCE — the HOST publish for code-server is loopback, but the CONTAINER bind is not:<br/>[program:code-server] runs code-server --bind-addr 0.0.0.0:8080 --auth none, so it is reachable unauthenticated<br/>from any sibling container on visionclaw_network. BASELINE flags this and cites flake.nix:1927, which is stale"]
     Q1 -.-> CSR["RESOLVED ADR-2040 (implementation_status: partial): code-server<br/>([program:code-server]) now runs --auth password, credential minted at boot<br/>into /home/devuser/.local/share/code-server/config.yaml (0600).<br/>jupyter-lab's empty --IdentityProvider.token= ([program:jupyter-lab])<br/>was DELETED in favour of a minted JUPYTER_TOKEN. Listener-side<br/>CI gate is still open work."]
     R1 -.-> PGN["ADR-015 — mandatory memory sidecar, health-gated;<br/>ruvector-mcp.cjs fails closed with no sql.js fallback"]
 ```

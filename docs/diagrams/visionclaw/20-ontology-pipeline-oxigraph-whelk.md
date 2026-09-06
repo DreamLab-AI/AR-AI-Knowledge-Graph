@@ -37,7 +37,7 @@ sources:
   - src/actors/gpu/ontology_constraint_actor.rs
   - src/actors/gpu/physics_supervisor.rs
   - src/settings/models.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-20.1 load_ontology bin - actual sample-data loader
@@ -45,12 +45,12 @@ verified_commit: bed6b617d
 sequenceDiagram
     autonumber
     participant Bin as main<br/>src/bin/load_ontology.rs:18
-    participant Repo as OxigraphOntologyRepository<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:589
+    participant Repo as OxigraphOntologyRepository<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:591
     participant Store as Oxigraph Store
 
     Bin->>Repo: open(DATA_DIR/oxigraph) (line 31, defn line 589)
     Repo-->>Bin: Ok(Self)
-    Note over Bin: RESOLVED ADR-2064 - the bin now walks the real authored corpus. Root resolves CLI arg then<br/>VAULT_ROOT/pages then /app/data/pages (load_ontology.rs:43-53,102), files are parsed with OntologyParser and<br/>persisted via save_ontology, then OwlExtractorService runs over the persisted classes. It exits non-zero when the<br/>corpus is absent or nothing was extracted. The five hardcoded OwlClass literals are gone.
+    Note over Bin: RESOLVED ADR-2064 - the bin now walks the real authored corpus. Root resolves CLI arg then<br/>VAULT_ROOT/pages then /app/data/pages (load_ontology.rs:45-55,102), files are parsed with OntologyParser and<br/>persisted via save_ontology, then OwlExtractorService runs over the persisted classes. It exits non-zero when the<br/>corpus is absent or nothing was extracted. The five hardcoded OwlClass literals are gone.
     loop 5 sample_classes (lines 42-63)
         Bin->>Repo: add_owl_class(class) (line 76, defn line 1676)
         Repo->>Store: ASK FROM GRAPH_ONTOLOGY duplicate check (line 1679-1684)
@@ -74,7 +74,7 @@ sequenceDiagram
 ```mermaid
 erDiagram
     GRAPH_ONTOLOGY_ASSERT {
-        string iri "urn:ngm:graph:ontology:assert (oxigraph_ontology_repository.rs:46)"
+        string iri "urn:ngm:graph:ontology:assert (oxigraph_ontology_repository.rs:48)"
         string contents "OwlClass/OwlProperty/OwlAxiom triples, vc: ns"
     }
     GRAPH_ONTOLOGY_INFERRED {
@@ -110,7 +110,7 @@ erDiagram
 sequenceDiagram
     autonumber
     participant Sync as GitHubSyncService::run_post_sync_reasoning<br/>src/services/github_sync_service.rs:1220
-    participant Repo as OxigraphOntologyRepository<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:2321
+    participant Repo as OxigraphOntologyRepository<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:2323
     participant Engine as WhelkInferenceEngine<br/>crates/visionclaw-adapters/src/whelk_inference_engine.rs:346
     participant Whelk as whelk-rs reasoner::assert<br/>crates/visionclaw-adapters/src/whelk_inference_engine.rs:425
 
@@ -193,12 +193,12 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Handler as ontology_agent_handler::propose<br/>src/handlers/ontology_agent_handler.rs:217
-    participant Mut as OntologyMutationService::propose_create<br/>src/services/ontology_mutation_service.rs:230
-    participant Idem as idempotency.reserve<br/>src/services/ontology_mutation_service.rs:256
+    participant Mut as OntologyMutationService::propose_create<br/>src/services/ontology_mutation_service.rs:227
+    participant Idem as idempotency.reserve<br/>src/services/ontology_mutation_service.rs:253
     participant Repo as OntologyRepository::list_owl_classes
     participant Gate as ontology_conflict_gate::evaluate<br/>src/services/ontology_conflict_gate.rs:454
     participant Whelk as WhelkInferenceEngine::check_axiom_set<br/>crates/visionclaw-adapters/src/whelk_inference_engine.rs:305
-    participant PR as github_pr.create_ontology_pr<br/>src/services/ontology_mutation_service.rs:362
+    participant PR as github_pr.create_ontology_pr<br/>src/services/ontology_mutation_service.rs:359
 
     rect rgb(255,230,230)
     Note over Handler,PR: trust boundary - RateLimit::per_minute(20) + RequireAuth::authenticated() on /ontology-agent/propose (ontology_agent_handler.rs:445-446)
@@ -268,7 +268,7 @@ sequenceDiagram
         Cap-->>Handler: rows capped at 10000, byte fence MAX_SPARQL_RESULT_BYTES 8388608, truncated flag (lines 866-882)
         Handler-->>Client: 200 results rowCount truncated
     end
-    Note over Handler: ADR-2004 - handler-level fence mirrors adapter fence sparql_select_json (crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:880)
+    Note over Handler: ADR-2004 - handler-level fence mirrors adapter fence sparql_select_json (crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:882)
 ```
 
 ## VC-20.7 ontology HTTP route families
@@ -276,7 +276,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Client
-    participant Rbac as RbacGate on /api scope<br/>src/main.rs:1053
+    participant Rbac as RbacGate on /api scope<br/>src/main.rs:1056
     participant OntScope as /api/ontology scope<br/>src/handlers/api_handler/ontology/mod.rs:1654
     participant DerivedScope as /api/ontology/derived scope<br/>src/handlers/ontology_derived_handler.rs:185
     participant CountScope as /api/ontology/class-count scope<br/>src/handlers/ontology_class_count_handler.rs:76
@@ -421,7 +421,7 @@ flowchart TD
 ```mermaid
 erDiagram
     GRAPH_ONTOLOGY_SUMMARY {
-        string iri "urn:ngm:graph:ontology:summary (oxigraph_ontology_repository.rs:61)"
+        string iri "urn:ngm:graph:ontology:summary (oxigraph_ontology_repository.rs:63)"
         string contents "approval-driven summary triples, fenced write, see VC-22"
     }
     GRAPH_ONTOLOGY_OBSERVED {

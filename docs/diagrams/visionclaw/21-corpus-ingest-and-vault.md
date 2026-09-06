@@ -36,7 +36,7 @@ sources:
   - data/settings.yaml
   - scripts/pre-commit-validate.sh
   - src/handlers/validation_handler.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-21.1 GitHubSyncService::sync_graphs — full ingest path
@@ -44,14 +44,14 @@ verified_commit: bed6b617d
 sequenceDiagram
     autonumber
     participant Bin as sync_github.rs<br/>src/bin/sync_github.rs:65
-    participant Svc as GitHubSyncService::sync_graphs<br/>src/services/github_sync_service.rs:264
-    participant With as sync_graphs_with<br/>src/services/github_sync_service.rs:272
+    participant Svc as GitHubSyncService::sync_graphs<br/>src/services/github_sync_service.rs:283
+    participant With as sync_graphs_with<br/>src/services/github_sync_service.rs:291
     participant API as EnhancedContentAPI<br/>src/services/github/content_enhanced.rs:12
-    participant SHA as filter_changed_files<br/>src/services/github_sync_service.rs:2113
-    participant SQL as sync_db (SQLite)<br/>src/services/github_sync_service.rs:2138
-    participant Batch as process_batch_incremental<br/>src/services/github_sync_service.rs:1390
-    participant File as process_fetched_file<br/>src/services/github_sync_service.rs:1586
-    participant KG as kg_repo (Oxigraph)<br/>src/services/github_sync_service.rs:1511
+    participant SHA as filter_changed_files<br/>src/services/github_sync_service.rs:2207
+    participant SQL as sync_db (SQLite)<br/>src/services/github_sync_service.rs:2232
+    participant Batch as process_batch_incremental<br/>src/services/github_sync_service.rs:1490
+    participant File as process_fetched_file<br/>src/services/github_sync_service.rs:1686
+    participant KG as kg_repo (Oxigraph)<br/>src/services/github_sync_service.rs:1611
 
     Bin->>Svc: sync_graphs()
     Svc->>With: sync_graphs_with(false)
@@ -63,7 +63,7 @@ sequenceDiagram
     Note over With: INVARIANT: index built before the SHA1 filter or an incremental sync mints phantom stubs for unchanged pages
     With->>With: force_full_sync = force_full_override or base_path_changed or FORCE_FULL_SYNC
     alt FORCE_FULL_SYNC=1 or true (env)
-        Note over With: bypasses the SHA1 filter entirely - github_sync_service.rs:325
+        Note over With: bypasses the SHA1 filter entirely - github_sync_service.rs:344
         With->>With: files_to_process = files.clone()
     else incremental
         With->>SHA: filter_changed_files(files)
@@ -74,26 +74,26 @@ sequenceDiagram
     opt force_full_sync
         With->>KG: clear_graph()
     end
-    loop chunks(BATCH_SIZE=50) - github_sync_service.rs:32,371
+    loop chunks(BATCH_SIZE=50) - github_sync_service.rs:51,371
         With->>Batch: process_batch_incremental(batch, vault_ctx)
         loop PARALLEL_FETCHES=8 concurrent downloads
             Batch->>API: fetch_file_content(download_url)
         end
         Batch->>File: process_fetched_file(file, content, vault_ctx)
-        File->>File: jsonld_ingest::parse_canonical_entity(content, path)<br/>github_sync_service.rs:1604
+        File->>File: jsonld_ingest::parse_canonical_entity(content, path)<br/>github_sync_service.rs:1704
         alt Ok(Some(entity)) - JSON-LD Page/Class fence present
             File->>File: build_node_from_entity + page_name_to_id(slug)
             Note over File: canonical path claims the node before the publish gate runs (VAULT V4)
         else Ok(None) - no JSON-LD blocks
-            File->>File: process_plain_vault_file(file, content, vault_ctx)<br/>github_sync_service.rs:1780
+            File->>File: process_plain_vault_file(file, content, vault_ctx)<br/>github_sync_service.rs:1873
             Note over File: see VC-21.2 for the inclusion gate applied here
         else Err(parse failure)
             File->>File: skip (debug log only)
         end
-        Batch->>KG: batch_add_nodes(real_nodes) / batch_add_nodes_if_absent(stub_nodes)<br/>github_sync_service.rs:1511,1522
+        Batch->>KG: batch_add_nodes(real_nodes) / batch_add_nodes_if_absent(stub_nodes)<br/>github_sync_service.rs:1611,1522
         Batch->>KG: batch_add_edges(immediate_edges) - same-batch endpoints only
     end
-    With->>With: deferred_edges partition: resolvable vs dangling<br/>github_sync_service.rs:1826
+    With->>With: deferred_edges partition: resolvable vs dangling<br/>github_sync_service.rs:1920
     With->>KG: batch_add_edges(resolvable)
     Note over With,KG: DIVERGENCE: dangling wikilinks mint no linked_page stub - they fold into wikilink_count weight plus co-citation springs (FANOUT_NODE_THRESHOLD, default 3)
     With->>SQL: update_file_metadata(all_files_to_process)
@@ -104,10 +104,10 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Plain as process_plain_vault_file<br/>src/services/github_sync_service.rs:1780
+    participant Plain as process_plain_vault_file<br/>src/services/github_sync_service.rs:1873
     participant Parser as KnowledgeGraphParser::parse_with_index<br/>src/services/parsers/knowledge_graph_parser.rs:83
     participant Vault as vault::parse<br/>crates/visionclaw-domain/src/vault/mod.rs:149
-    participant Gate as page_is_kg_included<br/>src/services/github_sync_service.rs:2304
+    participant Gate as page_is_kg_included<br/>src/services/github_sync_service.rs:2398
 
     Plain->>Parser: parse_with_index(content, vault_path, vault_index)
     Parser->>Vault: vault::parse(content) -> PageMeta{public,owl_class,...}
@@ -139,8 +139,8 @@ sequenceDiagram
             Plain-->>Plain: node ingested as page / linked_page population
         end
     end
-    Note over Gate: RESOLVED ADR-2070: the VAULT readers table now cites github_sync_service.rs:2304 for this fn (call site :1822)
-    Note over Plain: superseded owl:class:: (double-colon, ADR-2014 original) still recognised only via legacy_properties_anywhere enrichment (file_service.rs:728), never the gate itself
+    Note over Gate: RESOLVED ADR-2070: the VAULT readers table now cites github_sync_service.rs:2398 for this fn (call site :1822)
+    Note over Plain: superseded owl:class:: (double-colon, ADR-2014 original) still recognised only via legacy_properties_anywhere enrichment (file_service.rs:731), never the gate itself
 ```
 
 ## VC-21.3 Node-type derivation: file to page / linked_page / owl_*
@@ -299,12 +299,12 @@ sequenceDiagram
     participant Map as paths::map_page<br/>crates/vault-migrate/src/paths.rs:57
     participant Conv as convert::convert_page<br/>crates/vault-migrate/src/convert.rs:39
     participant FM as frontmatter::parse_leading_block/map_properties<br/>crates/vault-migrate/src/frontmatter.rs:80
-    participant Coll as resolve_collisions<br/>crates/vault-migrate/src/lib.rs:361
+    participant Coll as resolve_collisions<br/>crates/vault-migrate/src/lib.rs:385
     participant Rep as Report<br/>crates/vault-migrate/src/report.rs:57
-    participant FS as write_atomically / apply<br/>crates/vault-migrate/src/lib.rs:653,694
+    participant FS as write_atomically / apply<br/>crates/vault-migrate/src/lib.rs:697,694
 
-    Run->>Run: validate(opts) - graph is dir, in_place xor out, dirty-tree refusal<br/>lib.rs:502
-    Run->>Run: collect_tree(source/pages) - walkdir follow_links(true)<br/>lib.rs:551
+    Run->>Run: validate(opts) - graph is dir, in_place xor out, dirty-tree refusal<br/>lib.rs:529
+    Run->>Run: collect_tree(source/pages) - walkdir follow_links(true)<br/>lib.rs:581-583
     Run->>Map: map_page(rel) for each pages/ file
     alt already Ns/Title.md (folder layout)
         Map-->>Run: (same path, page_name) - idempotent
@@ -330,7 +330,7 @@ sequenceDiagram
     Conv->>Conv: body::rewrite(body_lines) - tasks, embeds, multiword tags, asset paths
     Conv-->>Run: PageResult{content, stats}
     Run->>Run: actions.push(Action::Write{rel, content, source})
-    Run->>Run: claimed = starter .obsidian/ config only where nothing claims the path<br/>lib.rs:287-294
+    Run->>Run: claimed = starter .obsidian/ config only where nothing claims the path<br/>lib.rs:303-314
     Run->>Coll: resolve_collisions(actions, on_collision, source)
     alt CollisionPolicy::Fail and collisions non-empty
         Coll-->>Run: bail! collision_failure_message - refuses the run, writes nothing
@@ -344,7 +344,7 @@ sequenceDiagram
     else write mode
         Run->>FS: apply(action, dest) -> write_atomically (tmp + rename)
         opt opts.in_place
-            Run->>Run: rename_moved_originals - remove pre-move original only after new path verified non-empty<br/>lib.rs:738
+            Run->>Run: rename_moved_originals - remove pre-move original only after new path verified non-empty<br/>lib.rs:784
         end
     end
     Run->>Rep: tally(rep, stats) + collect_leftovers(rel, stats)
@@ -357,22 +357,22 @@ sequenceDiagram
 ```mermaid
 stateDiagram-v2
     [*] --> Discovered
-    Discovered --> Classified: paths.map_page / map_journal (lib.rs:148,165)
+    Discovered --> Classified: paths.map_page / map_journal (lib.rs:153,165)
     Classified --> CopiedVerbatim: hidden dir, non-md, dot-directory, or whiteboards
     Classified --> Converting: convert_page / convert_journal (convert.rs:39,45)
     Converting --> FrontmatterMapped: frontmatter.parse_leading_block + map_properties
-    FrontmatterMapped --> BodyRewritten: body.rewrite (convert.rs:157)
-    BodyRewritten --> Planned: Action.Write pushed (lib.rs:260)
+    FrontmatterMapped --> BodyRewritten: body.rewrite (convert.rs:159)
+    BodyRewritten --> Planned: Action.Write pushed (lib.rs:276)
     CopiedVerbatim --> Planned: Action.Copy pushed
-    Planned --> CollisionChecked: resolve_collisions (lib.rs:305)
+    Planned --> CollisionChecked: resolve_collisions (lib.rs:325)
     CollisionChecked --> Rejected: on_collision=fail and collision found
     CollisionChecked --> Suffixed: on_collision=suffix
     CollisionChecked --> Unclaimed: no collision
     Suffixed --> Unclaimed
     Unclaimed --> DriftCompared: opts.check
     Unclaimed --> Skipped: opts.dry_run
-    Unclaimed --> Written: write mode - write_atomically/copy_atomically (lib.rs:653,665)
-    Written --> OriginalRemoved: opts.in_place and new path verified non-empty (lib.rs:738)
+    Unclaimed --> Written: write mode - write_atomically/copy_atomically (lib.rs:697,665)
+    Written --> OriginalRemoved: opts.in_place and new path verified non-empty (lib.rs:784)
     Written --> [*]
     OriginalRemoved --> [*]
     DriftCompared --> [*]
@@ -473,7 +473,7 @@ flowchart TD
     Wire["binary settings wire path rewrite<br/>.graphs.logseq. replaced with .graphs.knowledge.<br/>src/protocols/binary_settings_protocol.rs:84-85"] --> Canon
     Actor["OptimizedSettingsActor accepts both<br/>src/actors/optimized_settings_actor.rs:516,527<br/>physics prefix branch :940-941"] --> Canon
     Helpers["settings_handler helpers get knowledge else logseq<br/>src/handlers/settings_handler/helpers.rs:34"] --> Canon
-    Valid["validation_handler get knowledge else logseq<br/>src/handlers/validation_handler.rs:157"] --> Canon
+    Valid["validation_handler get knowledge else logseq<br/>src/handlers/validation_handler.rs:156-159"] --> Canon
     Access["path_accessible_impls match knowledge or logseq<br/>src/config/path_accessible_impls.rs:160"] --> Canon
     Canon --> Client["client renders the knowledge graph with the same colours (EXP-V06)"]
     Inv["INVARIANT: the serde alias is the whole compatibility surface -<br/>one canonical key on write, both accepted on read (graph_type.rs:1-9)"]

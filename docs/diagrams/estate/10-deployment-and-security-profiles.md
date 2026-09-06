@@ -27,14 +27,14 @@ sources:
   - src/config/security_profile.rs
   - agentbox/.github/workflows/invariants.yml
   - scripts/backup-secrets.sh
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-10.1 Three named profiles — exact flag set per profile vs the fail-closed code default
 ```mermaid
 flowchart TB
     subgraph code["Code defaults — fail-closed (ADR-2026)"]
-        CD1["RBAC_PUBLIC_READS<br/>unwrap_or(false) = OFF<br/>rbac_gate.rs:122-128"]
-        CD2["RBAC_ALLOW_OWNERLESS<br/>absent = refuse boot<br/>main.rs:732-752"]
+        CD1["RBAC_PUBLIC_READS<br/>unwrap_or(false) = OFF<br/>rbac_gate.rs:126-132"]
+        CD2["RBAC_ALLOW_OWNERLESS<br/>absent = refuse boot<br/>main.rs:735-755"]
         CD3["PUBKEY_VISIBILITY_FILTER<br/>parse_visibility_flag = ON<br/>position_updates.rs:34-58"]
         CD4["RBAC_DEFAULT_ROLE<br/>RBAC_DEFAULT_ROLE_ENV role_store.rs:41<br/>parse_default_role :195 = Editor<br/>fails closed to viewer on an unknown value :204"]
         CD5["RBAC_GATE_MODE<br/>enforce<br/>rbac_gate.rs:82-102"]
@@ -82,7 +82,7 @@ sequenceDiagram
     participant M as main<br/>src/main.rs:195
     participant EH as enforce_release_env_hygiene<br/>src/main.rs:118
     participant EV as env validation<br/>src/main.rs:59-85
-    participant RS as RoleStore bootstrap<br/>src/main.rs:710-752
+    participant RS as RoleStore bootstrap<br/>src/main.rs:713-755
     participant L as HTTP listener
 
     OS->>M: exec visionclaw binary
@@ -110,20 +110,20 @@ sequenceDiagram
     alt an Owner is assigned
         RS-->>M: ok
     else no Owner and RBAC_ALLOW_OWNERLESS=1
-        RS-->>M: warn and continue — src/main.rs:739
+        RS-->>M: warn and continue — src/main.rs:742
     else no Owner and flag unset
-        RS-->>M: FATAL PermissionDenied — src/main.rs:746-752
+        RS-->>M: FATAL PermissionDenied — src/main.rs:749-755
     end
     M->>L: bind
-    Note over M,L: ADR-2038 IMPLEMENTED, UNCOMMITTED — assert_effective_profile_or_exit<br/>runs at src/main.rs:873 (block :868-878) BEFORE HttpServer::new :893<br/>and .bind :1146, exiting 2 on any finding in a production artefact.<br/>Boot receipt :879-883. The file is untracked and the call site is not<br/>in HEAD, so ADR-2038 stays proposed. see ES-10.7 and VC-09.4
+    Note over M,L: ADR-2038 IMPLEMENTED, UNCOMMITTED — assert_effective_profile_or_exit<br/>runs at src/main.rs:876 (block :868-878) BEFORE HttpServer::new :893<br/>and .bind :1146, exiting 2 on any finding in a production artefact.<br/>Boot receipt :879-883. The file is untracked and the call site is not<br/>in HEAD, so ADR-2038 stays proposed. see ES-10.7 and VC-09.4
 ```
 
 ## ES-10.3 Shipped compose inverts two fail-closed code defaults
 ```mermaid
 flowchart LR
     subgraph codeside["src/ — fail-closed defaults"]
-        A1["public_reads_enabled()<br/>.unwrap_or(false)<br/>rbac_gate.rs:128"]
-        A2["RBAC_ALLOW_OWNERLESS_ENV absent<br/>refuse to start<br/>main.rs:746-752"]
+        A1["public_reads_enabled()<br/>.unwrap_or(false)<br/>rbac_gate.rs:132"]
+        A2["RBAC_ALLOW_OWNERLESS_ENV absent<br/>refuse to start<br/>main.rs:749-755"]
         A3["parse_visibility_flag<br/>defaults ON<br/>position_updates.rs:34"]
     end
     subgraph composeside["docker-compose.unified.yml — shipped"]
@@ -135,7 +135,7 @@ flowchart LR
     end
     NET["Net shipped posture = demo-open<br/>anonymous /api reads ON, owner-less boot permitted"]
     DRIFT1["DIVERGENCE — the image boots owner-less with anonymous<br/>reads unless an operator overrides .env. Deliberate<br/>legacy-compatibility trade-off (ADR-2027)"]
-    DRIFT2["RESOLVED ADR-2087: docs/SECURITY-profiles.md now cites the<br/>code default and the compose default as two SEPARATE facts —<br/>fail-closed at rbac_gate.rs:122-128 (unwrap_or(false)) vs the<br/>demo-open override at docker-compose.unified.yml:93-94.<br/>docs/DATA-authority-erasure.md still says default ON at<br/>rbac_gate.rs:119-122 — routed to vc-knowledge, open until applied."]
+    DRIFT2["RESOLVED ADR-2087: docs/SECURITY-profiles.md now cites the<br/>code default and the compose default as two SEPARATE facts —<br/>fail-closed at rbac_gate.rs:126-132 (unwrap_or(false)) vs the<br/>demo-open override at docker-compose.unified.yml:93-94.<br/>docs/DATA-authority-erasure.md still says default ON at<br/>rbac_gate.rs:123-126 — routed to vc-knowledge, open until applied."]
 
     A1 -- "inverted by" --> B1
     A2 -- "inverted by" --> B2
@@ -160,7 +160,7 @@ flowchart TB
         H3["NODE_ENV=development plus DOCKER_ENV"]
         H3E["FATAL — src/main.rs:140-146"]
         H4["RBAC_ALLOW_OWNERLESS=0 with no RBAC_OWNER_PUBKEY<br/>and no prior Owner"]
-        H4E["PermissionDenied, refuses to start<br/>src/main.rs:746-752"]
+        H4E["PermissionDenied, refuses to start<br/>src/main.rs:749-755"]
     end
     subgraph soft["Refuses to activate — falls back to safe value"]
         S1["RBAC_GATE_MODE=report in release without<br/>RBAC_REPORT_MODE_ACK = today UTC"]
@@ -187,7 +187,7 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant B as boot
-    participant RG as RbacGate::from_env<br/>src/middleware/rbac_gate.rs:179
+    participant RG as RbacGate::from_env<br/>src/middleware/rbac_gate.rs:183
     participant RA as report_acknowledged<br/>src/middleware/rbac_gate.rs:82
     participant REQ as inbound /api request
 
@@ -206,15 +206,15 @@ sequenceDiagram
     else enforce
         RG-->>B: enforce
     end
-    RG->>RG: public_reads_enabled() — rbac_gate.rs:122
+    RG->>RG: public_reads_enabled() — rbac_gate.rs:126
     alt RBAC_PUBLIC_READS is "1" or "true"
-        RG-->>B: log anonymous /api reads ENABLED — rbac_gate.rs:190
+        RG-->>B: log anonymous /api reads ENABLED — rbac_gate.rs:194
     else absent or any other value
-        RG-->>B: fail closed, reads require auth — rbac_gate.rs:128
+        RG-->>B: fail closed, reads require auth — rbac_gate.rs:132
     end
     REQ->>RG: method + path
-    RG->>RG: required_level(method, path, public_reads) — rbac_gate.rs:134
-    Note over RG: INVARIANT — absence of a security flag must never<br/>widen access. RBAC_PUBLIC_READS may only widen reads<br/>when EXPLICITLY set (rbac_gate.rs:116-121)
+    RG->>RG: required_level(method, path, public_reads) — rbac_gate.rs:138
+    Note over RG: INVARIANT — absence of a security flag must never<br/>widen access. RBAC_PUBLIC_READS may only widen reads<br/>when EXPLICITLY set (rbac_gate.rs:120-125)
 ```
 
 ## ES-10.6 VISIONCLAW_DEV_MODE — peer-agnostic LAN-local full bypass (ADR-2039)
@@ -295,7 +295,7 @@ stateDiagram-v2
         combination still binds.
     end note
     note right of LogAndBind
-        Call site src/main.rs:873 inside the block at
+        Call site src/main.rs:876 inside the block at
         :868-878, BEFORE HttpServer::new :893 and
         .bind :1146. Boot receipt logged :879-883.
         see VC-09.4, VC-09.5, VC-09.6
@@ -321,7 +321,7 @@ flowchart TB
     end
     FAIL["Anything else FAILS CI"]
     INV["INVARIANT — :9095 AoE serve is NEVER published to the LAN. It runs<br/>aoe serve --auth token --behind-proxy --allowed-host 127.0.0.1<br/>--host 127.0.0.1 (flake.nix:2247) — it binds loopback EXPLICITLY,<br/>unlike code-server. :9096 is the one identity-gated door<br/>(flake.nix:2267, published 9096:9096 at docker-compose.yml:54)."]
-    D1["RESOLVED ADR-2013 — the estate has TEN sanctioned LAN publishes,<br/>not one front door and not two. the main compose publishes only :9096<br/>(docker-compose.yml:54) but the overlays add nine more, each with a<br/>cited rationale on the SANCTIONED list (check-ports-loopback.mjs:76-87)<br/>and CI-enforced. These are DECIDED exposures, not an admitted breach."]
+    D1["RESOLVED ADR-2013 — the estate has TEN sanctioned LAN publishes,<br/>not one front door and not two. the main compose publishes only :9096<br/>(docker-compose.yml:54) but the overlays add nine more, each with a<br/>cited rationale on the SANCTIONED list (check-ports-loopback.mjs:93-104)<br/>and CI-enforced. These are DECIDED exposures, not an admitted breach."]
     D2["RESOLVED ADR-2013 closeout 2026-09-05 — the scanner is now a<br/>strict YAML PARSER, not an awk line-walker<br/>(check-ports-loopback.mjs:8-24). It rejects the flow-mapping<br/>and JSON-flow bypasses that previously passed, plus IPv6<br/>binds and non-sequence ports values (:39-41)."]
     D3["PROPOSED ADR-2062: code-server binds 0.0.0.0:8080 --auth none<br/>INSIDE the container (flake.nix:2180) while compose publishes<br/>127.0.0.1:8080:8080 (docker-compose.yml:61). A loopback PUBLISH<br/>constrains the HOST only — agentbox also joins visionclaw_network<br/>(docker-compose.yml:160-162), so any PEER CONTAINER reaches an<br/>unauthenticated editor. Fix is to bind 127.0.0.1."]
     D5["PROPOSED ADR-2062: the gate reasons about PUBLISHED ports and<br/>is structurally blind to a container-internal 0.0.0.0 bind on a<br/>shared bridge. The invariant is to be restated in terms of<br/>LISTENERS, with each supervised program declaring its bind address."]

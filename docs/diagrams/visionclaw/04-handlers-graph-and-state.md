@@ -52,7 +52,7 @@ sources:
   - src/handlers/api_handler/analytics/sssp_handlers.rs
   - src/utils/binary_protocol.rs
   - src/utils/validation/sanitization.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-04.1 api_handler graph — read path (data, paginated, positions, fold, relations, expand, pattern)
@@ -601,8 +601,8 @@ sequenceDiagram
     participant C as Client
     participant SM as set_layout_mode<br/>src/handlers/layout_handler.rs:15
     participant GPU as GPU compute actor<br/>SetLayoutMode / SetRadialLayout / ResetPositions
-    participant RL as set_radial_layout<br/>layout_handler.rs:139
-    participant RS as reset_layout<br/>layout_handler.rs:243
+    participant RL as set_radial_layout<br/>layout_handler.rs:144
+    participant RS as reset_layout<br/>layout_handler.rs:248
 
     C->>SM: POST /api/layout/mode {mode, transitionMs}
     SM->>SM: parse LayoutMode from mode string, default ForceDirected on parse failure
@@ -619,7 +619,7 @@ sequenceDiagram
     end
     alt mode.is_gpu_resident() (ForceDirected/Radial/Clustered)
         alt persisted is Err
-            SM-->>C: error response — GPU-resident mode's entire effect IS the persisted<br/>mode, so a persistence failure must be reported, not hidden (layout_handler.rs:57-60)
+            SM-->>C: error response — GPU-resident mode's entire effect IS the persisted<br/>mode, so a persistence failure must be reported, not hidden (layout_handler.rs:62-65)
         else Ok
             SM-->>C: 200 no one-shot positions — GPU streams positions continuously
         end
@@ -707,7 +707,7 @@ sequenceDiagram
     SU->>KC: lineage_for(snapshot_id)
     KC->>KR: lineage_for(snapshot_id) — DERIVED_FROM trail (WP-8 AC3)
     SU-->>C: 200 {snapshot_id, lineage}
-    par background volume tap — src/main.rs:1196 tokio::spawn(run_agent_event_tap(kpi_repo))
+    par background volume tap — src/main.rs:1199 tokio::spawn(run_agent_event_tap(kpi_repo))
         TAP->>HUB: subscribe() — same seam the render actor uses
         loop rx.recv().await — never returns, fail-open on lagged/closed channel
             HUB-->>TAP: AgentEventEnvelope
@@ -724,7 +724,7 @@ sequenceDiagram
     autonumber
     participant C as Client
     participant GM as get_metrics<br/>src/handlers/metrics_handler.rs:33
-    participant PT as ProcessStartTime<br/>web::Data — Instant captured at boot (src/main.rs:987)
+    participant PT as ProcessStartTime<br/>web::Data — Instant captured at boot (src/main.rs:990)
     participant EB as EventBus<br/>app_state.event_bus
     participant MW as MetricsMiddleware<br/>downcast via dyn Any
 
@@ -868,10 +868,10 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant VP as validate_payload<br/>src/handlers/validation_handler.rs:334
+    participant VP as validate_payload<br/>src/handlers/validation_handler.rs:335
     participant VS as ValidationService<br/>validation_handler.rs:10 — settings/physics/ragflow/bots/swarm schemas
     participant SAN as Sanitizer::sanitize_json<br/>src/utils/validation/sanitization.rs
-    participant GS as get_validation_stats<br/>validation_handler.rs:372
+    participant GS as get_validation_stats<br/>validation_handler.rs:373
 
     C->>VP: POST /api/validation/test/{type} {payload}
     VP->>VP: validation_type = path {type}, extract_client_id(req)
@@ -989,7 +989,7 @@ sequenceDiagram
     Note over DC,SEM: /centrality, /shortest-path, /generate-constraints (compute_centrality :110,<br/>compute_shortest_path :160, generate_constraints :187) share the SAME<br/>read-graph-then-initialize-then-compute shape — /cache/invalidate (:229) and<br/>GET /statistics (:214) skip the graph read entirely
 
 C--xRI: POST /api/inference/run — route no longer registered
-    Note over RI: REMOVED ADR-2066 — the whole Phase 7 inference stack was deleted as dead code.<br/>src/handlers/inference_handler.rs, src/application/inference_service.rs and<br/>src/events/inference_triggers.rs are gone, and the registration at src/main.rs:1095<br/>was removed with them. Removal rationale recorded at src/handlers/mod.rs:44-49
+    Note over RI: REMOVED ADR-2066 — the whole Phase 7 inference stack was deleted as dead code.<br/>src/handlers/inference_handler.rs, src/application/inference_service.rs and<br/>src/events/inference_triggers.rs are gone, and the registration at src/main.rs:1098<br/>was removed with them. Removal rationale recorded at src/handlers/mod.rs:44-49
     Note over RI: root cause — all seven handlers extracted web::Data of Arc RwLock InferenceService<br/>but InferenceService was never registered as app data anywhere, so every<br/>/api/inference/* route 500'd at the extractor. The live reasoning path is<br/>GitHubSyncService::run_post_sync_reasoning — see VC-20.3
 ```
 
@@ -1083,7 +1083,7 @@ sequenceDiagram
     end
     CL->>CL: append entries to /app/logs/client.log
     CL-->>C: 200 {status:success}
-    Note over CL: registered EARLY in the /api scope (src/main.rs:1057) specifically to avoid<br/>scope-registration-order conflicts (VC-01.10) — RBAC-allowlisted (VC-03.6 has_segment_prefix)
+    Note over CL: registered EARLY in the /api scope (src/main.rs:1060) specifically to avoid<br/>scope-registration-order conflicts (VC-01.10) — RBAC-allowlisted (VC-03.6 has_segment_prefix)
 
     C->>WS: GET /ws/client-messages (Upgrade: websocket)
     WS->>WS: token = Authorization Bearer OR ?token= query param
@@ -1113,11 +1113,11 @@ sequenceDiagram
     autonumber
     participant C as Client (Nostr session)
     participant A as Agent caller (X-Agent-Key)
-    participant SJ as submit_image_job<br/>src/handlers/image_gen_handler.rs:272
-    participant AJ as agent_submit_image_job<br/>image_gen_handler.rs:495
+    participant SJ as submit_image_job<br/>src/handlers/image_gen_handler.rs:275
+    participant AJ as agent_submit_image_job<br/>image_gen_handler.rs:498
     participant CU as ComfyUI<br/>COMFYUI_URL default http://comfyui:8188 (:31)
     participant SA as ComfyUI Salad<br/>COMFYUI_SALAD_URL default http://comfyui:3000 (:36)
-    participant GJ as get_job_status<br/>image_gen_handler.rs:705
+    participant GJ as get_job_status<br/>image_gen_handler.rs:708
 
     rect rgb(225,225,245)
     Note over SJ,CU: PROCESS BOUNDARY — external HTTP to the ComfyUI service
@@ -1161,7 +1161,7 @@ sequenceDiagram
     end
     C->>GJ: GET /api/image-gen/status/{job_id}
     GJ-->>C: 200/404 job status lookup
-    Note over AJ: DIVERGENCE — agent_key() comparison uses plain #quot;!=#quot (image_gen_handler.rs:505),<br/>NOT the constant_time_eq used by canary_write_authorised (VC-04.17) — same<br/>X-Agent-Key credential CONCEPT, two different comparison postures in one commit.<br/>Also unlike canary, an unset VISIONCLAW_AGENT_KEY here fails OPEN to a hardcoded<br/>default string rather than failing closed
+    Note over AJ: DIVERGENCE — agent_key() comparison uses plain #quot;!=#quot (image_gen_handler.rs:508),<br/>NOT the constant_time_eq used by canary_write_authorised (VC-04.17) — same<br/>X-Agent-Key credential CONCEPT, two different comparison postures in one commit.<br/>Also unlike canary, an unset VISIONCLAW_AGENT_KEY here fails OPEN to a hardcoded<br/>default string rather than failing closed
 ```
 
 ## VC-04.27 `pay` scope — L402-style balance/debit gate, unconditionally mounted, inert until PAY_ENABLED
@@ -1176,7 +1176,7 @@ sequenceDiagram
     participant DEP as pay_deposit_handler<br/>pay_handler.rs:480
     participant ST as FsPaymentStore<br/>web::Data~Arc~FsPaymentStore~~ — get_balance/debit
 
-    Note over CFG: routes mounted UNCONDITIONALLY at src/main.rs:1023 (VC-01.6) — inert until<br/>PAY_ENABLED=true, gated handler-by-handler rather than by a scope-level middleware
+    Note over CFG: routes mounted UNCONDITIONALLY at src/main.rs:1026 (VC-01.6) — inert until<br/>PAY_ENABLED=true, gated handler-by-handler rather than by a scope-level middleware
     C->>INFO: GET /pay/.info (always reachable, no gate)
     INFO-->>C: 200 {enabled, methods:[lightning], costTiers} — reports the REAL enabled flag
     C->>BAL: GET /pay/.balance

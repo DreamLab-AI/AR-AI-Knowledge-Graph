@@ -33,14 +33,14 @@ sources:
   - crates/visionclaw-actors/src/supervisor.rs
   - tests/orchestration_improvements_test.rs
   - src/actors/mod.rs
-verified_commit: b0bc275f6
+verified_commit: 7a20db228
 ---
 
 ## VC-02.1 Supervision-tree topology — AppState::new boot order
 ```mermaid
 flowchart TB
     APP["AppState::new<br/>src/app_state.rs:413"]
-    CC["ClientCoordinatorActor<br/>src/app_state.rs:709<br/>Addr~ClientCoordinatorActor~"]
+    CC["ClientCoordinatorActor<br/>src/app_state.rs:714<br/>Addr~ClientCoordinatorActor~"]
     AB["AgentBeamActor<br/>src/app_state.rs:722<br/>no Addr held — hub-subscription lifetime"]
     MD["MetadataActor<br/>src/app_state.rs:805<br/>Addr~MetadataActor~"]
     GSS["GraphServiceSupervisor<br/>src/app_state.rs:810<br/>Addr~GraphServiceSupervisor~"]

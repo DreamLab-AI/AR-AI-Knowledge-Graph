@@ -21,7 +21,7 @@ sources:
   - agentbox/skills/mcp.json
   - agentbox/docker-compose.yml
   - agentbox/scripts/post-deploy-cleanup.sh
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-05.1 GET /v1/system — catalogue plus live introspection
@@ -30,22 +30,22 @@ sequenceDiagram
     autonumber
     participant C as Operator or cockpit
     participant R as routes/system.js:33<br/>fastify.get /v1/system
-    participant BV as buildSystemView<br/>system-manifest.js:274
-    participant CAT as CATALOGUE const<br/>system-manifest.js:40-231
-    participant ST as stateOf<br/>system-manifest.js:248
-    participant RG as resolveGate<br/>system-manifest.js:234
+    participant BV as buildSystemView<br/>system-manifest.js:287
+    participant CAT as CATALOGUE const<br/>system-manifest.js:40-244
+    participant ST as stateOf<br/>system-manifest.js:261
+    participant RG as resolveGate<br/>system-manifest.js:247
     participant AD as resolved adapters
 
     C->>R: GET /v1/system
     R->>BV: buildSystemView(manifest, adapters) — routes/system.js:42
     BV->>BV: core = manifest entry :277 plus identity entry :281
-    loop for slot of beads pods memory events orchestrator (system-manifest.js:285-286)
+    loop for slot of beads pods memory events orchestrator (system-manifest.js:298-299)
         BV->>AD: read adapter.impl and adapter.CONTRACT_VERSION
         AD-->>BV: impl or 'unresolved', contract_version or null (:290-291)
         BV->>BV: push core entry adapter-<slot> (:288-293)
     end
     BV->>BV: build resolved vault block (:301-319)
-    loop for entry of CATALOGUE (system-manifest.js:323)
+    loop for entry of CATALOGUE (system-manifest.js:336)
         BV->>ST: stateOf(manifest, entry)
         ST->>RG: resolveGate(manifest, entry.gate)
         RG-->>ST: gate value walked down the dotted path (:236-239)
@@ -54,17 +54,17 @@ sequenceDiagram
     end
     BV-->>R: apply_classes, core, vault, surfaces, modules, counts (:338-351)
     R-->>C: live system view
-    Note over BV,CAT: INVARIANT — the catalogue is documentation-as-data but STATE is always introspected from the parsed agentbox.toml at request time, never hard-coded (system-manifest.js:328)
+    Note over BV,CAT: INVARIANT — the catalogue is documentation-as-data but STATE is always introspected from the parsed agentbox.toml at request time, never hard-coded (system-manifest.js:341)
     Note over BV: counts block emits core, surfaces_on, surfaces, modules_on, modules (:344-350)
-    Note over BV,AD: DOC-DRIFT — the adapter-slot summary at system-manifest.js:292 repeats "observability → privacy → JSON-LD". Only two layers are in the wrap chain — see AB-04.4
-    Note over BV,AD: RESOLVED ADR-2036: system-manifest.js:292 now reads<br/>"every dispatch wrapped by observability → privacy redaction<br/>(ADR-2036). JSON-LD encoding is a per-surface gated stage<br/>invoked by the owning route, not a dispatch layer" — see AB-04.4
+    Note over BV,AD: DOC-DRIFT — the adapter-slot summary at system-manifest.js:305 repeats "observability → privacy → JSON-LD". Only two layers are in the wrap chain — see AB-04.4
+    Note over BV,AD: RESOLVED ADR-2036: system-manifest.js:305 now reads<br/>"every dispatch wrapped by observability → privacy redaction<br/>(ADR-2036). JSON-LD encoding is a per-surface gated stage<br/>invoked by the owning route, not a dispatch layer" — see AB-04.4
     Note over R: sibling route GET /v1/system/audit-chain verifies the hash-chained events JSONL (routes/system.js:47)
 ```
 
 ## AB-05.2 Catalogue shape and the real surface/module census
 ```mermaid
 flowchart TD
-    CAT["CATALOGUE array<br/>system-manifest.js:40-231<br/>60 entries total"] --> SURF["layer 'surface' — 13 entries"]
+    CAT["CATALOGUE array<br/>system-manifest.js:40-244<br/>60 entries total"] --> SURF["layer 'surface' — 13 entries"]
     CAT --> MOD["layer 'module' — 47 entries"]
     SURF --> S1["ungated: management-api, terminal, setup-wizard,<br/>uri-resolver, agent-events-stream, metrics<br/>system-manifest.js:41-71"]
     SURF --> S2["gated: code-server, jupyter, desktop, comfyui,<br/>linked-data-viewer, interaction-plane, tab0-bridge<br/>system-manifest.js:50-79"]
@@ -75,7 +75,7 @@ flowchart TD
     MOD --> M5["memory: ruvector-external, memory-learning,<br/>memory-hygiene, ruvnet-brain, compression"]
     MOD --> M6["corpus: vault :216, vault-tui :219, ontology"]
     CAT --> FIELDS["per-entry fields: id, name, layer, gate or gates,<br/>service, apply_class, summary, heavy"]
-    FIELDS --> CORE["core layer emitted separately by buildSystemView<br/>manifest, identity, five adapter-<slot> entries<br/>system-manifest.js:275-294"]
+    FIELDS --> CORE["core layer emitted separately by buildSystemView<br/>manifest, identity, five adapter-<slot> entries<br/>system-manifest.js:288-307"]
     CAT -.-> DRIFT["DOC-DRIFT — BASELINE-container says the catalogue holds<br/>14 surfaces plus about 35 modules.<br/>Verified census is 13 surfaces and 47 modules<br/>system-manifest.js grep layer counts"]
     CAT -.-> RES["RESOLVED ADR-2039: BASELINE-container.md:109 now says<br/>60 entries = 13 surfaces + 47 modules"]
 ```
@@ -83,25 +83,25 @@ flowchart TD
 ## AB-05.3 stateOf — how a gate value becomes a state word
 ```mermaid
 flowchart TD
-    E["catalogue entry"] --> A{"Array.isArray(entry.gates)?<br/>system-manifest.js:251"}
+    E["catalogue entry"] --> A{"Array.isArray(entry.gates)?<br/>system-manifest.js:264"}
     A -->|yes| MG["resolve every gate path"]
     MG --> MG1{"any value === true?"}
     MG1 -->|yes| ON1["state 'on' — :253"]
     MG1 -->|no| MG2{"any value === false?"}
     MG2 -->|yes| OFF1["state 'off' — :254"]
     MG2 -->|no| AV1["state 'available' — :255"]
-    A -->|no| B{"entry.gate falsy?<br/>system-manifest.js:257"}
+    A -->|no| B{"entry.gate falsy?<br/>system-manifest.js:270"}
     B -->|yes| ON2["state 'on' — ungated surface,<br/>present whenever the image is"]
-    B -->|no| RG["resolveGate(manifest, entry.gate)<br/>system-manifest.js:234"]
-    RG --> W["walk the dotted path key by key<br/>system-manifest.js:236-239"]
-    W --> SEC{"cursor is an object?<br/>system-manifest.js:241"}
+    B -->|no| RG["resolveGate(manifest, entry.gate)<br/>system-manifest.js:247"]
+    RG --> W["walk the dotted path key by key<br/>system-manifest.js:249-252"]
+    W --> SEC{"cursor is an object?<br/>system-manifest.js:254"}
     SEC -->|yes| SECE["section gate resolves via its .enabled key — :242"]
     SEC -->|no| VAL["scalar value — :244"]
     SECE --> D
     VAL --> D{"value type"}
     D -->|"true"| ON3["state 'on' — :259"]
     D -->|"false"| OFF2["state 'off' — :260"]
-    D -->|"string"| MODE{"value === 'off' or 'none'?<br/>system-manifest.js:265"}
+    D -->|"string"| MODE{"value === 'off' or 'none'?<br/>system-manifest.js:278"}
     D -->|"undefined"| AV2["state 'available' — catalogued<br/>but unconfigured — :266"]
     MODE -->|yes| OFF3["state 'off'"]
     MODE -->|no| ON4["state 'on'"]
@@ -112,20 +112,20 @@ flowchart TD
 ```mermaid
 flowchart TD
     TOML["agentbox.toml [vault]<br/>root required, pages, format, tui,<br/>working, transcripts"] --> SCHEMA["schema/agentbox.toml.schema.json<br/>root is required"]
-    TOML --> E1["catalogue entry 'vault'<br/>gate vault.format — apply_class BOOT<br/>system-manifest.js:216-218"]
-    TOML --> E2["catalogue entry 'vault-tui'<br/>gate vault.tui — apply_class REBUILD<br/>system-manifest.js:219-221"]
+    TOML --> E1["catalogue entry 'vault'<br/>gate vault.format — apply_class BOOT<br/>system-manifest.js:229-231"]
+    TOML --> E2["catalogue entry 'vault-tui'<br/>gate vault.tui — apply_class REBUILD<br/>system-manifest.js:232-234"]
     E1 --> WHY1["root/pages/format are read ONCE by the entrypoint<br/>at container start — a restart picks them up"]
     E2 --> WHY2["tui decides the Nix package set (ADR-2029)<br/>none to rune needs ./agentbox.sh rebuild, not a restart"]
-    E1 --> SPLIT["ADR-039 honesty rule — one entry claiming 'boot' for both<br/>would tell an operator that flipping tui and restarting<br/>gets them the Rune TUI. It does not.<br/>system-manifest.js:210-215"]
+    E1 --> SPLIT["ADR-039 honesty rule — one entry claiming 'boot' for both<br/>would tell an operator that flipping tui and restarting<br/>gets them the Rune TUI. It does not.<br/>system-manifest.js:223-228"]
     E2 --> SPLIT
-    TOML --> VB["resolved vault block from buildSystemView<br/>system-manifest.js:301-319"]
+    TOML --> VB["resolved vault block from buildSystemView<br/>system-manifest.js:314-332"]
     VB --> VB1["enabled = Boolean(root) — :305"]
     VB --> VB2["pages = root minus trailing slashes + '/' + pages default 'pages' — :307"]
     VB --> VB3["format default 'obsidian' when root set — :308"]
     VB --> VB4["tui default 'none' when root set — :309"]
     VB --> VB5["ADR-2028 amendment 2026-09-02 — working_root, working_pages,<br/>transcripts sibling-vault keys — :311-313"]
     VB --> VB6["env_root, env_pages, env_working_pages, env_transcripts<br/>read from the process the container actually booted with — :314-317"]
-    VB6 --> DRIFT["drift = root set AND VAULT_ROOT set AND they differ<br/>system-manifest.js:318"]
+    VB6 --> DRIFT["drift = root set AND VAULT_ROOT set AND they differ<br/>system-manifest.js:331"]
     DRIFT --> DOC["so /v1/system and the doctor can show manifest-vs-running drift"]
     TOML -.-> DIV["DIVERGENCE — BASELINE 'Vault compatibility and Notes qualification 2026-09-04'.<br/>ADR-2028 is partial for universal disablement: the no-vault resolver clears<br/>VAULT_PAGES but retains a legacy ONTOLOGY_PAGES_DIR override consumers prefer.<br/>See AB-02 for the entrypoint resolution path"]
 ```

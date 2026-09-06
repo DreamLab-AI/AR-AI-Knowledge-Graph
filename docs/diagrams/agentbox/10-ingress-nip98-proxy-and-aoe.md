@@ -24,7 +24,7 @@ sources:
   - agentbox/docs/adr/ADR-2011-hex-canonical-identity.md
   - agentbox/docs/adr/ADR-2013-loopback-publish-except-9096.md
   - agentbox/docker-compose.voice.yml
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-10.1 Door inventory and port topology
@@ -33,24 +33,24 @@ verified_commit: bed6b617d
 flowchart TB
     LAN["LAN client"]
     P9096["nip98-proxy<br/>agentbox/config/nip98-proxy/proxy.mjs:1020<br/>listen 0.0.0.0:9096"]
-    AOE9095["aoe serve --auth token --behind-proxy<br/>agentbox/flake.nix:2247<br/>127.0.0.1:9095"]
-    MGMT9090["management-api<br/>agentbox/management-api/server.js:1377,:47<br/>HOST 0.0.0.0 PORT 9090 in-container"]
-    RELAY7777["nostr-rs-relay<br/>agentbox/flake.nix:1410,:1414<br/>127.0.0.1:7777 unless sovereign_mesh.relay.expose"]
+    AOE9095["aoe serve --auth token --behind-proxy<br/>agentbox/flake.nix:2264<br/>127.0.0.1:9095"]
+    MGMT9090["management-api<br/>agentbox/management-api/server.js:1423,:47<br/>HOST 0.0.0.0 PORT 9090 in-container"]
+    RELAY7777["nostr-rs-relay<br/>agentbox/flake.nix:1427,:1414<br/>127.0.0.1:7777 unless sovereign_mesh.relay.expose"]
     VOICE8444["voice cockpit Caddy origin<br/>docker-compose.voice.yml:40<br/>0.0.0.0:8444"]
 
-    LAN -->|"9096:9096 SANCTIONED agentbox/scripts/ci/check-ports-loopback.mjs:77,:76-86 ADR-2013"| P9096
+    LAN -->|"9096:9096 SANCTIONED agentbox/scripts/ci/check-ports-loopback.mjs:94,:76-86 ADR-2013"| P9096
     P9096 -->|"default route, Authorization UNCONDITIONALLY replaced with daemon token agentbox/config/nip98-proxy/proxy.mjs:848-863"| AOE9095
     P9096 -->|"prefix /mgmt/ NIP98_PROXY_MGMT_UPSTREAM agentbox/config/nip98-proxy/proxy.mjs:308-319"| MGMT9090
-    LAN -.->|"127.0.0.1:9090:9090 host publish agentbox/flake.nix:2517 not LAN-reachable"| MGMT9090
-    LAN -->|"8443/8444 SANCTIONED docker-compose.voice.yml:40 agentbox/scripts/ci/check-ports-loopback.mjs:78-79"| VOICE8444
+    LAN -.->|"127.0.0.1:9090:9090 host publish agentbox/flake.nix:2542 not LAN-reachable"| MGMT9090
+    LAN -->|"8443/8444 SANCTIONED docker-compose.voice.yml:40 agentbox/scripts/ci/check-ports-loopback.mjs:95-96"| VOICE8444
     VOICE8444 -->|"forwards Authorization to slash mgmt slash, slash approvals slash agentbox docs INGRESS-identity.md:118-121"| MGMT9090
     VOICE8444 -->|"forwards to AoE slash aoe slash agentbox docs INGRESS-identity.md:121"| AOE9095
 
-N1["RESOLVED ADR-2047: not a breach - a decided, enumerated exposure. The LAN surface is TEN<br/>sanctioned publishes across five compose files, matched on the normalised host_ip/published/<br/>target/protocol tuple: 9096 sovereign ingress, voice 8443 and 8444, browsercontainer 5903<br/>8931 9222-to-9223, gui-tools 5905 9876 9877, xr-runtime 5904 - each cited at<br/>agentbox/scripts/ci/check-ports-loopback.mjs:55-86. 9096 is the sole IDENTITY ingress to the<br/>AoE plane; the others carry their own auth. The old framing understated the count as well."]
-N2["RESOLVED ADR-2047: the stale --auth none bullet is gone. flake.nix:2515 reads<br/>aoe serve --auth token is NEVER published, matching the live supervisor command, and<br/>INGRESS-identity now records the bullet as Resolved rather than open. The doc body's<br/>drifted verifyIdentity citation (proxy.mjs:410-450) is also corrected to proxy.mjs:527."]
+N1["RESOLVED ADR-2047: not a breach - a decided, enumerated exposure. The LAN surface is TEN<br/>sanctioned publishes across five compose files, matched on the normalised host_ip/published/<br/>target/protocol tuple: 9096 sovereign ingress, voice 8443 and 8444, browsercontainer 5903<br/>8931 9222-to-9223, gui-tools 5905 9876 9877, xr-runtime 5904 - each cited at<br/>agentbox/scripts/ci/check-ports-loopback.mjs:72-103. 9096 is the sole IDENTITY ingress to the<br/>AoE plane; the others carry their own auth. The old framing understated the count as well."]
+N2["RESOLVED ADR-2047: the stale --auth none bullet is gone. flake.nix:2540 reads<br/>aoe serve --auth token is NEVER published, matching the live supervisor command, and<br/>INGRESS-identity now records the bullet as Resolved rather than open. The doc body's<br/>drifted verifyIdentity citation (proxy.mjs:410-450) is also corrected to proxy.mjs:527."]
 N3["INVARIANT ADR-2009: aoe serve binds 127.0.0.1 plus --behind-proxy - nip98-proxy is the sole<br/>IDENTITY ingress to :9095, nothing else may open that port<br/>agentbox/config/nip98-proxy/README.md:40-50"]
 N4["RESOLVED ADR-2047: the compose-exposure qualification is superseded in the governing doc.<br/>The line-walker bypass is fixed - check-ports-loopback.sh is a wrapper that execs<br/>check-ports-loopback.mjs, a strict YAML reader for the compose subset, and anything outside that<br/>subset is REJECTED with file and line, never skipped. ADR-2013 stays partial for the DEPLOYMENT<br/>half only: overlay order, interpolation, external files and active-listener evidence.<br/>Receipt: agentbox/docs/estate-closeout/2026-09-05/adr-2013-ports-gate.json."]
-N5["INVARIANT ADR-2013: the wrapper FAILS LOUDLY when the .mjs gate is missing - a copy of the<br/>wrapper without its gate exits 3 with an explicit message rather than looking like a pass<br/>agentbox/scripts/ci/check-ports-loopback.sh:9-18"]
+N5["INVARIANT ADR-2013: the wrapper FAILS LOUDLY when the .mjs gate is missing - a copy of the<br/>wrapper without its gate exits 3 with an explicit message rather than looking like a pass<br/>agentbox/scripts/ci/check-ports-loopback.sh:27-36"]
 ```
 
 ## AB-10.2 proxy.mjs boot sequence — config, routes, verifier load
@@ -266,7 +266,7 @@ sequenceDiagram
     participant RT as routeFor<br/>agentbox/config/nip98-proxy/proxy.mjs:327
     participant TOK as readAoeToken<br/>agentbox/config/nip98-proxy/proxy.mjs:179
     participant FS as serve.url state file<br/>~/.config/agent-of-empires/serve.url
-    participant AOE as aoe serve --auth token<br/>agentbox/flake.nix:2247 127.0.0.1:9095
+    participant AOE as aoe serve --auth token<br/>agentbox/flake.nix:2264 127.0.0.1:9095
 
     BR->>PX: GET /api/sessions (or dashboard asset) proxy.mjs:765
     PX->>PX: buffer request body, size-capped MAX_BODY_BYTES 25MiB proxy.mjs:772-909
@@ -304,7 +304,7 @@ sequenceDiagram
     participant PX as forward()<br/>agentbox/config/nip98-proxy/proxy.mjs:765
     participant VI as verifyIdentity<br/>agentbox/config/nip98-proxy/proxy.mjs:527
     participant RT as routeFor<br/>agentbox/config/nip98-proxy/proxy.mjs:327
-    participant MAPI as management-api server<br/>agentbox/management-api/server.js:1377
+    participant MAPI as management-api server<br/>agentbox/management-api/server.js:1423
     participant AUTH as authMiddleware<br/>agentbox/management-api/middleware/auth.js:164
     participant NB2 as verifyNip98Header<br/>agentbox/management-api/middleware/auth.js:67
 
@@ -424,12 +424,12 @@ Note over PX: DIVERGENCE query-carried credentials, WS-handshake-only - regressi
 sequenceDiagram
     autonumber
     participant DC as Direct caller (container-internal)
-    participant MAPI as management-api server<br/>agentbox/management-api/server.js:1377, HOST 0.0.0.0 PORT 9090
+    participant MAPI as management-api server<br/>agentbox/management-api/server.js:1423, HOST 0.0.0.0 PORT 9090
     participant AUTH as authMiddleware<br/>agentbox/management-api/middleware/auth.js:164
     participant BR2 as Browser via :9096
     participant PX2 as proxy /mgmt/ route<br/>agentbox/config/nip98-proxy/proxy.mjs:803
 
-    Note over DC,MAPI: :9090 is published to the host only as 127.0.0.1:9090:9090 agentbox/flake.nix:2517 - DC must already be container-internal or on the loopback publish
+    Note over DC,MAPI: :9090 is published to the host only as 127.0.0.1:9090:9090 agentbox/flake.nix:2542 - DC must already be container-internal or on the loopback publish
     DC->>MAPI: request with its OWN Authorization Bearer API_KEY or Nostr header, no X-Agentbox-Pubkey
     MAPI->>AUTH: authMiddleware verifies bearer or nip98 directly agentbox/management-api/server.js:216-224
     AUTH-->>MAPI: allow or 401
@@ -450,7 +450,7 @@ sequenceDiagram
     participant GW as aoeRequest<br/>agentbox/config/nostr-gateway/gateway.cjs:431
     participant TOKFN as readAoeToken<br/>agentbox/config/nostr-gateway/gateway.cjs:127
     participant FS2 as serve.url<br/>AGENTBOX_AOE_TOKEN_FILE override, default ~/.config/agent-of-empires/serve.url
-    participant AOE2 as aoe serve :9095<br/>agentbox/flake.nix:2247
+    participant AOE2 as aoe serve :9095<br/>agentbox/flake.nix:2264
 
     OP->>GW: /spawn dir agent text - aoeCreateSession(repoPath, tool, title) agentbox/config/nostr-gateway/gateway.cjs:320-323,452-453
     GW->>GW: POST /api/sessions?wait=ready via aoeRequest gateway.cjs:452-453

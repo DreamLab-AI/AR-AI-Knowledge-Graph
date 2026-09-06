@@ -34,7 +34,7 @@ sources:
   - client/src/features/graph/workers/graph.worker.ts
   - client/src/services/BinaryWebSocketProtocol.ts
   - src/handlers/socket_flow_handler/actor_messages.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-13.3 GPU broadcast frame end to end
@@ -60,7 +60,7 @@ sequenceDiagram
         alt token available (max_tokens=100, cost=1)<br/>src/gpu/backpressure.rs:67-70
             BP-->>FC: Some(sequence_id)
             Note over FC: clamp NaN/Inf per-node<br/>src/actors/gpu/force_compute_actor.rs:2460
-            FC->>GSS: UpdateNodePositions{positions, correlation_id}<br/>src/actors/messages/graph_messages.rs:59
+            FC->>GSS: UpdateNodePositions{positions, correlation_id}<br/>src/actors/messages/graph_messages.rs:58
             GSS->>GSA: do_send(UpdateNodePositions clone)<br/>src/actors/graph_service_supervisor.rs:2019
             GSA-->>GSA: mutate graph_data.nodes in-place<br/>src/actors/graph_state_actor.rs:861
             Note right of GSA: polling path (subscribe_position_updates)<br/>now returns GPU-computed layout, see VC-13.6
@@ -183,7 +183,7 @@ sequenceDiagram
     autonumber
     participant WS as WebSocket.onmessage<br/>client/src/store/websocket/binaryFrameDispatcher.ts:97
     participant BFD as BinaryFrameDispatcher<br/>client/src/store/websocket/binaryFrameDispatcher.ts:43
-    participant BP as processBinaryData<br/>client/src/store/websocket/binaryProtocol.ts:464
+    participant BP as processBinaryData<br/>client/src/store/websocket/binaryProtocol.ts:460
     participant GDM as graphDataManager<br/>client/src/features/graph/managers/graphDataManager.ts:433
     participant WSC as handleBinaryFrame<br/>client/src/features/graph/managers/dataManager/wsClient.ts:19
     participant GWP as graphWorkerProxy<br/>client/src/features/graph/managers/graphWorkerProxy.ts:205
@@ -196,7 +196,7 @@ sequenceDiagram
         BFD->>BFD: pendingLatest = buffer (newest-wins, drop older)<br/>client/src/store/websocket/binaryFrameDispatcher.ts:52-60
     else no frame in flight
         BFD->>BP: processBinaryData(buffer, get, set)<br/>client/src/store/websocket/binaryFrameDispatcher.ts:64
-        BP->>BP: read lead byte, V2/V3/V5 routes to legacy path<br/>client/src/store/websocket/binaryProtocol.ts:474-480
+        BP->>BP: read lead byte, V2/V3/V5 routes to legacy path<br/>client/src/store/websocket/binaryProtocol.ts:470-476
         BP->>BP: parseBinaryFrameData(data)<br/>client/src/store/websocket/binaryProtocol.ts:370
         opt full V3/V5 frame
             BP->>BP: nodeAnalyticsStore.ingest(parsedNodes)<br/>client/src/store/websocket/binaryProtocol.ts:381-386

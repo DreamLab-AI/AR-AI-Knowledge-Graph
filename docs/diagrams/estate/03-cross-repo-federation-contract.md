@@ -24,7 +24,7 @@ sources:
   - agentbox/management-api/routes/uri-resolver.js
   - agentbox/management-api/utils/agent-event-publisher.js
   - agentbox/schema/federation-kinds.json
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-03.1 Shared wire envelope: AgentActionNotification (agentbox emit -> VisionClaw ingest)
 ```mermaid
@@ -425,7 +425,7 @@ flowchart TD
         G1["urn:visionclaw:* operational URN<br/>src/uri/mod.rs:41 legacy ADR-105"]
         G2["vc:{domain}/{slug} semantic IRI, RDF display / JSON-LD predicate CURIE only<br/>legacy ADR-100"]
         G3["did:nostr:hex plus npub display<br/>src/uri/mod.rs:220"]
-        G4["urn:ngm:class / property / axiom IRIs, still minted<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:20-24"]
+        G4["urn:ngm:class / property / axiom IRIs, still minted<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:20-25"]
         G5["visionclaw:owner:{npub}/kg/... NOT emitted anywhere in src/ or crates/<br/>legacy ADR-050, superseded by urn:visionclaw:kg pubkey scope"]
     end
     subgraph AB["agentbox grammars in live code"]

@@ -14,7 +14,7 @@ sources:
   - agentbox/scripts/opf-router.py
   - agentbox/mcp/servers/lib/ontology-telemetry.js
   - agentbox/flake.nix
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-24.1 Two deployments of one facade contract — topology
@@ -23,19 +23,19 @@ verified_commit: bed6b617d
 flowchart TB
     subgraph consumers["Consumers hold a DOOR, never a raw model port (ADR-2023)"]
         RET["ontology-retrieval brain<br/>agentbox/mcp/servers/lib/ontology-retrieval.js:667"]
-        COND["ontology condense<br/>agentbox/agentbox.toml:649"]
-        DREAM["dream-engine loom_url<br/>agentbox/agentbox.toml:1613"]
-        SEED["AoE session seed slug=loom<br/>agentbox/agentbox.toml:1259"]
-        SEEDRAW["AoE session seed slug=loom-raw<br/>agentbox/agentbox.toml:1266"]
+        COND["ontology condense<br/>agentbox/agentbox.toml:668"]
+        DREAM["dream-engine loom_url<br/>agentbox/agentbox.toml:1648"]
+        SEED["AoE session seed slug=loom<br/>agentbox/agentbox.toml:1294"]
+        SEEDRAW["AoE session seed slug=loom-raw<br/>agentbox/agentbox.toml:1301"]
         EMAIL["email gateway REASONER_BASE_URL<br/>see AB-27"]
     end
     subgraph depA["Deployment A — LAN facade on machinelearn .132"]
         F84["Loom facade<br/>http://192.168.2.132:8084/v1"]
     end
     subgraph depB["Deployment B — sidecar on visionclaw_network (compose profile loom)"]
-        SIDE["loom-facade (Rust)<br/>docker-compose.unified.yml:288"]
-        TMPFS["tmpfs /run/loom mode=0750 uid=65532<br/>docker-compose.unified.yml:333"]
-        DATA["loom-data :ro generation<br/>docker-compose.unified.yml:328"]
+        SIDE["loom-facade (Rust)<br/>docker-compose.unified.yml:298"]
+        TMPFS["tmpfs /run/loom mode=0750 uid=65532<br/>docker-compose.unified.yml:343"]
+        DATA["loom-data :ro generation<br/>docker-compose.unified.yml:338"]
     end
     subgraph model["The model — an operational detail BEHIND the door"]
         M85["loom-model :8085 qwen3.8-27B<br/>DISTILL_BACKEND_URL"]
@@ -255,7 +255,7 @@ sequenceDiagram
     autonumber
     participant C as Consumer<br/>holds the door, never the model
     participant FAC as loom-facade<br/>LOOM_FACADE_PORT 8080
-    participant IDX as staged generation :ro<br/>docker-compose.unified.yml:328
+    participant IDX as staged generation :ro<br/>docker-compose.unified.yml:338
     participant XI as Xinference bge-small-en-v1.5 384-dim<br/>XINFERENCE_URL
     participant M as model behind DISTILL_BACKEND_URL
 
@@ -272,7 +272,7 @@ sequenceDiagram
     rect rgb(250,240,235)
         Note over C,M: delegation tier — REQUIRES a model
         C->>FAC: POST /v1/chat/completions
-        alt DISTILL_BACKEND_URL blank (docker-compose.unified.yml:299)
+        alt DISTILL_BACKEND_URL blank (docker-compose.unified.yml:309)
             FAC-->>C: 503 — retrieval-only deployment
         else backend configured
             FAC->>IDX: scaffold-inject the LAST user message
@@ -289,7 +289,7 @@ sequenceDiagram
                 end
             end
             FAC->>M: delegate chat-completions
-            Note over FAC,M: PROTOCOL: reasoning backends truncate to EMPTY below LOOM_MIN_MAX_TOKENS 1536 — the<br/>400-to-empty trap (docker-compose.unified.yml:306-307)
+            Note over FAC,M: PROTOCOL: reasoning backends truncate to EMPTY below LOOM_MIN_MAX_TOKENS 1536 — the<br/>400-to-empty trap (docker-compose.unified.yml:316-317)
             M-->>FAC: completion
             FAC-->>C: completion
         end
@@ -320,9 +320,9 @@ sequenceDiagram
     CONS->>FAC: unchanged calls
     FAC-->>CONS: unchanged contract
     Note over OP,CONS: INVARIANT ADR-2023: swapping the deployed model must NOT touch any consumer — the model<br/>is an operational detail behind :8084
-    Note over CFG: history — Gemma then Muse then Qwen3.8-27B — agentbox.toml:1614 loom_model =<br/>qwen3.8-27B, :1618 loom_max_tokens = 32768
-    Note over FAC: DOC-DRIFT: GOVERNANCE-capabilities cites agentbox.toml:1564-1566 with loom_max_tokens<br/>16384 — the working tree has loom_url at :1613 and loom_max_tokens = 32768 at :1618 —<br/>the cap was raised after glm-5.3 burned ~16k reasoning tokens and hit the old 16384 cap<br/>with empty content twice (agentbox.toml:1615-1617)
-    Note over FAC: DOC-DRIFT: GOVERNANCE-capabilities cites session seeds at agentbox.toml:1231 and :1238 —<br/>the working tree has slug=loom at :1259 and slug=loom-raw at :1266
+    Note over CFG: history — Gemma then Muse then Qwen3.8-27B — agentbox.toml:1649 loom_model =<br/>qwen3.8-27B, :1618 loom_max_tokens = 32768
+    Note over FAC: DOC-DRIFT: GOVERNANCE-capabilities cites agentbox.toml:1599-1601 with loom_max_tokens<br/>16384 — the working tree has loom_url at :1613 and loom_max_tokens = 32768 at :1618 —<br/>the cap was raised after glm-5.3 burned ~16k reasoning tokens and hit the old 16384 cap<br/>with empty content twice (agentbox.toml:1650-1652)
+    Note over FAC: DOC-DRIFT: GOVERNANCE-capabilities cites session seeds at agentbox.toml:1266 and :1238 —<br/>the working tree has slug=loom at :1259 and slug=loom-raw at :1266
     Note over NEW: DIVERGENCE: HP's old 192.168.2.48 is DEAD — a stale model-backend route black-holes<br/>every synthesis while /health still answers
 ```
 
@@ -353,7 +353,7 @@ stateDiagram-v2
         HNSW index is repacked on open, so it cannot be served from the
         read-only mount. tmpfs uid/gid MUST stay 65532 to match the image's
         non-root user or the copy fails EACCES.
-        loom/README.md:78-81, docker-compose.unified.yml:329-333
+        loom/README.md:78-81, docker-compose.unified.yml:339-343
     end note
     RvdbCopied --> Healthy : GET /health returns 200
     RvdbCopied --> EmptyFloor : source empty or mis-pointed
@@ -382,12 +382,12 @@ flowchart LR
         D85["raw model :8085 — NOT a door"]
     end
     RET["ontology-retrieval brain<br/>LOOM_FACADE_URL<br/>agentbox/mcp/servers/lib/ontology-retrieval.js:472"] --> D84
-    COND["ontology condense endpoint<br/>agentbox/agentbox.toml:649<br/>model qwen3.8-27B style openai max_concurrency 2"] --> D84
-    DREAM["dream_machine loom_url<br/>agentbox/agentbox.toml:1613"] --> D84
-    SEEDL["session seed slug=loom<br/>agentbox/agentbox.toml:1259<br/>model loom-lan/qwen3.8-27B — scaffolded, knowledge work"] --> D84
-    SEEDR["session seed slug=loom-raw<br/>agentbox/agentbox.toml:1266<br/>model loom-raw/qwen3.8-27B — no scaffold, coding"] --> D85
+    COND["ontology condense endpoint<br/>agentbox/agentbox.toml:668<br/>model qwen3.8-27B style openai max_concurrency 2"] --> D84
+    DREAM["dream_machine loom_url<br/>agentbox/agentbox.toml:1648"] --> D84
+    SEEDL["session seed slug=loom<br/>agentbox/agentbox.toml:1294<br/>model loom-lan/qwen3.8-27B — scaffolded, knowledge work"] --> D84
+    SEEDR["session seed slug=loom-raw<br/>agentbox/agentbox.toml:1301<br/>model loom-raw/qwen3.8-27B — no scaffold, coding"] --> D85
     EMAIL["email gateway<br/>REASONER_BASE_URL http://loom:8080/v1<br/>loom/README.md:19-21"] --> D80
-    CUST["consultant custom ai_base_url<br/>agentbox/agentbox.toml:1572"] --> D80
+    CUST["consultant custom ai_base_url<br/>agentbox/agentbox.toml:1607"] --> D80
     D84 --> M["qwen3.8-27B"]
     D80 --> M
     D85 --> M

@@ -5,7 +5,7 @@ area: agentbox
 governing:
   - agentbox/docs/INGRESS-identity.md
   - agentbox/docs/PROTOCOL-registry.md
-adrs: [ADR-2011, ADR-2025, ADR-2027]
+adrs: [ADR-2011, ADR-2025, ADR-2027, ADR-2064]
 sources:
   - agentbox/management-api/lib/agent-identity.js
   - agentbox/management-api/lib/uris.js
@@ -14,6 +14,8 @@ sources:
   - agentbox/management-api/lib/authority-consumer.js
   - agentbox/management-api/lib/capability-scope.js
   - agentbox/management-api/lib/pod-signer.js
+  - agentbox/management-api/adapters/pods/_solid-http-base.js
+  - agentbox/management-api/adapters/index.js
   - agentbox/management-api/lib/agent-event-auth.js
   - agentbox/management-api/lib/per-user-agent.js
   - agentbox/management-api/routes/mandate.js
@@ -26,7 +28,7 @@ sources:
   - agentbox/mcp/servers/nostr-bridge.js
   - agentbox/agentbox.toml
   - agentbox/management-api/lib/bc20-provenance-bridge.js
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-11.1 Identity, URN and mandate type model
@@ -543,7 +545,7 @@ note for EffectType "DIVERGENCE GOVERNANCE-capabilities: this classification is 
 sequenceDiagram
     autonumber
     participant BOOT as management-api boot<br/>agentbox/management-api/server.js
-    participant PS as buildPodNip98<br/>agentbox/management-api/lib/pod-signer.js:32
+    participant PS as buildPodNip98<br/>agentbox/management-api/lib/pod-signer.js:42
     participant MF as agentbox.toml<br/>[integrations.solid_pod_rs]
     participant ENV as process.env
     participant NB as nostr-bridge loadSigner / buildNip98Header
@@ -554,12 +556,12 @@ sequenceDiagram
     PS->>MF: manifest.integrations.solid_pod_rs.sign_requests
     alt sign_requests falsy
         PS-->>BOOT: return null
-        Note over PS,ADP: INVARIANT pod-signer.js:14 — default (unsigned)<br/>behaviour stays byte-identical. Enabling the flag is the ONLY<br/>behavioural change. Compare ADR-2020 byte-identical-when-off, see AB-15
+        Note over PS,ADP: INVARIANT pod-signer.js:16-17 — default (unsigned)<br/>behaviour stays byte-identical. Enabling the flag is the ONLY<br/>behavioural change. Compare ADR-2020 byte-identical-when-off, see AB-15
     else enabled
         PS->>ENV: AGENTBOX_STACK then AGENTBOX_PROFILE then integ.sign_stack
         alt no stack resolves
             PS->>BOOT: deps.onError("sign_requests is on but no stack resolved")
-            PS-->>BOOT: return null — adapter goes out UNSIGNED
+            PS-->>BOOT: return null — but requireSigned still rides with the config<br/>(adapters/index.js:63,74-77), so the adapter FAILS CLOSED
         else stack resolved
             PS-->>BOOT: async nip98(method, url, body)
         end
@@ -572,8 +574,12 @@ sequenceDiagram
             NB-->>PS: error
             PS->>BOOT: deps.onError(err) — fired ONCE (loadFailed latch)
             PS-->>ADP: null header
-            ADP->>POD: request goes out UNSIGNED
-            Note over ADP,POD: DIVERGENCE INGRESS-identity<br/>"Unsigned pod-signing fallback" — fail-OPEN<br/>at the adapter layer. pod-signer.js:14 argues<br/>the pod still fails closed if it requires auth,<br/>so the residual risk is a default-allow pod<br/>silently accepting unattributed writes.<br/>With the did:nostr:local placeholder (AB-11.3)<br/>a degraded boot writes unsigned under a<br/>non-sovereign identity.
+            alt sign_requests ON (requireSigned)
+                ADP--xADP: throw SigningUnavailable — no bytes reach the pod<br/>_solid-http-base.js:87-90
+            else flag off
+                ADP->>POD: request goes out UNSIGNED — the pre-signing baseline
+            end
+            Note over ADP,POD: RESOLVED ADR-2064: the fail-OPEN is gone.<br/>A null header no longer means "go out unsigned":<br/>pod-signer.js:12-22 makes null mean only "no<br/>originator could be built" and hands the outcome<br/>to the adapter, which throws SigningUnavailable<br/>per request when sign_requests is on<br/>(_solid-http-base.js:84-91,104-106). Unsigned is<br/>reachable ONLY with the flag off, where it is the<br/>byte-identical pre-signing baseline.
         end
     end
     alt signer available

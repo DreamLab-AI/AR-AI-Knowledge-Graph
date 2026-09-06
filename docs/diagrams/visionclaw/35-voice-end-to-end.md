@@ -32,7 +32,7 @@ sources:
   - xr-client/rust/src/webrtc_audio.rs
   - client/src/services/WebSocketEventBus.ts
   - src/actors/elevation_actor.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-35.1 Push-to-talk state machine and the agent DID binding
@@ -182,8 +182,8 @@ sequenceDiagram
     participant VW as VoiceWebSocketService.connect<br/>client/src/services/VoiceWebSocketService.ts:68
     participant REG as WebSocketRegistry<br/>client/src/services/WebSocketRegistry.ts
     participant BUS as WebSocketEventBus<br/>client/src/services/WebSocketEventBus.ts
-    participant SV as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:798
-    participant SS as SpeechSocket actor<br/>src/handlers/speech_socket_handler.rs:836
+    participant SV as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:794
+    participant SS as SpeechSocket actor<br/>src/handlers/speech_socket_handler.rs:832
     participant AO as AudioOutputService<br/>client/src/services/AudioOutputService.ts:15
 
     VW->>VW: wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws/speech'
@@ -191,13 +191,13 @@ sequenceDiagram
     VW->>SV: WebSocket upgrade (no header, no query token)
     rect rgb(238, 244, 252)
         SV->>SV: derive connection_url from scheme, host and path_and_query
-        Note over SV: speech_socket_handler.rs:986-999. This is the HTTP-equivalent<br/>URL the client must sign as the NIP-98 u tag - same derivation the<br/>graph socket uses at socket_flow_handler/http_handler.rs:357-366
+        Note over SV: speech_socket_handler.rs:982-995. This is the HTTP-equivalent<br/>URL the client must sign as the NIP-98 u tag - same derivation the<br/>graph socket uses at socket_flow_handler/http_handler.rs:357-366
         SV->>SS: SpeechSocket::new(id, app_state, None, connection_url, dev_bypass_ok)
-        Note over SV,SS: speech_socket_handler.rs:1009. dev_bypass_ok is<br/>dev_bypass_permitted(&req) behind cfg(debug_assertions or dev-auth),<br/>false in release. pubkey starts None
+        Note over SV,SS: speech_socket_handler.rs:1005. dev_bypass_ok is<br/>dev_bypass_permitted(&req) behind cfg(debug_assertions or dev-auth),<br/>false in release. pubkey starts None
         SV-->>VW: 101 Switching Protocols
         Note over SV,VW: RESOLVED ADR-2075: NO credential is checked at upgrade. The old<br/>path accepted any non-empty Bearer value OR ?token= query parameter<br/>without verifying either, and browsers cannot set WebSocket headers,<br/>so the browser client (which sent neither) was 401d outright. Query<br/>token auth is removed. The socket opens anonymous and useless
     end
-    SS->>SS: ctx.run_later(AUTH_DEADLINE) speech_socket_handler.rs:483
+    SS->>SS: ctx.run_later(AUTH_DEADLINE) speech_socket_handler.rs:479
     Note over SS: AUTH_DEADLINE = 30s speech_socket_handler.rs:22. A socket still<br/>unauthenticated at the deadline is sent an error and ctx.stop() - an<br/>unauthenticated peer cannot hold an audio broadcast subscription open
     VW->>REG: register('voice', url, socket)
     Note over VW,REG: REGISTRY_NAME = 'voice' VoiceWebSocketService.ts:13, :87
@@ -208,7 +208,7 @@ sequenceDiagram
         VW-->>VW: warn "not authenticated - /ws/speech will refuse commands" - BREAK
     else dev mode
         VW->>SS: {"type":"authenticate","token":"dev-session-token","pubkey":...}
-        Note over VW,SS: VoiceWebSocketService.ts:139-148. Server accepts ONLY when<br/>dev_bypass_ok, i.e. DEV_AUTH_LOOPBACK=1 and a loopback peer<br/>speech_socket_handler.rs:189-215. Never accepted ungated
+        Note over VW,SS: VoiceWebSocketService.ts:139-148. Server accepts ONLY when<br/>dev_bypass_ok, i.e. DEV_AUTH_LOOPBACK=1 and a loopback peer<br/>speech_socket_handler.rs:187-213. Never accepted ungated
     else NIP-98
         VW->>VW: httpUrl = wsUrl with ws scheme swapped for http
         VW->>SS: {"type":"authenticate","event":"<base64 kind-27235>"}
@@ -217,7 +217,7 @@ sequenceDiagram
     SS->>SS: handle_authenticate speech_socket_handler.rs:163
     alt dev_full_bypass_active() and dev build
         SS-->>VW: authenticate_success pubkey dev-mode-local-admin
-        Note over SS: ADR-2039 LAN-local full bypass, compiled out of release<br/>speech_socket_handler.rs:171-186
+        Note over SS: ADR-2039 LAN-local full bypass, compiled out of release<br/>speech_socket_handler.rs:171-184
     else NIP-98 verified
         SS->>SS: verify_nip98_auth("Nostr <b64>", connection_url, "GET", None)
         Note over SS: via NostrService - single-use replay cache ADR-2002
@@ -363,7 +363,7 @@ sequenceDiagram
             SS-->>SS: hold for a clarification turn, do NOT dispatch
             Note right of SS: PRD-023 WP-10. Absent confidence is NOT a block -<br/>the command is not gated on missing telemetry.<br/>speech_socket_handler.rs:58-64
             SS->>KO: speak the clarification over the Kokoro TTS path
-            Note right of SS: speech_socket_handler.rs:264
+            Note right of SS: speech_socket_handler.rs:260
         end
         SS->>VC: dispatch(text, actor_did)
         VC->>VC: resolve endpoint
@@ -389,7 +389,7 @@ sequenceDiagram
             VC-->>SS: info "dispatched to {endpoint} (event, verb)"
             Note right of VC: voice_intent_client.rs:264
             SS->>KO: speak the acknowledgement
-            Note over SS,KO: COM-15 AC3 speech_socket_handler.rs:186,<br/>log line "voice to 31402 to /v1/voice-intent accepted<br/>(event, verb) then Kokoro ack" :199
+            Note over SS,KO: COM-15 AC3 speech_socket_handler.rs:184,<br/>log line "voice to 31402 to /v1/voice-intent accepted<br/>(event, verb) then Kokoro ack" :199
         else rejected
             AB-->>VC: VoiceIntentError::Rejected
             Note right of VC: "voice-intent rejected: {e}"<br/>voice_intent_client.rs:66

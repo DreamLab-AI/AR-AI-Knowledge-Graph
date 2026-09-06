@@ -26,7 +26,7 @@ sources:
   - agentbox/tests/contract/beads.contract.spec.js
   - agentbox/agentbox.toml
   - agentbox/mcp/servers/lib/ontology-local.js
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-26.1 headroom — lazy native load and slot gating
@@ -44,12 +44,12 @@ sequenceDiagram
     MW->>H: compress(content, slot, opts)
     alt slot == events
         H-->>MW: input UNCHANGED
-        Note over H: HARD-CODED regardless of manifest config — the AUDIT TRAIL MUST NEVER BE COMPRESSED<br/>(headroom.js:15-17). agentbox.toml:1525 events = false agrees, but the code does not<br/>trust it
+        Note over H: HARD-CODED regardless of manifest config — the AUDIT TRAIL MUST NEVER BE COMPRESSED<br/>(headroom.js:15-17). agentbox.toml:1560 events = false agrees, but the code does not<br/>trust it
     else slot not enabled in [compression.slots]
         H->>CFG: read the manifest
-        Note over CFG: agentbox.toml:1522-1527 — memory true, pods true, events false, beads true, orchestrator<br/>false
+        Note over CFG: agentbox.toml:1557-1562 — memory true, pods true, events false, beads true, orchestrator<br/>false
         H-->>MW: input UNCHANGED — fail-open
-    else compression.enabled false (agentbox.toml:1516)
+    else compression.enabled false (agentbox.toml:1551)
         H-->>MW: input UNCHANGED — fail-open
     else enabled and slot on
         H->>LN: load the addon on FIRST CALL, not at require() time
@@ -87,7 +87,7 @@ sequenceDiagram
     alt json_array
         JS->>SC: smart_crush(input, SmartCrushOptions)
         SC->>SC: analyse the schema, preserve ANCHORS and OUTLIERS, sample the rest
-        Note over SC: target_ratio default 0.3 in-crate (smart_crusher.rs:11), min_items default 2.<br/>agentbox.toml:1520 sets an aggressive target_ratio = 0.15 — keep about 15 percent
+        Note over SC: target_ratio default 0.3 in-crate (smart_crusher.rs:11), min_items default 2.<br/>agentbox.toml:1555 sets an aggressive target_ratio = 0.15 — keep about 15 percent
         SC->>CCR: emit a CCR sentinel per DROPPED row
     else log_output
         JS->>LC: compress_log(input, LogCompressOptions)
@@ -101,7 +101,7 @@ sequenceDiagram
     end
     CCR->>DB: ccr_store_entry(hash, original) — lib.rs:61
     Note over CCR,DB: BLAKE3 hash prefix, 24 hex chars, identifies the stored content (types.rs:5-12).<br/>Process-global singleton via OnceLock (ccr_store.rs:11-12), DashMap over a rusqlite<br/>Connection
-    Note over DB: backend sqlite (memory also supported, redis DEFERRED), ttl_minutes 30, max_entries 1000<br/>with LRU eviction (agentbox.toml:1517-1519)
+    Note over DB: backend sqlite (memory also supported, redis DEFERRED), ttl_minutes 30, max_entries 1000<br/>with LRU eviction (agentbox.toml:1552-1554)
     JS-->>JS: CompressResult {compressed, original_bytes, ...}
 ```
 

@@ -30,7 +30,7 @@ sources:
   - agentbox/mcp/servers/ruvector-mcp.cjs
   - agentbox/scripts/ruvector-aggregate-sweep.mjs
   - agentbox/scripts/ruvector-pattern-distill.mjs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## AB-02.1 boot phases 1-3 — vault resolution, directories, sovereign identity
 ```mermaid
@@ -40,7 +40,7 @@ sequenceDiagram
     participant E as entrypoint-unified.sh<br/>agentbox/config/entrypoint-unified.sh:1
     participant TV as _ab_toml_val<br/>entrypoint-unified.sh:29
     participant FS as rootfs/tmpfs
-    participant NPB as nostr-pod-bridge<br/>entrypoint-unified.sh:406
+    participant NPB as nostr-pod-bridge<br/>entrypoint-unified.sh:413
 
     D->>E: exec entrypoint-unified.sh<br/>set -euo pipefail (:17)
     Note over E: ADR-2028 vault resolve runs before Phase 1<br/>every supervised program inherits PID1 env
@@ -85,10 +85,10 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant E as entrypoint-unified.sh
-    participant AM as agentbox-manifest<br/>entrypoint-unified.sh:528
+    participant AM as agentbox-manifest<br/>entrypoint-unified.sh:535
     participant FS as rootfs/tmpfs
-    participant SV as supervisord<br/>entrypoint-unified.sh:689
-    participant B as [program:bootstrap] Stage B<br/>entrypoint-unified.sh:693
+    participant SV as supervisord<br/>entrypoint-unified.sh:696
+    participant B as [program:bootstrap] Stage B<br/>entrypoint-unified.sh:700
 
     E-->>E: echo "[4/8] Provisioning agent stacks..." (:527)
     E->>AM: agentbox-manifest provision-stacks (:528)
@@ -136,12 +136,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant B as [program:bootstrap] Stage B<br/>entrypoint-unified.sh:836
-    participant AM as agentbox-manifest<br/>entrypoint-unified.sh:1384
-    participant MCP as .mcp.json<br/>entrypoint-unified.sh:910
+    participant B as [program:bootstrap] Stage B<br/>entrypoint-unified.sh:843
+    participant AM as agentbox-manifest<br/>entrypoint-unified.sh:1456
+    participant MCP as .mcp.json<br/>entrypoint-unified.sh:917
     participant FS as rootfs/tmpfs
-    participant RT as runtime-env.sh<br/>entrypoint-unified.sh:1994
-    participant TS as trust-seed.cjs<br/>config/hooks/trust-seed.cjs:1121
+    participant RT as runtime-env.sh<br/>entrypoint-unified.sh:2120
+    participant TS as trust-seed.cjs<br/>registered from entrypoint-unified.sh:1284-1295
 
     B-->>B: echo "[7/8] Bootstrapping ruflo plugins..." (:836)
     B->>FS: mkdir ~/.claude-flow/plugins, /var/cache/ruflo-plugins (:841-843)
@@ -182,17 +182,17 @@ sequenceDiagram
 ## AB-02.4 supervision tree — core and identity programs
 ```mermaid
 flowchart TB
-    BOOT["program:bootstrap<br/>flake.nix:2022<br/>no user= line -&gt; runs as root<br/>priority=5 autorestart=false one-shot"]
-    MGMT["program:management-api<br/>flake.nix:2036<br/>user=devuser bind 0.0.0.0:ENV_MANAGEMENT_API_PORT default 9090<br/>priority=20 REQUIRED_FOR_READINESS=true"]
-    SEAL["program:bootstrap-seal<br/>flake.nix:2052<br/>user=devuser priority=99 autorestart=false one-shot<br/>writes /run/agentbox/bootstrap.done, timeout 120s"]
-    SOLID["program:solid-pod<br/>flake.nix:2064<br/>gate sovereign_mesh.enabled and local-solid-rs active<br/>user=devuser priority=30 REQUIRED_FOR_READINESS=true"]
-    HTTPSB["program:https-bridge<br/>flake.nix:2081<br/>gate sovereign_mesh.enabled and https_bridge<br/>user=devuser priority=32"]
-    GATERELAY{"podBridgeEnabled? ADR-2003<br/>flake.nix:1273 relayLocal and pod_bridge"}
-    NRELAY1["program:nostr-relay native<br/>flake.nix:2118<br/>bind 127.0.0.1:7777 (AGENTBOX_RELAY_BIND)<br/>user=devuser priority=35 REQUIRED_FOR_READINESS=false"]
-    NRELAY2["program:nostr-relay nostr-rs-relay<br/>flake.nix:2130<br/>config /etc/agentbox/nostr-relay.toml<br/>user=devuser priority=35 REQUIRED_FOR_READINESS=false"]
-    NGW["program:nostr-gateway<br/>flake.nix:1809<br/>user=devuser priority=234<br/>off switch AGENTBOX_NOSTR_GATEWAY=0"]
-    TSD["program:tailscaled<br/>flake.nix:2156<br/>gate networking.tailscale, no user= -&gt; root<br/>socket /var/run/tailscale priority=15"]
-    TSU["program:tailscale-up<br/>flake.nix:2166<br/>gate networking.tailscale, no user= -&gt; root<br/>priority=16 autorestart=false one-shot"]
+    BOOT["program:bootstrap<br/>flake.nix:2039<br/>no user= line -&gt; runs as root<br/>priority=5 autorestart=false one-shot"]
+    MGMT["program:management-api<br/>flake.nix:2053<br/>user=devuser bind 0.0.0.0:ENV_MANAGEMENT_API_PORT default 9090<br/>priority=20 REQUIRED_FOR_READINESS=true"]
+    SEAL["program:bootstrap-seal<br/>flake.nix:2069<br/>user=devuser priority=99 autorestart=false one-shot<br/>writes /run/agentbox/bootstrap.done, timeout 120s"]
+    SOLID["program:solid-pod<br/>flake.nix:2081<br/>gate sovereign_mesh.enabled and local-solid-rs active<br/>user=devuser priority=30 REQUIRED_FOR_READINESS=true"]
+    HTTPSB["program:https-bridge<br/>flake.nix:2098<br/>gate sovereign_mesh.enabled and https_bridge<br/>user=devuser priority=32"]
+    GATERELAY{"podBridgeEnabled? ADR-2003<br/>flake.nix:1290 relayLocal and pod_bridge"}
+    NRELAY1["program:nostr-relay native<br/>flake.nix:2135<br/>bind 127.0.0.1:7777 (AGENTBOX_RELAY_BIND)<br/>user=devuser priority=35 REQUIRED_FOR_READINESS=false"]
+    NRELAY2["program:nostr-relay nostr-rs-relay<br/>flake.nix:2147<br/>config /etc/agentbox/nostr-relay.toml<br/>user=devuser priority=35 REQUIRED_FOR_READINESS=false"]
+    NGW["program:nostr-gateway<br/>flake.nix:1826<br/>user=devuser priority=234<br/>off switch AGENTBOX_NOSTR_GATEWAY=0"]
+    TSD["program:tailscaled<br/>flake.nix:2173<br/>gate networking.tailscale, no user= -&gt; root<br/>socket /var/run/tailscale priority=15"]
+    TSU["program:tailscale-up<br/>flake.nix:2183<br/>gate networking.tailscale, no user= -&gt; root<br/>priority=16 autorestart=false one-shot"]
 
     BOOT -->|"priority 5, runs before 20"| MGMT
     MGMT -->|"REQUIRED_FOR_READINESS=true"| SEAL
@@ -207,11 +207,11 @@ flowchart TB
 ## AB-02.5 supervision tree — memory and scheduled programs
 ```mermaid
 flowchart TB
-    RAS["program:ruvector-aggregate-sweep<br/>flake.nix:1792<br/>node ruvector-aggregate-sweep.mjs --loop<br/>user=devuser priority=232 startsecs=0"]
-    RPD["program:ruvector-pattern-distill<br/>flake.nix:1821<br/>node ruvector-pattern-distill.mjs --loop<br/>user=devuser priority=233 startsecs=0"]
-    OCS["program:ontology-condense-scheduler<br/>flake.nix:1839<br/>gate ONTOLOGY_CONDENSE_SCHEDULE and _ENABLED (imageEnv)<br/>user=devuser priority=234 startsecs=0 flock-serialised"]
-    PCRON["program:podcast-cron<br/>flake.nix:2322<br/>supercronic over podcast-knowledge-ingest/crontab<br/>user=devuser priority=250"]
-    FCRON["program:forum-backup-cron<br/>flake.nix:2341<br/>supercronic over dreamlab-ai-website backup/crontab<br/>user=devuser priority=250, fails loud without CLOUDFLARE_API_TOKEN"]
+    RAS["program:ruvector-aggregate-sweep<br/>flake.nix:1809<br/>node ruvector-aggregate-sweep.mjs --loop<br/>user=devuser priority=232 startsecs=0"]
+    RPD["program:ruvector-pattern-distill<br/>flake.nix:1838<br/>node ruvector-pattern-distill.mjs --loop<br/>user=devuser priority=233 startsecs=0"]
+    OCS["program:ontology-condense-scheduler<br/>flake.nix:1856<br/>gate ONTOLOGY_CONDENSE_SCHEDULE and _ENABLED (imageEnv)<br/>user=devuser priority=234 startsecs=0 flock-serialised"]
+    PCRON["program:podcast-cron<br/>flake.nix:2339<br/>supercronic over podcast-knowledge-ingest/crontab<br/>user=devuser priority=250"]
+    FCRON["program:forum-backup-cron<br/>flake.nix:2358<br/>supercronic over dreamlab-ai-website backup/crontab<br/>user=devuser priority=250, fails loud without CLOUDFLARE_API_TOKEN"]
 
     RAS -->|"feeds"| RPD
     RPD -->|"feeds"| OCS
@@ -221,14 +221,14 @@ flowchart TB
 ## AB-02.6 supervision tree — gated toolchain programs
 ```mermaid
 flowchart TB
-    QGIS["program:qgis-mcp<br/>flake.nix:1756<br/>gate spatial.qgis, TCP proxy to gui-tools-service:9877<br/>user=devuser priority=230"]
-    BLEND["program:blender-mcp<br/>flake.nix:1781<br/>gate spatial.blender, bridges 127.0.0.1:9876 to external GUI sidecar<br/>user=devuser priority=231"]
-    JLAB["program:jupyter-lab<br/>flake.nix:1852<br/>gate data_science.jupyter, bind 0.0.0.0:8888 no token<br/>user=devuser priority=232"]
-    IMGM["program:imagemagick-mcp<br/>flake.nix:2095<br/>gate media.imagemagick<br/>user=devuser priority=210"]
-    COMFY["program:comfyui-builtin<br/>flake.nix:2196<br/>gate media.comfyui_builtin, bind 127.0.0.1:8188<br/>user=devuser priority=220"]
-    OPF["program:opf-router<br/>flake.nix:2143<br/>gate privacyFilterEnabled (:1448), OPF_PORT default 9092<br/>user=devuser priority=240"]
-    DREAM["program:dream-engine<br/>flake.nix:2218<br/>gate dreamEngineEnabled (:1323), LOOM_URL default 192.168.2.132:8084/v1<br/>user=devuser priority=230"]
-    CODES["program:code-server<br/>flake.nix:2179<br/>gate toolchains.code_server, bind 0.0.0.0:8080 auth none<br/>user=devuser priority=50"]
+    QGIS["program:qgis-mcp<br/>flake.nix:1773<br/>gate spatial.qgis, TCP proxy to gui-tools-service:9877<br/>user=devuser priority=230"]
+    BLEND["program:blender-mcp<br/>flake.nix:1798<br/>gate spatial.blender, bridges 127.0.0.1:9876 to external GUI sidecar<br/>user=devuser priority=231"]
+    JLAB["program:jupyter-lab<br/>flake.nix:1869<br/>gate data_science.jupyter, bind 0.0.0.0:8888 no token<br/>user=devuser priority=232"]
+    IMGM["program:imagemagick-mcp<br/>flake.nix:2112<br/>gate media.imagemagick<br/>user=devuser priority=210"]
+    COMFY["program:comfyui-builtin<br/>flake.nix:2213<br/>gate media.comfyui_builtin, bind 127.0.0.1:8188<br/>user=devuser priority=220"]
+    OPF["program:opf-router<br/>flake.nix:2160<br/>gate privacyFilterEnabled (:1448), OPF_PORT default 9092<br/>user=devuser priority=240"]
+    DREAM["program:dream-engine<br/>flake.nix:2235<br/>gate dreamEngineEnabled (:1323), LOOM_URL default 192.168.2.132:8084/v1<br/>user=devuser priority=230"]
+    CODES["program:code-server<br/>flake.nix:2196<br/>gate toolchains.code_server, bind 0.0.0.0:8080 auth none<br/>user=devuser priority=50"]
 
     OPF -.->|"privacy filter mode gate"| DREAM
     DREAM -.->|"ZAI_ANTHROPIC_API_KEY, RUVECTOR_PG_CONNINFO inherited from PID1"| RVNOTE["note: secrets never written<br/>into generated supervisor text"]
@@ -238,18 +238,18 @@ flowchart TB
 ```mermaid
 flowchart TB
     GATESTACK{"desktop.stack ADR-2003<br/>flake.nix:107-108, Nix if/else-if/else"}
-    HYPR["program:hyprland<br/>flake.nix:1915<br/>user=devuser priority=40"]
-    XWAY["program:xwayland-session<br/>flake.nix:1929<br/>user=devuser priority=41"]
-    WAYVNC["program:wayvnc<br/>flake.nix:1940<br/>bind 0.0.0.0:5901 user=devuser priority=42"]
-    XORG["program:xorg-nvidia<br/>flake.nix:1951<br/>no user= -&gt; root priority=40"]
-    I3A["program:i3wm xorg-nvidia branch<br/>flake.nix:1961<br/>user=devuser priority=41"]
-    X11VNC["program:x11vnc<br/>flake.nix:1972<br/>bind 0.0.0.0:5901 user=devuser priority=42"]
-    XVNC["program:xvnc<br/>flake.nix:1983<br/>bind 0.0.0.0:5901 no user= -&gt; root priority=40"]
-    I3B["program:i3wm i3-x11 default branch<br/>flake.nix:1993<br/>user=devuser priority=41"]
-    AOE["program:aoe-serve<br/>flake.nix:2246<br/>gate interaction_plane.enabled (:136), bind 127.0.0.1:9095<br/>--auth token --behind-proxy user=devuser priority=45"]
-    NIP98["program:nip98-proxy<br/>flake.nix:2268<br/>bind 0.0.0.0:9096, published 9096:9096 in compose<br/>user=devuser priority=46"]
-    TAB0["program:tab0-bridge<br/>flake.nix:2298<br/>gate sovereign_mesh.enabled<br/>user=devuser priority=236"]
-    TMUX["program:tmux-autostart<br/>flake.nix:2311<br/>user=devuser priority=95 autorestart=false one-shot"]
+    HYPR["program:hyprland<br/>flake.nix:1932<br/>user=devuser priority=40"]
+    XWAY["program:xwayland-session<br/>flake.nix:1946<br/>user=devuser priority=41"]
+    WAYVNC["program:wayvnc<br/>flake.nix:1957<br/>bind 0.0.0.0:5901 user=devuser priority=42"]
+    XORG["program:xorg-nvidia<br/>flake.nix:1968<br/>no user= -&gt; root priority=40"]
+    I3A["program:i3wm xorg-nvidia branch<br/>flake.nix:1978<br/>user=devuser priority=41"]
+    X11VNC["program:x11vnc<br/>flake.nix:1989<br/>bind 0.0.0.0:5901 user=devuser priority=42"]
+    XVNC["program:xvnc<br/>flake.nix:2000<br/>bind 0.0.0.0:5901 no user= -&gt; root priority=40"]
+    I3B["program:i3wm i3-x11 default branch<br/>flake.nix:2010<br/>user=devuser priority=41"]
+    AOE["program:aoe-serve<br/>flake.nix:2263<br/>gate interaction_plane.enabled (:136), bind 127.0.0.1:9095<br/>--auth token --behind-proxy user=devuser priority=45"]
+    NIP98["program:nip98-proxy<br/>flake.nix:2285<br/>bind 0.0.0.0:9096, published 9096:9096 in compose<br/>user=devuser priority=46"]
+    TAB0["program:tab0-bridge<br/>flake.nix:2315<br/>gate sovereign_mesh.enabled<br/>user=devuser priority=236"]
+    TMUX["program:tmux-autostart<br/>flake.nix:2328<br/>user=devuser priority=95 autorestart=false one-shot"]
 
     GATESTACK -->|"hyprland-wayland"| HYPR --> XWAY --> WAYVNC
     GATESTACK -->|"xorg-nvidia"| XORG --> I3A --> X11VNC
@@ -263,14 +263,14 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     autonumber
-    participant SV as supervisord PID1<br/>flake.nix:2005 supervisord section nodaemon=true
-    participant BOOT as program:bootstrap<br/>flake.nix:2022 no user= line means root
-    participant MGMT as program:management-api<br/>flake.nix:2036 user=devuser priority=20
-    participant SOLID as program:solid-pod<br/>flake.nix:2064 user=devuser priority=30
+    participant SV as supervisord PID1<br/>flake.nix:2022 supervisord section nodaemon=true
+    participant BOOT as program:bootstrap<br/>flake.nix:2039 no user= line means root
+    participant MGMT as program:management-api<br/>flake.nix:2053 user=devuser priority=20
+    participant SOLID as program:solid-pod<br/>flake.nix:2081 user=devuser priority=30
     participant SEAL as program:bootstrap-seal<br/>agentbox/config/seal-bootstrap.sh priority=99
     participant SC as supervisorctl status<br/>seal-bootstrap.sh:88
 
-    Note over SV: supervisord itself inherits root from the exec'd<br/>entrypoint-unified.sh Stage A (entrypoint-unified.sh:689)
+    Note over SV: supervisord itself inherits root from the exec'd<br/>entrypoint-unified.sh Stage A (entrypoint-unified.sh:696)
     SV->>BOOT: spawn priority=5, environment AGENTBOX_BOOTSTRAP_STAGE=B (:2024)
     Note right of BOOT: no user= line — Stage B (phases 6-8) runs as ROOT,<br/>needed for chown/mkdir under devuser volumes
     SV->>MGMT: spawn priority=20, user=devuser (:2039)
@@ -382,7 +382,7 @@ stateDiagram-v2
 ## AB-02.11 tmux-autostart window layout
 ```mermaid
 flowchart TB
-    START["program:tmux-autostart<br/>flake.nix:2311, priority=95<br/>runs config/tmux-autostart.sh"]
+    START["program:tmux-autostart<br/>flake.nix:2328, priority=95<br/>runs config/tmux-autostart.sh"]
     W0["window 0 Claude<br/>tmux-autostart.sh:237<br/>tab0-bridge injection target<br/>CLAUDE_CONFIG_DIR=/home/devuser/.claude"]
     W1["window 1 Agent<br/>tmux-autostart.sh:260<br/>agent execution workspace"]
     W2["window 2 Services<br/>tmux-autostart.sh:267<br/>supervisorctl status"]
@@ -432,7 +432,7 @@ sequenceDiagram
             AM->>FS: write .claude/settings.json with learning_hooks wiring (stacks.rs:26-64)
         end
     end
-    Note over E: chown -R 1000:1000 WORKSPACE/profiles after provision-stacks (entrypoint-unified.sh:536-538)
+    Note over E: chown -R 1000:1000 WORKSPACE/profiles after provision-stacks (entrypoint-unified.sh:543-545)
     SEED->>FS: provision profiles/openrouter/.claude/settings.local.json ANTHROPIC_BASE_URL/AUTH_TOKEN (aoe-seed-sessions.mjs:121-135)
     SEED->>FS: provision profiles/zai/.claude/settings.local.json (aoe-seed-sessions.mjs:141-154)
     Note right of SEED: ADR-043 D4.1 — a distinct AGENTBOX_PROFILE per session<br/>yields a distinct persisted did:nostr identity
@@ -444,7 +444,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant AOE as aoe serve custom_agents<br/>flake.nix:2246 exec of wrapper
+    participant AOE as aoe serve custom_agents<br/>flake.nix:2263 exec of wrapper
     participant W as zai.sh / openrouter.sh<br/>config/harness-wrappers/zai.sh:1
     participant PV as provider_url_validate<br/>config/harness-wrappers/_provider-url.sh:64
     participant SET as settings.local.json<br/>WORKSPACE/profiles/SLUG/.claude
@@ -480,7 +480,7 @@ sequenceDiagram
     autonumber
     participant TOML as agentbox.toml vault section<br/>entrypoint-unified.sh:46-81
     participant VR as _ab_vault_resolve<br/>entrypoint-unified.sh:81
-    participant PID1 as supervisord PID1 env<br/>entrypoint-unified.sh:689 exec
+    participant PID1 as supervisord PID1 env<br/>entrypoint-unified.sh:696 exec
     participant PROG as supervised programs<br/>flake.nix program blocks
 
     VR->>TOML: _ab_toml_val vault root/pages/format/tui/working/transcripts (:86,111-121)
@@ -497,7 +497,7 @@ sequenceDiagram
         VR->>VR: export ONTOLOGY_PAGES_DIR default VAULT_PAGES, derived (:129-133)
         Note right of VR: DIVERGENCE — vault ENABLED but an explicit<br/>ONTOLOGY_PAGES_DIR differing from VAULT_PAGES<br/>still OVERRIDES it for legacy consumers (:130-131)
     end
-    VR->>PID1: exec supervisord inherits VAULT_ROOT/PAGES/FORMAT/TUI/WORKING/TRANSCRIPTS (entrypoint-unified.sh:689)
+    VR->>PID1: exec supervisord inherits VAULT_ROOT/PAGES/FORMAT/TUI/WORKING/TRANSCRIPTS (entrypoint-unified.sh:696)
     PID1->>PROG: every program child inherits PID1 env at spawn, no VAULT_* set per-program in flake.nix
 ```
 
@@ -505,10 +505,10 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant PID1 as supervisord PID1 env<br/>entrypoint-unified.sh:689
-    participant RT as runtime-env.sh<br/>entrypoint-unified.sh:1994
-    participant BASH as etc profile.d bash<br/>entrypoint-unified.sh:2088
-    participant FISH as fish conf.d<br/>entrypoint-unified.sh:2094-2103
+    participant PID1 as supervisord PID1 env<br/>entrypoint-unified.sh:696
+    participant RT as runtime-env.sh<br/>entrypoint-unified.sh:2120
+    participant BASH as etc profile.d bash<br/>entrypoint-unified.sh:2214
+    participant FISH as fish conf.d<br/>entrypoint-unified.sh:2220-2229
     participant TMUX as tmux windows<br/>tmux-autostart.sh:9
 
     PID1->>RT: Phase 8 writes RUNTIME_ENV_FILE=/run/agentbox/runtime-env.sh (:1994-2043)
@@ -522,7 +522,7 @@ sequenceDiagram
 ## AB-02.16 seccomp profile — supplemental denylist
 ```mermaid
 flowchart TB
-    COMPOSE["docker-compose.yml:140-142<br/>security_opt no-new-privileges:true<br/>seccomp=./config/seccomp-agentbox.json"]
+    COMPOSE["docker-compose.yml:141-143<br/>security_opt no-new-privileges:true<br/>seccomp=./config/seccomp-agentbox.json"]
     PROFILE["seccomp-agentbox.json<br/>config/seccomp-agentbox.json<br/>defaultAction SCMP_ACT_ALLOW"]
     SOCK["rule 1: socket syscall<br/>args index0 value38 SCMP_CMP_EQ<br/>action SCMP_ACT_ERRNO"]
     DENY["rule 2: 46 named syscalls<br/>action SCMP_ACT_ERRNO"]

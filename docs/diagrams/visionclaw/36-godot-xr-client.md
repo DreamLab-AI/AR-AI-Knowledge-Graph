@@ -40,7 +40,7 @@ sources:
   - xr-client/scripts/plane_manager.gd
   - xr-client/scripts/query_builder.gd
   - xr-client/tests/run_gut.gd
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-36.1 Boot — OpenXR init, capability probe, deferred scene swap (ADR-2036)
@@ -541,7 +541,7 @@ sequenceDiagram
     PM->>LH: POST /api/layout/mode + NIP-98 header
     HD->>GS: control_pressed("radial:<dagRank|typeTier|ego>")
     GS->>PR: _post_radial(mode)
-    PR->>LH: POST /api/layout/radial (server layout_handler.rs:135-166)
+    PR->>LH: POST /api/layout/radial (server layout_handler.rs:140-171)
     HD->>GS: Hierarchy toggle
     GS->>LH: PUT dagBiasK = 0.6 on / 0.0 off graph_scene.gd:888-910
     HD->>GS: Shells +/- nudge

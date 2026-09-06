@@ -66,7 +66,7 @@ sources:
   - agentbox/services/skill-tools/src/docs_alignment/models.rs
   - agentbox/services/skill-tools/src/docs_alignment/orchestrator.rs
   - agentbox/services/skill-tools/src/docs_alignment/report_sections.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-28.1 agentbox-manifest — the boot-time projection surface
@@ -164,7 +164,7 @@ sequenceDiagram
     autonumber
     participant EP as entrypoint-unified.sh
     participant BIN as agentbox-manifest toml-string<br/>agentbox/services/agentbox-manifest/src/tomlval.rs
-    participant TOML as agentbox.toml [consultants.*]<br/>agentbox/agentbox.toml:856
+    participant TOML as agentbox.toml [consultants.*]<br/>agentbox/agentbox.toml:891
     participant ENV as consultant environment
     participant TUI as TUI save path
 
@@ -267,7 +267,7 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     autonumber
-    participant SUP as supervisord<br/>agentbox/flake.nix:2095
+    participant SUP as supervisord<br/>agentbox/flake.nix:2112
     participant BIN as agentbox-mcp<br/>agentbox/services/agentbox-mcp/src/main.rs:40
     participant LOG as tracing_subscriber
     participant T as rmcp stdio transport

@@ -28,7 +28,7 @@ sources:
   - agentbox/flake.nix
   - agentbox/mcp/servers/lib/ontology-push.js
   - agentbox/scripts/dream-inbox.mjs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## AB-08.1 Hook registration table part 1 — tool, prompt and session events
 ```mermaid

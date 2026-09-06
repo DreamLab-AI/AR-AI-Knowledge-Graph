@@ -2,7 +2,7 @@
 id: VC-31
 title: R3F/Three.js graph render pipeline and WASM scene effects
 area: visionclaw
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 governing:
   - docs/BASELINE-architecture.md
 adrs: []
@@ -90,7 +90,7 @@ flowchart LR
 sequenceDiagram
     autonumber
     participant R3F as R3F render loop
-    participant GM as GraphManager.useFrame priority -2<br/>GraphManager.tsx:360
+    participant GM as GraphManager.useFrame priority -2<br/>GraphManager.tsx:367
     participant WP as graphWorkerProxy.getPositionsSync<br/>graphWorkerProxy.ts:294
     participant SEL as useGraphSelection fly-to state<br/>useGraphSelection.ts:67, resolveNodeWorldPosition cameraFocus.ts:68
     participant EBC as useEdgeBufferComputation.useFrame priority -2<br/>useEdgeBufferComputation.ts:73
@@ -527,14 +527,14 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant WS as handleAgentActionTagged<br/>binaryProtocol.ts:442
+    participant WS as handleAgentActionTagged<br/>binaryProtocol.ts:438
     participant STORE as transientBeamStore.pushBeams<br/>transientBeamStore.ts:67
     participant LAYER as TransientBeamsLayer<br/>TransientBeamsLayer.tsx:69
     participant HOOK as useTransientBeams<br/>useTransientBeams.ts:24
     participant MESH as TransientBeamMesh.updateBeam useFrame<br/>TransientBeamsLayer.tsx:166
     participant ENC as semanticEncoding agentActionColorHex/Shape<br/>semanticEncoding.ts:126,131
 
-    Note over WS: 0x23 wire frame is a bare type tag, not a V4 header colon separated fields<br/>count:u16 then repeated len:u16 plus event bytes (binaryProtocol.ts:436-437). See VC-30<br/>for the surrounding websocket store and worker plumbing.
+    Note over WS: 0x23 wire frame is a bare type tag, not a V4 header colon separated fields<br/>count:u16 then repeated len:u16 plus event bytes (binaryProtocol.ts:422-427, decoded at :437-442). See VC-30<br/>for the surrounding websocket store and worker plumbing.
     WS->>STORE: pushTransientBeams(actions) exported non-React entry point<br/>(transientBeamStore.ts:115)
     STORE->>STORE: pushBeams -- clampDuration(durationMs) floor MIN_BEAM_DURATION_MS=400,<br/>default DEFAULT_BEAM_DURATION_MS=1500
     STORE->>STORE: beams.concat(incoming), FIFO trim to MAX_TRANSIENT_BEAMS=256 (oldest<br/>evicted first)

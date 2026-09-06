@@ -24,7 +24,7 @@ sources:
   - agentbox/management-api/routes/broker-bridge.js
   - agentbox/management-api/routes/kg-elevation.js
   - agentbox/mcp/nostr-bridge/relay-consumer.js
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-05.1 The loop — one case crossing four systems
 ```mermaid
@@ -34,7 +34,7 @@ flowchart LR
         GATE["buildAuthorityGate.guard<br/>lib/authority.js:207"]
         ELEV["elevation-publisher<br/>lib/elevation-publisher.js"]
         WAIT["GovernanceDecisionWaiter<br/>lib/governance-decision-waiter.js:45"]
-        RC["relay-consumer governance branch<br/>mcp/nostr-bridge/relay-consumer.js:314-325"]
+        RC["relay-consumer governance branch<br/>mcp/nostr-bridge/relay-consumer.js:363-374"]
         BB["broker-bridge routes<br/>routes/broker-bridge.js:252,371"]
     end
     subgraph forum["ACSP forum relay — stateless surface"]
@@ -66,7 +66,7 @@ flowchart LR
 
     INV["INVARIANT ADR-2006 — the stateful BrokerActor and its Neo4j<br/>transport are SUPERSEDED and DELETED. Only the<br/>storage-agnostic domain kernel is retained. Callers must<br/>not resurrect the old actor transport."]
     D1["DIVERGENCE ADR-2006 implementation_status partial — ACSP<br/>gives a forum-native signed-event surface, but its consumers<br/>STILL own pending state and durable reconciliation. Removing<br/>BrokerActor did NOT make the whole workflow stateless."]
-    D2["EXTERNAL — the VisionFlow Judgment Broker<br/>handleGovernanceDecision is not on disk in this repo.<br/>relay-consumer.js:316-318 hands the 31403 to the<br/>orchestrator adapter, which writes it as JSON to the pod<br/>governance decisions directory for VisionClaw to collect."]
+    D2["EXTERNAL — the VisionFlow Judgment Broker<br/>handleGovernanceDecision is not on disk in this repo.<br/>relay-consumer.js:365-367 hands the 31403 to the<br/>orchestrator adapter, which writes it as JSON to the pod<br/>governance decisions directory for VisionClaw to collect."]
 
     KERNEL --> INV
     ACSP --> D1
@@ -161,7 +161,7 @@ sequenceDiagram
     autonumber
     participant G as authority gate
     participant W as GovernanceDecisionWaiter<br/>lib/governance-decision-waiter.js:45
-    participant RC as relay-consumer<br/>mcp/nostr-bridge/relay-consumer.js:325
+    participant RC as relay-consumer<br/>mcp/nostr-bridge/relay-consumer.js:374
     participant O as orchestrator.handleGovernanceDecision
 
     G->>W: register awaiter for signedRequest

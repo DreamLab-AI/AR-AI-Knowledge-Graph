@@ -36,7 +36,7 @@ sources:
   - agentbox/management-api/lib/system-manifest.js
   - agentbox/flake.nix
   - agentbox/mcp/servers/mcp-ws-relay.js
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-22.1 Skill discovery and JIT load at a turn
@@ -105,7 +105,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant CI as invariants.yml<br/>agentbox/.github/workflows/invariants.yml:68
+    participant CI as invariants.yml<br/>agentbox/.github/workflows/invariants.yml:71
     participant SH as lint-skills.sh<br/>agentbox/skills/lint-skills.sh:24
     participant MJS as lint-skills.mjs<br/>agentbox/skills/lint-skills.mjs:406
     participant TXT as checkTextPatterns<br/>agentbox/skills/lint-skills.mjs:308
@@ -195,7 +195,7 @@ sequenceDiagram
     else found — check required_substrates and blocked_patterns per guide, plus structure.substrates
         HB-->>AG: {compliant, violations[], template_version} (harness-bridge.js:363-369)
     end
-    Note over TD: DOC-DRIFT: agentbox.toml:699 sets [skills.harness] template_dir =<br/>"/home/devuser/workspace/VisionFlow/docs/engineering/templates" but<br/>config/entrypoint-unified.sh's harness-bridge registration block (:1462-1476) never<br/>exports HARNESS_TEMPLATE_DIR — the server falls back to its hardcoded default<br/>/var/lib/agentbox/harness-templates
+    Note over TD: DOC-DRIFT: agentbox.toml:718 sets [skills.harness] template_dir =<br/>"/home/devuser/workspace/VisionFlow/docs/engineering/templates" but<br/>config/entrypoint-unified.sh's harness-bridge registration block (:1462-1476) never<br/>exports HARNESS_TEMPLATE_DIR — the server falls back to its hardcoded default<br/>/var/lib/agentbox/harness-templates
 ```
 
 ## AB-22.6 harness_audit — pairing ratio across all templates
@@ -330,8 +330,8 @@ flowchart TB
     GATE["gateOpen(x-agentbox-gate)<br/>agentbox/scripts/project-mcp-servers.mjs:234"]
     REQ["requiresMet(x-agentbox-requires)<br/>agentbox/scripts/project-mcp-servers.mjs:248"]
     LEDGER["ownership ledger<br/>agentbox/scripts/project-mcp-servers.mjs:265"]
-    WS[".mcp.json workspace target<br/>entrypoint-unified.sh:910 WORKSPACE/.mcp.json"]
-    BESPOKE["bespoke entries hand-written earlier in entrypoint<br/>harness-bridge, precedent-bridge, claude-flow, browser-gpu —<br/>entrypoint-unified.sh:1445,1465"]
+    WS[".mcp.json workspace target<br/>entrypoint-unified.sh:917 WORKSPACE/.mcp.json"]
+    BESPOKE["bespoke entries hand-written earlier in entrypoint<br/>harness-bridge, precedent-bridge, claude-flow, browser-gpu —<br/>entrypoint-unified.sh:1517,1465"]
 
     REG -- "mirror shared server wiring (skills/mcp.json:3 comment)" --> MIRROR
     REG -- "nix bake" --> BAKE
@@ -342,7 +342,7 @@ flowchart TB
     REQ -- "bin on PATH / file exists / envset non-empty" --> PROJ
     PROJ --> LEDGER
     LEDGER -- "D1: owned name whose definition vanished is removed + recorded" --> WS
-    BESPOKE -- "written first, entrypoint-unified.sh:1655 runs projector AFTER" --> WS
+    BESPOKE -- "written first, entrypoint-unified.sh:1765 runs projector AFTER" --> WS
     PROJ -- "reconcile: upsert projector-managed servers, remove closed-gate ones" --> WS
 ```
 
@@ -352,7 +352,7 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant EP as entrypoint _ab_vault_resolve<br/>agentbox/config/entrypoint-unified.sh:81
-    participant TOML as agentbox.toml [vault]<br/>agentbox/agentbox.toml:680
+    participant TOML as agentbox.toml [vault]<br/>agentbox/agentbox.toml:699
     participant ENV as exported VAULT_ROOT/PAGES/FORMAT/TUI<br/>agentbox/config/entrypoint-unified.sh:124
     participant SK as vault-writing skills<br/>podcast-knowledge-ingest, web-summary note-link mode
     participant VF as vault-frontmatter.js<br/>agentbox/mcp/servers/lib/vault-frontmatter.js:242
@@ -399,7 +399,7 @@ sequenceDiagram
     participant KS as KernelSession (code-interpreter MCP)
 
     U->>TSC: /tree-search-coder <task> (manifest_gate [skills.tree_search_coder] enabled=true)
-    loop candidate k = 1..max_candidates (default 5, agentbox.toml:625)
+    loop candidate k = 1..max_candidates (default 5, agentbox.toml:644)
         TSC->>CAP: tree-search-cap reserve --run RUN_ID --estimate 0.13 (algorithm.md:60-63)
         CAP->>LED: reserve_at(run_id, estimate, now) under exclusive flock (cost_cap/mod.rs:361-366)
         break exit 3 REFUSED — spend_cap_exceeded, candidate_limit_exceeded, branch_timeout, or capability_disabled
@@ -422,7 +422,7 @@ sequenceDiagram
     end
     TSC->>TSC: score by assertion-pass count, select highest, tie-break shortest code<br/>(algorithm.md:16-18)
     TSC-->>U: chosen candidate + audit trajectory JSONL for ExpeL distillation (algorithm.md:27-28)
-    Note over TSC,LED: INVARIANT (ADR-2020): no default-unlimited mode — an absent spend_cap_usd falls back to<br/>the documented 0.50 USD default, never to infinity (algorithm.md:24,<br/>agentbox.toml:625-627)
+    Note over TSC,LED: INVARIANT (ADR-2020): no default-unlimited mode — an absent spend_cap_usd falls back to<br/>the documented 0.50 USD default, never to infinity (algorithm.md:24,<br/>agentbox.toml:644-646)
     Note over TSC,U: INVARIANT: never auto-routed — SKILL-DIRECTORY.md and skill-router's routing table<br/>exclude tree-search-coder from automatic dispatch (algorithm.md manifest gate section)
 ```
 
@@ -436,8 +436,8 @@ flowchart TB
     subgraph rebuild["apply_class rebuild — Nix package set + supervisor block, image rebuild required"]
         CI2["code_interpreter :534<br/>system-manifest.js:140"]
         CODEACT["codeact :550"]
-        ACI["aci_shell :578<br/>system-manifest.js:223"]
-        TSCB["tree_search_coder :620<br/>system-manifest.js:226"]
+        ACI["aci_shell :578<br/>system-manifest.js:236"]
+        TSCB["tree_search_coder :620<br/>system-manifest.js:239"]
         RES["research.web_researcher :522<br/>system-manifest.js:143"]
     end
     subgraph boot["apply_class boot — env/manifest re-read at container boot, no rebuild"]
@@ -455,7 +455,7 @@ flowchart TB
     TOML --> MANI
     MANI --> rebuild
     MANI --> boot
-    TOML -.->|"PROPOSED ADR-2057: entrypoint-unified.sh:1442,1462 register on file presence only — the enabled flag is never read, and neither gate has a system-manifest.js apply_class. Routed to the flake/manifest owner."| unwired
+    TOML -.->|"PROPOSED ADR-2057: entrypoint-unified.sh:1514,1462 register on file presence only — the enabled flag is never read, and neither gate has a system-manifest.js apply_class. Routed to the flake/manifest owner."| unwired
     TOML --> vault
 
     HARN -->|"file exists at /opt/agentbox/mcp/servers/harness-bridge.js"| REG2["harness-bridge registered in .mcp.json regardless of [skills.harness].enabled"]

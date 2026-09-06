@@ -54,7 +54,7 @@ sources:
   - src/middleware/rbac_gate.rs
   - src/services/management_api_client.rs
   - src/services/nostr_bead_publisher.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-05.1 `admin_rbac_handler` — whoami / list / assign / revoke (ADR-2010)
@@ -62,7 +62,7 @@ verified_commit: bed6b617d
 sequenceDiagram
     autonumber
     participant C as caller
-    participant H as admin_rbac_handler<br/>src/handlers/admin_rbac_handler.rs:287 scope /admin/rbac (registration see VC-01.13)
+    participant H as admin_rbac_handler<br/>src/handlers/admin_rbac_handler.rs:284 scope /admin/rbac (registration see VC-01.13)
     participant VA as verify_access/verify_admin<br/>src/utils/auth.rs
     participant RS as RoleStore<br/>src/services/role_store.rs:408 assign_checked, :500 remove_checked
 
@@ -116,7 +116,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as caller
-    participant TO as TimeoutMiddleware<br/>src/main.rs:972-975 override "/api/admin/sync"->600s
+    participant TO as TimeoutMiddleware<br/>src/main.rs:975-978 override "/api/admin/sync"->600s
     participant RG as RbacGate<br/>Admin required (any /api/admin/* method, see VC-03.6)
     participant H as admin_sync_handler::trigger_sync<br/>src/handlers/admin_sync_handler.rs:115
 
@@ -200,7 +200,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as XR client<br/>Godot
-    participant WS as PresenceSession<br/>src/handlers/presence_handler.rs:135 ws_presence :501 (route src/main.rs:1036)
+    participant WS as PresenceSession<br/>src/handlers/presence_handler.rs:135 ws_presence :501 (route src/main.rs:1039)
     participant NC as SeenNonces LRU<br/>presence_handler.rs:51 cap 4096
     participant IV as IdentityVerifier<br/>visionclaw_xr_presence::ports
     participant REG as PresenceRoomRegistry<br/>DashMap~String,Addr~PresenceActor~~
@@ -263,7 +263,7 @@ sequenceDiagram
     autonumber
     participant C as XR client (Joined)
     participant WS as PresenceSession::handle_pose_frame<br/>presence_handler.rs:354
-    participant PA as PresenceActor::handle_ingest<br/>src/actors/presence_actor.rs:748
+    participant PA as PresenceActor::handle_ingest<br/>src/actors/presence_actor.rs:751
     participant HR as configured_hand_reach_m<br/>presence_actor.rs:44 env PRESENCE_HAND_REACH_M
 
     Note over WS: opcode 0x43 OPCODE_AVATAR_POSE (wire::PREAMBLE_OPCODE, presence_handler.rs:5,197)<br/>envelope: [opcode u8][len u16][room_hash 16B][avatar_id_len u8][avatar_id][payload]
@@ -584,7 +584,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant H as mcp_relay_handler<br/>src/handlers/mcp_relay_handler.rs:441 (route src/main.rs:1032)
+    participant H as mcp_relay_handler<br/>src/handlers/mcp_relay_handler.rs:441 (route src/main.rs:1035)
     participant A as MCPRelayActor<br/>src/handlers/mcp_relay_handler.rs:38
     participant O as orchestrator WS<br/>ORCHESTRATOR_WS_URL env :77 default ws://multi-agent-container:3002/ws
 
@@ -634,7 +634,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant H as multi_mcp_websocket_handler<br/>src/handlers/multi_mcp_websocket_handler.rs:858 scope /multi-mcp
+    participant H as multi_mcp_websocket_handler<br/>src/handlers/multi_mcp_websocket_handler.rs:903 scope /multi-mcp
     participant WS as MultiMcpVisualizationWs<br/>src/actors/multi_mcp_visualization_actor.rs (started :428)
     participant DS as MultiMcpAgentDiscovery<br/>src/services/multi_mcp_agent_discovery.rs:62
 
@@ -776,7 +776,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant H as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:967 (route src/main.rs:1031)
+    participant H as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:963 (route src/main.rs:1034)
     participant SS as SpeechSocket actor<br/>src/handlers/speech_socket_handler.rs:106 new()
 
     C->>H: GET /ws/speech (Authorization Bearer or ?token=) :818
@@ -800,7 +800,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant V as voice/RunCycle trigger<br/>src/actors/elevation_actor.rs:832 Handler~RunCycle~ (VC-02 internals)
-    participant EA as ElevationActor/DecisionElevationActor<br/>src/actors/elevation_actor.rs:98, decision_elevation_actor.rs:79 (VC-02)
+    participant EA as ElevationActor/DecisionElevationActor<br/>src/actors/elevation_actor.rs:98, decision_elevation_actor.rs:128 (VC-02)
     participant FR as forum kind-31403<br/>src/services/acsp/client.rs:22 CaseDecision{event_id,created_at}
     participant DB as SqliteEnrichmentRepository::record_decision<br/>StoredDecision table — SHARED sink
     participant D as decide/decide_as_operator -> apply_decision<br/>src/handlers/enrichment_proposals_handler.rs:340

@@ -43,7 +43,7 @@ sources:
   - crates/visionclaw-gpu/src/cuda_sources/gpu_landmark_apsp.cu
   - docs/GPU-wire-abi.md
   - crates/visionclaw-gpu/tests/analytics_oracle_conformance.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-15.1 POST /analytics/clustering/run — spectral/kmeans/louvain/default dispatch with CPU fallback

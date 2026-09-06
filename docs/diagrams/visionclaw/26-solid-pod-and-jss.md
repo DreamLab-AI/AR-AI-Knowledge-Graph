@@ -30,7 +30,7 @@ sources:
   - client/src/features/solid/components/PodSettings.tsx
   - client/src/features/solid/components/ResourceEditor.tsx
   - src/handlers/image_gen_handler.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-26.1 Deployment topology — embedded pod vs feature-off stub
@@ -125,8 +125,8 @@ sequenceDiagram
     participant B as init_pod / init_pod_nip98<br/>solid_proxy_handler.rs:1293,1349
 
     U->>U: useEffect - authenticated and nostrAuth.isAuthenticated()<br/>useSolidPod.ts:115-121
-    U->>S: initPod() (checkPod / createPod call the same path)<br/>useSolidPod.ts:43,68 -> SolidPodService.ts:168
-    S->>L: fetchWithAuth(POST /solid/pods/init, {})<br/>SolidPodService.ts:170
+    U->>S: initPod() (checkPod / createPod call the same path)<br/>useSolidPod.ts:43,68 -> SolidPodService.ts:171
+    S->>L: fetchWithAuth(POST /solid/pods/init, {})<br/>SolidPodService.ts:173
     L->>NA: isAuthenticated() / isDevMode()<br/>ldpClient.ts:97-98
     alt dev mode
         L->>L: headers Authorization: Bearer dev-session-token<br/>+ X-Nostr-Pubkey (ldpClient.ts:99-101)
@@ -378,17 +378,17 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Hook as useSolidContainer/useSolidResource
-    participant PN as PodNotificationManager<br/>podNotifications.ts:29
-    participant WS as WebSocket (VITE_JSS_WS_URL)<br/>podNotifications.ts:18,57
-    participant SW as solidWebSocket store<br/>store/websocket/solidWebSocket.ts
+    participant PN as PodNotificationManager<br/>podNotifications.ts:58
+    participant WS as WebSocket (VITE_JSS_WS_URL)<br/>podNotifications.ts:18,87
+    participant SW as solidWebSocket store adapter<br/>store/websocket/solidWebSocket.ts:71
 
-    Hook->>PN: subscribe(resourceUrl, callback)<br/>podNotifications.ts:97
+    Hook->>PN: subscribe(resourceUrl, callback)<br/>podNotifications.ts:130
     alt first subscriber for this URL
-        PN->>WS: send("sub " + resourceUrl") if OPEN<br/>podNotifications.ts:100-102
+        PN->>WS: send("sub " + resourceUrl") if OPEN<br/>podNotifications.ts:133-135
     end
-    WS-->>PN: onmessage "protocol ..." | "ack ..." | "pub ..."<br/>podNotifications.ts:142-157
+    WS-->>PN: onmessage "protocol ..." | "ack ..." | "pub ..."<br/>podNotifications.ts:225-249
     alt msg starts with "pub "
-        PN->>PN: notifySubscribers(url) + parent container (podNotifications.ts:251-273)
+        PN->>PN: notifySubscribers(url) + parent container (podNotifications.ts:251-259)
         PN-->>Hook: callback({type:'pub', url})
     else msg starts with "ack "
         PN-->>Hook: callback({type:'ack', url})

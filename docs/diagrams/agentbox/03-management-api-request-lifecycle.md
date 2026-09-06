@@ -30,6 +30,7 @@ sources:
   - agentbox/management-api/routes/git-bridge.js
   - agentbox/management-api/routes/kg-elevation.js
   - agentbox/management-api/routes/linked-objects.js
+  - agentbox/management-api/routes/mandate.js
   - agentbox/management-api/routes/memory.js
   - agentbox/management-api/routes/payments.js
   - agentbox/management-api/routes/pod-git.js
@@ -37,7 +38,7 @@ sources:
   - agentbox/management-api/routes/sessions-boundary.js
   - agentbox/management-api/routes/tasks.js
   - agentbox/scripts/ci/check-ports-loopback.mjs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-03.1 server.js boot part 1 — Fastify construction, hooks, static route registers
@@ -125,18 +126,18 @@ sequenceDiagram
     Start->>App: register routes/mandate<br/>server.js:1146
     Start->>App: register routes/sessions-boundary<br/>server.js:1156
     Start->>App: register routes/approvals<br/>server.js:1166
-    Start->>Start: log SecurityProfileApplied resolved posture<br/>server.js:1225-1231
-    Start->>Adapters: connectAdapters per-slot deadline<br/>server.js:1241
+    Start->>Start: log SecurityProfileApplied resolved posture<br/>server.js:1241-1247
+    Start->>Adapters: connectAdapters per-slot deadline<br/>server.js:1257
     Note over Start,Adapters: see AB-04.6 connectAdapters per-slot deadline detail, not re-drawn here
     opt AGENTBOX_RELAY_ENABLED and AGENTBOX_RELAY_POD_BRIDGE true
-        Start->>Start: new RelayConsumer(npubs...).start()<br/>server.js:1284-1301
+        Start->>Start: new RelayConsumer(npubs...).start()<br/>server.js:1324-1342
     end
     opt junkiejarvis enabled via env or manifest
-        Start->>Start: startJunkieJarvis bridge logger<br/>server.js:1335-1343
+        Start->>Start: startJunkieJarvis bridge logger<br/>server.js:1381-1389
     end
-    Start->>Start: headroom.init(logger) decorate headroom<br/>server.js:1360-1368
-    Start->>Start: initTracing, setBuildInfo, startMetricsServer<br/>server.js:1372-1374
-    Start->>App: app.listen port PORT host HOST<br/>server.js:1377
+    Start->>Start: headroom.init(logger) decorate headroom<br/>server.js:1406-1414
+    Start->>Start: initTracing, setBuildInfo, startMetricsServer<br/>server.js:1418-1420
+    Start->>App: app.listen port PORT host HOST<br/>server.js:1423
     Note over Start: MANAGEMENT_API_PORT default 9090 (server.js:42) HOST default 0.0.0.0 (server.js:47)<br/>compose publishes 127.0.0.1 9090 9090 only
 ```
 
@@ -229,7 +230,7 @@ sequenceDiagram
     participant H as route handler
 
     rect rgb(232,244,255)
-    Note over RO: consumed by routes/mandate.js create revoke list<br/>lib/authz.js:311,389,437
+    Note over RO: consumed by routes/mandate.js create revoke list<br/>routes/mandate.js:311,389,437
     C->>RO: preHandler(request, reply)
     alt auth.mode is bearer
         RO->>H: allowed unconditionally — bearer IS the operator credential<br/>lib/authz.js:188
@@ -254,7 +255,7 @@ sequenceDiagram
         end
     end
     end
-    Note over RO,RA: ADR-2013 — 9096 is the ONE LAN-published ingress door<br/>(docker-compose.yml:54, sanctioned check-ports-loopback.mjs:77) — 9090 mgmt-api and<br/>9095 aoe serve are loopback-only (docker-compose.yml:55)
+    Note over RO,RA: ADR-2013 — 9096 is the ONE LAN-published ingress door<br/>(docker-compose.yml:54, sanctioned check-ports-loopback.mjs:94) — 9090 mgmt-api and<br/>9095 aoe serve are loopback-only (docker-compose.yml:55)
 ```
 
 ## AB-03.6 route table (a) — system, status, well-known, uri-resolver, meta probes

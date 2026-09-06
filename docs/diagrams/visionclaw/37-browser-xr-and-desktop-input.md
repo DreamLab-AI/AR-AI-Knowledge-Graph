@@ -22,7 +22,7 @@ sources:
   - xr-client/project.godot
   - client/src/app/App.tsx
   - client/src/services/remoteLogger.ts
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-37.1 Browser XR capability probe — what platformManager actually does
@@ -233,12 +233,12 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C as HeadTrackedParallaxController<br/>client/src/features/visualisation/components/HeadTrackedParallaxController.tsx:9
+    participant C as HeadTrackedParallaxController<br/>client/src/features/visualisation/components/HeadTrackedParallaxController.tsx:14
     participant H as useHeadTracking<br/>client/src/hooks/useHeadTracking.ts:13
     participant FR as FilesetResolver.forVisionTasks<br/>client/src/hooks/useHeadTracking.ts:27
     participant FL as FaceLandmarker<br/>@mediapipe/tasks-vision
     participant V as HTMLVideoElement webcam
-    participant CAM as three PerspectiveCamera via useThree<br/>HeadTrackedParallaxController.tsx:9
+    participant CAM as three PerspectiveCamera via useThree<br/>HeadTrackedParallaxController.tsx:14
 
     C->>H: useHeadTracking()
     H->>H: initialize() - skip if faceLandmarker already set
@@ -266,20 +266,20 @@ sequenceDiagram
         end
     end
     H-->>C: {isEnabled, setIsEnabled, isTracking, headPosition, error}
-    C->>C: cameraMode from settings.visualisation.interaction.headTrackedParallax.cameraMode<br/>default 'asymmetricFrustum' HeadTrackedParallaxController.tsx:14
+    C->>C: cameraMode from settings.visualisation.interaction.headTrackedParallax.cameraMode<br/>default 'asymmetricFrustum' HeadTrackedParallaxController.tsx:19
     loop useFrame
         alt isTracking and headPosition and camera is PerspectiveCamera
             alt cameraMode === 'asymmetricFrustum'
                 C->>CAM: setViewOffset(...) then updateProjectionMatrix()
-                Note right of C: HeadTrackedParallaxController.tsx:41-49
+                Note right of C: HeadTrackedParallaxController.tsx:46-54
             else
-                C->>CAM: projectionMatrix.multiply(nudgeMatrix)
-                Note right of C: HeadTrackedParallaxController.tsx:57
+                C->>CAM: projectionMatrix.multiply(NUDGE_MATRIX.makeTranslation(offsetX, offsetY, 0))
+                Note right of C: HeadTrackedParallaxController.tsx:57-62 - the module-level<br/>NUDGE_MATRIX replaced a per-frame Matrix4 plus Vector3 allocation (:60-61)
             end
         else not tracking
             opt camera.view set
                 C->>CAM: clearViewOffset() then updateProjectionMatrix()
-                Note right of C: restores the plain frustum<br/>HeadTrackedParallaxController.tsx:61-63
+                Note right of C: restores the plain frustum<br/>HeadTrackedParallaxController.tsx:66-68
             end
         end
     end
@@ -305,7 +305,7 @@ flowchart LR
         ILx["InstancedLabels.tsx<br/>client/src/features/graph/components/InstancedLabels.tsx"]
     end
     SP --> HKx["useSpacePilot useThree camera, scene, gl<br/>useSpacePilot.ts:49"] --> CAM
-    HT --> HPCx["HeadTrackedParallaxController useThree camera, size<br/>HeadTrackedParallaxController.tsx:9"] --> CAM
+    HT --> HPCx["HeadTrackedParallaxController useThree camera, size<br/>HeadTrackedParallaxController.tsx:14"] --> CAM
     CAM --> GMx
     SCN --> GMx
     GL --> GMx

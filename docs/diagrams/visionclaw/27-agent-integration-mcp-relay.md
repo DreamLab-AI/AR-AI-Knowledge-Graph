@@ -26,7 +26,7 @@ sources:
   - src/agent_events/schema.rs
   - src/agent_events/provenance.rs
   - src/services/acsp/client.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-27.1 BotsClient — legacy `:9500` MCP-TCP poller (superseded path)
@@ -196,8 +196,8 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Client as WS client
-    participant H as multi_mcp_visualization_ws()<br/>src/handlers/multi_mcp_websocket_handler.rs:779
-    participant Ws as MultiMcpVisualizationWs<br/>multi_mcp_websocket_handler.rs:111, Actor :425
+    participant H as multi_mcp_visualization_ws()<br/>src/handlers/multi_mcp_websocket_handler.rs:824
+    participant Ws as MultiMcpVisualizationWs<br/>multi_mcp_websocket_handler.rs:144, Actor :425
 
     Client->>H: GET /multi-mcp/ws (upgrade) - configure_multi_mcp_routes :858-864
     H->>H: require Bearer/token or 401 - :787-814
@@ -403,7 +403,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Boot as AppState::new<br/>src/app_state.rs:1262-1271
+    participant Boot as AppState::new<br/>src/app_state.rs:1267-1276
     participant MAC as ManagementApiClient<br/>src/services/management_api_client.rs:27, new() :180-199
     participant API as agentbox management-api<br/>base_url = http://MANAGEMENT_API_HOST:MANAGEMENT_API_PORT (default agentic-workstation:9090)
 

@@ -21,7 +21,7 @@ sources:
   - src/actors/gpu/analytics_telemetry.rs
   - src/actors/gpu/force_compute_actor.rs
   - src/actors/gpu/stress_majorization_actor.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-18.1 /analytics scope — auth wrapper and route table

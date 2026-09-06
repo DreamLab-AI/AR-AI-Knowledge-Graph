@@ -26,14 +26,14 @@ sources:
   - client/src/types/generated/settings.ts
   - src/handlers/nostr_handler.rs
   - src/middleware/rbac_gate.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-06.1 Settings route surface and the actor behind it
 ```mermaid
 flowchart TB
-    S["web::scope('/settings') + RateLimit::per_minute(60)<br/>src/main.rs:1060-1064"]
-    S --> CFG["settings::api::configure_routes<br/>src/settings/api/settings_routes.rs:1710"]
+    S["web::scope('/settings') + RateLimit::per_minute(60)<br/>src/main.rs:1063-1067"]
+    S --> CFG["settings::api::configure_routes<br/>src/settings/api/settings_routes.rs:1712"]
     CFG --> P["GET|PUT physics :1713-1714<br/>POST physics/reset-layout :1715"]
     CFG --> C["GET|PUT constraints :1716-1717"]
     CFG --> R["GET|PUT rendering :1718-1719"]
@@ -43,13 +43,13 @@ flowchart TB
     CFG --> AL["GET all :1726"]
     CFG --> PR["POST|GET profiles :1727-1728<br/>GET|DELETE profiles/{id} :1729-1730"]
     CFG --> U["nested scope /user<br/>GET|PUT /filter :1734-1736"]
-    ACT["state.settings_addr : Addr of OptimizedSettingsActor<br/>src/app_state.rs:350, started src/app_state.rs:1170"]
-    REPO["settings_repo : web::Data of Arc of SqliteSettingsRepository<br/>injected src/main.rs:1005"]
+    ACT["state.settings_addr : Addr of OptimizedSettingsActor<br/>src/app_state.rs:355, started src/app_state.rs:1175"]
+    REPO["settings_repo : web::Data of Arc of SqliteSettingsRepository<br/>injected src/main.rs:1008"]
     P --> ACT
     P --> REPO
-    N1["INVARIANT — /api/settings writes require the WriteSettings capability at the RbacGate<br/>src/main.rs:1051-1053. Request-time gate behaviour see VC-03.6"]
+    N1["INVARIANT — /api/settings writes require the WriteSettings capability at the RbacGate<br/>src/main.rs:1054-1056. Request-time gate behaviour see VC-03.6"]
     S --- N1
-    N2["DIVERGENCE — the settings hot-reload watcher is DISABLED, src/app_state.rs:1174-1176<br/>reason recorded in code: it was causing database deadlocks"]
+    N2["DIVERGENCE — the settings hot-reload watcher is DISABLED, src/app_state.rs:1179-1181<br/>reason recorded in code: it was causing database deadlocks"]
     ACT --- N2
 ```
 
@@ -69,7 +69,7 @@ sequenceDiagram
     RG->>H: forward
     H->>AU: extract AuthenticatedUser (auth.pubkey logged at :475-478)
     H->>SA: send(GetSettings)
-    Note over H,SA: single GetSettings call — a full snapshot is fetched ONCE to avoid a TOCTOU race<br/>comment src/settings/api/settings_routes.rs:480
+    Note over H,SA: single GetSettings call — a full snapshot is fetched ONCE to avoid a TOCTOU race<br/>comment src/settings/api/settings_routes.rs:482
     alt Ok(Ok(settings))
         SA-->>H: AppFullSettings
     else Ok(Err(e))
@@ -143,8 +143,8 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant H1 as update_rendering_settings<br/>src/settings/api/settings_routes.rs:796
-    participant H2 as update_node_filter_settings<br/>src/settings/api/settings_routes.rs:908
+    participant H1 as update_rendering_settings<br/>src/settings/api/settings_routes.rs:798
+    participant H2 as update_node_filter_settings<br/>src/settings/api/settings_routes.rs:910
     participant H3 as update_physics_settings<br/>src/settings/api/settings_routes.rs:469
     participant CC as ClientCoordinatorActor<br/>state.client_manager_addr
     participant B as other browser sessions
@@ -164,7 +164,7 @@ sequenceDiagram
 classDiagram
     class OptimizedSettingsActor {
       <<src/actors/optimized_settings_actor.rs>>
-      +started app_state.rs:1170
+      +started app_state.rs:1175
       +with_actors(repo, gs_addr, None)
     }
     class WarmCacheMessage {
@@ -215,10 +215,10 @@ classDiagram
 sequenceDiagram
     autonumber
     participant H as nostr_handler api-keys routes<br/>src/handlers/nostr_handler.rs:58-59
-    participant PS as ProtectedSettingsActor<br/>src/app_state.rs:1206, Addr src/app_state.rs:351
+    participant PS as ProtectedSettingsActor<br/>src/app_state.rs:1211, Addr src/app_state.rs:356
     participant ST as ProtectedSettings store
 
-    Note over PS: started with ProtectedSettings::default() — src/app_state.rs:1206
+    Note over PS: started with ProtectedSettings::default() — src/app_state.rs:1211
     H->>PS: GetApiKeys (handler src/actors/protected_settings_actor.rs:33)
     PS->>ST: read
     H->>PS: UpdateUserApiKeys (:81)
@@ -283,8 +283,8 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     IN["incoming settings JSON"]
-    IN --> N1["normalize_physics_keys<br/>src/settings/api/settings_routes.rs:504-506<br/>snake_case and legacy names to canonical camelCase"]
-    N1 --> V1["validate_physics_settings<br/>src/settings/api/settings_routes.rs:524"]
+    IN --> N1["normalize_physics_keys<br/>src/settings/api/settings_routes.rs:506-508<br/>snake_case and legacy names to canonical camelCase"]
+    N1 --> V1["validate_physics_settings<br/>src/settings/api/settings_routes.rs:526"]
     V1 --> OUT["PhysicsSettings"]
     subgraph FIX["src/handlers/settings_validation_fix.rs"]
         F1["validate_physics_settings_complete(&Value) :5"]
@@ -320,7 +320,7 @@ sequenceDiagram
     Note over B,F: output_path is the literal "client/src/types/generated/settings.ts" (:18)<br/>the parent directory is created if absent (:19-21)
     B->>F: fs::metadata(output_path) then log the byte size (:34)
     Note over D,F: ADR-2041 — the generated types emit `knowledge`, never `logseq`.<br/>path_accessible_impls resolves both segments server-side (src/config/path_accessible_impls.rs:160 and :185)<br/>Full alias lifecycle see VC-09.15
-    Note over B: server-side YAML is snake_case, the JSON and TS surface is camelCase —<br/>the serde alias behaviour is asserted at boot, src/main.rs:296-315
+    Note over B: server-side YAML is snake_case, the JSON and TS surface is camelCase —<br/>the serde alias behaviour is asserted at boot, src/main.rs:299-318
 ```
 
 ## VC-06.10 RESOLVED ADR-2046 — the dead SettingsActor surface and what replaced it

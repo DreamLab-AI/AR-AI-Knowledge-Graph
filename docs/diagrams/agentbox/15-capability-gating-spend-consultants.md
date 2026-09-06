@@ -41,19 +41,19 @@ sources:
   - agentbox/skills/mcp.json
   - agentbox/agentbox.sh
   - agentbox/flake.nix
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## AB-15.1 Gate lattice — manifest to package set to supervisor to runtime trace
 ```mermaid
 flowchart TD
     subgraph M["agentbox.toml — declared gates"]
-        M1["[skills.tree_search_coder]<br/>agentbox.toml:620"]
-        M2["[toolchains].deepsec<br/>agentbox.toml:1295-1310"]
-        M3["[security.deepsec]<br/>agentbox.toml:1560"]
-        M4["[dream_machine]<br/>agentbox.toml:1609"]
-        M5["[payments]<br/>agentbox.toml:1062"]
-        M6["[consultants.*]<br/>agentbox.toml:861-889"]
+        M1["[skills.tree_search_coder]<br/>agentbox.toml:639"]
+        M2["[toolchains].deepsec<br/>agentbox.toml:1330-1345"]
+        M3["[security.deepsec]<br/>agentbox.toml:1595"]
+        M4["[dream_machine]<br/>agentbox.toml:1644"]
+        M5["[payments]<br/>agentbox.toml:1097"]
+        M6["[consultants.*]<br/>agentbox.toml:896-924"]
     end
     subgraph N["Nix package set — rebuild class"]
         N1["flake.nix deepsecPkg closure"]
@@ -70,7 +70,7 @@ flowchart TD
         C4["payments<br/>apply_class boot<br/>:222"]
         C5["consultants<br/>apply_class boot<br/>:227"]
     end
-    R["runtime trace<br/>GET /v1/system stateOf()<br/>system-manifest.js:275"]
+    R["runtime trace<br/>GET /v1/system stateOf()<br/>system-manifest.js:288"]
 
     M1 -->|"rebuild"| C1
     M2 -->|"rebuild — bakes npm closure"| N1
@@ -145,8 +145,8 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant TOML as agentbox.toml<br/>agentbox/agentbox.toml:1560
-    participant Entry as entrypoint-unified.sh<br/>agentbox/config/entrypoint-unified.sh:1650
+    participant TOML as agentbox.toml<br/>agentbox/agentbox.toml:1595
+    participant Entry as entrypoint-unified.sh<br/>agentbox/config/entrypoint-unified.sh:1760
     participant MB as agentbox-manifest bin<br/>agentbox/services/agentbox-manifest/src/main.rs:184
     participant Sup as supervisord<br/>dream-engine program
     participant API as management-api<br/>routes/system.js:33
@@ -213,7 +213,7 @@ sequenceDiagram
     autonumber
     participant Op as Operator
     participant Val as agentbox-config-validate.js<br/>agentbox/scripts/agentbox-config-validate.js:1332
-    participant TOML as agentbox.toml<br/>[skills.tree_search_coder]<br/>agentbox.toml:620-625
+    participant TOML as agentbox.toml<br/>[skills.tree_search_coder]<br/>agentbox.toml:639-644
     participant Skill as tree-search-coder SKILL.md<br/>agentbox/skills/tree-search-coder/SKILL.md:78
     participant CLI as tree-search-cap<br/>src/bin/tree-search-cap.rs:1
     participant Lim as Limiter<br/>cost_cap/mod.rs:307,376
@@ -266,7 +266,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Agent as Agentbox consumer<br/>[payments.consumer]<br/>agentbox.toml:1081
+    participant Agent as Agentbox consumer<br/>[payments.consumer]<br/>agentbox.toml:1116
     participant Merchant as External merchant endpoint
     participant Classify as pay402.classify()<br/>lib/pay402.js:169
     participant Pay as /v1/pay/* routes<br/>routes/payments.js:145-677
@@ -287,7 +287,7 @@ sequenceDiagram
     end
 
     rect rgb(220,240,220)
-    Note over Agent,Pod: payable path — [payments.consumer].enabled required (agentbox.toml:1082)
+    Note over Agent,Pod: payable path — [payments.consumer].enabled required (agentbox.toml:1117)
     Agent->>Pay: POST /v1/pay/estimate {endpoint, units}
     Pay-->>Agent: 200 estimated_sats, hold_sats = ceil(estimated*HOLD_BUFFER_RATIO)
     Agent->>Pay: GET /v1/pay/balance (NIP-98 auth)
@@ -306,7 +306,7 @@ sequenceDiagram
         Merchant-->>Agent: 200 OK — settled
     end
     end
-    Note over Agent: DIVERGENCE: #91;payments.consumer#93;.enabled = false by default #40;agentbox.toml:1082#41;,<br/>#91;payments.broadcast#93;.enabled = false and well_known = false #40;agentbox.toml:1090-1092#41; — see AB-11.15
+    Note over Agent: DIVERGENCE: #91;payments.consumer#93;.enabled = false by default #40;agentbox.toml:1117#41;,<br/>#91;payments.broadcast#93;.enabled = false and well_known = false #40;agentbox.toml:1125-1127#41; — see AB-11.15
 ```
 
 ## AB-15.7 routes/payments.js — GET info, GET balance, POST deposit
@@ -537,9 +537,9 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant PreBoot as Pre-boot environment
-    participant Entry as entrypoint-unified.sh<br/>agentbox/config/entrypoint-unified.sh:1650
+    participant Entry as entrypoint-unified.sh<br/>agentbox/config/entrypoint-unified.sh:1760
     participant MB as agentbox-manifest toml-string<br/>services/agentbox-manifest/src/main.rs:264
-    participant TOML as agentbox.toml<br/>[consultants.antigravity]<br/>agentbox.toml:867-871
+    participant TOML as agentbox.toml<br/>[consultants.antigravity]<br/>agentbox.toml:902-906
     participant Reg as skills/mcp.json registry default
     participant Srv as antigravity server.js<br/>mcp/consultants/antigravity/server.js:20
 
@@ -638,7 +638,7 @@ sequenceDiagram
     autonumber
     participant Op as build-with-quality caller
     participant Gate as deepsec-gate.sh<br/>skills/build-with-quality/scripts/deepsec-gate.sh:1
-    participant TOML as [security.deepsec]<br/>agentbox.toml:1560-1571
+    participant TOML as [security.deepsec]<br/>agentbox.toml:1595-1606
     participant CLI as deepsec CLI<br/>#40;vercel-labs/deepsec, baked by toolchains.deepsec#41;
     participant Local as claude #124; codex CLI<br/>#40;operator's own login#41;
     participant Loom as Loom façade<br/>http://loom:8080/v1<br/>LAN-only

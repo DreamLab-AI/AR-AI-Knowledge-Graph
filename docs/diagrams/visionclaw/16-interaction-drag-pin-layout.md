@@ -19,7 +19,7 @@ sources:
   - src/models/force_channels.rs
   - src/utils/binary_protocol.rs
   - src/utils/unified_gpu_compute/execution.rs
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 
 ## VC-16.1 Node drag start — pin acquisition
@@ -150,7 +150,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant LH as layout_handler<br/>src/handlers/layout_handler.rs:275
+    participant LH as layout_handler<br/>src/handlers/layout_handler.rs:280
     participant FCA as ForceComputeActor<br/>force_compute_actor.rs:2641
 
     C->>LH: GET /modes :278

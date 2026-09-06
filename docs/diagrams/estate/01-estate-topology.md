@@ -38,7 +38,7 @@ sources:
   - docs/adr/ADR-2027-three-deployment-profiles.md
   - docs/adr/ADR-2025-cross-from-agentbox-closed-map.md
   - agentbox/lib/solid-pod-rs.nix
-verified_commit: bed6b617d
+verified_commit: 7a20db228
 ---
 ## ES-01.1 Substrate map — six repositories, five-participant identity mesh
 ```mermaid
@@ -148,15 +148,15 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph net["visionclaw_network — external bridge, declared in BOTH stacks"]
-        N1["docker-compose.unified.yml:353-356<br/>external true, name ${EXTERNAL_NETWORK:-visionclaw_network}"]
+        N1["docker-compose.unified.yml:363-366<br/>external true, name ${EXTERNAL_NETWORK:-visionclaw_network}"]
         N2["agentbox/docker-compose.override.yml:181-183<br/>alias visionclaw, external true"]
     end
-    subgraph vcvol["VisionClaw volumes — docker-compose.unified.yml:360-380"]
+    subgraph vcvol["VisionClaw volumes — docker-compose.unified.yml:370-390"]
         V1["loom-data — mirrored corpus generation"]
         V2["visionclaw-data / visionclaw-logs"]
         V3["npm-cache / cargo-cache / cargo-git-cache / cargo-target-cache"]
     end
-    subgraph abvol["agentbox volumes — agentbox/docker-compose.yml:165-190"]
+    subgraph abvol["agentbox volumes — agentbox/docker-compose.yml:167-194"]
         W1["ruvector-pg-data / ruvector-data"]
         W2["solid-data / sovereign-identities / agentbox-secrets"]
         W3["code-harness-data / agentbox-events / consultations-data"]
