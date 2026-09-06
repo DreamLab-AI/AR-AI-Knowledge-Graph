@@ -55,12 +55,43 @@ jobs:
         with:
           fetch-depth: 2
 
+      # The ontology source is a PRIVATE repository owned by another account
+      # (jjohare/logseq). The automatic GITHUB_TOKEN is scoped to this repository
+      # alone, so it can never read it: actions/checkout retries three times and
+      # then reports only the opaque
+      #   "Not Found - https://docs.github.com/rest/repos/repos#get-a-repository"
+      # which is why this workflow has failed on every run since 2025-12-31.
+      # Name the missing credential before we hit that wall.
+      - name: Verify ontology source access
+        env:
+          GH_TOKEN: ${{ secrets.ONTOLOGY_SOURCE_TOKEN || secrets.GITHUB_TOKEN }}
+          HAVE_PAT: ${{ secrets.ONTOLOGY_SOURCE_TOKEN != '' }}
+        run: |
+          if gh repo view "$ONTOLOGY_SOURCE_REPO" --json nameWithOwner >/dev/null 2>&1; then
+            echo "✓ $ONTOLOGY_SOURCE_REPO is readable"
+            exit 0
+          fi
+          echo "::error title=Ontology source unreachable::Cannot read $ONTOLOGY_SOURCE_REPO"
+          if [ "$HAVE_PAT" != "true" ]; then
+            echo "No ONTOLOGY_SOURCE_TOKEN secret is set, so this job fell back to the"
+            echo "automatic GITHUB_TOKEN, which is scoped to ${{ github.repository }} only"
+            echo "and cannot read a private repository owned by another account."
+            echo ""
+            echo "OPS ACTION: create a fine-grained PAT with Contents: read on"
+            echo "$ONTOLOGY_SOURCE_REPO and add it to ${{ github.repository }} as the"
+            echo "repository secret ONTOLOGY_SOURCE_TOKEN."
+          else
+            echo "ONTOLOGY_SOURCE_TOKEN is set but cannot read $ONTOLOGY_SOURCE_REPO."
+            echo "Check that it has not expired and grants Contents: read on that repository."
+          fi
+          exit 1
+
       - name: Checkout ontology source
         uses: actions/checkout@v4
         with:
           repository: ${{ env.ONTOLOGY_SOURCE_REPO }}
           path: logseq-source
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.ONTOLOGY_SOURCE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Detect changes
         id: detect
@@ -110,6 +141,9 @@ jobs:
         with:
           repository: ${{ env.ONTOLOGY_SOURCE_REPO }}
           path: logseq-source
+          # Same private cross-owner source as validate-source above; this step
+          # passed no token at all, so it defaulted to the unusable GITHUB_TOKEN.
+          token: ${{ secrets.ONTOLOGY_SOURCE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
