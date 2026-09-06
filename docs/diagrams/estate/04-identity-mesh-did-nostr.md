@@ -134,7 +134,7 @@ classDiagram
 sequenceDiagram
     autonumber
     participant C as caller
-    participant V as validate_nip98_token<br/>src/utils/nip98.rs:330
+    participant V as validate_nip98_token<br/>src/utils/nip98.rs:374-375
     participant R as claim_event_id<br/>src/utils/nip98.rs:234
     participant CACHE as REPLAY_CACHE<br/>Mutex-guarded, src/utils/nip98.rs:200
 

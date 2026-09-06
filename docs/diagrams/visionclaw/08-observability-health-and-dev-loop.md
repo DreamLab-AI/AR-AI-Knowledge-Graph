@@ -68,7 +68,7 @@ sequenceDiagram
     participant M as main<br/>src/main.rs:1179-1197
     participant W as run_kg_watchdog<br/>src/services/liveness_harness.rs:444
     participant P as probe_once
-    participant V as health_verdict<br/>src/services/liveness_harness.rs:494-514
+    participant V as health_verdict<br/>src/services/liveness_harness.rs:505-507
     participant H as LivenessHarness::record_kg_state<br/>src/services/liveness_harness.rs:422
 
     M->>W: tokio::spawn(run_kg_watchdog(harness, self_url, period))
@@ -368,7 +368,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant B as boot
-    participant P as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:528
+    participant P as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:604-612
     participant L as log
     participant R as readiness_probe<br/>src/handlers/consolidated_health_handler.rs
     participant O as operator

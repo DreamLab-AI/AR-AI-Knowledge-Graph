@@ -102,7 +102,7 @@ sequenceDiagram
     participant C as Client
     participant HH as socket_flow_handler<br/>src/handlers/socket_flow_handler/http_handler.rs:39
     participant NS as NostrService<br/>src/handlers/socket_flow_handler/http_handler.rs:155
-    participant N98 as nip98::validate_nip98_token<br/>src/utils/nip98.rs:325
+    participant N98 as nip98::validate_nip98_token<br/>src/utils/nip98.rs:374-375
     participant WSS as SocketFlowServer actor<br/>src/handlers/socket_flow_handler/types.rs:616
     participant FA as filter_auth::handle_authenticate<br/>src/handlers/socket_flow_handler/filter_auth.rs:10
 
@@ -384,7 +384,7 @@ sequenceDiagram
     participant PU as fetch_nodes<br/>src/handlers/socket_flow_handler/position_updates.rs:114
     participant GSS as GraphServiceSupervisor<br/>src/actors/graph_service_supervisor.rs:1495
     participant GSA as GraphStateActor<br/>src/actors/graph_state_actor.rs:858
-    participant BIN as binary_protocol::encode_node_data_extended_with_sssp<br/>src/utils/binary_protocol.rs:394
+    participant BIN as binary_protocol::encode_node_data_extended_with_sssp<br/>src/utils/binary_protocol.rs:415-419
 
     rect rgb(225,228,245)
     Note over PU: invoked from the subscribe_position_updates run_later<br/>loop, see VC-13.2 — this is the per-connection<br/>poll path, independent of the ClientCoordinatorActor push<br/>path in VC-13.3

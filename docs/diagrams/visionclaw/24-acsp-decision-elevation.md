@@ -66,7 +66,7 @@ stateDiagram-v2
 sequenceDiagram
     autonumber
     participant EA as ElevationActor.run_cycle<br/>elevation_actor.rs:840
-    participant ACSP as AcspClient.publish<br/>services/acsp/client.rs:64
+    participant ACSP as AcspClient.publish<br/>services/acsp/client.rs:99
     participant REPO as SqliteEnrichmentRepository<br/>adapters/sqlite_enrichment_repository.rs:266
     Note over EA: RunCycle scans owl_class frontier stubs<br/>ranked by voice demand then graph degree
     EA->>EA: case_for + pending_proposal build<br/>elevation_actor.rs:350,792-794
@@ -86,8 +86,8 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant BR as agentbox broker-bridge
-    participant H as decide<br/>handlers/enrichment_proposals_handler.rs:291
-    participant AUTH as require_agent_key<br/>handlers/enrichment_proposals_handler.rs:137
+    participant H as decide<br/>handlers/enrichment_proposals_handler.rs:321
+    participant AUTH as require_agent_key<br/>handlers/enrichment_proposals_handler.rs:163-165
     participant AD as apply_decision<br/>handlers/enrichment_proposals_handler.rs:340
     participant REPO as SqliteEnrichmentRepository
     participant OXI as OxigraphOntologyRepository.append_derived_summary<br/>handlers/enrichment_proposals_handler.rs:410
@@ -223,7 +223,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant DS as DecisionService.record_decision<br/>services/decision_service.rs:515 maybe_elevate
+    participant DS as DecisionService.record_decision<br/>services/decision_service.rs:542-546 maybe_elevate
     participant SIG as is_significant<br/>services/decision_elevation.rs:69
     participant SINK as ActorElevationSink.elevate<br/>actors/decision_elevation_actor.rs:982
     participant DEA as DecisionElevationActor<br/>actors/decision_elevation_actor.rs:8,459,510
@@ -399,7 +399,7 @@ sequenceDiagram
     autonumber
     participant BOOT as AppState::new<br/>app_state.rs:1364-1389
     participant ENV as env FORUM_RELAY_URL + ACSP_PANEL_NOSTR_PRIVKEY|VISIONCLAW_NOSTR_PRIVKEY
-    participant ACSP as AcspClient::connect<br/>acsp/client.rs:38
+    participant ACSP as AcspClient::connect<br/>acsp/client.rs:74
     participant RELAY as forum relay (nostr_sdk Client, auto-reconnect)
     BOOT->>ENV: read FORUM_RELAY_URL, ACSP_PANEL_NOSTR_PRIVKEY.or(VISIONCLAW_NOSTR_PRIVKEY)<br/>app_state.rs:1372-1375
     alt both configured

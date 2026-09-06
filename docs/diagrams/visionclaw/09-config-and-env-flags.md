@@ -75,7 +75,7 @@ sequenceDiagram
     participant H as enforce_release_env_hygiene<br/>src/main.rs:118 real / :169 stub
     participant T as telemetry logger<br/>src/main.rs:266
     participant S as AppFullSettings::new<br/>src/main.rs:292
-    participant P as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:528
+    participant P as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:604-612
     participant B as HttpServer::new/bind<br/>src/main.rs:896
 
     Note over M,B: INVARIANT ordering — every refusal runs BEFORE the listener binds
@@ -183,10 +183,10 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant M as main<br/>src/main.rs:871-881
-    participant E as EnvSnapshot::from_process<br/>src/config/security_profile.rs:169
+    participant E as EnvSnapshot::from_process<br/>src/config/security_profile.rs:173-174
     participant BI as BuildIdentity::current<br/>src/config/security_profile.rs:227
-    participant A as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:528
-    participant V as evaluate_effective_profile<br/>src/config/security_profile.rs:422
+    participant A as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:604-612
+    participant V as evaluate_effective_profile<br/>src/config/security_profile.rs:477-480
 
     Note over M,V: ADR-2038 closes ADR-2012 / ADR-2026 / ADR-2027 / ADR-2037<br/>runs BEFORE HttpServer::bind at src/main.rs:896
     M->>E: from_process() — vars + argv snapshot taken once
@@ -345,8 +345,8 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant C as caller<br/>src/config/security_profile.rs:422
-    participant R as report_mode_requested<br/>src/config/security_profile.rs:396
-    participant K as report_mode_acknowledged<br/>src/config/security_profile.rs:410
+    participant R as report_mode_requested<br/>src/config/security_profile.rs:453-454
+    participant K as report_mode_acknowledged<br/>src/config/security_profile.rs:460-468
     participant G as RbacGate::from_env<br/>src/middleware/rbac_gate.rs:185-200
 
     Note over C,G: single implementation shared with the gate so the two cannot drift

@@ -217,7 +217,7 @@ sequenceDiagram
     autonumber
     participant Op as Operator
     participant CLI as agentbox.sh voice<br/>agentbox/agentbox.sh:2092
-    participant Certs as _voice_ensure_certs<br/>agentbox/agentbox.sh:1887
+    participant Certs as _voice_ensure_certs<br/>agentbox/agentbox.sh:1891-1892
     participant Compose as docker compose (agentbox-voice project)<br/>agentbox/agentbox.sh:1917
     participant Caddy as voice-console Caddy :8444/:8443<br/>agentbox/voice/console
     participant Bridge as tab0-bridge :8971<br/>agentbox/agentbox.toml

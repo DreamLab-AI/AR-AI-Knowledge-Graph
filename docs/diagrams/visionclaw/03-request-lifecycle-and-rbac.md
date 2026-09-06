@@ -135,7 +135,7 @@ sequenceDiagram
     participant R as request
     participant FR as AuthenticatedUser::from_request<br/>src/settings/auth_extractor.rs:93
     participant DB as try_dev_bypass<br/>src/settings/auth_extractor.rs:20 dev / :64 release stub
-    participant NS as NostrService::verify_nip98_auth<br/>src/services/nostr_service.rs:579
+    participant NS as NostrService::verify_nip98_auth<br/>src/services/nostr_service.rs:601-611
 
     R->>FR: from_request(req)
     FR->>DB: try_dev_bypass(req)
@@ -192,8 +192,8 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant H as caller<br/>auth.rs:142 / auth_extractor.rs:93
-    participant NS as NostrService::verify_nip98_auth<br/>src/services/nostr_service.rs:579
-    participant V as validate_nip98_token<br/>src/utils/nip98.rs:270
+    participant NS as NostrService::verify_nip98_auth<br/>src/services/nostr_service.rs:601-611
+    participant V as validate_nip98_token<br/>src/utils/nip98.rs:374-375
     participant RC as REPLAY_CACHE<br/>src/utils/nip98.rs:187 Mutex~HashMap~
 
     Note over V,RC: INVARIANT (IDENTITY-authority-chain.md #1) — order is fixed:<br/>freshness -> tag match (host-checked) -> signature -> replay claim LAST.<br/>The claim must never precede signature verification.
@@ -558,8 +558,8 @@ sequenceDiagram
     autonumber
     participant K as secp256k1 keypair (client-held)
     participant U as uri::did_nostr<br/>src/uri/mod.rs:219
-    participant NS as NostrService::verify_nip98_auth<br/>src/services/nostr_service.rs:579
-    participant SP as init_pod_nip98<br/>src/handlers/solid_proxy_handler.rs:1349
+    participant NS as NostrService::verify_nip98_auth<br/>src/services/nostr_service.rs:601-611
+    participant SP as init_pod_nip98<br/>src/handlers/solid_proxy_handler.rs:1311-1313
     participant RS as RoleStore::effective_role<br/>src/services/role_store.rs:359
     participant AL as AccessLevel<br/>src/utils/auth.rs:16
 

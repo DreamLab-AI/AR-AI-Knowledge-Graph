@@ -96,7 +96,7 @@ sequenceDiagram
 
     SUP->>ENG: dream-engine --loop --agentbox-toml /etc/agentbox.toml
     Note over SUP,ENG: autostart=true autorestart=true priority=230 user=devuser (flake.nix:2235-2245)
-    alt [dream_machine] enabled = false (agentbox/agentbox.toml:1645)
+    alt [dream_machine] enabled = false (agentbox/agentbox.toml:1703)
         ENG-->>SUP: byte-identical-when-off — no supervisor block is generated at all
     else enabled
         loop nightly window

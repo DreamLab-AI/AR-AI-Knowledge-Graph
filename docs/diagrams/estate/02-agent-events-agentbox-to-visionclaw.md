@@ -95,7 +95,7 @@ sequenceDiagram
     autonumber
     participant PUB as agentEventPublisher<br/>agentbox/management-api/utils/agent-event-publisher.js:22
     participant SUB as AgentEventWsSubscriber<br/>agentbox/management-api/utils/agent-event-ws-subscriber.js:30
-    participant VCW as agent_events_ws<br/>src/agent_events/ingest.rs:291
+    participant VCW as agent_events_ws<br/>src/agent_events/ingest.rs:296-297
     participant NS as NostrService.get_session<br/>src/agent_events/ingest.rs:268
     participant PF as process_frame<br/>src/agent_events/ingest.rs:94
     participant PROV as provenance::record<br/>src/agent_events/provenance.rs:96

@@ -119,7 +119,7 @@ sequenceDiagram
     participant SY as GithubSyncService<br/>src/services/github_sync_service.rs
     participant RS as RoleStore<br/>src/services/role_store.rs
     participant SV as domain services
-    participant PR as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:528
+    participant PR as assert_effective_profile_or_exit<br/>src/config/security_profile.rs:604-612
 
     M->>AS: AppState::new(...) — see VC-01.5 for actor start order
     AS-->>M: AppState (liveness_harness, kpi_compute_service, sqlite_kpi_repository, addrs)

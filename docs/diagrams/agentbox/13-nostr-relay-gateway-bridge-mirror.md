@@ -54,7 +54,7 @@ flowchart TB
     subgraph phone["Operator phone"]
         AME["Amethyst + Amber signer<br/>reads/writes the operator self-DM thread"]
     end
-    MIRROR["nostr-live-mirror.cjs hook<br/>config/hooks/nostr-live-mirror.cjs:349 main()<br/>SessionStart/UserPromptSubmit/Stop/SessionEnd"]
+    MIRROR["nostr-live-mirror.cjs hook<br/>config/hooks/nostr-live-mirror.cjs:374 main()<br/>SessionStart/UserPromptSubmit/Stop/SessionEnd"]
     DIGEST["nostr-pod-bridge session-summary<br/>services/nostr-pod-bridge/src/session_summary.rs:362 run()"]
     ZAI["Z.AI / GLM summariser<br/>session_summary.rs:59 DEFAULT_ZAI_BASE"]
     FORUM["forum-backup-cron<br/>flake.nix:2358 [program:forum-backup-cron]<br/>supercronic + dreamlab-ai-website/scripts/backup/crontab (OUT OF TREE)"]
@@ -438,7 +438,7 @@ Note over DISP: gate order enforced before dispatch is reached (AB-13.5) —<br/
 sequenceDiagram
     autonumber
     participant HOOK as Claude Code hook event<br/>SessionStart/UserPromptSubmit/Stop/SessionEnd
-    participant MAIN as main<br/>config/hooks/nostr-live-mirror.cjs:349
+    participant MAIN as main<br/>config/hooks/nostr-live-mirror.cjs:374
     participant BODY as bodyForEvent<br/>nostr-live-mirror.cjs:267
     participant URI as mintActivityUrn<br/>nostr-live-mirror.cjs:159
     participant KEY as deriveChildKey<br/>nostr-live-mirror.cjs:204
@@ -472,7 +472,7 @@ Note over KEY: child_sk = HMAC-SHA256(operator_sk,<br/>AGENTBOX_MIRROR_KEY_TAG d
 ```mermaid
 sequenceDiagram
     autonumber
-    participant MAIN as main<br/>config/hooks/nostr-live-mirror.cjs:349
+    participant MAIN as main<br/>config/hooks/nostr-live-mirror.cjs:374
     participant PUB as publishWrap<br/>nostr-live-mirror.cjs:297
     participant CLOUD as cloud worker relay<br/>dreamlab-nostr-relay workers.dev
     participant AME as Amethyst (operator phone)

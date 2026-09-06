@@ -326,7 +326,7 @@ sequenceDiagram
     participant RTs as Route POST /pathfinding/sssp<br/>mod.rs:213
     participant RTa as Route POST /pathfinding/apsp<br/>mod.rs:217
     participant CS as compute_sssp<br/>pathfinding.rs:135
-    participant CAp as compute_apsp<br/>pathfinding.rs:200
+    participant CAp as compute_apsp<br/>pathfinding.rs:190-204
     participant SPA as ShortestPathActor (data.shortest_path_actor)<br/>shortest_path_actor.rs:214
 
     C->>RTs: POST /analytics/pathfinding/sssp {sourceIdx,maxDistance,delta}
@@ -393,7 +393,7 @@ sequenceDiagram
     autonumber
     participant C as Client
     participant RT as Route<br/>mod.rs:226
-    participant CC as compute_connected_components<br/>pathfinding.rs:266
+    participant CC as compute_connected_components<br/>pathfinding.rs:258-271
     participant CCA as ConnectedComponentsActor (data.connected_components_actor)<br/>connected_components_actor.rs:233
 
     C->>RT: POST /analytics/pathfinding/connected-components {maxIterations}
@@ -428,7 +428,7 @@ sequenceDiagram
     autonumber
     participant C as Client
     participant RT as Route<br/>mod.rs:222
-    participant PTP as compute_point_to_point<br/>pathfinding.rs:400
+    participant PTP as compute_point_to_point<br/>pathfinding.rs:414-415
     participant GR as graph_repository<br/>pathfinding.rs:410
     participant AS as AStarPathfinder<br/>services/pathfinding.rs
     participant BD as BidirectionalDijkstra<br/>services/pathfinding.rs

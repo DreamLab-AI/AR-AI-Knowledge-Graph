@@ -360,7 +360,7 @@ sequenceDiagram
     participant AB as agentbox broker-bridge<br/>X-Agent-Key service caller
     participant OP as power-user operator<br/>via broker_inbox_handler scope
     participant GB as git-bridge write-back<br/>agentbox management-api
-    participant D as decide / decide_as_operator<br/>src/handlers/enrichment_proposals_handler.rs:291,321
+    participant D as decide / decide_as_operator<br/>src/handlers/enrichment_proposals_handler.rs:321,351
     participant WB as ingest_writeback_handler::writeback<br/>src/handlers/ingest_writeback_handler.rs:75
     participant AD as apply_decision (shared core)<br/>enrichment_proposals_handler.rs:340
     participant OK as DecisionOrchestrator<br/>src/domain/broker/broker_decision.rs (ADR-130 Decision 2 kernel)
@@ -776,7 +776,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant H as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:963 (route src/main.rs:1034)
+    participant H as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:971-972 (route src/main.rs:1034)
     participant SS as SpeechSocket actor<br/>src/handlers/speech_socket_handler.rs:106 new()
 
     C->>H: GET /ws/speech (Authorization Bearer or ?token=) :818
@@ -803,7 +803,7 @@ sequenceDiagram
     participant EA as ElevationActor/DecisionElevationActor<br/>src/actors/elevation_actor.rs:98, decision_elevation_actor.rs:128 (VC-02)
     participant FR as forum kind-31403<br/>src/services/acsp/client.rs:22 CaseDecision{event_id,created_at}
     participant DB as SqliteEnrichmentRepository::record_decision<br/>StoredDecision table — SHARED sink
-    participant D as decide/decide_as_operator -> apply_decision<br/>src/handlers/enrichment_proposals_handler.rs:340
+    participant D as decide/decide_as_operator -> apply_decision<br/>src/handlers/enrichment_proposals_handler.rs:341-351
     participant BI as broker_inbox_handler::inbox<br/>src/handlers/broker_inbox_handler.rs:133
 
     Note over V,FR: no HTTP handler in this file (decision_handler, enrichment_proposals_handler,<br/>broker_inbox_handler) ever sends a message to ElevationActor or DecisionElevationActor —<br/>grep across src/handlers finds zero references to either actor type

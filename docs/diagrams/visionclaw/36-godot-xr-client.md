@@ -271,7 +271,7 @@ sequenceDiagram
     autonumber
     participant SV as server /wss
     participant IX as transport inbox VecDeque<br/>xr-client/rust/src/transport.rs:52
-    participant PL as BinaryProtocolClient::poll<br/>xr-client/rust/src/binary_protocol.rs:864
+    participant PL as BinaryProtocolClient::poll<br/>xr-client/rust/src/binary_protocol.rs:971
     participant FV as frame_version<br/>xr-client/rust/src/binary_protocol.rs:702
     participant DP as decode_position_frame_with_sequence<br/>xr-client/rust/src/binary_protocol.rs:400
     participant PR as parse_node_record<br/>xr-client/rust/src/binary_protocol.rs:681
@@ -325,7 +325,7 @@ sequenceDiagram
     participant GD as graph_scene.gd _process
     participant UE as _update_edge_multimesh<br/>xr-client/scripts/graph_scene.gd:1800
     participant UB as _update_beam_multimesh<br/>xr-client/scripts/graph_scene.gd:1823
-    participant RS as RenderStore::build_edge_buffer<br/>xr-client/rust/src/render_store.rs:472
+    participant RS as RenderStore::build_edge_buffer<br/>xr-client/rust/src/render_store.rs:1472-1474
     participant SC as edge_style_code<br/>xr-client/rust/src/render_store.rs:113
     participant MM as MultiMesh GraphRoot/EdgesMulti<br/>use_custom_data = true
 
@@ -407,7 +407,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant SV as server broadcast_to_all<br/>src/utils/binary_protocol.rs MessageType::AgentAction
-    participant BP as BinaryProtocolClient::poll<br/>xr-client/rust/src/binary_protocol.rs:864
+    participant BP as BinaryProtocolClient::poll<br/>xr-client/rust/src/binary_protocol.rs:971
     participant DA as decode agent-action batch<br/>xr-client/rust/src/binary_protocol.rs:781
     participant AS as avatar_state AgentAvatarNode<br/>xr-client/rust/src/avatar_state.rs:444
     participant RS as RenderStore beam buffer<br/>xr-client/rust/src/render_store.rs:472
@@ -433,7 +433,7 @@ sequenceDiagram
     BP->>HD: swarm roster update
     HD->>HD: SWARM_STATUS_COLORS {0 idle slate, 1 working green,<br/>2 blocked amber-red, 3 done cyan-white} hud.gd:163-168
     Note over HD: Mirrors render_store::agent_status_color - ADR-140 Pillar 3
-    Note over AS,RS: DIVERGENCE: action timestamps are stored without freshness<br/>checks, so an old action can overwrite done/idle with working.<br/>docs/XR-client.md 'Estate closeout qualification 2026-09-04'
+    Note over AS,RS: DOC-DRIFT: docs/XR-client.md:236 still records 'action timestamps are stored without<br/>freshness checks, and old actions can overwrite JSON done/idle with working'. The code<br/>refutes it since ADR-2034: apply_agent_action rejects an action no newer than the record's<br/>evidence_ts (render_store.rs:714-719) and apply_agent_state does the same (:770-776), both<br/>via ts_is_newer (:460). Stale hits increment agent_actions_stale / agent_states_stale, and<br/>expire_stale_agents (:795-801) ages records out. The governing doc is the stale side here
     RS->>RS: agent_hover_offset(target, agent_id, HOVER_RADIUS)
     Note over RS: Hover motion IS implemented. Golden-angle walk 2.3999632 rad keyed by<br/>agent id fans multiple agents around one node instead of stacking them,<br/>lifted by HOVER_LIFT. HOVER_RADIUS = 1.5 render_store.rs:392, :402-409
     Note over RS: Per-node target priority render_store.rs:1332-1342 - a grabbed node is<br/>pinned, an ACTIVE AGENT hovers at its target (local hover point, not a<br/>server position), a member folding IN chases its representative, everything<br/>else eases to self.targets. DIVERGENCE agent endpoints use LOCAL positions<br/>directly while beam targets are fold-remapped and drawn-gated - the closeout<br/>asks for explicit state precedence, expiry and visible stale/error handling.<br/>docs/XR-client.md 'Estate closeout qualification 2026-09-04'

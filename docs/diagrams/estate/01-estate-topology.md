@@ -225,10 +225,10 @@ flowchart TB
         R4["loom/ — README.md + app/<br/>deployment notes only, NO implementation.<br/>The Rust loom-facade lives in the separate loom repo."]
         R5["vircadia-world/ — server/ only"]
     end
-    subgraph stub["Uninitialised submodules — an EMPTY same-named subdir only"]
-        S1["Kokoros/Kokoros — 0 entries"]
-        S2["Whisper-WebUI/Whisper-WebUI — 0 entries"]
-        S3["xinference/xinference — 0 entries"]
+    subgraph stub["Gitignored symlinks — .gitignore:227-229, NOT submodules"]
+        S1["Kokoros -> /mnt/nvme/githubs/Kokoros (dangling here)"]
+        S2["Whisper-WebUI -> /mnt/mldata/githubs/Whisper-WebUI (dangling here)"]
+        S3["xinference -> /mnt/nvme/githubs/xinference (dangling here)<br/>live consumers: docker-compose.unified.yml:312,<br/>agentbox/docker-compose.yml:89"]
     end
     subgraph ext["EXTERNAL — not on disk in any form"]
         E1["EXTERNAL: nostr-rust-forum"]
@@ -238,7 +238,7 @@ flowchart TB
     end
 
     WARN["INVARIANT for this diagram tree — a claim about an EXTERNAL<br/>repo may only assert what THIS repo's code or docs state.<br/>Nothing about their internals is asserted here."]
-    D1["DIVERGENCE — the three stub directories look like checkouts to<br/>a naive ls but contain nothing. Any doc describing their<br/>contents from this repo is describing something not present."]
+    D1["DOC-DRIFT — these three are NOT submodules and are absent from<br/>.gitmodules. They are untracked symlinks to host paths<br/>(.gitignore:227-229), dangling in this container. git ls-files<br/>returns nothing for any of them. xinference nonetheless has live<br/>compose consumers, so its absence is a broken link, not an<br/>unused stub. see VC-35.12 for the Kokoros/Whisper half."]
     D2["DIVERGENCE — loom/README.md records that a second Python<br/>implementation (app/{loom_facade,ontology_proxy,<br/>ontology_scaffold,loom_graph}.py, 1,727 lines) was DELETED<br/>2026-09-03 as a dead twin of the Rust facade. see ES-06.6"]
 
     stub --> D1

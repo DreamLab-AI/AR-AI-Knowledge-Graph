@@ -245,6 +245,63 @@ function citeCheck(topics) {
   return warnings;
 }
 
+// A relocation that preserves a line's text preserves whatever the citation
+// meant — including a citation that was already pointing at the wrong line. The
+// one cheap check that catches THAT: a participant labelled with a function name
+// should cite a line inside (or immediately above) that function's definition.
+const PART_RE = /^[ \t]*(?:participant|actor)\s+\w+\s+as\s+(.+)$/gm;
+const FN_RE = /\b([a-z_][a-z0-9_]{3,})\b/g;
+function symbolCheck(topics) {
+  const warnings = [];
+  const lineCache = new Map();
+  const linesOf = (p) => {
+    if (!lineCache.has(p)) {
+      try { lineCache.set(p, fs.readFileSync(path.join(repoRoot, p), 'utf8').split('\n')); }
+      catch { lineCache.set(p, null); }
+    }
+    return lineCache.get(p);
+  };
+  for (const t of topics) {
+    for (const m of t.diagrams.map((d) => d.src).join('\n').matchAll(PART_RE)) {
+      const label = m[1];
+      const c = new RegExp(CITE_RE.source).exec(label);
+      if (!c) continue;
+      const [, cited, a, b] = c, ln = +a, end = b ? +b : ln;
+      const hits = (t.fm.sources || []).filter((s) => {
+        const sp = s.split(':')[0];
+        return sp === cited || sp.endsWith('/' + cited);
+      });
+      if (hits.length !== 1) continue;
+      const src = hits[0].split(':')[0], lines = linesOf(src);
+      if (!lines || ln > lines.length) continue;
+      const near = lines.slice(Math.max(0, ln - 4), ln + 3).join('\n');
+      const names = [...new Set([...label.slice(0, c.index).matchAll(FN_RE)].map((x) => x[1]))];
+      // A participant deliberately covering several operations carries its own
+      // comma-list of citations; only the first is parsed here, so leave it be.
+      // ...as does one written `path:a,b` with a line per operation.
+      if (names.length > 1 || /^\s*,\s*\d+/.test(label.slice(c.index + c[0].length))) continue;
+      for (const name of names) {
+        if (near.includes(name)) continue;
+        const def = new RegExp(`^\\s*(?:pub\\s+)?(?:async\\s+)?fn\\s+${name}\\b|^\\s*(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\b`);
+        const at = lines.reduce((acc, txt, i) => (def.test(txt) ? acc.concat(i + 1) : acc), []);
+        if (at.length !== 1) continue;
+        // Citing a STEP INSIDE the named function is correct and common, so the
+        // test is body containment, not proximity: walk braces from the
+        // definition to its close and accept anything from its doc comment to
+        // its last line.
+        let depth = 0, endOfBody = at[0], seen = false;
+        for (let i = at[0] - 1; i < lines.length; i++) {
+          for (const ch of lines[i]) { if (ch === '{') { depth++; seen = true; } else if (ch === '}') depth--; }
+          if (seen && depth <= 0) { endOfBody = i + 1; break; }
+        }
+        if ((ln < at[0] - 3 && end < at[0]) || ln > endOfBody)
+          warnings.push(`${t.rel} — ${src}:${ln} is labelled '${name}' but that function spans :${at[0]}-${endOfBody}`);
+      }
+    }
+  }
+  return warnings;
+}
+
 // ---------------------------------------------------------------- render
 function renderOne(topic, d, outDir) {
   return new Promise((resolve) => {
@@ -376,7 +433,7 @@ function writeIndexes(topics) {
   const total = topics.reduce((n, t) => n + t.diagrams.length, 0);
   console.log(`parsed ${topics.length} topic files, ${total} mermaid diagrams`);
   if (flags.cite) {
-    const w = citeCheck(topics);
+    const w = citeCheck(topics).concat(symbolCheck(topics));
     console.log(`cite-check: ${w.length} warning(s)`);
     for (const x of w) console.warn(`  ! ${x}`);
   }

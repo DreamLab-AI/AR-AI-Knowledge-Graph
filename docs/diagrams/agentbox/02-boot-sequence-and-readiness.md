@@ -446,7 +446,7 @@ sequenceDiagram
     autonumber
     participant AOE as aoe serve custom_agents<br/>flake.nix:2263 exec of wrapper
     participant W as zai.sh / openrouter.sh<br/>config/harness-wrappers/zai.sh:1
-    participant PV as provider_url_validate<br/>config/harness-wrappers/_provider-url.sh:64
+    participant PV as provider_url_validate<br/>config/harness-wrappers/_provider-url.sh:71-72
     participant SET as settings.local.json<br/>WORKSPACE/profiles/SLUG/.claude
     participant C as claude binary
 

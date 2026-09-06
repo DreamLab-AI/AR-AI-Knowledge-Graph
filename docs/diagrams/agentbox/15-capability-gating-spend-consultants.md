@@ -100,7 +100,7 @@ sequenceDiagram
     participant Agent as Claude session
     participant Skill as tree-search-coder skill<br/>skills/tree-search-coder/SKILL.md
     participant CLI as tree-search-cap bin<br/>services/agentbox-ops/src/bin/tree-search-cap.rs:1
-    participant Limiter as Limiter::reserve<br/>services/agentbox-ops/src/cost_cap/mod.rs:307
+    participant Limiter as Limiter::reserve<br/>services/agentbox-ops/src/cost_cap/mod.rs:361
     participant Ledger as Ledger #40;flock#41;<br/>services/agentbox-ops/src/cost_cap/ledger.rs
 
     rect rgb(235,235,235)

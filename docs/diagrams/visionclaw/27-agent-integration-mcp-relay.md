@@ -161,7 +161,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Caller as start_discovery()<br/>src/services/multi_mcp_agent_discovery.rs:169
+    participant Caller as start_discovery()<br/>src/services/multi_mcp_agent_discovery.rs:206-207
     participant D as MultiMcpAgentDiscovery<br/>multi_mcp_agent_discovery.rs:62
     participant CF as claude-flow server<br/>host=CLAUDE_FLOW_HOST port=MCP_TCP_PORT default 9500 (:91-95)
     participant RS as ruv-swarm server<br/>host=RUV_SWARM_HOST port=RUV_SWARM_PORT default 9501 (:108-112)
@@ -496,7 +496,7 @@ classDiagram
 sequenceDiagram
     autonumber
     participant Client as WS client
-    participant H as agent_visualization_ws()<br/>src/handlers/bots_visualization_handler.rs:197
+    participant H as agent_visualization_ws()<br/>src/handlers/bots_visualization_handler.rs:213-214
     participant Ws as AgentVisualizationWs<br/>bots_visualization_handler.rs:17, Actor :78
     participant Proto as AgentVisualizationProtocol<br/>services/agent_visualization_protocol.rs:630
     participant Proc as AgentVisualizationProcessor<br/>services/agent_visualization_processor.rs:182, new() :195
@@ -577,7 +577,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant AB as agentbox management-api<br/>Note: see ES-02
-    participant H as agent_events_ws()<br/>src/agent_events/ingest.rs:291
+    participant H as agent_events_ws()<br/>src/agent_events/ingest.rs:296-297
     participant Ws as AgentEventsIngestWs<br/>ingest.rs:149, Actor :187
     participant Sch as AgentActionNotification<br/>agent_events/schema.rs
     participant Prov as provenance::record<br/>agent_events/provenance.rs:96

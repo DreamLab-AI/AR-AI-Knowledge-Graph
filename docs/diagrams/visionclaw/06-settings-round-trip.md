@@ -59,7 +59,7 @@ sequenceDiagram
     autonumber
     participant CL as client
     participant RG as RbacGate<br/>src/middleware/rbac_gate.rs
-    participant H as update_physics_settings<br/>src/settings/api/settings_routes.rs:469
+    participant H as update_physics_settings<br/>src/settings/api/settings_routes.rs:497-501
     participant AU as AuthenticatedUser<br/>src/settings/auth_extractor.rs
     participant SA as OptimizedSettingsActor<br/>src/actors/optimized_settings_actor.rs:778
     participant VA as validate_physics_settings<br/>src/settings/api/settings_routes.rs
@@ -95,7 +95,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant H as update_physics_settings<br/>src/settings/api/settings_routes.rs:469
+    participant H as update_physics_settings<br/>src/settings/api/settings_routes.rs:497-501
     participant SA as OptimizedSettingsActor<br/>src/actors/optimized_settings_actor.rs:805
     participant GPU as GPUComputeActor<br/>via state.get_gpu_compute_addr()
     participant GM as GPUManagerActor<br/>state.gpu_manager_addr
@@ -143,9 +143,9 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant H1 as update_rendering_settings<br/>src/settings/api/settings_routes.rs:798
-    participant H2 as update_node_filter_settings<br/>src/settings/api/settings_routes.rs:910
-    participant H3 as update_physics_settings<br/>src/settings/api/settings_routes.rs:469
+    participant H1 as update_rendering_settings<br/>src/settings/api/settings_routes.rs:831-833
+    participant H2 as update_node_filter_settings<br/>src/settings/api/settings_routes.rs:931-934
+    participant H3 as update_physics_settings<br/>src/settings/api/settings_routes.rs:497-501
     participant CC as ClientCoordinatorActor<br/>state.client_manager_addr
     participant B as other browser sessions
 

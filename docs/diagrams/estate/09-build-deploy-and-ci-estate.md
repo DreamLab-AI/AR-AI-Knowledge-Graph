@@ -452,7 +452,11 @@ sequenceDiagram
     participant WS as notify-websocket job<br/>ontology-publish.yml:668
     participant PRP as pr-preview job<br/>ontology-publish.yml:747
 
-    GH->>VAL: verify access :65-88, checkout the private ontology source with a dedicated token :89-95
+    GH->>VAL: preflight gh repo view on the private ontology source :65-73<br/>ONTOLOGY_SOURCE_TOKEN, falling back to GITHUB_TOKEN :67-68
+    alt source unreadable
+        VAL--xGH: ::error + OPS ACTION naming the fine-grained PAT, exit 1 :74-87
+    end
+    GH->>VAL: checkout ontology source with the same token :89-95
     VAL->>VAL: detect changed markdown files :96-117
     VAL->>CONV: has_changes true, needs validate-source :129-131
     CONV->>CONV: md_to_ttl.py parses Logseq pages -> Turtle :158-372

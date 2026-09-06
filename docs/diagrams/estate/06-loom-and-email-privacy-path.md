@@ -23,7 +23,7 @@ flowchart LR
     end
     subgraph vcnet["visionclaw_network (docker bridge)"]
         GW["email-mcp-gateway:8765<br/>streamable-HTTP MCP, bearer auth"]
-        LOOMB["loom sidecar — Deployment B<br/>hostname loom, LOOM_FACADE_PORT 8080<br/>compose profile loom, docker-compose.unified.yml:298"]
+        LOOMB["loom sidecar — Deployment B, NOT RUNNING BY DEFAULT<br/>hostname loom, LOOM_FACADE_PORT 8080<br/>docker-compose.unified.yml:298-304,<br/>gated behind profiles: [loom] :360-361"]
         XI["xinference:9997/v1<br/>bge-small-en-v1.5 / 384"]
     end
     subgraph ml["machinelearn .132"]
@@ -44,6 +44,7 @@ flowchart LR
 
     INV1["INVARIANT — consumers hold the FAÇADE, never the model port.<br/>The deployed model is a URL behind DISTILL_BACKEND_URL;<br/>swapping Muse to Gemma to Qwen3.8 to next never touches a<br/>consumer. This is the no-technical-debt-on-upgrade guarantee."]
     INV2["INVARIANT — the Loom IS the email privacy system. It<br/>delegates ONLY to a LAN/local model, never to a cloud<br/>endpoint, so mail content never leaves the LAN."]
+    DIV0["DIVERGENCE — Deployment B is SPECIFIED, not running. The loom<br/>service is gated behind compose profile loom (docker-compose.unified.yml:360-361),<br/>so a default up never starts it, and its image is not built from this repo:<br/>the referenced loom/deploy/Dockerfile does not exist in this checkout<br/>(:292-296, loom/ holds README.md + app/ only). Deployment A (:8084 on HP)<br/>is the live path. see ES-01.6"]
     DIV1["DIVERGENCE — 192.168.2.48 (HP's old LAN IP) is DEAD.<br/>HP is off the Sodola with no LAN IP; ml routes and NATs it<br/>over the direct 25G rail. Never target .48. see ES-06.7"]
     DIV2["DIVERGENCE GOVERNANCE-capabilities — ADR-051 (Loom) is<br/>decision_status PROPOSED while the Loom is<br/>production-critical. Interim authority is the governing doc."]
     DIV3["DIVERGENCE ADR-045 one front door publishes TWO LAN doors —<br/>the scaffolded façade (:8084) and the raw model (:8085) are<br/>both reachable; consumers must pick correctly per task."]

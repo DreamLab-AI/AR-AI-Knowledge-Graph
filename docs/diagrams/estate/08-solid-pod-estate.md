@@ -162,9 +162,9 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Caller
-    participant H as handle_solid_proxy<br/>solid_proxy_handler.rs:307
-    participant AUTH as authenticate_request<br/>solid_proxy_handler.rs:238
-    participant ACL as load_acl_for_path<br/>solid_proxy_handler.rs:889
+    participant H as handle_solid_proxy<br/>solid_proxy_handler.rs:304-311
+    participant AUTH as authenticate_request<br/>solid_proxy_handler.rs:244-246
+    participant ACL as load_acl_for_path<br/>solid_proxy_handler.rs:881-884
     participant WAC as evaluate_access<br/>solid_pod_rs::wac (imported line 55)
     participant FS as FsBackend storage
 
@@ -209,9 +209,9 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant CL as Client
-    participant R as init_pod_nip98<br/>solid_proxy_handler.rs:1349
-    participant PE as pod_exists<br/>solid_proxy_handler.rs:952
-    participant CS as create_pod_with_structure<br/>solid_proxy_handler.rs:959
+    participant R as init_pod_nip98<br/>solid_proxy_handler.rs:1311-1313
+    participant PE as pod_exists<br/>solid_proxy_handler.rs:946
+    participant CS as create_pod_with_structure<br/>solid_proxy_handler.rs:951-953
     participant PP as provision_pod<br/>solid_pod_rs::provision (imported line 51)
     participant FS as FsBackend storage
     participant AU as admin-users.js<br/>POST /admin/users/provision:137
@@ -252,7 +252,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Caller
-    participant H as handle_patch<br/>solid_proxy_handler.rs:749
+    participant H as handle_patch<br/>solid_proxy_handler.rs:742-743
     participant D as patch_dialect_from_mime<br/>solid_pod_rs::ldp (imported line 47)
     participant G as Graph::parse_ntriples<br/>solid_pod_rs::ldp
     participant FS as FsBackend storage

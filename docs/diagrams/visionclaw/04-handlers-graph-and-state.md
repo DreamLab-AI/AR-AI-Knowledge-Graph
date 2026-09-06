@@ -460,7 +460,7 @@ sequenceDiagram
     participant DC as define_constraints<br/>src/handlers/constraints_handler.rs:22
     participant SE as settings_addr<br/>GetSettings / UpdateSettings
     participant GPU as GPU compute actor<br/>UpdateConstraints
-    participant LC as list_constraints / get_constraints<br/>constraints_handler.rs:236,258
+    participant LC as list_constraints / get_constraints<br/>constraints_handler.rs:226,236
 
     C->>DC: POST /api/constraints/define {ConstraintSystem}
     DC->>DC: validate_constraint_system(&constraints)
@@ -599,10 +599,10 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant C as Client
-    participant SM as set_layout_mode<br/>src/handlers/layout_handler.rs:15
+    participant SM as set_layout_mode<br/>src/handlers/layout_handler.rs:37-38
     participant GPU as GPU compute actor<br/>SetLayoutMode / SetRadialLayout / ResetPositions
-    participant RL as set_radial_layout<br/>layout_handler.rs:144
-    participant RS as reset_layout<br/>layout_handler.rs:248
+    participant RL as set_radial_layout<br/>layout_handler.rs:167-171
+    participant RS as reset_layout<br/>layout_handler.rs:274-275
 
     C->>SM: POST /api/layout/mode {mode, transitionMs}
     SM->>SM: parse LayoutMode from mode string, default ForceDirected on parse failure
@@ -1113,11 +1113,11 @@ sequenceDiagram
     autonumber
     participant C as Client (Nostr session)
     participant A as Agent caller (X-Agent-Key)
-    participant SJ as submit_image_job<br/>src/handlers/image_gen_handler.rs:275
-    participant AJ as agent_submit_image_job<br/>image_gen_handler.rs:498
+    participant SJ as submit_image_job<br/>src/handlers/image_gen_handler.rs:317-318
+    participant AJ as agent_submit_image_job<br/>image_gen_handler.rs:535-541
     participant CU as ComfyUI<br/>COMFYUI_URL default http://comfyui:8188 (:31)
     participant SA as ComfyUI Salad<br/>COMFYUI_SALAD_URL default http://comfyui:3000 (:36)
-    participant GJ as get_job_status<br/>image_gen_handler.rs:708
+    participant GJ as get_job_status<br/>image_gen_handler.rs:749-750
 
     rect rgb(225,225,245)
     Note over SJ,CU: PROCESS BOUNDARY — external HTTP to the ComfyUI service

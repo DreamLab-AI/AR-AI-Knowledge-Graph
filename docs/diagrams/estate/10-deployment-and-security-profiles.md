@@ -188,7 +188,7 @@ sequenceDiagram
     autonumber
     participant B as boot
     participant RG as RbacGate::from_env<br/>src/middleware/rbac_gate.rs:183
-    participant RA as report_acknowledged<br/>src/middleware/rbac_gate.rs:82
+    participant RA as report_acknowledged<br/>src/middleware/rbac_gate.rs:105-111
     participant REQ as inbound /api request
 
     B->>RG: construct from env
@@ -225,7 +225,7 @@ sequenceDiagram
     participant DK as Docker bridge SNAT
     participant AX as AuthenticatedUser extractor<br/>src/settings/auth_extractor.rs
     participant DB as dev_full_bypass_active<br/>src/utils/auth.rs:99
-    participant VA as verify_access<br/>src/utils/auth.rs:162
+    participant VA as verify_access<br/>src/utils/auth.rs:141-142
     participant WS as WS handshake<br/>src/handlers/socket_flow_handler/filter_auth.rs
 
     Note over HP,DK: CONTEXT ADR-2039 — Docker port-publishing SNATs the<br/>source, so the backend sees the bridge gateway not the<br/>real HP. Neither a loopback check nor a LAN-CIDR<br/>allow-list can express trust my headset.

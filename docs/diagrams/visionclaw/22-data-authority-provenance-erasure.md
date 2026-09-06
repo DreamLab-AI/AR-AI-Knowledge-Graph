@@ -407,7 +407,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant OP as Operator (force_full_sync)
-    participant SYNC as GithubSyncService.sync_graphs<br/>src/services/github_sync_service.rs:378-379
+    participant SYNC as GithubSyncService.sync_graphs<br/>src/services/github_sync_service.rs:283
     participant KGREPO as kg_repo.clear_graph<br/>src/adapters/oxigraph_graph_repository.rs:1226
     participant REBUILD as rebuild_assert_graph<br/>src/services/github_sync_service.rs:992
     participant AG as GRAPH_ONTOLOGY assert

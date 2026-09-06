@@ -121,39 +121,39 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant MintOrValidate as mint / strict resolve
-    participant P as parse<br/>src/uri/mod.rs:504
+    participant P as parse<br/>src/uri/mod.rs:520
     participant ResolveSurface as resolve / lookup surface
-    participant PD as parse_dual<br/>src/uri/mod.rs:614
+    participant PD as parse_dual<br/>src/uri/mod.rs:630
     MintOrValidate->>P: parse(input)
     alt input has did:nostr: prefix
-        P->>P: is_pubkey_hex check, src/uri/mod.rs:505-508
+        P->>P: is_pubkey_hex check on the did:nostr tail, src/uri/mod.rs:521-527
         alt pubkey invalid
             P-->>MintOrValidate: Err(InvalidPubkey)
         else pubkey valid
             P-->>MintOrValidate: Ok(ParsedUri::DidNostr)
         end
     else input has urn:visionclaw: prefix
-        P->>P: split kind token, src/uri/mod.rs:518-523
+        P->>P: split kind token, src/uri/mod.rs:535-537
         alt kind token unrecognised
-            P-->>MintOrValidate: Err(UnknownKind) src/uri/mod.rs:523
+            P-->>MintOrValidate: Err(UnknownKind) src/uri/mod.rs:538-539
         else kind recognised
-            P->>P: per-kind structural validation, src/uri/mod.rs:525-598
+            P->>P: per-kind structural validation, src/uri/mod.rs:541-614
             P-->>MintOrValidate: Ok(ParsedUri kind variant)
         end
     else any other namespace, including urn:ngm
-        P-->>MintOrValidate: Err(NotVisionclaw) src/uri/mod.rs:514-516
+        P-->>MintOrValidate: Err(NotVisionclaw) src/uri/mod.rs:530-532
     end
     ResolveSurface->>PD: parse_dual(input)
     PD->>P: parse(input)
     alt parse succeeds
         P-->>PD: Ok(ParsedUri)
-        PD-->>ResolveSurface: Ok(ParsedUri) unchanged, src/uri/mod.rs:616
+        PD-->>ResolveSurface: Ok(ParsedUri) unchanged, src/uri/mod.rs:631-632
     else parse returns NotVisionclaw and input has urn:ngm: prefix
-        PD-->>ResolveSurface: Ok(ParsedUri::LegacyNgm) src/uri/mod.rs:618-624
+        PD-->>ResolveSurface: Ok(ParsedUri::LegacyNgm) src/uri/mod.rs:634-641
     else parse returns NotVisionclaw and no urn:ngm prefix
-        PD-->>ResolveSurface: Err(NotVisionclaw) src/uri/mod.rs:626
+        PD-->>ResolveSurface: Err(NotVisionclaw) src/uri/mod.rs:642
     else parse returns any other UriError
-        PD-->>ResolveSurface: Err propagated unchanged, src/uri/mod.rs:628
+        PD-->>ResolveSurface: Err propagated unchanged, src/uri/mod.rs:644
     end
     Note over MintOrValidate,PD: INVARIANT parse rejects urn:ngm, parse_dual accepts it -- mint calls parse, resolve calls parse_dual, ADR-2021
     Note over PD: DIVERGENCE open governance item -- legacy ADR-100/105/050/053/063 identifier prose is superseded by this code<br/>where it diverges, per IDENTIFIER-taxonomy.md Known divergences
@@ -219,7 +219,7 @@ sequenceDiagram
         MT-->>Caller: bare 12 hex chars, no sha256-12- prefix added by this helper
     end
     Note over VC,AB: INVARIANT byte-identical -- both truncate to the first 6 bytes (12 hex chars) of the same SHA-256 digest, ADR-2023
-    Note over VC: verified fixture sha256-12-b94d27b9934d for input hello world, src/uri/mod.rs:853-863
+    Note over VC: verified fixture sha256-12-b94d27b9934d for input hello world, src/uri/mod.rs:883-894
     Note over MT: DIVERGENCE memory-tools.js:60 returns the bare 12-hex digest with no sha256-12- prefix, unlike CONTENT_ADDR_PREFIX-enforced VisionClaw and bc20-provenance-bridge sides
 ```
 
@@ -327,7 +327,7 @@ flowchart TD
 flowchart TD
     subgraph ID["Identity kinds"]
         direction TB
-        K1["DidNostr<br/>did:nostr:HEXPUBKEY<br/>mint src/uri/mod.rs:220-225<br/>parse :494-501<br/>kind() returns None :440-443"]
+        K1["DidNostr<br/>did:nostr:HEXPUBKEY<br/>mint src/uri/mod.rs:220-225<br/>parse :521-527<br/>kind() returns None :467-470"]
         K9["Avatar<br/>urn:visionclaw:avatar:HEXPUBKEY<br/>1:1 with the avatar DID<br/>mint :297-302 / parse :579-586"]
     end
     subgraph OWNED["Owner-scoped content-addressed kinds"]
@@ -351,7 +351,7 @@ flowchart TD
     end
     XR["Room has no production emission site -- only RoomId::parse under cfg(test), presence_actor.rs:920-921"]
     K7 -.-> XR
-    CROSS["UrnCrossing -- federation boundary record, src/uri/mod.rs:638-645 -- see VC-23.6"]
+    CROSS["UrnCrossing -- federation boundary record, src/uri/mod.rs:772-779 -- see VC-23.6"]
     ID --> CROSS
     OWNED --> CROSS
     UNSCOPED --> CROSS

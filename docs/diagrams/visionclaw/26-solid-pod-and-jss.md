@@ -77,9 +77,9 @@ flowchart TB
 sequenceDiagram
     autonumber
     participant C as Client
-    participant H as handle_solid_proxy<br/>solid_proxy_handler.rs:307
-    participant AUTH as authenticate_request<br/>solid_proxy_handler.rs:242
-    participant ACL as load_acl_for_path<br/>solid_proxy_handler.rs:890
+    participant H as handle_solid_proxy<br/>solid_proxy_handler.rs:304-311
+    participant AUTH as authenticate_request<br/>solid_proxy_handler.rs:244-246
+    participant ACL as load_acl_for_path<br/>solid_proxy_handler.rs:881-884
     participant WAC as evaluate_access<br/>solid_pod_rs::wac (imported :55)
     participant FS as FsBackend<br/>solid_pod_rs::storage::fs (imported :53)
 
@@ -122,7 +122,7 @@ sequenceDiagram
     participant NA as nostrAuth<br/>services/nostrAuthService
     participant S as SolidPodService<br/>services/SolidPodService.ts:115
     participant L as ldpClient.fetchWithAuth<br/>solidPod/ldpClient.ts:91
-    participant B as init_pod / init_pod_nip98<br/>solid_proxy_handler.rs:1293,1349
+    participant B as init_pod / init_pod_nip98<br/>solid_proxy_handler.rs:1267,1313
 
     U->>U: useEffect - authenticated and nostrAuth.isAuthenticated()<br/>useSolidPod.ts:115-121
     U->>S: initPod() (checkPod / createPod call the same path)<br/>useSolidPod.ts:43,68 -> SolidPodService.ts:171
@@ -164,8 +164,8 @@ sequenceDiagram
     NA-->>ldp: Authorization: Nostr <token>
 
     participant ldp as fetchWithAuth<br/>ldpClient.ts:91
-    participant AUTH as extract_user_identity<br/>solid_proxy_handler.rs:184
-    participant VAL as validate_nip98_token<br/>nip98.rs:330
+    participant AUTH as extract_user_identity<br/>solid_proxy_handler.rs:186-188
+    participant VAL as validate_nip98_token<br/>nip98.rs:374-375
     participant CACHE as REPLAY_CACHE<br/>nip98.rs:215 (Mutex<HashMap>)
 
     ldp->>AUTH: HTTP request, Authorization: Nostr <token>
@@ -206,7 +206,7 @@ sequenceDiagram
     participant App as caller (agentMemory / typeIndex / wacManager)
     participant L as ldpClient<br/>solidPod/ldpClient.ts
     participant F as fetchWithAuth<br/>ldpClient.ts:91
-    participant P as handle_solid_proxy<br/>solid_proxy_handler.rs:307
+    participant P as handle_solid_proxy<br/>solid_proxy_handler.rs:304-311
 
     App->>L: fetchJsonLd(path) / fetchTurtle(path)<br/>ldpClient.ts:130,144
     L->>F: GET, Accept ld+json|turtle
@@ -311,8 +311,8 @@ sequenceDiagram
     participant WAC as writeContainerAcl<br/>wacManager.ts:69
     participant B as buildAclTurtle<br/>wacManager.ts:30
     participant F as fetchWithAuth (PUT .acl)<br/>ldpClient.ts:91
-    participant H as handle_solid_proxy<br/>solid_proxy_handler.rs:307
-    participant R as load_acl_for_path<br/>solid_proxy_handler.rs:890
+    participant H as handle_solid_proxy<br/>solid_proxy_handler.rs:304-311
+    participant R as load_acl_for_path<br/>solid_proxy_handler.rs:881-884
 
     Caller->>WAC: writeContainerAcl(containerPath, ownerWebId, agentEntry)
     WAC->>B: buildAclTurtle(containerUrl, ownerWebId, agentEntry)<br/>emits acl:Authorization owner + agent (wacManager.ts:37-55)

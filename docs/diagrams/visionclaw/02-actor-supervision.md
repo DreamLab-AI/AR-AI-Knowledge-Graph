@@ -47,7 +47,7 @@ flowchart TB
     REBIND["SetClientCoordinatorAddr<br/>src/app_state.rs:821"]
     GPU["GPUManagerActor boundary<br/>src/app_state.rs:963<br/>Note: GPU internals see VC-10"]
     ANA["analytics actors — supervised, not started here<br/>src/app_state.rs:965-971<br/>ADR-2053 removed the standalone ShortestPathActor and<br/>ConnectedComponentsActor pair, see VC-10"]
-    SET["OptimizedSettingsActor<br/>src/app_state.rs:1161<br/>Addr~OptimizedSettingsActor~"]
+    SET["OptimizedSettingsActor<br/>src/app_state.rs:1152-1161<br/>Addr~OptimizedSettingsActor~"]
     AM["AgentMonitorActor<br/>src/app_state.rs:1184<br/>Addr~AgentMonitorActor~"]
     PS["ProtectedSettingsActor<br/>src/app_state.rs:1197<br/>Addr~ProtectedSettingsActor~"]
     WS["WorkspaceActor<br/>src/app_state.rs:1200<br/>Addr~WorkspaceActor~"]

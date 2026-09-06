@@ -730,7 +730,7 @@ flowchart LR
     EmbeddingCloudLayer["EmbeddingCloudLayer<br/>client/src/features/visualisation/components/EmbeddingCloudLayer.tsx:110,254"]
     useTransientBeams["useTransientBeams hook<br/>client/src/features/visualisation/hooks/useTransientBeams.ts:25-26"]
     TransientBeamsLayer["TransientBeamsLayer<br/>client/src/features/visualisation/components/TransientBeamsLayer.tsx"]
-    binaryProtocol["binaryProtocol.ts handleAgentAction<br/>client/src/store/websocket/binaryProtocol.ts"]
+    binaryProtocol["binaryProtocol.ts handleAgentActionTagged<br/>client/src/store/websocket/binaryProtocol.ts:437, routed at :480"]
 
     settingsStore --> GraphManager
     settingsStore --> GraphCanvas

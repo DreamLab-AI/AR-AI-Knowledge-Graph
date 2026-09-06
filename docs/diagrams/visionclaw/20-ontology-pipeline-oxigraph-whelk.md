@@ -44,7 +44,7 @@ verified_commit: 7a20db228
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Bin as main<br/>src/bin/load_ontology.rs:18
+    participant Bin as main<br/>src/bin/load_ontology.rs:97
     participant Repo as OxigraphOntologyRepository<br/>crates/visionclaw-adapters/src/oxigraph_ontology_repository.rs:591
     participant Store as Oxigraph Store
 

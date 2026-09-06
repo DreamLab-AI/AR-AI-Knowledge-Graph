@@ -33,7 +33,7 @@ sequenceDiagram
     participant PO as PhysicsOrchestratorActor<br/>src/actors/physics_orchestrator_actor.rs
     participant PS as PhysicsSupervisor<br/>physics_supervisor.rs:628
     participant FCA as ForceComputeActor<br/>force_compute_actor.rs:1867
-    participant EX as UnifiedGPUCompute::execute<br/>src/utils/unified_gpu_compute/execution.rs:954
+    participant EX as UnifiedGPUCompute::execute<br/>src/utils/unified_gpu_compute/execution.rs:131
     participant FC as derive_dispatch_feature_flags<br/>src/models/force_channels.rs:486
 
     PO->>PS: ComputeForces

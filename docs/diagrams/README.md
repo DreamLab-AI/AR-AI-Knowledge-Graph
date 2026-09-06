@@ -50,10 +50,19 @@ node scripts/diagram-index-gen.js docs/diagrams                      # regenerat
 ```
 
 `--cite-check` resolves each `path:line` inside a diagram against the file's own `sources:` list, asserts the
-file is long enough, and warns when the anchor line is blank or a lone closing brace. It **warns, never fails**:
-a citation can be structurally sound and still describe deleted behaviour, and it cannot resolve a bare `:NNN`
-continuation (`Dockerfile.unified:255<br/>… ENTRYPOINT:340`) or a basename that two `sources:` entries share
-(`ci.yml`). Those, and semantic staleness generally, still need a human reading the code at each cited line.
+file is long enough, warns when the anchor line is blank or a lone closing brace, and — for a participant
+labelled with a function name — warns when the cited line falls outside that function's body. It **warns,
+never fails**.
+
+That last check exists because relocating a citation by diff, however carefully, preserves whatever the
+citation meant: if it was already pointing at the wrong line, a re-anchoring pass moves the error and stamps a
+fresh `verified_commit` on it. Re-derive a citation from the SYMBOL (`grep -n` the name, then read the body),
+never from a computed offset.
+
+Its blind spots: a bare `:NNN` continuation (`Dockerfile.unified:255<br/>… ENTRYPOINT:340`), a basename two
+`sources:` entries share (`ci.yml`), a `governing:` doc that is not also a source, and — unfixably — a
+citation that resolves to a real, non-blank line describing behaviour that has since been deleted. Those still
+need a human reading the code at each cited line.
 
 `mmdc` is the Nix-installed Mermaid CLI (11.16). For a visual check, copy an SVG from `rendered/` to
 `/home/devuser/gui-tools/` and open `file:///home/devuser/exchange/<name>.svg` in the browsercontainer

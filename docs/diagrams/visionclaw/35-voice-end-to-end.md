@@ -182,7 +182,7 @@ sequenceDiagram
     participant VW as VoiceWebSocketService.connect<br/>client/src/services/VoiceWebSocketService.ts:68
     participant REG as WebSocketRegistry<br/>client/src/services/WebSocketRegistry.ts
     participant BUS as WebSocketEventBus<br/>client/src/services/WebSocketEventBus.ts
-    participant SV as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:794
+    participant SV as speech_socket_handler<br/>src/handlers/speech_socket_handler.rs:971-972
     participant SS as SpeechSocket actor<br/>src/handlers/speech_socket_handler.rs:832
     participant AO as AudioOutputService<br/>client/src/services/AudioOutputService.ts:15
 
@@ -610,5 +610,5 @@ flowchart TB
     box --> SEP
     SEP["SEPARATE SUBSYSTEM: this is the agentbox tmux voice plane<br/>(Track A), not the VisionClaw graph voice loop. Its LLM is the<br/>tab0-bridge, its STT/TTS are Kyutai models, and its grammar is<br/>'tell tab zero to ...' / 'what's tab zero doing?'.<br/>voice-stack/README.md:52-56. The kokoros container serving the<br/>VisionClaw visualiser is explicitly untouched by it<br/>voice-stack/README.md:21 - see AB-06 for the console boundary."]
     compose --> DIV
-    DIV["Kokoros and Whisper-WebUI are UNTRACKED local symlinks at the repo root<br/>(to /mnt/nvme/githubs/Kokoros and /mnt/mldata/githubs/Whisper-WebUI, both<br/>absent here). Verified 2026-09-05: git ls-files returns nothing for either,<br/>and no tracked .yml, .toml, .rs or .sh references them - they are a<br/>developer convenience, NOT repo content, so there is nothing to archive or<br/>repoint. The container contracts are therefore knowable only from the<br/>consuming Rust: kokoro-tts-container:8880 /v1/audio/speech and<br/>whisper-webui-backend:8000 /v1/audio/transcriptions - see VC-35.6 and<br/>VC-35.9. No port or protocol here was read from their own sources."]
+    DIV["Kokoros, Whisper-WebUI and xinference are UNTRACKED symlinks at the repo root,<br/>gitignored at .gitignore:227-229 and absent from .gitmodules - NOT submodules.<br/>All three dangle in this container (targets /mnt/nvme/githubs/Kokoros,<br/>/mnt/mldata/githubs/Whisper-WebUI, /mnt/nvme/githubs/xinference). git ls-files<br/>returns nothing for any of them. Kokoros and Whisper-WebUI have no tracked<br/>.yml/.toml/.rs/.sh reference and are pure developer convenience; xinference is<br/>DIFFERENT - it has live compose consumers (docker-compose.unified.yml:312,<br/>agentbox/docker-compose.yml:89), so its dangling link is a broken dependency,<br/>not an unused stub. The container contracts are knowable only from the<br/>consuming Rust: kokoro-tts-container:8880 /v1/audio/speech and<br/>whisper-webui-backend:8000 /v1/audio/transcriptions - see VC-35.6 and<br/>VC-35.9. No port or protocol here was read from their own sources. see ES-01.6"]
 ```

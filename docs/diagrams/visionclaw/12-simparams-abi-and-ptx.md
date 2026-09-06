@@ -345,7 +345,7 @@ sequenceDiagram
     autonumber
     participant GRA as GPUResourceActor<br/>gpu_resource_actor.rs:51
     participant Loader as ptx_loader<br/>ptx_loader.rs:357
-    participant Downgrade as downgrade_ptx_isa_if_needed<br/>ptx_loader.rs:312
+    participant Downgrade as downgrade_ptx_isa_if_needed<br/>ptx_loader.rs:305-330
     participant UGC as UnifiedGPUCompute<br/>construction.rs:262
     participant Cust as cust::module::Module<br/>CUDA driver JIT
 
